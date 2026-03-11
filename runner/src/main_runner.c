@@ -18,6 +18,7 @@
 #include <SDL.h>
 #include "nes_runtime.h"
 #include "input_script.h"
+#include "logger.h"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
@@ -120,10 +121,6 @@ void nes_vblank_callback(void) {
 
     /* Per-frame script execution */
     script_tick(g_frame_count, g_ram);
-    {
-        int ec = script_check_exit();
-        if (ec >= 0) exit(ec);
-    }
 
     /* Log per-frame state BEFORE NMI runs */
     debug_log_frame(s_cb_count);
@@ -136,23 +133,23 @@ void nes_vblank_callback(void) {
     /* Clear sprite-0 hit (bit6) and sprite-overflow (bit5) at frame start.
      * Real NES clears all three status bits at pre-render scanline. */
     g_ppustatus &= ~0x60;
-    /* Simulate hardware NMI push: RTI inside the handler consumes 2 bytes
-     * (P + 1 dummy for PC). On real hardware, NMI pushes PC_hi, PC_lo, P
-     * before jumping to the NMI vector. Our static RTI does S+=2.
-     * Push 2 bytes here so RTI restores the stack correctly. */
-    {
+    /* Set VBlank flag unconditionally — game can poll $2002 to detect it. */
+    g_ppustatus |= 0x80;
+    /* Gate NMI on PPUCTRL bit7 (NMI enable). On real NES, the PPU only
+     * generates an NMI at VBlank if bit7 of $2000 is set. The game clears
+     * this bit during room transitions (while PPU rendering is disabled) to
+     * prevent the NMI handler from running the sprite-0 spin-wait with
+     * rendering off, which would loop forever. */
+    log_on_change("NMI_enable", (g_ppuctrl >> 7) & 1);
+    if (g_ppuctrl & 0x80) {
+        /* Simulate hardware NMI push so RTI in the handler restores stack. */
         uint8_t p_save = (uint8_t)((g_cpu.N<<7)|(g_cpu.V<<6)|(1<<5)|
                                    (g_cpu.D<<3)|(g_cpu.I<<2)|(g_cpu.Z<<1)|g_cpu.C);
-        g_ram[0x100+g_cpu.S] = 0x00;   g_cpu.S--;  /* PC_lo placeholder */
-        g_ram[0x100+g_cpu.S] = p_save; g_cpu.S--;  /* P flags restored by RTI */
+        g_ram[0x100+g_cpu.S] = 0x00;   g_cpu.S--;
+        g_ram[0x100+g_cpu.S] = p_save; g_cpu.S--;
+        func_NMI();
+        if (s_cb_count <= 5) printf("[VBlank] NMI returned ok\n");
     }
-    /* Set VBlank for func_NMI's benefit, then call NMI.
-     * Do NOT clear bit7 here — let ppu_read_reg($2002) clear it when the
-     * game reads $2002 in its spin loop (real NES behavior: VBlank flag is
-     * cleared by the first CPU read of $2002 after VBlank starts). */
-    g_ppustatus |= 0x80;
-    func_NMI();
-    if (s_cb_count <= 5) printf("[VBlank] NMI returned ok\n");
 
     /* Render PPU to framebuffer */
     ppu_render_frame(s_framebuf);
@@ -171,6 +168,12 @@ void nes_vblank_callback(void) {
             stbi_write_png(shot_path, 256, 240, 3, rgb, 256*3);
             printf("[Shot] %s\n", shot_path);
         }
+    }
+
+    /* Exit check after screenshot is saved */
+    {
+        int ec = script_check_exit();
+        if (ec >= 0) exit(ec);
     }
 
     /* Rotating screenshot every 60 frames */

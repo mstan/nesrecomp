@@ -13,30 +13,61 @@ to the known_tables scanner in function_finder.c, bringing function count from 5
 
 ---
 
-## ISSUE #2 — Dialogue box causes black corruption and soft lock
+## ISSUE #2 — Dialogue box freeze (application locks up)
 
-**Status:** OPEN
+**Status:** ROOT CAUSE IDENTIFIED — fix not yet applied
 
 ### Symptom
-When the player walks into an NPC and triggers a dialogue box, large black rectangular
-regions appear across the screen and the game soft locks (stops responding to input).
+When the player triggers a dialogue box, the entire application freezes (window
+becomes unresponsive). This is a hard freeze, not a soft lock.
+
+### Root cause (CONFIRMED)
+`func_C9D6` ($C9D6, bank15 fixed) is called every NMI. It contains a sprite-0 hit
+spin-wait loop at $CA02–$CA0A:
+
+```
+CA02: BIT $2002  → loop while bit6=1 (wait for sprite-0 to clear)
+CA07: BIT $2002  → loop while bit6=0 (wait for sprite-0 to fire)
+```
+
+`ppu_read_reg($2002)` only simulates sprite-0 hit when `g_ppumask & 0x18 != 0`
+(rendering enabled). During dialogue box setup, the game temporarily disables PPU
+rendering (`$2001=0`) but leaves NMI enabled. When the NMI fires in this window,
+`func_C9D6` runs, writes `g_ram[0x0B]` (which is 0) back to `$2001`, then hits the
+`BVC $CA07` spin loop. With rendering disabled, `ppu_read_reg` never sets bit6
+→ loop spins forever → entire application freezes.
+
+### Fix required
+In `runner/src/runtime.c`, `ppu_read_reg` case `0x2002` — remove the
+`if (g_ppumask & 0x18)` guard so sprite-0 is ALWAYS simulated after 3 reads:
+
+```c
+// BEFORE:
+if (g_ppumask & 0x18) {
+    static int s_spr0_reads = 0;
+    ...simulate...
+}
+
+// AFTER: always simulate, regardless of render state
+{
+    static int s_spr0_reads = 0;
+    ...simulate...
+}
+```
+
+This lets the `BVC $CA07` loop exit after ~4 reads even when PPU is off, preventing
+the hang. On real NES, sprite-0 hit is hardware-cleared at VBlank and doesn't fire
+when rendering is off — but our simulation just needs to not loop forever.
+
+### Partial fix applied (this session — may be incomplete)
+`main_runner.c`: NMI now gated on `g_ppuctrl & 0x80` (PPUCTRL bit7). This is correct
+hardware behavior but trace shows `$2000=$90` throughout cave/dialogue transitions, so
+NMI is always enabled — the gate alone does not prevent the freeze. The sprite-0
+simulation fix above is the correct solution.
 
 ### How to reproduce
-Run with input script to Eolis outdoor area, walk right into the first NPC/building.
-
-### Suspected root cause
-The dialogue/text rendering system uses a different PPU write path (possibly via the
-CF3C queue or a text-specific VRAM writer in bank15). One or more of these paths likely:
-- Writes to an incorrect nametable region, overwriting valid tile data with zeros
-- OR uses a VRAM address that wraps incorrectly in g_ppu_nt[]
-- OR the text box background fill is using tile index $00 (black) instead of the correct
-  border/fill tiles because a CHR bank is not loaded
-
-### What to investigate
-1. Check ppu_trace.csv during dialogue trigger — look for large bursts of $2007 writes
-2. Check bank15 $F8F2-$F907 (text/logo writes) — likely the text renderer
-3. Check CF3C queue entries during text box draw
-4. Cross-reference with reference emulator (Nestopia) to see correct text box appearance
+Run the game, press START, walk right until character enters first indoor area / talks
+to an NPC. Application freezes immediately when the dialogue box opens.
 
 ---
 

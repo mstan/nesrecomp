@@ -114,22 +114,7 @@ uint8_t nes_read(uint16_t addr) {
 
 void nes_write(uint16_t addr, uint8_t val) {
     maybe_trigger_vblank();
-    /* Debug: trace $1A (frame sub-counter) increments in frame 1 to count C970 calls */
-    if (g_frame_count == 1 && addr == 0x1A) {
-        static uint64_t s_1a_count = 0;
-        s_1a_count++;
-        if (s_1a_count <= 20) {
-            printf("[1A] #%llu val=%02X\n", (unsigned long long)s_1a_count, val);
-        } else if (s_1a_count == 21) {
-            printf("[1A] ... (>20 more C970 calls)\n");
-        }
-    }
-    /* Trap: log every write to $0100 (bank tracking register) */
-    if (addr == 0x0100) {
-        static FILE *s_trap = NULL;
-        if (!s_trap) { s_trap = fopen("C:/temp/trap_0100.txt","w"); if(s_trap) fprintf(s_trap,"FRAME,val,S\n"); }
-        if (s_trap) { fprintf(s_trap,"%llu,%02X,%02X\n",(unsigned long long)g_frame_count,val,g_cpu.S); fflush(s_trap); }
-    }
+
     if (addr <= 0x1FFF) { g_ram[addr & 0x07FF] = val; return; }
     if (addr >= 0x2000 && addr <= 0x3FFF) { ppu_write_reg(0x2000 + (addr & 7), val); return; }
     if (addr == 0x4014) {
@@ -196,7 +181,7 @@ uint8_t ppu_read_reg(uint16_t reg) {
             /* Simulate sprite-0 hit (bit6) for split-screen spin-waits.
              * After 3 consecutive reads that find bit6 clear while rendering
              * is enabled, set sprite-0 hit. */
-            if (g_ppumask & 0x18) {
+            {
                 static int s_spr0_reads = 0;
                 if (s & 0x40) {
                     s_spr0_reads = 0;

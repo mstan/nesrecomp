@@ -351,6 +351,8 @@ void function_finder_run(const NESRom *rom, FunctionList *out) {
         { 14, 0x8958, 0x8968 }, /* bank14 entity state dispatch 2 (8 entries) */
         { 14, 0xA6D8, 0xA6E8 }, /* bank14 entity state dispatch 3 (8 entries) */
         { 14, 0xA5E7, 0xA66B }, /* bank14 entity type dispatch (66 entries) */
+        {  5, 0x826A, 0x828E }, /* bank5 sound dispatch table 1 (18 entries) */
+        /* {  5, 0x85AF, 0x8623 }, */ /* bank5 sound dispatch table 2 — causes bank=15 flood, disabled */
     };
     int before_kt = out->count;
     for (int t = 0; t < (int)(sizeof(known_tables)/sizeof(known_tables[0])); t++) {
@@ -358,6 +360,29 @@ void function_finder_run(const NESRom *rom, FunctionList *out) {
         for (uint16_t a = known_tables[t].start; a < known_tables[t].end; a += 2) {
             uint8_t lo = rom_read(rom, kb, a);
             uint8_t hi = rom_read(rom, kb, a + 1);
+            uint16_t target = (lo | ((uint16_t)hi << 8)) + 1;
+            if (target >= 0x8000 && target <= 0xBFFD) {
+                if (!function_list_contains(out, target, kb))
+                    add_function(out, target, kb);
+            } else if (target >= 0xC000 && target <= 0xFFFD) {
+                if (!function_list_contains(out, target, fixed_bank))
+                    add_function(out, target, fixed_bank);
+            }
+        }
+    }
+
+    /* Split-format dispatch table scanner.
+     * Some dispatch functions store lo-bytes and hi-bytes in separate arrays
+     * (not interleaved). Each entry: bank, lo_table_addr, hi_table_addr, count.
+     * target = (hi[i]<<8 | lo[i]) + 1 */
+    static const struct { int bank; uint16_t lo_start; uint16_t hi_start; int count; } known_split_tables[] = {
+        { 12, 0x827B, 0x8293, 24 }, /* bank12 room/scene state dispatch at $826E (24 states) */
+    };
+    for (int t = 0; t < (int)(sizeof(known_split_tables)/sizeof(known_split_tables[0])); t++) {
+        int kb = known_split_tables[t].bank;
+        for (int i = 0; i < known_split_tables[t].count; i++) {
+            uint8_t lo = rom_read(rom, kb, known_split_tables[t].lo_start + i);
+            uint8_t hi = rom_read(rom, kb, known_split_tables[t].hi_start + i);
             uint16_t target = (lo | ((uint16_t)hi << 8)) + 1;
             if (target >= 0x8000 && target <= 0xBFFD) {
                 if (!function_list_contains(out, target, kb))
