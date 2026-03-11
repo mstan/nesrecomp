@@ -1,0 +1,6 @@
+build/
+generated/
+baserom.nes
+bank*.bin
+*.log
+*.csv
