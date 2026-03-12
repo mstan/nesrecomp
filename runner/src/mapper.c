@@ -123,3 +123,7 @@ const uint8_t *mapper_get_fixed_bank(void) {
     if (!s_prg_data) return NULL;
     return s_prg_data + (size_t)(s_prg_banks - 1) * 0x4000;
 }
+
+int mapper_get_mirroring(void) {
+    return s_ctrl & 0x03;
+}

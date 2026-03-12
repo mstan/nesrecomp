@@ -413,6 +413,10 @@ void function_finder_run(const NESRom *rom, FunctionList *out) {
     add_function(out, 0x8C0F, 14);        /* bank14 entity dispatch entry (no static ref) */
     add_function(out, 0x828E, 5);         /* bank5 entity dispatch via RAM vector $2901 */
     add_function(out, 0xD673, fixed_bank); /* fixed-bank VRAM write (called dynamically) */
+    /* Mid-function entry points only reachable when bank15 is in switchable slot.
+     * switchable addr + $4000 = fixed-bank addr; e.g. $B982→$F982, $B9ED→$F9ED. */
+    add_function(out, 0xF982, fixed_bank);
+    add_function(out, 0xF9ED, fixed_bank);
     /* BFS for hardcoded seeds */
     while (queue_pop(&item)) {
         for (int i = 0; i < out->count; i++) {

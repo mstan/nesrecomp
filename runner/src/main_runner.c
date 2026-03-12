@@ -59,7 +59,7 @@ static FILE *s_debug_log = NULL;
 static void debug_log_open(void) {
     s_debug_log = fopen("C:/temp/debug_trace.txt", "w");
     if (s_debug_log) {
-        fprintf(s_debug_log, "FRAME,bank,r13,r14,r20,r1F,S\n");
+        fprintf(s_debug_log, "FRAME,bank,r13,r14,r20,r1F,S,r100,r5A,r5B\n");
         fflush(s_debug_log);
     }
 }
@@ -67,13 +67,14 @@ static void debug_log_open(void) {
 /* Call at NMI time to log one line per frame. Comment out when not debugging. */
 static void debug_log_frame(uint64_t frame) {
     if (!s_debug_log) return;
-    fprintf(s_debug_log, "%llu,%d,%02X,%02X,%02X,%02X,%02X,%02X\n",
+    fprintf(s_debug_log, "%llu,%d,%02X,%02X,%02X,%02X,%02X,%02X,%02X,%02X\n",
             (unsigned long long)frame,
             g_current_bank,
             g_ram[0x13], g_ram[0x14],
             g_ram[0x20], g_ram[0x1F],
             g_cpu.S,
-            g_ram[0x100]);   /* game's bank tracking register ($0100) */
+            g_ram[0x100],
+            g_ram[0x5A], g_ram[0x5B]);  /* sprite-0 spin gate vars */
     fflush(s_debug_log);
 }
 
@@ -147,27 +148,39 @@ void nes_vblank_callback(void) {
                                    (g_cpu.D<<3)|(g_cpu.I<<2)|(g_cpu.Z<<1)|g_cpu.C);
         g_ram[0x100+g_cpu.S] = 0x00;   g_cpu.S--;
         g_ram[0x100+g_cpu.S] = p_save; g_cpu.S--;
+        if (s_cb_count >= 850)
+            printf("[VBlank] ENTERING NMI cb=%llu bank=%d $5A=%02X $0B=%02X $13=%02X\n",
+                   (unsigned long long)s_cb_count, g_current_bank,
+                   g_ram[0x5A], g_ram[0x0B], g_ram[0x13]);
         func_NMI();
-        if (s_cb_count <= 5) printf("[VBlank] NMI returned ok\n");
+        if (s_cb_count <= 5 || s_cb_count >= 840)
+            printf("[VBlank] NMI returned ok, cb=%llu bank=%d $5A=%02X $5B=%02X\n",
+                   (unsigned long long)s_cb_count, g_current_bank,
+                   g_ram[0x5A], g_ram[0x5B]);
     }
 
-    /* Render PPU to framebuffer */
-    ppu_render_frame(s_framebuf);
+    /* Render PPU to framebuffer.
+     * In turbo mode skip rendering except every 10th frame or script screenshots
+     * — ppu_render_frame and PNG saves are expensive, calling them every frame
+     * makes turbo slower than real-time. */
+    char shot_path[256];
+    int wants_shot = script_wants_screenshot(shot_path, sizeof(shot_path));
+    int need_render = !g_turbo || (g_frame_count % 10 == 0) || wants_shot;
+    if (need_render) {
+        ppu_render_frame(s_framebuf);
+    }
 
     /* Script-triggered named screenshot */
-    {
-        char shot_path[256];
-        if (script_wants_screenshot(shot_path, sizeof(shot_path))) {
-            static uint8_t rgb[256 * 240 * 3];
-            for (int i = 0; i < 256 * 240; i++) {
-                uint32_t px = s_framebuf[i];
-                rgb[i*3+0] = (px >> 16) & 0xFF;
-                rgb[i*3+1] = (px >>  8) & 0xFF;
-                rgb[i*3+2] = (px      ) & 0xFF;
-            }
-            stbi_write_png(shot_path, 256, 240, 3, rgb, 256*3);
-            printf("[Shot] %s\n", shot_path);
+    if (wants_shot) {
+        static uint8_t rgb[256 * 240 * 3];
+        for (int i = 0; i < 256 * 240; i++) {
+            uint32_t px = s_framebuf[i];
+            rgb[i*3+0] = (px >> 16) & 0xFF;
+            rgb[i*3+1] = (px >>  8) & 0xFF;
+            rgb[i*3+2] = (px      ) & 0xFF;
         }
+        stbi_write_png(shot_path, 256, 240, 3, rgb, 256*3);
+        printf("[Shot] %s\n", shot_path);
     }
 
     /* Exit check after screenshot is saved */
@@ -176,17 +189,22 @@ void nes_vblank_callback(void) {
         if (ec >= 0) exit(ec);
     }
 
-    /* Rotating screenshot every 60 frames */
-    if (g_frame_count % 60 == 0) {
+    /* Rotating screenshot every 60 frames — skip in turbo (PNG compression
+     * is slow and would bottleneck turbo at 10x the normal save rate). */
+    if (!g_turbo && g_frame_count % 60 == 0) {
         save_screenshot();
     }
     g_frame_count++;
 
-    /* Upload texture and present */
-    SDL_UpdateTexture(s_texture, NULL, s_framebuf, 256 * 4);
-    SDL_RenderClear(s_renderer);
-    SDL_RenderCopy(s_renderer, s_texture, NULL, NULL);
-    SDL_RenderPresent(s_renderer);
+    /* Upload texture and present.
+     * In turbo mode only render every 10th frame so SDL_RenderPresent
+     * doesn't throttle the game loop. */
+    if (!g_turbo || (g_frame_count % 10 == 0)) {
+        SDL_UpdateTexture(s_texture, NULL, s_framebuf, 256 * 4);
+        SDL_RenderClear(s_renderer);
+        SDL_RenderCopy(s_renderer, s_texture, NULL, NULL);
+        SDL_RenderPresent(s_renderer);
+    }
 
     /* 60Hz pacing — skipped in turbo mode */
     if (!g_turbo) {
@@ -276,7 +294,7 @@ int main(int argc, char *argv[]) {
     }
 
     s_renderer = SDL_CreateRenderer(s_window, -1,
-        SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+        SDL_RENDERER_ACCELERATED);
     if (!s_renderer) {
         fprintf(stderr, "SDL_CreateRenderer: %s\n", SDL_GetError());
         return 1;

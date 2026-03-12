@@ -606,6 +606,22 @@ static void emit_dispatch(FILE *f, const FunctionList *funcs, const NESRom *rom)
         } else {
             /* Multiple bank variants: dispatch by current bank */
             fprintf(f, "            switch (g_current_bank) {\n");
+
+            /* Check if bank 15 (fixed) is already a variant. If not, and if the
+             * fixed-bank equivalent (addr + $4000) exists, add a bank-15 alias.
+             * This handles the case where the game maps bank15 into the switchable
+             * slot ($8000-$BFFF) and calls switchable addresses that alias to
+             * fixed-bank functions (switchable $XXXX = fixed $XXXX+$4000). */
+            bool has_fb15 = false;
+            for (int v = 0; v < nv; v++)
+                if (variants[v] == fixed_bank) { has_fb15 = true; break; }
+            if (!has_fb15 && addr >= 0x8000 && addr <= 0xBFFF) {
+                uint16_t fb_equiv = addr + 0x4000;
+                if (function_list_contains(funcs, fb_equiv, fixed_bank))
+                    fprintf(f, "                case %d: func_%04X(); break;\n",
+                            fixed_bank, fb_equiv);
+            }
+
             for (int v = 0; v < nv; v++) {
                 int bk = variants[v];
                 if (bk == fixed_bank && addr >= 0xC000)

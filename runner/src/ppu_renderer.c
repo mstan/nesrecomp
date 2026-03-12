@@ -5,6 +5,7 @@
  * Phase 2: OAM sprites
  */
 #include "nes_runtime.h"
+#include "mapper.h"
 #include <string.h>
 
 /* NES system palette — 64 colors as ARGB8888 */
@@ -70,6 +71,9 @@ void ppu_render_frame(uint32_t *framebuf) {
         int origin_x = g_ppuscroll_x + ((g_ppuctrl & 0x01) ? 256 : 0);
         int origin_y = g_ppuscroll_y + ((g_ppuctrl & 0x02) ? 240 : 0);
 
+        /* MMC1 mirroring — look up once per frame, not per pixel */
+        int mirroring = mapper_get_mirroring();
+
         for (int sy = 0; sy < 240; sy++) {
             int nt_y = origin_y + sy;
             if (nt_y >= 480) nt_y -= 480;
@@ -85,8 +89,17 @@ void ppu_render_frame(uint32_t *framebuf) {
                 int nt_col   = (tile_x >= 32) ? 1 : 0;
                 int local_tx = tile_x % 32;
 
-                int which_nt = nt_row * 2 + nt_col;
-                int nt_off   = which_nt * 0x400;
+                /* Resolve virtual NT to physical NT using cached mirroring mode */
+                int virt_nt = nt_row * 2 + nt_col;
+                int phys_nt;
+                switch (mirroring) {
+                    case 0:  phys_nt = 0;            break; /* one-screen lower */
+                    case 1:  phys_nt = 1;            break; /* one-screen upper */
+                    case 2:  phys_nt = virt_nt & 1;  break; /* vertical */
+                    case 3:  phys_nt = virt_nt >> 1; break; /* horizontal */
+                    default: phys_nt = virt_nt & 1;  break;
+                }
+                int nt_off = phys_nt * 0x400;
 
                 uint8_t tile_id = g_ppu_nt[(nt_off + local_ty * 32 + local_tx) & 0x0FFF];
 

@@ -14,3 +14,8 @@ const uint8_t *mapper_get_fixed_bank(void);
 
 /* Current switchable bank index */
 extern int g_current_bank;
+
+/* MMC1 mirroring mode from control register bits 1:0
+ *   0: one-screen lower  1: one-screen upper
+ *   2: vertical          3: horizontal */
+int mapper_get_mirroring(void);
