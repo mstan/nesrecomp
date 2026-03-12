@@ -369,13 +369,19 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
             }
             break;
         case MN_RTS:
-            /* Detect RTS-as-JMP trick: if the byte immediately before RTS is
-             * PHA (0x48), the preceding push(es) encode a computed jump target.
-             * This is the standard NES jump-table pattern:
-             *   LDA table_hi,X / PHA / LDA table_lo,X / PHA / RTS
-             * which jumps to (hi<<8|lo)+1. Pop the pushed bytes, dispatch,
-             * and return — the stack is left balanced. */
-            if (pc >= 0x8001 && rom_read(rom, bank, pc - 1) == 0x48 /* PHA */) {
+            /* Detect 4-PHA dispatch: LDA #cont_hi/PHA / LDA #cont_lo/PHA /
+             * LDA tbl_hi,Y/PHA / LDA tbl_lo,Y/PHA / RTS.
+             * PHAs at pc-12, pc-9, pc-5, pc-1.  Continuation = pc+1.
+             * The 2 cont bytes must be cleaned off the stack unconditionally
+             * (target may have internal PHA/PLA imbalance — can't be conditional). */
+            if (pc >= 0x800D &&
+                rom_read(rom, bank, pc-1)  == 0x48 &&
+                rom_read(rom, bank, pc-5)  == 0x48 &&
+                rom_read(rom, bank, pc-9)  == 0x48 &&
+                rom_read(rom, bank, pc-12) == 0x48) {
+                fprintf(f, "{ uint8_t _s4=g_cpu.S; g_cpu.S++; uint8_t _lo=g_ram[0x100+g_cpu.S]; g_cpu.S++; uint8_t _hi=g_ram[0x100+g_cpu.S]; call_by_address(((uint16_t)_hi<<8|_lo)+1); g_cpu.S=(uint8_t)(_s4+4); } goto label_%04X;\n    ", (uint16_t)(pc+1));
+            /* Detect 2-PHA RTS-as-JMP: LDA hi/PHA / LDA lo/PHA / RTS */
+            } else if (pc >= 0x8001 && rom_read(rom, bank, pc - 1) == 0x48 /* PHA */) {
                 fprintf(f, "{ g_cpu.S++; uint8_t _lo=g_ram[0x100+g_cpu.S]; g_cpu.S++; uint8_t _hi=g_ram[0x100+g_cpu.S]; call_by_address(((uint16_t)_hi<<8|_lo)+1); }\n    ");
             }
             fprintf(f, "return;\n");
@@ -492,6 +498,18 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
                 default: break;
             }
             if (e2->mnemonic == MN_ILLEGAL) { scan += sz; continue; }
+            /* 4-PHA dispatch RTS: continuation (scan+1) must be included in scan */
+            if (e2->mnemonic == MN_RTS && scan >= 0x800D &&
+                rom_read(rom, bank, scan-1)  == 0x48 &&
+                rom_read(rom, bank, scan-5)  == 0x48 &&
+                rom_read(rom, bank, scan-9)  == 0x48 &&
+                rom_read(rom, bank, scan-12) == 0x48) {
+                uint16_t cont = scan + 1;
+                bool found = false;
+                for (int p = 0; p < ps_pending_count; p++)
+                    if (ps_pending[p] == cont) { found = true; break; }
+                if (!found && ps_pending_count < 256) ps_pending[ps_pending_count++] = cont;
+            }
             /* Stop at terminal instructions when no pending forward branches */
             if (e2->mnemonic == MN_RTS || e2->mnemonic == MN_RTI ||
                 e2->mnemonic == MN_BRK || e2->mnemonic == MN_JMP) {
@@ -505,6 +523,10 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
      * We continue emitting after the stop instruction until all pending are covered. */
     uint16_t pending[256];
     int pending_count = 0;
+    /* Branch-target set: RTS addresses that are direct branch targets bypass PHA setup;
+     * they must be emitted as regular returns, not 2-PHA dispatches. */
+    uint16_t branch_targets[256];
+    int branch_targets_count = 0;
 
     uint16_t cursor = pc;
     for (int insn = 0; insn < MAX_INSNS_PER_FUNC; insn++) {
@@ -537,14 +559,63 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
                     for (int p = 0; p < pending_count; p++)
                         if (pending[p] == tgt) { found = true; break; }
                     if (!found) pending[pending_count++] = tgt;
+                    /* Record as branch target: RTS at tgt would bypass any PHA setup */
+                    bool bt_found = false;
+                    for (int b = 0; b < branch_targets_count; b++)
+                        if (branch_targets[b] == tgt) { bt_found = true; break; }
+                    if (!bt_found && branch_targets_count < 256) branch_targets[branch_targets_count++] = tgt;
                 }
                 break;
             }
             default: break;
         }
 
+        /* 4-PHA dispatch RTS: add cont (cursor+1) to pending so emit loop continues */
+        if (e->mnemonic == MN_RTS && cursor >= 0x800D &&
+            rom_read(rom, bank, cursor-1)  == 0x48 &&
+            rom_read(rom, bank, cursor-5)  == 0x48 &&
+            rom_read(rom, bank, cursor-9)  == 0x48 &&
+            rom_read(rom, bank, cursor-12) == 0x48) {
+            uint16_t cont = cursor + 1;
+            bool found = false;
+            for (int p = 0; p < pending_count; p++)
+                if (pending[p] == cont) { found = true; break; }
+            if (!found && pending_count < 256) pending[pending_count++] = cont;
+        }
+
+        /* If this RTS is a direct branch target, the PHA setup was bypassed —
+         * emit a regular return instead of a 2-PHA dispatch. */
+        if (e->mnemonic == MN_RTS && cursor >= 0x8001 &&
+            rom_read(rom, bank, cursor - 1) == 0x48) {
+            bool is_branch_tgt = false;
+            for (int b = 0; b < branch_targets_count; b++)
+                if (branch_targets[b] == cursor) { is_branch_tgt = true; break; }
+            if (is_branch_tgt) {
+                fprintf(f, "    /* $%04X: 60 */ return; /* branch-target RTS */\n", cursor);
+                if (pending_count == 0) break;
+                cursor += 1;
+                continue;
+            }
+        }
+
         int consumed = emit_instruction(f, rom, bank, cursor, pc, fixed_bank, funcs,
                                         valid_starts, valid_count);
+
+        /* If this PHA is immediately followed by a branch-target RTS, the fall-through path
+         * must dispatch now (before reaching the RTS label, which is bypassed by branches).
+         * Emit the 2-PHA dispatch inline and return; the branch path will hit label_RTS: return. */
+        if (e->mnemonic == MN_PHA) {
+            uint16_t next = cursor + 1;
+            if (next >= 0x8001 && rom_read(rom, bank, next) == 0x60) {
+                bool is_branch_tgt = false;
+                for (int b = 0; b < branch_targets_count; b++)
+                    if (branch_targets[b] == next) { is_branch_tgt = true; break; }
+                if (is_branch_tgt) {
+                    fprintf(f, "    { g_cpu.S++; uint8_t _lo=g_ram[0x100+g_cpu.S]; g_cpu.S++; uint8_t _hi=g_ram[0x100+g_cpu.S]; call_by_address(((uint16_t)_hi<<8|_lo)+1); }\n");
+                    fprintf(f, "    return;\n");
+                }
+            }
+        }
 
         /* Check stop conditions — only stop if no pending forward targets remain */
         if (e->mnemonic == MN_RTS || e->mnemonic == MN_RTI || e->mnemonic == MN_BRK) {

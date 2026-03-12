@@ -377,6 +377,7 @@ void function_finder_run(const NESRom *rom, FunctionList *out) {
      * target = (hi[i]<<8 | lo[i]) + 1 */
     static const struct { int bank; uint16_t lo_start; uint16_t hi_start; int count; } known_split_tables[] = {
         { 12, 0x827B, 0x8293, 24 }, /* bank12 room/scene state dispatch at $826E (24 states) */
+        { 15, 0xD64C, 0xD650,  4 }, /* fixed-bank CHR update handler dispatch at $D61D (4 slots: $D654,$D673,$D699,$D6B1) */
     };
     for (int t = 0; t < (int)(sizeof(known_split_tables)/sizeof(known_split_tables[0])); t++) {
         int kb = known_split_tables[t].bank;
