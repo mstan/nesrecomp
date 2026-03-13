@@ -30,6 +30,57 @@ static const char *s_script_path    = NULL;
 static const char *s_record_path    = NULL;
 static const char *s_loadstate_path = NULL;
 
+/* ---- Password auto-fill ---- */
+static const char *s_password          = NULL;
+static int         s_password_injected = 0;
+
+/* Returns the mantra table index (0-63) for a character, or -1 if invalid.
+ * Bank12 $8764 table order: A-Z (0-25), a-z (26-51), 0-9 (52-61), ',' (62), '?' (63) */
+static int password_char_to_index(char ch) {
+    if (ch >= 'A' && ch <= 'Z') return ch - 'A';
+    if (ch >= 'a' && ch <= 'z') return 26 + (ch - 'a');
+    if (ch >= '0' && ch <= '9') return 52 + (ch - '0');
+    if (ch == ',') return 62;
+    if (ch == '?') return 63;
+    return -1;
+}
+
+/* Inject password into the mantra entry RAM buffer.
+ * Detection (Ghidra bank12 analysis):
+ *   $0665 == len  — max-length register set to our password length (24 for Faxanadu mantra)
+ *   $0666 == 0    — no characters entered yet (fresh screen)
+ *   $0600 == 0xFF — first slot is empty sentinel
+ * Writes character table indices to $0600+i, sets $0664 = $0666 = len. */
+static void maybe_inject_password(void) {
+    if (!s_password || s_password_injected) return;
+
+    int len = (int)strlen(s_password);
+    if (len == 0 || len > 24) return;
+
+    uint8_t max_len = g_ram[0x665];
+    if (max_len == 0)          return;   /* screen not initialized yet */
+    if (g_ram[0x666] != 0)     return;   /* something already entered */
+    if (g_ram[0x600] != 0xFF)  return;   /* first slot not empty */
+
+    for (int i = 0; i < len; i++) {
+        int idx = password_char_to_index(s_password[i]);
+        if (idx < 0) {
+            fprintf(stderr, "[Password] Unknown character '%c' at position %d — aborted\n",
+                    s_password[i], i);
+            return;
+        }
+        g_ram[0x600 + i] = (uint8_t)idx;
+    }
+    for (int i = len; i < (int)max_len; i++)
+        g_ram[0x600 + i] = 0xFF;   /* fill remaining slots with empty sentinel */
+
+    g_ram[0x664] = (uint8_t)len;   /* cursor: positioned after last entered char */
+    g_ram[0x666] = (uint8_t)len;   /* characters-entered count */
+
+    s_password_injected = 1;
+    printf("[Password] Injected \"%s\" (%d chars)\n", s_password, len);
+}
+
 /* ---- SDL state (file-level so nes_vblank_callback can access) ---- */
 static SDL_Window        *s_window    = NULL;
 static SDL_Renderer      *s_renderer  = NULL;
@@ -152,6 +203,8 @@ void nes_vblank_callback(void) {
      * prevent the NMI handler from running the sprite-0 spin-wait with
      * rendering off, which would loop forever. */
     log_on_change("NMI_enable", (g_ppuctrl >> 7) & 1);
+    maybe_inject_password();
+
     if (g_ppuctrl & 0x80) {
         /* Simulate hardware NMI push so RTI in the handler restores stack. */
         uint8_t p_save = (uint8_t)((g_cpu.N<<7)|(g_cpu.V<<6)|(1<<5)|
@@ -263,7 +316,7 @@ static bool load_rom(const char *path) {
 
 int main(int argc, char *argv[]) {
     if (argc < 2) {
-        fprintf(stderr, "Usage: NESRecompGame <baserom.nes> [--script FILE] [--record FILE] [--loadstate FILE]\n");
+        fprintf(stderr, "Usage: NESRecompGame <baserom.nes> [--script FILE] [--record FILE] [--loadstate FILE] [--password STRING]\n");
         return 1;
     }
 
@@ -272,7 +325,11 @@ int main(int argc, char *argv[]) {
         if (strcmp(argv[i], "--script") == 0 && i+1 < argc) s_script_path = argv[++i];
         else if (strcmp(argv[i], "--record") == 0 && i+1 < argc) s_record_path = argv[++i];
         else if (strcmp(argv[i], "--loadstate") == 0 && i+1 < argc) s_loadstate_path = argv[++i];
+        else if (strcmp(argv[i], "--password") == 0 && i+1 < argc) s_password = argv[++i];
     }
+
+    if (s_password)
+        printf("[Password] Will auto-fill mantra: \"%s\"\n", s_password);
 
     if (!load_rom(argv[1])) return 1;
 
