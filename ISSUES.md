@@ -159,6 +159,29 @@ yet. Leave alone until a visible bug is linked to it.
 
 ---
 
+## ISSUE #7 — Magic projectile sprites not visible
+
+**Status:** OPEN
+
+### Symptom
+When casting spells, the projectile graphics do not appear on screen. The spells
+appear to function correctly (damage registers on enemies), but no visible sprite or
+effect is rendered for the projectile itself.
+
+### Likely cause
+Sprite visibility or priority issue in `ppu_renderer.c`, OR a missing/incorrect CHR
+tile load for the projectile tiles, OR a sprite OAM entry being skipped/culled
+incorrectly. Could also be a missing function in one of the switchable banks that
+handles projectile sprite setup.
+
+### Starting point
+- Check OAM during a spell cast: are projectile sprite entries present with valid
+  tile/position/attribute data, or are they absent entirely?
+- Check CHR tile load: are the projectile tile indices pointing to loaded CHR data?
+- Ghidra the spell-cast code path in the relevant bank to find projectile OAM setup.
+
+---
+
 ## Historical notes
 
 - bank-14 dispatch misses ($8C0F, $8C98, $89EF, $A6FF, $0001): status unclear after
