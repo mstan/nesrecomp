@@ -77,6 +77,22 @@ static void maybe_inject_password(void) {
     g_ram[0x664] = (uint8_t)len;   /* cursor: positioned after last entered char */
     g_ram[0x666] = (uint8_t)len;   /* characters-entered count */
 
+    /* Queue PPU tile writes so the characters appear on screen.
+     * $0500 DMA queue format: [count(1 byte), addr_hi, addr_lo, tile...]
+     * Queue write-ptr at $0020. Tiles are ASCII values (bank12 $8764 maps index→ASCII).
+     * Row 0 (positions 0-15):  PPU $2129+pos
+     * Row 1 (positions 16-31): PPU $2149+(pos-16) */
+    for (int i = 0; i < len; i++) {
+        uint8_t ppu_lo = (i < 16) ? (0x28 + i) : (0x48 + (i - 16));
+        uint8_t tile   = (uint8_t)s_password[i];   /* ASCII = PPU tile number */
+        uint8_t wp     = g_ram[0x20];
+        g_ram[0x500 + wp++] = 0x01;   /* 1 tile */
+        g_ram[0x500 + wp++] = 0x21;   /* PPU addr hi */
+        g_ram[0x500 + wp++] = ppu_lo;
+        g_ram[0x500 + wp++] = tile;
+        g_ram[0x20] = wp;
+    }
+
     s_password_injected = 1;
     printf("[Password] Injected \"%s\" (%d chars)\n", s_password, len);
 }
