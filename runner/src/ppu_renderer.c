@@ -62,10 +62,16 @@ void ppu_render_frame(uint32_t *framebuf) {
     if (!(g_ppumask & 0x08)) goto render_sprites;
 
     {
-        /* Split-screen: rows 0-15 use HUD scroll (captured at sprite-0 hit);
-         * rows 16-239 use the post-split game-area scroll.
-         * When no split occurred this frame, all rows use current scroll. */
-        int split_y = g_spr0_split_active ? 16 : 240;
+        /* Split-screen: rows 0..split_y-1 use HUD scroll (captured at sprite-0 hit);
+         * rows split_y..239 use the post-split game-area scroll.
+         * When no split occurred this frame, all rows use current scroll.
+         *
+         * split_y is derived from sprite-0 OAM Y: the sprite renders rows Y+1..Y+8.
+         * The game's spin-wait fires near the last row of the sprite.
+         * Adding 9 gives the first scanline AFTER the sprite → clean 8px tile boundary.
+         * For Faxanadu (sprite-0 Y=$17=23): split_y=32, keeping NT0 rows 0-3 in HUD
+         * scroll (rows 0-1 blank spacer, rows 2-3 actual HUD tiles). */
+        int split_y = g_spr0_split_active ? ((int)(g_ppu_oam[0]) + 9) : 240;
 
         for (int sy = 0; sy < 240; sy++) {
             /* Choose scroll source for this scanline */

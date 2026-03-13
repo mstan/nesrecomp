@@ -82,63 +82,32 @@ Low — requires substantial new subsystem. Tackle after all visual bugs are res
 
 ## ISSUE #4 — HUD garbles after left/right screen transition
 
-**Status:** OPEN — partially fixed, low priority
+**Status:** FIXED ✅ (2026-03-12)
 
-### Symptom
-After transitioning between outdoor screens (walking left or right off the edge of a
-screen), the top 2 rows of the display become filled with garbage tiles — repeating
-"Q"-like characters across the full width — and the M/P health/magic bars shift to the
-top-right corner of the HUD area instead of spanning the top. The game area below the
-HUD renders correctly. The HUD restores itself when the player enters a building
-(which triggers a full nametable reload).
+### Root cause (final)
+`split_y` was hardcoded to 16 in `ppu_renderer.c`. The Faxanadu HUD tiles live in
+**NT0 nametable rows 2–3** (scanlines 16–31), not rows 0–1. With split_y=16, those
+scanlines were assigned to the *game* scroll region (not HUD scroll), so after the
+screen transition switched the game area to NT1, the HUD tiles at NT0 rows 2-3 became
+invisible and were replaced by NT1 game tiles.
 
-### Evidence
-See screenshots: NESRecompGame_pfxhV93Qqj.png (garbled), NESRecompGame_qVL7S3WRZp.png
-(restored after building entry, compare HUD row).
+### Fix
+`split_y` is now derived from sprite-0 OAM Y: `(g_ppu_oam[0] + 9)`. For Faxanadu
+(sprite-0 Y=$17=23) this gives split_y=32, putting scanlines 0–31 in the HUD scroll
+region (NT0, scroll=0) and scanlines 32+ in the game scroll region. NT0 rows 0-1
+(scanlines 0-15) are spacer rows (tile $00), rows 2-3 (scanlines 16-31) hold the actual
+HUD content (M:, P: health/magic bars; E:, G: counters; T:, item brackets).
 
-### Likely root cause
-On screen transition, the game scrolls the nametable and writes new tile data for the
-incoming screen. The HUD is pinned to the top of the screen using the PPU scroll
-registers ($2005) and a split-screen trick (sprite-0 hit). If the scroll split is
-applied incorrectly, the HUD rows scroll with the background instead of staying fixed,
-causing them to show background tile data instead of the HUD layout.
+### Investigation path
+- NT dump revealed NT0 rows 0-1 = all zeros, rows 2-3 = HUD tile IDs
+- OAM dump confirmed no HUD sprites; HUD is purely BG tiles in NT0 rows 2-3
+- Pre-transition partial garble (right-side orange circles) was NT1 column 0-10 showing
+  through when game scroll (sx=88) wrapped into NT1 at screen x≈168+
+- After fix: HUD stable across all frames before, during, and after transition
 
-More specifically, the nametable write for the incoming screen likely overwrites the
-nametable region that the HUD should be reading. The PPU scroll/split-screen logic
-in `ppu_renderer.c` may not be correctly restoring scroll=0 for the HUD rows after
-the split point.
-
-### Progress (2026-03-12)
-Split-screen fix implemented: capture `g_ppuscroll_x/y` + `g_ppuctrl` at sprite-0 hit
-(the pre-split HUD scroll = 0,0); use those for scanlines 0-15, post-split for 16-239.
-Result: was full-width Q-tile garbage on 2 rows → now only partial (roughly half-width).
-
-### Progress (2026-03-12, continued)
-Reliable reproduction now available via save state + script:
-- Save state: `C:/temp/quicksave.sav` (character standing just before right load zone)
-- Script: `C:/temp/my_session.txt` (intro → F7 restore → walk right → transition fires)
-- Replay: `NESRecompGame.exe baserom.nes --script C:/temp/my_session.txt`
-
-PPU trace analysis of transition (frames ~2430–2460):
-- Split state is **correct**: `split=1 hud_ctrl=90 hud_sx=0 game_ctrl=91 game_sx=0`
-- HUD rows correctly read NT0 (ppuctrl_hud=$90, scroll=0) after transition
-- Game rows correctly read NT1 (ppuctrl=$91, scroll=0) after transition
-- NO NT0 writes happen during the transition (all VRAM writes go to NT1)
-- NT0 row 0 tiles 0-3 are **all zero** (`nt0r0=00000000`) in every frame logged
-
-**Root cause identified**: NT0 row 0 contains all-zero tile IDs. Tile 0 in CHR RAM is
-whatever the game stored there — and it happens to render as orange circles/bricks, not
-HUD elements. The HUD tiles are being written somewhere, but our trace shows NT0 row 0
-as all zeros. Possible causes:
-1. The game writes HUD tiles to NT0 during the intro / room-load phase, but the save
-   state was taken AFTER that phase and NT0 was already overwritten
-2. The HUD tiles are in a different nametable region than rows 0-1
-3. The game uses a different approach to render the HUD (e.g., sprites for health bars)
-
-### Next investigation step
-- Instrument NT0 row 0 to see what tile IDs are actually there at render time
-- Compare with a known-good frame (pre-transition) to see if NT0 row 0 was ever correct
-- Check if the HUD bars (M:, P:) are drawn as sprites rather than BG tiles
+### Verified fix
+Frame 2400 (pre-transition), 2460 (mid-transition), 2520 (post-transition): M:, P:
+bars and E:/G: counters all render correctly throughout the screen transition.
 
 ---
 
