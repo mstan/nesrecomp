@@ -47,36 +47,27 @@ EXIT 0 at frame 1151 with no freeze and no spurious bank=12 dispatch misses.
 
 ## ISSUE #3 — No sound (APU / SDL audio not implemented)
 
-**Status:** OPEN — significant feature work required
+**Status:** FIXED ✅ (2026-03-12)
 
-### Symptom
-The game runs completely silently. No music, no sound effects of any kind — not
-title screen music, not area music changes on room entry, not damage/death/gold SFX.
+Music and SFX (footsteps, dialogue scroll) both work. Commits: bf49fa2, 8723a35.
 
-### Root cause
-SDL audio is not initialized anywhere in the runner. There is no APU emulation and
-no audio output path. Building sound requires:
-1. Initialize SDL audio (SDL_Init with SDL_INIT_AUDIO, open audio device)
-2. Emulate the NES APU (pulse 1, pulse 2, triangle, noise, DMC channels) or at minimum
-   stub the APU register writes ($4000–$4013, $4015, $4017) to produce output
-3. Mix and stream audio samples to the SDL audio callback at ~44100 Hz
+### What was built
+- `runner/src/apu.c` + `runner/include/apu.h`: pulse1, pulse2, triangle, noise
+  channels with envelopes, sweep, length counters. DMC: output-level ($4011) only.
+- SDL_QueueAudio at 44100 Hz mono, 735 samples/frame. 4 frame-counter quarter-frame
+  ticks per VBlank (envelope/length/sweep updates at ~240 Hz).
+- `runtime.c`: $4000–$401F writes route to apu_write(); $4015 reads return status.
 
-Additionally, several bank5 APU routines are not yet generated due to missing dispatch
-table entries. Active dispatch misses:
+### Bank5 dispatch table flood — root cause (now understood)
+Previous entry `{5, $85AF, $8623}` was wrong: start should be $85AD (dispatcher
+reads lo from $85AD+X, hi from $85AE+X). Old start added $8680 (bare RTS of the
+dispatcher) as a function. code_generator saw PHA at $867F and wrongly emitted a
+2-PHA dispatch there, reading stale stack data → $8003/$8009 bank=15 flood every frame.
+Fix: `{5, 0x85B1, 0x8621}` — skips $8681 and $8680, adds $8C69/$8C73 correctly.
 
-| Address | Bank | Rate | Note |
-|---------|------|------|------|
-| $8C73   | 5    | ~14/run | APU channel write |
-| $8C69   | 5    | ~14/run | APU channel write |
-| $8680   | 5    | ~1/run  | APU dispatch |
-
-Bank5 dispatch tables that need adding (add ONE AT A TIME — a previous attempt caused
-a $8003/$8009 bank=15 dispatch flood, root cause not yet identified):
-- $826A–$828D (18 entries), dispatcher at $8265
-- $85AF–$8620 (58 entries, skip entry 0 — entry 0 recurses infinitely), dispatcher $8678
-
-### Priority
-Low — requires substantial new subsystem. Tackle after all visual bugs are resolved.
+### Remaining
+- DMC ROM DMA not implemented (DMC samples silent, if any).
+- $8680 dispatch miss (~1/run) — intended no-op, harmless.
 
 ---
 
