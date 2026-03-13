@@ -352,7 +352,14 @@ void function_finder_run(const NESRom *rom, FunctionList *out) {
         { 14, 0xA6D8, 0xA6E8 }, /* bank14 entity state dispatch 3 (8 entries) */
         { 14, 0xA5E7, 0xA66B }, /* bank14 entity type dispatch (66 entries) */
         {  5, 0x826A, 0x828E }, /* bank5 sound dispatch table 1 (18 entries) */
-        /* {  5, 0x85AF, 0x8623 }, */ /* bank5 sound dispatch table 2 — causes bank=15 flood, disabled */
+        {  5, 0x85B1, 0x8621 }, /* bank5 sound dispatch table 2 (56 entries, entries 2-57).
+                                   * Dispatcher at $8678: LDA $85AE,X / PHA / LDA $85AD,X / PHA / RTS.
+                                   * Table base $85AD, stride 2. We skip entries 0 ($8681) and 1 ($8680):
+                                   *   Entry 0 ($8681) = APU init — omitted, dispatch miss is harmless.
+                                   *   Entry 1 ($8680) = bare RTS byte after dispatcher — if added as
+                                   *   a function, code_generator sees PHA at $867F and wrongly emits
+                                   *   a 2-PHA dispatch, causing the $8003/$8009 bank=15 flood.
+                                   * Starting at $85B1 avoids both and still adds $8C69/$8C73 (SFX). */
     };
     int before_kt = out->count;
     for (int t = 0; t < (int)(sizeof(known_tables)/sizeof(known_tables[0])); t++) {
