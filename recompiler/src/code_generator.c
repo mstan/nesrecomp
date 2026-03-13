@@ -11,6 +11,7 @@
  * - JMP (ind) → call_by_address(nes_read16(ind)); return
  */
 #include "code_generator.h"
+#include "annotations.h"
 #include "cpu6502_decoder.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -441,10 +442,14 @@ static bool is_branch_target(const NESRom *rom, int bank,
 }
 
 static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
-                          const FunctionList *funcs) {
+                          const FunctionList *funcs, const AnnotationTable *at) {
     int fixed_bank = rom->prg_banks - 1;
     int bank = fe->bank;
     uint16_t pc = fe->addr;
+
+    /* Function-level annotation (appears before the signature) */
+    const char *fann = annotation_lookup(at, bank, pc);
+    if (fann) fprintf(f, "/* NOTE: %s */\n", fann);
 
     /* Function name — non-static so dispatch table can call them */
     if (bank == fixed_bank && pc >= 0xC000) {
@@ -531,6 +536,12 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
     uint16_t cursor = pc;
     for (int insn = 0; insn < MAX_INSNS_PER_FUNC; insn++) {
         fprintf(f, "label_%04X:;\n", cursor);
+
+        /* Instruction-level annotation (skipped at function start — already shown above) */
+        if (cursor != pc) {
+            const char *iann = annotation_lookup(at, bank, cursor);
+            if (iann) fprintf(f, "    /* NOTE: %s */\n", iann);
+        }
 
         /* Remove this address from pending (we're emitting it now) */
         for (int p = 0; p < pending_count; p++) {
@@ -701,7 +712,8 @@ static void emit_dispatch(FILE *f, const FunctionList *funcs, const NESRom *rom)
 }
 
 bool codegen_emit(const NESRom *rom, const FunctionList *funcs,
-                  const char *out_full_path, const char *out_dispatch_path) {
+                  const char *out_full_path, const char *out_dispatch_path,
+                  const AnnotationTable *at) {
     FILE *f_full = fopen(out_full_path, "w");
     if (!f_full) {
         fprintf(stderr, "codegen: cannot open %s\n", out_full_path);
@@ -713,7 +725,7 @@ bool codegen_emit(const NESRom *rom, const FunctionList *funcs,
 
     int fixed_bank = rom->prg_banks - 1;
     for (int i = 0; i < funcs->count; i++) {
-        emit_function(f_full, rom, &funcs->entries[i], funcs);
+        emit_function(f_full, rom, &funcs->entries[i], funcs, at);
     }
 
     /* Add NMI/RESET/IRQ entry points for runner */

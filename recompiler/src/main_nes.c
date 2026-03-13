@@ -9,6 +9,7 @@
 #include "rom_parser.h"
 #include "function_finder.h"
 #include "code_generator.h"
+#include "annotations.h"
 
 int main(int argc, char *argv[]) {
     if (argc < 2) {
@@ -36,10 +37,27 @@ int main(int argc, char *argv[]) {
     function_finder_run(&rom, &funcs);
     printf("[NESRecomp] Found %d functions\n", funcs.count);
 
+    /* Load annotations sidecar: <rompath_without_extension>_annotations.csv */
+    AnnotationTable at = {0};
+    {
+        char ann_path[512];
+        const char *dot = strrchr(rom_path, '.');
+        if (dot) {
+            size_t n = (size_t)(dot - rom_path);
+            if (n >= sizeof(ann_path) - 20) n = sizeof(ann_path) - 20;
+            memcpy(ann_path, rom_path, n);
+            strcpy(ann_path + n, "_annotations.csv");
+        } else {
+            snprintf(ann_path, sizeof(ann_path), "%s_annotations.csv", rom_path);
+        }
+        if (annotations_load(&at, ann_path))
+            printf("[NESRecomp] Annotations: %d entries from %s\n", at.count, ann_path);
+    }
+
     /* Emit C */
     const char *out_full     = "generated/faxanadu_full.c";
     const char *out_dispatch = "generated/faxanadu_dispatch.c";
-    if (!codegen_emit(&rom, &funcs, out_full, out_dispatch)) {
+    if (!codegen_emit(&rom, &funcs, out_full, out_dispatch, &at)) {
         fprintf(stderr, "[NESRecomp] Code generation failed\n");
         rom_free(&rom);
         function_list_free(&funcs);
@@ -52,5 +70,6 @@ int main(int argc, char *argv[]) {
 
     rom_free(&rom);
     function_list_free(&funcs);
+    annotations_free(&at);
     return 0;
 }

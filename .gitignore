@@ -4,3 +4,4 @@ baserom.nes
 bank*.bin
 *.log
 *.csv
+!*_annotations.csv

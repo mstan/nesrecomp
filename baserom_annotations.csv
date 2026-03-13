@@ -1,0 +1,86 @@
+# Faxanadu NES ROM — address annotations for NESRecomp code generator
+#
+# Format: bank, address, note
+# bank:    decimal (0-15); 15 = fixed bank ($C000-$FFFF)
+# address: hex 0xXXXX or decimal
+# note:    free text; may contain commas; appears as /* NOTE: ... */ in generated C
+#
+# Workflow: when a non-obvious pattern is discovered via Ghidra, document it here
+# so the generated code is self-explaining without ever reading faxanadu_full.c whole.
+# ─────────────────────────────────────────────────────────────────────────────────
+
+# ── Fixed bank (bank 15, $C000-$FFFF) ────────────────────────────────────────────
+
+# Entry vectors
+15, 0xC913, RESET vector — game main loop, never returns
+15, 0xC999, NMI vector — VBlank handler, called at 60 Hz
+15, 0xC9D5, IRQ vector
+
+# JSR $F859 bank-switch dispatch idiom
+# The JSR is followed by 3 inline data bytes (bank, addr_lo, addr_hi), not instructions.
+# code_generator expands each call site inline: bank-switch + call_by_address + bank-restore.
+15, 0xF859, JSR $F859 bank-switch dispatch: 3 inline data bytes follow (bank, addr_lo, addr_hi). NOT a normal subroutine call.
+
+# Branch-bypass 2-PHA dispatch (func_C478)
+# Four branches — BNE $C47C, BEQ $C482, BEQ $C489, BCS $C492 — all jump directly to
+# the RTS at $C49C, bypassing the two PHAs at $C49A-$C49B that load the dispatch target.
+# code_generator detects this via branch_targets[]: emits the 2-PHA dispatch inline after
+# the last PHA (fall-through path), emits plain return at the branch-target label.
+15, 0xC478, scene dispatch function — contains branch-bypass 2-PHA dispatch at $C49A-$C49C
+15, 0xC49A, first PHA of 2-PHA RTS dispatch (fall-through path); four branches bypass both PHAs to reach RTS at $C49C
+15, 0xC49C, branch-target RTS — bypassed by BNE/BEQ/BEQ/BCS; fall-through path dispatched inline after $C49B PHA
+
+# CHR tile-update split dispatch table
+# func_D61D dispatches to 4 CHR update handlers via split lo/hi table at $D64C/$D650.
+# Added as known_split_tables entry {15, 0xD64C, 0xD650, 4}.
+15, 0xD61D, CHR tile-update dispatcher — uses split table lo=$D64C, hi=$D650, 4 entries
+15, 0xD64C, lo-byte half of CHR update dispatch split table (4 entries: $D654, $D673, $D699, $D6B1)
+15, 0xD650, hi-byte half of CHR update dispatch split table
+15, 0xD654, CHR tile-update handler 0
+15, 0xD673, CHR tile-update handler 1
+15, 0xD699, CHR tile-update handler 2
+15, 0xD6B1, CHR tile-update handler 3
+
+# ── Bank 14 ($8000-$BFFF, entity/room logic) ─────────────────────────────────────
+
+# 4-PHA RTS dispatch sites
+# Pattern: 4× PHA then RTS. Saves S before all 4 PHAs (_s4 = S after 4 pushes = S_orig-4).
+# Correct S restore: _s4+4 = S_orig (NOT _s4+2 — that caused MMC1 bank register corruption).
+14, 0xA6A0, 4-PHA RTS dispatch — entity state router. S restore must be _s4+4 (= S_orig). See ISSUES.md #2.
+14, 0xA78B, 4-PHA RTS dispatch — second site. Same S-restore rule: _s4+4.
+
+# Entity state dispatch tables (known_tables entries)
+14, 0x8087, entity state dispatch table 1 — 101 entries ($8087-$8150), 2-PHA RTS format
+14, 0x8958, entity state dispatch table 2 — 8 entries ($8958-$8967)
+14, 0xA6D8, entity state dispatch table 3 — 8 entries ($A6D8-$A6E7)
+14, 0xA5E7, entity/room-type dispatch table — 66 entries ($A5E7-$A66A)
+
+# ── Bank 12 ($8000-$BFFF, dialogue/room state) ───────────────────────────────────
+
+# Room/scene state split dispatch table
+# Dispatcher at $826E uses split lo/hi tables. Added as known_split_tables {12, 0x827B, 0x8293, 24}.
+12, 0x826E, room/scene state dispatcher — split table lo=$827B, hi=$8293, 24 entries
+12, 0x827B, lo-byte half of room/scene state dispatch split table (24 entries)
+12, 0x8293, hi-byte half of room/scene state dispatch split table
+
+# ── Bank 5 ($8000-$BFFF, APU/sound) ─────────────────────────────────────────────
+
+# Sound dispatch table 1
+# 18 entries, each a 2-byte LE (target-1) pointer. Added as known_tables {5, 0x826A, 0x828E}.
+ 5, 0x8265, 2-PHA sound dispatch table 1 — reads from table 1 at $826A-$828D
+ 5, 0x826A, sound dispatch table 1 — 18 entries (target-1 LE16 pairs, $826A-$828D)
+
+# Sound dispatch table 2
+# Dispatcher at $8678: LDA $85AE,X / PHA / LDA $85AD,X / PHA / RTS.
+# Real table base = $85AD (lo) / $85AE (hi), not $85AF.
+# We add entries 2-57 ($85B1-$8620) as known_tables {5, 0x85B1, 0x8621}.
+# Entries 0 ($8681, APU init) and 1 ($8680, bare RTS of dispatcher) are skipped:
+#   entry 1 at $8680 would generate a func starting with RTS, and code_generator
+#   sees PHA at $867F (dispatcher's last PHA) and wrongly emits 2-PHA dispatch →
+#   stale stack data → $8003/$8009 bank=15 dispatch flood every frame.
+ 5, 0x8678, 2-PHA sound dispatch table 2 — lo=$85AD+X, hi=$85AE+X. Real base $85AD, not $85AF.
+ 5, 0x85AD, sound dispatch table 2 actual base (lo bytes at even offsets, hi bytes at odd offsets)
+ 5, 0x8680, bare RTS — last byte of dispatcher at $8678. DO NOT add as function: causes 2-PHA false-positive.
+ 5, 0x8681, APU init/reset — silence DMC, clear RAM sound vars, JSR $804A, enable all channels ($4015=$0F)
+ 5, 0x8C69, noise channel SFX writer — LDA #$05 STA $0126, sets noise period/volume ($400C/$400E/$400F)
+ 5, 0x8C73, noise channel SFX writer (entry point mid-function) — LDA #$01 STA $400C then noise period logic
