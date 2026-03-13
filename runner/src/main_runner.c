@@ -18,14 +18,16 @@
 #include <SDL.h>
 #include "nes_runtime.h"
 #include "input_script.h"
+#include "savestate.h"
 #include "logger.h"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
-/* ---- Script / record paths (set from CLI) ---- */
-static const char *s_script_path = NULL;
-static const char *s_record_path = NULL;
+/* ---- Script / record / savestate paths (set from CLI) ---- */
+static const char *s_script_path    = NULL;
+static const char *s_record_path    = NULL;
+static const char *s_loadstate_path = NULL;
 
 /* ---- SDL state (file-level so nes_vblank_callback can access) ---- */
 static SDL_Window   *s_window   = NULL;
@@ -34,12 +36,10 @@ static SDL_Texture  *s_texture  = NULL;
 static uint32_t      s_framebuf[256 * 240];
 
 /* ---- Screenshot ---- */
-#define SHOT_COUNT 10
-static int s_shot_index = 1;
-
 static void save_screenshot(void) {
-    char path[64];
-    snprintf(path, sizeof(path), "C:/temp/nes_shot_%02d.png", s_shot_index);
+    char path[80];
+    snprintf(path, sizeof(path), "C:/temp/nes_shot_%04llu.png",
+             (unsigned long long)g_frame_count);
     static uint8_t rgb[256 * 240 * 3];
     for (int i = 0; i < 256 * 240; i++) {
         uint32_t px = s_framebuf[i];
@@ -49,8 +49,6 @@ static void save_screenshot(void) {
     }
     stbi_write_png(path, 256, 240, 3, rgb, 256*3);
     printf("[Shot] Saved %s\n", path);
-    s_shot_index++;
-    if (s_shot_index > SHOT_COUNT) s_shot_index = 1;
 }
 
 /* ---- Debug trace log (C:/temp/debug_trace.txt) ---- */
@@ -93,6 +91,13 @@ void nes_vblank_callback(void) {
         if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_ESCAPE) exit(0);
         if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_F5)
             g_turbo ^= 1;
+        if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_F6)
+            savestate_save("C:/temp/quicksave.sav");
+        if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_F7) {
+            record_loadstate(g_frame_count, "C:/temp/quicksave.sav");
+            savestate_load("C:/temp/quicksave.sav");
+            record_sync_frame(g_frame_count); /* g_frame_count now = restored value */
+        }
     }
 
     /* Update controller 1 from keyboard state.
@@ -242,7 +247,7 @@ static bool load_rom(const char *path) {
 
 int main(int argc, char *argv[]) {
     if (argc < 2) {
-        fprintf(stderr, "Usage: NESRecompGame <baserom.nes> [--script FILE] [--record FILE]\n");
+        fprintf(stderr, "Usage: NESRecompGame <baserom.nes> [--script FILE] [--record FILE] [--loadstate FILE]\n");
         return 1;
     }
 
@@ -250,13 +255,15 @@ int main(int argc, char *argv[]) {
     for (int i = 2; i < argc; i++) {
         if (strcmp(argv[i], "--script") == 0 && i+1 < argc) s_script_path = argv[++i];
         else if (strcmp(argv[i], "--record") == 0 && i+1 < argc) s_record_path = argv[++i];
+        else if (strcmp(argv[i], "--loadstate") == 0 && i+1 < argc) s_loadstate_path = argv[++i];
     }
 
     if (!load_rom(argv[1])) return 1;
 
     runtime_init();
 
-    if (s_record_path) record_open(s_record_path);
+    if (s_loadstate_path) savestate_load(s_loadstate_path);
+    if (s_record_path) { record_open(s_record_path); atexit(record_close); }
     if (s_script_path) script_load(s_script_path);
 
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {

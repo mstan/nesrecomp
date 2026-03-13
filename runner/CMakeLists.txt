@@ -15,6 +15,7 @@ add_executable(NESRecompGame
     src/mapper.c
     src/logger.c
     src/input_script.c
+    src/savestate.c
     ../generated/faxanadu_full.c
     ../generated/faxanadu_dispatch.c
 )

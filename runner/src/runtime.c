@@ -23,6 +23,11 @@ uint8_t g_oamaddr     = 0;
 uint8_t g_ppuscroll_x = 0;
 uint8_t g_ppuscroll_y = 0;
 uint16_t g_ppuaddr    = 0;
+
+uint8_t g_ppuscroll_x_hud = 0;
+uint8_t g_ppuscroll_y_hud = 0;
+uint8_t g_ppuctrl_hud     = 0;
+int     g_spr0_split_active = 0;
 static int g_ppuaddr_latch = 0;
 static int g_scroll_latch  = 0;
 
@@ -81,6 +86,7 @@ static void maybe_trigger_vblank(void) {
     s_vblank_firing = true;
     /* Set VBlank (bit7), clear sprite-0 hit (bit6) — standard NES VBlank start */
     g_ppustatus = (g_ppustatus & ~0x40) | 0x80;
+    g_spr0_split_active = 0;  /* reset per-frame split state */
     nes_vblank_callback();
     s_vblank_firing = false;
     /* Update s_last so we don't immediately re-fire after a long callback */
@@ -187,6 +193,11 @@ uint8_t ppu_read_reg(uint16_t reg) {
                     s_spr0_reads = 0;
                 } else {
                     if (++s_spr0_reads >= 3) {
+                        /* Capture scroll/ppuctrl state as HUD (pre-split) values */
+                        g_ppuscroll_x_hud   = g_ppuscroll_x;
+                        g_ppuscroll_y_hud   = g_ppuscroll_y;
+                        g_ppuctrl_hud       = g_ppuctrl;
+                        g_spr0_split_active = 1;
                         g_ppustatus |= 0x40;
                         s_spr0_reads = 0;
                     }
@@ -204,6 +215,16 @@ uint8_t ppu_read_reg(uint16_t reg) {
         }
     }
     return 0;
+}
+
+void runtime_get_latch_state(uint8_t *ppuaddr_latch, uint8_t *scroll_latch) {
+    *ppuaddr_latch = (uint8_t)g_ppuaddr_latch;
+    *scroll_latch  = (uint8_t)g_scroll_latch;
+}
+
+void runtime_set_latch_state(uint8_t ppuaddr_latch, uint8_t scroll_latch) {
+    g_ppuaddr_latch = (int)ppuaddr_latch;
+    g_scroll_latch  = (int)scroll_latch;
 }
 
 void nes_log_dispatch_miss(uint16_t addr) {

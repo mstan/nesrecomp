@@ -62,28 +62,38 @@ void ppu_render_frame(uint32_t *framebuf) {
     if (!(g_ppumask & 0x08)) goto render_sprites;
 
     {
-        /* BG pattern table: PPUCTRL bit 4 selects $0000 or $1000 */
-        int chr_base = (g_ppuctrl & 0x10) ? 0x1000 : 0x0000;
-
-        /* Scroll origin in combined 512×480 nametable space.
-         * PPUCTRL bits 0-1 select the base nametable (add 256 or 240 to scroll). */
-        int origin_x = g_ppuscroll_x + ((g_ppuctrl & 0x01) ? 256 : 0);
-        int origin_y = g_ppuscroll_y + ((g_ppuctrl & 0x02) ? 240 : 0);
+        /* Split-screen: rows 0-15 use HUD scroll (captured at sprite-0 hit);
+         * rows 16-239 use the post-split game-area scroll.
+         * When no split occurred this frame, all rows use current scroll. */
+        int split_y = g_spr0_split_active ? 16 : 240;
 
         for (int sy = 0; sy < 240; sy++) {
+            /* Choose scroll source for this scanline */
+            uint8_t ppuctrl_row = (sy < split_y) ? g_ppuctrl_hud  : g_ppuctrl;
+            int     scroll_x    = (sy < split_y) ? g_ppuscroll_x_hud : g_ppuscroll_x;
+            int     scroll_y    = (sy < split_y) ? g_ppuscroll_y_hud : g_ppuscroll_y;
+
+            /* BG pattern table: PPUCTRL bit 4 selects $0000 or $1000 */
+            int chr_base = (ppuctrl_row & 0x10) ? 0x1000 : 0x0000;
+
+            /* Scroll origin in combined 512×480 nametable space.
+             * PPUCTRL bits 0-1 select the base nametable (add 256 or 240 to scroll). */
+            int origin_x = scroll_x + ((ppuctrl_row & 0x01) ? 256 : 0);
+            int origin_y = scroll_y + ((ppuctrl_row & 0x02) ? 240 : 0);
+
             int nt_y = origin_y + sy;
             if (nt_y >= 480) nt_y -= 480;
-            int tile_y  = nt_y / 8;
+            int tile_y   = nt_y / 8;
             int tile_row = nt_y % 8;
             int nt_row   = (tile_y >= 30) ? 1 : 0;
             int local_ty = tile_y % 30;
 
             for (int sx = 0; sx < 256; sx++) {
-                int nt_x     = (origin_x + sx) & 0x1FF;
-                int tile_x   = nt_x / 8;
+                int nt_x      = (origin_x + sx) & 0x1FF;
+                int tile_x    = nt_x / 8;
                 int pixel_col = nt_x % 8;
-                int nt_col   = (tile_x >= 32) ? 1 : 0;
-                int local_tx = tile_x % 32;
+                int nt_col    = (tile_x >= 32) ? 1 : 0;
+                int local_tx  = tile_x % 32;
 
                 int which_nt = nt_row * 2 + nt_col;
                 int nt_off   = which_nt * 0x400;
@@ -121,9 +131,10 @@ render_sprites:
 
         if (spr_y >= 0xEF) continue; /* off-screen */
 
-        int flip_h = (spr_attr >> 6) & 1;
-        int flip_v = (spr_attr >> 7) & 1;
-        int spr_pal = (spr_attr & 0x03) + 4; /* sprite palettes start at $3F10, offset 4 */
+        int flip_h   = (spr_attr >> 6) & 1;
+        int flip_v   = (spr_attr >> 7) & 1;
+        int priority = (spr_attr >> 5) & 1; /* 0=in front, 1=behind BG */
+        int spr_pal  = (spr_attr & 0x03) + 4; /* sprite palettes start at $3F10, offset 4 */
 
         for (int row = 0; row < 8; row++) {
             int draw_row = flip_v ? (7 - row) : row;
@@ -141,6 +152,11 @@ render_sprites:
                 if (px < 0 || px >= 256) continue;
                 int color_idx = ((lo >> chr_bit) & 1) | (((hi >> chr_bit) & 1) << 1);
                 if (color_idx == 0) continue; /* transparent */
+                if (priority) {
+                    /* Behind BG: only draw where BG pixel is universal background color */
+                    uint32_t bg_backdrop = NES_PALETTE[g_ppu_pal[0] & 0x3F];
+                    if (framebuf[py * 256 + px] != bg_backdrop) continue;
+                }
                 uint8_t nes_color = g_ppu_pal[(spr_pal * 4 + color_idx) & 0x1F] & 0x3F;
                 framebuf[py * 256 + px] = NES_PALETTE[nes_color];
             }

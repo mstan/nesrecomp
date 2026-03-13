@@ -69,6 +69,14 @@ extern uint8_t g_ppustatus;
 extern uint8_t g_ppuscroll_x;
 extern uint8_t g_ppuscroll_y;
 
+/* Split-screen: scroll/ppuctrl captured at sprite-0 hit (= HUD values).
+ * g_spr0_split_active is 1 if a split occurred this frame. When active,
+ * scanlines 0-15 use *_hud values; 16+ use g_ppuscroll_x/y + g_ppuctrl. */
+extern uint8_t g_ppuscroll_x_hud;
+extern uint8_t g_ppuscroll_y_hud;
+extern uint8_t g_ppuctrl_hud;
+extern int     g_spr0_split_active;
+
 /* Frame counter incremented each VBlank */
 extern uint64_t g_frame_count;
 

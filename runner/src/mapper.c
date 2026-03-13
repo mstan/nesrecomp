@@ -114,6 +114,26 @@ void mapper_write(uint16_t addr, uint8_t val) {
     }
 }
 
+void mapper_get_state(MapperState *out) {
+    out->shift_reg   = s_shift_reg;
+    out->shift_count = s_shift_count;
+    out->ctrl        = s_ctrl;
+    out->chr0        = s_chr0;
+    out->chr1        = s_chr1;
+    out->prg_reg     = s_prg_reg;
+    out->current_bank = g_current_bank;
+}
+
+void mapper_set_state(const MapperState *in) {
+    s_shift_reg    = in->shift_reg;
+    s_shift_count  = in->shift_count;
+    s_ctrl         = in->ctrl;
+    s_chr0         = in->chr0;
+    s_chr1         = in->chr1;
+    s_prg_reg      = in->prg_reg;
+    g_current_bank = in->current_bank;
+}
+
 const uint8_t *mapper_get_switchable_bank(void) {
     if (!s_prg_data) return NULL;
     return s_prg_data + (size_t)g_current_bank * 0x4000;
