@@ -16,10 +16,32 @@
 15, 0xC999, NMI vector — VBlank handler, called at 60 Hz
 15, 0xC9D5, IRQ vector
 
+# PRG bank switch functions
+# Two entry points to MMC1 bank switching. Both set PRG bank = X; do not conflate them.
+15, 0xCC1A, PRG bank switch — clean 5-write MMC1 sequence; also tail-call target from $F8C6 return trampoline
+15, 0xCC85, PRG bank switch — same as $CC1A but checks $0012 guard first; resets MMC1 shift register if non-zero (interrupt-safe variant)
+
+# NMI enable
+# Called at end of every major init phase. LDA $000A / ORA #$80 / BNE $CB39 (always) / STA $000A / STA $2000.
+# Seeing this in a trace means the game just finished reset/init and is entering the main loop.
+15, 0xCB2F, NMI enable — LDA $000A / ORA #$80 → STA $000A + STA $2000 (PPUCTRL); called after every init phase
+
+# NMI renders-on path and PPU helpers
+# $C9D6: the "rendering enabled" branch of the NMI handler (entered when $5A bit set).
+#   Calls $CF3C to flush PPU DMA queue, sets $2001 (PPUMASK), runs sprite-0 scroll split if $5A>=0.
+# $CF3C: PPU DMA queue processor — drains $0500 write buffer (read ptr RAM $001F, write ptr RAM $0020).
+# $D016: palette writer — copies 32 bytes from $0293-$02B2 (shadow palette) to PPU $3F00.
+15, 0xC9D6, NMI renders-on path — calls $CF3C (PPU DMA flush), sets PPUMASK $2001, sprite-0 scroll split when $5A>=0
+15, 0xCF3C, PPU DMA queue processor — drains $0500 write buffer; read ptr=$001F, write ptr=$0020
+15, 0xD016, palette writer — copies shadow palette $0293-$02B2 (32 bytes) → PPU $3F00
+
 # JSR $F859 bank-switch dispatch idiom
 # The JSR is followed by 3 inline data bytes (bank, addr_lo, addr_hi), not instructions.
 # code_generator expands each call site inline: bank-switch + call_by_address + bank-restore.
+# $F8C6 is the return trampoline: after the dispatched function returns, execution lands here
+#   to restore the caller's bank. PLA (pop saved bank) / TAX / JMP $CC1A.
 15, 0xF859, JSR $F859 bank-switch dispatch: 3 inline data bytes follow (bank, addr_lo, addr_hi). NOT a normal subroutine call.
+15, 0xF8C6, JSR $F859 return trampoline — PLA (pop saved bank) / TAX / JMP $CC1A; restores caller's PRG bank after dispatched function returns
 
 # Branch-bypass 2-PHA dispatch (func_C478)
 # Four branches — BNE $C47C, BEQ $C482, BEQ $C489, BCS $C492 — all jump directly to
