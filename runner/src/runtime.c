@@ -4,6 +4,7 @@
 #include "nes_runtime.h"
 #include "mapper.h"
 #include "logger.h"
+#include "apu.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -67,6 +68,7 @@ void runtime_init(void) {
     memset(g_ppu_nt,  0, sizeof(g_ppu_nt));
     g_cpu.S = 0xFD;
     g_cpu.I = 1;
+    apu_init();
     ppu_trace_init();
 }
 
@@ -98,6 +100,7 @@ uint8_t nes_read(uint16_t addr) {
     if (addr <= 0x1FFF) return g_ram[addr & 0x07FF];
     if (addr >= 0x2000 && addr <= 0x3FFF) return ppu_read_reg(0x2000 + (addr & 7));
     if (addr >= 0x4000 && addr <= 0x401F) {
+        if (addr == 0x4015) return apu_read_status();
         if (addr == 0x4016) {
             if (s_ctrl1_strobe) return 0x40 | (g_controller1_buttons >> 7);
             uint8_t bit = (s_ctrl1_shift & 0x80) ? 1 : 0;
@@ -137,7 +140,7 @@ void nes_write(uint16_t addr, uint8_t val) {
         }
         return;
     }
-    if (addr >= 0x4000 && addr <= 0x401F) return;
+    if (addr >= 0x4000 && addr <= 0x401F) { apu_write(addr, val); return; }
     if (addr >= 0x8000) { mapper_write(addr, val); return; }
 }
 

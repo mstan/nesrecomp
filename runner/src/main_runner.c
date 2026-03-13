@@ -20,6 +20,7 @@
 #include "input_script.h"
 #include "savestate.h"
 #include "logger.h"
+#include "apu.h"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
@@ -30,10 +31,15 @@ static const char *s_record_path    = NULL;
 static const char *s_loadstate_path = NULL;
 
 /* ---- SDL state (file-level so nes_vblank_callback can access) ---- */
-static SDL_Window   *s_window   = NULL;
-static SDL_Renderer *s_renderer = NULL;
-static SDL_Texture  *s_texture  = NULL;
-static uint32_t      s_framebuf[256 * 240];
+static SDL_Window        *s_window    = NULL;
+static SDL_Renderer      *s_renderer  = NULL;
+static SDL_Texture       *s_texture   = NULL;
+static uint32_t           s_framebuf[256 * 240];
+
+/* ---- Audio state ---- */
+static SDL_AudioDeviceID  s_audio_dev = 0;
+#define AUDIO_SAMPLES_PER_FRAME 735
+static int16_t            s_audio_frame[AUDIO_SAMPLES_PER_FRAME];
 
 /* ---- Screenshot ---- */
 static void save_screenshot(void) {
@@ -156,6 +162,16 @@ void nes_vblank_callback(void) {
         if (s_cb_count <= 5) printf("[VBlank] NMI returned ok\n");
     }
 
+    /* Generate one frame of audio after NMI (APU registers now up-to-date).
+     * Skip in turbo mode — queued audio would pile up faster than it drains. */
+    if (s_audio_dev && !g_turbo) {
+        /* Don't over-buffer: skip if more than 6 frames already queued */
+        if (SDL_GetQueuedAudioSize(s_audio_dev) < AUDIO_SAMPLES_PER_FRAME * sizeof(int16_t) * 6) {
+            apu_generate(s_audio_frame, AUDIO_SAMPLES_PER_FRAME);
+            SDL_QueueAudio(s_audio_dev, s_audio_frame, AUDIO_SAMPLES_PER_FRAME * sizeof(int16_t));
+        }
+    }
+
     /* Render PPU to framebuffer */
     ppu_render_frame(s_framebuf);
 
@@ -266,9 +282,30 @@ int main(int argc, char *argv[]) {
     if (s_record_path) { record_open(s_record_path); atexit(record_close); }
     if (s_script_path) script_load(s_script_path);
 
-    if (SDL_Init(SDL_INIT_VIDEO) < 0) {
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
         fprintf(stderr, "SDL_Init: %s\n", SDL_GetError());
         return 1;
+    }
+
+    /* Open audio device — use SDL_QueueAudio (callback=NULL) to push samples
+     * from the game thread without needing a separate audio thread. */
+    {
+        SDL_AudioSpec want;
+        SDL_memset(&want, 0, sizeof(want));
+        want.freq     = 44100;
+        want.format   = AUDIO_S16SYS;
+        want.channels = 1;
+        want.samples  = 512;
+        want.callback = NULL;
+        SDL_AudioSpec got;
+        s_audio_dev = SDL_OpenAudioDevice(NULL, 0, &want, &got, 0);
+        if (s_audio_dev == 0) {
+            fprintf(stderr, "[APU] SDL_OpenAudioDevice: %s (continuing without audio)\n",
+                    SDL_GetError());
+        } else {
+            SDL_PauseAudioDevice(s_audio_dev, 0); /* start playback */
+            printf("[APU] Audio device opened: %d Hz, %d ch\n", got.freq, got.channels);
+        }
     }
 
     s_window = SDL_CreateWindow(
