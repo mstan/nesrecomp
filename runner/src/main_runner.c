@@ -109,6 +109,11 @@ static SDL_AudioDeviceID  s_audio_dev = 0;
 static int16_t            s_audio_frame[AUDIO_SAMPLES_PER_FRAME];
 
 /* ---- Screenshot ---- */
+/* Non-static wrapper so ppu_renderer.c can save PNGs */
+void save_png(const char *path, int w, int h, const void *rgb, int stride) {
+    stbi_write_png(path, w, h, 3, rgb, stride);
+}
+
 static void save_screenshot(void) {
     char path[80];
     snprintf(path, sizeof(path), "C:/temp/nes_shot_%04llu.png",
@@ -130,21 +135,47 @@ static FILE *s_debug_log = NULL;
 static void debug_log_open(void) {
     s_debug_log = fopen("C:/temp/debug_trace.txt", "w");
     if (s_debug_log) {
-        fprintf(s_debug_log, "FRAME,bank,r13,r14,r20,r1F,S\n");
+        fprintf(s_debug_log, "FRAME,slot,Y,tile,attr,X\n");
         fflush(s_debug_log);
     }
+}
+
+/* One-time dump of CHR tiles A0-C0 + all 32 palette bytes when item sprites appear */
+static int s_chr_dumped = 0;
+static void chr_dump_once(uint64_t frame) {
+    if (s_chr_dumped) return;
+    s_chr_dumped = 1;
+    FILE *f = fopen("C:/temp/chr_dump.txt", "w");
+    if (!f) return;
+    /* Palette dump */
+    fprintf(f, "PALETTE:");
+    for (int i = 0; i < 32; i++) fprintf(f, " %02X", g_ppu_pal[i]);
+    fprintf(f, "  (at frame %llu)\n", (unsigned long long)frame);
+    /* CHR tile dump */
+    fprintf(f, "CHR_ADDR,B0,B1,B2,B3,B4,B5,B6,B7,B8,B9,BA,BB,BC,BD,BE,BF\n");
+    for (int tile = 0xA0; tile <= 0xC0; tile++) {
+        int addr = tile * 16;
+        fprintf(f, "%04X", addr);
+        for (int b = 0; b < 16; b++) fprintf(f, ",%02X", g_chr_ram[addr+b]);
+        fprintf(f, "\n");
+    }
+    fclose(f);
+    printf("[CHR] Dumped CHR+PAL at frame %llu\n", (unsigned long long)frame);
 }
 
 /* Call at NMI time to log one line per frame. Comment out when not debugging. */
 static void debug_log_frame(uint64_t frame) {
     if (!s_debug_log) return;
-    fprintf(s_debug_log, "%llu,%d,%02X,%02X,%02X,%02X,%02X,%02X\n",
-            (unsigned long long)frame,
-            g_current_bank,
-            g_ram[0x13], g_ram[0x14],
-            g_ram[0x20], g_ram[0x1F],
-            g_cpu.S,
-            g_ram[0x100]);   /* game's bank tracking register ($0100) */
+    /* Log all visible OAM entries every frame: FRAME,slot,Y,tile,attr,X */
+    for (int s = 0; s < 64; s++) {
+        uint8_t sy = g_ppu_oam[s*4+0];
+        if (sy < 240) {
+            fprintf(s_debug_log, "%llu,%d,%02X,%02X,%02X,%02X\n",
+                    (unsigned long long)frame, s,
+                    sy, g_ppu_oam[s*4+1],
+                    g_ppu_oam[s*4+2], g_ppu_oam[s*4+3]);
+        }
+    }
     fflush(s_debug_log);
 }
 
@@ -202,6 +233,25 @@ void nes_vblank_callback(void) {
 
     /* Log per-frame state BEFORE NMI runs */
     debug_log_frame(s_cb_count);
+
+    /* TEMP DEBUG Issue#8: log first death/drop entity seen in slots 0..7 */
+    {
+        static int s_death_seen = 0, s_drop_seen = 0;
+        for (int _i = 0; _i < 8; _i++) {
+            uint8_t _t = g_ram[0x02CC + _i];
+            if ((_t == 0x13 || _t == 0x14 || _t == 0x64) && !s_death_seen) {
+                printf("[DEBUG] frame=%llu death entity slot=%d type=$%02X orig=$%02X phase=$%02X\n",
+                       (unsigned long long)g_frame_count, _i, _t,
+                       g_ram[0x02FC + _i], g_ram[0x02E4 + _i]);
+                s_death_seen = 1;
+            }
+            if ((_t == 0x01 || _t == 0x02) && _i > 0 && !s_drop_seen) {
+                printf("[DEBUG] frame=%llu DROP entity slot=%d type=$%02X!\n",
+                       (unsigned long long)g_frame_count, _i, _t);
+                s_drop_seen = 1;
+            }
+        }
+    }
 
     /* Debug: dump NMI gate variables */
     if (s_cb_count <= 5)
