@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "ghidra_bank15": {
+      "type": "sse",
+      "url": "http://localhost:9015/sse"
+    },
+    "mesen": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["/path/to/nesrecomp/tools/mesen_mcp_server.py"]
+    }
+  }
+}

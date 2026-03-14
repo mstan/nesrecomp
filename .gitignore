@@ -1,7 +1,18 @@
 build/
 generated/
-baserom.nes
-bank*.bin
+
+# ROM files — never commit game ROMs
+*.nes
+*.bin
+*.sav
+
+# Log / trace files
 *.log
 *.csv
 !*_annotations.csv
+
+# SDL2 prebuilt binaries — install via CMake FetchContent or system package
+runner/external/SDL2/lib/
+
+# Local MCP server config (paths are machine-specific); see .mcp.json.example
+.mcp.json
