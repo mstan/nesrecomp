@@ -259,7 +259,11 @@ int script_check_exit(void) {
 
 int script_wants_screenshot(char *buf, int buflen) {
     if (!s_shot_pending[0]) return 0;
-    snprintf(buf, buflen, "C:/temp/%s", s_shot_pending);
+    /* If path is absolute (starts with drive letter: or /), use as-is */
+    if (s_shot_pending[1] == ':' || s_shot_pending[0] == '/' || s_shot_pending[0] == '\\')
+        snprintf(buf, buflen, "%s", s_shot_pending);
+    else
+        snprintf(buf, buflen, "C:/temp/%s", s_shot_pending);
     s_shot_pending[0] = '\0';
     return 1;
 }

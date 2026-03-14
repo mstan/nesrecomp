@@ -258,7 +258,9 @@ static void watch_render_frame(void) {
     if (!s_watch_window || !s_watch_renderer || s_watch_count == 0) return;
 
     /* Check for changes */
-    int any_dirty = 0;
+    static uint32_t s_last_miss_count = 0xFFFFFFFF;
+    int any_dirty = (g_miss_count_any != s_last_miss_count);
+    s_last_miss_count = g_miss_count_any;
     for (int i = 0; i < s_watch_count; i++) {
         WatchEntry *e = &s_watch[i];
         uint8_t cur = g_ram[e->addr];
@@ -307,6 +309,42 @@ static void watch_render_frame(void) {
         SDL_SetRenderDrawColor(s_watch_renderer, 0x1A, 0x1A, 0x2A, 255);
         SDL_Rect sep = { 8, oy + WATCH_ENTRY_H - 5, WATCH_W - 16, 1 };
         SDL_RenderFillRect(s_watch_renderer, &sep);
+    }
+
+    /* Dispatch miss monitor — unique address list */
+    {
+        int oy = 6 + s_watch_count * WATCH_ENTRY_H;
+
+        /* Header */
+        SDL_SetRenderDrawColor(s_watch_renderer, 0x22, 0x08, 0x08, 255);
+        SDL_Rect hdr = { 8, oy, WATCH_W - 16, 18 };
+        SDL_RenderFillRect(s_watch_renderer, &hdr);
+        char hdr_str[40];
+        snprintf(hdr_str, sizeof(hdr_str), "DISPATCH MISSES  total:%u", g_miss_count_any);
+        watch_draw_str(14, oy + 4, hdr_str, 1, 0x88, 0x44, 0x44);
+
+        /* One row per unique missed address */
+        int row_h = 18;
+        int n = g_miss_unique_count;
+        SDL_SetRenderDrawColor(s_watch_renderer, 15, 10, 10, 255);
+        SDL_Rect body = { 8, oy + 20, WATCH_W - 16, (n > 0 ? n : 1) * row_h + 4 };
+        SDL_RenderFillRect(s_watch_renderer, &body);
+
+        if (n == 0) {
+            watch_draw_str(20, oy + 24, "none", 1, 0x44, 0x44, 0x44);
+        } else {
+            for (int i = 0; i < n; i++) {
+                int is_last = (g_miss_unique_addrs[i] == g_miss_last_addr);
+                char row[24];
+                snprintf(row, sizeof(row), "$%04X", g_miss_unique_addrs[i]);
+                int rx = 20 + (i % 3) * 120;
+                int ry = oy + 24 + (i / 3) * row_h;
+                watch_draw_str(rx, ry, row, 2,
+                    is_last ? 0xFF : 0xAA,
+                    is_last ? 0x66 : 0x55,
+                    is_last ? 0x22 : 0x55);
+            }
+        }
     }
 
     SDL_RenderPresent(s_watch_renderer);
@@ -391,7 +429,7 @@ static void debug_log_frame(uint64_t frame) {
 /* ---- VBlank callback (called from ppu_read_reg when $2002 bit7 fires) ---- */
 void nes_vblank_callback(void) {
     static uint64_t s_cb_count = 0;
-    if (s_cb_count == 0) debug_log_open();
+    if (s_cb_count == 0) { /* debug_log_open(); */ }
     s_cb_count++;
     if (s_cb_count <= 5 || s_cb_count % 60 == 0)
         printf("[VBlank] callback #%llu frame=%llu\n",
@@ -709,9 +747,14 @@ int main(int argc, char *argv[]) {
     /* RAM Watch window — created alongside OAM debug window */
     if (s_debug) {
         /* ---- Watched variables ---- */
-        watch_add(0x02B3, "Magic State  (FF = inactive, 0-N = spell in flight)");
+        watch_add(0x02B3, "Magic State  (FF=inactive)");
+        watch_add(0x02B4, "Magic flags  (bit6=right)");
+        watch_add(0x03C1, "Action state ($C478 dispatch)");
+        watch_add(0x03C7, "Magic X pos  (0-7F=draw,FF=off)");
+        watch_add(0x0025, "OAM slot idx ($25)");
+        watch_add(0x0039, "OAM overflow ($39, NZ=skip!)");
 
-        int wh = (s_watch_count > 0 ? s_watch_count : 1) * WATCH_ENTRY_H + 12;
+        int wh = s_watch_count * WATCH_ENTRY_H + 20 + MAX_MISS_UNIQUE * 6 + 60; /* watch + miss list */
         s_watch_window = SDL_CreateWindow(
             "RAM Watch",
             SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,

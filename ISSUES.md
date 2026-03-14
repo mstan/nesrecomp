@@ -161,24 +161,135 @@ yet. Leave alone until a visible bug is linked to it.
 
 ## ISSUE #7 — Magic projectile sprites not visible
 
+**Status:** FIXED ✅ (2026-03-13)
+
+### What was wrong
+The entity state machine dispatch table at bank14 `$BAF7` was missing entries beyond
+state 16 (`$BC5B`). State 16 was the initial state for projectile/effect entities.
+Without the full table, entities would execute the wrong state handler and the sprite
+draw path for magic would not be reached.
+
+Fix: added `{14, 0xBAF7, 0xBB25}` to `known_tables` in `function_finder.c` (23 entries).
+
+### Verified fix (2026-03-13) — runtime confirmed
+Recompiler rebuilt; `func_BBF3_b14` (Deluge state 4) and `func_BC5B_b14` (state 16)
+now present in `generated/faxanadu_full.c` and registered in the dispatch table.
+
+Runtime test with `--password "k8fPcv?,TwSYzGZQhMIQhCEA" --script C:/temp/projectiles.txt`
+and force-injection of `$03C1 = 0x10` (Deluge action state) in frames 200–1200:
+- `$02B3` reached `0x4` → `func_BBF3_b14` called (Deluge state-machine handler)
+- `$02B3` transitioned to `0xFF` (entity completed normally)
+- No dispatch miss for bank14 `$BAD9`/`$BBF3` region
+- Force-injection required because the password gives `$03C1 = 0x7` (wrong magic type);
+  Deluge IS in inventory (`$0210 & $1F = $10`) but not equipped in that save
+
+Mesen ground truth (established separately): `oam5_t=0x90`, `oam5_a=0x43`
+(tiles `$90–$96`, `attr=$03`, orange/gold orb in-front-of-BG, palette 3).
+
+### No debug code remaining
+All debug traps removed from `runtime.c`, `ppu_renderer.c`, and `main_runner.c`.
+
+---
+
+## ISSUE #8 — Enemy drops not spawning
+
 **Status:** OPEN
 
 ### Symptom
-When casting spells, the projectile graphics do not appear on screen. The spells
-appear to function correctly (damage registers on enemies), but no visible sprite or
-effect is rendered for the projectile itself.
+Enemies die (death animation plays) but no coin/bread item drop appears.
 
-### Likely cause
-Sprite visibility or priority issue in `ppu_renderer.c`, OR a missing/incorrect CHR
-tile load for the projectile tiles, OR a sprite OAM entry being skipped/culled
-incorrectly. Could also be a missing function in one of the switchable banks that
-handles projectile sprite setup.
+### Code analysis (Ghidra, 2026-03-13)
+Call chain in bank14 is intact:
 
-### Starting point
-- Check OAM during a spell cast: are projectile sprite entries present with valid
-  tile/position/attribute data, or are they absent entirely?
-- Check CHR tile load: are the projectile tile indices pointing to loaded CHR data?
-- Ghidra the spell-cast code path in the relevant bank to find projectile OAM setup.
+1. **Entity death state handler** (~$ABD8): runs each frame after `Sprite_SetDeathEntity`
+   sets the entity to a death-animation type. Increments `$02EC,X` each frame; once it
+   reaches 8 it calls `JSR $AC21` then sets entity to `$FF` (destroy).
+2. **`$AC21` (Sprite_HandleDeathDropIfPossible)**: calls `$A236` to check if max sprites
+   on screen; if not full, calls `JSR $AC2D`.
+3. **`$AC2D` (Maybe_Sprite_HandleDeathDrop)**: saves Y (free slot index) in `$00`, loads
+   original entity ID from `$02FC,X`, looks up `$B672[entity_id]` (drop table). Returns
+   no-drop if result is `$FF` or `>= $40`; otherwise uses `$ACED[drop_index]` for
+   probability, then spawns coin (entity `$02`) or bread (entity `$01`).
+4. **`Sprite_SetDeathEntity`** (`$ABF8`) initialises `$02EC,X = 0` (confirmed at `$AC19`).
+
+`$AC21` is called from `JSR $AC21` at `$ABE3` and `JMP $AC21` at `$ABAC`. Both are
+reachable via JSR tracing; `func_AC21` and `func_AC2D` will be generated.
+
+### Likely runtime causes to investigate
+- **Drop table returns `$FF`**: `$02FC,X` may contain the wrong entity ID at drop time
+  (e.g. the death-animation entity ID `$13`/`$14` instead of the original enemy ID).
+  `Sprite_SetDeathEntity` is supposed to copy the original ID before overwriting — verify
+  `$02CC,X → $02FC,X` copy at `$ABF9-$ABFB`.
+- **All 8 slots occupied**: `$A236` (HasMaxOnScreen check) returns carry set; drop silently
+  skipped. Check how many entity slots are active when an enemy dies.
+- **Death state handler not being reached**: The entity behavior script address for the
+  death animation type (`$13`/`$14`) points to the handler at `$ABD8`. If the dispatch
+  table at `$AD2D` (loaded at `$AC05-$AC0A`) has wrong entries, the handler never runs.
+
+### Next debug step
+Add a `log_on_change()` in `runtime.c` watching `g_ram[0x02EC]` to confirm the death
+frame counter increments. If it never reaches 8, the state handler at `$ABD8` isn't
+firing. If it does reach 8, add a targeted one-shot log inside `func_AC2D` to see what
+`$02FC,X` contains and what `$B672` returns.
+
+---
+
+## ISSUE #9 — Magic sprite invisible near castle walls (priority behind BG)
+
+**Status:** CLOSED ✅ — correct NES behavior (2026-03-13)
+
+### Symptom
+Magic projectile deals damage but is not visible near castle walls (zone codes 4/D/9).
+OAM attribute observed as `$61` (priority=1, flip-H, palette 1) vs `$03` in open areas.
+
+### Full code trace (Ghidra, 2026-03-13)
+
+**Magic render entry point: bank15 `$C2E9`**
+Called after the `$BAD9` entity-state dispatch returns to bank15. Sequence:
+1. `LDA $02B3; BMI $C314` — if magic inactive ($FF), skip to RTS
+2. `JSR $C315` — zone-based attr computation → ZP `$26`
+3. Sets ZP `$27`/`$28` = magic X/Y position hi bytes (for metasprite offset)
+4. 2-PHA dispatch from table `$BB27` (indexed by `$02B3` magic state) → finish handler
+
+**`$C315` — zone-based attr computation:**
+- ZP `$B8` = 0
+- Checks zone code at X+4 via `$E86C`/`$E8C3`; if zone ∈ {4, D, 9} → `ORA #$01`
+- Checks zone code at X+12; if zone = 4 → `ORA #$02`
+- If direction bit (`$02B4 AND $40`) = LEFT → `EOR #$03` on palette bits (flip L/R)
+- Result stored in ZP `$26`
+
+**`$BB27` finish-handler table** (addr−1, 5 spell types):
+| State | Target |
+|-------|--------|
+| 0 (Deluge) | $C39B |
+| 1 (Thunder) | $C3A7 |
+| 2 (Fire) | $C3B6 |
+| 3 (Death) | $C3C9 |
+| 4 (Tilte) | $C3D6 |
+
+Each finish handler calls `$C393` (`AND $02B4,#$40 → ZP $29` = flip-H flag), extracts
+animation frame from ZP `$1A`, then `JMP $C37D → ADC $C387,Y; JMP $F057`.
+
+**`$F057` — metasprite OAM writer:**
+Reads multi-tile sprite layout from CHR pointer table. For each sub-tile:
+- `LDA ($3A),Y` = metasprite base attr byte
+- `EOR $29` (apply direction flip-H)
+- `ZP $01` = result
+- **`LDA $26; AND $F224[Y_sub]; BEQ skip; LDA $01; ORA #$20; STA $01`**
+  → if zone-palette byte (`$26`) overlaps mask for this sub-tile, **set priority=1**
+- `STA $0700,X` → write attr to OAM buffer (page $07)
+
+**`$F224` mask table:** `{01, 02, 02, 01}` — alternates between checking palette bit 0
+(zone at X+4) and bit 1 (zone at X+12) per sub-tile within the metasprite.
+
+### Conclusion
+`attr=$61` is **100% correct NES behavior**. The game's metasprite engine deliberately
+sets priority=1 (behind BG) on any magic sub-tile whose pixel position overlaps a castle
+zone tile. This is the same per-pixel BG-priority system used for the player walking
+behind foreground pillars (Issue #5). Magic projectiles pass through castle walls visually
+— they show through transparent BG pixels only, which is sparse in castle zones.
+
+No fix needed. Close.
 
 ---
 

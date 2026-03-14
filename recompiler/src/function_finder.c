@@ -351,6 +351,8 @@ void function_finder_run(const NESRom *rom, FunctionList *out) {
         { 14, 0x8958, 0x8968 }, /* bank14 entity state dispatch 2 (8 entries) */
         { 14, 0xA6D8, 0xA6E8 }, /* bank14 entity state dispatch 3 (8 entries) */
         { 14, 0xA5E7, 0xA66B }, /* bank14 entity type dispatch (66 entries) */
+        { 14, 0xBAF7, 0xBB25 }, /* bank14 entity state machine dispatch at $BAD9 via $02B3 (23 entries) */
+        { 14, 0xAC71, 0xAC75 }, /* bank14 drop spawn dispatch at $AC2D/$AC70: coin=$AC75, bread=$AC9F */
         {  5, 0x826A, 0x828E }, /* bank5 sound dispatch table 1 (18 entries) */
         {  5, 0x85B1, 0x8621 }, /* bank5 sound dispatch table 2 (56 entries, entries 2-57).
                                    * Dispatcher at $8678: LDA $85AE,X / PHA / LDA $85AD,X / PHA / RTS.
@@ -380,17 +382,20 @@ void function_finder_run(const NESRom *rom, FunctionList *out) {
 
     /* Split-format dispatch table scanner.
      * Some dispatch functions store lo-bytes and hi-bytes in separate arrays
-     * (not interleaved). Each entry: bank, lo_table_addr, hi_table_addr, count.
-     * target = (hi[i]<<8 | lo[i]) + 1 */
-    static const struct { int bank; uint16_t lo_start; uint16_t hi_start; int count; } known_split_tables[] = {
-        { 12, 0x827B, 0x8293, 24 }, /* bank12 room/scene state dispatch at $826E (24 states) */
-        { 15, 0xD64C, 0xD650,  4 }, /* fixed-bank CHR update handler dispatch at $D61D (4 slots: $D654,$D673,$D699,$D6B1) */
+     * (not interleaved). Each entry: bank, lo_table_addr, hi_table_addr, count, stride.
+     * target = (hi[i]<<8 | lo[i]) + 1.
+     * stride=1: lo/hi in separate packed arrays; stride=2: lo/hi interleaved pairs. */
+    static const struct { int bank; uint16_t lo_start; uint16_t hi_start; int count; int stride; } known_split_tables[] = {
+        { 12, 0x827B, 0x8293, 24, 1 }, /* bank12 room/scene state dispatch at $826E (24 states) */
+        { 15, 0xD64C, 0xD650,  4, 1 }, /* fixed-bank CHR update handler dispatch at $D61D (4 slots) */
+        { 14, 0xBB27, 0xBB28, 12, 2 }, /* bank14 entity sprite handler table at $C2E9 ($02B3*2 index, 12 entries) */
     };
     for (int t = 0; t < (int)(sizeof(known_split_tables)/sizeof(known_split_tables[0])); t++) {
         int kb = known_split_tables[t].bank;
+        int st = known_split_tables[t].stride;
         for (int i = 0; i < known_split_tables[t].count; i++) {
-            uint8_t lo = rom_read(rom, kb, known_split_tables[t].lo_start + i);
-            uint8_t hi = rom_read(rom, kb, known_split_tables[t].hi_start + i);
+            uint8_t lo = rom_read(rom, kb, known_split_tables[t].lo_start + i * st);
+            uint8_t hi = rom_read(rom, kb, known_split_tables[t].hi_start + i * st);
             uint16_t target = (lo | ((uint16_t)hi << 8)) + 1;
             if (target >= 0x8000 && target <= 0xBFFD) {
                 if (!function_list_contains(out, target, kb))
@@ -421,6 +426,7 @@ void function_finder_run(const NESRom *rom, FunctionList *out) {
     add_function(out, 0x8C0F, 14);        /* bank14 entity dispatch entry (no static ref) */
     add_function(out, 0x828E, 5);         /* bank5 entity dispatch via RAM vector $2901 */
     add_function(out, 0xD673, fixed_bank); /* fixed-bank VRAM write (called dynamically) */
+    add_function(out, 0xC2E9, fixed_bank); /* entity loop continuation — pushed as $C2E8 by BAD9 4-PHA, only reachable via PHA dispatch */
     /* BFS for hardcoded seeds */
     while (queue_pop(&item)) {
         for (int i = 0; i < out->count; i++) {

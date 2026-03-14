@@ -57,6 +57,113 @@ static void render_tile_row(uint32_t *framebuf,
     }
 }
 
+/* ---- OAM Debug View ----
+ * Renders all 64 OAM slots as an 8x8 grid into a 256x256 ARGB buffer.
+ * Each cell is 32x32 (8px tile at 4x scale).
+ * Border colors:
+ *   dark gray   = slot off-screen (Y >= $EF)
+ *   white/cyan/green/magenta = palette 0-3, sprite in front of BG
+ *   yellow      = sprite behind BG (priority bit set)
+ * Transparent pixels rendered as dark magenta (#200020).
+ */
+void ppu_render_oam_debug(uint32_t *buf) {
+    /* Dark background */
+    for (int i = 0; i < 256 * 256; i++) buf[i] = 0xFF101010;
+
+    /* Grid lines */
+    for (int gy = 0; gy < 256; gy++)
+        for (int gx = 0; gx < 256; gx++)
+            if (gx % 32 == 0 || gy % 32 == 0)
+                buf[gy * 256 + gx] = 0xFF282828;
+
+    int spr_base = (g_ppuctrl & 0x08) ? 0x1000 : 0x0000;
+
+    /* Border palette: slot on-screen, by palette 0-3 */
+    static const uint32_t pal_border[4] = {
+        0xFFFFFFFF, /* pal 0: white */
+        0xFF00FFFF, /* pal 1: cyan */
+        0xFF00FF00, /* pal 2: green */
+        0xFFFF00FF, /* pal 3: magenta */
+    };
+
+    for (int slot = 0; slot < 64; slot++) {
+        uint8_t sy   = g_ppu_oam[slot * 4 + 0];
+        uint8_t stile= g_ppu_oam[slot * 4 + 1];
+        uint8_t sattr= g_ppu_oam[slot * 4 + 2];
+        /* sx unused for rendering but kept for symmetry */
+
+        int col = slot % 8;
+        int row = slot / 8;
+        int ox  = col * 32;
+        int oy  = row * 32;
+
+        int off_screen = (sy >= 0xEF);
+        int pal        = (sattr & 0x03);
+        int flip_h     = (sattr >> 6) & 1;
+        int flip_v     = (sattr >> 7) & 1;
+        int behind_bg  = (sattr >> 5) & 1;
+
+        uint32_t border = off_screen ? 0xFF303030
+                        : behind_bg  ? 0xFFFFFF00
+                        : pal_border[pal];
+
+        /* Draw 1px border around 32x32 cell */
+        for (int bx = ox; bx < ox + 32; bx++) {
+            buf[oy * 256 + bx]        = border;
+            buf[(oy + 31) * 256 + bx] = border;
+        }
+        for (int by = oy; by < oy + 32; by++) {
+            buf[by * 256 + ox]        = border;
+            buf[by * 256 + (ox + 31)] = border;
+        }
+
+        /* Render tile pixels at 4x scale (1px border inset → 30x30 usable, but we
+         * actually use 32x32 and let border overdraw the outermost pixel row) */
+        int spr_pal = pal + 4; /* sprite palettes start at sub-palette 4 in g_ppu_pal */
+        int chr_off = spr_base + stile * 16;
+
+        for (int tr = 0; tr < 8; tr++) {
+            int src_row = flip_v ? (7 - tr) : tr;
+            uint8_t lo = g_chr_ram[chr_off + src_row];
+            uint8_t hi = g_chr_ram[chr_off + src_row + 8];
+
+            for (int b = 7; b >= 0; b--) {
+                int src_bit = flip_h ? (7 - b) : b;
+                int ci = ((lo >> src_bit) & 1) | (((hi >> src_bit) & 1) << 1);
+                uint32_t color;
+                if (ci == 0) {
+                    color = off_screen ? 0xFF181818 : 0xFF200020; /* transparent: dark magenta */
+                } else {
+                    uint8_t nc = g_ppu_pal[(spr_pal * 4 + ci) & 0x1F] & 0x3F;
+                    color = NES_PALETTE[nc];
+                    if (off_screen) {
+                        /* Dim off-screen sprites to 25% brightness */
+                        uint8_t r = ((color >> 16) & 0xFF) >> 2;
+                        uint8_t g = ((color >>  8) & 0xFF) >> 2;
+                        uint8_t bv= ( color        & 0xFF) >> 2;
+                        color = 0xFF000000 | ((uint32_t)r << 16) | ((uint32_t)g << 8) | bv;
+                    }
+                }
+                int px0 = ox + (7 - b) * 4;
+                int py0 = oy + tr * 4;
+                for (int dy = 0; dy < 4; dy++)
+                    for (int dx = 0; dx < 4; dx++)
+                        buf[(py0 + dy) * 256 + (px0 + dx)] = color;
+            }
+        }
+
+        /* Redraw border on top so it isn't overwritten by tile pixels */
+        for (int bx = ox; bx < ox + 32; bx++) {
+            buf[oy * 256 + bx]        = border;
+            buf[(oy + 31) * 256 + bx] = border;
+        }
+        for (int by = oy; by < oy + 32; by++) {
+            buf[by * 256 + ox]        = border;
+            buf[by * 256 + (ox + 31)] = border;
+        }
+    }
+}
+
 void ppu_render_frame(uint32_t *framebuf) {
     /* Universal background color */
     uint32_t bg = NES_PALETTE[g_ppu_pal[0] & 0x3F];
@@ -266,7 +373,7 @@ render_sprites:
         }
     }
 
-#if 0 /* DEBUG OVERLAY: green boxes at tile >= $90 positions */
+#if 0 /* DEBUG OVERLAY: green boxes at tile >= $90 positions -- kept for reference */
     for (int di = 0; di < 64; di++) {
         uint8_t dy = g_ppu_oam[di*4+0], dt = g_ppu_oam[di*4+1];
         uint8_t dx = g_ppu_oam[di*4+3];

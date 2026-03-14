@@ -77,6 +77,16 @@
 14, 0xA6D8, entity state dispatch table 3 — 8 entries ($A6D8-$A6E7)
 14, 0xA5E7, entity/room-type dispatch table — 66 entries ($A5E7-$A66A)
 
+# Entity state machine dispatch via $02B3 (Issue #7 fix)
+# Dispatcher at $BAD9: 4-PHA RTS; continuation=$C2E9. Loads $02B3*2 into Y, then:
+#   PHA hi=$BAF8,Y  PHA lo=$BAF7,Y  RTS  -> dispatches to table[i]+1
+# Table at $BAF7, 23 interleaved 2-byte LE entries (states 0-22). Added as known_tables {14,0xBAF7,0xBB25}.
+# State 16 -> $BC5B was missing, causing spawned entities (enemies, coins, health) to be invisible.
+# $BC5B: LDA #0 / STA $02B9 / LDA #$0B / STA $02B3 / RTS  (entity state transition: sets state=$0B, clears $02B9)
+14, 0xBAD9, entity state machine dispatcher — 4-PHA RTS via $02B3 index; table=$BAF7 (23 entries $BAF7-$BB24)
+14, 0xBAF7, entity state machine dispatch table — 23 interleaved LE entries (states 0-22); known_tables {14,0xBAF7,0xBB25}
+14, 0xBC5B, entity state transition: $02B9=0, $02B3=$0B (state 16 handler; was missing, caused invisible entities)
+
 # ── Bank 12 ($8000-$BFFF, dialogue/room state) ───────────────────────────────────
 
 # Room/scene state split dispatch table

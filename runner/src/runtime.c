@@ -124,7 +124,9 @@ uint8_t nes_read(uint16_t addr) {
 void nes_write(uint16_t addr, uint8_t val) {
     maybe_trigger_vblank();
 
-    if (addr <= 0x1FFF) { g_ram[addr & 0x07FF] = val; return; }
+    if (addr <= 0x1FFF) {
+        g_ram[addr & 0x07FF] = val; return;
+    }
     if (addr >= 0x2000 && addr <= 0x3FFF) { ppu_write_reg(0x2000 + (addr & 7), val); return; }
     if (addr == 0x4014) {
         uint16_t src = (uint16_t)val << 8;
@@ -173,7 +175,9 @@ void ppu_write_reg(uint16_t reg, uint8_t val) {
             uint16_t a = g_ppuaddr & 0x3FFF;
             if      (a >= 0x3F00) g_ppu_pal[a & 0x1F] = val;
             else if (a >= 0x2000) g_ppu_nt[a & 0x0FFF] = val; /* nametable */
-            else                  g_chr_ram[a] = val;          /* CHR RAM */
+            else {
+                g_chr_ram[a] = val;
+            }
             g_ppuaddr += (g_ppuctrl & 0x04) ? 32 : 1;
             break;
         }
@@ -230,6 +234,14 @@ void runtime_set_latch_state(uint8_t ppuaddr_latch, uint8_t scroll_latch) {
     g_scroll_latch  = (int)scroll_latch;
 }
 
+uint32_t g_miss_count_any   = 0;
+uint16_t g_miss_last_addr   = 0;
+uint64_t g_miss_last_frame  = 0;
+
+#define MAX_MISS_UNIQUE 12
+uint16_t g_miss_unique_addrs[MAX_MISS_UNIQUE];
+int      g_miss_unique_count = 0;
+
 void nes_log_dispatch_miss(uint16_t addr) {
     static uint32_t last = 0xFFFFFFFF;
     uint32_t key = ((uint32_t)g_current_bank << 16) | addr;
@@ -237,4 +249,13 @@ void nes_log_dispatch_miss(uint16_t addr) {
         printf("[Dispatch] MISS: no func for $%04X bank=%d\n", addr, g_current_bank);
         last = key;
     }
+    g_miss_count_any++;
+    g_miss_last_addr  = addr;
+    g_miss_last_frame = g_frame_count;
+    /* Add to unique list if not already present */
+    int found = 0;
+    for (int i = 0; i < g_miss_unique_count; i++)
+        if (g_miss_unique_addrs[i] == addr) { found = 1; break; }
+    if (!found && g_miss_unique_count < MAX_MISS_UNIQUE)
+        g_miss_unique_addrs[g_miss_unique_count++] = addr;
 }

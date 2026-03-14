@@ -381,9 +381,36 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                 rom_read(rom, bank, pc-9)  == 0x48 &&
                 rom_read(rom, bank, pc-12) == 0x48) {
                 fprintf(f, "{ uint8_t _s4=g_cpu.S; g_cpu.S++; uint8_t _lo=g_ram[0x100+g_cpu.S]; g_cpu.S++; uint8_t _hi=g_ram[0x100+g_cpu.S]; call_by_address(((uint16_t)_hi<<8|_lo)+1); g_cpu.S=(uint8_t)(_s4+4); } goto label_%04X;\n    ", (uint16_t)(pc+1));
-            /* Detect 2-PHA RTS-as-JMP: LDA hi/PHA / LDA lo/PHA / RTS */
+            /* Detect 2-PHA RTS-as-JMP: LDA hi/PHA / LDA lo/PHA / RTS.
+             * Also detect "outer continuation" pattern: function starts with
+             * LDA #cont_hi/PHA / LDA #cont_lo/PHA, then does computation, then
+             * LDA tbl_hi/PHA / LDA tbl_lo/PHA / RTS.  The 4-PHA detector above
+             * misses this because the PHAs are not at fixed offsets (computation
+             * breaks the pc-9/pc-12 spacing).  After calling the inner handler,
+             * we must also call the static outer continuation. */
             } else if (pc >= 0x8001 && rom_read(rom, bank, pc - 1) == 0x48 /* PHA */) {
-                fprintf(f, "{ g_cpu.S++; uint8_t _lo=g_ram[0x100+g_cpu.S]; g_cpu.S++; uint8_t _hi=g_ram[0x100+g_cpu.S]; call_by_address(((uint16_t)_hi<<8|_lo)+1); }\n    ");
+                /* Check for outer continuation pushed at function prologue */
+                int has_outer_cont = 0;
+                uint16_t outer_cont_target = 0;
+                if (func_base + 5 < pc &&
+                    rom_read(rom, bank, func_base)   == 0xA9 /* LDA #imm */ &&
+                    rom_read(rom, bank, func_base+2) == 0x48 /* PHA */ &&
+                    rom_read(rom, bank, func_base+3) == 0xA9 /* LDA #imm */ &&
+                    rom_read(rom, bank, func_base+5) == 0x48 /* PHA */) {
+                    uint8_t hi_val = rom_read(rom, bank, func_base+1);
+                    uint8_t lo_val = rom_read(rom, bank, func_base+4);
+                    uint16_t tgt = (uint16_t)(((uint16_t)hi_val << 8) | lo_val) + 1;
+                    if (tgt >= 0x8000 && tgt != (uint16_t)(pc + 1)) {
+                        outer_cont_target = tgt;
+                        has_outer_cont = 1;
+                    }
+                }
+                if (has_outer_cont) {
+                    /* Pop inner handler, call it, discard outer cont bytes, call cont */
+                    fprintf(f, "{ g_cpu.S++; uint8_t _lo=g_ram[0x100+g_cpu.S]; g_cpu.S++; uint8_t _hi=g_ram[0x100+g_cpu.S]; call_by_address(((uint16_t)_hi<<8|_lo)+1); g_cpu.S+=2; call_by_address(0x%04X); }\n    ", outer_cont_target);
+                } else {
+                    fprintf(f, "{ g_cpu.S++; uint8_t _lo=g_ram[0x100+g_cpu.S]; g_cpu.S++; uint8_t _hi=g_ram[0x100+g_cpu.S]; call_by_address(((uint16_t)_hi<<8|_lo)+1); }\n    ");
+                }
             }
             fprintf(f, "return;\n");
             break;
@@ -532,6 +559,7 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
      * they must be emitted as regular returns, not 2-PHA dispatches. */
     uint16_t branch_targets[256];
     int branch_targets_count = 0;
+    int pending_pha_count = 0; /* net PHAs pushed without matching PLA (for non-adjacent dispatch) */
 
     uint16_t cursor = pc;
     for (int insn = 0; insn < MAX_INSNS_PER_FUNC; insn++) {
@@ -622,6 +650,27 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
                 for (int b = 0; b < branch_targets_count; b++)
                     if (branch_targets[b] == next) { is_branch_tgt = true; break; }
                 if (is_branch_tgt) {
+                    fprintf(f, "    { g_cpu.S++; uint8_t _lo=g_ram[0x100+g_cpu.S]; g_cpu.S++; uint8_t _hi=g_ram[0x100+g_cpu.S]; call_by_address(((uint16_t)_hi<<8|_lo)+1); }\n");
+                    fprintf(f, "    return;\n");
+                }
+            }
+        }
+
+        /* Update net PHA count for non-adjacent dispatch detection */
+        if (e->mnemonic == MN_PHA) pending_pha_count++;
+        else if (e->mnemonic == MN_PLA && pending_pha_count > 0) pending_pha_count--;
+
+        /* Non-adjacent 2-PHA dispatch: if the NEXT instruction is a branch-target RTS and
+         * 2 PHAs have been pushed earlier in this function without matching PLAs, emit the
+         * dispatch inline here (fall-through path). The RTS label handles branch paths.
+         * Example: $AC2D/$AC70 — PHA/PHA/LDY $00 / RTS(branch-target). */
+        if (e->mnemonic != MN_PHA && pending_pha_count >= 2) {
+            uint16_t _nxt = (uint16_t)(cursor + consumed);
+            if (_nxt >= 0x8001 && rom_read(rom, bank, _nxt) == 0x60 /* RTS */) {
+                bool _is_bt = false;
+                for (int _b = 0; _b < branch_targets_count; _b++)
+                    if (branch_targets[_b] == _nxt) { _is_bt = true; break; }
+                if (_is_bt) {
                     fprintf(f, "    { g_cpu.S++; uint8_t _lo=g_ram[0x100+g_cpu.S]; g_cpu.S++; uint8_t _hi=g_ram[0x100+g_cpu.S]; call_by_address(((uint16_t)_hi<<8|_lo)+1); }\n");
                     fprintf(f, "    return;\n");
                 }

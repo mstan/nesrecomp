@@ -48,6 +48,10 @@ uint8_t ppu_read_reg(uint16_t reg);
 /* framebuf: 256*240 ARGB8888 pixels */
 void ppu_render_frame(uint32_t *framebuf);
 
+/* Render OAM debug view: 8x8 grid of 64 sprite slots at 4x scale.
+ * buf must be 256*256 ARGB8888 pixels. */
+void ppu_render_oam_debug(uint32_t *buf);
+
 /* ---- Mapper Interface ---- */
 void mapper_write(uint16_t addr, uint8_t val);
 void mapper_init(const uint8_t *prg_data, int prg_banks);
@@ -87,6 +91,14 @@ extern int g_current_bank;
 /* Button bitmask: bit7=A, bit6=B, bit5=Select, bit4=Start,
  *                 bit3=Up, bit2=Down, bit1=Left, bit0=Right */
 extern uint8_t g_controller1_buttons;
+
+/* ---- Dispatch miss monitor ---- */
+extern uint32_t g_miss_count_any;
+extern uint16_t g_miss_last_addr;
+extern uint64_t g_miss_last_frame;
+#define MAX_MISS_UNIQUE 12
+extern uint16_t g_miss_unique_addrs[MAX_MISS_UNIQUE];
+extern int      g_miss_unique_count;
 
 /* ---- Logger ---- */
 void log_on_change(const char *label, uint32_t value);
