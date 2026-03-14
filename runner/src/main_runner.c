@@ -748,12 +748,6 @@ int main(int argc, char *argv[]) {
     /* RAM Watch window — created alongside OAM debug window */
     if (s_debug) {
         /* ---- Watched variables ---- */
-        watch_add(0x02B3, "Magic State  (FF=inactive)");
-        watch_add(0x02B4, "Magic flags  (bit6=right)");
-        watch_add(0x03C1, "Action state ($C478 dispatch)");
-        watch_add(0x03C7, "Magic X pos  (0-7F=draw,FF=off)");
-        watch_add(0x0025, "OAM slot idx ($25)");
-        watch_add(0x0039, "OAM overflow ($39, NZ=skip!)");
 
         int wh = s_watch_count * WATCH_ENTRY_H + 20 + MAX_MISS_UNIQUE * 6 + 60; /* watch + miss list */
         s_watch_window = SDL_CreateWindow(

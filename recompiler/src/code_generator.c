@@ -406,7 +406,10 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                         uint8_t hi_val = rom_read(rom, bank, _probe+1);
                         uint8_t lo_val = rom_read(rom, bank, _probe+4);
                         uint16_t tgt = (uint16_t)(((uint16_t)hi_val << 8) | lo_val) + 1;
-                        if (tgt >= 0x8000 && tgt != (uint16_t)(pc + 1)) {
+                        /* Outer continuations must be in the fixed bank ($C000+).
+                         * Switchable-bank addresses are false positives — the bank
+                         * may have changed by the time we'd return to them. */
+                        if (tgt >= 0xC000 && tgt != (uint16_t)(pc + 1)) {
                             outer_cont_target = tgt;
                             has_outer_cont = 1;
                             break;

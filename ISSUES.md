@@ -422,6 +422,70 @@ Rebuilt recompiler (5659 functions unchanged) + runner. No `$C2E9` dispatch miss
 in stdout. Kill-test script runs cleanly to frame 1440. Magic projectile sprites
 now visible in OAM and on-screen.
 
+### Regression introduced — see Issue #11
+
+---
+
+## ISSUE #11 — Backward scan false positives: enemy flicker + wrong drop positions
+
+**Status:** FIXED ✅ (2026-03-14)
+
+### Symptom
+Introduced by the Issue #10 fix. After magic sprites became visible:
+- Enemy sprites flicker and "spaz out" (jitter/teleport rapidly)
+- Item drops (bread/coin) spawn at wrong map positions
+- Broad memory corruption effects visible across many game systems
+
+### Root cause
+The Issue #10 fix replaced the `func_base` prologue check with a **backward scan**
+(up to 128 bytes) for `LDA #hi / PHA / LDA #lo / PHA` to detect outer continuations.
+The scan accepted any target address `>= 0x8000`, which included switchable-bank
+addresses ($8000–$BFFF).
+
+This created two false positives in bank14:
+
+**`$A6CE` → `call_by_address(0xA6A1)`:**
+The scan found bytes matching `A9 A6 48 A9 A0 48` somewhere in the 128 bytes before
+`$A6CE` (a legitimate 2-PHA entity dispatch). The pattern decoded to target `$A6A1`
+(= ($A6A0) + 1), which is the continuation address of the adjacent 4-PHA dispatch at
+`$A6A0` — NOT an outer continuation for `$A6CE`. The generated code now called
+`func_A6A1_b14` after every entity-state dispatch, re-entering the entity processing
+loop spuriously.
+
+**`$A7F3` → `call_by_address(0xA78C)`:**
+Same problem: backward scan matched a pattern and decoded `$A78C` as an outer
+continuation for `$A7F3`.
+
+Effect: entity state handlers were called 2× per frame, corrupting entity coordinates
+(→ wrong drop positions) and alternating sprite positions every frame (→ flicker).
+
+### Why switchable-bank addresses can never be outer continuations
+The "outer continuation" pattern (`LDA #hi/PHA / LDA #lo/PHA / ... dispatch ... / RTS`)
+pushes a FIXED address to call after the dispatched handler returns. For this to be
+meaningful across a bank switch, the address must be in the **fixed bank** ($C000–$FFFF,
+always accessible). A switchable-bank address ($8000–$BFFF) would be invalid after any
+MMC1 bank switch inside the dispatched handler — the bank may be different on return.
+In Faxanadu, all confirmed outer continuations are in bank15 (the fixed bank).
+
+### Fix
+`code_generator.c`: changed the backward-scan acceptance condition from
+`tgt >= 0x8000` to `tgt >= 0xC000` (fixed bank only).
+
+This excludes both false positives (`$A6A1` < `$C000`, `$A78C` < `$C000`) while
+keeping the intended detection of `$C2E9` (= `0xC2E9` >= `$C000` ✓).
+
+### Outer-continuation sites after fix (correct — 4 total)
+All 4 are `$BAEC → call_by_address(0xC2E9)`:
+```c
+{ ...; call_by_address(entity_handler); g_cpu.S+=2; call_by_address(0xC2E9); }
+```
+Two occurrences are inline goto-target blocks (the bug that Issue #10 fixed).
+Two occurrences are inside `func_BAD9_b14` and one duplicate bank context.
+
+### Also in this commit
+Removed RAM debug watch variables from `main_runner.c` (Magic State, OAM slot idx,
+OAM overflow — no longer needed after Issue #10 investigation).
+
 ---
 
 ## Historical notes
