@@ -103,6 +103,13 @@ static SDL_Renderer      *s_renderer  = NULL;
 static SDL_Texture       *s_texture   = NULL;
 static uint32_t           s_framebuf[256 * 240];
 
+/* ---- OAM debug window (--debug flag) ---- */
+static int                s_debug         = 0;
+static SDL_Window        *s_dbg_window    = NULL;
+static SDL_Renderer      *s_dbg_renderer  = NULL;
+static SDL_Texture       *s_dbg_texture   = NULL;
+static uint32_t           s_dbg_buf[256 * 256];
+
 /* ---- Audio state ---- */
 static SDL_AudioDeviceID  s_audio_dev = 0;
 #define AUDIO_SAMPLES_PER_FRAME 735
@@ -234,25 +241,6 @@ void nes_vblank_callback(void) {
     /* Log per-frame state BEFORE NMI runs */
     debug_log_frame(s_cb_count);
 
-    /* TEMP DEBUG Issue#8: log first death/drop entity seen in slots 0..7 */
-    {
-        static int s_death_seen = 0, s_drop_seen = 0;
-        for (int _i = 0; _i < 8; _i++) {
-            uint8_t _t = g_ram[0x02CC + _i];
-            if ((_t == 0x13 || _t == 0x14 || _t == 0x64) && !s_death_seen) {
-                printf("[DEBUG] frame=%llu death entity slot=%d type=$%02X orig=$%02X phase=$%02X\n",
-                       (unsigned long long)g_frame_count, _i, _t,
-                       g_ram[0x02FC + _i], g_ram[0x02E4 + _i]);
-                s_death_seen = 1;
-            }
-            if ((_t == 0x01 || _t == 0x02) && _i > 0 && !s_drop_seen) {
-                printf("[DEBUG] frame=%llu DROP entity slot=%d type=$%02X!\n",
-                       (unsigned long long)g_frame_count, _i, _t);
-                s_drop_seen = 1;
-            }
-        }
-    }
-
     /* Debug: dump NMI gate variables */
     if (s_cb_count <= 5)
         printf("[NMI_pre] frame=%llu $10=%02X $13=%02X $14=%02X $1A=%02X $0B=%02X\n",
@@ -293,6 +281,27 @@ void nes_vblank_callback(void) {
 
     /* Render PPU to framebuffer */
     ppu_render_frame(s_framebuf);
+
+    /* OAM debug window — updated every frame when --debug is active */
+    if (s_debug && s_dbg_texture) {
+        ppu_render_oam_debug(s_dbg_buf);
+        SDL_UpdateTexture(s_dbg_texture, NULL, s_dbg_buf, 256 * 4);
+        SDL_RenderClear(s_dbg_renderer);
+        SDL_RenderCopy(s_dbg_renderer, s_dbg_texture, NULL, NULL);
+        SDL_RenderPresent(s_dbg_renderer);
+        /* Update debug window title with frame + visible sprite count */
+        {
+            int vis = 0;
+            for (int _s = 0; _s < 64; _s++)
+                if (g_ppu_oam[_s*4] < 0xEF) vis++;
+            char title[80];
+            snprintf(title, sizeof(title),
+                     "OAM Debug  frame=%llu  visible=%d  sprCHR=$%04X",
+                     (unsigned long long)g_frame_count, vis,
+                     (g_ppuctrl & 0x08) ? 0x1000 : 0x0000);
+            SDL_SetWindowTitle(s_dbg_window, title);
+        }
+    }
 
     /* Script-triggered named screenshot */
     {
@@ -382,7 +391,7 @@ static bool load_rom(const char *path) {
 
 int main(int argc, char *argv[]) {
     if (argc < 2) {
-        fprintf(stderr, "Usage: NESRecompGame <baserom.nes> [--script FILE] [--record FILE] [--loadstate FILE] [--password STRING]\n");
+        fprintf(stderr, "Usage: NESRecompGame <baserom.nes> [--script FILE] [--record FILE] [--loadstate FILE] [--password STRING] [--debug]\n");
         return 1;
     }
 
@@ -392,7 +401,10 @@ int main(int argc, char *argv[]) {
         else if (strcmp(argv[i], "--record") == 0 && i+1 < argc) s_record_path = argv[++i];
         else if (strcmp(argv[i], "--loadstate") == 0 && i+1 < argc) s_loadstate_path = argv[++i];
         else if (strcmp(argv[i], "--password") == 0 && i+1 < argc) s_password = argv[++i];
+        else if (strcmp(argv[i], "--debug") == 0) s_debug = 1;
     }
+
+    if (s_debug) printf("[Debug] OAM debug window enabled\n");
 
     if (s_password)
         printf("[Password] Will auto-fill mantra: \"%s\"\n", s_password);
@@ -460,6 +472,34 @@ int main(int argc, char *argv[]) {
     SDL_RenderSetLogicalSize(s_renderer, 768, 720);
 
     memset(s_framebuf, 0, sizeof(s_framebuf));
+
+    /* OAM debug window — created only when --debug is passed */
+    if (s_debug) {
+        s_dbg_window = SDL_CreateWindow(
+            "OAM Debug",
+            SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
+            512, 512,   /* 256x256 content at 2x display scale */
+            SDL_WINDOW_SHOWN
+        );
+        if (s_dbg_window) {
+            s_dbg_renderer = SDL_CreateRenderer(s_dbg_window, -1,
+                SDL_RENDERER_ACCELERATED);
+            if (s_dbg_renderer) {
+                s_dbg_texture = SDL_CreateTexture(s_dbg_renderer,
+                    SDL_PIXELFORMAT_ARGB8888,
+                    SDL_TEXTUREACCESS_STREAMING,
+                    256, 256);
+                if (!s_dbg_texture)
+                    fprintf(stderr, "[Debug] SDL_CreateTexture: %s\n", SDL_GetError());
+                else
+                    printf("[Debug] OAM window created (256x256 content, 512x512 display)\n");
+            } else {
+                fprintf(stderr, "[Debug] SDL_CreateRenderer: %s\n", SDL_GetError());
+            }
+        } else {
+            fprintf(stderr, "[Debug] SDL_CreateWindow: %s\n", SDL_GetError());
+        }
+    }
 
     printf("[Runner] Starting RESET handler (NMI fires via VBlank callback)...\n");
 
