@@ -114,16 +114,18 @@ the JSR are data (bank, addr_lo, addr_hi), not instructions.
 
 ## Visual Debugging
 
-Screenshots auto-saved as PNG every 60 NES frames (~1 second at 60Hz).
+Screenshots auto-saved as PNG every 60 NES frames, named by frame number.
 
 | File | Contents |
 |------|----------|
-| `C:/temp/nes_shot_01.png` .. `nes_shot_10.png` | Rotating screenshots every 60 frames |
+| `C:/temp/nes_shot_XXXX.png` | Screenshot at frame XXXX (every 60 frames) |
 | `C:/temp/ppu_trace.csv` | PPU register writes: W,ADDR,VALUE,PC,FRAME |
 | `C:/temp/mapper_trace.csv` | Mapper bank switches: BANK_SWITCH,bank,PC,FRAME |
+| `C:/temp/quicksave.sav` | F6 quick-save slot |
 | `src/title_reference.png` | Reference screenshot of Faxanadu title screen |
 
 Screenshots are PNG. **BMP is prohibited** — too large for token limits.
+**Clean up old screenshots** with `rm C:/temp/nes_shot_*.png` after examining them.
 
 Faxanadu title: dark blue sky, tree canopy, "FAXANADU" in gold, "PUSH START BUTTON"
 - Wrong colors → palette mapping bug in ppu_renderer.c
@@ -132,26 +134,74 @@ Faxanadu title: dark blue sky, tree canopy, "FAXANADU" in gold, "PUSH START BUTT
 
 ---
 
+## Input Scripts and Save States
+
+### Running with a script
+```batch
+# Run synchronously — game exits when script reaches EXIT 0
+"F:/Projects/nesrecomp/build/runner/Release/NESRecompGame.exe" baserom.nes \
+    --script C:/temp/my_session.txt > C:/temp/stdout.txt 2>&1
+ls -t C:/temp/nes_shot_*.png | head -5
+```
+
+### Recording a session
+```batch
+"F:/Projects/nesrecomp/build/runner/Release/NESRecompGame.exe" baserom.nes \
+    --record C:/temp/my_session.txt
+# Play normally; close window → EXIT 0 written automatically
+```
+
+### Save state hotkeys (in-game)
+| Key | Action |
+|-----|--------|
+| F5  | Toggle turbo (fast-forward) |
+| F6  | Save state → `C:/temp/quicksave.sav` |
+| F7  | Load state ← `C:/temp/quicksave.sav` |
+
+F7 presses are recorded into `--record` files as `LOAD_STATE` commands and replayed
+correctly. Frame baseline re-syncs after load so subsequent WAITs are not inflated.
+
+### Loading a save state at startup
+```batch
+"F:/Projects/nesrecomp/build/runner/Release/NESRecompGame.exe" baserom.nes \
+    --loadstate C:/temp/quicksave.sav --script C:/temp/test.txt
+```
+
+### Script command reference
+| Command | Description |
+|---------|-------------|
+| `WAIT <n>` | Wait n frames |
+| `HOLD <BTN>` | Hold button (A B SELECT START UP DOWN LEFT RIGHT) |
+| `RELEASE <BTN>` | Release button |
+| `TURBO ON\|OFF` | Toggle fast-forward |
+| `SCREENSHOT [file]` | Save PNG to C:/temp/ |
+| `LOG <msg>` | Print message to stdout |
+| `SAVE_STATE <path>` | Save emulator state to file |
+| `LOAD_STATE <path>` | Restore emulator state from file |
+| `WAIT_RAM8 <hex_addr> <hex_val>` | Block until g_ram[addr]==val (30s timeout) |
+| `ASSERT_RAM8 <hex_addr> <hex_val> [msg]` | Assert RAM value |
+| `EXIT [code]` | Exit with code (default 0) |
+
+---
+
 ## Build Commands
 
 ```batch
 # Build recompiler (after code_generator.c changes)
-C:/temp/nesrecomp_build_recompiler.bat
-cat /c/temp/build_recompiler_log.txt | tail -10
+cmake --build F:/Projects/nesrecomp/build/recompiler --config Release
+# (do NOT use nesrecomp_build_recompiler.bat — cmake output goes silent in bash)
 
 # Regenerate faxanadu_full.c
-F:/Projects/nesrecomp/build/recompiler/NESRecomp.exe F:/Projects/nesrecomp/baserom.nes
+F:/Projects/nesrecomp/build/recompiler/Release/NESRecomp.exe F:/Projects/nesrecomp/baserom.nes
 
 # Build runner (most common)
-C:/temp/nesrecomp_build_runner.bat
-cat /c/temp/build_runner_log.txt | tail -10
+cmake --build F:/Projects/nesrecomp/build/runner --config Release 2>&1 | tail -5
 
-# Run (kill first, then start with timeout)
+# Run with a script (synchronous — exits at EXIT 0)
 powershell -File C:/temp/kill_nes.ps1
-C:/temp/nesrecomp_run_game.bat &
-sleep 10
-powershell -File C:/temp/kill_nes.ps1
-# Then: Read C:/temp/nes_shot_01.png
+"F:/Projects/nesrecomp/build/runner/Release/NESRecompGame.exe" baserom.nes \
+    --script C:/temp/my_session.txt > C:/temp/stdout.txt 2>&1
+ls -t C:/temp/nes_shot_*.png | head -5
 ```
 
 ---

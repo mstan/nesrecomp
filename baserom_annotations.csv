@@ -1,0 +1,135 @@
+# Faxanadu NES ROM — address annotations for NESRecomp code generator
+#
+# Format: bank, address, note
+# bank:    decimal (0-15); 15 = fixed bank ($C000-$FFFF)
+# address: hex 0xXXXX or decimal
+# note:    free text; may contain commas; appears as /* NOTE: ... */ in generated C
+#
+# Workflow: when a non-obvious pattern is discovered via Ghidra, document it here
+# so the generated code is self-explaining without ever reading faxanadu_full.c whole.
+# ─────────────────────────────────────────────────────────────────────────────────
+
+# ── Fixed bank (bank 15, $C000-$FFFF) ────────────────────────────────────────────
+
+# Entry vectors
+15, 0xC913, RESET vector — game main loop, never returns
+15, 0xC999, NMI vector — VBlank handler, called at 60 Hz
+15, 0xC9D5, IRQ vector
+
+# PRG bank switch functions
+# Two entry points to MMC1 bank switching. Both set PRG bank = X; do not conflate them.
+15, 0xCC1A, PRG bank switch — clean 5-write MMC1 sequence; also tail-call target from $F8C6 return trampoline
+15, 0xCC85, PRG bank switch — same as $CC1A but checks $0012 guard first; resets MMC1 shift register if non-zero (interrupt-safe variant)
+
+# NMI enable
+# Called at end of every major init phase. LDA $000A / ORA #$80 / BNE $CB39 (always) / STA $000A / STA $2000.
+# Seeing this in a trace means the game just finished reset/init and is entering the main loop.
+15, 0xCB2F, NMI enable — LDA $000A / ORA #$80 → STA $000A + STA $2000 (PPUCTRL); called after every init phase
+
+# NMI renders-on path and PPU helpers
+# $C9D6: the "rendering enabled" branch of the NMI handler (entered when $5A bit set).
+#   Calls $CF3C to flush PPU DMA queue, sets $2001 (PPUMASK), runs sprite-0 scroll split if $5A>=0.
+# $CF3C: PPU DMA queue processor — drains $0500 write buffer (read ptr RAM $001F, write ptr RAM $0020).
+# $D016: palette writer — copies 32 bytes from $0293-$02B2 (shadow palette) to PPU $3F00.
+15, 0xC9D6, NMI renders-on path — calls $CF3C (PPU DMA flush), sets PPUMASK $2001, sprite-0 scroll split when $5A>=0
+15, 0xCF3C, PPU DMA queue processor — drains $0500 write buffer; read ptr=$001F, write ptr=$0020
+15, 0xD016, palette writer — copies shadow palette $0293-$02B2 (32 bytes) → PPU $3F00
+
+# JSR $F859 bank-switch dispatch idiom
+# The JSR is followed by 3 inline data bytes (bank, addr_lo, addr_hi), not instructions.
+# code_generator expands each call site inline: bank-switch + call_by_address + bank-restore.
+# $F8C6 is the return trampoline: after the dispatched function returns, execution lands here
+#   to restore the caller's bank. PLA (pop saved bank) / TAX / JMP $CC1A.
+15, 0xF859, JSR $F859 bank-switch dispatch: 3 inline data bytes follow (bank, addr_lo, addr_hi). NOT a normal subroutine call.
+15, 0xF8C6, JSR $F859 return trampoline — PLA (pop saved bank) / TAX / JMP $CC1A; restores caller's PRG bank after dispatched function returns
+
+# Branch-bypass 2-PHA dispatch (func_C478)
+# Four branches — BNE $C47C, BEQ $C482, BEQ $C489, BCS $C492 — all jump directly to
+# the RTS at $C49C, bypassing the two PHAs at $C49A-$C49B that load the dispatch target.
+# code_generator detects this via branch_targets[]: emits the 2-PHA dispatch inline after
+# the last PHA (fall-through path), emits plain return at the branch-target label.
+15, 0xC478, scene dispatch function — contains branch-bypass 2-PHA dispatch at $C49A-$C49C
+15, 0xC49A, first PHA of 2-PHA RTS dispatch (fall-through path); four branches bypass both PHAs to reach RTS at $C49C
+15, 0xC49C, branch-target RTS — bypassed by BNE/BEQ/BEQ/BCS; fall-through path dispatched inline after $C49B PHA
+
+# CHR tile-update split dispatch table
+# func_D61D dispatches to 4 CHR update handlers via split lo/hi table at $D64C/$D650.
+# Added as known_split_tables entry {15, 0xD64C, 0xD650, 4}.
+15, 0xD61D, CHR tile-update dispatcher — uses split table lo=$D64C, hi=$D650, 4 entries
+15, 0xD64C, lo-byte half of CHR update dispatch split table (4 entries: $D654, $D673, $D699, $D6B1)
+15, 0xD650, hi-byte half of CHR update dispatch split table
+15, 0xD654, CHR tile-update handler 0
+15, 0xD673, CHR tile-update handler 1
+15, 0xD699, CHR tile-update handler 2
+15, 0xD6B1, CHR tile-update handler 3
+
+# ── Bank 14 ($8000-$BFFF, entity/room logic) ─────────────────────────────────────
+
+# 4-PHA RTS dispatch sites
+# Pattern: 4× PHA then RTS. Saves S before all 4 PHAs (_s4 = S after 4 pushes = S_orig-4).
+# Correct S restore: _s4+4 = S_orig (NOT _s4+2 — that caused MMC1 bank register corruption).
+14, 0xA6A0, 4-PHA RTS dispatch — entity state router. S restore must be _s4+4 (= S_orig). See ISSUES.md #2.
+14, 0xA78B, 4-PHA RTS dispatch — second site. Same S-restore rule: _s4+4.
+
+# Entity state dispatch tables (known_tables entries)
+14, 0x8087, entity state dispatch table 1 — 101 entries ($8087-$8150), 2-PHA RTS format
+14, 0x8958, entity state dispatch table 2 — 8 entries ($8958-$8967)
+14, 0xA6D8, entity state dispatch table 3 — 8 entries ($A6D8-$A6E7)
+14, 0xA5E7, entity/room-type dispatch table — 66 entries ($A5E7-$A66A)
+
+# Entity state machine dispatch via $02B3 (Issue #7 fix)
+# Dispatcher at $BAD9: 4-PHA RTS; continuation=$C2E9. Loads $02B3*2 into Y, then:
+#   PHA hi=$BAF8,Y  PHA lo=$BAF7,Y  RTS  -> dispatches to table[i]+1
+# Table at $BAF7, 23 interleaved 2-byte LE entries (states 0-22). Added as known_tables {14,0xBAF7,0xBB25}.
+# State 16 -> $BC5B was missing, causing spawned entities (enemies, coins, health) to be invisible.
+# $BC5B: LDA #0 / STA $02B9 / LDA #$0B / STA $02B3 / RTS  (entity state transition: sets state=$0B, clears $02B9)
+14, 0xBAD9, entity state machine dispatcher — 4-PHA RTS via $02B3 index; table=$BAF7 (23 entries $BAF7-$BB24)
+14, 0xBAF7, entity state machine dispatch table — 23 interleaved LE entries (states 0-22); known_tables {14,0xBAF7,0xBB25}
+14, 0xBC5B, entity state transition: $02B9=0, $02B3=$0B (state 16 handler; was missing, caused invisible entities)
+
+# ── Fixed bank — PPU DMA queue commands ──────────────────────────────────────────
+
+# PPUBuffer_DrawCommand_RotateTilesRight1Pixel ($CD3B)
+# Fog/smoke tile animation: reads each CHR byte via PPUDATA ($2007 buffered read),
+# rotates it right 1 pixel (PHA/LSR/PLA/ROR), writes back.
+# CRITICAL: relies on NES PPUDATA read-delay buffer. Dummy read primes the buffer;
+# each loop iteration reads the buffered previous byte and loads the next.
+# Without the buffer, plane0==plane1 convergence occurs → all color-3 (red) pixels.
+15, 0xCD3B, PPUBuffer_DrawCommand_RotateTilesRight1Pixel — reads CHR via buffered $2007 reads; rotates each byte right 1 pixel; uses PHA/LSR/PLA/ROR. Needs PPUDATA read-delay buffer.
+
+# Fog_OnTick / Fog_UpdateTiles ($DFC5/$DFDE)
+# Forepaw fog/smoke animation. Fog_OnTick checks: area_type=2 (Forepaw) AND $65=$0A (PALETTE_MIST).
+# Fog_UpdateTiles queues 3-byte PPU DMA command: opcode=$FC, addr=$18, param=Fog_TileIndex*16.
+# Opcode $FC dispatches to $CD3B in PPU DMA processor ($CF3C).
+15, 0xDFC5, Fog_OnTick — fires only when area_type=2 (Forepaw) AND palette_id=$0A (PALETTE_MIST); queues fog rotation command
+15, 0xDFDE, Fog_UpdateTiles — queues 3-byte DMA command: opcode=$FC / addr_hi=$18 / tile_idx*16; rotates CHR tiles in pattern table 1
+
+# ── Bank 12 ($8000-$BFFF, dialogue/room state) ───────────────────────────────────
+
+# Room/scene state split dispatch table
+# Dispatcher at $826E uses split lo/hi tables. Added as known_split_tables {12, 0x827B, 0x8293, 24}.
+12, 0x826E, room/scene state dispatcher — split table lo=$827B, hi=$8293, 24 entries
+12, 0x827B, lo-byte half of room/scene state dispatch split table (24 entries)
+12, 0x8293, hi-byte half of room/scene state dispatch split table
+
+# ── Bank 5 ($8000-$BFFF, APU/sound) ─────────────────────────────────────────────
+
+# Sound dispatch table 1
+# 18 entries, each a 2-byte LE (target-1) pointer. Added as known_tables {5, 0x826A, 0x828E}.
+ 5, 0x8265, 2-PHA sound dispatch table 1 — reads from table 1 at $826A-$828D
+ 5, 0x826A, sound dispatch table 1 — 18 entries (target-1 LE16 pairs, $826A-$828D)
+
+# Sound dispatch table 2
+# Dispatcher at $8678: LDA $85AE,X / PHA / LDA $85AD,X / PHA / RTS.
+# Real table base = $85AD (lo) / $85AE (hi), not $85AF.
+# We add entries 2-57 ($85B1-$8620) as known_tables {5, 0x85B1, 0x8621}.
+# Entries 0 ($8681, APU init) and 1 ($8680, bare RTS of dispatcher) are skipped:
+#   entry 1 at $8680 would generate a func starting with RTS, and code_generator
+#   sees PHA at $867F (dispatcher's last PHA) and wrongly emits 2-PHA dispatch →
+#   stale stack data → $8003/$8009 bank=15 dispatch flood every frame.
+ 5, 0x8678, 2-PHA sound dispatch table 2 — lo=$85AD+X, hi=$85AE+X. Real base $85AD, not $85AF.
+ 5, 0x85AD, sound dispatch table 2 actual base (lo bytes at even offsets, hi bytes at odd offsets)
+ 5, 0x8680, bare RTS — last byte of dispatcher at $8678. DO NOT add as function: causes 2-PHA false-positive.
+ 5, 0x8681, APU init/reset — silence DMC, clear RAM sound vars, JSR $804A, enable all channels ($4015=$0F)
+ 5, 0x8C69, noise channel SFX writer — LDA #$05 STA $0126, sets noise period/volume ($400C/$400E/$400F)
+ 5, 0x8C73, noise channel SFX writer (entry point mid-function) — LDA #$01 STA $400C then noise period logic

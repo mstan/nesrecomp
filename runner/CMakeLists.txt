@@ -11,10 +11,12 @@ find_package(SDL2 REQUIRED)
 add_executable(NESRecompGame
     src/main_runner.c
     src/runtime.c
+    src/apu.c
     src/ppu_renderer.c
     src/mapper.c
     src/logger.c
     src/input_script.c
+    src/savestate.c
     ../generated/faxanadu_full.c
     ../generated/faxanadu_dispatch.c
 )

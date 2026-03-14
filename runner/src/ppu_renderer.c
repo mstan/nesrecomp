@@ -7,6 +7,10 @@
 #include "nes_runtime.h"
 #include "mapper.h"
 #include <string.h>
+#include <stdio.h>
+
+/* PNG save wrapper — implemented in main_runner.c */
+extern void save_png(const char *path, int w, int h, const void *rgb, int stride);
 
 /* NES system palette — 64 colors as ARGB8888 */
 static const uint32_t NES_PALETTE[64] = {
@@ -54,6 +58,113 @@ static void render_tile_row(uint32_t *framebuf,
     }
 }
 
+/* ---- OAM Debug View ----
+ * Renders all 64 OAM slots as an 8x8 grid into a 256x256 ARGB buffer.
+ * Each cell is 32x32 (8px tile at 4x scale).
+ * Border colors:
+ *   dark gray   = slot off-screen (Y >= $EF)
+ *   white/cyan/green/magenta = palette 0-3, sprite in front of BG
+ *   yellow      = sprite behind BG (priority bit set)
+ * Transparent pixels rendered as dark magenta (#200020).
+ */
+void ppu_render_oam_debug(uint32_t *buf) {
+    /* Dark background */
+    for (int i = 0; i < 256 * 256; i++) buf[i] = 0xFF101010;
+
+    /* Grid lines */
+    for (int gy = 0; gy < 256; gy++)
+        for (int gx = 0; gx < 256; gx++)
+            if (gx % 32 == 0 || gy % 32 == 0)
+                buf[gy * 256 + gx] = 0xFF282828;
+
+    int spr_base = (g_ppuctrl & 0x08) ? 0x1000 : 0x0000;
+
+    /* Border palette: slot on-screen, by palette 0-3 */
+    static const uint32_t pal_border[4] = {
+        0xFFFFFFFF, /* pal 0: white */
+        0xFF00FFFF, /* pal 1: cyan */
+        0xFF00FF00, /* pal 2: green */
+        0xFFFF00FF, /* pal 3: magenta */
+    };
+
+    for (int slot = 0; slot < 64; slot++) {
+        uint8_t sy   = g_ppu_oam[slot * 4 + 0];
+        uint8_t stile= g_ppu_oam[slot * 4 + 1];
+        uint8_t sattr= g_ppu_oam[slot * 4 + 2];
+        /* sx unused for rendering but kept for symmetry */
+
+        int col = slot % 8;
+        int row = slot / 8;
+        int ox  = col * 32;
+        int oy  = row * 32;
+
+        int off_screen = (sy >= 0xEF);
+        int pal        = (sattr & 0x03);
+        int flip_h     = (sattr >> 6) & 1;
+        int flip_v     = (sattr >> 7) & 1;
+        int behind_bg  = (sattr >> 5) & 1;
+
+        uint32_t border = off_screen ? 0xFF303030
+                        : behind_bg  ? 0xFFFFFF00
+                        : pal_border[pal];
+
+        /* Draw 1px border around 32x32 cell */
+        for (int bx = ox; bx < ox + 32; bx++) {
+            buf[oy * 256 + bx]        = border;
+            buf[(oy + 31) * 256 + bx] = border;
+        }
+        for (int by = oy; by < oy + 32; by++) {
+            buf[by * 256 + ox]        = border;
+            buf[by * 256 + (ox + 31)] = border;
+        }
+
+        /* Render tile pixels at 4x scale (1px border inset → 30x30 usable, but we
+         * actually use 32x32 and let border overdraw the outermost pixel row) */
+        int spr_pal = pal + 4; /* sprite palettes start at sub-palette 4 in g_ppu_pal */
+        int chr_off = spr_base + stile * 16;
+
+        for (int tr = 0; tr < 8; tr++) {
+            int src_row = flip_v ? (7 - tr) : tr;
+            uint8_t lo = g_chr_ram[chr_off + src_row];
+            uint8_t hi = g_chr_ram[chr_off + src_row + 8];
+
+            for (int b = 7; b >= 0; b--) {
+                int src_bit = flip_h ? (7 - b) : b;
+                int ci = ((lo >> src_bit) & 1) | (((hi >> src_bit) & 1) << 1);
+                uint32_t color;
+                if (ci == 0) {
+                    color = off_screen ? 0xFF181818 : 0xFF200020; /* transparent: dark magenta */
+                } else {
+                    uint8_t nc = g_ppu_pal[(spr_pal * 4 + ci) & 0x1F] & 0x3F;
+                    color = NES_PALETTE[nc];
+                    if (off_screen) {
+                        /* Dim off-screen sprites to 25% brightness */
+                        uint8_t r = ((color >> 16) & 0xFF) >> 2;
+                        uint8_t g = ((color >>  8) & 0xFF) >> 2;
+                        uint8_t bv= ( color        & 0xFF) >> 2;
+                        color = 0xFF000000 | ((uint32_t)r << 16) | ((uint32_t)g << 8) | bv;
+                    }
+                }
+                int px0 = ox + (7 - b) * 4;
+                int py0 = oy + tr * 4;
+                for (int dy = 0; dy < 4; dy++)
+                    for (int dx = 0; dx < 4; dx++)
+                        buf[(py0 + dy) * 256 + (px0 + dx)] = color;
+            }
+        }
+
+        /* Redraw border on top so it isn't overwritten by tile pixels */
+        for (int bx = ox; bx < ox + 32; bx++) {
+            buf[oy * 256 + bx]        = border;
+            buf[(oy + 31) * 256 + bx] = border;
+        }
+        for (int by = oy; by < oy + 32; by++) {
+            buf[by * 256 + ox]        = border;
+            buf[by * 256 + (ox + 31)] = border;
+        }
+    }
+}
+
 void ppu_render_frame(uint32_t *framebuf) {
     /* Universal background color */
     uint32_t bg = NES_PALETTE[g_ppu_pal[0] & 0x3F];
@@ -63,31 +174,47 @@ void ppu_render_frame(uint32_t *framebuf) {
     if (!(g_ppumask & 0x08)) goto render_sprites;
 
     {
-        /* BG pattern table: PPUCTRL bit 4 selects $0000 or $1000 */
-        int chr_base = (g_ppuctrl & 0x10) ? 0x1000 : 0x0000;
-
-        /* Scroll origin in combined 512×480 nametable space.
-         * PPUCTRL bits 0-1 select the base nametable (add 256 or 240 to scroll). */
-        int origin_x = g_ppuscroll_x + ((g_ppuctrl & 0x01) ? 256 : 0);
-        int origin_y = g_ppuscroll_y + ((g_ppuctrl & 0x02) ? 240 : 0);
+        /* Split-screen: rows 0..split_y-1 use HUD scroll (captured at sprite-0 hit);
+         * rows split_y..239 use the post-split game-area scroll.
+         * When no split occurred this frame, all rows use current scroll.
+         *
+         * split_y is derived from sprite-0 OAM Y: the sprite renders rows Y+1..Y+8.
+         * The game's spin-wait fires near the last row of the sprite.
+         * Adding 9 gives the first scanline AFTER the sprite → clean 8px tile boundary.
+         * For Faxanadu (sprite-0 Y=$17=23): split_y=32, keeping NT0 rows 0-3 in HUD
+         * scroll (rows 0-1 blank spacer, rows 2-3 actual HUD tiles). */
+        int split_y = g_spr0_split_active ? ((int)(g_ppu_oam[0]) + 9) : 240;
 
         /* MMC1 mirroring — look up once per frame, not per pixel */
         int mirroring = mapper_get_mirroring();
 
         for (int sy = 0; sy < 240; sy++) {
+            /* Choose scroll source for this scanline */
+            uint8_t ppuctrl_row = (sy < split_y) ? g_ppuctrl_hud  : g_ppuctrl;
+            int     scroll_x    = (sy < split_y) ? g_ppuscroll_x_hud : g_ppuscroll_x;
+            int     scroll_y    = (sy < split_y) ? g_ppuscroll_y_hud : g_ppuscroll_y;
+
+            /* BG pattern table: PPUCTRL bit 4 selects $0000 or $1000 */
+            int chr_base = (ppuctrl_row & 0x10) ? 0x1000 : 0x0000;
+
+            /* Scroll origin in combined 512×480 nametable space.
+             * PPUCTRL bits 0-1 select the base nametable (add 256 or 240 to scroll). */
+            int origin_x = scroll_x + ((ppuctrl_row & 0x01) ? 256 : 0);
+            int origin_y = scroll_y + ((ppuctrl_row & 0x02) ? 240 : 0);
+
             int nt_y = origin_y + sy;
             if (nt_y >= 480) nt_y -= 480;
-            int tile_y  = nt_y / 8;
+            int tile_y   = nt_y / 8;
             int tile_row = nt_y % 8;
             int nt_row   = (tile_y >= 30) ? 1 : 0;
             int local_ty = tile_y % 30;
 
             for (int sx = 0; sx < 256; sx++) {
-                int nt_x     = (origin_x + sx) & 0x1FF;
-                int tile_x   = nt_x / 8;
+                int nt_x      = (origin_x + sx) & 0x1FF;
+                int tile_x    = nt_x / 8;
                 int pixel_col = nt_x % 8;
-                int nt_col   = (tile_x >= 32) ? 1 : 0;
-                int local_tx = tile_x % 32;
+                int nt_col    = (tile_x >= 32) ? 1 : 0;
+                int local_tx  = tile_x % 32;
 
                 /* Resolve virtual NT to physical NT using cached mirroring mode */
                 int virt_nt = nt_row * 2 + nt_col;
@@ -122,6 +249,102 @@ render_sprites:
     /* Phase 2: Sprites (OAM) — skip if sprite rendering disabled */
     if (!(g_ppumask & 0x10)) return;
 
+    /* DEBUG: save OAM tile sheet — 8 cols x 8 rows, each tile at 4x scale (32x32px)
+     * Image = 256x256. Magenta BG, grid lines. Transparent pixels = magenta.
+     * Also writes a text file with OAM slot info + full palette dump. */
+    if (0 && g_frame_count >= 300 && g_frame_count % 60 == 0) {
+        #define SCALE 4
+        #define CELL (8 * SCALE)   /* 32 */
+        #define GCOLS 8
+        #define GROWS 8
+        #define GW (CELL * GCOLS)  /* 256 */
+        #define GH (CELL * GROWS)  /* 256 */
+        static uint32_t oam_img[GW * GH];
+        int sb = (g_ppuctrl & 0x08) ? 0x1000 : 0x0000;
+        /* Magenta background */
+        for (int i = 0; i < GW * GH; i++) oam_img[i] = 0xFFFF00FF;
+        /* Grid lines (dark gray) */
+        for (int gy = 0; gy < GH; gy++)
+            for (int gx = 0; gx < GW; gx++)
+                if (gx % CELL == 0 || gy % CELL == 0)
+                    oam_img[gy * GW + gx] = 0xFF333333;
+
+        for (int si = 0; si < 64; si++) {
+            uint8_t sy = g_ppu_oam[si*4+0], st = g_ppu_oam[si*4+1];
+            uint8_t sa = g_ppu_oam[si*4+2];
+            int col = si % GCOLS, row = si / GCOLS;
+            int ox = col * CELL + 1, oy = row * CELL + 1;
+            if (sy >= 0xEF) {
+                /* Mark hidden slots with dark gray fill */
+                for (int py = oy; py < oy + CELL - 1 && py < GH; py++)
+                    for (int px = ox; px < ox + CELL - 1 && px < GW; px++)
+                        oam_img[py * GW + px] = 0xFF222222;
+                continue;
+            }
+            int sp = (sa & 3) + 4;
+            for (int tr = 0; tr < 8; tr++) {
+                int co = sb + st * 16 + tr;
+                uint8_t lo = g_chr_ram[co], hi = g_chr_ram[co + 8];
+                for (int b = 7; b >= 0; b--) {
+                    int ci = ((lo >> b) & 1) | (((hi >> b) & 1) << 1);
+                    uint32_t color;
+                    if (ci == 0)
+                        color = 0xFFFF00FF; /* transparent = magenta */
+                    else {
+                        uint8_t nc = g_ppu_pal[(sp*4+ci) & 0x1F] & 0x3F;
+                        color = NES_PALETTE[nc];
+                    }
+                    int px0 = ox + (7 - b) * SCALE;
+                    int py0 = oy + tr * SCALE;
+                    for (int dy = 0; dy < SCALE; dy++)
+                        for (int dx = 0; dx < SCALE; dx++) {
+                            int fx = px0 + dx, fy = py0 + dy;
+                            if (fx < GW && fy < GH)
+                                oam_img[fy * GW + fx] = color;
+                        }
+                }
+            }
+        }
+        /* Save image */
+        {
+            static uint8_t rgb[GW * GH * 3];
+            for (int i = 0; i < GW * GH; i++) {
+                rgb[i*3+0] = (oam_img[i] >> 16) & 0xFF;
+                rgb[i*3+1] = (oam_img[i] >>  8) & 0xFF;
+                rgb[i*3+2] =  oam_img[i]        & 0xFF;
+            }
+            char path[80];
+            snprintf(path, sizeof(path), "C:/temp/oam_sheet_%04llu.png",
+                     (unsigned long long)g_frame_count);
+            save_png(path, GW, GH, rgb, GW * 3);
+        }
+        /* Save text info */
+        {
+            char path[80];
+            snprintf(path, sizeof(path), "C:/temp/oam_info_%04llu.txt",
+                     (unsigned long long)g_frame_count);
+            FILE *f = fopen(path, "w");
+            if (f) {
+                fprintf(f, "Frame %llu  PPUCTRL=$%02X  spr_chr=$%04X\n",
+                        (unsigned long long)g_frame_count, g_ppuctrl, sb);
+                fprintf(f, "Palette: ");
+                for (int i = 0; i < 32; i++) fprintf(f, "%02X ", g_ppu_pal[i]);
+                fprintf(f, "\n\nSlot  Y    Tile Attr  X   Pal  Colors(1/2/3)\n");
+                for (int i = 0; i < 64; i++) {
+                    uint8_t y=g_ppu_oam[i*4], t=g_ppu_oam[i*4+1];
+                    uint8_t a=g_ppu_oam[i*4+2], x=g_ppu_oam[i*4+3];
+                    if (y >= 0xEF) continue;
+                    int p=(a&3)+4;
+                    fprintf(f, " %2d  %3d   $%02X  $%02X  %3d   %d   $%02X/$%02X/$%02X\n",
+                            i, y, t, a, x, p,
+                            g_ppu_pal[(p*4+1)&0x1F], g_ppu_pal[(p*4+2)&0x1F],
+                            g_ppu_pal[(p*4+3)&0x1F]);
+                }
+                fclose(f);
+            }
+        }
+    }
+
     /* Sprite pattern table: PPUCTRL bit 3 selects $0000 or $1000 (8x8 mode) */
     int spr_chr_base = (g_ppuctrl & 0x08) ? 0x1000 : 0x0000;
 
@@ -134,9 +357,10 @@ render_sprites:
 
         if (spr_y >= 0xEF) continue; /* off-screen */
 
-        int flip_h = (spr_attr >> 6) & 1;
-        int flip_v = (spr_attr >> 7) & 1;
-        int spr_pal = (spr_attr & 0x03) + 4; /* sprite palettes start at $3F10, offset 4 */
+        int flip_h   = (spr_attr >> 6) & 1;
+        int flip_v   = (spr_attr >> 7) & 1;
+        int priority = (spr_attr >> 5) & 1; /* 0=in front, 1=behind BG */
+        int spr_pal  = (spr_attr & 0x03) + 4; /* sprite palettes start at $3F10, offset 4 */
 
         for (int row = 0; row < 8; row++) {
             int draw_row = flip_v ? (7 - row) : row;
@@ -154,9 +378,27 @@ render_sprites:
                 if (px < 0 || px >= 256) continue;
                 int color_idx = ((lo >> chr_bit) & 1) | (((hi >> chr_bit) & 1) << 1);
                 if (color_idx == 0) continue; /* transparent */
+                /* Priority=1: sprite behind BG — only draw where BG is transparent */
+                if (priority && framebuf[py * 256 + px] != bg) continue;
                 uint8_t nes_color = g_ppu_pal[(spr_pal * 4 + color_idx) & 0x1F] & 0x3F;
                 framebuf[py * 256 + px] = NES_PALETTE[nes_color];
             }
         }
     }
+
+#if 0 /* DEBUG OVERLAY: green boxes at tile >= $90 positions -- kept for reference */
+    for (int di = 0; di < 64; di++) {
+        uint8_t dy = g_ppu_oam[di*4+0], dt = g_ppu_oam[di*4+1];
+        uint8_t dx = g_ppu_oam[di*4+3];
+        if (dy >= 0xEF) continue;
+        if (dt < 0x90) continue;
+        int by = dy + 1, bx = dx;
+        for (int ry = by - 2; ry < by + 10; ry++)
+            for (int rx = bx - 2; rx < bx + 10; rx++) {
+                if (ry < 0 || ry >= 240 || rx < 0 || rx >= 256) continue;
+                if (ry < by || ry >= by+8 || rx < bx || rx >= bx+8)
+                    framebuf[ry * 256 + rx] = 0xFF00FF00;
+            }
+    }
+#endif
 }

@@ -2,6 +2,7 @@
  * input_script.c — NES input script playback and recording
  */
 #include "input_script.h"
+#include "savestate.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -31,6 +32,7 @@ typedef enum {
     CMD_TURBO_ON, CMD_TURBO_OFF,
     CMD_SCREENSHOT, CMD_LOG, CMD_EXIT,
     CMD_WAIT_RAM8, CMD_ASSERT_RAM8,
+    CMD_SAVE_STATE, CMD_LOAD_STATE,
 } CmdType;
 
 typedef struct {
@@ -118,6 +120,12 @@ int script_load(const char *path) {
                     if (*p == ' ') { skip++; while(*p == ' ') p++; break; }
                 strncpy(c.sarg, p, sizeof(c.sarg)-1);
             }
+        } else if (strcmp(tok, "SAVE_STATE") == 0 && n >= 2) {
+            c.type = CMD_SAVE_STATE;
+            strncpy(c.sarg, arg1, sizeof(c.sarg)-1);
+        } else if (strcmp(tok, "LOAD_STATE") == 0 && n >= 2) {
+            c.type = CMD_LOAD_STATE;
+            strncpy(c.sarg, arg1, sizeof(c.sarg)-1);
         } else {
             fprintf(stderr, "[Script] Unknown command: %s\n", tok);
             continue;
@@ -203,6 +211,16 @@ void script_tick(uint64_t frame, const uint8_t *ram) {
             case CMD_LOG:
                 printf("[Script] %s\n", c->sarg);
                 break;
+            case CMD_SAVE_STATE:
+                printf("[Script] SAVE_STATE %s at frame %llu\n",
+                       c->sarg, (unsigned long long)frame);
+                savestate_save(c->sarg);
+                break;
+            case CMD_LOAD_STATE:
+                printf("[Script] LOAD_STATE %s at frame %llu\n",
+                       c->sarg, (unsigned long long)frame);
+                savestate_load(c->sarg);
+                break;
             case CMD_EXIT:
                 printf("[Script] EXIT %d at frame %llu\n",
                        c->iarg, (unsigned long long)frame);
@@ -241,7 +259,11 @@ int script_check_exit(void) {
 
 int script_wants_screenshot(char *buf, int buflen) {
     if (!s_shot_pending[0]) return 0;
-    snprintf(buf, buflen, "C:/temp/%s", s_shot_pending);
+    /* If path is absolute (starts with drive letter: or /), use as-is */
+    if (s_shot_pending[1] == ':' || s_shot_pending[0] == '/' || s_shot_pending[0] == '\\')
+        snprintf(buf, buflen, "%s", s_shot_pending);
+    else
+        snprintf(buf, buflen, "C:/temp/%s", s_shot_pending);
     s_shot_pending[0] = '\0';
     return 1;
 }
@@ -260,6 +282,30 @@ void record_open(const char *path) {
     fflush(s_rec_file);
     s_rec_opened = 1;
     printf("[Record] Recording to %s\n", path);
+}
+
+void record_close(void) {
+    if (!s_rec_file) return;
+    fprintf(s_rec_file, "EXIT 0\n");
+    fflush(s_rec_file);
+    fclose(s_rec_file);
+    s_rec_file = NULL;
+}
+
+void record_loadstate(uint64_t frame, const char *path) {
+    if (!s_rec_file) return;
+    uint64_t delta = frame - s_rec_last_frame;
+    fprintf(s_rec_file, "WAIT %llu\n", (unsigned long long)delta);
+    fprintf(s_rec_file, "LOAD_STATE %s\n", path);
+    fflush(s_rec_file);
+    s_rec_last_frame = frame;
+}
+
+/* Call immediately after savestate_load() to re-sync the recording's frame
+ * baseline to the restored frame count, preventing uint64_t underflow on
+ * the next record_tick() delta calculation. */
+void record_sync_frame(uint64_t frame) {
+    s_rec_last_frame = frame;
 }
 
 void record_tick(uint64_t frame, uint8_t buttons, int turbo) {

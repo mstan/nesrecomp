@@ -10,6 +10,7 @@ add_executable(NESRecomp
     src/cpu6502_decoder.c
     src/function_finder.c
     src/code_generator.c
+    src/annotations.c
 )
 
 target_include_directories(NESRecomp PRIVATE src)

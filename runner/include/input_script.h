@@ -28,3 +28,9 @@ int  script_wants_screenshot(char *buf, int buflen);
 /* Recording — call once per frame BEFORE applying script override */
 void record_open(const char *path);
 void record_tick(uint64_t frame, uint8_t buttons, int turbo);
+/* Emit LOAD_STATE into the recording at the current frame */
+void record_loadstate(uint64_t frame, const char *path);
+/* Re-sync frame baseline after savestate_load() changes g_frame_count */
+void record_sync_frame(uint64_t frame);
+/* Flush final WAIT + EXIT 0 — registered automatically via atexit */
+void record_close(void);

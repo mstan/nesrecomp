@@ -4,6 +4,7 @@
 #include "nes_runtime.h"
 #include "mapper.h"
 #include "logger.h"
+#include "apu.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -23,9 +24,14 @@ uint8_t g_oamaddr     = 0;
 uint8_t g_ppuscroll_x = 0;
 uint8_t g_ppuscroll_y = 0;
 uint16_t g_ppuaddr    = 0;
-static int g_ppuaddr_latch = 0;
-static int g_scroll_latch  = 0;
-static int s_spr0_reads    = 0; /* sprite-0 hit simulation counter, reset at each VBlank */
+
+uint8_t g_ppuscroll_x_hud = 0;
+uint8_t g_ppuscroll_y_hud = 0;
+uint8_t g_ppuctrl_hud     = 0;
+int     g_spr0_split_active = 0;
+static int     g_ppuaddr_latch = 0;
+static int     g_scroll_latch  = 0;
+static uint8_t g_ppudata_buf   = 0; /* PPUDATA read buffer (NES read-delay) */
 
 uint64_t g_frame_count = 0;
 
@@ -63,6 +69,7 @@ void runtime_init(void) {
     memset(g_ppu_nt,  0, sizeof(g_ppu_nt));
     g_cpu.S = 0xFD;
     g_cpu.I = 1;
+    apu_init();
     ppu_trace_init();
 }
 
@@ -72,22 +79,17 @@ void runtime_init(void) {
  * so it works for both read-heavy and write-heavy game loops. */
 static bool s_vblank_firing = false;
 
-extern int g_turbo;
-
 static void maybe_trigger_vblank(void) {
     if (s_vblank_firing) return;
     static clock_t s_last = 0;
     clock_t now = clock();
-    /* CLOCKS_PER_SEC/60 = period for 60Hz. On MSVC CLOCKS_PER_SEC=1000 → 16 ticks.
-     * In turbo mode skip the throttle — fire on every call. */
-    if (!g_turbo && (now - s_last) < (CLOCKS_PER_SEC / 60)) return;
+    /* CLOCKS_PER_SEC/60 = period for 60Hz. On MSVC CLOCKS_PER_SEC=1000 → 16 ticks */
+    if ((now - s_last) < (CLOCKS_PER_SEC / 60)) return;
     s_last = now;
     s_vblank_firing = true;
-    /* Set VBlank (bit7), clear sprite-0 hit (bit6) — standard NES VBlank start.
-     * Also reset sprite-0 read counter so main-loop $2002 reads between VBlanks
-     * don't poison the count and cause the first spin-wait to loop forever. */
+    /* Set VBlank (bit7), clear sprite-0 hit (bit6) — standard NES VBlank start */
     g_ppustatus = (g_ppustatus & ~0x40) | 0x80;
-    s_spr0_reads = 0;
+    g_spr0_split_active = 0;  /* reset per-frame split state */
     nes_vblank_callback();
     s_vblank_firing = false;
     /* Update s_last so we don't immediately re-fire after a long callback */
@@ -99,6 +101,7 @@ uint8_t nes_read(uint16_t addr) {
     if (addr <= 0x1FFF) return g_ram[addr & 0x07FF];
     if (addr >= 0x2000 && addr <= 0x3FFF) return ppu_read_reg(0x2000 + (addr & 7));
     if (addr >= 0x4000 && addr <= 0x401F) {
+        if (addr == 0x4015) return apu_read_status();
         if (addr == 0x4016) {
             if (s_ctrl1_strobe) return 0x40 | (g_controller1_buttons >> 7);
             uint8_t bit = (s_ctrl1_shift & 0x80) ? 1 : 0;
@@ -122,7 +125,10 @@ uint8_t nes_read(uint16_t addr) {
 void nes_write(uint16_t addr, uint8_t val) {
     maybe_trigger_vblank();
 
-    if (addr <= 0x1FFF) { g_ram[addr & 0x07FF] = val; return; }
+    if (addr <= 0x1FFF) {
+        uint16_t a = addr & 0x07FF;
+        g_ram[a] = val; return;
+    }
     if (addr >= 0x2000 && addr <= 0x3FFF) { ppu_write_reg(0x2000 + (addr & 7), val); return; }
     if (addr == 0x4014) {
         uint16_t src = (uint16_t)val << 8;
@@ -138,7 +144,7 @@ void nes_write(uint16_t addr, uint8_t val) {
         }
         return;
     }
-    if (addr >= 0x4000 && addr <= 0x401F) return;
+    if (addr >= 0x4000 && addr <= 0x401F) { apu_write(addr, val); return; }
     if (addr >= 0x8000) { mapper_write(addr, val); return; }
 }
 
@@ -148,26 +154,6 @@ uint16_t nes_read16(uint16_t addr) {
 
 uint16_t nes_read16zp(uint8_t zp) {
     return (uint16_t)g_ram[zp] | ((uint16_t)g_ram[(uint8_t)(zp + 1)] << 8);
-}
-
-/* Map a PPU address in $2000-$2FFF to a physical offset in g_ppu_nt[].
- * MMC1 supports 4 mirroring modes; only 2KB of physical NT RAM is used.
- *   Mode 0: one-screen lower  — all 4 virtual NTs → physical NT0 (offset 0)
- *   Mode 1: one-screen upper  — all 4 virtual NTs → physical NT1 (offset 0x400)
- *   Mode 2: vertical          — $2000/$2800→NT0, $2400/$2C00→NT1
- *   Mode 3: horizontal        — $2000/$2400→NT0, $2800/$2C00→NT1
- * virtual_idx: 0=$2000, 1=$2400, 2=$2800, 3=$2C00 */
-static int nt_phys_offset(uint16_t a) {
-    int virt = (a >> 10) & 3;
-    int phys;
-    switch (mapper_get_mirroring()) {
-        case 0:  phys = 0;          break; /* one-screen lower */
-        case 1:  phys = 1;          break; /* one-screen upper */
-        case 2:  phys = virt & 1;   break; /* vertical:   $2000/$2800→0, $2400/$2C00→1 */
-        case 3:  phys = virt >> 1;  break; /* horizontal: $2000/$2400→0, $2800/$2C00→1 */
-        default: phys = virt & 1;   break;
-    }
-    return phys * 0x400 + (a & 0x3FF);
 }
 
 void ppu_write_reg(uint16_t reg, uint8_t val) {
@@ -186,12 +172,15 @@ void ppu_write_reg(uint16_t reg, uint8_t val) {
             if (!g_ppuaddr_latch) g_ppuaddr = (uint16_t)val << 8;
             else                   g_ppuaddr |= val;
             g_ppuaddr_latch ^= 1;
+            g_ppudata_buf = 0; /* writing $2006 resets the read buffer */
             break;
         case 0x2007: {
             uint16_t a = g_ppuaddr & 0x3FFF;
             if      (a >= 0x3F00) g_ppu_pal[a & 0x1F] = val;
-            else if (a >= 0x2000) g_ppu_nt[nt_phys_offset(a)] = val; /* nametable w/ mirroring */
-            else                  g_chr_ram[a] = val;                 /* CHR RAM */
+            else if (a >= 0x2000) g_ppu_nt[a & 0x0FFF] = val; /* nametable */
+            else {
+                g_chr_ram[a] = val;
+            }
             g_ppuaddr += (g_ppuctrl & 0x04) ? 32 : 1;
             break;
         }
@@ -206,14 +195,19 @@ uint8_t ppu_read_reg(uint16_t reg) {
             g_scroll_latch  = 0;
             g_ppuaddr_latch = 0;
             /* Simulate sprite-0 hit (bit6) for split-screen spin-waits.
-             * After 3 consecutive reads that find bit6 clear, set sprite-0 hit.
-             * s_spr0_reads is file-scope and reset at each VBlank start so that
-             * main-loop reads between VBlanks cannot pre-arm the counter. */
+             * After 3 consecutive reads that find bit6 clear while rendering
+             * is enabled, set sprite-0 hit. */
             {
+                static int s_spr0_reads = 0;
                 if (s & 0x40) {
                     s_spr0_reads = 0;
                 } else {
                     if (++s_spr0_reads >= 3) {
+                        /* Capture scroll/ppuctrl state as HUD (pre-split) values */
+                        g_ppuscroll_x_hud   = g_ppuscroll_x;
+                        g_ppuscroll_y_hud   = g_ppuscroll_y;
+                        g_ppuctrl_hud       = g_ppuctrl;
+                        g_spr0_split_active = 1;
                         g_ppustatus |= 0x40;
                         s_spr0_reads = 0;
                     }
@@ -223,15 +217,43 @@ uint8_t ppu_read_reg(uint16_t reg) {
         }
         case 0x2004: return g_ppu_oam[g_oamaddr];
         case 0x2007: {
+            /* NES PPU $2007 read: buffered for CHR/NT, immediate for palette.
+             * The real NES returns the OLD buffer contents for non-palette reads,
+             * then updates the buffer with the byte at the current address.
+             * Palette reads ($3F00+) are immediate (no buffer delay). */
             uint16_t a = g_ppuaddr & 0x3FFF;
             g_ppuaddr += (g_ppuctrl & 0x04) ? 32 : 1;
-            if (a >= 0x3F00) return g_ppu_pal[a & 0x1F];
-            if (a >= 0x2000) return g_ppu_nt[nt_phys_offset(a)]; /* mirrored */
-            return g_chr_ram[a];
+            if (a >= 0x3F00) {
+                /* Palette: immediate read, but also update buffer with NT mirror */
+                g_ppudata_buf = g_ppu_nt[a & 0x0FFF];
+                return g_ppu_pal[a & 0x1F];
+            }
+            uint8_t ret = g_ppudata_buf;
+            if (a >= 0x2000) g_ppudata_buf = g_ppu_nt[a & 0x0FFF];
+            else              g_ppudata_buf = g_chr_ram[a];
+            return ret;
         }
     }
     return 0;
 }
+
+void runtime_get_latch_state(uint8_t *ppuaddr_latch, uint8_t *scroll_latch) {
+    *ppuaddr_latch = (uint8_t)g_ppuaddr_latch;
+    *scroll_latch  = (uint8_t)g_scroll_latch;
+}
+
+void runtime_set_latch_state(uint8_t ppuaddr_latch, uint8_t scroll_latch) {
+    g_ppuaddr_latch = (int)ppuaddr_latch;
+    g_scroll_latch  = (int)scroll_latch;
+}
+
+uint32_t g_miss_count_any   = 0;
+uint16_t g_miss_last_addr   = 0;
+uint64_t g_miss_last_frame  = 0;
+
+#define MAX_MISS_UNIQUE 12
+uint16_t g_miss_unique_addrs[MAX_MISS_UNIQUE];
+int      g_miss_unique_count = 0;
 
 void nes_log_dispatch_miss(uint16_t addr) {
     static uint32_t last = 0xFFFFFFFF;
@@ -240,4 +262,13 @@ void nes_log_dispatch_miss(uint16_t addr) {
         printf("[Dispatch] MISS: no func for $%04X bank=%d\n", addr, g_current_bank);
         last = key;
     }
+    g_miss_count_any++;
+    g_miss_last_addr  = addr;
+    g_miss_last_frame = g_frame_count;
+    /* Add to unique list if not already present */
+    int found = 0;
+    for (int i = 0; i < g_miss_unique_count; i++)
+        if (g_miss_unique_addrs[i] == addr) { found = 1; break; }
+    if (!found && g_miss_unique_count < MAX_MISS_UNIQUE)
+        g_miss_unique_addrs[g_miss_unique_count++] = addr;
 }
