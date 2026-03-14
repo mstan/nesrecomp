@@ -11,6 +11,7 @@ add_executable(NESRecomp
     src/function_finder.c
     src/code_generator.c
     src/annotations.c
+    src/game_config.c
 )
 
 target_include_directories(NESRecomp PRIVATE src)

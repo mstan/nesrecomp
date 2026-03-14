@@ -1,18 +1,11 @@
 /*
- * mapper.c — Mapper 1 (MMC1) implementation
+ * mapper.c — NES mapper implementations
  *
- * MMC1 uses a 5-bit serial shift register written one bit at a time.
- * Writing a value with bit 7 set resets the shift register.
- * After 5 writes, the accumulated 5-bit value is applied to a register
- * determined by address bits 14-13:
- *   $8000-$9FFF: Control  (mirroring, PRG/CHR bank mode)
- *   $A000-$BFFF: CHR bank 0
- *   $C000-$DFFF: CHR bank 1
- *   $E000-$FFFF: PRG bank select
+ * Supported mappers:
+ *   0 — NROM (Super Mario Bros., etc.)   No bank switching; PRG fixed at $8000-$FFFF.
+ *   1 — MMC1 (Faxanadu, etc.)            5-bit serial shift register, 4 sub-registers.
  *
- * Faxanadu uses PRG bank mode 3 by default:
- *   - $8000-$BFFF: switchable 16KB bank (g_current_bank)
- *   - $C000-$FFFF: fixed to last bank (bank 15)
+ * Add new mappers: extend mapper_init() and mapper_write() with a new case.
  */
 #include "mapper.h"
 #include "nes_runtime.h"
@@ -23,13 +16,13 @@
 static const uint8_t *s_prg_data  = NULL;
 static int            s_prg_banks = 0;
 int                   g_current_bank = 0;
+static int            s_mapper_type  = 0;
+static int            s_mirroring    = 3; /* default: horizontal */
 
-/* MMC1 shift register state */
+/* ── Mapper 1 (MMC1) state ─────────────────────────────────────────────────── */
 static uint8_t s_shift_reg   = 0x10; /* Reset state: bit 4 set */
 static int     s_shift_count  = 0;
-
-/* MMC1 internal registers */
-static uint8_t s_ctrl    = 0x1C; /* Default: PRG mode 3, CHR mode 0 */
+static uint8_t s_ctrl    = 0x1C;     /* Default: PRG mode 3, CHR mode 0 */
 static uint8_t s_chr0    = 0;
 static uint8_t s_chr1    = 0;
 static uint8_t s_prg_reg = 0;
@@ -38,25 +31,7 @@ static uint8_t s_prg_reg = 0;
 static FILE *s_mapper_trace = NULL;
 extern uint64_t g_frame_count; /* defined in runtime.c */
 
-void mapper_init(const uint8_t *prg_data, int prg_banks) {
-    s_prg_data  = prg_data;
-    s_prg_banks = prg_banks;
-    g_current_bank = 0;
-    s_shift_reg   = 0x10;
-    s_shift_count  = 0;
-    s_ctrl    = 0x1C; /* PRG mode 3: fix last bank at $C000, switch $8000 */
-    s_chr0    = 0;
-    s_chr1    = 0;
-    s_prg_reg = 0;
-
-    s_mapper_trace = fopen("C:/temp/mapper_trace.csv", "w");
-    if (s_mapper_trace) {
-        fprintf(s_mapper_trace, "EVENT,bank,PC,FRAME\n");
-        fflush(s_mapper_trace);
-    }
-    printf("[Mapper] Init: %d banks, Mapper 1 (MMC1)\n", prg_banks);
-}
-
+/* ── MMC1 helper ───────────────────────────────────────────────────────────── */
 static void mmc1_apply_prg(void) {
     int mode = (s_ctrl >> 2) & 3;
     int bank = s_prg_reg & 0x0F;
@@ -64,16 +39,13 @@ static void mmc1_apply_prg(void) {
 
     switch (mode) {
         case 0: case 1:
-            /* 32KB mode: switch both $8000 and $C000 together */
-            new_bank = bank & 0x0E;
+            new_bank = bank & 0x0E;  /* 32KB mode: both $8000 and $C000 together */
             break;
         case 2:
-            /* Fix $8000 to bank 0, switch $C000 */
-            new_bank = 0;
+            new_bank = 0;            /* Fix $8000 to bank 0, switch $C000 */
             break;
         case 3:
-            /* Fix $C000 to last bank, switch $8000 — most common */
-            new_bank = bank;
+            new_bank = bank;         /* Fix $C000 to last bank, switch $8000 */
             break;
     }
 
@@ -85,46 +57,110 @@ static void mmc1_apply_prg(void) {
             fflush(s_mapper_trace);
         }
     }
+
+    /* Update mirroring from MMC1 ctrl bits 0-1 */
+    s_mirroring = s_ctrl & 0x03;
+}
+
+/* ── Public API ────────────────────────────────────────────────────────────── */
+
+void mapper_init(const uint8_t *prg_data, int prg_banks,
+                 int mapper_type, int initial_mirroring) {
+    s_prg_data    = prg_data;
+    s_prg_banks   = prg_banks;
+    s_mapper_type = mapper_type;
+    g_current_bank = 0;
+
+    /* Convert iNES mirroring flag (0=horizontal, 1=vertical) to renderer values
+     * (2=vertical, 3=horizontal) for Mapper 0. MMC1 overrides at runtime. */
+    s_mirroring = (initial_mirroring == 1) ? 2 : 3;
+
+    /* MMC1 reset state */
+    s_shift_reg   = 0x10;
+    s_shift_count = 0;
+    s_ctrl        = 0x1C; /* PRG mode 3 */
+    s_chr0        = 0;
+    s_chr1        = 0;
+    s_prg_reg     = 0;
+
+    s_mapper_trace = fopen("C:/temp/mapper_trace.csv", "w");
+    if (s_mapper_trace) {
+        fprintf(s_mapper_trace, "EVENT,bank,PC,FRAME\n");
+        fflush(s_mapper_trace);
+    }
+
+    printf("[Mapper] Init: %d PRG banks, Mapper %d\n", prg_banks, mapper_type);
 }
 
 void mapper_write(uint16_t addr, uint8_t val) {
-    /* Reset shift register if bit 7 set */
-    if (val & 0x80) {
-        s_shift_reg   = 0x10;
-        s_shift_count  = 0;
-        s_ctrl |= 0x0C; /* Set PRG bank mode to 3 */
-        return;
+    switch (s_mapper_type) {
+        case 0:
+            /* NROM: no bank switching; writes to $8000+ are ignored */
+            return;
+
+        case 1:
+            /* MMC1: 5-bit serial shift register */
+            if (val & 0x80) {
+                /* Reset */
+                s_shift_reg   = 0x10;
+                s_shift_count = 0;
+                s_ctrl |= 0x0C;
+                return;
+            }
+            s_shift_reg = (s_shift_reg >> 1) | ((val & 1) << 4);
+            s_shift_count++;
+            if (s_shift_count == 5) {
+                uint8_t data = s_shift_reg & 0x1F;
+                if      (addr <= 0x9FFF) { s_ctrl    = data; }
+                else if (addr <= 0xBFFF) { s_chr0    = data; }
+                else if (addr <= 0xDFFF) { s_chr1    = data; }
+                else                     { s_prg_reg = data; mmc1_apply_prg(); }
+                s_shift_reg   = 0x10;
+                s_shift_count = 0;
+            }
+            return;
+
+        default:
+            /* Unknown mapper: ignore writes */
+            return;
     }
+}
 
-    /* Shift in bit 0 */
-    s_shift_reg = (s_shift_reg >> 1) | ((val & 1) << 4);
-    s_shift_count++;
-
-    if (s_shift_count == 5) {
-        uint8_t data = s_shift_reg & 0x1F;
-        /* Apply to the appropriate register */
-        if (addr <= 0x9FFF)      { s_ctrl    = data; }
-        else if (addr <= 0xBFFF) { s_chr0    = data; }
-        else if (addr <= 0xDFFF) { s_chr1    = data; }
-        else                     { s_prg_reg = data; mmc1_apply_prg(); }
-
-        /* Reset shift register */
-        s_shift_reg   = 0x10;
-        s_shift_count  = 0;
+const uint8_t *mapper_get_switchable_bank(void) {
+    if (!s_prg_data) return NULL;
+    switch (s_mapper_type) {
+        case 0:
+            /* NROM: $8000-$BFFF = first 16KB of PRG (bank 0) */
+            return s_prg_data;
+        default:
+            return s_prg_data + (size_t)g_current_bank * 0x4000;
     }
+}
+
+const uint8_t *mapper_get_fixed_bank(void) {
+    if (!s_prg_data) return NULL;
+    /* Both Mapper 0 and Mapper 1: fixed bank = last 16KB of PRG */
+    return s_prg_data + (size_t)(s_prg_banks - 1) * 0x4000;
+}
+
+int mapper_get_mirroring(void) {
+    return s_mirroring;
 }
 
 void mapper_get_state(MapperState *out) {
-    out->shift_reg   = s_shift_reg;
-    out->shift_count = s_shift_count;
-    out->ctrl        = s_ctrl;
-    out->chr0        = s_chr0;
-    out->chr1        = s_chr1;
-    out->prg_reg     = s_prg_reg;
+    out->mapper_type  = s_mapper_type;
+    out->shift_reg    = s_shift_reg;
+    out->shift_count  = s_shift_count;
+    out->ctrl         = s_ctrl;
+    out->chr0         = s_chr0;
+    out->chr1         = s_chr1;
+    out->prg_reg      = s_prg_reg;
     out->current_bank = g_current_bank;
+    out->mirroring    = s_mirroring;
 }
 
 void mapper_set_state(const MapperState *in) {
+    s_mapper_type  = in->mapper_type;
     s_shift_reg    = in->shift_reg;
     s_shift_count  = in->shift_count;
     s_ctrl         = in->ctrl;
@@ -132,18 +168,5 @@ void mapper_set_state(const MapperState *in) {
     s_chr1         = in->chr1;
     s_prg_reg      = in->prg_reg;
     g_current_bank = in->current_bank;
-}
-
-const uint8_t *mapper_get_switchable_bank(void) {
-    if (!s_prg_data) return NULL;
-    return s_prg_data + (size_t)g_current_bank * 0x4000;
-}
-
-const uint8_t *mapper_get_fixed_bank(void) {
-    if (!s_prg_data) return NULL;
-    return s_prg_data + (size_t)(s_prg_banks - 1) * 0x4000;
-}
-
-int mapper_get_mirroring(void) {
-    return s_ctrl & 0x03;
+    s_mirroring    = in->mirroring;
 }

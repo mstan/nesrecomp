@@ -96,7 +96,8 @@ static bool is_func_entry(const FunctionList *funcs, uint16_t addr) {
 static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                             uint16_t pc, uint16_t func_base, int fixed_bank,
                             const FunctionList *funcs,
-                            const uint16_t *valid_starts, int valid_count) {
+                            const uint16_t *valid_starts, int valid_count,
+                            const GameConfig *cfg) {
     uint8_t opcode = rom_read(rom, bank, pc);
     const OpcodeEntry *e = &g_opcode_table[opcode];
     uint8_t op1 = (e->size > 1) ? rom_read(rom, bank, pc+1) : 0;
@@ -316,23 +317,30 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
 
         /* Jumps */
         case MN_JSR: {
-            /* Special case: JSR $F859 — inline-parameter bank dispatch.
-             * The 3 bytes after this JSR are [bank, addr_lo, addr_hi], not instructions.
-             * Inline the full dispatch+call+restore sequence and consume 6 bytes. */
-            if (abs16 == 0xF859) {
-                uint8_t disp_bank = rom_read(rom, bank, pc + 3);
-                uint8_t disp_lo   = rom_read(rom, bank, pc + 4);
-                uint8_t disp_hi   = rom_read(rom, bank, pc + 5);
-                uint16_t disp_addr = (disp_lo | ((uint16_t)disp_hi << 8)) + 1;
-                fprintf(f, "/* F859 dispatch: bank=%d addr=$%04X */\n", disp_bank, disp_addr);
-                fprintf(f, "{ nes_write(0xDE,g_cpu.A); nes_write(0xDF,g_cpu.X); nes_write(0xE0,g_cpu.Y);\n");
-                fprintf(f, "  g_ram[0x100+g_cpu.S]=g_ram[0x100]; g_cpu.S--;\n");
-                fprintf(f, "  g_cpu.X=0x%02X; func_CC1A();\n", disp_bank);
-                fprintf(f, "  g_cpu.A=nes_read(0xDE); g_cpu.X=nes_read(0xDF); g_cpu.Y=nes_read(0xE0);\n");
-                fprintf(f, "  call_by_address(0x%04X);\n", disp_addr);
-                fprintf(f, "  g_cpu.S++; g_cpu.A=g_ram[0x100+g_cpu.S]; FLAG_NZ(g_cpu.A);\n");
-                fprintf(f, "  g_cpu.X=g_cpu.A; FLAG_NZ(g_cpu.X); func_CC1A(); }\n");
-                return 6;
+            /* Check against game-config trampolines (e.g. JSR $F859 for Faxanadu MMC1).
+             * The inline_bytes after the JSR are data [bank, addr_lo, addr_hi], not code.
+             * Inline the full dispatch+call+restore sequence and consume 3+inline_bytes. */
+            {
+                const TrampolineEntry *tramp = NULL;
+                for (int ti = 0; ti < cfg->trampoline_count; ti++) {
+                    if (abs16 == cfg->trampolines[ti].addr) { tramp = &cfg->trampolines[ti]; break; }
+                }
+                if (tramp) {
+                    uint8_t disp_bank = rom_read(rom, bank, pc + 3);
+                    uint8_t disp_lo   = rom_read(rom, bank, pc + 4);
+                    uint8_t disp_hi   = rom_read(rom, bank, pc + 5);
+                    uint16_t disp_addr = (disp_lo | ((uint16_t)disp_hi << 8)) + 1;
+                    fprintf(f, "/* trampoline $%04X dispatch: bank=%d addr=$%04X */\n",
+                            tramp->addr, disp_bank, disp_addr);
+                    fprintf(f, "{ nes_write(0xDE,g_cpu.A); nes_write(0xDF,g_cpu.X); nes_write(0xE0,g_cpu.Y);\n");
+                    fprintf(f, "  g_ram[0x100+g_cpu.S]=g_ram[0x100]; g_cpu.S--;\n");
+                    fprintf(f, "  g_cpu.X=0x%02X; func_%04X();\n", disp_bank, tramp->bs_fn_addr);
+                    fprintf(f, "  g_cpu.A=nes_read(0xDE); g_cpu.X=nes_read(0xDF); g_cpu.Y=nes_read(0xE0);\n");
+                    fprintf(f, "  call_by_address(0x%04X);\n", disp_addr);
+                    fprintf(f, "  g_cpu.S++; g_cpu.A=g_ram[0x100+g_cpu.S]; FLAG_NZ(g_cpu.A);\n");
+                    fprintf(f, "  g_cpu.X=g_cpu.A; FLAG_NZ(g_cpu.X); func_%04X(); }\n", tramp->bs_fn_addr);
+                    return 3 + tramp->inline_bytes;
+                }
             }
             if (abs16 >= 0xC000) {
                 fprintf(f, "func_%04X();\n", abs16);
@@ -480,7 +488,8 @@ static bool is_branch_target(const NESRom *rom, int bank,
 }
 
 static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
-                          const FunctionList *funcs, const AnnotationTable *at) {
+                          const FunctionList *funcs, const AnnotationTable *at,
+                          const GameConfig *cfg) {
     int fixed_bank = rom->prg_banks - 1;
     int bank = fe->bank;
     uint16_t pc = fe->addr;
@@ -518,11 +527,17 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
             uint8_t op = rom_read(rom, bank, scan);
             const OpcodeEntry *e2 = &g_opcode_table[op];
             int sz = (e2->size > 0) ? e2->size : 1;
-            /* Special case: JSR $F859 consumes 6 bytes (3 JSR + 3 inline data) */
+            /* Trampoline JSR: consumes 3 + inline_bytes (not just 3) */
             if (e2->mnemonic == MN_JSR) {
                 uint8_t _lo = rom_read(rom, bank, scan + 1);
                 uint8_t _hi = rom_read(rom, bank, scan + 2);
-                if ((_lo | ((uint16_t)_hi << 8)) == 0xF859) sz = 6;
+                uint16_t _tgt = _lo | ((uint16_t)_hi << 8);
+                for (int _ti = 0; _ti < cfg->trampoline_count; _ti++) {
+                    if (_tgt == cfg->trampolines[_ti].addr) {
+                        sz = 3 + cfg->trampolines[_ti].inline_bytes;
+                        break;
+                    }
+                }
             }
             /* Track forward branch targets so we continue past early RTS/JMP */
             switch (e2->mnemonic) {
@@ -649,7 +664,7 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
         }
 
         int consumed = emit_instruction(f, rom, bank, cursor, pc, fixed_bank, funcs,
-                                        valid_starts, valid_count);
+                                        valid_starts, valid_count, cfg);
 
         /* If this PHA is immediately followed by a branch-target RTS, the fall-through path
          * must dispatch now (before reaching the RTS label, which is bypassed by branches).
@@ -789,7 +804,7 @@ static void emit_dispatch(FILE *f, const FunctionList *funcs, const NESRom *rom)
 
 bool codegen_emit(const NESRom *rom, const FunctionList *funcs,
                   const char *out_full_path, const char *out_dispatch_path,
-                  const AnnotationTable *at) {
+                  const AnnotationTable *at, const GameConfig *cfg) {
     FILE *f_full = fopen(out_full_path, "w");
     if (!f_full) {
         fprintf(stderr, "codegen: cannot open %s\n", out_full_path);
@@ -801,7 +816,7 @@ bool codegen_emit(const NESRom *rom, const FunctionList *funcs,
 
     int fixed_bank = rom->prg_banks - 1;
     for (int i = 0; i < funcs->count; i++) {
-        emit_function(f_full, rom, &funcs->entries[i], funcs, at);
+        emit_function(f_full, rom, &funcs->entries[i], funcs, at, cfg);
     }
 
     /* Add NMI/RESET/IRQ entry points for runner */

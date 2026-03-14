@@ -21,6 +21,8 @@
 #include "savestate.h"
 #include "logger.h"
 #include "apu.h"
+#include "mapper.h"
+#include "game_extras.h"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
@@ -29,81 +31,6 @@
 static const char *s_script_path    = NULL;
 static const char *s_record_path    = NULL;
 static const char *s_loadstate_path = NULL;
-
-/* ---- Password auto-fill ---- */
-static const char *s_password          = NULL;
-static int         s_password_injected = 0;
-
-/* Returns the mantra table index (0-63) for a character, or -1 if invalid.
- * Bank12 $8764 table order: A-Z (0-25), a-z (26-51), 0-9 (52-61), ',' (62), '?' (63) */
-static int password_char_to_index(char ch) {
-    if (ch >= 'A' && ch <= 'Z') return ch - 'A';
-    if (ch >= 'a' && ch <= 'z') return 26 + (ch - 'a');
-    if (ch >= '0' && ch <= '9') return 52 + (ch - '0');
-    if (ch == ',') return 62;
-    if (ch == '?') return 63;
-    return -1;
-}
-
-/* Inject password into the mantra entry RAM buffer.
- * Detection (Ghidra bank12 analysis):
- *   $0665 == len  — max-length register set to our password length (24 for Faxanadu mantra)
- *   $0666 == 0    — no characters entered yet (fresh screen)
- *   $0600 == 0xFF — first slot is empty sentinel
- * Writes character table indices to $0600+i, sets $0664 = $0666 = len. */
-static void maybe_inject_password(void) {
-    if (!s_password || s_password_injected) return;
-
-    /* Strip spaces (sometimes shown as separators online) */
-    static char s_pw_stripped[25];
-    int slen = 0;
-    for (const char *p = s_password; *p && slen < 24; p++)
-        if (*p != ' ') s_pw_stripped[slen++] = *p;
-    s_pw_stripped[slen] = '\0';
-    s_password = s_pw_stripped;
-
-    int len = (int)strlen(s_password);
-    if (len == 0 || len > 24) return;
-
-    uint8_t max_len = g_ram[0x665];
-    if (max_len == 0)          return;   /* screen not initialized yet */
-    if (g_ram[0x666] != 0)     return;   /* something already entered */
-    if (g_ram[0x600] != 0xFF)  return;   /* first slot not empty */
-
-    for (int i = 0; i < len; i++) {
-        int idx = password_char_to_index(s_password[i]);
-        if (idx < 0) {
-            fprintf(stderr, "[Password] Unknown character '%c' at position %d — aborted\n",
-                    s_password[i], i);
-            return;
-        }
-        g_ram[0x600 + i] = (uint8_t)idx;
-    }
-    for (int i = len; i < (int)max_len; i++)
-        g_ram[0x600 + i] = 0xFF;   /* fill remaining slots with empty sentinel */
-
-    g_ram[0x664] = (uint8_t)len;   /* cursor: positioned after last entered char */
-    g_ram[0x666] = (uint8_t)len;   /* characters-entered count */
-
-    /* Queue PPU tile writes so the characters appear on screen.
-     * $0500 DMA queue format: [count(1 byte), addr_hi, addr_lo, tile...]
-     * Queue write-ptr at $0020. Tiles are ASCII values (bank12 $8764 maps index→ASCII).
-     * Row 0 (positions 0-15):  PPU $2129+pos
-     * Row 1 (positions 16-31): PPU $2149+(pos-16) */
-    for (int i = 0; i < len; i++) {
-        uint8_t ppu_lo = (i < 16) ? (0x28 + i) : (0x48 + (i - 16));
-        uint8_t tile   = (uint8_t)s_password[i];   /* ASCII = PPU tile number */
-        uint8_t wp     = g_ram[0x20];
-        g_ram[0x500 + wp++] = 0x01;   /* 1 tile */
-        g_ram[0x500 + wp++] = 0x21;   /* PPU addr hi */
-        g_ram[0x500 + wp++] = ppu_lo;
-        g_ram[0x500 + wp++] = tile;
-        g_ram[0x20] = wp;
-    }
-
-    s_password_injected = 1;
-    printf("[Password] Injected \"%s\" (%d chars)\n", s_password, len);
-}
 
 /* ---- SDL state (file-level so nes_vblank_callback can access) ---- */
 static SDL_Window        *s_window    = NULL;
@@ -505,7 +432,7 @@ void nes_vblank_callback(void) {
      * prevent the NMI handler from running the sprite-0 spin-wait with
      * rendering off, which would loop forever. */
     log_on_change("NMI_enable", (g_ppuctrl >> 7) & 1);
-    maybe_inject_password();
+    game_on_frame(g_frame_count);
 
 
     if (g_ppuctrl & 0x80) {
@@ -616,54 +543,77 @@ static bool load_rom(const char *path) {
         fclose(f); return false;
     }
 
-    s_prg_banks = header[4];
-    int mapper  = ((header[6]>>4)&0x0F) | (header[7]&0xF0);
+    s_prg_banks   = header[4];
     int chr_banks = header[5];
+    int mapper    = ((header[6] >> 4) & 0x0F) | (header[7] & 0xF0);
+    int mirroring = (header[6] & 0x01);  /* 0=horizontal, 1=vertical */
+    int has_trainer = (header[6] & 0x04) ? 1 : 0;
 
-    printf("[Runner] ROM: %d PRG banks x 16KB, %d CHR banks, Mapper %d\n",
+    printf("[Runner] ROM: %d PRG banks x 16KB, %d CHR banks x 8KB, Mapper %d\n",
            s_prg_banks, chr_banks, mapper);
 
-    if (header[6] & 0x04) fseek(f, 512, SEEK_CUR);
+    if (has_trainer) fseek(f, 512, SEEK_CUR);
 
+    /* Load PRG ROM */
     size_t prg_size = (size_t)s_prg_banks * 0x4000;
     s_prg_data = (uint8_t *)malloc(prg_size);
     if (!s_prg_data) { fclose(f); return false; }
     fread(s_prg_data, 1, prg_size, f);
+
+    /* Load CHR ROM into g_chr_ram (PPU pattern table), if present.
+     * CHR ROM is fixed tile data — the game never writes to it.
+     * For CHR RAM games (chr_banks==0), g_chr_ram starts zeroed and
+     * is populated dynamically via PPU $2007 DMA writes. */
+    if (chr_banks > 0) {
+        size_t chr_size = (size_t)chr_banks * 0x2000;
+        if (chr_size > sizeof(g_chr_ram)) chr_size = sizeof(g_chr_ram);
+        size_t n = fread(g_chr_ram, 1, chr_size, f);
+        printf("[Runner] CHR ROM: loaded %zu bytes into g_chr_ram\n", n);
+    }
+
     fclose(f);
 
-    const uint8_t *fixed = s_prg_data + (size_t)(s_prg_banks-1)*0x4000;
-    uint16_t nmi   = fixed[0x3FFA] | ((uint16_t)fixed[0x3FFB]<<8);
-    uint16_t reset = fixed[0x3FFC] | ((uint16_t)fixed[0x3FFD]<<8);
-    uint16_t irq   = fixed[0x3FFE] | ((uint16_t)fixed[0x3FFF]<<8);
+    const uint8_t *fixed = s_prg_data + (size_t)(s_prg_banks - 1) * 0x4000;
+    uint16_t nmi   = fixed[0x3FFA] | ((uint16_t)fixed[0x3FFB] << 8);
+    uint16_t reset = fixed[0x3FFC] | ((uint16_t)fixed[0x3FFD] << 8);
+    uint16_t irq   = fixed[0x3FFE] | ((uint16_t)fixed[0x3FFF] << 8);
     printf("[Runner] Vectors: NMI=$%04X RESET=$%04X IRQ=$%04X\n", nmi, reset, irq);
 
-    mapper_init(s_prg_data, s_prg_banks);
+    mapper_init(s_prg_data, s_prg_banks, mapper, mirroring);
     return true;
 }
 
 int main(int argc, char *argv[]) {
     if (argc < 2) {
-        fprintf(stderr, "Usage: NESRecompGame <baserom.nes> [--script FILE] [--record FILE] [--loadstate FILE] [--password STRING] [--debug]\n");
+        fprintf(stderr, "Usage: NESRecompGame <rom.nes> [--script FILE] [--record FILE] "
+                        "[--loadstate FILE] [--debug]");
+        const char *game_usage = game_arg_usage();
+        if (game_usage) fprintf(stderr, "\n%s", game_usage);
+        fprintf(stderr, "\n");
         return 1;
     }
 
     /* Parse optional flags */
     for (int i = 2; i < argc; i++) {
-        if (strcmp(argv[i], "--script") == 0 && i+1 < argc) s_script_path = argv[++i];
-        else if (strcmp(argv[i], "--record") == 0 && i+1 < argc) s_record_path = argv[++i];
+        if      (strcmp(argv[i], "--script")    == 0 && i+1 < argc) s_script_path    = argv[++i];
+        else if (strcmp(argv[i], "--record")    == 0 && i+1 < argc) s_record_path    = argv[++i];
         else if (strcmp(argv[i], "--loadstate") == 0 && i+1 < argc) s_loadstate_path = argv[++i];
-        else if (strcmp(argv[i], "--password") == 0 && i+1 < argc) s_password = argv[++i];
-        else if (strcmp(argv[i], "--debug") == 0) s_debug = 1;
+        else if (strcmp(argv[i], "--debug")     == 0) s_debug = 1;
+        else {
+            /* Offer remaining args to the game-specific handler */
+            const char *val = (i+1 < argc && argv[i+1][0] != '-') ? argv[i+1] : NULL;
+            if (game_handle_arg(argv[i], val)) {
+                if (val) i++; /* game consumed the value */
+            }
+        }
     }
 
     if (s_debug) printf("[Debug] OAM debug window enabled\n");
 
-    if (s_password)
-        printf("[Password] Will auto-fill mantra: \"%s\"\n", s_password);
-
     if (!load_rom(argv[1])) return 1;
 
     runtime_init();
+    game_on_init();
 
     if (s_loadstate_path) savestate_load(s_loadstate_path);
     if (s_record_path) { record_open(s_record_path); atexit(record_close); }
@@ -695,12 +645,14 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    s_window = SDL_CreateWindow(
-        "NESRecomp - Faxanadu",
-        SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-        768, 720,
-        SDL_WINDOW_SHOWN
-    );
+    {
+        char window_title[64];
+        snprintf(window_title, sizeof(window_title), "NESRecomp - %s", game_get_name());
+        s_window = SDL_CreateWindow(window_title,
+            SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+            768, 720,
+            SDL_WINDOW_SHOWN);
+    }
     if (!s_window) {
         fprintf(stderr, "SDL_CreateWindow: %s\n", SDL_GetError());
         return 1;

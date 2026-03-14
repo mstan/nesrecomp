@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "rom_parser.h"
+#include "game_config.h"
 
 #define MAX_FUNCTIONS 32768
 #define MAX_INSNS_PER_FUNC 2048
@@ -20,7 +21,7 @@ typedef struct {
     int           count;
 } FunctionList;
 
-void function_finder_run(const NESRom *rom, FunctionList *out);
+void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig *cfg);
 void function_list_free(FunctionList *list); /* Currently a no-op — entries are static */
 
 /* Returns true if addr is already in the function list */

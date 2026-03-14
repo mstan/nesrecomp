@@ -3,9 +3,13 @@ project(NESRecompGame C)
 
 set(CMAKE_C_STANDARD 11)
 
+# Game target — selects game-specific extras and generated C files.
+# Override with: cmake -DGAME_TARGET=super-mario-bros ...
+set(GAME_TARGET "faxanadu" CACHE STRING "Target game (e.g. faxanadu, super-mario-bros)")
+message(STATUS "Building runner for game: ${GAME_TARGET}")
+
 # SDL2 — pre-configured, no FetchContent needed
 set(SDL2_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/SDL2/cmake")
-
 find_package(SDL2 REQUIRED)
 
 add_executable(NESRecompGame
@@ -17,13 +21,18 @@ add_executable(NESRecompGame
     src/logger.c
     src/input_script.c
     src/savestate.c
-    ../generated/faxanadu_full.c
-    ../generated/faxanadu_dispatch.c
+    # Game-specific extras (password injection, etc.)
+    ../games/${GAME_TARGET}/extras.c
+    # Generated recompiled game code
+    ../generated/${GAME_TARGET}_full.c
+    ../generated/${GAME_TARGET}_dispatch.c
 )
 
 target_include_directories(NESRecompGame PRIVATE
     include
     src
+    # Game-specific extras header (extras.h re-exports game_extras.h)
+    ../games/${GAME_TARGET}
     ${SDL2_INCLUDE_DIRS}
 )
 

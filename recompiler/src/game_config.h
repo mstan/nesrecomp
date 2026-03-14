@@ -1,0 +1,87 @@
+/*
+ * game_config.h — Per-game recompiler configuration
+ *
+ * Loaded from games/<name>/game.cfg at recompile time.
+ * Encapsulates all game-specific addresses that the generic recompiler
+ * needs to handle correctly (dispatch tables, bank-switch trampolines, etc.).
+ */
+#pragma once
+#include <stdint.h>
+#include <stdbool.h>
+
+#define GAME_CFG_MAX_TRAMPOLINES    8
+#define GAME_CFG_MAX_KNOWN_TABLES  32
+#define GAME_CFG_MAX_SPLIT_TABLES  16
+#define GAME_CFG_MAX_EXTRA_FUNCS   32
+
+/*
+ * Trampoline: a JSR whose operand address is a known bank-switch dispatch
+ * routine. The bytes immediately after the JSR are inline data (not code).
+ * inline_bytes: how many bytes after the JSR to consume as data (typ. 3).
+ * bs_fn_addr:   the recompiled bank-switch function to call (e.g. 0xCC1A).
+ */
+typedef struct {
+    uint16_t addr;          /* JSR target address (the trampoline entry) */
+    int      inline_bytes;  /* extra data bytes following the JSR opcode  */
+    uint16_t bs_fn_addr;    /* bank-switch function address in fixed bank  */
+} TrampolineEntry;
+
+/*
+ * Known 2-byte little-endian dispatch table.
+ * Each pair of bytes is (target-1) stored as a LE16.
+ * start..end is the half-open byte range within the given bank.
+ */
+typedef struct {
+    int      bank;
+    uint16_t start;
+    uint16_t end;
+} KnownTable;
+
+/*
+ * Split dispatch table: lo-bytes and hi-bytes in separate arrays.
+ * target = (hi[i] << 8 | lo[i]) + 1.
+ * stride=1: packed; stride=2: interleaved pairs.
+ */
+typedef struct {
+    int      bank;
+    uint16_t lo_start;
+    uint16_t hi_start;
+    int      count;
+    int      stride;
+} KnownSplitTable;
+
+/*
+ * Extra function seed: a function that is dispatched dynamically and cannot
+ * be discovered via static pointer/table scans.
+ */
+typedef struct {
+    uint16_t addr;
+    int      bank;   /* -1 for fixed bank */
+} ExtraFunc;
+
+typedef struct {
+    char            output_prefix[64];  /* e.g. "faxanadu" → generated/faxanadu_full.c */
+    char            annotations_path[512]; /* override for annotations.csv */
+
+    TrampolineEntry trampolines[GAME_CFG_MAX_TRAMPOLINES];
+    int             trampoline_count;
+
+    KnownTable      known_tables[GAME_CFG_MAX_KNOWN_TABLES];
+    int             known_table_count;
+
+    KnownSplitTable known_split_tables[GAME_CFG_MAX_SPLIT_TABLES];
+    int             known_split_table_count;
+
+    ExtraFunc       extra_funcs[GAME_CFG_MAX_EXTRA_FUNCS];
+    int             extra_func_count;
+} GameConfig;
+
+/* Initialize to empty (no dispatch tables, prefix derived from ROM name) */
+void game_config_init_empty(GameConfig *cfg);
+
+/*
+ * Load config from a game.cfg file.
+ * Returns true on success; cfg remains empty on failure.
+ * game_dir is set to the directory containing the file (for annotations lookup).
+ */
+bool game_config_load(GameConfig *cfg, const char *path);

@@ -64,7 +64,8 @@ bool function_list_contains(const FunctionList *list, uint16_t addr, int bank) {
  * while pending forward targets remain, so JSR calls in those sections are
  * discovered. */
 static int walk_function(const NESRom *rom, FunctionList *list,
-                         uint16_t start_addr, int switchable_bank) {
+                         uint16_t start_addr, int switchable_bank,
+                         const GameConfig *cfg) {
     uint16_t pc = start_addr;
     int insn_count = 0;
     int fixed_bank = rom->prg_banks - 1;
@@ -131,21 +132,29 @@ static int walk_function(const NESRom *rom, FunctionList *list,
             uint8_t hi = rom_read(rom, read_bank, pc + 2);
             uint16_t target = lo | ((uint16_t)hi << 8);
 
-            /* Special case: JSR $F859 — inline-parameter bank dispatch.
-             * The 3 bytes after this JSR are [bank, addr_lo, addr_hi], not code.
-             * Skip 6 bytes total and add the real target function. */
-            if (target == 0xF859) {
-                add_function(list, 0xF859, fixed_bank);
-                uint8_t disp_bank = rom_read(rom, read_bank, pc + 3);
-                uint8_t disp_lo   = rom_read(rom, read_bank, pc + 4);
-                uint8_t disp_hi   = rom_read(rom, read_bank, pc + 5);
-                uint16_t disp_addr = (disp_lo | ((uint16_t)disp_hi << 8)) + 1;
-                if (disp_addr >= 0x8000) {
-                    int tbank = (disp_addr >= 0xC000) ? fixed_bank : (int)disp_bank;
-                    add_function(list, disp_addr, tbank);
+            /* Check against game-config trampolines: JSR to a known bank-switch
+             * dispatch routine where inline data bytes follow (not instructions). */
+            {
+                const TrampolineEntry *tramp = NULL;
+                for (int ti = 0; ti < cfg->trampoline_count; ti++) {
+                    if (target == cfg->trampolines[ti].addr) {
+                        tramp = &cfg->trampolines[ti];
+                        break;
+                    }
                 }
-                pc += 6;
-                continue;
+                if (tramp) {
+                    add_function(list, tramp->addr, fixed_bank);
+                    uint8_t disp_bank = rom_read(rom, read_bank, pc + 3);
+                    uint8_t disp_lo   = rom_read(rom, read_bank, pc + 4);
+                    uint8_t disp_hi   = rom_read(rom, read_bank, pc + 5);
+                    uint16_t disp_addr = (disp_lo | ((uint16_t)disp_hi << 8)) + 1;
+                    if (disp_addr >= 0x8000) {
+                        int tbank = (disp_addr >= 0xC000) ? fixed_bank : (int)disp_bank;
+                        add_function(list, disp_addr, tbank);
+                    }
+                    pc += 3 + tramp->inline_bytes;
+                    continue;
+                }
             }
 
             if (target >= 0xC000) {
@@ -219,7 +228,7 @@ static int walk_function(const NESRom *rom, FunctionList *list,
     return insn_count;
 }
 
-void function_finder_run(const NESRom *rom, FunctionList *out) {
+void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig *cfg) {
     memset(out, 0, sizeof(*out));
     s_queue_head = 0;
     s_queue_tail = 0;
@@ -251,7 +260,7 @@ void function_finder_run(const NESRom *rom, FunctionList *out) {
                 out->entries[i].bank == item.bank &&
                 out->entries[i].size == 0)
             {
-                out->entries[i].size = walk_function(rom, out, item.addr, item.bank);
+                out->entries[i].size = walk_function(rom, out, item.addr, item.bank, cfg);
                 break;
             }
         }
@@ -291,7 +300,7 @@ void function_finder_run(const NESRom *rom, FunctionList *out) {
                 out->entries[i].bank == item.bank &&
                 out->entries[i].size == 0)
             {
-                out->entries[i].size = walk_function(rom, out, item.addr, item.bank);
+                out->entries[i].size = walk_function(rom, out, item.addr, item.bank, cfg);
                 break;
             }
         }
@@ -332,7 +341,7 @@ void function_finder_run(const NESRom *rom, FunctionList *out) {
                 out->entries[i].bank == item.bank &&
                 out->entries[i].size == 0)
             {
-                out->entries[i].size = walk_function(rom, out, item.addr, item.bank);
+                out->entries[i].size = walk_function(rom, out, item.addr, item.bank, cfg);
                 break;
             }
         }
@@ -340,33 +349,15 @@ void function_finder_run(const NESRom *rom, FunctionList *out) {
     printf("[FuncFinder] Switchable-bank pointer scan added %d candidates\n",
            out->count - before_sw_scan);
 
-    /* Known dispatch table scanner.
-     * These are PHA/PHA/RTS jump tables in specific banks that use
-     * (target-1) entries where the byte at (target-1) is a VALID opcode,
-     * so the conservative illegal-opcode rule above misses them.
-     * Format: 2-byte LE entries [LO, HI]; actual target = stored_value + 1.
-     * Each table: (bank, start_addr, end_addr_exclusive) */
-    static const struct { int bank; uint16_t start; uint16_t end; } known_tables[] = {
-        { 14, 0x8087, 0x8151 }, /* bank14 main entity state dispatch (101 entries) */
-        { 14, 0x8958, 0x8968 }, /* bank14 entity state dispatch 2 (8 entries) */
-        { 14, 0xA6D8, 0xA6E8 }, /* bank14 entity state dispatch 3 (8 entries) */
-        { 14, 0xA5E7, 0xA66B }, /* bank14 entity type dispatch (66 entries) */
-        { 14, 0xBAF7, 0xBB25 }, /* bank14 entity state machine dispatch at $BAD9 via $02B3 (23 entries) */
-        { 14, 0xAC71, 0xAC75 }, /* bank14 drop spawn dispatch at $AC2D/$AC70: coin=$AC75, bread=$AC9F */
-        {  5, 0x826A, 0x828E }, /* bank5 sound dispatch table 1 (18 entries) */
-        {  5, 0x85B1, 0x8621 }, /* bank5 sound dispatch table 2 (56 entries, entries 2-57).
-                                   * Dispatcher at $8678: LDA $85AE,X / PHA / LDA $85AD,X / PHA / RTS.
-                                   * Table base $85AD, stride 2. We skip entries 0 ($8681) and 1 ($8680):
-                                   *   Entry 0 ($8681) = APU init — omitted, dispatch miss is harmless.
-                                   *   Entry 1 ($8680) = bare RTS byte after dispatcher — if added as
-                                   *   a function, code_generator sees PHA at $867F and wrongly emits
-                                   *   a 2-PHA dispatch, causing the $8003/$8009 bank=15 flood.
-                                   * Starting at $85B1 avoids both and still adds $8C69/$8C73 (SFX). */
-    };
+    /* Known dispatch table scanner (game-config-driven).
+     * These are PHA/PHA/RTS jump tables that use (target-1) entries where the
+     * byte at (target-1) is a VALID opcode, so the conservative illegal-opcode
+     * rule above misses them.
+     * Format: 2-byte LE entries [LO, HI]; actual target = stored_value + 1. */
     int before_kt = out->count;
-    for (int t = 0; t < (int)(sizeof(known_tables)/sizeof(known_tables[0])); t++) {
-        int kb   = known_tables[t].bank;
-        for (uint16_t a = known_tables[t].start; a < known_tables[t].end; a += 2) {
+    for (int t = 0; t < cfg->known_table_count; t++) {
+        int kb   = cfg->known_tables[t].bank;
+        for (uint16_t a = cfg->known_tables[t].start; a < cfg->known_tables[t].end; a += 2) {
             uint8_t lo = rom_read(rom, kb, a);
             uint8_t hi = rom_read(rom, kb, a + 1);
             uint16_t target = (lo | ((uint16_t)hi << 8)) + 1;
@@ -380,22 +371,16 @@ void function_finder_run(const NESRom *rom, FunctionList *out) {
         }
     }
 
-    /* Split-format dispatch table scanner.
-     * Some dispatch functions store lo-bytes and hi-bytes in separate arrays
-     * (not interleaved). Each entry: bank, lo_table_addr, hi_table_addr, count, stride.
+    /* Split-format dispatch table scanner (game-config-driven).
+     * Some dispatch functions store lo-bytes and hi-bytes in separate arrays.
      * target = (hi[i]<<8 | lo[i]) + 1.
-     * stride=1: lo/hi in separate packed arrays; stride=2: lo/hi interleaved pairs. */
-    static const struct { int bank; uint16_t lo_start; uint16_t hi_start; int count; int stride; } known_split_tables[] = {
-        { 12, 0x827B, 0x8293, 24, 1 }, /* bank12 room/scene state dispatch at $826E (24 states) */
-        { 15, 0xD64C, 0xD650,  4, 1 }, /* fixed-bank CHR update handler dispatch at $D61D (4 slots) */
-        { 14, 0xBB27, 0xBB28, 12, 2 }, /* bank14 entity sprite handler table at $C2E9 ($02B3*2 index, 12 entries) */
-    };
-    for (int t = 0; t < (int)(sizeof(known_split_tables)/sizeof(known_split_tables[0])); t++) {
-        int kb = known_split_tables[t].bank;
-        int st = known_split_tables[t].stride;
-        for (int i = 0; i < known_split_tables[t].count; i++) {
-            uint8_t lo = rom_read(rom, kb, known_split_tables[t].lo_start + i * st);
-            uint8_t hi = rom_read(rom, kb, known_split_tables[t].hi_start + i * st);
+     * stride=1: packed arrays; stride=2: interleaved pairs. */
+    for (int t = 0; t < cfg->known_split_table_count; t++) {
+        int kb = cfg->known_split_tables[t].bank;
+        int st = cfg->known_split_tables[t].stride;
+        for (int i = 0; i < cfg->known_split_tables[t].count; i++) {
+            uint8_t lo = rom_read(rom, kb, cfg->known_split_tables[t].lo_start + i * st);
+            uint8_t hi = rom_read(rom, kb, cfg->known_split_tables[t].hi_start + i * st);
             uint16_t target = (lo | ((uint16_t)hi << 8)) + 1;
             if (target >= 0x8000 && target <= 0xBFFD) {
                 if (!function_list_contains(out, target, kb))
@@ -413,7 +398,7 @@ void function_finder_run(const NESRom *rom, FunctionList *out) {
                 out->entries[i].bank == item.bank &&
                 out->entries[i].size == 0)
             {
-                out->entries[i].size = walk_function(rom, out, item.addr, item.bank);
+                out->entries[i].size = walk_function(rom, out, item.addr, item.bank, cfg);
                 break;
             }
         }
@@ -421,12 +406,12 @@ void function_finder_run(const NESRom *rom, FunctionList *out) {
     printf("[FuncFinder] Known dispatch table scan added %d candidates\n",
            out->count - before_kt);
 
-    /* Hardcoded seeds: functions known to be dispatched dynamically
+    /* Extra function seeds from game config: functions dispatched dynamically
      * but not discoverable via static pointer/table scans. */
-    add_function(out, 0x8C0F, 14);        /* bank14 entity dispatch entry (no static ref) */
-    add_function(out, 0x828E, 5);         /* bank5 entity dispatch via RAM vector $2901 */
-    add_function(out, 0xD673, fixed_bank); /* fixed-bank VRAM write (called dynamically) */
-    add_function(out, 0xC2E9, fixed_bank); /* entity loop continuation — pushed as $C2E8 by BAD9 4-PHA, only reachable via PHA dispatch */
+    for (int i = 0; i < cfg->extra_func_count; i++) {
+        int bank = (cfg->extra_funcs[i].bank < 0) ? fixed_bank : cfg->extra_funcs[i].bank;
+        add_function(out, cfg->extra_funcs[i].addr, bank);
+    }
     /* BFS for hardcoded seeds */
     while (queue_pop(&item)) {
         for (int i = 0; i < out->count; i++) {
@@ -434,7 +419,7 @@ void function_finder_run(const NESRom *rom, FunctionList *out) {
                 out->entries[i].bank == item.bank &&
                 out->entries[i].size == 0)
             {
-                out->entries[i].size = walk_function(rom, out, item.addr, item.bank);
+                out->entries[i].size = walk_function(rom, out, item.addr, item.bank, cfg);
                 break;
             }
         }
