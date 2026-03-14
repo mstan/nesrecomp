@@ -239,9 +239,12 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
     printf("[FuncFinder] Seeding from NMI=$%04X RESET=$%04X IRQ=$%04X\n",
            rom->nmi_vector, rom->reset_vector, rom->irq_vector);
 
-    add_function(out, rom->reset_vector, fixed_bank);
-    add_function(out, rom->nmi_vector,   fixed_bank);
-    add_function(out, rom->irq_vector,   fixed_bank);
+    /* Seed vectors with their correct bank: fixed bank if in $C000+, else bank 0 */
+#define VEC_BANK(addr) ((addr) >= 0xC000 ? fixed_bank : 0)
+    add_function(out, rom->reset_vector, VEC_BANK(rom->reset_vector));
+    add_function(out, rom->nmi_vector,   VEC_BANK(rom->nmi_vector));
+    add_function(out, rom->irq_vector,   VEC_BANK(rom->irq_vector));
+#undef VEC_BANK
 
     /* Seed each switchable bank from $8000 so cross-bank calls from the
      * fixed bank get proper per-bank function bodies. */

@@ -819,14 +819,15 @@ bool codegen_emit(const NESRom *rom, const FunctionList *funcs,
         emit_function(f_full, rom, &funcs->entries[i], funcs, at, cfg);
     }
 
-    /* Add NMI/RESET/IRQ entry points for runner */
-    fprintf(f_full,
-        "/* Runner entry points */\n"
-        "void func_RESET(void) { func_%04X(); }\n"
-        "void func_NMI(void)   { func_%04X(); }\n"
-        "void func_IRQ(void)   { func_%04X(); }\n",
-        rom->reset_vector, rom->nmi_vector, rom->irq_vector
-    );
+    /* Add NMI/RESET/IRQ entry points for runner.
+     * If the vector target is in the switchable bank ($8000-$BFFF), use _b0 suffix. */
+    fprintf(f_full, "/* Runner entry points */\n");
+    const char *reset_sfx = (rom->reset_vector < 0xC000) ? "_b0" : "";
+    const char *nmi_sfx   = (rom->nmi_vector   < 0xC000) ? "_b0" : "";
+    const char *irq_sfx   = (rom->irq_vector   < 0xC000) ? "_b0" : "";
+    fprintf(f_full, "void func_RESET(void) { func_%04X%s(); }\n", rom->reset_vector, reset_sfx);
+    fprintf(f_full, "void func_NMI(void)   { func_%04X%s(); }\n", rom->nmi_vector,   nmi_sfx);
+    fprintf(f_full, "void func_IRQ(void)   { func_%04X%s(); }\n", rom->irq_vector,   irq_sfx);
 
     fclose(f_full);
 
