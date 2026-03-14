@@ -292,6 +292,138 @@ No fix needed. Close.
 
 ---
 
+## ISSUE #10 — Magic projectile sprites not visible in OAM
+
+**Status:** FIXED ✅ (2026-03-14)
+
+### Symptom
+Magic spells (Deluge, Thunder, Fire, etc.) cast damage correctly and travel through
+the air dealing HP damage to enemies — but the sprites for the magic orbs/effects
+were completely invisible. They never appeared in the OAM debug window and were never
+rendered on-screen. The player could observe enemies losing HP with nothing visible
+causing it.
+
+### Investigation path
+
+**Step 1 — OAM overflow check ruled out.**
+`$0039` (OAM overflow flag, written by `$CB5F` / `func_CB3F`) is always zero, so the
+overflow check at `$F0FE` (`LDA $39 / BNE $F161`) inside `func_F057` (metasprite OAM
+writer) is never blocking sprite writes. This was confirmed by user inspection of the
+live debug watch window.
+
+**Step 2 — OAM DMA path confirmed correct.**
+`runtime.c` handles `$4014 = $07` by copying `g_ram[$0700–$07FF]` to `g_ppu_oam[0–255]`.
+`func_CB4F` (OAM buffer clear: sets `$0025=0`, fills `$0704–$07FF` with `$F0`) IS called
+many times per run (30+ call sites confirmed in generated code). OAM management works.
+
+**Step 3 — `func_C2E9` has no direct call sites.**
+Grepping `generated/faxanadu_full.c` for `func_C2E9` shows only the forward declaration
+and the function definition — zero call sites. Yet `func_C2E9` IS registered in
+`faxanadu_dispatch.c` as `case 0xC2E9: func_C2E9(); break;`.
+
+**Step 4 — `call_by_address(0xC2E9)` found at `$BAEC`.**
+Grepping for `0xC2E9` in the generated code found one call at line ~158103:
+```c
+/* $BAEC: 60 */ { ...; call_by_address((...)+1); g_cpu.S+=2; call_by_address(0xC2E9); }
+```
+This is inside `func_BAD9_b14`. The same `$BAEC` address in another (outer) function
+emitted only:
+```c
+/* $BAEC: 60 */ { ...; call_by_address((...)+1); }
+return;
+```
+No `call_by_address(0xC2E9)` — the magic render call is missing from the inline path.
+
+**Step 5 — Call chain understood via Ghidra (bank14 `$BAD9`).**
+
+The entity-state dispatcher in bank14:
+```
+$BAD9: LDA #$C2   \ push outer continuation $C2E8 (addr-1 form of $C2E9)
+$BADB: PHA         /
+$BADC: LDA #$E8   \
+$BADE: PHA         /
+$BADF: LDA $02B3        ; magic state index
+$BAE2: ASL              ; × 2 for table offset
+$BAE3: TAY
+$BAE4: LDA $BAF8,Y  \   push entity state handler (hi byte, addr-1)
+$BAE7: PHA           /
+$BAE8: LDA $BAF7,Y  \   push entity state handler (lo byte, addr-1)
+$BAEB: PHA           /
+$BAEC: RTS              ; 4-item dispatch: entity handler, then outer cont $C2E9
+```
+The RTS at `$BAEC` is a "2+2 dispatch": pop inner handler → call it, then pop outer
+continuation → call it. The inner handler runs the entity state machine (Deluge/Thunder/
+etc.). The outer continuation `$C2E9` runs the magic sprite render.
+
+**Step 6 — Root cause identified: `func_base` vs. branch-target block start.**
+
+`code_generator.c` `emit_instruction()` detects this pattern by checking whether the
+function STARTS with `LDA #hi / PHA / LDA #lo / PHA` (the outer continuation push at
+the function prologue). When processing `$BAEC` inside `func_BAD9_b14`, `func_base =
+$BAD9`, and the check finds `A9 C2 48 A9 E8 48` at `$BAD9` — correct, emits
+`call_by_address(0xC2E9)`.
+
+BUT: `$BAD9` is also a **branch target** inside a larger outer function. The outer
+function has `CMP #$04 / BNE $BAD9` at `$BAC4`–`$BAC6`. The recompiler inlines the
+`$BAD9–$BAEC` code block as a `goto label_BAD9` in the outer function. When the same
+`emit_instruction()` processes `$BAEC` in this context, `func_base` is the OUTER
+function's entry point (not `$BAD9`). The outer function does NOT start with
+`LDA/PHA/LDA/PHA`, so the outer continuation check fails → plain 2-PHA dispatch →
+entity handler called but `$C2E9` never called → magic render never runs.
+
+This bug is silent: the entity state machine runs correctly (magic travels, deals
+damage via separate HP-subtraction path), but the OAM write path in `$C2E9` is never
+reached.
+
+### Fix
+
+`code_generator.c`, `emit_instruction()`, 2-PHA dispatch detection:
+
+**Before:** check only `func_base + 0..5` for the `LDA #hi/PHA/LDA #lo/PHA` pattern.
+
+**After:** scan backwards from the RTS (up to 128 bytes) looking for
+`A9 hi 48 A9 lo 48`. Scanning nearest-first finds the innermost static address push.
+
+```c
+for (int _back = 6; _back <= 128; _back++) {
+    uint16_t _probe = (uint16_t)(pc - _back);
+    if (rom_read(rom, bank, _probe)   == 0xA9 &&
+        rom_read(rom, bank, _probe+2) == 0x48 &&
+        rom_read(rom, bank, _probe+3) == 0xA9 &&
+        rom_read(rom, bank, _probe+5) == 0x48) {
+        // Extract hi/lo, compute tgt = ((hi<<8)|lo)+1
+        // If tgt >= 0x8000 and tgt != pc+1 → has_outer_cont = 1
+    }
+}
+```
+
+The backwards scan is safe because the outer continuation push always uses
+`LDA #const / PHA` (opcode `A9` = immediate), while the inner handler uses
+`LDA $table,Y` (opcode `B9` = absolute indexed), so there is no ambiguity.
+
+For `$BAEC` in the outer function: the scan finds the pattern at `back=19` (address
+`$BAD9`), extracts `hi=$C2`, `lo=$E8`, computes target `$C2E9`. Correct.
+
+The fix also handles `func_BAD9_b14` unchanged: scan at `back=19` still finds `$BAD9`.
+
+### Generated code after fix
+
+All 4 occurrences of `$BAEC` in `faxanadu_full.c` now correctly emit:
+```c
+{ g_cpu.S++; uint8_t _lo=g_ram[0x100+g_cpu.S]; g_cpu.S++; uint8_t _hi=g_ram[0x100+g_cpu.S];
+  call_by_address(((uint16_t)_hi<<8|_lo)+1);  /* entity state handler */
+  g_cpu.S+=2;                                  /* discard $C2E8 addr bytes */
+  call_by_address(0xC2E9);                     /* magic render → func_C2E9 */
+}
+```
+
+### Verified fix
+Rebuilt recompiler (5659 functions unchanged) + runner. No `$C2E9` dispatch misses
+in stdout. Kill-test script runs cleanly to frame 1440. Magic projectile sprites
+now visible in OAM and on-screen.
+
+---
+
 ## Historical notes
 
 - bank-14 dispatch misses ($8C0F, $8C98, $89EF, $A6FF, $0001): status unclear after

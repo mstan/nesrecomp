@@ -389,20 +389,28 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
              * breaks the pc-9/pc-12 spacing).  After calling the inner handler,
              * we must also call the static outer continuation. */
             } else if (pc >= 0x8001 && rom_read(rom, bank, pc - 1) == 0x48 /* PHA */) {
-                /* Check for outer continuation pushed at function prologue */
+                /* Check for outer continuation: scan backwards for LDA #hi/PHA/LDA #lo/PHA.
+                 * Works both when the pattern is at func_base (original case) and when it
+                 * starts at a branch-target block entry within the function (e.g., $BAD9
+                 * is a goto target inside an outer function, but func_base is the outer
+                 * function start — the backward scan finds the inner block's push). */
                 int has_outer_cont = 0;
                 uint16_t outer_cont_target = 0;
-                if (func_base + 5 < pc &&
-                    rom_read(rom, bank, func_base)   == 0xA9 /* LDA #imm */ &&
-                    rom_read(rom, bank, func_base+2) == 0x48 /* PHA */ &&
-                    rom_read(rom, bank, func_base+3) == 0xA9 /* LDA #imm */ &&
-                    rom_read(rom, bank, func_base+5) == 0x48 /* PHA */) {
-                    uint8_t hi_val = rom_read(rom, bank, func_base+1);
-                    uint8_t lo_val = rom_read(rom, bank, func_base+4);
-                    uint16_t tgt = (uint16_t)(((uint16_t)hi_val << 8) | lo_val) + 1;
-                    if (tgt >= 0x8000 && tgt != (uint16_t)(pc + 1)) {
-                        outer_cont_target = tgt;
-                        has_outer_cont = 1;
+                for (int _back = 6; _back <= 128; _back++) {
+                    if (pc < (uint16_t)(0x8000 + _back + 5)) break;
+                    uint16_t _probe = (uint16_t)(pc - _back);
+                    if (rom_read(rom, bank, _probe)   == 0xA9 /* LDA #imm */ &&
+                        rom_read(rom, bank, _probe+2) == 0x48 /* PHA */ &&
+                        rom_read(rom, bank, _probe+3) == 0xA9 /* LDA #imm */ &&
+                        rom_read(rom, bank, _probe+5) == 0x48 /* PHA */) {
+                        uint8_t hi_val = rom_read(rom, bank, _probe+1);
+                        uint8_t lo_val = rom_read(rom, bank, _probe+4);
+                        uint16_t tgt = (uint16_t)(((uint16_t)hi_val << 8) | lo_val) + 1;
+                        if (tgt >= 0x8000 && tgt != (uint16_t)(pc + 1)) {
+                            outer_cont_target = tgt;
+                            has_outer_cont = 1;
+                            break;
+                        }
                     }
                 }
                 if (has_outer_cont) {
