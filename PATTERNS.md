@@ -124,6 +124,72 @@ means the game just finished a reset/init phase and is about to enter the main l
 
 ---
 
+## Pattern 4: Outer-Continuation 2-PHA Dispatch
+
+### What it looks like in ROM
+
+```
+$XXXX: LDA #cont_hi   ; push outer continuation (addr-1 convention)
+$XXX2: PHA
+$XXX3: LDA #cont_lo
+$XXX5: PHA
+       ... (computation: load table index, multiply, TAY) ...
+$YYYY: LDA table_hi,Y ; push inner handler (addr-1 from table)
+$YYY3: PHA
+$YYY4: LDA table_lo,Y
+$YYY7: PHA
+$YYY8: RTS            ; dispatch: call inner handler, then outer cont
+```
+
+Unlike the adjacent 4-PHA (Pattern — PHAs at pc-1/pc-5/pc-9/pc-12), here the
+4 PHAs are non-adjacent because computation intervenes between the first pair
+and the second pair.
+
+### Confirmed instance: bank14 `$BAD9`
+
+```
+$BAD9: LDA #$C2 / PHA / LDA #$E8 / PHA   ; outer cont = $C2E8+1 = $C2E9
+$BADF: LDA $02B3 / ASL / TAY              ; magic state index × 2
+$BAE4: LDA $BAF8,Y / PHA                  ; inner handler hi (addr-1)
+$BAE8: LDA $BAF7,Y / PHA                  ; inner handler lo (addr-1)
+$BAEC: RTS                                ; dispatch
+```
+
+The RTS at `$BAEC` calls the entity state handler, then calls `$C2E9` (magic
+render entry in bank15).
+
+### Code generator detection (`emit_instruction`, MN_RTS path)
+
+When pc-1 is PHA (`0x48`) and this is NOT an adjacent 4-PHA:
+- Scan backwards up to 128 bytes for `A9 hi 48 A9 lo 48` (LDA#/PHA/LDA#/PHA)
+- Extract target = `((hi<<8)|lo) + 1`
+- **Target MUST be `>= 0xC000` (fixed bank only)**
+
+**Critical constraint:** outer continuations must be in the fixed bank ($C000–$FFFF).
+A switchable-bank target ($8000–$BFFF) is ALWAYS a false positive — the bank may
+have changed inside the dispatched handler. Accepting `tgt >= 0x8000` caused Issue
+#11 (false matches at $A6CE→$A6A1 and $A7F3→$A78C, producing enemy flicker and
+wrong drop positions).
+
+Generated C for the outer-continuation 2-PHA dispatch:
+```c
+{ g_cpu.S++; uint8_t _lo=g_ram[0x100+g_cpu.S]; g_cpu.S++; uint8_t _hi=g_ram[0x100+g_cpu.S];
+  call_by_address(((uint16_t)_hi<<8|_lo)+1);  /* inner handler */
+  g_cpu.S+=2;                                  /* discard outer cont bytes */
+  call_by_address(0xC2E9);                     /* outer continuation */
+}
+```
+
+### Complication: branch-target inline blocks
+
+`$BAD9` is also a branch target (`BNE $BAC6 → $BAD9`) inside a larger outer function.
+When inlined as a `goto label_BAD9` block, `func_base` is the outer function's start —
+NOT `$BAD9`. The backward scan (not the old `func_base` check) is what correctly finds
+the `LDA #$C2/PHA/LDA #$E8/PHA` pattern in both the standalone function and the inline
+block. See Issue #10.
+
+---
+
 ## Patterns to watch for (not yet encountered)
 
 - `JMP ($XXXX)` where vector is in ROM → static target, can be resolved
