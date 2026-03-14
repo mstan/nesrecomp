@@ -215,22 +215,54 @@ Call chain in bank14 is intact:
 `$AC21` is called from `JSR $AC21` at `$ABE3` and `JMP $AC21` at `$ABAC`. Both are
 reachable via JSR tracing; `func_AC21` and `func_AC2D` will be generated.
 
-### Likely runtime causes to investigate
-- **Drop table returns `$FF`**: `$02FC,X` may contain the wrong entity ID at drop time
-  (e.g. the death-animation entity ID `$13`/`$14` instead of the original enemy ID).
-  `Sprite_SetDeathEntity` is supposed to copy the original ID before overwriting — verify
-  `$02CC,X → $02FC,X` copy at `$ABF9-$ABFB`.
-- **All 8 slots occupied**: `$A236` (HasMaxOnScreen check) returns carry set; drop silently
-  skipped. Check how many entity slots are active when an enemy dies.
-- **Death state handler not being reached**: The entity behavior script address for the
-  death animation type (`$13`/`$14`) points to the handler at `$ABD8`. If the dispatch
-  table at `$AD2D` (loaded at `$AC05-$AC0A`) has wrong entries, the handler never runs.
+### Updated analysis (2026-03-14) — two death paths found
+
+Ghidra trace of the bank14 damage/death system reveals **two distinct kill paths**:
+
+**Path A — instant destroy, NO drops** (`$87CB`):
+```
+JSR $87DC          ; side effects (EXP/score update via bank12 + $C08E)
+LDX $0378          ; reload entity slot
+LDA #$FF
+STA $02CC,X        ; entity type = $FF (instantly inactive)
+```
+This path fires when a bounding-box collision check at `$87C8` (BCC) detects a hit.
+Entity vanishes without death animation and without calling `$AC21` (no drop).
+
+**Path B — death animation WITH drops** (`$88A9`):
+```
+LDA #$03 / JSR $D0E4  ; bank-switch prep
+STA $034C,X / JSR $8B87 / LDY $02CC,X / LDA $B544,Y
+CMP #$07 → JMP $ABEC  ; type $64 "big death" for special enemies
+           JMP $ABF1  ; type $13 normal death → SetDeathEntity → drop check
+```
+This path fires when entity HP subtraction at `$8891–$8897` underflows (HP ≤ 0).
+
+### Root cause hypothesis
+If the player sword attack or magic projectile collision uses **Path A** (bounding-box
+kill) rather than the HP-subtraction path, drops never spawn. Path A is reachable from
+`func_87CA_b14` (in dispatch). Path B at `$88A9` is reachable from `func_88A9_b14`
+(also in dispatch).
+
+The symptom — enemies die (death animation?) but drops missing — needs confirmation that
+either: (a) Path A is being used instead of B, or (b) Path B fires but `$B672[entity_id]`
+returns `$FF` (no-drop entry for that enemy type).
+
+### Runtime test status
+Automated combat tests could not confirm any enemy deaths during scripted runs:
+- The DEATH_TYPE watch ($02CC changing to $13/$14) never fired — no enemies entered
+  the death animation state.
+- `$02EC` at slot 5 (entity type $0B) incremented continuously — this is a BEHAVIOR
+  counter for that entity type, NOT a death counter.
+- Entity type $0B (`$B544[$0B]=0`) would use death type $13 if damaged via Path B.
 
 ### Next debug step
-Add a `log_on_change()` in `runtime.c` watching `g_ram[0x02EC]` to confirm the death
-frame counter increments. If it never reaches 8, the state handler at `$ABD8` isn't
-firing. If it does reach 8, add a targeted one-shot log inside `func_AC2D` to see what
-`$02FC,X` contains and what `$B672` returns.
+To confirm which path is used: add `log_on_change` for `g_ram[0x0344]` (entity HP slot 0
+= `$0344+slot`). If HP decrements → Path B is reached. If HP never changes but entity
+vanishes → Path A (instant destroy). Monitor `$02CC` across all slots for `$FF` appearance.
+
+Dispatch entries confirmed present: `func_88A9_b14`, `func_87CA_b14`, `func_87DC_b14`,
+`func_822E_b14`, `func_828B_b14`, `func_AC21_b14`, `func_AC2D_b14`.
 
 ---
 
