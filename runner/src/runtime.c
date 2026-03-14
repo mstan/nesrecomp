@@ -29,8 +29,9 @@ uint8_t g_ppuscroll_x_hud = 0;
 uint8_t g_ppuscroll_y_hud = 0;
 uint8_t g_ppuctrl_hud     = 0;
 int     g_spr0_split_active = 0;
-static int g_ppuaddr_latch = 0;
-static int g_scroll_latch  = 0;
+static int     g_ppuaddr_latch = 0;
+static int     g_scroll_latch  = 0;
+static uint8_t g_ppudata_buf   = 0; /* PPUDATA read buffer (NES read-delay) */
 
 uint64_t g_frame_count = 0;
 
@@ -125,7 +126,8 @@ void nes_write(uint16_t addr, uint8_t val) {
     maybe_trigger_vblank();
 
     if (addr <= 0x1FFF) {
-        g_ram[addr & 0x07FF] = val; return;
+        uint16_t a = addr & 0x07FF;
+        g_ram[a] = val; return;
     }
     if (addr >= 0x2000 && addr <= 0x3FFF) { ppu_write_reg(0x2000 + (addr & 7), val); return; }
     if (addr == 0x4014) {
@@ -170,6 +172,7 @@ void ppu_write_reg(uint16_t reg, uint8_t val) {
             if (!g_ppuaddr_latch) g_ppuaddr = (uint16_t)val << 8;
             else                   g_ppuaddr |= val;
             g_ppuaddr_latch ^= 1;
+            g_ppudata_buf = 0; /* writing $2006 resets the read buffer */
             break;
         case 0x2007: {
             uint16_t a = g_ppuaddr & 0x3FFF;
@@ -214,11 +217,21 @@ uint8_t ppu_read_reg(uint16_t reg) {
         }
         case 0x2004: return g_ppu_oam[g_oamaddr];
         case 0x2007: {
+            /* NES PPU $2007 read: buffered for CHR/NT, immediate for palette.
+             * The real NES returns the OLD buffer contents for non-palette reads,
+             * then updates the buffer with the byte at the current address.
+             * Palette reads ($3F00+) are immediate (no buffer delay). */
             uint16_t a = g_ppuaddr & 0x3FFF;
             g_ppuaddr += (g_ppuctrl & 0x04) ? 32 : 1;
-            if (a >= 0x3F00) return g_ppu_pal[a & 0x1F];
-            if (a >= 0x2000) return g_ppu_nt[a & 0x0FFF];
-            return g_chr_ram[a];
+            if (a >= 0x3F00) {
+                /* Palette: immediate read, but also update buffer with NT mirror */
+                g_ppudata_buf = g_ppu_nt[a & 0x0FFF];
+                return g_ppu_pal[a & 0x1F];
+            }
+            uint8_t ret = g_ppudata_buf;
+            if (a >= 0x2000) g_ppudata_buf = g_ppu_nt[a & 0x0FFF];
+            else              g_ppudata_buf = g_chr_ram[a];
+            return ret;
         }
     }
     return 0;

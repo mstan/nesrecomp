@@ -87,6 +87,23 @@
 14, 0xBAF7, entity state machine dispatch table — 23 interleaved LE entries (states 0-22); known_tables {14,0xBAF7,0xBB25}
 14, 0xBC5B, entity state transition: $02B9=0, $02B3=$0B (state 16 handler; was missing, caused invisible entities)
 
+# ── Fixed bank — PPU DMA queue commands ──────────────────────────────────────────
+
+# PPUBuffer_DrawCommand_RotateTilesRight1Pixel ($CD3B)
+# Fog/smoke tile animation: reads each CHR byte via PPUDATA ($2007 buffered read),
+# rotates it right 1 pixel (PHA/LSR/PLA/ROR), writes back.
+# CRITICAL: relies on NES PPUDATA read-delay buffer. Dummy read primes the buffer;
+# each loop iteration reads the buffered previous byte and loads the next.
+# Without the buffer, plane0==plane1 convergence occurs → all color-3 (red) pixels.
+15, 0xCD3B, PPUBuffer_DrawCommand_RotateTilesRight1Pixel — reads CHR via buffered $2007 reads; rotates each byte right 1 pixel; uses PHA/LSR/PLA/ROR. Needs PPUDATA read-delay buffer.
+
+# Fog_OnTick / Fog_UpdateTiles ($DFC5/$DFDE)
+# Forepaw fog/smoke animation. Fog_OnTick checks: area_type=2 (Forepaw) AND $65=$0A (PALETTE_MIST).
+# Fog_UpdateTiles queues 3-byte PPU DMA command: opcode=$FC, addr=$18, param=Fog_TileIndex*16.
+# Opcode $FC dispatches to $CD3B in PPU DMA processor ($CF3C).
+15, 0xDFC5, Fog_OnTick — fires only when area_type=2 (Forepaw) AND palette_id=$0A (PALETTE_MIST); queues fog rotation command
+15, 0xDFDE, Fog_UpdateTiles — queues 3-byte DMA command: opcode=$FC / addr_hi=$18 / tile_idx*16; rotates CHR tiles in pattern table 1
+
 # ── Bank 12 ($8000-$BFFF, dialogue/room state) ───────────────────────────────────
 
 # Room/scene state split dispatch table

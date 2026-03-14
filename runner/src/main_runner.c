@@ -54,6 +54,14 @@ static int password_char_to_index(char ch) {
 static void maybe_inject_password(void) {
     if (!s_password || s_password_injected) return;
 
+    /* Strip spaces (sometimes shown as separators online) */
+    static char s_pw_stripped[25];
+    int slen = 0;
+    for (const char *p = s_password; *p && slen < 24; p++)
+        if (*p != ' ') s_pw_stripped[slen++] = *p;
+    s_pw_stripped[slen] = '\0';
+    s_password = s_pw_stripped;
+
     int len = (int)strlen(s_password);
     if (len == 0 || len > 24) return;
 
