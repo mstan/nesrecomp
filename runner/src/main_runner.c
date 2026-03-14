@@ -499,6 +499,7 @@ void nes_vblank_callback(void) {
     log_on_change("NMI_enable", (g_ppuctrl >> 7) & 1);
     maybe_inject_password();
 
+
     if (g_ppuctrl & 0x80) {
         /* Simulate hardware NMI push so RTI in the handler restores stack. */
         uint8_t p_save = (uint8_t)((g_cpu.N<<7)|(g_cpu.V<<6)|(1<<5)|

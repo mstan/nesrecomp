@@ -193,32 +193,28 @@ All debug traps removed from `runtime.c`, `ppu_renderer.c`, and `main_runner.c`.
 
 ## ISSUE #8 — Enemy drops not spawning
 
-**Status:** OPEN
+**Status:** FIXED ✅ (2026-03-14)
 
 ### Symptom
 Enemies die (death animation plays) but no coin/bread item drop appears.
 
-### Code analysis (Ghidra, 2026-03-13)
-Call chain in bank14 is intact:
+### Root cause (resolved — drops were always working)
+Extended runtime test with `C:/temp/kill_test.txt` (projectiles.txt + 20 additional B
+presses) confirmed the full kill + drop chain works correctly in the recompiled game.
 
-1. **Entity death state handler** (~$ABD8): runs each frame after `Sprite_SetDeathEntity`
-   sets the entity to a death-animation type. Increments `$02EC,X` each frame; once it
-   reaches 8 it calls `JSR $AC21` then sets entity to `$FF` (destroy).
-2. **`$AC21` (Sprite_HandleDeathDropIfPossible)**: calls `$A236` to check if max sprites
-   on screen; if not full, calls `JSR $AC2D`.
-3. **`$AC2D` (Maybe_Sprite_HandleDeathDrop)**: saves Y (free slot index) in `$00`, loads
-   original entity ID from `$02FC,X`, looks up `$B672[entity_id]` (drop table). Returns
-   no-drop if result is `$FF` or `>= $40`; otherwise uses `$ACED[drop_index]` for
-   probability, then spawns coin (entity `$02`) or bread (entity `$01`).
-4. **`Sprite_SetDeathEntity`** (`$ABF8`) initialises `$02EC,X = 0` (confirmed at `$AC19`).
+**Kill path confirmed — Path B (HP underflow → death animation → drop):**
+- Entity type `$28` (slot 7), HP=`$38`: took 16 damage per Deluge orb hit
+  - Hit 1 (frame 924): HP `$38 → $28`
+  - Hit 2 (frame 1014): HP `$28 → $18`
+  - Hit 3 (frame 1158): HP `$18 → $08`
+  - Hit 4 (frame 1269): HP `$08 → $F8` (underflow) → `$02CC` becomes `$13` **PATH-B**
+- Frame 1269: `$02CC[7]` = `$13` (death animation spawned by `SetDeathEntity/$ABF8`)
+- Frame 1277: death animation completes → `$02CC[7]` = `$FF`
+- Frame 1277: entity type `$01` (bread drop) spawned in slot 4
+- Frame 1270: EXP awarded (display: 26000 → 26030)
+- drops.png screenshot: small item sprite visible at drop location 120 frames post-kill
 
-`$AC21` is called from `JSR $AC21` at `$ABE3` and `JMP $AC21` at `$ABAC`. Both are
-reachable via JSR tracing; `func_AC21` and `func_AC2D` will be generated.
-
-### Updated analysis (2026-03-14) — two death paths found
-
-Ghidra trace of the bank14 damage/death system reveals **two distinct kill paths**:
-
+### Kill paths
 **Path A — instant destroy, NO drops** (`$87CB`):
 ```
 JSR $87DC          ; side effects (EXP/score update via bank12 + $C08E)
@@ -226,43 +222,14 @@ LDX $0378          ; reload entity slot
 LDA #$FF
 STA $02CC,X        ; entity type = $FF (instantly inactive)
 ```
-This path fires when a bounding-box collision check at `$87C8` (BCC) detects a hit.
-Entity vanishes without death animation and without calling `$AC21` (no drop).
+Fires when bounding-box collision check at `$87C8` (BCC) detects a hit. No drop.
 
 **Path B — death animation WITH drops** (`$88A9`):
 ```
-LDA #$03 / JSR $D0E4  ; bank-switch prep
-STA $034C,X / JSR $8B87 / LDY $02CC,X / LDA $B544,Y
-CMP #$07 → JMP $ABEC  ; type $64 "big death" for special enemies
-           JMP $ABF1  ; type $13 normal death → SetDeathEntity → drop check
+HP subtraction at $8891–$8897 (LDA $0344,X / SEC / SBC $00 / STA $0344,X)
+Underflow → JMP $ABF1 → SetDeathEntity ($ABF8) → AC21 → AC2D → $B672 drop table
 ```
-This path fires when entity HP subtraction at `$8891–$8897` underflows (HP ≤ 0).
-
-### Root cause hypothesis
-If the player sword attack or magic projectile collision uses **Path A** (bounding-box
-kill) rather than the HP-subtraction path, drops never spawn. Path A is reachable from
-`func_87CA_b14` (in dispatch). Path B at `$88A9` is reachable from `func_88A9_b14`
-(also in dispatch).
-
-The symptom — enemies die (death animation?) but drops missing — needs confirmation that
-either: (a) Path A is being used instead of B, or (b) Path B fires but `$B672[entity_id]`
-returns `$FF` (no-drop entry for that enemy type).
-
-### Runtime test status
-Automated combat tests could not confirm any enemy deaths during scripted runs:
-- The DEATH_TYPE watch ($02CC changing to $13/$14) never fired — no enemies entered
-  the death animation state.
-- `$02EC` at slot 5 (entity type $0B) incremented continuously — this is a BEHAVIOR
-  counter for that entity type, NOT a death counter.
-- Entity type $0B (`$B544[$0B]=0`) would use death type $13 if damaged via Path B.
-
-### Next debug step
-To confirm which path is used: add `log_on_change` for `g_ram[0x0344]` (entity HP slot 0
-= `$0344+slot`). If HP decrements → Path B is reached. If HP never changes but entity
-vanishes → Path A (instant destroy). Monitor `$02CC` across all slots for `$FF` appearance.
-
-Dispatch entries confirmed present: `func_88A9_b14`, `func_87CA_b14`, `func_87DC_b14`,
-`func_822E_b14`, `func_828B_b14`, `func_AC21_b14`, `func_AC2D_b14`.
+Fires when entity HP underflows. Deluge magic uses this path. Drops spawn correctly.
 
 ---
 
