@@ -36,7 +36,7 @@ static const char *s_loadstate_path = NULL;
 static SDL_Window        *s_window    = NULL;
 static SDL_Renderer      *s_renderer  = NULL;
 static SDL_Texture       *s_texture   = NULL;
-static uint32_t           s_framebuf[256 * 240];
+static uint32_t           s_framebuf[560 * 240];  /* max widescreen (21:9) */
 
 /* ---- OAM debug window (--debug flag) ---- */
 static int                s_debug         = 0;
@@ -300,14 +300,14 @@ static void save_screenshot(void) {
     char path[80];
     snprintf(path, sizeof(path), "C:/temp/nes_shot_%04llu.png",
              (unsigned long long)g_frame_count);
-    static uint8_t rgb[256 * 240 * 3];
-    for (int i = 0; i < 256 * 240; i++) {
+    static uint8_t rgb[560 * 240 * 3];  /* max widescreen */
+    for (int i = 0; i < g_render_width * 240; i++) {
         uint32_t px = s_framebuf[i];
         rgb[i*3+0] = (px >> 16) & 0xFF;
         rgb[i*3+1] = (px >>  8) & 0xFF;
         rgb[i*3+2] = (px      ) & 0xFF;
     }
-    stbi_write_png(path, 256, 240, 3, rgb, 256*3);
+    stbi_write_png(path, g_render_width, 240, 3, rgb, g_render_width * 3);
     printf("[Shot] Saved %s\n", path);
 }
 
@@ -377,6 +377,21 @@ void nes_vblank_callback(void) {
         if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_ESCAPE) exit(0);
         if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_F5)
             g_turbo ^= 1;
+        if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_F8) {
+            /* Cycle widescreen: 4:3 → 16:9 → 21:9 → 4:3 */
+            AspectRatio next = (AspectRatio)((g_aspect_ratio + 1) % 3);
+            widescreen_set(next);
+            SDL_SetWindowSize(s_window, g_render_width * 3, 720);
+            SDL_DestroyTexture(s_texture);
+            s_texture = SDL_CreateTexture(s_renderer,
+                SDL_PIXELFORMAT_ARGB8888,
+                SDL_TEXTUREACCESS_STREAMING,
+                g_render_width, 240);
+            SDL_RenderSetLogicalSize(s_renderer, g_render_width, 240);
+            printf("[Widescreen] Switched to %s (%dx240)\n",
+                   next == ASPECT_4_3 ? "4:3" : next == ASPECT_16_9 ? "16:9" : "21:9",
+                   g_render_width);
+        }
         if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_F6)
             savestate_save("C:/temp/quicksave.sav");
         if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_F7) {
@@ -496,14 +511,14 @@ void nes_vblank_callback(void) {
     {
         char shot_path[256];
         if (script_wants_screenshot(shot_path, sizeof(shot_path))) {
-            static uint8_t rgb[256 * 240 * 3];
-            for (int i = 0; i < 256 * 240; i++) {
+            static uint8_t rgb[560 * 240 * 3];  /* max widescreen */
+            for (int i = 0; i < g_render_width * 240; i++) {
                 uint32_t px = s_framebuf[i];
                 rgb[i*3+0] = (px >> 16) & 0xFF;
                 rgb[i*3+1] = (px >>  8) & 0xFF;
                 rgb[i*3+2] = (px      ) & 0xFF;
             }
-            stbi_write_png(shot_path, 256, 240, 3, rgb, 256*3);
+            stbi_write_png(shot_path, g_render_width, 240, 3, rgb, g_render_width * 3);
             printf("[Shot] %s\n", shot_path);
         }
     }
@@ -521,7 +536,7 @@ void nes_vblank_callback(void) {
     g_frame_count++;
 
     /* Upload texture and present */
-    SDL_UpdateTexture(s_texture, NULL, s_framebuf, 256 * 4);
+    SDL_UpdateTexture(s_texture, NULL, s_framebuf, g_render_width * 4);
     SDL_RenderClear(s_renderer);
     SDL_RenderCopy(s_renderer, s_texture, NULL, NULL);
     SDL_RenderPresent(s_renderer);
@@ -606,6 +621,12 @@ void nesrecomp_runner_run(int argc, char *argv[]) {
         else if (strcmp(argv[i], "--record")    == 0 && i+1 < argc) s_record_path    = argv[++i];
         else if (strcmp(argv[i], "--loadstate") == 0 && i+1 < argc) s_loadstate_path = argv[++i];
         else if (strcmp(argv[i], "--debug")     == 0) s_debug = 1;
+        else if (strcmp(argv[i], "--widescreen") == 0 && i+1 < argc) {
+            const char *ar = argv[++i];
+            if (strcmp(ar, "16:9") == 0) widescreen_set(ASPECT_16_9);
+            else if (strcmp(ar, "21:9") == 0) widescreen_set(ASPECT_21_9);
+            else fprintf(stderr, "[Widescreen] Unknown aspect ratio: %s (use 16:9 or 21:9)\n", ar);
+        }
         else {
             /* Offer remaining args to the game-specific handler */
             const char *val = (i+1 < argc && argv[i+1][0] != '-') ? argv[i+1] : NULL;
@@ -657,8 +678,8 @@ void nesrecomp_runner_run(int argc, char *argv[]) {
         snprintf(window_title, sizeof(window_title), "NESRecomp - %s", game_get_name());
         s_window = SDL_CreateWindow(window_title,
             SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-            768, 720,
-            SDL_WINDOW_SHOWN);
+            g_render_width * 3, 720,
+            SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
     }
     if (!s_window) {
         fprintf(stderr, "SDL_CreateWindow: %s\n", SDL_GetError());
@@ -675,12 +696,12 @@ void nesrecomp_runner_run(int argc, char *argv[]) {
     s_texture = SDL_CreateTexture(s_renderer,
         SDL_PIXELFORMAT_ARGB8888,
         SDL_TEXTUREACCESS_STREAMING,
-        256, 240);
+        g_render_width, 240);
     if (!s_texture) {
         fprintf(stderr, "SDL_CreateTexture: %s\n", SDL_GetError());
         exit(1);
     }
-    SDL_RenderSetLogicalSize(s_renderer, 768, 720);
+    SDL_RenderSetLogicalSize(s_renderer, g_render_width, 240);
 
     memset(s_framebuf, 0, sizeof(s_framebuf));
 

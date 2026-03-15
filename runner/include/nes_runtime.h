@@ -48,7 +48,7 @@ void ppu_write_reg(uint16_t reg, uint8_t val);
 uint8_t ppu_read_reg(uint16_t reg);
 
 /* Render one frame to the framebuffer */
-/* framebuf: 256*240 ARGB8888 pixels */
+/* framebuf: g_render_width*240 ARGB8888 pixels */
 void ppu_render_frame(uint32_t *framebuf);
 
 /* Render OAM debug view: 8x8 grid of 64 sprite slots at 4x scale.
@@ -69,7 +69,9 @@ void runtime_init(void);
  * injected inline whenever the game reads $2002 during a VBlank period. */
 void nes_vblank_callback(void);
 
-/* Check elapsed time and fire VBlank if >=16ms has passed.
+/* Check elapsed time and fire VBlank if >=16667us (1/60s) has passed.
+ * Uses high-resolution timer (QPC on Windows, clock_gettime on POSIX).
+ * In turbo mode, timing is bypassed — fires immediately on every call.
  * Called from generated JMP instructions to ensure games with tight idle
  * loops (no memory reads) still receive timely NMI callbacks. */
 void maybe_trigger_vblank(void);
@@ -92,6 +94,21 @@ extern int     g_spr0_reads_ctr;
 
 /* Frame counter incremented each VBlank */
 extern uint64_t g_frame_count;
+
+/* ---- Widescreen ---- */
+typedef enum { ASPECT_4_3 = 0, ASPECT_16_9 = 1, ASPECT_21_9 = 2 } AspectRatio;
+extern AspectRatio g_aspect_ratio;
+extern int g_render_width;      /* 256, 427, or 560 */
+extern int g_widescreen_left;   /* extra px on left margin */
+extern int g_widescreen_right;  /* extra px on right margin */
+void widescreen_set(AspectRatio ar);
+
+/* Nametable column freshness tracking for widescreen stale-tile detection.
+ * Each of the 64 virtual NT columns (512px / 8) gets stamped with the current
+ * generation when written. Scene transitions bump the generation, making old
+ * columns stale. The renderer blanks stale columns in widescreen margins. */
+extern uint32_t g_nt_generation;
+extern uint32_t g_nt_col_gen[64];
 
 /* Current switchable PRG bank (set by mapper_write) */
 extern int g_current_bank;

@@ -176,7 +176,9 @@ void ppu_render_frame(uint32_t *framebuf) {
 
     /* Universal background color */
     uint32_t bg = NES_PALETTE[g_ppu_pal[0] & 0x3F];
-    for (int i = 0; i < 256 * 240; i++) framebuf[i] = bg;
+    for (int i = 0; i < g_render_width * 240; i++) framebuf[i] = bg;
+
+    int split_y = 240;  /* default: no split (used for HUD masking + vignette) */
 
     /* Only render if BG rendering is enabled ($2001 bit 3) */
     if (!(g_ppumask & 0x08)) goto render_sprites;
@@ -211,7 +213,6 @@ void ppu_render_frame(uint32_t *framebuf) {
          * game's own flag says scrolling is active, OR when the counter-based
          * sim already fired this frame. */
         int scroll_flag = g_ram[0x0722];
-        int split_y;
         if (g_spr0_split_active ||
             (scroll_flag && spr0_y > 0 && spr0_y < 200 && (g_ppumask & 0x18))) {
             split_y = (spr0_y + 15) & ~7;  /* tile-aligned */
@@ -253,10 +254,22 @@ void ppu_render_frame(uint32_t *framebuf) {
             int nt_row   = (tile_y >= 30) ? 1 : 0;
             int local_ty = tile_y % 30;
 
-            for (int sx = 0; sx < 256; sx++) {
+            for (int wx = 0; wx < g_render_width; wx++) {
+                int sx = wx - g_widescreen_left;  /* NES-relative X */
                 int nt_x      = (origin_x + sx) & 0x1FF;
                 int tile_x    = nt_x / 8;
                 int pixel_col = nt_x % 8;
+
+                /* Widescreen stale-column check: for pixels outside the NES
+                 * 256px viewport, blank columns that haven't been written since
+                 * the last scene transition. This prevents title screen remnants
+                 * and other stale data from appearing in the margins. */
+                if ((sx < 0 || sx >= 256) &&
+                    g_nt_col_gen[tile_x & 63] != g_nt_generation) {
+                    framebuf[sy * g_render_width + wx] = bg;
+                    continue;
+                }
+
                 int nt_col    = (tile_x >= 32) ? 1 : 0;
                 int local_tx  = tile_x % 32;
 
@@ -283,7 +296,18 @@ void ppu_render_frame(uint32_t *framebuf) {
                 int chr_off = chr_base + tile_id * 16 + tile_row;
                 int color_idx = ((g_chr_ram[chr_off] >> bit) & 1) |
                                 (((g_chr_ram[chr_off + 8] >> bit) & 1) << 1);
-                framebuf[sy * 256 + sx] = bg_color(pal_base, color_idx);
+                framebuf[sy * g_render_width + wx] = bg_color(pal_base, color_idx);
+            }
+        }
+
+        /* HUD masking: blank widescreen margins in HUD region (rows 0..split_y-1).
+         * The HUD only has meaningful content in the original 256px area. */
+        if (g_widescreen_left > 0) {
+            for (int sy = 0; sy < split_y && sy < 240; sy++) {
+                for (int wx = 0; wx < g_widescreen_left; wx++)
+                    framebuf[sy * g_render_width + wx] = bg;
+                for (int wx = g_widescreen_left + 256; wx < g_render_width; wx++)
+                    framebuf[sy * g_render_width + wx] = bg;
             }
         }
     }
@@ -418,14 +442,49 @@ render_sprites:
             for (int bit = 7; bit >= 0; bit--) {
                 /* flip_h mirrors which CHR bit we read; screen position is always (7-bit) */
                 int chr_bit = flip_h ? (7 - bit) : bit;
-                int px = spr_x + (7 - bit);
-                if (px < 0 || px >= 256) continue;
+                int px = spr_x + (7 - bit) + g_widescreen_left;
+                if (px < 0 || px >= g_render_width) continue;
                 int color_idx = ((lo >> chr_bit) & 1) | (((hi >> chr_bit) & 1) << 1);
                 if (color_idx == 0) continue; /* transparent */
                 /* Priority=1: sprite behind BG — only draw where BG is transparent */
-                if (priority && framebuf[py * 256 + px] != bg) continue;
+                if (priority && framebuf[py * g_render_width + px] != bg) continue;
                 uint8_t nes_color = g_ppu_pal[(spr_pal * 4 + color_idx) & 0x1F] & 0x3F;
-                framebuf[py * 256 + px] = NES_PALETTE[nes_color];
+                framebuf[py * g_render_width + px] = NES_PALETTE[nes_color];
+            }
+        }
+    }
+
+    /* ---- Edge vignette: darken outermost 24px at each screen edge ----
+     * Only the very edge pixels are darkened (quadratic falloff), NOT the
+     * entire margin. Most of the extended view stays at full brightness. */
+    if (g_widescreen_left > 0) {
+        int vw = 24;  /* vignette: only the outermost 24px */
+        for (int vy = 0; vy < 240; vy++) {
+            /* Left screen edge */
+            for (int wx = 0; wx < vw && wx < g_widescreen_left; wx++) {
+                int dist = vw - wx;  /* vw at edge, 1 at inner */
+                int factor = dist * dist * 160 / (vw * vw);
+                uint32_t *p = &framebuf[vy * g_render_width + wx];
+                uint32_t c = *p;
+                int rv = ((c >> 16) & 0xFF) * (256 - factor) >> 8;
+                int gv = ((c >>  8) & 0xFF) * (256 - factor) >> 8;
+                int bv = ( c        & 0xFF) * (256 - factor) >> 8;
+                *p = 0xFF000000 | ((uint32_t)rv << 16) | ((uint32_t)gv << 8) | (uint32_t)bv;
+            }
+            /* Right screen edge */
+            int r_inner = g_render_width - vw;
+            if (r_inner < g_widescreen_left + 256) r_inner = g_widescreen_left + 256;
+            int r_span = g_render_width - r_inner;
+            if (r_span < 1) continue;
+            for (int wx = r_inner; wx < g_render_width; wx++) {
+                int dist = wx - r_inner + 1;
+                int factor = dist * dist * 160 / (r_span * r_span);
+                uint32_t *p = &framebuf[vy * g_render_width + wx];
+                uint32_t c = *p;
+                int rv = ((c >> 16) & 0xFF) * (256 - factor) >> 8;
+                int gv = ((c >>  8) & 0xFF) * (256 - factor) >> 8;
+                int bv = ( c        & 0xFF) * (256 - factor) >> 8;
+                *p = 0xFF000000 | ((uint32_t)rv << 16) | ((uint32_t)gv << 8) | (uint32_t)bv;
             }
         }
     }

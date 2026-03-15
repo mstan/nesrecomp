@@ -6,10 +6,28 @@
 #include "logger.h"
 #include "apu.h"
 #include "game_extras.h"
+#include "input_script.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include <time.h>
+
+/* High-resolution microsecond timer for frame pacing */
+#ifdef _WIN32
+#include <windows.h>
+static uint64_t get_time_us(void) {
+    static LARGE_INTEGER freq = {0};
+    if (freq.QuadPart == 0) QueryPerformanceFrequency(&freq);
+    LARGE_INTEGER now;
+    QueryPerformanceCounter(&now);
+    return (uint64_t)(now.QuadPart * 1000000ULL / freq.QuadPart);
+}
+#else
+static uint64_t get_time_us(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000000ULL + ts.tv_nsec / 1000;
+}
+#endif
 
 CPU6502State g_cpu;
 uint8_t      g_ram[0x0800];
@@ -38,6 +56,37 @@ static int     g_scroll_latch  = 0;
 static uint8_t g_ppudata_buf   = 0; /* PPUDATA read buffer (NES read-delay) */
 
 uint64_t g_frame_count = 0;
+
+/* ---- Widescreen state ---- */
+AspectRatio g_aspect_ratio = ASPECT_4_3;
+int g_render_width     = 256;
+int g_widescreen_left  = 0;
+int g_widescreen_right = 0;
+
+void widescreen_set(AspectRatio ar) {
+    g_aspect_ratio = ar;
+    switch (ar) {
+        case ASPECT_16_9:
+            g_render_width     = 427;
+            g_widescreen_left  = 57;   /* ~1/3 of 171 extra px */
+            g_widescreen_right = 114;  /* ~2/3 of 171 extra px */
+            break;
+        case ASPECT_21_9:
+            g_render_width     = 560;
+            g_widescreen_left  = 101;  /* ~1/3 of 304 extra px */
+            g_widescreen_right = 203;  /* ~2/3 of 304 extra px */
+            break;
+        default: /* ASPECT_4_3 */
+            g_render_width     = 256;
+            g_widescreen_left  = 0;
+            g_widescreen_right = 0;
+            break;
+    }
+}
+
+/* ---- Nametable column freshness ---- */
+uint32_t g_nt_generation = 1;    /* start at 1; columns start at 0 = stale */
+uint32_t g_nt_col_gen[64] = {0};
 
 /* ---- Controller state ---- */
 uint8_t g_controller1_buttons = 0;
@@ -78,19 +127,22 @@ void runtime_init(void) {
     ppu_trace_init();
 }
 
-/* Wall-clock VBlank simulation: fires NMI every ~16ms (60Hz).
- * Uses clock() which on MSVC gives millisecond resolution.
- * This fires regardless of how many memory operations the game performs,
- * so it works for both read-heavy and write-heavy game loops. */
+/* Operation-counting VBlank simulation: fires NMI every OPS_PER_VBLANK
+ * nes_read/nes_write calls.  This makes VBlank timing deterministic —
+ * the same code path always fires VBlank at the same instruction, regardless
+ * of wall-clock speed.  Display pacing (60fps) is handled separately by
+ * SDL_Delay + VSync in nes_vblank_callback().
+ * In turbo mode, VBlank fires on every call (maximum speed). */
+#define OPS_PER_VBLANK 7000  /* ~1 NES frame worth of memory accesses */
 static bool s_vblank_firing = false;
 
 void maybe_trigger_vblank(void) {
     if (s_vblank_firing) return;
-    static clock_t s_last = 0;
-    clock_t now = clock();
-    /* CLOCKS_PER_SEC/60 = period for 60Hz. On MSVC CLOCKS_PER_SEC=1000 → 16 ticks */
-    if ((now - s_last) < (CLOCKS_PER_SEC / 60)) return;
-    s_last = now;
+    if (!g_turbo) {
+        static uint32_t s_op_count = 0;
+        if (++s_op_count < OPS_PER_VBLANK) return;
+        s_op_count = 0;
+    }
     s_vblank_firing = true;
     /* Set VBlank (bit7), clear sprite-0 hit (bit6) — standard NES VBlank start */
     g_ppustatus = (g_ppustatus & ~0x40) | 0x80;
@@ -118,8 +170,7 @@ void maybe_trigger_vblank(void) {
     /* Only fire NMI if $2000 bit7 (NMI enable) is set — gates init spin-waits correctly */
     if (g_ppuctrl & 0x80) nes_vblank_callback();
     s_vblank_firing = false;
-    /* Update s_last so we don't immediately re-fire after a long callback */
-    s_last = clock();
+    /* No s_last update here — anchored to frame start, not end of callback */
 }
 
 uint8_t nes_read(uint16_t addr) {
@@ -215,7 +266,22 @@ void ppu_write_reg(uint16_t reg, uint8_t val) {
                 if (idx == 0x10 || idx == 0x14 || idx == 0x18 || idx == 0x1C)
                     idx &= 0x0F;
                 g_ppu_pal[idx] = val;
-            } else if (a >= 0x2000) g_ppu_nt[a & 0x0FFF] = val; /* nametable */
+            } else if (a >= 0x2000) {
+                int nt_off = a & 0x0FFF;
+                g_ppu_nt[nt_off] = val;
+                /* Stamp column freshness for widescreen stale-tile detection */
+                int vnt = nt_off / 0x400;
+                int local = nt_off % 0x400;
+                int col_base = (vnt & 1) * 32;
+                if (local < 960) {
+                    g_nt_col_gen[col_base + (local % 32)] = g_nt_generation;
+                } else {
+                    /* Attribute byte covers a 4-column block */
+                    int ab = (local - 960) % 8;
+                    for (int c = ab * 4; c < ab * 4 + 4 && c < 32; c++)
+                        g_nt_col_gen[col_base + c] = g_nt_generation;
+                }
+            }
             else if (!g_chr_is_rom) {
                 g_chr_ram[a] = val; /* CHR RAM only — CHR ROM is read-only */
             }
