@@ -180,8 +180,14 @@ void ppu_write_reg(uint16_t reg, uint8_t val) {
             break;
         case 0x2007: {
             uint16_t a = g_ppuaddr & 0x3FFF;
-            if      (a >= 0x3F00) g_ppu_pal[a & 0x1F] = val;
-            else if (a >= 0x2000) g_ppu_nt[a & 0x0FFF] = val; /* nametable */
+            if (a >= 0x3F00) {
+                /* NES palette mirror: $3F10/$3F14/$3F18/$3F1C share storage
+                 * with $3F00/$3F04/$3F08/$3F0C (transparent color slots). */
+                uint8_t idx = a & 0x1F;
+                if (idx == 0x10 || idx == 0x14 || idx == 0x18 || idx == 0x1C)
+                    idx &= 0x0F;
+                g_ppu_pal[idx] = val;
+            } else if (a >= 0x2000) g_ppu_nt[a & 0x0FFF] = val; /* nametable */
             else if (!g_chr_is_rom) {
                 g_chr_ram[a] = val; /* CHR RAM only — CHR ROM is read-only */
             }
@@ -240,7 +246,10 @@ uint8_t ppu_read_reg(uint16_t reg) {
             if (a >= 0x3F00) {
                 /* Palette: immediate read, but also update buffer with NT mirror */
                 g_ppudata_buf = g_ppu_nt[a & 0x0FFF];
-                return g_ppu_pal[a & 0x1F];
+                uint8_t idx = a & 0x1F;
+                if (idx == 0x10 || idx == 0x14 || idx == 0x18 || idx == 0x1C)
+                    idx &= 0x0F;
+                return g_ppu_pal[idx];
             }
             uint8_t ret = g_ppudata_buf;
             if (a >= 0x2000) g_ppudata_buf = g_ppu_nt[a & 0x0FFF];
