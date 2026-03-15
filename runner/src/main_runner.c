@@ -592,16 +592,11 @@ static bool load_rom(const char *path) {
     return true;
 }
 
-int main(int argc, char *argv[]) {
-    setvbuf(stdout, NULL, _IONBF, 0);  /* unbuffered stdout so redirected output is visible */
-    if (argc < 2) {
-        fprintf(stderr, "Usage: NESRecompGame <rom.nes> [--script FILE] [--record FILE] "
-                        "[--loadstate FILE] [--debug]");
-        const char *game_usage = game_arg_usage();
-        if (game_usage) fprintf(stderr, "\n%s", game_usage);
-        fprintf(stderr, "\n");
-        return 1;
-    }
+/*
+ * nesrecomp_runner_run — main runner entry point, called by launcher.c after
+ * ROM discovery and CRC verification. argv[1] is guaranteed to be the ROM path.
+ */
+void nesrecomp_runner_run(int argc, char *argv[]) {
 
     /* Parse optional flags */
     for (int i = 2; i < argc; i++) {
@@ -620,7 +615,7 @@ int main(int argc, char *argv[]) {
 
     if (s_debug) printf("[Debug] OAM debug window enabled\n");
 
-    if (!load_rom(argv[1])) return 1;
+    if (!load_rom(argv[1])) exit(1);
 
     runtime_init();
     game_on_init();
@@ -631,7 +626,7 @@ int main(int argc, char *argv[]) {
 
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
         fprintf(stderr, "SDL_Init: %s\n", SDL_GetError());
-        return 1;
+        exit(1);
     }
 
     /* Open audio device — use SDL_QueueAudio (callback=NULL) to push samples
@@ -665,14 +660,14 @@ int main(int argc, char *argv[]) {
     }
     if (!s_window) {
         fprintf(stderr, "SDL_CreateWindow: %s\n", SDL_GetError());
-        return 1;
+        exit(1);
     }
 
     s_renderer = SDL_CreateRenderer(s_window, -1,
         SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
     if (!s_renderer) {
         fprintf(stderr, "SDL_CreateRenderer: %s\n", SDL_GetError());
-        return 1;
+        exit(1);
     }
 
     s_texture = SDL_CreateTexture(s_renderer,
@@ -681,7 +676,7 @@ int main(int argc, char *argv[]) {
         256, 240);
     if (!s_texture) {
         fprintf(stderr, "SDL_CreateTexture: %s\n", SDL_GetError());
-        return 1;
+        exit(1);
     }
     SDL_RenderSetLogicalSize(s_renderer, 768, 720);
 
@@ -747,5 +742,4 @@ int main(int argc, char *argv[]) {
     SDL_DestroyWindow(s_window);
     SDL_Quit();
     free(s_prg_data);
-    return 0;
 }
