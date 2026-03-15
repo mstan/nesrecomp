@@ -108,7 +108,10 @@ void maybe_trigger_vblank(void) {
      * back to these even when the counter doesn't trigger. */
     g_ppuscroll_x_hud = 0;
     g_ppuscroll_y_hud = 0;
-    g_ppuctrl_hud     = g_ppuctrl & ~0x03; /* nametable 0 for HUD region */
+    g_ppuctrl_hud     = g_ppuctrl & 0x38;  /* keep bits 3-5 (spr size, spr/bg pattern);
+                                            * clear bits 0-1 (force NT0 for HUD),
+                                            * clear bit 2 (VRAM inc — irrelevant),
+                                            * clear bit 7 (NMI enable — irrelevant) */
     /* Only fire NMI if $2000 bit7 (NMI enable) is set — gates init spin-waits correctly */
     if (g_ppuctrl & 0x80) nes_vblank_callback();
     s_vblank_firing = false;
@@ -243,10 +246,14 @@ uint8_t ppu_read_reg(uint16_t reg) {
                     g_spr0_reads_ctr = 0;
                 } else {
                     if (++g_spr0_reads_ctr >= 3) {
-                        /* Capture scroll/ppuctrl state as HUD (pre-split) values */
+                        /* Capture scroll/ppuctrl state as HUD (pre-split) values.
+                         * Mask ppuctrl to only rendering-relevant bits: 0-1 (NT),
+                         * 3 (spr pattern), 4 (BG pattern), 5 (spr size).
+                         * Bit 2 (VRAM inc) and bit 7 (NMI enable) don't affect
+                         * rendering and may have transient values from PPU uploads. */
                         g_ppuscroll_x_hud   = g_ppuscroll_x;
                         g_ppuscroll_y_hud   = g_ppuscroll_y;
-                        g_ppuctrl_hud       = g_ppuctrl;
+                        g_ppuctrl_hud       = g_ppuctrl & 0x38;
                         g_spr0_split_active = 1;
                         g_ppustatus |= 0x40;
                         g_spr0_reads_ctr = 0;

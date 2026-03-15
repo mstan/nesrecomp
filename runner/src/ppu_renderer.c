@@ -166,6 +166,14 @@ void ppu_render_oam_debug(uint32_t *buf) {
 }
 
 void ppu_render_frame(uint32_t *framebuf) {
+    /* When rendering is fully disabled (BG + sprites off), keep the previous
+     * frame's content rather than blanking.  On real NES the CRT continues
+     * displaying the last rendered scanlines, so brief rendering-off windows
+     * during nametable loads (ppumask=$06) are invisible.  Without this,
+     * those frames flash the universal background color — visible as HUD
+     * flicker on LCD displays. */
+    if (!(g_ppumask & 0x18)) return;
+
     /* Universal background color */
     uint32_t bg = NES_PALETTE[g_ppu_pal[0] & 0x3F];
     for (int i = 0; i < 256 * 240; i++) framebuf[i] = bg;
@@ -176,24 +184,44 @@ void ppu_render_frame(uint32_t *framebuf) {
     {
         /* Split-screen: rows 0..split_y-1 use HUD scroll (captured at sprite-0 hit);
          * rows split_y..239 use the post-split game-area scroll.
-         * When no split occurred this frame, all rows use current scroll.
-         *
-         * split_y is derived from sprite-0 OAM Y: the sprite renders rows Y+1..Y+8.
-         * The game's spin-wait fires near the last row of the sprite.
-         * Adding 9 gives the first scanline AFTER the sprite → clean 8px tile boundary.
-         * For Faxanadu (sprite-0 Y=$17=23): split_y=32, keeping NT0 rows 0-3 in HUD
-         * scroll (rows 0-1 blank spacer, rows 2-3 actual HUD tiles). */
+         * When no split occurred this frame, all rows use current scroll. */
         /* On real NES, sprite-0 hit always fires when the sprite overlaps
          * a non-transparent BG pixel — it's a hardware signal, not software.
          * Our counter-based $2002 sim can miss, so fall back: if sprite 0 is
          * on-screen and rendering is enabled, assume the split happens.
-         * HUD scroll values are pre-captured as (0,0) at VBlank start. */
+         * HUD scroll values are pre-captured as (0,0) at VBlank start.
+         *
+         * split_y is tile-aligned: round the sprite's last scanline (Y+8) up
+         * to the next 8-pixel boundary.  This ensures the HUD/gameplay
+         * boundary lands on a tile row edge, preventing seam artifacts.
+         *   SMB:      OAM[0].Y=$18(24) → (24+15)&~7 = 32  (4 tile rows)
+         *   Faxanadu: OAM[0].Y=$17(23) → (23+15)&~7 = 32  (4 tile rows)
+         *
+         * Hysteresis: if OAM[0] was recently on-screen with a valid split,
+         * maintain the split for a few frames even if OAM[0] is temporarily
+         * hidden (e.g. during DMA timing or mode transition).  This prevents
+         * single-frame HUD disappearances. */
+        static int s_last_valid_split_y = 240;
+        static int s_split_holdoff      = 0;
+
         int spr0_y  = (int)(g_ppu_oam[0]);
+        /* $0722 = ScrollFlag in SMB.  When zero, the game skips the sprite-0
+         * wait entirely — no scroll split is wanted (title screen init, mode
+         * transitions, death animation).  Only activate the split when the
+         * game's own flag says scrolling is active, OR when the counter-based
+         * sim already fired this frame. */
+        int scroll_flag = g_ram[0x0722];
         int split_y;
-        if (g_spr0_split_active) {
-            split_y = spr0_y + 9;
-        } else if (spr0_y > 0 && spr0_y < 200 && (g_ppumask & 0x18)) {
-            split_y = spr0_y + 9;
+        if (g_spr0_split_active ||
+            (scroll_flag && spr0_y > 0 && spr0_y < 200 && (g_ppumask & 0x18))) {
+            split_y = (spr0_y + 15) & ~7;  /* tile-aligned */
+            if (split_y > 240) split_y = 240;
+            s_last_valid_split_y = split_y;
+            s_split_holdoff      = 6;       /* maintain for up to 6 frames */
+        } else if (s_split_holdoff > 0) {
+            /* OAM[0] hidden but recently had a valid split — hold it */
+            split_y = s_last_valid_split_y;
+            s_split_holdoff--;
         } else {
             split_y = 240;
         }
