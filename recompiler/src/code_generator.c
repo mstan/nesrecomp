@@ -409,15 +409,25 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
         case MN_JMP:
             if (e->addr_mode == AM_ABS) {
                 if (abs16 >= 0xC000) {
-                    fprintf(f, "maybe_trigger_vblank(); func_%04X(); return;\n", abs16);
+                    if (abs16 == func_base && pc == func_base) {
+                        /* JMP $self at function start: true idle spin (single-instr).
+                         * while(1) polls VBlank without recursion. */
+                        fprintf(f, "while(1) { maybe_trigger_vblank(); }\n");
+                    } else if (abs16 == func_base) {
+                        /* JMP to own entry from within body: loop-back. */
+                        fprintf(f, "goto label_%04X;\n", abs16);
+                    } else {
+                        fprintf(f, "maybe_trigger_vblank(); func_%04X(); return;\n", abs16);
+                    }
                 } else if (abs16 >= 0x8000) {
                     if (bank == fixed_bank) {
                         fprintf(f, "maybe_trigger_vblank(); call_by_address(0x%04X); return;\n", abs16);
-                    } else if (abs16 == func_base) {
-                        /* Self-referencing JMP: this is the game's idle spin loop.
-                         * Emit an explicit while(1) so we never recurse or overflow
-                         * the C stack, but still poll for VBlank every iteration. */
+                    } else if (abs16 == func_base && pc == func_base) {
+                        /* JMP $self at function start: true idle spin. */
                         fprintf(f, "while(1) { maybe_trigger_vblank(); }\n");
+                    } else if (abs16 == func_base) {
+                        /* JMP to own entry from within body: loop-back. */
+                        fprintf(f, "goto label_%04X;\n", abs16);
                     } else {
                         fprintf(f, "maybe_trigger_vblank(); func_%04X_b%d(); return;\n", abs16, bank);
                     }
