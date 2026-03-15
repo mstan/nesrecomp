@@ -110,6 +110,11 @@ void widescreen_set(AspectRatio ar);
 extern uint32_t g_nt_generation;
 extern uint32_t g_nt_col_gen[64];
 
+/* World scroll position (absolute, not mod 512).  Set by game extras each
+ * frame from game RAM.  Used by the renderer to clamp widescreen margins:
+ * left margin blanked where world_x < 0, right blanked beyond write cursor. */
+extern int g_ws_world_scroll;
+
 /* Current switchable PRG bank (set by mapper_write) */
 extern int g_current_bank;
 

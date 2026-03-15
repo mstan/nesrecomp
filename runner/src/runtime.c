@@ -65,16 +65,15 @@ int g_widescreen_right = 0;
 
 void widescreen_set(AspectRatio ar) {
     g_aspect_ratio = ar;
+    /* Centered split: equal margins on each side.  The renderer clamps
+     * margin pixels to the valid nametable range using g_ws_world_scroll
+     * (left: blank where world_x < 0; right: blank beyond write cursor).
+     * Invalid margins render as background color (sky). */
     switch (ar) {
         case ASPECT_16_9:
             g_render_width     = 427;
-            g_widescreen_left  = 57;   /* ~1/3 of 171 extra px */
-            g_widescreen_right = 114;  /* ~2/3 of 171 extra px */
-            break;
-        case ASPECT_21_9:
-            g_render_width     = 560;
-            g_widescreen_left  = 101;  /* ~1/3 of 304 extra px */
-            g_widescreen_right = 203;  /* ~2/3 of 304 extra px */
+            g_widescreen_left  = 86;
+            g_widescreen_right = 85;
             break;
         default: /* ASPECT_4_3 */
             g_render_width     = 256;
@@ -87,6 +86,9 @@ void widescreen_set(AspectRatio ar) {
 /* ---- Nametable column freshness ---- */
 uint32_t g_nt_generation = 1;    /* start at 1; columns start at 0 = stale */
 uint32_t g_nt_col_gen[64] = {0};
+
+/* ---- World scroll (absolute, set by game extras) ---- */
+int g_ws_world_scroll = 0;
 
 /* ---- Controller state ---- */
 uint8_t g_controller1_buttons = 0;

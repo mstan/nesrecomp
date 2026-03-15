@@ -260,14 +260,21 @@ void ppu_render_frame(uint32_t *framebuf) {
                 int tile_x    = nt_x / 8;
                 int pixel_col = nt_x % 8;
 
-                /* Widescreen stale-column check: for pixels outside the NES
-                 * 256px viewport, blank columns that haven't been written since
-                 * the last scene transition. This prevents title screen remnants
-                 * and other stale data from appearing in the margins. */
-                if ((sx < 0 || sx >= 256) &&
-                    g_nt_col_gen[tile_x & 63] != g_nt_generation) {
-                    framebuf[sy * g_render_width + wx] = bg;
-                    continue;
+                /* Widescreen margin clamping.  Uses the absolute world scroll
+                 * position (g_ws_world_scroll, set by game extras) to determine
+                 * which margin pixels have valid nametable data.
+                 *
+                 * Left margin:  blank where world_x < 0 (before level start)
+                 * Right margin: blank where sx > 271 (beyond game's ~16px write
+                 *               cursor ahead of viewport)
+                 * Both margins: blank columns not yet written (generation check) */
+                if (sx < 0 || sx >= 256) {
+                    int world_x = g_ws_world_scroll + sx;
+                    if (world_x < 0 || sx > 271 ||
+                        g_nt_col_gen[tile_x & 63] != g_nt_generation) {
+                        framebuf[sy * g_render_width + wx] = bg;
+                        continue;
+                    }
                 }
 
                 int nt_col    = (tile_x >= 32) ? 1 : 0;
