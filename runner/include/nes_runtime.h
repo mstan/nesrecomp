@@ -34,6 +34,7 @@ void call_by_address(uint16_t addr);
 
 /* Logging for dispatch misses */
 void nes_log_dispatch_miss(uint16_t addr);
+void nes_log_inline_miss(uint16_t dispatch_pc, uint8_t a_val);
 
 /* ---- Entry Points (defined in faxanadu_full.c) ---- */
 void func_RESET(void);

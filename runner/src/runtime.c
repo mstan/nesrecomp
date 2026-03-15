@@ -295,3 +295,13 @@ void nes_log_dispatch_miss(uint16_t addr) {
     if (!found && g_miss_unique_count < MAX_MISS_UNIQUE)
         g_miss_unique_addrs[g_miss_unique_count++] = addr;
 }
+
+void nes_log_inline_miss(uint16_t dispatch_pc, uint8_t a_val) {
+    static uint32_t last = 0xFFFFFFFF;
+    uint32_t key = ((uint32_t)dispatch_pc << 8) | a_val;
+    if (key != last) {
+        printf("[Dispatch] INLINE MISS @$%04X A=%d (0x%02X)\n", dispatch_pc, (int)a_val, (unsigned)a_val);
+        last = key;
+    }
+    g_miss_count_any++;
+}

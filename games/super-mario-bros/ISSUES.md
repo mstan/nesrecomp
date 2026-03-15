@@ -81,21 +81,37 @@ is not recompiled correctly, it silently returns without processing the hit.
 
 ## ISSUE #5 — Items don't spawn from ? blocks
 
-**Status:** OPEN
+**Status:** FIXED
 
 ### Symptom
-Hitting a `?` block does not spawn a mushroom, coin, or other item. The block
-animation may play but no item entity appears.
+Hitting a `?` block did not spawn a mushroom, coin, or other item.
 
-### Likely cause
-Item spawning likely goes through the entity state machine (similar to Faxanadu's
-entity dispatch). If the spawn function is missing from the recompiled output (dispatch
-miss) or the entity slot initialization code has a bug, the item never appears.
+### Root cause
+`function_finder.c` inline_dispatch target bank tagging was wrong for NROM-256.
+When scanning the fixed bank (bank 1), `switchable_bank == fixed_bank == 1`. The
+old code:
+```c
+int dest_bank = (dest >= 0xC000) ? fixed_bank : switchable_bank;
+```
+Tagged all `$8000-$BFFF` inline_dispatch targets as bank 1, generating garbage
+`func_XXXX_b1` functions decoded from the wrong ROM region. The entity state machine
+runs in `$C000+` with `g_current_bank=1`, so `call_by_address(0xBC60)` dispatched to
+the garbage `func_BC60_b1` instead of the correct `func_BC60_b0`.
 
-### Next steps
-- Check for `[Dispatch] MISS` near the moment of hitting a `?` block
-- Ghidra the item-spawn routine to find which function is responsible
-- Verify the entity table is being populated correctly
+### Fix
+`function_finder.c`: changed inline_dispatch bank tagging to match regular JSR logic:
+```c
+if (dest >= 0xC000) {
+    add_function(list, dest, fixed_bank);
+} else if (switchable_bank != fixed_bank) {
+    add_function(list, dest, switchable_bank);
+} else {
+    /* Fixed bank scanning switchable region: add for all switchable banks */
+    for (int _b = 0; _b < fixed_bank; _b++)
+        add_function(list, dest, _b);
+}
+```
+Mushroom now spawns and rises from `?` block correctly (verified by screenshot).
 
 ---
 
@@ -126,9 +142,31 @@ state, Luigi may be stuck regardless of controller input.
 
 ---
 
+## ISSUE #7 — World 1-2 causes random game over / warp pipe crash
+
+**Status:** OPEN
+
+### Symptom
+Entering world 1-2 sometimes causes an immediate game over or a crash. Suspected to
+be related to the underground secret warp pipes (world 1-2 contains pipes that warp
+to worlds 2, 3, 4).
+
+### Likely cause
+The warp pipe mechanic likely triggers a different code path for pipe-entry vs. normal
+pipe traversal. If the warp zone entity or the screen-transition routine has a dispatch
+miss, the game may jump to an invalid address or corrupt Mario's world/level state,
+causing an immediate game over.
+
+### Next steps
+- Check for `[Dispatch] MISS` or `[Dispatch] INLINE MISS` when entering the warp pipes
+- Ghidra the pipe-entry and world-transition routines
+- Verify `g_miss_count_any` is zero through a clean 1-2 run
+
+---
+
 ## ROM / config facts
 - SMB ROM: `F:/Projects/nesrecomp/Super Mario Bros. (World).nes`
 - Mapper 0 (NROM-256), 2 PRG banks × 16KB, 1 CHR bank × 8KB (CHR ROM, read-only)
-- Ghidra server: `mcp__ghidra_smb__*` (bank0.bin loaded, base `$8000`)
+- Ghidra server: `mcp__ghidra_smb__*` (`smb_prg.bin` loaded, base `$8000`, full 32KB)
 - Runner build: `build/runner_smb/Release/NESRecompGame.exe`
 - Test script: `C:/temp/smb_test.txt`

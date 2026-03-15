@@ -385,6 +385,7 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                         }
                         tpc += 2;
                     }
+                    fprintf(f, "  default: nes_log_inline_miss(0x%04X, g_cpu.A); return;\n", pc);
                     fprintf(f, "}\n");
                     return (int)(tpc - pc);
                 }

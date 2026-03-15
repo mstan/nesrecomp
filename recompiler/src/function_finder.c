@@ -176,8 +176,16 @@ static int walk_function(const NESRom *rom, FunctionList *list,
                         uint8_t hi = rom_read(rom, read_bank, tpc + 1);
                         if (hi < 0x80) break;
                         uint16_t dest = (uint16_t)lo | ((uint16_t)hi << 8);
-                        int dest_bank = (dest >= 0xC000) ? fixed_bank : switchable_bank;
-                        add_function(list, dest, dest_bank);
+                        if (dest >= 0xC000) {
+                            add_function(list, dest, fixed_bank);
+                        } else if (switchable_bank != fixed_bank) {
+                            /* Inside a switchable bank: target is in the same bank */
+                            add_function(list, dest, switchable_bank);
+                        } else {
+                            /* Fixed bank calling switchable region: add for all switchable banks */
+                            for (int _b = 0; _b < fixed_bank; _b++)
+                                add_function(list, dest, _b);
+                        }
                         tpc += 2;
                     }
                     pc = tpc;
