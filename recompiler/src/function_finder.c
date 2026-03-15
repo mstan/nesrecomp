@@ -157,6 +157,34 @@ static int walk_function(const NESRom *rom, FunctionList *list,
                 }
             }
 
+            /* Check against inline_dispatch: JSR to an indexed-dispatch routine
+             * where the return address is used to find an inline address table.
+             * Entries are 2-byte LE absolute addresses; table ends at hi < 0x80. */
+            {
+                const InlineDispatch *idsp = NULL;
+                for (int ti = 0; ti < cfg->inline_dispatch_count; ti++) {
+                    if (target == cfg->inline_dispatches[ti].addr) {
+                        idsp = &cfg->inline_dispatches[ti];
+                        break;
+                    }
+                }
+                if (idsp) {
+                    add_function(list, idsp->addr, fixed_bank);
+                    uint16_t tpc = pc + 3;
+                    while (1) {
+                        uint8_t lo = rom_read(rom, read_bank, tpc);
+                        uint8_t hi = rom_read(rom, read_bank, tpc + 1);
+                        if (hi < 0x80) break;
+                        uint16_t dest = (uint16_t)lo | ((uint16_t)hi << 8);
+                        int dest_bank = (dest >= 0xC000) ? fixed_bank : switchable_bank;
+                        add_function(list, dest, dest_bank);
+                        tpc += 2;
+                    }
+                    pc = tpc;
+                    continue;
+                }
+            }
+
             if (target >= 0xC000) {
                 /* Fixed bank target — always knowable */
                 add_function(list, target, fixed_bank);

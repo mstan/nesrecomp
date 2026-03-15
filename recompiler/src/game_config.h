@@ -9,10 +9,11 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define GAME_CFG_MAX_TRAMPOLINES    8
-#define GAME_CFG_MAX_KNOWN_TABLES  32
-#define GAME_CFG_MAX_SPLIT_TABLES  16
-#define GAME_CFG_MAX_EXTRA_FUNCS   32
+#define GAME_CFG_MAX_TRAMPOLINES       8
+#define GAME_CFG_MAX_KNOWN_TABLES     32
+#define GAME_CFG_MAX_SPLIT_TABLES     16
+#define GAME_CFG_MAX_EXTRA_FUNCS      32
+#define GAME_CFG_MAX_INLINE_DISPATCHES 8
 
 /*
  * Trampoline: a JSR whose operand address is a known bank-switch dispatch
@@ -59,6 +60,20 @@ typedef struct {
     int      bank;   /* -1 for fixed bank */
 } ExtraFunc;
 
+/*
+ * Inline indexed dispatch: JSR to a routine that pops the return address to
+ * find an inline address table immediately after the JSR instruction.
+ * The called routine dispatches via A register: entry = table[A].
+ * Table entries are 2-byte little-endian absolute addresses.
+ * Table ends when a hi byte < 0x80 is found (no valid ROM address).
+ *
+ * Usage in game.cfg:  inline_dispatch <hex_addr>
+ * Example (SMB):      inline_dispatch 8E04
+ */
+typedef struct {
+    uint16_t addr;  /* JSR target (the dispatch routine) */
+} InlineDispatch;
+
 typedef struct {
     char            output_prefix[64];  /* e.g. "faxanadu" → generated/faxanadu_full.c */
     char            annotations_path[512]; /* override for annotations.csv */
@@ -74,6 +89,9 @@ typedef struct {
 
     ExtraFunc       extra_funcs[GAME_CFG_MAX_EXTRA_FUNCS];
     int             extra_func_count;
+
+    InlineDispatch  inline_dispatches[GAME_CFG_MAX_INLINE_DISPATCHES];
+    int             inline_dispatch_count;
 } GameConfig;
 
 /* Initialize to empty (no dispatch tables, prefix derived from ROM name) */

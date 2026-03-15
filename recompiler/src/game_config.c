@@ -2,11 +2,12 @@
  * game_config.c — game.cfg file parser
  *
  * Format (# comments, blank lines ignored):
- *   output_prefix  <name>
- *   trampoline     <hex_addr> <inline_bytes> <hex_bs_fn_addr>
- *   known_table    <bank> <hex_start> <hex_end>
- *   split_table    <bank> <hex_lo> <hex_hi> <count> <stride>
- *   extra_func     <bank> <hex_addr>
+ *   output_prefix    <name>
+ *   trampoline       <hex_addr> <inline_bytes> <hex_bs_fn_addr>
+ *   known_table      <bank> <hex_start> <hex_end>
+ *   split_table      <bank> <hex_lo> <hex_hi> <count> <stride>
+ *   extra_func       <bank> <hex_addr>
+ *   inline_dispatch  <hex_addr>
  */
 #include "game_config.h"
 #include <stdio.h>
@@ -104,6 +105,14 @@ bool game_config_load(GameConfig *cfg, const char *path) {
                 int i = cfg->extra_func_count++;
                 cfg->extra_funcs[i].addr = (uint16_t)addr;
                 cfg->extra_funcs[i].bank = bank;
+            }
+
+        } else if (strcmp(key, "inline_dispatch") == 0) {
+            unsigned addr;
+            if (sscanf(rest, "%x", &addr) == 1 &&
+                cfg->inline_dispatch_count < GAME_CFG_MAX_INLINE_DISPATCHES) {
+                int i = cfg->inline_dispatch_count++;
+                cfg->inline_dispatches[i].addr = (uint16_t)addr;
             }
 
         } else {

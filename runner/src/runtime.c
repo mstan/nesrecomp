@@ -13,6 +13,7 @@
 CPU6502State g_cpu;
 uint8_t      g_ram[0x0800];
 uint8_t      g_chr_ram[0x2000];
+int          g_chr_is_rom = 0;
 uint8_t      g_ppu_oam[0x100];
 uint8_t      g_ppu_pal[0x20];
 uint8_t      g_ppu_nt[0x1000]; /* 4KB nametable RAM: $2000-$2FFF */
@@ -29,6 +30,7 @@ uint8_t g_ppuscroll_x_hud = 0;
 uint8_t g_ppuscroll_y_hud = 0;
 uint8_t g_ppuctrl_hud     = 0;
 int     g_spr0_split_active = 0;
+int     g_spr0_reads_ctr    = 0;  /* sprite-0 hit simulation read counter */
 static int     g_ppuaddr_latch = 0;
 static int     g_scroll_latch  = 0;
 static uint8_t g_ppudata_buf   = 0; /* PPUDATA read buffer (NES read-delay) */
@@ -63,7 +65,7 @@ static void ppu_trace_write(uint16_t reg, uint8_t val) {
 void runtime_init(void) {
     memset(&g_cpu, 0, sizeof(g_cpu));
     memset(g_ram,     0, sizeof(g_ram));
-    memset(g_chr_ram, 0, sizeof(g_chr_ram));
+    if (!g_chr_is_rom) memset(g_chr_ram, 0, sizeof(g_chr_ram));
     memset(g_ppu_oam, 0, sizeof(g_ppu_oam));
     memset(g_ppu_pal, 0, sizeof(g_ppu_pal));
     memset(g_ppu_nt,  0, sizeof(g_ppu_nt));
@@ -79,7 +81,7 @@ void runtime_init(void) {
  * so it works for both read-heavy and write-heavy game loops. */
 static bool s_vblank_firing = false;
 
-static void maybe_trigger_vblank(void) {
+void maybe_trigger_vblank(void) {
     if (s_vblank_firing) return;
     static clock_t s_last = 0;
     clock_t now = clock();
@@ -90,7 +92,9 @@ static void maybe_trigger_vblank(void) {
     /* Set VBlank (bit7), clear sprite-0 hit (bit6) — standard NES VBlank start */
     g_ppustatus = (g_ppustatus & ~0x40) | 0x80;
     g_spr0_split_active = 0;  /* reset per-frame split state */
-    nes_vblank_callback();
+    g_spr0_reads_ctr    = 0;  /* reset sprite-0 hit counter */
+    /* Only fire NMI if $2000 bit7 (NMI enable) is set — gates init spin-waits correctly */
+    if (g_ppuctrl & 0x80) nes_vblank_callback();
     s_vblank_firing = false;
     /* Update s_last so we don't immediately re-fire after a long callback */
     s_last = clock();
@@ -178,8 +182,8 @@ void ppu_write_reg(uint16_t reg, uint8_t val) {
             uint16_t a = g_ppuaddr & 0x3FFF;
             if      (a >= 0x3F00) g_ppu_pal[a & 0x1F] = val;
             else if (a >= 0x2000) g_ppu_nt[a & 0x0FFF] = val; /* nametable */
-            else {
-                g_chr_ram[a] = val;
+            else if (!g_chr_is_rom) {
+                g_chr_ram[a] = val; /* CHR RAM only — CHR ROM is read-only */
             }
             g_ppuaddr += (g_ppuctrl & 0x04) ? 32 : 1;
             break;
@@ -195,21 +199,31 @@ uint8_t ppu_read_reg(uint16_t reg) {
             g_scroll_latch  = 0;
             g_ppuaddr_latch = 0;
             /* Simulate sprite-0 hit (bit6) for split-screen spin-waits.
-             * After 3 consecutive reads that find bit6 clear while rendering
-             * is enabled, set sprite-0 hit. */
+             * On real NES, bit6 is set by hardware during active rendering and
+             * cleared only at the pre-render scanline — never by reading $2002.
+             * Our simulation has no scanline timing, so we model it as "pulse on
+             * read": bit6 is set after 3 consecutive reads that see bit6=0, and
+             * cleared (consumed) when bit6=1 is read back.  This ensures:
+             *   - "wait for bit6=0" spin-wait exits in at most 2 reads
+             *   - "wait for bit6=1" spin-wait exits after the 3-read trigger
+             *   - Random $2002 reads during PPU uploads don't cause a spurious
+             *     permanent bit6=1 that would lock the first spin-wait forever
+             * Counter is reset at VBlank start via g_spr0_split_active reset
+             * path in maybe_trigger_vblank. */
             {
-                static int s_spr0_reads = 0;
                 if (s & 0x40) {
-                    s_spr0_reads = 0;
+                    /* Bit6 was set; consume it (clear) and reset counter */
+                    g_ppustatus &= ~0x40;
+                    g_spr0_reads_ctr = 0;
                 } else {
-                    if (++s_spr0_reads >= 3) {
+                    if (++g_spr0_reads_ctr >= 3) {
                         /* Capture scroll/ppuctrl state as HUD (pre-split) values */
                         g_ppuscroll_x_hud   = g_ppuscroll_x;
                         g_ppuscroll_y_hud   = g_ppuscroll_y;
                         g_ppuctrl_hud       = g_ppuctrl;
                         g_spr0_split_active = 1;
                         g_ppustatus |= 0x40;
-                        s_spr0_reads = 0;
+                        g_spr0_reads_ctr = 0;
                     }
                 }
             }

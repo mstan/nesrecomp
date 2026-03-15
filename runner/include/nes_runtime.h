@@ -16,7 +16,8 @@ typedef struct {
 
 extern CPU6502State g_cpu;
 extern uint8_t      g_ram[0x0800];     /* 2KB work RAM */
-extern uint8_t      g_chr_ram[0x2000]; /* 8KB CHR RAM */
+extern uint8_t      g_chr_ram[0x2000]; /* 8KB CHR RAM/ROM */
+extern int          g_chr_is_rom;      /* 1 = CHR ROM (ignore $2007 writes to $0000-$1FFF) */
 extern uint8_t      g_ppu_oam[0x100];  /* 64 sprites x 4 bytes */
 extern uint8_t      g_ppu_pal[0x20];   /* Palette $3F00-$3F1F */
 extern uint8_t      g_ppu_nt[0x1000];  /* Nametable RAM $2000-$2FFF */
@@ -66,6 +67,11 @@ void runtime_init(void);
  * injected inline whenever the game reads $2002 during a VBlank period. */
 void nes_vblank_callback(void);
 
+/* Check elapsed time and fire VBlank if >=16ms has passed.
+ * Called from generated JMP instructions to ensure games with tight idle
+ * loops (no memory reads) still receive timely NMI callbacks. */
+void maybe_trigger_vblank(void);
+
 /* PPU registers */
 extern uint8_t g_ppuctrl;
 extern uint8_t g_ppumask;
@@ -80,6 +86,7 @@ extern uint8_t g_ppuscroll_x_hud;
 extern uint8_t g_ppuscroll_y_hud;
 extern uint8_t g_ppuctrl_hud;
 extern int     g_spr0_split_active;
+extern int     g_spr0_reads_ctr;
 
 /* Frame counter incremented each VBlank */
 extern uint64_t g_frame_count;

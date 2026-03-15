@@ -366,7 +366,7 @@ void nes_vblank_callback(void) {
     static uint64_t s_cb_count = 0;
     if (s_cb_count == 0) { /* debug_log_open(); */ }
     s_cb_count++;
-    if (s_cb_count <= 5 || s_cb_count % 60 == 0)
+    if (s_cb_count <= 100 || s_cb_count % 60 == 0)
         printf("[VBlank] callback #%llu frame=%llu\n",
                (unsigned long long)s_cb_count, (unsigned long long)g_frame_count);
 
@@ -441,8 +441,16 @@ void nes_vblank_callback(void) {
                                    (g_cpu.D<<3)|(g_cpu.I<<2)|(g_cpu.Z<<1)|g_cpu.C);
         g_ram[0x100+g_cpu.S] = 0x00;   g_cpu.S--;
         g_ram[0x100+g_cpu.S] = p_save; g_cpu.S--;
+        /* DEBUG: log NMI gate state when nodisplay first clears */
+        uint8_t pre_0779 = g_ram[0x779];
+        uint8_t pre_0774 = g_ram[0x774];
         func_NMI();
         if (s_cb_count <= 5) printf("[VBlank] NMI returned ok\n");
+        if (g_ram[0x779] != pre_0779 || (pre_0774 != 0 && g_ram[0x774] == 0) ||
+            (pre_0774 == 0 && s_cb_count <= 40))
+            printf("[NMI_dbg] frame=%llu $0774_pre=%02X->%02X $0779=%02X->%02X ppumask=%02X\n",
+                   (unsigned long long)g_frame_count,
+                   pre_0774, g_ram[0x774], pre_0779, g_ram[0x779], g_ppumask);
     }
 
     /* Generate one frame of audio after NMI (APU registers now up-to-date).
@@ -569,6 +577,7 @@ static bool load_rom(const char *path) {
         if (chr_size > sizeof(g_chr_ram)) chr_size = sizeof(g_chr_ram);
         size_t n = fread(g_chr_ram, 1, chr_size, f);
         printf("[Runner] CHR ROM: loaded %zu bytes into g_chr_ram\n", n);
+        g_chr_is_rom = 1; /* protect CHR ROM from PPU $2007 writes */
     }
 
     fclose(f);
@@ -584,6 +593,7 @@ static bool load_rom(const char *path) {
 }
 
 int main(int argc, char *argv[]) {
+    setvbuf(stdout, NULL, _IONBF, 0);  /* unbuffered stdout so redirected output is visible */
     if (argc < 2) {
         fprintf(stderr, "Usage: NESRecompGame <rom.nes> [--script FILE] [--record FILE] "
                         "[--loadstate FILE] [--debug]");

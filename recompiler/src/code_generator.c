@@ -342,6 +342,53 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                     return 3 + tramp->inline_bytes;
                 }
             }
+            /* Check against inline_dispatch: JSR to an indexed-dispatch routine.
+             * Bytes after the JSR are a 2-byte LE address table indexed by A.
+             * Table ends when hi byte < 0x80.  Emit a switch on g_cpu.A. */
+            {
+                const InlineDispatch *idsp = NULL;
+                for (int ti = 0; ti < cfg->inline_dispatch_count; ti++) {
+                    if (abs16 == cfg->inline_dispatches[ti].addr) { idsp = &cfg->inline_dispatches[ti]; break; }
+                }
+                if (idsp) {
+                    uint16_t tpc = pc + 3;
+                    int entry_count = 0;
+                    /* Count entries first */
+                    while (1) {
+                        uint8_t hi = rom_read(rom, bank, tpc + 1);
+                        if (hi < 0x80) break;
+                        tpc += 2;
+                        entry_count++;
+                    }
+                    fprintf(f, "/* inline_dispatch $%04X: %d entries */\n", idsp->addr, entry_count);
+                    /* inline_dispatch is a computed JMP: the dispatch routine does
+                     * PLA/PLA then JMP (indirect), bypassing any code after the table.
+                     * Emit `return` after each case (not `break`) so the containing
+                     * function terminates immediately after the dispatch. */
+                    fprintf(f, "switch(g_cpu.A) {\n");
+                    tpc = pc + 3;
+                    for (int ei = 0; ei < entry_count; ei++) {
+                        uint8_t lo = rom_read(rom, bank, tpc);
+                        uint8_t hi = rom_read(rom, bank, tpc + 1);
+                        uint16_t dest = (uint16_t)lo | ((uint16_t)hi << 8);
+                        fprintf(f, "  case %d: ", ei);
+                        if (dest >= 0xC000) {
+                            fprintf(f, "func_%04X(); return;\n", dest);
+                        } else if (dest >= 0x8000) {
+                            if (bank == fixed_bank) {
+                                fprintf(f, "call_by_address(0x%04X); return;\n", dest);
+                            } else {
+                                fprintf(f, "func_%04X_b%d(); return;\n", dest, bank);
+                            }
+                        } else {
+                            fprintf(f, "call_by_address(0x%04X); return;\n", dest);
+                        }
+                        tpc += 2;
+                    }
+                    fprintf(f, "}\n");
+                    return (int)(tpc - pc);
+                }
+            }
             if (abs16 >= 0xC000) {
                 fprintf(f, "func_%04X();\n", abs16);
             } else if (abs16 >= 0x8000) {
@@ -361,20 +408,25 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
         case MN_JMP:
             if (e->addr_mode == AM_ABS) {
                 if (abs16 >= 0xC000) {
-                    fprintf(f, "func_%04X(); return;\n", abs16);
+                    fprintf(f, "maybe_trigger_vblank(); func_%04X(); return;\n", abs16);
                 } else if (abs16 >= 0x8000) {
                     if (bank == fixed_bank) {
-                        fprintf(f, "call_by_address(0x%04X); return;\n", abs16);
+                        fprintf(f, "maybe_trigger_vblank(); call_by_address(0x%04X); return;\n", abs16);
+                    } else if (abs16 == func_base) {
+                        /* Self-referencing JMP: this is the game's idle spin loop.
+                         * Emit an explicit while(1) so we never recurse or overflow
+                         * the C stack, but still poll for VBlank every iteration. */
+                        fprintf(f, "while(1) { maybe_trigger_vblank(); }\n");
                     } else {
-                        fprintf(f, "func_%04X_b%d(); return;\n", abs16, bank);
+                        fprintf(f, "maybe_trigger_vblank(); func_%04X_b%d(); return;\n", abs16, bank);
                     }
                 } else {
                     /* JMP to non-ROM address: dispatch at runtime */
-                    fprintf(f, "call_by_address(0x%04X); return;\n", abs16);
+                    fprintf(f, "maybe_trigger_vblank(); call_by_address(0x%04X); return;\n", abs16);
                 }
             } else {
                 /* JMP (ind) — dispatch */
-                fprintf(f, "call_by_address(nes_read16(0x%04X)); return;\n", abs16);
+                fprintf(f, "maybe_trigger_vblank(); call_by_address(nes_read16(0x%04X)); return;\n", abs16);
             }
             break;
         case MN_RTS:
@@ -527,7 +579,7 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
             uint8_t op = rom_read(rom, bank, scan);
             const OpcodeEntry *e2 = &g_opcode_table[op];
             int sz = (e2->size > 0) ? e2->size : 1;
-            /* Trampoline JSR: consumes 3 + inline_bytes (not just 3) */
+            /* Trampoline / inline_dispatch JSR: may consume more than 3 bytes */
             if (e2->mnemonic == MN_JSR) {
                 uint8_t _lo = rom_read(rom, bank, scan + 1);
                 uint8_t _hi = rom_read(rom, bank, scan + 2);
@@ -535,6 +587,15 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
                 for (int _ti = 0; _ti < cfg->trampoline_count; _ti++) {
                     if (_tgt == cfg->trampolines[_ti].addr) {
                         sz = 3 + cfg->trampolines[_ti].inline_bytes;
+                        break;
+                    }
+                }
+                for (int _ti = 0; _ti < cfg->inline_dispatch_count; _ti++) {
+                    if (_tgt == cfg->inline_dispatches[_ti].addr) {
+                        /* Count inline table bytes */
+                        uint16_t _tpc = scan + 3;
+                        while (rom_read(rom, bank, _tpc + 1) >= 0x80) _tpc += 2;
+                        sz = (int)(_tpc - scan);
                         break;
                     }
                 }
