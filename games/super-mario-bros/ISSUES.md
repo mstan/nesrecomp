@@ -99,6 +99,33 @@ miss) or the entity slot initialization code has a bug, the item never appears.
 
 ---
 
+## ISSUE #6 — Luigi unable to move (2-player mode) *(lowest priority)*
+
+**Status:** OPEN
+
+### Symptom
+When Mario dies and play switches to Luigi, Luigi cannot move.
+
+### Likely causes (two candidates — check the simple one first)
+
+**Candidate A — No player 2 controller bound (likely):**
+The runner currently only implements controller 1 (`$4016`). Controller 2 (`$4017`)
+always returns `$40` (no buttons pressed). In 2-player alternating mode SMB reads
+controller 2 for Luigi's input. If that's the case this is a one-liner fix: map
+keyboard or a second button layout to `g_controller2_buttons` and wire it into the
+`$4017` read in `runtime.c`.
+
+**Candidate B — Player 2 init bug:**
+If the game's player-2 initialization routine has a dispatch miss or uninitialized
+state, Luigi may be stuck regardless of controller input.
+
+### Next steps
+1. Check `runtime.c` `$4017` handler — confirm it always returns `$40` (no buttons)
+2. Add a temporary second controller binding (e.g. WASD + numpad) and test
+3. Only if Luigi still can't move after binding → Ghidra the player-switch routine
+
+---
+
 ## ROM / config facts
 - SMB ROM: `F:/Projects/nesrecomp/Super Mario Bros. (World).nes`
 - Mapper 0 (NROM-256), 2 PRG banks × 16KB, 1 CHR bank × 8KB (CHR ROM, read-only)
