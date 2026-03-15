@@ -4,10 +4,12 @@
 This is NOT an NES emulator. We translate 6502 machine code to C functions, compile them.
 
 **Game repos** consume this as a git submodule:
-- [FaxanaduRecomp](../FaxanaduRecomp/) — Faxanadu (Mapper 1/MMC1)
+- [FaxanaduRecomp](../FaxanaduRecomp/) — Faxanadu (Mapper 1/MMC1) — **use as boilerplate for new games**
 - [SuperMarioBrosRecomp](../SuperMarioBrosRecomp/) — Super Mario Bros. (Mapper 0)
 
 See `runner/runner.cmake` for how game projects consume the runner source list.
+When starting a new game, clone FaxanaduRecomp as a template — it has the simplest
+working `CMakeLists.txt`, `game.cfg`, and `extras.c` to copy from.
 
 ---
 
@@ -31,7 +33,7 @@ See `EXTRACTION.md` for bank extraction procedures per game.
 ---
 
 ## ████████████████████████████████████████████████████████████████
-## ██  RULE 1: NEVER TOUCH generated/*_full.c DIRECTLY          ██
+## ██  RULE 1: ALWAYS FIX THE TOOL, NEVER THE OUTPUT. ALWAYS.  ██
 ## ████████████████████████████████████████████████████████████████
 
 `generated/*_full.c` and `generated/*_dispatch.c` are BUILD ARTIFACTS.
@@ -39,6 +41,17 @@ See `EXTRACTION.md` for bank extraction procedures per game.
 **NEVER read them whole. NEVER modify them. NEVER patch them.**
 
 If generated code is wrong → fix `recompiler/src/code_generator.c` and regenerate.
+If runtime behavior is wrong → fix `runner/src/*.c` in nesrecomp.
+If a function is missing → add `extra_func` to the game's `game.cfg` and regenerate.
+
+**The recompiler and runner are the source of truth.** Game repos ONLY contain:
+- `game.cfg` (recompiler config)
+- `extras.c` (game-specific hooks)
+- `generated/` (regenerated, never hand-edited)
+
+Any bug fix that improves the framework belongs in nesrecomp, not in a game repo.
+Grep-and-sed on generated files is NEVER acceptable — it will be overwritten on
+the next regeneration and the fix will be silently lost.
 
 ---
 
@@ -90,6 +103,13 @@ Session resume after context clear: **say "Run the game."** Screenshot + Ghidra 
 ---
 
 ## How to Add a New Game
+
+**Quickstart:** Copy [FaxanaduRecomp](../FaxanaduRecomp/) as a boilerplate. It has
+the minimal working set of files: `CMakeLists.txt`, `game.cfg`, `extras.c`, and the
+nesrecomp submodule already wired up. Rename, update the CRC32 and game name in
+`extras.c`, adjust `game.cfg` for your ROM's mapper/dispatch, and regenerate.
+
+**From scratch:**
 
 1. Create `game.cfg` — tells recompiler the ROM layout, mapper, dispatch idioms.
 2. Create `extras.c` / `extras.h` implementing `game_extras.h` (see `runner/include/game_extras.h`).
