@@ -12,6 +12,7 @@
 
 CPU6502State g_cpu;
 uint8_t      g_ram[0x0800];
+uint8_t      g_sram[0x2000]; /* $6000-$7FFF battery-backed SRAM (8KB) */
 uint8_t      g_chr_ram[0x2000];
 int          g_chr_is_rom = 0;
 uint8_t      g_ppu_oam[0x100];
@@ -134,6 +135,7 @@ uint8_t nes_read(uint16_t addr) {
         if (addr == 0x4017) return 0x40; /* controller 2 not connected */
         return 0;
     }
+    if (addr >= 0x6000 && addr <= 0x7FFF) return g_sram[addr - 0x6000];
     if (addr >= 0x8000 && addr <= 0xBFFF) {
         const uint8_t *bank = mapper_get_switchable_bank();
         return bank ? bank[addr - 0x8000] : 0xFF;
@@ -168,6 +170,7 @@ void nes_write(uint16_t addr, uint8_t val) {
         return;
     }
     if (addr >= 0x4000 && addr <= 0x401F) { apu_write(addr, val); return; }
+    if (addr >= 0x6000 && addr <= 0x7FFF) { g_sram[addr - 0x6000] = val; return; }
     if (addr >= 0x8000) { mapper_write(addr, val); return; }
 }
 
