@@ -93,6 +93,22 @@ void maybe_trigger_vblank(void) {
     g_ppustatus = (g_ppustatus & ~0x40) | 0x80;
     g_spr0_split_active = 0;  /* reset per-frame split state */
     g_spr0_reads_ctr    = 0;  /* reset sprite-0 hit counter */
+    /* Reset scroll to (0,0) at VBlank start so the HUD region renders with
+     * correct scroll.  The NMI handler writes PPUCTRL ($2000) early for the
+     * HUD nametable but does NOT write PPUSCROLL ($2005) until after the
+     * sprite-0 wait.  Without this reset the HUD captures stale gameplay
+     * scroll values from the previous frame, causing flicker. */
+    g_ppuscroll_x = 0;
+    g_ppuscroll_y = 0;
+    g_scroll_latch = 0;
+    /* Pre-capture HUD scroll as (0,0) with nametable 0.  On the real NES the
+     * sprite-0 hit always fires (it's hardware).  Our counter-based sim can
+     * miss because $2002 reads during PPU data transfers contaminate the
+     * counter.  By pre-setting valid HUD values here, the renderer can fall
+     * back to these even when the counter doesn't trigger. */
+    g_ppuscroll_x_hud = 0;
+    g_ppuscroll_y_hud = 0;
+    g_ppuctrl_hud     = g_ppuctrl & ~0x03; /* nametable 0 for HUD region */
     /* Only fire NMI if $2000 bit7 (NMI enable) is set — gates init spin-waits correctly */
     if (g_ppuctrl & 0x80) nes_vblank_callback();
     s_vblank_firing = false;
@@ -162,6 +178,10 @@ uint16_t nes_read16zp(uint8_t zp) {
 
 void ppu_write_reg(uint16_t reg, uint8_t val) {
     ppu_trace_write(reg, val);
+    /* Any PPU write between $2002 reads means the read was a latch reset
+     * (e.g., LDA $2002; STA $2006), not a sprite-0 spin-wait poll.
+     * Reset the counter so only consecutive $2002 reads trigger the hit. */
+    g_spr0_reads_ctr = 0;
     switch (reg) {
         case 0x2000: g_ppuctrl = val; break;
         case 0x2001: g_ppumask = val; break;

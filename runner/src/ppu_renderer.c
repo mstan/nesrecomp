@@ -183,7 +183,20 @@ void ppu_render_frame(uint32_t *framebuf) {
          * Adding 9 gives the first scanline AFTER the sprite → clean 8px tile boundary.
          * For Faxanadu (sprite-0 Y=$17=23): split_y=32, keeping NT0 rows 0-3 in HUD
          * scroll (rows 0-1 blank spacer, rows 2-3 actual HUD tiles). */
-        int split_y = g_spr0_split_active ? ((int)(g_ppu_oam[0]) + 9) : 240;
+        /* On real NES, sprite-0 hit always fires when the sprite overlaps
+         * a non-transparent BG pixel — it's a hardware signal, not software.
+         * Our counter-based $2002 sim can miss, so fall back: if sprite 0 is
+         * on-screen and rendering is enabled, assume the split happens.
+         * HUD scroll values are pre-captured as (0,0) at VBlank start. */
+        int spr0_y  = (int)(g_ppu_oam[0]);
+        int split_y;
+        if (g_spr0_split_active) {
+            split_y = spr0_y + 9;
+        } else if (spr0_y > 0 && spr0_y < 200 && (g_ppumask & 0x18)) {
+            split_y = spr0_y + 9;
+        } else {
+            split_y = 240;
+        }
 
         /* MMC1 mirroring — look up once per frame, not per pixel */
         int mirroring = mapper_get_mirroring();
