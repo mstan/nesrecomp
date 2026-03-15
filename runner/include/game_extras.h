@@ -17,8 +17,11 @@ const char *game_get_name(void);
 /* Called once after ROM is loaded and runtime_init() completes */
 void game_on_init(void);
 
-/* Called every VBlank, before rendering */
+/* Called every VBlank, before NMI runs */
 void game_on_frame(uint64_t frame_count);
+
+/* Called every VBlank, after NMI runs (nametable is up-to-date) */
+void game_post_nmi(uint64_t frame_count);
 
 /*
  * Handle a game-specific CLI argument.

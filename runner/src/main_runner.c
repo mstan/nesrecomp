@@ -366,7 +366,7 @@ void nes_vblank_callback(void) {
     static uint64_t s_cb_count = 0;
     if (s_cb_count == 0) { /* debug_log_open(); */ }
     s_cb_count++;
-    if (s_cb_count <= 100 || s_cb_count % 60 == 0)
+    if (s_debug && (s_cb_count <= 100 || s_cb_count % 60 == 0))
         printf("[VBlank] callback #%llu frame=%llu\n",
                (unsigned long long)s_cb_count, (unsigned long long)g_frame_count);
 
@@ -453,6 +453,8 @@ void nes_vblank_callback(void) {
                    pre_0774, g_ram[0x774], pre_0779, g_ram[0x779], g_ppumask);
     }
 
+    game_post_nmi(g_frame_count);
+
     /* Generate one frame of audio after NMI (APU registers now up-to-date).
      * Skip in turbo mode — queued audio would pile up faster than it drains. */
     if (s_audio_dev && !g_turbo) {
@@ -512,8 +514,8 @@ void nes_vblank_callback(void) {
         if (ec >= 0) exit(ec);
     }
 
-    /* Rotating screenshot every 60 frames */
-    if (g_frame_count % 60 == 0) {
+    /* Rotating screenshot every 60 frames (debug mode only) */
+    if (s_debug && g_frame_count % 60 == 0) {
         save_screenshot();
     }
     g_frame_count++;

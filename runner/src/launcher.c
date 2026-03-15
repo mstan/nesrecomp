@@ -135,7 +135,7 @@ int main(int argc, char *argv[]) {
     static char rom_path[512];
     uint32_t expected_crc = game_get_expected_crc32();
 
-    if (argc >= 2) {
+    if (argc >= 2 && argv[1][0] != '-') {
         /* Backwards-compatible: ROM path given on command line */
         strncpy(rom_path, argv[1], sizeof(rom_path) - 1);
         /* Still verify CRC, but don't re-prompt on mismatch — just warn */
@@ -170,12 +170,15 @@ int main(int argc, char *argv[]) {
         printf("[Launcher] ROM: %s\n", rom_path);
     }
 
-    /* Re-build argv so that argv[1] == rom_path for the runner */
+    /* Re-build argv so that argv[1] == rom_path for the runner.
+     * If argv[1] was the ROM path, extra args start at index 2.
+     * If argv[1] was a flag (starts with '-'), forward all args from index 1. */
     char *new_argv[64];
     int new_argc = 0;
+    int extra_start = (argc >= 2 && argv[1][0] != '-') ? 2 : 1;
     new_argv[new_argc++] = argv[0];
     new_argv[new_argc++] = rom_path;
-    for (int i = 2; i < argc && new_argc < 63; i++)
+    for (int i = extra_start; i < argc && new_argc < 63; i++)
         new_argv[new_argc++] = argv[i];
     new_argv[new_argc] = NULL;
 
