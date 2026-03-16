@@ -485,6 +485,48 @@ render_sprites:
         }
     }
 
+    /* ---- Extended OAM: widescreen right-margin sprites ----
+     * Drawn from g_ppu_oam_ext, which was captured by sprite runahead with
+     * the camera shifted right by 256px.  Buffer X = OAM_X + 256 + widescreen_left. */
+    if (g_ext_oam_valid && g_widescreen_right > 0) {
+        for (int s = 63; s >= 0; s--) {
+            uint8_t spr_y    = g_ppu_oam_ext[s * 4 + 0];
+            uint8_t spr_tile = g_ppu_oam_ext[s * 4 + 1];
+            uint8_t spr_attr = g_ppu_oam_ext[s * 4 + 2];
+            uint8_t spr_x    = g_ppu_oam_ext[s * 4 + 3];
+
+            if (spr_y >= 0xEF) continue;
+            /* Skip HUD-region sprites (coin icon, etc.) — only draw gameplay sprites */
+            if (spr_y < 32) continue;
+
+            int flip_h   = (spr_attr >> 6) & 1;
+            int flip_v   = (spr_attr >> 7) & 1;
+            int priority = (spr_attr >> 5) & 1;
+            int spr_pal  = (spr_attr & 0x03) + 4;
+
+            for (int row = 0; row < 8; row++) {
+                int draw_row = flip_v ? (7 - row) : row;
+                int py = spr_y + 1 + row;
+                if (py < 0 || py >= 240) continue;
+
+                int chr_off = spr_chr_base + spr_tile * 16 + draw_row;
+                uint8_t lo = g_chr_ram[chr_off];
+                uint8_t hi = g_chr_ram[chr_off + 8];
+
+                for (int bit = 7; bit >= 0; bit--) {
+                    int chr_bit = flip_h ? (7 - bit) : bit;
+                    int px = (int)spr_x + (7 - bit) + 256 + g_widescreen_left;
+                    if (px < 0 || px >= g_render_width) continue;
+                    int color_idx = ((lo >> chr_bit) & 1) | (((hi >> chr_bit) & 1) << 1);
+                    if (color_idx == 0) continue;
+                    if (priority && framebuf[py * g_render_width + px] != bg) continue;
+                    uint8_t nes_color = g_ppu_pal[(spr_pal * 4 + color_idx) & 0x1F] & 0x3F;
+                    framebuf[py * g_render_width + px] = NES_PALETTE[nes_color];
+                }
+            }
+        }
+    }
+
     /* ---- Edge vignette: darken outermost 24px at each screen edge ----
      * Only the very edge pixels are darkened (quadratic falloff), NOT the
      * entire margin. Most of the extended view stays at full brightness. */

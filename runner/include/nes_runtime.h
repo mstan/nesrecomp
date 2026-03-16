@@ -123,6 +123,14 @@ extern uint8_t g_shadow_nt[0x1000];
 extern int     g_shadow_nt_valid;
 extern int     g_runahead_mode;  /* when set, PPU $2007 writes go to g_shadow_nt */
 
+/* Extended OAM for widescreen sprite runahead.  Filled by game extras by
+ * running the game engine with a shifted camera so entities at screen_x 256+
+ * get rendered into the 0-255 OAM range.  The renderer draws these at
+ * OAM_X + 256 + g_widescreen_left. */
+extern uint8_t g_ppu_oam_ext[0x100];
+extern int     g_ext_oam_valid;
+extern int     g_suppress_vblank;  /* when set, maybe_trigger_vblank() is a no-op */
+
 /* PPU latch save/restore for runahead state preservation */
 void runtime_get_latch_state(uint8_t *ppuaddr_latch, uint8_t *scroll_latch);
 void runtime_set_latch_state(uint8_t ppuaddr_latch, uint8_t scroll_latch);
