@@ -14,6 +14,7 @@
 #define GAME_CFG_MAX_SPLIT_TABLES     16
 #define GAME_CFG_MAX_EXTRA_FUNCS      32
 #define GAME_CFG_MAX_INLINE_DISPATCHES 8
+#define GAME_CFG_MAX_RAM_READ_HOOKS   16
 
 /*
  * Trampoline: a JSR whose operand address is a known bank-switch dispatch
@@ -74,6 +75,18 @@ typedef struct {
     uint16_t addr;  /* JSR target (the dispatch routine) */
 } InlineDispatch;
 
+/*
+ * RAM read hook: when the generated code reads from this address via
+ * absolute addressing, wrap the value through game_ram_read_hook(pc, addr, val).
+ * This lets game-specific extras.c adjust the returned value per-call-site.
+ *
+ * Usage in game.cfg:  ram_read_hook <hex_addr>
+ * Example (SMB):      ram_read_hook 071D
+ */
+typedef struct {
+    uint16_t addr;
+} RamReadHook;
+
 typedef struct {
     char            output_prefix[64];  /* e.g. "faxanadu" → generated/faxanadu_full.c */
     char            annotations_path[512]; /* override for annotations.csv */
@@ -92,6 +105,9 @@ typedef struct {
 
     InlineDispatch  inline_dispatches[GAME_CFG_MAX_INLINE_DISPATCHES];
     int             inline_dispatch_count;
+
+    RamReadHook     ram_read_hooks[GAME_CFG_MAX_RAM_READ_HOOKS];
+    int             ram_read_hook_count;
 } GameConfig;
 
 /* Initialize to empty (no dispatch tables, prefix derived from ROM name) */

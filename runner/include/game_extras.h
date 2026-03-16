@@ -47,3 +47,16 @@ uint32_t game_get_expected_crc32(void);
  * or return 0 to fall through to the dispatch miss log.
  */
 int game_dispatch_override(uint16_t addr);
+
+/*
+ * RAM read hook — called from generated code when a ram_read_hook address
+ * is read via absolute addressing mode. Allows game-specific extras.c to
+ * adjust the value per call-site (identified by the 6502 PC).
+ * Default: return val unchanged.
+ *
+ * pc   = 6502 program counter of the reading instruction
+ * addr = RAM address being read
+ * val  = raw value from nes_read()
+ * Returns: (possibly adjusted) value to use
+ */
+uint8_t game_ram_read_hook(uint16_t pc, uint16_t addr, uint8_t val);
