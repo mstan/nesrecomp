@@ -731,6 +731,9 @@ void nesrecomp_runner_run(int argc, char *argv[]) {
         }
     }
 
+    /* Raise main game window above debug windows */
+    SDL_RaiseWindow(s_window);
+
     printf("[Runner] Starting RESET handler (NMI fires via VBlank callback)...\n");
 
     /* func_RESET() is the game's main loop — it never returns.

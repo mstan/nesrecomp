@@ -16,6 +16,7 @@ typedef struct {
 
 extern CPU6502State g_cpu;
 extern uint8_t      g_ram[0x0800];     /* 2KB work RAM */
+extern uint8_t      g_sram[0x2000];    /* 8KB battery-backed SRAM ($6000-$7FFF) */
 extern uint8_t      g_chr_ram[0x2000]; /* 8KB CHR RAM/ROM */
 extern int          g_chr_is_rom;      /* 1 = CHR ROM (ignore $2007 writes to $0000-$1FFF) */
 extern uint8_t      g_ppu_oam[0x100];  /* 64 sprites x 4 bytes */

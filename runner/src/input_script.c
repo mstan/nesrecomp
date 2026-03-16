@@ -2,6 +2,7 @@
  * input_script.c — NES input script playback and recording
  */
 #include "input_script.h"
+#include "nes_runtime.h"
 #include "savestate.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -32,6 +33,8 @@ typedef enum {
     CMD_TURBO_ON, CMD_TURBO_OFF,
     CMD_SCREENSHOT, CMD_LOG, CMD_EXIT,
     CMD_WAIT_RAM8, CMD_ASSERT_RAM8,
+    CMD_WRITE_RAM8, CMD_WRITE_SRAM8,
+    CMD_DUMP_RAM,
     CMD_SAVE_STATE, CMD_LOAD_STATE,
 } CmdType;
 
@@ -120,6 +123,19 @@ int script_load(const char *path) {
                     if (*p == ' ') { skip++; while(*p == ' ') p++; break; }
                 strncpy(c.sarg, p, sizeof(c.sarg)-1);
             }
+        } else if (strcmp(tok, "WRITE_RAM8") == 0 && n >= 3) {
+            c.type = CMD_WRITE_RAM8;
+            c.iarg = (int)strtol(arg1, NULL, 16) & 0x7FF;
+            c.barg = (uint8_t)strtol(arg2, NULL, 16);
+        } else if (strcmp(tok, "DUMP_RAM") == 0 && n >= 3) {
+            c.type = CMD_DUMP_RAM;
+            c.iarg = (int)strtol(arg1, NULL, 16) & 0x7FF;
+            c.barg = (uint8_t)strtol(arg2, NULL, 16); /* length (up to 256) */
+            if (n >= 4) strncpy(c.sarg, arg2, sizeof(c.sarg)-1);
+        } else if (strcmp(tok, "WRITE_SRAM8") == 0 && n >= 3) {
+            c.type = CMD_WRITE_SRAM8;
+            c.iarg = (int)strtol(arg1, NULL, 16) & 0x1FFF;
+            c.barg = (uint8_t)strtol(arg2, NULL, 16);
         } else if (strcmp(tok, "SAVE_STATE") == 0 && n >= 2) {
             c.type = CMD_SAVE_STATE;
             strncpy(c.sarg, arg1, sizeof(c.sarg)-1);
@@ -234,6 +250,25 @@ void script_tick(uint64_t frame, const uint8_t *ram) {
                 else
                     printf("[Script] ASSERT OK: $%03X==%02X %s\n",
                            c->iarg, c->barg, c->sarg);
+                break;
+            }
+            case CMD_WRITE_RAM8:
+                g_ram[c->iarg & 0x7FF] = c->barg;
+                printf("[Script] WRITE_RAM8 $%03X=%02X\n", c->iarg, c->barg);
+                break;
+            case CMD_WRITE_SRAM8:
+                g_sram[c->iarg & 0x1FFF] = c->barg;
+                printf("[Script] WRITE_SRAM8 $%04X=%02X\n", 0x6000 + c->iarg, c->barg);
+                break;
+            case CMD_DUMP_RAM: {
+                int start = c->iarg & 0x7FF;
+                int len = c->barg ? c->barg : 0x100;
+                printf("[Script] DUMP_RAM $%03X-%03X:", start, start + len - 1);
+                for (int i = 0; i < len && (start + i) < 0x800; i++) {
+                    if (i % 16 == 0) printf("\n  $%03X:", start + i);
+                    printf(" %02X", ram[start + i]);
+                }
+                printf("\n");
                 break;
             }
             default: break;

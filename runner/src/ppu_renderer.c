@@ -230,10 +230,13 @@ void ppu_render_frame(uint32_t *framebuf) {
         int mirroring = mapper_get_mirroring();
 
         for (int sy = 0; sy < 240; sy++) {
-            /* Choose scroll source for this scanline */
-            uint8_t ppuctrl_row = (sy < split_y) ? g_ppuctrl_hud  : g_ppuctrl;
-            int     scroll_x    = (sy < split_y) ? g_ppuscroll_x_hud : g_ppuscroll_x;
-            int     scroll_y    = (sy < split_y) ? g_ppuscroll_y_hud : g_ppuscroll_y;
+            /* Choose scroll source for this scanline.
+             * When split_y==240 (no sprite-0 split), use main game scroll for
+             * all scanlines — the HUD values are stale (0,0) from VBlank reset. */
+            int use_hud = (split_y < 240 && sy < split_y);
+            uint8_t ppuctrl_row = use_hud ? g_ppuctrl_hud  : g_ppuctrl;
+            int     scroll_x    = use_hud ? g_ppuscroll_x_hud : g_ppuscroll_x;
+            int     scroll_y    = use_hud ? g_ppuscroll_y_hud : g_ppuscroll_y;
 
             /* BG pattern table: PPUCTRL bit 4 selects $0000 or $1000 */
             int chr_base = (ppuctrl_row & 0x10) ? 0x1000 : 0x0000;

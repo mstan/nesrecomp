@@ -5,6 +5,7 @@
 #include "mapper.h"
 #include "logger.h"
 #include "apu.h"
+#include "game_extras.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -66,6 +67,7 @@ static void ppu_trace_write(uint16_t reg, uint8_t val) {
 void runtime_init(void) {
     memset(&g_cpu, 0, sizeof(g_cpu));
     memset(g_ram,     0, sizeof(g_ram));
+    memset(g_sram, 0xFF, sizeof(g_sram)); /* fresh battery SRAM = all 0xFF */
     if (!g_chr_is_rom) memset(g_chr_ram, 0, sizeof(g_chr_ram));
     memset(g_ppu_oam, 0, sizeof(g_ppu_oam));
     memset(g_ppu_pal, 0, sizeof(g_ppu_pal));
@@ -309,6 +311,8 @@ uint16_t g_miss_unique_addrs[MAX_MISS_UNIQUE];
 int      g_miss_unique_count = 0;
 
 void nes_log_dispatch_miss(uint16_t addr) {
+    /* Let the game handle unmapped addresses (e.g. SRAM code remapping) */
+    if (game_dispatch_override(addr)) return;
     static uint32_t last = 0xFFFFFFFF;
     uint32_t key = ((uint32_t)g_current_bank << 16) | addr;
     if (key != last) {

@@ -40,3 +40,10 @@ const char *game_arg_usage(void);
  * Return 0 to skip verification.
  */
 uint32_t game_get_expected_crc32(void);
+
+/*
+ * Called when call_by_address has no entry for the given address.
+ * The game can handle the call (e.g. SRAM code remapping) and return 1,
+ * or return 0 to fall through to the dispatch miss log.
+ */
+int game_dispatch_override(uint16_t addr);
