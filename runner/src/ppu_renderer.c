@@ -278,16 +278,27 @@ void ppu_render_frame(uint32_t *framebuf) {
                             continue;
                         }
                     }
-                    /* Right margin: must have shadow NT data */
-                    if (sx >= 256 && !g_shadow_nt_valid) {
-                        framebuf[sy * g_render_width + wx] = bg;
-                        continue;
+                    /* Right margin: use game-written data if fresh,
+                     * otherwise fall back to runahead shadow NT.
+                     * This "reconciler" ensures near-margin columns use the
+                     * game's own nametable (which is pixel-accurate), while
+                     * far-margin columns use runahead lookahead data. */
+                    if (sx >= 256) {
+                        if (g_nt_col_gen[tile_x & 63] != g_nt_generation
+                            && !g_shadow_nt_valid) {
+                            framebuf[sy * g_render_width + wx] = bg;
+                            continue;
+                        }
                     }
                 }
 
-                /* Choose nametable source: shadow for right margin, real otherwise */
+                /* Choose nametable source per-column:
+                 * - Right margin with fresh game data → g_ppu_nt
+                 * - Right margin with stale game data → g_shadow_nt (runahead)
+                 * - Everything else → g_ppu_nt */
                 const uint8_t *nt_src = g_ppu_nt;
-                if (sx >= 256 && g_shadow_nt_valid)
+                if (sx >= 256 && g_shadow_nt_valid
+                    && g_nt_col_gen[tile_x & 63] != g_nt_generation)
                     nt_src = g_shadow_nt;
 
                 int nt_col    = (tile_x >= 32) ? 1 : 0;
