@@ -260,22 +260,35 @@ void ppu_render_frame(uint32_t *framebuf) {
                 int tile_x    = nt_x / 8;
                 int pixel_col = nt_x % 8;
 
-                /* Widescreen margin clamping.  Uses the absolute world scroll
-                 * position (g_ws_world_scroll, set by game extras) to determine
-                 * which margin pixels have valid nametable data.
-                 *
-                 * Left margin:  blank where world_x < 0 (before level start)
-                 * Right margin: blank where sx > 271 (beyond game's ~16px write
-                 *               cursor ahead of viewport)
-                 * Both margins: blank columns not yet written (generation check) */
+                /* Widescreen margin clamping.
+                 * Left margin:  blank where world_x < 0 (before level start),
+                 *               otherwise use g_ppu_nt (recently-passed tiles).
+                 * Right margin: use g_shadow_nt (runahead data) if available,
+                 *               otherwise blank. */
                 if (sx < 0 || sx >= 256) {
                     int world_x = g_ws_world_scroll + sx;
-                    if (world_x < 0 || sx > 271 ||
-                        g_nt_col_gen[tile_x & 63] != g_nt_generation) {
+                    if (world_x < 0) {
+                        framebuf[sy * g_render_width + wx] = bg;
+                        continue;
+                    }
+                    /* Left margin: use real NT with generation check */
+                    if (sx < 0) {
+                        if (g_nt_col_gen[tile_x & 63] != g_nt_generation) {
+                            framebuf[sy * g_render_width + wx] = bg;
+                            continue;
+                        }
+                    }
+                    /* Right margin: must have shadow NT data */
+                    if (sx >= 256 && !g_shadow_nt_valid) {
                         framebuf[sy * g_render_width + wx] = bg;
                         continue;
                     }
                 }
+
+                /* Choose nametable source: shadow for right margin, real otherwise */
+                const uint8_t *nt_src = g_ppu_nt;
+                if (sx >= 256 && g_shadow_nt_valid)
+                    nt_src = g_shadow_nt;
 
                 int nt_col    = (tile_x >= 32) ? 1 : 0;
                 int local_tx  = tile_x % 32;
@@ -292,10 +305,10 @@ void ppu_render_frame(uint32_t *framebuf) {
                 }
                 int nt_off = phys_nt * 0x400;
 
-                uint8_t tile_id = g_ppu_nt[(nt_off + local_ty * 32 + local_tx) & 0x0FFF];
+                uint8_t tile_id = nt_src[(nt_off + local_ty * 32 + local_tx) & 0x0FFF];
 
                 int attr_bx = local_tx / 4, attr_by = local_ty / 4;
-                uint8_t attr = g_ppu_nt[(nt_off + 0x3C0 + attr_by * 8 + attr_bx) & 0x0FFF];
+                uint8_t attr = nt_src[(nt_off + 0x3C0 + attr_by * 8 + attr_bx) & 0x0FFF];
                 int sub_x = (local_tx / 2) & 1, sub_y = (local_ty / 2) & 1;
                 int pal_base = (attr >> ((sub_y * 2 + sub_x) * 2)) & 0x03;
 

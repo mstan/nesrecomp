@@ -90,6 +90,11 @@ uint32_t g_nt_col_gen[64] = {0};
 /* ---- World scroll (absolute, set by game extras) ---- */
 int g_ws_world_scroll = 0;
 
+/* ---- Shadow nametable for widescreen runahead ---- */
+uint8_t g_shadow_nt[0x1000];
+int     g_shadow_nt_valid = 0;
+int     g_runahead_mode   = 0;  /* when set, PPU $2007 writes go to g_shadow_nt */
+
 /* ---- Controller state ---- */
 uint8_t g_controller1_buttons = 0;
 static uint8_t s_ctrl1_shift   = 0;
@@ -262,26 +267,33 @@ void ppu_write_reg(uint16_t reg, uint8_t val) {
         case 0x2007: {
             uint16_t a = g_ppuaddr & 0x3FFF;
             if (a >= 0x3F00) {
-                /* NES palette mirror: $3F10/$3F14/$3F18/$3F1C share storage
-                 * with $3F00/$3F04/$3F08/$3F0C (transparent color slots). */
-                uint8_t idx = a & 0x1F;
-                if (idx == 0x10 || idx == 0x14 || idx == 0x18 || idx == 0x1C)
-                    idx &= 0x0F;
-                g_ppu_pal[idx] = val;
+                if (!g_runahead_mode) {
+                    /* NES palette mirror: $3F10/$3F14/$3F18/$3F1C share storage
+                     * with $3F00/$3F04/$3F08/$3F0C (transparent color slots). */
+                    uint8_t idx = a & 0x1F;
+                    if (idx == 0x10 || idx == 0x14 || idx == 0x18 || idx == 0x1C)
+                        idx &= 0x0F;
+                    g_ppu_pal[idx] = val;
+                }
             } else if (a >= 0x2000) {
                 int nt_off = a & 0x0FFF;
-                g_ppu_nt[nt_off] = val;
-                /* Stamp column freshness for widescreen stale-tile detection */
-                int vnt = nt_off / 0x400;
-                int local = nt_off % 0x400;
-                int col_base = (vnt & 1) * 32;
-                if (local < 960) {
-                    g_nt_col_gen[col_base + (local % 32)] = g_nt_generation;
+                if (g_runahead_mode) {
+                    /* Runahead: redirect nametable writes to shadow NT */
+                    g_shadow_nt[nt_off] = val;
                 } else {
-                    /* Attribute byte covers a 4-column block */
-                    int ab = (local - 960) % 8;
-                    for (int c = ab * 4; c < ab * 4 + 4 && c < 32; c++)
-                        g_nt_col_gen[col_base + c] = g_nt_generation;
+                    g_ppu_nt[nt_off] = val;
+                    /* Stamp column freshness for widescreen stale-tile detection */
+                    int vnt = nt_off / 0x400;
+                    int local = nt_off % 0x400;
+                    int col_base = (vnt & 1) * 32;
+                    if (local < 960) {
+                        g_nt_col_gen[col_base + (local % 32)] = g_nt_generation;
+                    } else {
+                        /* Attribute byte covers a 4-column block */
+                        int ab = (local - 960) % 8;
+                        for (int c = ab * 4; c < ab * 4 + 4 && c < 32; c++)
+                            g_nt_col_gen[col_base + c] = g_nt_generation;
+                    }
                 }
             }
             else if (!g_chr_is_rom) {

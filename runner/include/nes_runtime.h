@@ -80,6 +80,7 @@ void maybe_trigger_vblank(void);
 extern uint8_t g_ppuctrl;
 extern uint8_t g_ppumask;
 extern uint8_t g_ppustatus;
+extern uint16_t g_ppuaddr;
 extern uint8_t g_ppuscroll_x;
 extern uint8_t g_ppuscroll_y;
 
@@ -114,6 +115,17 @@ extern uint32_t g_nt_col_gen[64];
  * frame from game RAM.  Used by the renderer to clamp widescreen margins:
  * left margin blanked where world_x < 0, right blanked beyond write cursor. */
 extern int g_ws_world_scroll;
+
+/* Shadow nametable for widescreen runahead.  Filled by game extras each frame
+ * by running the column-write pipeline ahead.  The renderer uses this for
+ * right-margin pixels (sx >= 256) instead of g_ppu_nt. */
+extern uint8_t g_shadow_nt[0x1000];
+extern int     g_shadow_nt_valid;
+extern int     g_runahead_mode;  /* when set, PPU $2007 writes go to g_shadow_nt */
+
+/* PPU latch save/restore for runahead state preservation */
+void runtime_get_latch_state(uint8_t *ppuaddr_latch, uint8_t *scroll_latch);
+void runtime_set_latch_state(uint8_t ppuaddr_latch, uint8_t scroll_latch);
 
 /* Current switchable PRG bank (set by mapper_write) */
 extern int g_current_bank;
