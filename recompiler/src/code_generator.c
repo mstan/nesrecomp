@@ -104,7 +104,7 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                             uint16_t pc, uint16_t func_base, int fixed_bank,
                             const FunctionList *funcs,
                             const uint16_t *valid_starts, int valid_count,
-                            const GameConfig *cfg) {
+                            const GameConfig *cfg, int sram_sourced) {
     uint8_t opcode = rom_read(rom, bank, pc);
     const OpcodeEntry *e = &g_opcode_table[opcode];
     uint8_t op1 = (e->size > 1) ? rom_read(rom, bank, pc+1) : 0;
@@ -414,9 +414,12 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
             if (abs16 >= 0xC000) {
                 fprintf(f, "func_%04X();\n", abs16);
             } else if (abs16 >= 0x8000) {
-                if (bank == fixed_bank) {
-                    /* Cross-bank call from fixed bank: bank is determined at
-                     * runtime by the mapper, so dispatch via call_by_address. */
+                if (bank == fixed_bank || sram_sourced) {
+                    /* Cross-bank call from fixed bank, OR call from SRAM-sourced
+                     * function: bank is determined at runtime by the mapper, so
+                     * dispatch via call_by_address.  SRAM functions run from RAM
+                     * and bank-switch during execution, so JSR targets in the
+                     * switchable bank range must use dynamic dispatch. */
                     fprintf(f, "call_by_address(0x%04X);\n", abs16);
                 } else {
                     fprintf(f, "func_%04X_b%d();\n", abs16, bank);
@@ -441,7 +444,7 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                         fprintf(f, "maybe_trigger_vblank(); func_%04X(); return;\n", abs16);
                     }
                 } else if (abs16 >= 0x8000) {
-                    if (bank == fixed_bank) {
+                    if (bank == fixed_bank || sram_sourced) {
                         fprintf(f, "maybe_trigger_vblank(); call_by_address(0x%04X); return;\n", abs16);
                     } else if (abs16 == func_base && pc == func_base) {
                         /* JMP $self at function start: true idle spin. */
@@ -571,12 +574,25 @@ static bool is_branch_target(const NESRom *rom, int bank,
     return false;
 }
 
+/* Check if a function address+bank falls within an SRAM-to-ROM mapped region.
+ * SRAM functions run from RAM and bank-switch during execution, so JSR calls
+ * to the switchable bank range ($8000-$BFFF) must use dynamic dispatch. */
+static int is_sram_sourced(const GameConfig *cfg, int bank, uint16_t addr) {
+    for (int i = 0; i < cfg->sram_map_count; i++) {
+        const SramMap *m = &cfg->sram_maps[i];
+        if (bank == m->bank && addr >= m->rom_start && addr < m->rom_start + m->size)
+            return 1;
+    }
+    return 0;
+}
+
 static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
                           const FunctionList *funcs, const AnnotationTable *at,
                           const GameConfig *cfg) {
     int fixed_bank = rom->prg_banks - 1;
     int bank = fe->bank;
     uint16_t pc = fe->addr;
+    int sram_sourced = is_sram_sourced(cfg, bank, fe->addr);
 
     /* Function-level annotation (appears before the signature) */
     const char *fann = annotation_lookup(at, bank, pc);
@@ -757,7 +773,7 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
         }
 
         int consumed = emit_instruction(f, rom, bank, cursor, pc, fixed_bank, funcs,
-                                        valid_starts, valid_count, cfg);
+                                        valid_starts, valid_count, cfg, sram_sourced);
 
         /* If this PHA is immediately followed by a branch-target RTS, the fall-through path
          * must dispatch now (before reaching the RTS label, which is bypassed by branches).

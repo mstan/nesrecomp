@@ -416,11 +416,10 @@ void nes_vblank_callback(void) {
     /* Log per-frame state BEFORE NMI runs */
     debug_log_frame(s_cb_count);
 
-    /* Debug: dump NMI gate variables */
-    if (s_cb_count <= 5)
-        printf("[NMI_pre] frame=%llu $10=%02X $13=%02X $14=%02X $1A=%02X $0B=%02X\n",
-               (unsigned long long)g_frame_count,
-               g_ram[0x10], g_ram[0x13], g_ram[0x14], g_ram[0x1A], g_ram[0x0B]);
+    if (s_debug) {
+        log_on_change("$12_mode", g_ram[0x12]);
+        log_on_change("$EB_room", g_ram[0xEB]);
+    }
     /* Clear sprite-0 hit (bit6) and sprite-overflow (bit5) at frame start.
      * Real NES clears all three status bits at pre-render scanline. */
     g_ppustatus &= ~0x60;
@@ -441,16 +440,7 @@ void nes_vblank_callback(void) {
                                    (g_cpu.D<<3)|(g_cpu.I<<2)|(g_cpu.Z<<1)|g_cpu.C);
         g_ram[0x100+g_cpu.S] = 0x00;   g_cpu.S--;
         g_ram[0x100+g_cpu.S] = p_save; g_cpu.S--;
-        /* DEBUG: log NMI gate state when nodisplay first clears */
-        uint8_t pre_0779 = g_ram[0x779];
-        uint8_t pre_0774 = g_ram[0x774];
         func_NMI();
-        if (s_cb_count <= 5) printf("[VBlank] NMI returned ok\n");
-        if (g_ram[0x779] != pre_0779 || (pre_0774 != 0 && g_ram[0x774] == 0) ||
-            (pre_0774 == 0 && s_cb_count <= 40))
-            printf("[NMI_dbg] frame=%llu $0774_pre=%02X->%02X $0779=%02X->%02X ppumask=%02X\n",
-                   (unsigned long long)g_frame_count,
-                   pre_0774, g_ram[0x774], pre_0779, g_ram[0x779], g_ppumask);
     }
 
     game_post_nmi(g_frame_count);
@@ -655,15 +645,18 @@ void nesrecomp_runner_run(int argc, char *argv[]) {
     {
         char window_title[64];
         snprintf(window_title, sizeof(window_title), "NESRecomp - %s", game_get_name());
+        Uint32 win_flags = s_script_path ? SDL_WINDOW_MINIMIZED : SDL_WINDOW_SHOWN;
         s_window = SDL_CreateWindow(window_title,
             SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
             768, 720,
-            SDL_WINDOW_SHOWN);
+            win_flags);
     }
     if (!s_window) {
         fprintf(stderr, "SDL_CreateWindow: %s\n", SDL_GetError());
         exit(1);
     }
+    /* Game window always on top; debug windows stay beneath */
+    SDL_SetWindowAlwaysOnTop(s_window, SDL_TRUE);
 
     s_renderer = SDL_CreateRenderer(s_window, -1,
         SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
@@ -690,7 +683,7 @@ void nesrecomp_runner_run(int argc, char *argv[]) {
             "OAM Debug",
             SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
             512, 512,   /* 256x256 content at 2x display scale */
-            SDL_WINDOW_SHOWN
+            s_script_path ? SDL_WINDOW_MINIMIZED : SDL_WINDOW_SHOWN
         );
         if (s_dbg_window) {
             s_dbg_renderer = SDL_CreateRenderer(s_dbg_window, -1,
@@ -721,7 +714,7 @@ void nesrecomp_runner_run(int argc, char *argv[]) {
             "RAM Watch",
             SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
             WATCH_W, wh,
-            SDL_WINDOW_SHOWN
+            s_script_path ? SDL_WINDOW_MINIMIZED : SDL_WINDOW_SHOWN
         );
         if (s_watch_window) {
             s_watch_renderer = SDL_CreateRenderer(s_watch_window, -1,
