@@ -36,7 +36,7 @@ static const char *s_loadstate_path = NULL;
 static SDL_Window        *s_window    = NULL;
 static SDL_Renderer      *s_renderer  = NULL;
 static SDL_Texture       *s_texture   = NULL;
-static uint32_t           s_framebuf[427 * 240];  /* max widescreen (16:9) */
+static uint32_t           s_framebuf[560 * 240];  /* max widescreen (21:9) */
 
 /* ---- OAM debug window (--debug flag) ---- */
 static int                s_debug         = 0;
@@ -378,8 +378,11 @@ void nes_vblank_callback(void) {
         if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_F5)
             g_turbo ^= 1;
         if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_F8) {
-            /* Toggle widescreen: 4:3 ↔ 16:9 */
-            AspectRatio next = (g_aspect_ratio == ASPECT_4_3) ? ASPECT_16_9 : ASPECT_4_3;
+            /* Cycle widescreen: 4:3 → 16:9 → 21:9 → 4:3 */
+            AspectRatio next;
+            if      (g_aspect_ratio == ASPECT_4_3)  next = ASPECT_16_9;
+            else if (g_aspect_ratio == ASPECT_16_9) next = ASPECT_21_9;
+            else                                     next = ASPECT_4_3;
             widescreen_set(next);
             SDL_SetWindowSize(s_window, g_render_width * 3, 720);
             SDL_DestroyTexture(s_texture);
@@ -388,9 +391,9 @@ void nes_vblank_callback(void) {
                 SDL_TEXTUREACCESS_STREAMING,
                 g_render_width, 240);
             SDL_RenderSetLogicalSize(s_renderer, g_render_width, 240);
+            const char *names[] = { "4:3", "16:9", "21:9" };
             printf("[Widescreen] Switched to %s (%dx240)\n",
-                   next == ASPECT_4_3 ? "4:3" : "16:9",
-                   g_render_width);
+                   names[next], g_render_width);
         }
         if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_F6)
             savestate_save("C:/temp/quicksave.sav");
@@ -624,7 +627,8 @@ void nesrecomp_runner_run(int argc, char *argv[]) {
         else if (strcmp(argv[i], "--widescreen") == 0 && i+1 < argc) {
             const char *ar = argv[++i];
             if (strcmp(ar, "16:9") == 0) widescreen_set(ASPECT_16_9);
-            else fprintf(stderr, "[Widescreen] Unknown aspect ratio: %s (use 16:9)\n", ar);
+            else if (strcmp(ar, "21:9") == 0) widescreen_set(ASPECT_21_9);
+            else fprintf(stderr, "[Widescreen] Unknown aspect ratio: %s (use 16:9 or 21:9)\n", ar);
         }
         else {
             /* Offer remaining args to the game-specific handler */

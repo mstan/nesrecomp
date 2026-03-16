@@ -75,6 +75,11 @@ void widescreen_set(AspectRatio ar) {
             g_widescreen_left  = 86;
             g_widescreen_right = 85;
             break;
+        case ASPECT_21_9:
+            g_render_width     = 560;
+            g_widescreen_left  = 152;
+            g_widescreen_right = 152;
+            break;
         default: /* ASPECT_4_3 */
             g_render_width     = 256;
             g_widescreen_left  = 0;
@@ -94,6 +99,11 @@ int g_ws_world_scroll = 0;
 uint8_t g_shadow_nt[0x1000];
 int     g_shadow_nt_valid = 0;
 int     g_runahead_mode   = 0;  /* when set, PPU $2007 writes go to g_shadow_nt */
+
+/* ---- Extended OAM for widescreen sprite runahead ---- */
+uint8_t g_ppu_oam_ext[0x100];
+int     g_ext_oam_valid    = 0;
+int     g_suppress_vblank  = 0;
 
 /* ---- Controller state ---- */
 uint8_t g_controller1_buttons = 0;
@@ -145,6 +155,7 @@ static bool s_vblank_firing = false;
 
 void maybe_trigger_vblank(void) {
     if (s_vblank_firing) return;
+    if (g_suppress_vblank) return;
     if (!g_turbo) {
         static uint32_t s_op_count = 0;
         if (++s_op_count < OPS_PER_VBLANK) return;
