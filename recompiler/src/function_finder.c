@@ -10,6 +10,9 @@
  * 6. Bank-aware: $C000-$FFFF = fixed bank 15; $8000-$BFFF = switchable
  *    For fixed bank analysis we walk bank 15 only (sufficient for RESET/NMI)
  *    Switchable bank code discovered via JSR from fixed bank
+ *
+ * Enhancement: Register state propagation tracks known A/X/Y values through
+ * the instruction stream to detect bank switches and resolve computed targets.
  */
 #include "function_finder.h"
 #include "cpu6502_decoder.h"
@@ -56,13 +59,20 @@ bool function_list_contains(const FunctionList *list, uint16_t addr, int bank) {
     return false;
 }
 
+/* Register propagation statistics */
+static int s_bank_switches_detected = 0;
+static int s_regprop_targeted_adds = 0;
+
 /* Walk one function starting at addr in the given bank context.
  * Returns number of instructions decoded.
  *
  * Pending-branch tracking: branches can jump forward past RTS/JMP into code
  * that's only reachable via that branch. We continue past stop instructions
  * while pending forward targets remain, so JSR calls in those sections are
- * discovered. */
+ * discovered.
+ *
+ * Register propagation: tracks known_a/x/y constant values to detect bank
+ * switches and provide precise bank context for target resolution. */
 static int walk_function(const NESRom *rom, FunctionList *list,
                          uint16_t start_addr, int switchable_bank,
                          const GameConfig *cfg) {
@@ -74,6 +84,13 @@ static int walk_function(const NESRom *rom, FunctionList *list,
     uint16_t pending[256];
     int pending_count = 0;
 
+    /* Register state propagation (known constant values, -1 = unknown) */
+    int known_a = -1, known_x = -1, known_y = -1;
+
+    /* Effective switchable bank — starts as the function's bank context,
+     * updated when a bank-switch call is detected with known A register. */
+    int effective_bank = switchable_bank;
+
     for (int i = 0; i < MAX_INSNS_PER_FUNC; i++) {
         /* Remove this address from pending now that we're visiting it */
         for (int p = 0; p < pending_count; p++) {
@@ -83,7 +100,8 @@ static int walk_function(const NESRom *rom, FunctionList *list,
             }
         }
 
-        /* Determine which bank to read from */
+        /* Determine which bank to read from (instruction decoding always
+         * uses the function's original bank, not effective_bank) */
         int read_bank = (pc >= 0xC000) ? fixed_bank : switchable_bank;
         if (pc < 0x8000) break; /* Not ROM */
 
@@ -94,6 +112,115 @@ static int walk_function(const NESRom *rom, FunctionList *list,
         if (entry->mnemonic == MN_ILLEGAL) {
             pc += 1;
             continue;
+        }
+
+        /* ── Register state propagation ────────────────────────────────
+         * Track known constant values in A, X, Y registers.
+         * JSR is excluded here — handled separately below for bank-switch
+         * detection before tainting. */
+        if (entry->mnemonic != MN_JSR) {
+            uint8_t operand8 = (entry->size >= 2) ?
+                rom_read(rom, read_bank, pc + 1) : 0;
+            uint16_t operand16 = (entry->size >= 3) ?
+                (rom_read(rom, read_bank, pc + 1) |
+                 ((uint16_t)rom_read(rom, read_bank, pc + 2) << 8)) : 0;
+
+            switch (entry->mnemonic) {
+                /* ── Loads ── */
+                case MN_LDA:
+                    if (entry->addr_mode == AM_IMM) {
+                        known_a = operand8;
+                    } else if (entry->addr_mode == AM_ABS && operand16 >= 0x8000) {
+                        int rb = (operand16 >= 0xC000) ? fixed_bank : effective_bank;
+                        known_a = rom_read(rom, rb, operand16);
+                    } else if (entry->addr_mode == AM_ABSX && known_x != -1) {
+                        uint16_t ea = operand16 + (uint16_t)known_x;
+                        if (ea >= 0x8000) {
+                            int rb = (ea >= 0xC000) ? fixed_bank : effective_bank;
+                            known_a = rom_read(rom, rb, ea);
+                        } else { known_a = -1; }
+                    } else if (entry->addr_mode == AM_ABSY && known_y != -1) {
+                        uint16_t ea = operand16 + (uint16_t)known_y;
+                        if (ea >= 0x8000) {
+                            int rb = (ea >= 0xC000) ? fixed_bank : effective_bank;
+                            known_a = rom_read(rom, rb, ea);
+                        } else { known_a = -1; }
+                    } else {
+                        known_a = -1; /* ZP, (ZP,X), (ZP),Y, or unknown index */
+                    }
+                    break;
+                case MN_LDX:
+                    known_x = (entry->addr_mode == AM_IMM) ? operand8 : -1;
+                    break;
+                case MN_LDY:
+                    known_y = (entry->addr_mode == AM_IMM) ? operand8 : -1;
+                    break;
+
+                /* ── Register transfers ── */
+                case MN_TAX: known_x = known_a; break;
+                case MN_TAY: known_y = known_a; break;
+                case MN_TXA: known_a = known_x; break;
+                case MN_TYA: known_a = known_y; break;
+                case MN_TSX: known_x = -1; break;
+
+                /* ── Bitwise ALU (computable with known A + immediate) ── */
+                case MN_AND:
+                    if (entry->addr_mode == AM_IMM && known_a != -1)
+                        known_a &= operand8;
+                    else
+                        known_a = -1;
+                    break;
+                case MN_ORA:
+                    if (entry->addr_mode == AM_IMM && known_a != -1)
+                        known_a |= operand8;
+                    else
+                        known_a = -1;
+                    break;
+                case MN_EOR:
+                    if (entry->addr_mode == AM_IMM && known_a != -1)
+                        known_a ^= operand8;
+                    else
+                        known_a = -1;
+                    break;
+
+                /* ── Shifts (accumulator mode, no carry needed) ── */
+                case MN_ASL:
+                    if (entry->addr_mode == AM_ACC)
+                        known_a = (known_a != -1) ? ((known_a << 1) & 0xFF) : -1;
+                    break;
+                case MN_LSR:
+                    if (entry->addr_mode == AM_ACC)
+                        known_a = (known_a != -1) ? ((known_a >> 1) & 0x7F) : -1;
+                    break;
+
+                /* ── Rotates & arithmetic (carry-dependent → taint) ── */
+                case MN_ROL: case MN_ROR:
+                    if (entry->addr_mode == AM_ACC) known_a = -1;
+                    break;
+                case MN_ADC: case MN_SBC:
+                    known_a = -1;
+                    break;
+
+                /* ── Increment / Decrement ── */
+                case MN_INX:
+                    known_x = (known_x != -1) ? ((known_x + 1) & 0xFF) : -1;
+                    break;
+                case MN_DEX:
+                    known_x = (known_x != -1) ? ((known_x - 1) & 0xFF) : -1;
+                    break;
+                case MN_INY:
+                    known_y = (known_y != -1) ? ((known_y + 1) & 0xFF) : -1;
+                    break;
+                case MN_DEY:
+                    known_y = (known_y != -1) ? ((known_y - 1) & 0xFF) : -1;
+                    break;
+
+                /* ── Stack (unknown value) ── */
+                case MN_PLA: known_a = -1; break;
+
+                /* ── Everything else: no register effect ── */
+                default: break;
+            }
         }
 
         /* Track forward branch targets so we continue past RTS/JMP when needed.
@@ -131,6 +258,27 @@ static int walk_function(const NESRom *rom, FunctionList *list,
             uint8_t lo = rom_read(rom, read_bank, pc + 1);
             uint8_t hi = rom_read(rom, read_bank, pc + 2);
             uint16_t target = lo | ((uint16_t)hi << 8);
+
+            /* ── Bank switch detection ─────────────────────────────────
+             * If JSR target is a known bank-switch routine and A holds a
+             * known constant, update effective_bank for subsequent target
+             * resolution in this function walk. */
+            for (int bi = 0; bi < cfg->bank_switch_count; bi++) {
+                if (target == cfg->bank_switches[bi].addr && known_a != -1) {
+                    int new_bank = known_a;
+                    /* Clamp to valid switchable bank range */
+                    if (new_bank >= rom->prg_banks - 1)
+                        new_bank = rom->prg_banks - 2;
+                    if (new_bank != effective_bank) {
+                        effective_bank = new_bank;
+                        s_bank_switches_detected++;
+                    }
+                    break;
+                }
+            }
+
+            /* Taint all registers: callee may clobber A/X/Y */
+            known_a = -1; known_x = -1; known_y = -1;
 
             /* Check against game-config trampolines: JSR to a known bank-switch
              * dispatch routine where inline data bytes follow (not instructions). */
@@ -172,17 +320,19 @@ static int walk_function(const NESRom *rom, FunctionList *list,
                     add_function(list, idsp->addr, fixed_bank);
                     uint16_t tpc = pc + 3;
                     while (1) {
-                        uint8_t lo = rom_read(rom, read_bank, tpc);
-                        uint8_t hi = rom_read(rom, read_bank, tpc + 1);
-                        if (hi < 0x80) break;
-                        uint16_t dest = (uint16_t)lo | ((uint16_t)hi << 8);
+                        uint8_t tlo = rom_read(rom, read_bank, tpc);
+                        uint8_t thi = rom_read(rom, read_bank, tpc + 1);
+                        if (thi < 0x80) break;
+                        uint16_t dest = (uint16_t)tlo | ((uint16_t)thi << 8);
                         if (dest >= 0xC000) {
                             add_function(list, dest, fixed_bank);
-                        } else if (switchable_bank != fixed_bank) {
-                            /* Inside a switchable bank: target is in the same bank */
-                            add_function(list, dest, switchable_bank);
+                        } else if (effective_bank != fixed_bank) {
+                            /* Bank known via walk context or bank-switch detection */
+                            add_function(list, dest, effective_bank);
+                            if (effective_bank != switchable_bank)
+                                s_regprop_targeted_adds++;
                         } else {
-                            /* Fixed bank calling switchable region: add for all switchable banks */
+                            /* Bank unknown: add for all switchable banks */
                             for (int _b = 0; _b < fixed_bank; _b++)
                                 add_function(list, dest, _b);
                         }
@@ -197,9 +347,11 @@ static int walk_function(const NESRom *rom, FunctionList *list,
                 /* Fixed bank target — always knowable */
                 add_function(list, target, fixed_bank);
             } else if (target >= 0x8000) {
-                if (switchable_bank != fixed_bank) {
-                    /* Inside a switchable bank: bank is known */
-                    add_function(list, target, switchable_bank);
+                if (effective_bank != fixed_bank) {
+                    /* Bank known via walk context or bank-switch detection */
+                    add_function(list, target, effective_bank);
+                    if (effective_bank != switchable_bank)
+                        s_regprop_targeted_adds++;
                 } else {
                     /* Fixed bank calling switchable region: bank unknown statically.
                      * Add for ALL switchable banks so each gets a correct body.
@@ -219,8 +371,10 @@ static int walk_function(const NESRom *rom, FunctionList *list,
             if (target >= 0xC000) {
                 add_function(list, target, fixed_bank);
             } else if (target >= 0x8000) {
-                if (switchable_bank != fixed_bank) {
-                    add_function(list, target, switchable_bank);
+                if (effective_bank != fixed_bank) {
+                    add_function(list, target, effective_bank);
+                    if (effective_bank != switchable_bank)
+                        s_regprop_targeted_adds++;
                 } else {
                     for (int _b = 0; _b < fixed_bank; _b++)
                         add_function(list, target, _b);
@@ -238,12 +392,12 @@ static int walk_function(const NESRom *rom, FunctionList *list,
             uint8_t hi_ptr = rom_read(rom, read_bank, pc + 2);
             uint16_t vec_addr = lo_ptr | ((uint16_t)hi_ptr << 8);
             if (vec_addr >= 0x8000) {
-                int vec_bank = (vec_addr >= 0xC000) ? fixed_bank : switchable_bank;
+                int vec_bank = (vec_addr >= 0xC000) ? fixed_bank : effective_bank;
                 uint8_t tlo = rom_read(rom, vec_bank, vec_addr);
                 uint8_t thi = rom_read(rom, vec_bank, vec_addr + 1);
                 uint16_t target = tlo | ((uint16_t)thi << 8);
                 if (target >= 0x8000) {
-                    int tbank = (target >= 0xC000) ? fixed_bank : switchable_bank;
+                    int tbank = (target >= 0xC000) ? fixed_bank : effective_bank;
                     add_function(list, target, tbank);
                 }
             }
@@ -269,11 +423,23 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
     s_queue_head = 0;
     s_queue_tail = 0;
 
+    /* Reset propagation stats */
+    s_bank_switches_detected = 0;
+    s_regprop_targeted_adds = 0;
+
     int fixed_bank = rom->prg_banks - 1;
 
     /* Seed from interrupt vectors */
     printf("[FuncFinder] Seeding from NMI=$%04X RESET=$%04X IRQ=$%04X\n",
            rom->nmi_vector, rom->reset_vector, rom->irq_vector);
+
+    /* Log register propagation config */
+    if (cfg->bank_switch_count > 0) {
+        printf("[RegProp] Bank switch routines:");
+        for (int i = 0; i < cfg->bank_switch_count; i++)
+            printf(" $%04X", cfg->bank_switches[i].addr);
+        printf("\n");
+    }
 
     /* Seed vectors with their correct bank: fixed bank if in $C000+, else bank 0 */
 #define VEC_BANK(addr) ((addr) >= 0xC000 ? fixed_bank : 0)
@@ -417,9 +583,9 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
     for (int t = 0; t < cfg->known_split_table_count; t++) {
         int kb = cfg->known_split_tables[t].bank;
         int st = cfg->known_split_tables[t].stride;
-        for (int i = 0; i < cfg->known_split_tables[t].count; i++) {
-            uint8_t lo = rom_read(rom, kb, cfg->known_split_tables[t].lo_start + i * st);
-            uint8_t hi = rom_read(rom, kb, cfg->known_split_tables[t].hi_start + i * st);
+        for (int si = 0; si < cfg->known_split_tables[t].count; si++) {
+            uint8_t lo = rom_read(rom, kb, cfg->known_split_tables[t].lo_start + si * st);
+            uint8_t hi = rom_read(rom, kb, cfg->known_split_tables[t].hi_start + si * st);
             uint16_t target = (lo | ((uint16_t)hi << 8)) + 1;
             if (target >= 0x8000 && target <= 0xBFFD) {
                 if (!function_list_contains(out, target, kb))
@@ -465,6 +631,8 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
     }
 
     printf("[FuncFinder] Total functions found: %d\n", out->count);
+    printf("[RegProp] Bank switches detected: %d, targeted adds via propagation: %d\n",
+           s_bank_switches_detected, s_regprop_targeted_adds);
 }
 
 void function_list_free(FunctionList *list) {

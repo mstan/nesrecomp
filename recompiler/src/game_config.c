@@ -123,6 +123,14 @@ bool game_config_load(GameConfig *cfg, const char *path) {
                 cfg->ram_read_hooks[i].addr = (uint16_t)addr;
             }
 
+        } else if (strcmp(key, "bank_switch") == 0) {
+            unsigned addr;
+            if (sscanf(rest, "%x", &addr) == 1 &&
+                cfg->bank_switch_count < GAME_CFG_MAX_BANK_SWITCHES) {
+                int i = cfg->bank_switch_count++;
+                cfg->bank_switches[i].addr = (uint16_t)addr;
+            }
+
         } else {
             fprintf(stderr, "[GameConfig] Unknown directive '%s' at line %d\n", key, line_no);
         }

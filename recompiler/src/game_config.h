@@ -15,6 +15,7 @@
 #define GAME_CFG_MAX_EXTRA_FUNCS      32
 #define GAME_CFG_MAX_INLINE_DISPATCHES 8
 #define GAME_CFG_MAX_RAM_READ_HOOKS   16
+#define GAME_CFG_MAX_BANK_SWITCHES     8
 
 /*
  * Trampoline: a JSR whose operand address is a known bank-switch dispatch
@@ -87,6 +88,17 @@ typedef struct {
     uint16_t addr;
 } RamReadHook;
 
+/*
+ * Bank-switch routine: a JSR target that switches the mapper's switchable
+ * bank to the value currently in the A register.
+ *
+ * Usage in game.cfg:  bank_switch <hex_addr>
+ * Example (Zelda):    bank_switch FFAC
+ */
+typedef struct {
+    uint16_t addr;  /* JSR target address of bank-switch routine */
+} BankSwitchRoutine;
+
 typedef struct {
     char            output_prefix[64];  /* e.g. "faxanadu" → generated/faxanadu_full.c */
     char            annotations_path[512]; /* override for annotations.csv */
@@ -108,6 +120,9 @@ typedef struct {
 
     RamReadHook     ram_read_hooks[GAME_CFG_MAX_RAM_READ_HOOKS];
     int             ram_read_hook_count;
+
+    BankSwitchRoutine bank_switches[GAME_CFG_MAX_BANK_SWITCHES];
+    int              bank_switch_count;
 } GameConfig;
 
 /* Initialize to empty (no dispatch tables, prefix derived from ROM name) */
