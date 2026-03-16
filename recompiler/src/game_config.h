@@ -16,6 +16,7 @@
 #define GAME_CFG_MAX_INLINE_DISPATCHES 8
 #define GAME_CFG_MAX_RAM_READ_HOOKS   16
 #define GAME_CFG_MAX_BANK_SWITCHES     8
+#define GAME_CFG_MAX_SRAM_MAPS         4
 
 /*
  * Trampoline: a JSR whose operand address is a known bank-switch dispatch
@@ -99,6 +100,22 @@ typedef struct {
     uint16_t addr;  /* JSR target address of bank-switch routine */
 } BankSwitchRoutine;
 
+/*
+ * SRAM-to-ROM mapping: a region of SRAM that is a copy of ROM code.
+ * When the walker encounters a JSR/JMP to an address in the SRAM range,
+ * it translates to the corresponding ROM address and adds it as a function.
+ * The ROM entry point is also seeded so internal calls get walked.
+ *
+ * Usage in game.cfg:  sram_map <sram_start> <rom_start> <bank> <size>
+ * Example (Zelda):    sram_map 6C90 A500 1 1370
+ */
+typedef struct {
+    uint16_t sram_start;  /* Start of SRAM region (e.g., $6C90) */
+    uint16_t rom_start;   /* Corresponding ROM address (e.g., $A500) */
+    int      bank;        /* ROM bank containing the source code */
+    uint16_t size;        /* Size of the mapped region in bytes */
+} SramMap;
+
 typedef struct {
     char            output_prefix[64];  /* e.g. "faxanadu" → generated/faxanadu_full.c */
     char            annotations_path[512]; /* override for annotations.csv */
@@ -123,6 +140,9 @@ typedef struct {
 
     BankSwitchRoutine bank_switches[GAME_CFG_MAX_BANK_SWITCHES];
     int              bank_switch_count;
+
+    SramMap          sram_maps[GAME_CFG_MAX_SRAM_MAPS];
+    int              sram_map_count;
 } GameConfig;
 
 /* Initialize to empty (no dispatch tables, prefix derived from ROM name) */

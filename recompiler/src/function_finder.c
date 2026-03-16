@@ -59,6 +59,19 @@ bool function_list_contains(const FunctionList *list, uint16_t addr, int bank) {
     return false;
 }
 
+/* Translate an SRAM address to ROM address via game config sram_map.
+ * Returns the ROM address (>= $8000) on success, or 0 if not mapped. */
+static uint16_t sram_translate(const GameConfig *cfg, uint16_t addr, int *out_bank) {
+    for (int i = 0; i < cfg->sram_map_count; i++) {
+        const SramMap *m = &cfg->sram_maps[i];
+        if (addr >= m->sram_start && addr < m->sram_start + m->size) {
+            *out_bank = m->bank;
+            return m->rom_start + (addr - m->sram_start);
+        }
+    }
+    return 0;
+}
+
 /* Register propagation statistics */
 static int s_bank_switches_detected = 0;
 static int s_regprop_targeted_adds = 0;
@@ -322,19 +335,27 @@ static int walk_function(const NESRom *rom, FunctionList *list,
                     while (1) {
                         uint8_t tlo = rom_read(rom, read_bank, tpc);
                         uint8_t thi = rom_read(rom, read_bank, tpc + 1);
-                        if (thi < 0x80) break;
                         uint16_t dest = (uint16_t)tlo | ((uint16_t)thi << 8);
                         if (dest >= 0xC000) {
                             add_function(list, dest, fixed_bank);
-                        } else if (effective_bank != fixed_bank) {
-                            /* Bank known via walk context or bank-switch detection */
-                            add_function(list, dest, effective_bank);
-                            if (effective_bank != switchable_bank)
-                                s_regprop_targeted_adds++;
+                        } else if (dest >= 0x8000) {
+                            if (effective_bank != fixed_bank) {
+                                add_function(list, dest, effective_bank);
+                                if (effective_bank != switchable_bank)
+                                    s_regprop_targeted_adds++;
+                            } else {
+                                for (int _b = 0; _b < fixed_bank; _b++)
+                                    add_function(list, dest, _b);
+                            }
                         } else {
-                            /* Bank unknown: add for all switchable banks */
-                            for (int _b = 0; _b < fixed_bank; _b++)
-                                add_function(list, dest, _b);
+                            /* Entry < $8000 — try SRAM translation */
+                            int sram_bank;
+                            uint16_t rom_addr = sram_translate(cfg, dest, &sram_bank);
+                            if (rom_addr >= 0x8000) {
+                                add_function(list, rom_addr, sram_bank);
+                            } else {
+                                break; /* Not ROM and not mapped SRAM — end of table */
+                            }
                         }
                         tpc += 2;
                     }
@@ -359,6 +380,12 @@ static int walk_function(const NESRom *rom, FunctionList *list,
                     for (int _b = 0; _b < fixed_bank; _b++)
                         add_function(list, target, _b);
                 }
+            } else {
+                /* Target in RAM — try SRAM-to-ROM translation */
+                int sram_bank;
+                uint16_t rom_addr = sram_translate(cfg, target, &sram_bank);
+                if (rom_addr >= 0x8000)
+                    add_function(list, rom_addr, sram_bank);
             }
             pc += entry->size;
             continue;
@@ -379,6 +406,12 @@ static int walk_function(const NESRom *rom, FunctionList *list,
                     for (int _b = 0; _b < fixed_bank; _b++)
                         add_function(list, target, _b);
                 }
+            } else {
+                /* Target in RAM — try SRAM-to-ROM translation */
+                int sram_bank;
+                uint16_t rom_addr = sram_translate(cfg, target, &sram_bank);
+                if (rom_addr >= 0x8000)
+                    add_function(list, rom_addr, sram_bank);
             }
             if (pending_count == 0) break;
             pc += entry->size;
@@ -439,6 +472,14 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
         for (int i = 0; i < cfg->bank_switch_count; i++)
             printf(" $%04X", cfg->bank_switches[i].addr);
         printf("\n");
+    }
+
+    /* Seed SRAM-mapped code regions as functions */
+    for (int i = 0; i < cfg->sram_map_count; i++) {
+        printf("[SramMap] SRAM $%04X → ROM bank %d $%04X (size=$%04X)\n",
+               cfg->sram_maps[i].sram_start, cfg->sram_maps[i].bank,
+               cfg->sram_maps[i].rom_start, cfg->sram_maps[i].size);
+        add_function(out, cfg->sram_maps[i].rom_start, cfg->sram_maps[i].bank);
     }
 
     /* Seed vectors with their correct bank: fixed bank if in $C000+, else bank 0 */

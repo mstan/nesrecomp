@@ -123,6 +123,18 @@ bool game_config_load(GameConfig *cfg, const char *path) {
                 cfg->ram_read_hooks[i].addr = (uint16_t)addr;
             }
 
+        } else if (strcmp(key, "sram_map") == 0) {
+            unsigned sram_start, rom_start, size;
+            int bank;
+            if (sscanf(rest, "%x %x %d %x", &sram_start, &rom_start, &bank, &size) == 4 &&
+                cfg->sram_map_count < GAME_CFG_MAX_SRAM_MAPS) {
+                int i = cfg->sram_map_count++;
+                cfg->sram_maps[i].sram_start = (uint16_t)sram_start;
+                cfg->sram_maps[i].rom_start  = (uint16_t)rom_start;
+                cfg->sram_maps[i].bank       = bank;
+                cfg->sram_maps[i].size       = (uint16_t)size;
+            }
+
         } else if (strcmp(key, "bank_switch") == 0) {
             unsigned addr;
             if (sscanf(rest, "%x", &addr) == 1 &&
