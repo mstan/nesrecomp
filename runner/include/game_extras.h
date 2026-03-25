@@ -35,7 +35,7 @@ int game_handle_arg(const char *key, const char *val);
 const char *game_arg_usage(void);
 
 /*
- * Expected CRC32 of the ROM file (entire .nes file, iNES header included).
+ * Expected CRC32 of the ROM data (16-byte iNES header excluded).
  * The launcher checks this before starting the game and re-prompts if wrong.
  * Return 0 to skip verification.
  */

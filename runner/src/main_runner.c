@@ -646,6 +646,7 @@ void nesrecomp_runner_run(int argc, char *argv[]) {
         char window_title[64];
         snprintf(window_title, sizeof(window_title), "NESRecomp - %s", game_get_name());
         Uint32 win_flags = s_script_path ? SDL_WINDOW_MINIMIZED : SDL_WINDOW_SHOWN;
+        win_flags |= SDL_WINDOW_RESIZABLE;
         s_window = SDL_CreateWindow(window_title,
             SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
             768, 720,
@@ -673,7 +674,7 @@ void nesrecomp_runner_run(int argc, char *argv[]) {
         fprintf(stderr, "SDL_CreateTexture: %s\n", SDL_GetError());
         exit(1);
     }
-    SDL_RenderSetLogicalSize(s_renderer, 768, 720);
+    SDL_RenderSetLogicalSize(s_renderer, 256, 240);
 
     memset(s_framebuf, 0, sizeof(s_framebuf));
 

@@ -109,7 +109,11 @@ static int verify_rom(const char *path, uint32_t expected_crc) {
     fread(data, 1, (size_t)sz, f);
     fclose(f);
 
-    uint32_t actual = crc32_compute(data, (size_t)sz);
+    /* Skip 16-byte iNES header so different header variants of the
+       same ROM (NES 2.0 vs iNES 1.0) produce the same CRC32. */
+    size_t hdr = 16;
+    if ((size_t)sz <= hdr) { free(data); return 0; }
+    uint32_t actual = crc32_compute(data + hdr, (size_t)sz - hdr);
     free(data);
 
     if (actual != expected_crc) {
