@@ -110,7 +110,8 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                             uint16_t pc, uint16_t func_base, int fixed_bank,
                             const FunctionList *funcs,
                             const uint16_t *valid_starts, int valid_count,
-                            const GameConfig *cfg, int sram_sourced) {
+                            const GameConfig *cfg, int sram_sourced,
+                            int effective_bank) {
     uint8_t opcode = rom_read(rom, bank, pc);
     const OpcodeEntry *e = &g_opcode_table[opcode];
     uint8_t op1 = (e->size > 1) ? rom_read(rom, bank, pc+1) : 0;
@@ -390,11 +391,76 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                         tpc += 2;
                         entry_count++;
                     }
-                    fprintf(f, "/* inline_dispatch $%04X: %d entries */\n", idsp->addr, entry_count);
+                    /* Determine which bank to use for switchable-range targets.
+                     * Scan backward from this JSR TableJump for the nearest
+                     * LDA #imm; JSR SwitchBank pattern (within ~20 bytes). */
+                    int dispatch_bank = -1;
+                    if (bank != fixed_bank) {
+                        dispatch_bank = bank;
+                    } else {
+                        /* Fixed bank: check inline_dispatch bank hints in config.
+                         * Then fall back to backward scan for LDA #imm; JSR SwitchBank.
+                         * Look for the dominating bank switch by scanning backward
+                         * up to 64 bytes, skipping conditional branch targets. */
+                        for (int bk = 5; bk <= 64; bk++) {
+                            if (pc < (uint16_t)(0xC000 + bk)) break;
+                            uint16_t probe = (uint16_t)(pc - bk);
+                            /* Skip if this location is after a conditional branch
+                             * (indicating we're in a branch-taken path, not the
+                             * main code flow).  Heuristic: if a JMP (4C) immediately
+                             * precedes this JSR SwitchBank, it's a tail-call from a
+                             * branch and the bank is not the dominating one. */
+                            for (int bi2 = 0; bi2 < cfg->bank_switch_count; bi2++) {
+                                uint16_t bs_addr = cfg->bank_switches[bi2].addr;
+                                if (rom_read(rom, bank, probe) == 0x20 &&
+                                    rom_read(rom, bank, probe + 1) == (bs_addr & 0xFF) &&
+                                    rom_read(rom, bank, probe + 2) == ((bs_addr >> 8) & 0xFF) &&
+                                    probe >= 2 && rom_read(rom, bank, probe - 2) == 0xA9) {
+                                    int bval = rom_read(rom, bank, probe - 1);
+                                    if (bval < fixed_bank) {
+                                        /* Check if a JMP follows this bank switch within 6 bytes.
+                                         * If so, this is a branch-only bank switch (tail call),
+                                         * not the dominating one. Skip it. */
+                                        int is_tail = 0;
+                                        for (int fwd = 3; fwd <= 8; fwd++) {
+                                            if (rom_read(rom, bank, probe + fwd) == 0x4C) {
+                                                is_tail = 1; break;
+                                            }
+                                        }
+                                        if (!is_tail) {
+                                            dispatch_bank = bval;
+                                            goto dispatch_bank_found;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        dispatch_bank_found:;
+                    }
+                    fprintf(f, "/* inline_dispatch $%04X: %d entries (bank=%d) */\n",
+                            idsp->addr, entry_count, dispatch_bank);
                     /* inline_dispatch is a computed JMP: the dispatch routine does
                      * PLA/PLA then JMP (indirect), bypassing any code after the table.
                      * Emit `return` after each case (not `break`) so the containing
                      * function terminates immediately after the dispatch. */
+                    /* Validate dispatch_bank: every switchable-range target
+                     * must have a generated function for that bank.  If any
+                     * target is missing, fall back to call_by_address(). */
+                    if (dispatch_bank >= 0 && funcs) {
+                        uint16_t vpc = pc + 3;
+                        for (int vi = 0; vi < entry_count; vi++) {
+                            uint8_t vlo = rom_read(rom, bank, vpc);
+                            uint8_t vhi = rom_read(rom, bank, vpc + 1);
+                            uint16_t vdest = (uint16_t)vlo | ((uint16_t)vhi << 8);
+                            if (vdest >= 0x8000 && vdest < 0xC000) {
+                                if (!function_list_contains(funcs, vdest, dispatch_bank)) {
+                                    dispatch_bank = -1; /* fall back */
+                                    break;
+                                }
+                            }
+                            vpc += 2;
+                        }
+                    }
                     fprintf(f, "switch(g_cpu.A) {\n");
                     tpc = pc + 3;
                     for (int ei = 0; ei < entry_count; ei++) {
@@ -405,10 +471,14 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                         if (dest >= 0xC000) {
                             fprintf(f, "func_%04X(); return;\n", dest);
                         } else if (dest >= 0x8000) {
-                            if (bank == fixed_bank) {
-                                fprintf(f, "call_by_address(0x%04X); return;\n", dest);
-                            } else {
+                            if (dispatch_bank >= 0) {
+                                /* Bank known from register propagation, validated */
+                                fprintf(f, "func_%04X_b%d(); return;\n", dest, dispatch_bank);
+                            } else if (bank != fixed_bank) {
                                 fprintf(f, "func_%04X_b%d(); return;\n", dest, bank);
+                            } else {
+                                /* Fixed bank, no bank-switch or missing targets: runtime */
+                                fprintf(f, "call_by_address(0x%04X); return;\n", dest);
                             }
                         } else {
                             fprintf(f, "call_by_address(0x%04X); return;\n", dest);
@@ -711,6 +781,11 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
     int branch_targets_count = 0;
     int pending_pha_count = 0; /* net PHAs pushed without matching PLA (for non-adjacent dispatch) */
 
+    /* effective_bank is passed to emit_instruction for inline_dispatch resolution.
+     * For switchable-bank functions, effective_bank == bank.
+     * For fixed-bank functions, each inline_dispatch does its own backward scan. */
+    int effective_bank = bank;
+
     uint16_t cursor = pc;
     for (int insn = 0; insn < MAX_INSNS_PER_FUNC; insn++) {
         fprintf(f, "label_%04X:;\n", cursor);
@@ -788,7 +863,8 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
         }
 
         int consumed = emit_instruction(f, rom, bank, cursor, pc, fixed_bank, funcs,
-                                        valid_starts, valid_count, cfg, sram_sourced);
+                                        valid_starts, valid_count, cfg, sram_sourced,
+                                        effective_bank);
 
         /* If this PHA is immediately followed by a branch-target RTS, the fall-through path
          * must dispatch now (before reaching the RTS label, which is bypassed by branches).

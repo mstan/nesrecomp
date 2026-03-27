@@ -154,11 +154,20 @@ uint8_t nes_read(uint16_t addr) {
     return 0xFF;
 }
 
+/* Write breakpoint state */
+uint16_t g_write_bp_addr = 0xFFFF;
+uint8_t  g_write_bp_match_val = 0xFF;
+write_bp_callback_t g_write_bp_callback = NULL;
+
 void nes_write(uint16_t addr, uint8_t val) {
     maybe_trigger_vblank();
 
     if (addr <= 0x1FFF) {
         uint16_t a = addr & 0x07FF;
+        if (a == g_write_bp_addr && g_write_bp_callback &&
+            (g_write_bp_match_val == 0xFF || val == g_write_bp_match_val)) {
+            g_write_bp_callback(a, g_ram[a], val);
+        }
         g_ram[a] = val; return;
     }
     if (addr >= 0x2000 && addr <= 0x3FFF) { ppu_write_reg(0x2000 + (addr & 7), val); return; }
