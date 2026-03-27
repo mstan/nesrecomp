@@ -73,3 +73,13 @@ void game_run_nmi(void);
  * When this function returns, the runner exits.
  */
 void game_run_main(void);
+
+/* Fill game-specific data in the debug frame record.
+ * Called each frame from debug_server_record_frame().
+ * Cast record to NESFrameRecord* and write up to 16 bytes into game_data[]. */
+void game_fill_frame_record(void *record);
+
+/* Handle a game-specific TCP debug command.
+ * Returns 1 if handled, 0 if not recognized.
+ * Use debug_server_send_fmt() to send responses. */
+int game_handle_debug_cmd(const char *cmd, int id, const char *json);
