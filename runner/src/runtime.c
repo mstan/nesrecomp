@@ -78,19 +78,26 @@ void runtime_init(void) {
     ppu_trace_init();
 }
 
-/* Wall-clock VBlank simulation: fires NMI every ~16ms (60Hz).
- * Uses clock() which on MSVC gives millisecond resolution.
- * This fires regardless of how many memory operations the game performs,
- * so it works for both read-heavy and write-heavy game loops. */
+/* Deterministic VBlank simulation: fires NMI every N bus operations.
+ * A real NES has ~29780 CPU cycles per frame. Each nes_read/nes_write
+ * represents at least one bus cycle. Counting operations instead of
+ * wall-clock time makes the demo playback perfectly deterministic.
+ *
+ * The threshold is tuned so games run at approximately correct speed
+ * when combined with the wall-clock frame pacing in nes_vblank_callback. */
 static bool s_vblank_firing = false;
+static uint32_t s_ops_count = 0;
+
+/* Approximate bus operations per frame. On real NES: ~29780 CPU cycles.
+ * Recompiled code doesn't map 1:1 to cycles, but memory operations are
+ * a reasonable proxy. This value is tuned for SMB demo determinism. */
+#define OPS_PER_FRAME 3000
 
 void maybe_trigger_vblank(void) {
     if (s_vblank_firing) return;
-    static clock_t s_last = 0;
-    clock_t now = clock();
-    /* CLOCKS_PER_SEC/60 = period for 60Hz. On MSVC CLOCKS_PER_SEC=1000 → 16 ticks */
-    if ((now - s_last) < (CLOCKS_PER_SEC / 60)) return;
-    s_last = now;
+    s_ops_count++;
+    if (s_ops_count < OPS_PER_FRAME) return;
+    s_ops_count = 0;
     s_vblank_firing = true;
     /* Set VBlank (bit7), clear sprite-0 hit (bit6) — standard NES VBlank start */
     g_ppustatus = (g_ppustatus & ~0x40) | 0x80;
@@ -118,8 +125,6 @@ void maybe_trigger_vblank(void) {
     /* Only fire NMI if $2000 bit7 (NMI enable) is set — gates init spin-waits correctly */
     if (g_ppuctrl & 0x80) nes_vblank_callback();
     s_vblank_firing = false;
-    /* Update s_last so we don't immediately re-fire after a long callback */
-    s_last = clock();
 }
 
 uint8_t nes_read(uint16_t addr) {
