@@ -527,6 +527,17 @@ void nes_vblank_callback(void) {
     }
 }
 
+/* ---- Public render function for emulated mode ---- */
+/* Accepts a 256x240 ARGB8888 buffer and presents it to the SDL window.
+ * Used by the emulated mode frame loop (Nestopia drives rendering). */
+void runner_present_framebuf(const uint32_t *argb_buf) {
+    if (!s_texture || !s_renderer || !argb_buf) return;
+    SDL_UpdateTexture(s_texture, NULL, argb_buf, 256 * 4);
+    SDL_RenderClear(s_renderer);
+    SDL_RenderCopy(s_renderer, s_texture, NULL, NULL);
+    SDL_RenderPresent(s_renderer);
+}
+
 /* ---- ROM Loading ---- */
 static uint8_t *s_prg_data = NULL;
 static int      s_prg_banks = 0;
