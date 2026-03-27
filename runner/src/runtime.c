@@ -322,12 +322,21 @@ void nes_log_dispatch_miss(uint16_t addr) {
     g_miss_count_any++;
     g_miss_last_addr  = addr;
     g_miss_last_frame = g_frame_count;
-    /* Add to unique list if not already present */
+    /* Add to unique list if not already present; log new misses to file */
     int found = 0;
     for (int i = 0; i < g_miss_unique_count; i++)
         if (g_miss_unique_addrs[i] == addr) { found = 1; break; }
-    if (!found && g_miss_unique_count < MAX_MISS_UNIQUE)
+    if (!found && g_miss_unique_count < MAX_MISS_UNIQUE) {
         g_miss_unique_addrs[g_miss_unique_count++] = addr;
+        /* Append to dispatch_misses.log in game.cfg-compatible format */
+        FILE *mf = fopen("dispatch_misses.log", "a");
+        if (mf) {
+            fprintf(mf, "extra_func %d 0x%04X\n", g_current_bank, addr);
+            fclose(mf);
+        }
+        fprintf(stderr, "[Dispatch] NEW miss logged: extra_func %d 0x%04X (frame %llu)\n",
+                g_current_bank, addr, (unsigned long long)g_frame_count);
+    }
 }
 
 void nes_log_inline_miss(uint16_t dispatch_pc, uint8_t a_val) {

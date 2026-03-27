@@ -60,3 +60,16 @@ int game_dispatch_override(uint16_t addr);
  * Returns: (possibly adjusted) value to use
  */
 uint8_t game_ram_read_hook(uint16_t pc, uint16_t addr, uint8_t val);
+
+/*
+ * Run the NMI handler for one frame. Default implementation calls func_NMI().
+ * Override in extras.c to inject verify mode (dual-execution comparison).
+ */
+void game_run_nmi(void);
+
+/*
+ * Run the main game loop. Default implementation calls func_RESET() (never returns).
+ * Override in extras.c for emulated mode (FCEUX drives the main loop instead).
+ * When this function returns, the runner exits.
+ */
+void game_run_main(void);

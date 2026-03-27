@@ -440,7 +440,7 @@ void nes_vblank_callback(void) {
                                    (g_cpu.D<<3)|(g_cpu.I<<2)|(g_cpu.Z<<1)|g_cpu.C);
         g_ram[0x100+g_cpu.S] = 0x00;   g_cpu.S--;
         g_ram[0x100+g_cpu.S] = p_save; g_cpu.S--;
-        func_NMI();
+        game_run_nmi();
     }
 
     game_post_nmi(g_frame_count);
@@ -609,6 +609,10 @@ void nesrecomp_runner_run(int argc, char *argv[]) {
 
     if (!load_rom(argv[1])) exit(1);
 
+    /* Expose ROM path to game extras (used by verify mode to init FCEUX) */
+    extern const char *g_rom_path_for_extras;
+    g_rom_path_for_extras = argv[1];
+
     runtime_init();
     game_on_init();
 
@@ -728,12 +732,11 @@ void nesrecomp_runner_run(int argc, char *argv[]) {
     /* Raise main game window above debug windows */
     SDL_RaiseWindow(s_window);
 
-    printf("[Runner] Starting RESET handler (NMI fires via VBlank callback)...\n");
+    printf("[Runner] Starting main game loop...\n");
 
-    /* func_RESET() is the game's main loop — it never returns.
-     * NMI is called from nes_vblank_callback() whenever the game
-     * reads $2002 (PPUSTATUS) and sees VBlank set. */
-    func_RESET();
+    /* game_run_main() defaults to func_RESET() (native recompiled main loop,
+     * never returns). In emulated mode, it runs FCEUX frames in a loop. */
+    game_run_main();
 
     /* Unreachable for most games, but clean up anyway */
     SDL_DestroyTexture(s_texture);
