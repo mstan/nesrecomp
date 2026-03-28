@@ -40,7 +40,8 @@ static void emit_header(FILE *f) {
     );
 }
 
-static void emit_forward_decls(FILE *f, const FunctionList *funcs, const NESRom *rom) {
+static void emit_forward_decls(FILE *f, const FunctionList *funcs, const NESRom *rom,
+                               const GameConfig *cfg) {
     fprintf(f, "/* Forward declarations */\n");
     for (int i = 0; i < funcs->count; i++) {
         uint16_t addr = funcs->entries[i].addr;
@@ -50,6 +51,18 @@ static void emit_forward_decls(FILE *f, const FunctionList *funcs, const NESRom 
             fprintf(f, "void func_%04X(void);\n", addr);
         } else {
             fprintf(f, "void func_%04X_b%d(void);\n", addr, bank);
+        }
+    }
+    /* Forward-declare extra_label secondary entry wrappers */
+    if (cfg) {
+        int fixed = rom->prg_banks - 1;
+        for (int i = 0; i < cfg->extra_label_count; i++) {
+            uint16_t addr = cfg->extra_labels[i].addr;
+            int bank = cfg->extra_labels[i].bank;
+            if (bank == fixed && addr >= 0xC000)
+                fprintf(f, "void func_%04X(void);\n", addr);
+            else
+                fprintf(f, "void func_%04X_b%d(void);\n", addr, bank);
         }
     }
     fprintf(f, "\n");
@@ -719,19 +732,6 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
     const char *fann = annotation_lookup(at, bank, pc);
     if (fann) fprintf(f, "/* NOTE: %s */\n", fann);
 
-    /* Function name — non-static so dispatch table can call them */
-    if (bank == fixed_bank && pc >= 0xC000) {
-        fprintf(f, "void func_%04X(void) {\n", pc);
-        fprintf(f, "#ifdef RECOMP_STACK_TRACKING\n");
-        fprintf(f, "    recomp_stack_push(\"func_%04X\");\n", pc);
-        fprintf(f, "#endif\n");
-    } else {
-        fprintf(f, "void func_%04X_b%d(void) {\n", pc, bank);
-        fprintf(f, "#ifdef RECOMP_STACK_TRACKING\n");
-        fprintf(f, "    recomp_stack_push(\"func_%04X_b%d\");\n", pc, bank);
-        fprintf(f, "#endif\n");
-    }
-
     /* Pre-scan: collect all valid instruction-start addresses within this function.
      * Mimics the emission loop's stop logic (stops at RTS/JMP/RTI/BRK when no pending
      * forward branches remain). This prevents overrunning into neighboring functions. */
@@ -810,6 +810,54 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
                 if (ps_pending_count == 0) break;
             }
             scan += sz;
+        }
+    }
+
+    /* Detect secondary entry points (extra_label addresses inside this function).
+     * If any exist, emit a multi-entry _body function with goto dispatch. */
+    uint16_t secondary_addrs[64];
+    int secondary_count = 0;
+    for (int li = 0; li < cfg->extra_label_count && secondary_count < 64; li++) {
+        int lbl_bank = cfg->extra_labels[li].bank;
+        uint16_t lbl_addr = cfg->extra_labels[li].addr;
+        if (lbl_bank != bank) continue;
+        if (lbl_addr == pc) continue; /* same as function start */
+        /* Skip if this address already has its own function (standalone) */
+        if (function_list_contains(funcs, lbl_addr, bank)) continue;
+        for (int v = 0; v < valid_count; v++) {
+            if (valid_starts[v] == lbl_addr) {
+                secondary_addrs[secondary_count++] = lbl_addr;
+                break;
+            }
+        }
+    }
+
+    int is_multi_entry = (secondary_count > 0);
+
+    /* Emit function signature — for multi-entry, emit a static _body function */
+    if (is_multi_entry) {
+        if (bank == fixed_bank && pc >= 0xC000) {
+            fprintf(f, "static void func_%04X_body(int _entry) {\n", pc);
+        } else {
+            fprintf(f, "static void func_%04X_b%d_body(int _entry) {\n", pc, bank);
+        }
+        /* Entry dispatch — jump to secondary entry label */
+        fprintf(f, "    switch (_entry) {\n");
+        for (int si = 0; si < secondary_count; si++) {
+            fprintf(f, "        case %d: goto label_%04X;\n", si + 1, secondary_addrs[si]);
+        }
+        fprintf(f, "    }\n");
+    } else {
+        if (bank == fixed_bank && pc >= 0xC000) {
+            fprintf(f, "void func_%04X(void) {\n", pc);
+            fprintf(f, "#ifdef RECOMP_STACK_TRACKING\n");
+            fprintf(f, "    recomp_stack_push(\"func_%04X\");\n", pc);
+            fprintf(f, "#endif\n");
+        } else {
+            fprintf(f, "void func_%04X_b%d(void) {\n", pc, bank);
+            fprintf(f, "#ifdef RECOMP_STACK_TRACKING\n");
+            fprintf(f, "    recomp_stack_push(\"func_%04X_b%d\");\n", pc, bank);
+            fprintf(f, "#endif\n");
         }
     }
 
@@ -962,10 +1010,62 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
     }
 
     fprintf(f, "}\n\n");
+
+    /* For multi-entry functions, emit thin wrappers after the body */
+    if (is_multi_entry) {
+        /* Primary entry wrapper */
+        if (bank == fixed_bank && pc >= 0xC000) {
+            fprintf(f, "void func_%04X(void) {\n", pc);
+            fprintf(f, "#ifdef RECOMP_STACK_TRACKING\n");
+            fprintf(f, "    recomp_stack_push(\"func_%04X\");\n", pc);
+            fprintf(f, "#endif\n");
+            fprintf(f, "    func_%04X_body(0);\n", pc);
+            fprintf(f, "#ifdef RECOMP_STACK_TRACKING\n");
+            fprintf(f, "    recomp_stack_pop();\n");
+            fprintf(f, "#endif\n");
+            fprintf(f, "}\n\n");
+        } else {
+            fprintf(f, "void func_%04X_b%d(void) {\n", pc, bank);
+            fprintf(f, "#ifdef RECOMP_STACK_TRACKING\n");
+            fprintf(f, "    recomp_stack_push(\"func_%04X_b%d\");\n", pc, bank);
+            fprintf(f, "#endif\n");
+            fprintf(f, "    func_%04X_b%d_body(0);\n", pc, bank);
+            fprintf(f, "#ifdef RECOMP_STACK_TRACKING\n");
+            fprintf(f, "    recomp_stack_pop();\n");
+            fprintf(f, "#endif\n");
+            fprintf(f, "}\n\n");
+        }
+        /* Secondary entry wrappers */
+        for (int si = 0; si < secondary_count; si++) {
+            uint16_t sa = secondary_addrs[si];
+            if (bank == fixed_bank && sa >= 0xC000) {
+                fprintf(f, "void func_%04X(void) {\n", sa);
+                fprintf(f, "#ifdef RECOMP_STACK_TRACKING\n");
+                fprintf(f, "    recomp_stack_push(\"func_%04X\");\n", sa);
+                fprintf(f, "#endif\n");
+                fprintf(f, "    func_%04X_body(%d);\n", pc, si + 1);
+                fprintf(f, "#ifdef RECOMP_STACK_TRACKING\n");
+                fprintf(f, "    recomp_stack_pop();\n");
+                fprintf(f, "#endif\n");
+                fprintf(f, "}\n\n");
+            } else {
+                fprintf(f, "void func_%04X_b%d(void) {\n", sa, bank);
+                fprintf(f, "#ifdef RECOMP_STACK_TRACKING\n");
+                fprintf(f, "    recomp_stack_push(\"func_%04X_b%d\");\n", sa, bank);
+                fprintf(f, "#endif\n");
+                fprintf(f, "    func_%04X_b%d_body(%d);\n", pc, bank, si + 1);
+                fprintf(f, "#ifdef RECOMP_STACK_TRACKING\n");
+                fprintf(f, "    recomp_stack_pop();\n");
+                fprintf(f, "#endif\n");
+                fprintf(f, "}\n\n");
+            }
+        }
+    }
 }
 
 /* Emit dispatch table */
-static void emit_dispatch(FILE *f, const FunctionList *funcs, const NESRom *rom) {
+static void emit_dispatch(FILE *f, const FunctionList *funcs, const NESRom *rom,
+                          const GameConfig *cfg) {
     int fixed_bank = rom->prg_banks - 1;
 
     fprintf(f,
@@ -1035,6 +1135,24 @@ static void emit_dispatch(FILE *f, const FunctionList *funcs, const NESRom *rom)
         }
     }
 
+    /* Extra_label secondary entries — add dispatch cases for their ROM addresses */
+    if (cfg) {
+        for (int i = 0; i < cfg->extra_label_count; i++) {
+            uint16_t addr = cfg->extra_labels[i].addr;
+            int bk = cfg->extra_labels[i].bank;
+            /* Skip if any function at this address already has a case */
+            bool has_case = false;
+            for (int j = 0; j < funcs->count; j++)
+                if (funcs->entries[j].addr == addr) { has_case = true; break; }
+            if (has_case) continue;
+            fprintf(f, "        case 0x%04X:\n", addr);
+            if (bk == fixed_bank && addr >= 0xC000)
+                fprintf(f, "            func_%04X(); break;\n", addr);
+            else
+                fprintf(f, "            func_%04X_b%d(); break;\n", addr, bk);
+        }
+    }
+
     fprintf(f,
         "        default:\n"
         "            nes_log_dispatch_miss(addr);\n"
@@ -1054,7 +1172,7 @@ bool codegen_emit(const NESRom *rom, const FunctionList *funcs,
     }
 
     emit_header(f_full);
-    emit_forward_decls(f_full, funcs, rom);
+    emit_forward_decls(f_full, funcs, rom, cfg);
 
     int fixed_bank = rom->prg_banks - 1;
     for (int i = 0; i < funcs->count; i++) {
@@ -1079,7 +1197,7 @@ bool codegen_emit(const NESRom *rom, const FunctionList *funcs,
         fprintf(stderr, "codegen: cannot open %s\n", out_dispatch_path);
         return false;
     }
-    emit_dispatch(f_disp, funcs, rom);
+    emit_dispatch(f_disp, funcs, rom, cfg);
     fclose(f_disp);
 
     return true;

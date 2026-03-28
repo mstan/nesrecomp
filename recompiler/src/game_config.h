@@ -12,11 +12,12 @@
 #define GAME_CFG_MAX_TRAMPOLINES       8
 #define GAME_CFG_MAX_KNOWN_TABLES     32
 #define GAME_CFG_MAX_SPLIT_TABLES     16
-#define GAME_CFG_MAX_EXTRA_FUNCS      256
+#define GAME_CFG_MAX_EXTRA_FUNCS      2048
 #define GAME_CFG_MAX_INLINE_DISPATCHES 8
 #define GAME_CFG_MAX_RAM_READ_HOOKS   16
 #define GAME_CFG_MAX_BANK_SWITCHES     8
 #define GAME_CFG_MAX_SRAM_MAPS         4
+#define GAME_CFG_MAX_EXTRA_LABELS   1024
 
 /*
  * Trampoline: a JSR whose operand address is a known bank-switch dispatch
@@ -143,6 +144,9 @@ typedef struct {
 
     SramMap          sram_maps[GAME_CFG_MAX_SRAM_MAPS];
     int              sram_map_count;
+
+    ExtraFunc        extra_labels[GAME_CFG_MAX_EXTRA_LABELS];
+    int              extra_label_count;
 } GameConfig;
 
 /* Initialize to empty (no dispatch tables, prefix derived from ROM name) */

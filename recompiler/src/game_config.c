@@ -107,6 +107,15 @@ bool game_config_load(GameConfig *cfg, const char *path) {
                 cfg->extra_funcs[i].bank = bank;
             }
 
+        } else if (strcmp(key, "extra_label") == 0) {
+            int bank; unsigned addr;
+            if (sscanf(rest, "%d %x", &bank, &addr) == 2 &&
+                cfg->extra_label_count < GAME_CFG_MAX_EXTRA_LABELS) {
+                int i = cfg->extra_label_count++;
+                cfg->extra_labels[i].addr = (uint16_t)addr;
+                cfg->extra_labels[i].bank = bank;
+            }
+
         } else if (strcmp(key, "inline_dispatch") == 0) {
             unsigned addr;
             if (sscanf(rest, "%x", &addr) == 1 &&
