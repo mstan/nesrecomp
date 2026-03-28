@@ -105,6 +105,34 @@ static bool is_func_entry(const FunctionList *funcs, uint16_t addr) {
     return false;
 }
 
+/* Translate an SRAM address to ROM address via game config sram_map.
+ * Returns the ROM address (>= $8000) on success, or 0 if not mapped. */
+static uint16_t codegen_sram_translate(const GameConfig *cfg, uint16_t addr, int *out_bank) {
+    for (int i = 0; i < cfg->sram_map_count; i++) {
+        const SramMap *m = &cfg->sram_maps[i];
+        if (addr >= m->sram_start && addr < m->sram_start + m->size) {
+            *out_bank = m->bank;
+            return m->rom_start + (addr - m->sram_start);
+        }
+    }
+    return 0;
+}
+
+/* Check if an address is a valid inline_dispatch table entry:
+ * either in ROM range ($8000+) or in a configured SRAM map range
+ * whose translated ROM address has a generated function. */
+static int is_valid_dispatch_target(const GameConfig *cfg, uint16_t addr,
+                                     const FunctionList *funcs) {
+    if (addr >= 0x8000) return 1;
+    int sram_bank = -1;
+    uint16_t rom_addr = codegen_sram_translate(cfg, addr, &sram_bank);
+    if (!rom_addr) return 0;
+    /* Only accept SRAM targets that have a known function — prevents
+     * random ROM data from extending the table past its real end. */
+    if (funcs && function_list_contains(funcs, rom_addr, sram_bank)) return 1;
+    return 0;
+}
+
 /* Emit C for one instruction. Returns bytes consumed. */
 static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                             uint16_t pc, uint16_t func_base, int fixed_bank,
@@ -384,10 +412,13 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                 if (idsp) {
                     uint16_t tpc = pc + 3;
                     int entry_count = 0;
-                    /* Count entries first */
+                    /* Count entries: valid targets are ROM ($8000+) or SRAM-mapped
+                     * with a known function at the translated ROM address. */
                     while (1) {
+                        uint8_t lo = rom_read(rom, bank, tpc);
                         uint8_t hi = rom_read(rom, bank, tpc + 1);
-                        if (hi < 0x80) break;
+                        uint16_t addr = (uint16_t)lo | ((uint16_t)hi << 8);
+                        if (!is_valid_dispatch_target(cfg, addr, funcs)) break;
                         tpc += 2;
                         entry_count++;
                     }
@@ -481,7 +512,18 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                                 fprintf(f, "call_by_address(0x%04X); return;\n", dest);
                             }
                         } else {
-                            fprintf(f, "call_by_address(0x%04X); return;\n", dest);
+                            /* Check if SRAM-mapped address */
+                            int sram_bank = -1;
+                            uint16_t rom_addr = codegen_sram_translate(cfg, dest, &sram_bank);
+                            if (rom_addr) {
+                                if (rom_addr >= 0xC000) {
+                                    fprintf(f, "func_%04X(); return;\n", rom_addr);
+                                } else {
+                                    fprintf(f, "func_%04X_b%d(); return;\n", rom_addr, sram_bank);
+                                }
+                            } else {
+                                fprintf(f, "call_by_address(0x%04X); return;\n", dest);
+                            }
                         }
                         tpc += 2;
                     }

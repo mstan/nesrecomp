@@ -229,7 +229,20 @@ void ppu_write_reg(uint16_t reg, uint8_t val) {
                 if (idx == 0x10 || idx == 0x14 || idx == 0x18 || idx == 0x1C)
                     idx &= 0x0F;
                 g_ppu_pal[idx] = val;
-            } else if (a >= 0x2000) g_ppu_nt[a & 0x0FFF] = val; /* nametable */
+            } else if (a >= 0x2000) {
+                /* Apply mirroring to nametable writes so they land in the
+                 * same physical NT the renderer reads from. */
+                int vnt = ((a - 0x2000) / 0x400) & 3;
+                int pnt;
+                switch (mapper_get_mirroring()) {
+                    case 0:  pnt = 0;          break; /* one-screen lower */
+                    case 1:  pnt = 1;          break; /* one-screen upper */
+                    case 2:  pnt = vnt & 1;    break; /* vertical */
+                    case 3:  pnt = vnt >> 1;   break; /* horizontal */
+                    default: pnt = vnt & 1;    break;
+                }
+                g_ppu_nt[pnt * 0x400 + (a & 0x3FF)] = val;
+            }
             else if (!g_chr_is_rom) {
                 g_chr_ram[a] = val; /* CHR RAM only — CHR ROM is read-only */
             }
@@ -291,15 +304,39 @@ uint8_t ppu_read_reg(uint16_t reg) {
             g_ppuaddr += (g_ppuctrl & 0x04) ? 32 : 1;
             if (a >= 0x3F00) {
                 /* Palette: immediate read, but also update buffer with NT mirror */
-                g_ppudata_buf = g_ppu_nt[a & 0x0FFF];
+                {
+                    int vnt_p = ((a - 0x2000) / 0x400) & 3;
+                    int pnt_p;
+                    switch (mapper_get_mirroring()) {
+                        case 0:  pnt_p = 0;            break;
+                        case 1:  pnt_p = 1;            break;
+                        case 2:  pnt_p = vnt_p & 1;    break;
+                        case 3:  pnt_p = vnt_p >> 1;   break;
+                        default: pnt_p = vnt_p & 1;    break;
+                    }
+                    g_ppudata_buf = g_ppu_nt[pnt_p * 0x400 + (a & 0x3FF)];
+                }
                 uint8_t idx = a & 0x1F;
                 if (idx == 0x10 || idx == 0x14 || idx == 0x18 || idx == 0x1C)
                     idx &= 0x0F;
                 return g_ppu_pal[idx];
             }
             uint8_t ret = g_ppudata_buf;
-            if (a >= 0x2000) g_ppudata_buf = g_ppu_nt[a & 0x0FFF];
-            else              g_ppudata_buf = g_chr_ram[a];
+            if (a >= 0x2000) {
+                /* Apply mirroring to NT reads to match write path */
+                int vnt = ((a - 0x2000) / 0x400) & 3;
+                int pnt;
+                switch (mapper_get_mirroring()) {
+                    case 0:  pnt = 0;          break;
+                    case 1:  pnt = 1;          break;
+                    case 2:  pnt = vnt & 1;    break;
+                    case 3:  pnt = vnt >> 1;   break;
+                    default: pnt = vnt & 1;    break;
+                }
+                g_ppudata_buf = g_ppu_nt[pnt * 0x400 + (a & 0x3FF)];
+            } else {
+                g_ppudata_buf = g_chr_ram[a];
+            }
             return ret;
         }
     }

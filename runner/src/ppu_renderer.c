@@ -389,7 +389,10 @@ render_sprites:
         }
     }
 
-    /* Sprite pattern table: PPUCTRL bit 3 selects $0000 or $1000 (8x8 mode) */
+    /* PPUCTRL bit 5: 0 = 8x8 sprites, 1 = 8x16 sprites */
+    int spr_tall = (g_ppuctrl & 0x20) != 0;
+    int spr_height = spr_tall ? 16 : 8;
+    /* Sprite pattern table: PPUCTRL bit 3 selects $0000 or $1000 (8x8 mode only) */
     int spr_chr_base = (g_ppuctrl & 0x08) ? 0x1000 : 0x0000;
 
     /* OAM: 64 sprites × 4 bytes: [Y, tile, attr, X] */
@@ -406,12 +409,30 @@ render_sprites:
         int priority = (spr_attr >> 5) & 1; /* 0=in front, 1=behind BG */
         int spr_pal  = (spr_attr & 0x03) + 4; /* sprite palettes start at $3F10, offset 4 */
 
-        for (int row = 0; row < 8; row++) {
-            int draw_row = flip_v ? (7 - row) : row;
+        /* 8x16 mode: tile bit 0 selects pattern table, top tile = tile & 0xFE */
+        int tile_base, tile_chr_base;
+        if (spr_tall) {
+            tile_chr_base = (spr_tile & 1) ? 0x1000 : 0x0000;
+            tile_base = spr_tile & 0xFE;
+        } else {
+            tile_chr_base = spr_chr_base;
+            tile_base = spr_tile;
+        }
+
+        for (int row = 0; row < spr_height; row++) {
+            int draw_row = flip_v ? (spr_height - 1 - row) : row;
             int py = spr_y + 1 + row; /* OAM Y is offset by 1 */
             if (py < 0 || py >= 240) continue;
 
-            int chr_off = spr_chr_base + spr_tile * 16 + draw_row;
+            /* For 8x16: rows 0-7 use top tile, rows 8-15 use bottom tile */
+            int tile_row = draw_row;
+            int tile_num = tile_base;
+            if (spr_tall && tile_row >= 8) {
+                tile_num = tile_base + 1;
+                tile_row -= 8;
+            }
+
+            int chr_off = tile_chr_base + tile_num * 16 + tile_row;
             uint8_t lo = g_chr_ram[chr_off];
             uint8_t hi = g_chr_ram[chr_off + 8];
 
