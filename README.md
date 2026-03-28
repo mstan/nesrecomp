@@ -9,6 +9,7 @@ A static 6502 recompiler framework for NES games. Translates NES ROM machine cod
 | Game | Status | Repository |
 |------|--------|------------|
 | The Legend of Zelda | Believed 100% playable | [LegendOfZeldaNESRecomp](https://github.com/mstan/LegendOfZeldaNESRecomp) |
+| Dr. Mario | Playable (1P tested) | [DrMarioNesRecomp](https://github.com/mstan/DrMarioNesRecomp) |
 | Faxanadu | Believed mostly playable, minor bugs | [FaxanaduRecomp](https://github.com/mstan/FaxanaduRecomp) |
 | Super Mario Bros. | Believed mostly playable, minor bugs | [SuperMarioBrosNESRecomp](https://github.com/mstan/SuperMarioBrosNESRecomp) |
 
@@ -39,7 +40,15 @@ Game executable (linked with runner library + SDL2)
 | `runner/src/main_runner.c` | SDL2 window, NMI loop, frame timing |
 | `runner/src/debug_server.c` | TCP debug server with ring buffer |
 
-### game.cfg Directives
+### Configuration Formats
+
+Games can use either `.cfg` (legacy text) or `.toml` (recommended) for recompiler configuration. Format is auto-detected by file extension. See Dr. Mario's `game.toml` for an example of the TOML format.
+
+### Configurable Controls
+
+A `keybinds.ini` file is auto-generated next to the game executable on first run. Both player 1 and player 2 keyboard bindings are configurable. Edit the INI file and restart the game to apply changes.
+
+### game.cfg / game.toml Directives
 
 | Directive | Description |
 |-----------|-------------|
@@ -48,6 +57,9 @@ Game executable (linked with runner library + SDL2)
 | `sram_map <sram> <rom> <bank> <size>` | SRAM-to-ROM code mapping |
 | `extra_func <bank> <addr>` | Force-create a function at this address |
 | `extra_label <bank> <addr>` | Secondary entry point within an existing function |
+| `inline_pointer <addr> <zp_lo> <zp_hi> [call]` | JSR reads 2 inline bytes into zero page; `call` = also call the function |
+| `nop_jsr <addr>` | Skip this JSR entirely (for stack-manipulation routines incompatible with recompilation) |
+| `data_region <bank> <start> <end>` | Exclude byte range from pointer scanner (known data, not code) |
 
 ### extra_func vs extra_label
 
