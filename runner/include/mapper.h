@@ -33,6 +33,13 @@ typedef struct {
     uint8_t prg_reg;
     int     current_bank;
     int     mirroring;
+    /* MMC3 (Mapper 4) state */
+    uint8_t mmc3_bank_select;
+    uint8_t mmc3_regs[8];
+    uint8_t mmc3_irq_latch;
+    uint8_t mmc3_irq_counter;
+    int     mmc3_irq_reload;
+    int     mmc3_irq_enabled;
 } MapperState;
 
 void mapper_get_state(MapperState *out);

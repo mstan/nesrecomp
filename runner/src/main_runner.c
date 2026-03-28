@@ -299,8 +299,8 @@ void save_png(const char *path, int w, int h, const void *rgb, int stride) {
 }
 
 static void save_screenshot(void) {
-    char path[80];
-    snprintf(path, sizeof(path), "C:/temp/nes_shot_%04llu.png",
+    char path[128];
+    snprintf(path, sizeof(path), "C:/temp/mm3_shot_%04llu.png",
              (unsigned long long)g_frame_count);
     static uint8_t rgb[256 * 240 * 3];
     for (int i = 0; i < 256 * 240; i++) {
@@ -505,8 +505,8 @@ void nes_vblank_callback(void) {
         if (ec >= 0) exit(ec);
     }
 
-    /* Rotating screenshot every 60 frames (debug mode only) */
-    if (s_debug && g_frame_count % 60 == 0) {
+    /* Rotating screenshot every 60 frames */
+    if (g_frame_count % 60 == 0) {
         save_screenshot();
     }
     g_frame_count++;
