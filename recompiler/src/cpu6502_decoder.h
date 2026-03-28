@@ -12,6 +12,7 @@ typedef enum {
     MN_LSR, MN_NOP, MN_ORA, MN_PHA, MN_PHP, MN_PLA, MN_PLP, MN_ROL,
     MN_ROR, MN_RTI, MN_RTS, MN_SBC, MN_SEC, MN_SED, MN_SEI, MN_STA,
     MN_STX, MN_STY, MN_TAX, MN_TAY, MN_TSX, MN_TXA, MN_TXS, MN_TYA,
+    MN_LAX,     /* Undocumented: LDA+LDX combined (A=X=mem) */
     MN_ILLEGAL  /* Invalid/undocumented opcode */
 } OpMnemonic;
 

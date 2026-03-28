@@ -163,8 +163,8 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
     fprintf(f, "    /* $%04X: %02X */ ", pc, opcode);
 
     if (e->mnemonic == MN_ILLEGAL) {
-        fprintf(f, "/* ILLEGAL $%02X — skip */\n", opcode);
-        return 1;
+        fprintf(f, "/* ILLEGAL $%02X — skip %d */\n", opcode, e->size);
+        return e->size;
     }
 
     switch (e->mnemonic) {
@@ -194,6 +194,13 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                 fprintf(f, "g_cpu.Y = game_ram_read_hook(0x%04X, 0x%04X, nes_read(0x%04X)); FLAG_NZ(g_cpu.Y);\n", pc, abs16, abs16);
             else
                 fprintf(f, "g_cpu.Y = nes_read(%s); FLAG_NZ(g_cpu.Y);\n",
+                        operand_addr_expr(e->addr_mode, op1, op2));
+            break;
+        case MN_LAX:
+            if (e->addr_mode == AM_IMM)
+                fprintf(f, "g_cpu.A = g_cpu.X = 0x%02X; FLAG_NZ(g_cpu.A);\n", op1);
+            else
+                fprintf(f, "g_cpu.A = g_cpu.X = nes_read(%s); FLAG_NZ(g_cpu.A);\n",
                         operand_addr_expr(e->addr_mode, op1, op2));
             break;
         case MN_STA:
@@ -545,6 +552,23 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                     return (int)(tpc - pc);
                 }
             }
+            /* Check against inline_pointer: JSR to a routine that reads 2
+             * inline bytes as a data pointer into zero page. */
+            {
+                const InlinePointer *ipp = NULL;
+                for (int ti = 0; ti < cfg->inline_pointer_count; ti++) {
+                    if (abs16 == cfg->inline_pointers[ti].addr) { ipp = &cfg->inline_pointers[ti]; break; }
+                }
+                if (ipp) {
+                    uint8_t lo = rom_read(rom, bank, pc + 3);
+                    uint8_t hi = rom_read(rom, bank, pc + 4);
+                    fprintf(f, "/* inline_pointer $%04X: load $%02X%02X into $%02X/$%02X */\n",
+                            ipp->addr, hi, lo, ipp->zp_lo, ipp->zp_hi);
+                    fprintf(f, "g_ram[0x%02X] = 0x%02X; g_ram[0x%02X] = 0x%02X;\n",
+                            ipp->zp_lo, lo, ipp->zp_hi, hi);
+                    return 5;
+                }
+            }
             if (abs16 >= 0xC000) {
                 fprintf(f, "func_%04X();\n", abs16);
             } else if (abs16 >= 0x8000) {
@@ -771,6 +795,12 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
                         uint16_t _tpc = scan + 3;
                         while (rom_read(rom, bank, _tpc + 1) >= 0x80) _tpc += 2;
                         sz = (int)(_tpc - scan);
+                        break;
+                    }
+                }
+                for (int _ti = 0; _ti < cfg->inline_pointer_count; _ti++) {
+                    if (_tgt == cfg->inline_pointers[_ti].addr) {
+                        sz = 5;
                         break;
                     }
                 }

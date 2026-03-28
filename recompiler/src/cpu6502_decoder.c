@@ -1,7 +1,10 @@
 /*
  * cpu6502_decoder.c — 256-entry 6502 opcode table
  * Valid 6502 has ~151 opcodes across 13 addressing modes.
- * Illegal opcodes marked MN_ILLEGAL (treated as 1-byte NOP in codegen).
+ * Most illegal opcodes treated as 1-byte NOP to avoid disturbing function
+ * boundary detection from the ROM pointer scanner.
+ * Exception: LAX variants (MN_LAX) have correct sizes and behavior since
+ * some NES games use them in real code paths.
  */
 #include "cpu6502_decoder.h"
 
@@ -35,7 +38,7 @@ const OpcodeEntry g_opcode_table[256] = {
     /* 0x18 */ {MN_CLC, AM_IMP, 1},
     /* 0x19 */ {MN_ORA, AM_ABSY, 3},
     /* 0x1A */ ILL,
-    /* 0x1B */ ILL,
+    /* 0x1B */ {MN_ILLEGAL, AM_ABSY, 3},     /* SLO abs,Y */
     /* 0x1C */ ILL,
     /* 0x1D */ {MN_ORA, AM_ABSX, 3},
     /* 0x1E */ {MN_ASL, AM_ABSX, 3},
@@ -124,7 +127,7 @@ const OpcodeEntry g_opcode_table[256] = {
     /* 0x71 */ {MN_ADC, AM_INDY, 2},
     /* 0x72 */ ILL,
     /* 0x73 */ ILL,
-    /* 0x74 */ ILL,
+    /* 0x74 */ {MN_ILLEGAL, AM_ZPX, 2},      /* DOP zp,X (2-byte NOP) */
     /* 0x75 */ {MN_ADC, AM_ZPX, 2},
     /* 0x76 */ {MN_ROR, AM_ZPX, 2},
     /* 0x77 */ ILL,
@@ -171,27 +174,27 @@ const OpcodeEntry g_opcode_table[256] = {
     /* 0xA0 */ {MN_LDY, AM_IMM, 2},
     /* 0xA1 */ {MN_LDA, AM_INDX, 2},
     /* 0xA2 */ {MN_LDX, AM_IMM, 2},
-    /* 0xA3 */ ILL,
+    /* 0xA3 */ {MN_LAX, AM_INDX, 2},         /* LAX (zp,X) */
     /* 0xA4 */ {MN_LDY, AM_ZP, 2},
     /* 0xA5 */ {MN_LDA, AM_ZP, 2},
     /* 0xA6 */ {MN_LDX, AM_ZP, 2},
-    /* 0xA7 */ ILL,
+    /* 0xA7 */ {MN_LAX, AM_ZP, 2},           /* LAX zp */
     /* 0xA8 */ {MN_TAY, AM_IMP, 1},
     /* 0xA9 */ {MN_LDA, AM_IMM, 2},
     /* 0xAA */ {MN_TAX, AM_IMP, 1},
-    /* 0xAB */ ILL,
+    /* 0xAB */ {MN_LAX, AM_IMM, 2},          /* LAX #imm */
     /* 0xAC */ {MN_LDY, AM_ABS, 3},
     /* 0xAD */ {MN_LDA, AM_ABS, 3},
     /* 0xAE */ {MN_LDX, AM_ABS, 3},
-    /* 0xAF */ ILL,
+    /* 0xAF */ {MN_LAX, AM_ABS, 3},          /* LAX abs */
     /* 0xB0 */ {MN_BCS, AM_REL, 2},
     /* 0xB1 */ {MN_LDA, AM_INDY, 2},
     /* 0xB2 */ ILL,
-    /* 0xB3 */ ILL,
+    /* 0xB3 */ {MN_LAX, AM_INDY, 2},         /* LAX (zp),Y */
     /* 0xB4 */ {MN_LDY, AM_ZPX, 2},
     /* 0xB5 */ {MN_LDA, AM_ZPX, 2},
     /* 0xB6 */ {MN_LDX, AM_ZPY, 2},
-    /* 0xB7 */ ILL,
+    /* 0xB7 */ {MN_LAX, AM_ZPY, 2},          /* LAX zp,Y */
     /* 0xB8 */ {MN_CLV, AM_IMP, 1},
     /* 0xB9 */ {MN_LDA, AM_ABSY, 3},
     /* 0xBA */ {MN_TSX, AM_IMP, 1},
@@ -199,7 +202,7 @@ const OpcodeEntry g_opcode_table[256] = {
     /* 0xBC */ {MN_LDY, AM_ABSX, 3},
     /* 0xBD */ {MN_LDA, AM_ABSX, 3},
     /* 0xBE */ {MN_LDX, AM_ABSY, 3},
-    /* 0xBF */ ILL,
+    /* 0xBF */ {MN_LAX, AM_ABSY, 3},         /* LAX abs,Y */
     /* 0xC0 */ {MN_CPY, AM_IMM, 2},
     /* 0xC1 */ {MN_CMP, AM_INDX, 2},
     /* 0xC2 */ ILL,
@@ -275,7 +278,7 @@ const char *mnemonic_name(OpMnemonic mn) {
         "LSR","NOP","ORA","PHA","PHP","PLA","PLP","ROL",
         "ROR","RTI","RTS","SBC","SEC","SED","SEI","STA",
         "STX","STY","TAX","TAY","TSX","TXA","TXS","TYA",
-        "???"
+        "LAX","???"
     };
     if (mn > MN_ILLEGAL) mn = MN_ILLEGAL;
     return names[mn];

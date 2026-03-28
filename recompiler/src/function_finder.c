@@ -231,6 +231,9 @@ static int walk_function(const NESRom *rom, FunctionList *list,
                 /* ── Stack (unknown value) ── */
                 case MN_PLA: known_a = -1; break;
 
+                /* ── Undocumented LAX: A = X = mem (unknown) ── */
+                case MN_LAX: known_a = -1; known_x = -1; break;
+
                 /* ── Everything else: no register effect ── */
                 default: break;
             }

@@ -14,6 +14,7 @@
 #define GAME_CFG_MAX_SPLIT_TABLES     16
 #define GAME_CFG_MAX_EXTRA_FUNCS      2048
 #define GAME_CFG_MAX_INLINE_DISPATCHES 8
+#define GAME_CFG_MAX_INLINE_POINTERS   8
 #define GAME_CFG_MAX_RAM_READ_HOOKS   16
 #define GAME_CFG_MAX_BANK_SWITCHES     8
 #define GAME_CFG_MAX_SRAM_MAPS         4
@@ -77,6 +78,12 @@ typedef struct {
 typedef struct {
     uint16_t addr;  /* JSR target (the dispatch routine) */
 } InlineDispatch;
+
+typedef struct {
+    uint16_t addr;
+    uint8_t  zp_lo;
+    uint8_t  zp_hi;
+} InlinePointer;
 
 /*
  * RAM read hook: when the generated code reads from this address via
@@ -144,6 +151,9 @@ typedef struct {
 
     SramMap          sram_maps[GAME_CFG_MAX_SRAM_MAPS];
     int              sram_map_count;
+
+    InlinePointer   inline_pointers[GAME_CFG_MAX_INLINE_POINTERS];
+    int             inline_pointer_count;
 
     ExtraFunc        extra_labels[GAME_CFG_MAX_EXTRA_LABELS];
     int              extra_label_count;
