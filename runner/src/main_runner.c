@@ -23,6 +23,7 @@
 #include "apu.h"
 #include "mapper.h"
 #include "game_extras.h"
+#include "debug_server.h"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
@@ -374,6 +375,8 @@ void nes_vblank_callback(void) {
     SDL_Event ev;
     while (SDL_PollEvent(&ev)) {
         if (ev.type == SDL_QUIT) exit(0);
+        if (ev.type == SDL_WINDOWEVENT &&
+            ev.window.event == SDL_WINDOWEVENT_CLOSE) exit(0);
         if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_ESCAPE) exit(0);
         if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_F5)
             g_turbo ^= 1;
@@ -412,6 +415,9 @@ void nes_vblank_callback(void) {
 
     /* Per-frame script execution */
     script_tick(g_frame_count, g_ram);
+
+    /* TCP debug server: poll for commands each frame */
+    debug_server_poll();
 
     /* Log per-frame state BEFORE NMI runs */
     debug_log_frame(s_cb_count);

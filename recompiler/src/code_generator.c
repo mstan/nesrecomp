@@ -378,8 +378,8 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
             if (_cross) { \
                 fprintf(f, "if (" cond_str ") { call_by_address(0x%04X); return; }\n", _tgt); \
             } else if (_tgt <= pc) { \
-                /* Backward branch (loop) — emit watchdog check */ \
-                fprintf(f, "if (" cond_str ") {\n#ifdef WATCHDOG_ENABLED\n    watchdog_check();\n#endif\n    goto label_%04X;\n    }\n", _tgt); \
+                /* Backward branch (loop) — emit VBlank trigger + watchdog check */ \
+                fprintf(f, "if (" cond_str ") {\n    maybe_trigger_vblank();\n#ifdef WATCHDOG_ENABLED\n    watchdog_check();\n#endif\n    goto label_%04X;\n    }\n", _tgt); \
             } else { \
                 fprintf(f, "if (" cond_str ") goto label_%04X;\n", _tgt); \
             } \
