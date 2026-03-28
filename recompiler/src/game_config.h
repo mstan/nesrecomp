@@ -15,6 +15,7 @@
 #define GAME_CFG_MAX_EXTRA_FUNCS      2048
 #define GAME_CFG_MAX_INLINE_DISPATCHES 8
 #define GAME_CFG_MAX_INLINE_POINTERS   8
+#define GAME_CFG_MAX_NOP_JSRS          8
 #define GAME_CFG_MAX_RAM_READ_HOOKS   16
 #define GAME_CFG_MAX_BANK_SWITCHES     8
 #define GAME_CFG_MAX_SRAM_MAPS         4
@@ -83,6 +84,7 @@ typedef struct {
     uint16_t addr;
     uint8_t  zp_lo;
     uint8_t  zp_hi;
+    int      call;   /* 1 = also call the function after loading ZP */
 } InlinePointer;
 
 /*
@@ -154,6 +156,9 @@ typedef struct {
 
     InlinePointer   inline_pointers[GAME_CFG_MAX_INLINE_POINTERS];
     int             inline_pointer_count;
+
+    uint16_t        nop_jsrs[GAME_CFG_MAX_NOP_JSRS]; /* JSR targets to skip entirely */
+    int             nop_jsr_count;
 
     ExtraFunc        extra_labels[GAME_CFG_MAX_EXTRA_LABELS];
     int              extra_label_count;

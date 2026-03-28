@@ -417,8 +417,10 @@ void nes_vblank_callback(void) {
     debug_log_frame(s_cb_count);
 
     if (s_debug) {
-        log_on_change("$12_mode", g_ram[0x12]);
-        log_on_change("$EB_room", g_ram[0xEB]);
+        log_on_change("$46_mode", g_ram[0x46]);
+        log_on_change("$68_palChg", g_ram[0x68]);
+        log_on_change("$5E_state", g_ram[0x5E]);
+        log_on_change("$66_ppuUpd", g_ram[0x66]);
     }
     /* Clear sprite-0 hit (bit6) and sprite-overflow (bit5) at frame start.
      * Real NES clears all three status bits at pre-render scanline. */

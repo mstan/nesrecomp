@@ -367,6 +367,26 @@ static int walk_function(const NESRom *rom, FunctionList *list,
                 }
             }
 
+            /* Check nop_jsr: skip this JSR entirely */
+            {
+                int is_nop = 0;
+                for (int ni = 0; ni < cfg->nop_jsr_count; ni++) {
+                    if (target == cfg->nop_jsrs[ni]) { is_nop = 1; break; }
+                }
+                if (is_nop) { pc += 3; continue; }
+            }
+            /* Check inline_pointer: skip 2 inline bytes after JSR */
+            {
+                const InlinePointer *ipp = NULL;
+                for (int ti = 0; ti < cfg->inline_pointer_count; ti++) {
+                    if (target == cfg->inline_pointers[ti].addr) { ipp = &cfg->inline_pointers[ti]; break; }
+                }
+                if (ipp) {
+                    add_function(list, ipp->addr, fixed_bank);
+                    pc += 5; continue;
+                }
+            }
+
             if (target >= 0xC000) {
                 /* Fixed bank target — always knowable */
                 add_function(list, target, fixed_bank);

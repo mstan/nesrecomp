@@ -124,14 +124,23 @@ bool game_config_load(GameConfig *cfg, const char *path) {
                 cfg->inline_dispatches[i].addr = (uint16_t)addr;
             }
 
+        } else if (strcmp(key, "nop_jsr") == 0) {
+            unsigned addr;
+            if (sscanf(rest, "%x", &addr) == 1 &&
+                cfg->nop_jsr_count < GAME_CFG_MAX_NOP_JSRS) {
+                cfg->nop_jsrs[cfg->nop_jsr_count++] = (uint16_t)addr;
+            }
+
         } else if (strcmp(key, "inline_pointer") == 0) {
             unsigned addr, zp_lo, zp_hi;
-            if (sscanf(rest, "%x %x %x", &addr, &zp_lo, &zp_hi) == 3 &&
+            char extra[16] = {0};
+            if (sscanf(rest, "%x %x %x %15s", &addr, &zp_lo, &zp_hi, extra) >= 3 &&
                 cfg->inline_pointer_count < GAME_CFG_MAX_INLINE_POINTERS) {
                 int i = cfg->inline_pointer_count++;
                 cfg->inline_pointers[i].addr  = (uint16_t)addr;
                 cfg->inline_pointers[i].zp_lo = (uint8_t)zp_lo;
                 cfg->inline_pointers[i].zp_hi = (uint8_t)zp_hi;
+                cfg->inline_pointers[i].call  = (strcmp(extra, "call") == 0) ? 1 : 0;
             }
 
         } else if (strcmp(key, "ram_read_hook") == 0) {

@@ -552,6 +552,13 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                     return (int)(tpc - pc);
                 }
             }
+            /* Check against nop_jsr: JSR to skip entirely (emit nothing) */
+            for (int ni = 0; ni < cfg->nop_jsr_count; ni++) {
+                if (abs16 == cfg->nop_jsrs[ni]) {
+                    fprintf(f, "/* nop_jsr $%04X — skipped */\n", abs16);
+                    return 3;
+                }
+            }
             /* Check against inline_pointer: JSR to a routine that reads 2
              * inline bytes as a data pointer into zero page. */
             {
@@ -566,6 +573,18 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                             ipp->addr, hi, lo, ipp->zp_lo, ipp->zp_hi);
                     fprintf(f, "g_ram[0x%02X] = 0x%02X; g_ram[0x%02X] = 0x%02X;\n",
                             ipp->zp_lo, lo, ipp->zp_hi, hi);
+                    if (!ipp->call) {
+                        /* getPointer_fromStack leaves Y=2 after reading 2 bytes */
+                        fprintf(f, "g_cpu.Y = 2; FLAG_NZ(g_cpu.Y);\n");
+                    }
+                    if (ipp->call) {
+                        if (abs16 >= 0xC000)
+                            fprintf(f, "func_%04X();\n", abs16);
+                        else if (bank == fixed_bank)
+                            fprintf(f, "call_by_address(0x%04X);\n", abs16);
+                        else
+                            fprintf(f, "func_%04X_b%d();\n", abs16, bank);
+                    }
                     return 5;
                 }
             }
@@ -801,6 +820,12 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
                 for (int _ti = 0; _ti < cfg->inline_pointer_count; _ti++) {
                     if (_tgt == cfg->inline_pointers[_ti].addr) {
                         sz = 5;
+                        break;
+                    }
+                }
+                for (int _ti = 0; _ti < cfg->nop_jsr_count; _ti++) {
+                    if (_tgt == cfg->nop_jsrs[_ti]) {
+                        sz = 3; /* just the JSR, no inline data */
                         break;
                     }
                 }
