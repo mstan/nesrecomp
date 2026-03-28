@@ -20,6 +20,7 @@
 #define GAME_CFG_MAX_BANK_SWITCHES     8
 #define GAME_CFG_MAX_SRAM_MAPS         4
 #define GAME_CFG_MAX_EXTRA_LABELS   1024
+#define GAME_CFG_MAX_DATA_REGIONS    64
 
 /*
  * Trampoline: a JSR whose operand address is a known bank-switch dispatch
@@ -126,6 +127,20 @@ typedef struct {
     uint16_t size;        /* Size of the mapped region in bytes */
 } SramMap;
 
+/*
+ * Data region: a range of PRG ROM that contains data, not code.
+ * The pointer scanner will not scan these bytes for function pointers,
+ * and the function walker will not try to walk them as code.
+ *
+ * Usage in game.cfg:  data_region <bank> <hex_start> <hex_end>
+ * Example:            data_region 0 A200 A800
+ */
+typedef struct {
+    int      bank;
+    uint16_t start;
+    uint16_t end;     /* exclusive */
+} DataRegion;
+
 typedef struct {
     char            output_prefix[64];  /* e.g. "faxanadu" → generated/faxanadu_full.c */
     char            annotations_path[512]; /* override for annotations.csv */
@@ -162,6 +177,9 @@ typedef struct {
 
     ExtraFunc        extra_labels[GAME_CFG_MAX_EXTRA_LABELS];
     int              extra_label_count;
+
+    DataRegion       data_regions[GAME_CFG_MAX_DATA_REGIONS];
+    int              data_region_count;
 } GameConfig;
 
 /* Initialize to empty (no dispatch tables, prefix derived from ROM name) */

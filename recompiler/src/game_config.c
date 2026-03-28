@@ -171,6 +171,16 @@ bool game_config_load(GameConfig *cfg, const char *path) {
                 cfg->bank_switches[i].addr = (uint16_t)addr;
             }
 
+        } else if (strcmp(key, "data_region") == 0) {
+            int bank; unsigned start, end;
+            if (sscanf(rest, "%d %x %x", &bank, &start, &end) == 3 &&
+                cfg->data_region_count < GAME_CFG_MAX_DATA_REGIONS) {
+                int i = cfg->data_region_count++;
+                cfg->data_regions[i].bank  = bank;
+                cfg->data_regions[i].start = (uint16_t)start;
+                cfg->data_regions[i].end   = (uint16_t)end;
+            }
+
         } else {
             fprintf(stderr, "[GameConfig] Unknown directive '%s' at line %d\n", key, line_no);
         }

@@ -72,6 +72,17 @@ static uint16_t sram_translate(const GameConfig *cfg, uint16_t addr, int *out_ba
     return 0;
 }
 
+/* Check if an address falls within a declared data region */
+static bool is_data_region(const GameConfig *cfg, int bank, uint16_t addr) {
+    for (int i = 0; i < cfg->data_region_count; i++) {
+        const DataRegion *dr = &cfg->data_regions[i];
+        if ((dr->bank == bank || dr->bank == -1) &&
+            addr >= dr->start && addr < dr->end)
+            return true;
+    }
+    return false;
+}
+
 /* Register propagation statistics */
 static int s_bank_switches_detected = 0;
 static int s_regprop_targeted_adds = 0;
@@ -538,14 +549,17 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
     /* ROM pointer scan: scan fixed bank for 16-bit values that look like
      * function pointers into ROM. Discovers targets of RAM-based dispatch
      * tables (loaded from ROM at runtime, invisible to JSR BFS).
-     * Criteria: value in $C000-$FFFD, first byte at target is non-illegal opcode. */
+     * Criteria: value in $C000-$FFFD, first byte at target is non-illegal opcode.
+     * Skip addresses in declared data_region ranges (both source and target). */
     int before_scan = out->count;
     for (uint16_t off = 0; off <= 0x3FFD; off++) {
         uint16_t addr = 0xC000 + off;
+        if (is_data_region(cfg, fixed_bank, addr)) continue;
         uint8_t lo = rom_read(rom, fixed_bank, addr);
         uint8_t hi = rom_read(rom, fixed_bank, addr + 1);
         uint16_t candidate = lo | ((uint16_t)hi << 8);
         if (candidate < 0xC000 || candidate > 0xFFFD) continue;
+        if (is_data_region(cfg, fixed_bank, candidate)) continue;
         /* Add candidate if it has a valid opcode. */
         uint8_t first_byte = rom_read(rom, fixed_bank, candidate);
         if (g_opcode_table[first_byte].mnemonic != MN_ILLEGAL &&
@@ -586,10 +600,12 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
     for (int b = 0; b < fixed_bank; b++) {
         for (uint16_t off = 0; off <= 0x3FFD; off++) {
             uint16_t addr = 0x8000 + off;
+            if (is_data_region(cfg, b, addr)) continue;
             uint8_t lo = rom_read(rom, b, addr);
             uint8_t hi = rom_read(rom, b, addr + 1);
             uint16_t candidate = lo | ((uint16_t)hi << 8);
             if (candidate < 0x8000 || candidate > 0xBFFD) continue;
+            if (is_data_region(cfg, b, candidate)) continue;
             /* Only the RTS-as-JMP case: candidate has ILLEGAL opcode,
              * meaning the stored value is (target-1) — skip candidate itself,
              * add candidate+1 if it has a valid opcode. */
