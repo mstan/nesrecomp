@@ -251,6 +251,41 @@ static bool game_config_load_toml(GameConfig *cfg, const char *path) {
         }
     }
 
+    /* [[trampoline]] */
+    toml_array_t *tramp = toml_array_in(root, "trampoline");
+    if (tramp) for (int i = 0; i < toml_array_nelem(tramp) && cfg->trampoline_count < GAME_CFG_MAX_TRAMPOLINES; i++) {
+        toml_table_t *t = toml_table_at(tramp, i);
+        if (!t) continue;
+        int idx = cfg->trampoline_count++;
+        cfg->trampolines[idx].addr        = toml_hex(t, "addr");
+        cfg->trampolines[idx].inline_bytes = toml_int_or(t, "inline_bytes", 0);
+        cfg->trampolines[idx].bs_fn_addr  = toml_hex(t, "bs_fn_addr");
+    }
+
+    /* [[known_table]] */
+    toml_array_t *ktbl = toml_array_in(root, "known_table");
+    if (ktbl) for (int i = 0; i < toml_array_nelem(ktbl) && cfg->known_table_count < GAME_CFG_MAX_KNOWN_TABLES; i++) {
+        toml_table_t *t = toml_table_at(ktbl, i);
+        if (!t) continue;
+        int idx = cfg->known_table_count++;
+        cfg->known_tables[idx].bank  = toml_int_or(t, "bank", -1);
+        cfg->known_tables[idx].start = toml_hex(t, "start");
+        cfg->known_tables[idx].end   = toml_hex(t, "end");
+    }
+
+    /* [[split_table]] */
+    toml_array_t *stbl = toml_array_in(root, "split_table");
+    if (stbl) for (int i = 0; i < toml_array_nelem(stbl) && cfg->known_split_table_count < GAME_CFG_MAX_SPLIT_TABLES; i++) {
+        toml_table_t *t = toml_table_at(stbl, i);
+        if (!t) continue;
+        int idx = cfg->known_split_table_count++;
+        cfg->known_split_tables[idx].bank     = toml_int_or(t, "bank", -1);
+        cfg->known_split_tables[idx].lo_start = toml_hex(t, "lo_addr");
+        cfg->known_split_tables[idx].hi_start = toml_hex(t, "hi_addr");
+        cfg->known_split_tables[idx].count    = toml_int_or(t, "count", 0);
+        cfg->known_split_tables[idx].stride   = toml_int_or(t, "stride", 1);
+    }
+
     /* [[inline_dispatch]] */
     toml_array_t *idisp = toml_array_in(root, "inline_dispatch");
     if (idisp) for (int i = 0; i < toml_array_nelem(idisp) && cfg->inline_dispatch_count < GAME_CFG_MAX_INLINE_DISPATCHES; i++) {
