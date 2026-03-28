@@ -121,7 +121,7 @@ void mapper_init(const uint8_t *prg_data, int prg_banks,
 void mapper_init_chr(const uint8_t *chr_data, int chr_banks) {
     s_chr_rom_data  = chr_data;
     s_chr_rom_banks = chr_banks;
-    if (chr_banks > 0) {
+    if (chr_banks > 0 && s_mapper_type == 1) {
         mmc1_apply_chr(); /* Load initial CHR bank into g_chr_ram */
         printf("[Mapper] CHR ROM: %d x 8KB banks, initial bank switching applied\n", chr_banks);
     }
