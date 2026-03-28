@@ -541,6 +541,7 @@ void runner_present_framebuf(const uint32_t *argb_buf) {
 /* ---- ROM Loading ---- */
 static uint8_t *s_prg_data = NULL;
 static int      s_prg_banks = 0;
+static uint8_t *s_chr_rom_full = NULL; /* Full CHR ROM for bank switching */
 
 static bool load_rom(const char *path) {
     FILE *f = fopen(path, "rb");
@@ -571,15 +572,21 @@ static bool load_rom(const char *path) {
     if (!s_prg_data) { fclose(f); return false; }
     fread(s_prg_data, 1, prg_size, f);
 
-    /* Load CHR ROM into g_chr_ram (PPU pattern table), if present.
-     * CHR ROM is fixed tile data — the game never writes to it.
+    /* Load CHR ROM, if present.
+     * For multi-bank CHR ROM, store the full data for mapper bank switching.
+     * The mapper will copy the correct bank(s) into g_chr_ram (8KB PPU view).
      * For CHR RAM games (chr_banks==0), g_chr_ram starts zeroed and
      * is populated dynamically via PPU $2007 DMA writes. */
     if (chr_banks > 0) {
         size_t chr_size = (size_t)chr_banks * 0x2000;
-        if (chr_size > sizeof(g_chr_ram)) chr_size = sizeof(g_chr_ram);
-        size_t n = fread(g_chr_ram, 1, chr_size, f);
-        printf("[Runner] CHR ROM: loaded %zu bytes into g_chr_ram\n", n);
+        s_chr_rom_full = (uint8_t *)malloc(chr_size);
+        if (s_chr_rom_full) {
+            size_t n = fread(s_chr_rom_full, 1, chr_size, f);
+            printf("[Runner] CHR ROM: loaded %zu bytes (%d banks)\n", n, chr_banks);
+            /* Copy first 8KB into g_chr_ram as initial state */
+            size_t init_size = (chr_size < sizeof(g_chr_ram)) ? chr_size : sizeof(g_chr_ram);
+            memcpy(g_chr_ram, s_chr_rom_full, init_size);
+        }
         g_chr_is_rom = 1; /* protect CHR ROM from PPU $2007 writes */
     }
 
@@ -592,6 +599,8 @@ static bool load_rom(const char *path) {
     printf("[Runner] Vectors: NMI=$%04X RESET=$%04X IRQ=$%04X\n", nmi, reset, irq);
 
     mapper_init(s_prg_data, s_prg_banks, mapper, mirroring);
+    if (s_chr_rom_full && chr_banks > 0)
+        mapper_init_chr(s_chr_rom_full, chr_banks);
     return true;
 }
 

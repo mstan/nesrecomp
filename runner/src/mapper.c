@@ -19,6 +19,10 @@ int                   g_current_bank = 0;
 static int            s_mapper_type  = 0;
 static int            s_mirroring    = 3; /* default: horizontal */
 
+/* ── CHR ROM data (for bank switching) ─────────────────────────────────────── */
+static const uint8_t *s_chr_rom_data = NULL;
+static int            s_chr_rom_banks = 0; /* number of 8KB CHR ROM banks */
+
 /* ── Mapper 1 (MMC1) state ─────────────────────────────────────────────────── */
 static uint8_t s_shift_reg   = 0x10; /* Reset state: bit 4 set */
 static int     s_shift_count  = 0;
@@ -30,6 +34,28 @@ static uint8_t s_prg_reg = 0;
 /* Trace file */
 static FILE *s_mapper_trace = NULL;
 extern uint64_t g_frame_count; /* defined in runtime.c */
+
+/* ── MMC1 CHR bank switching ───────────────────────────────────────────────── */
+extern uint8_t g_chr_ram[0x2000];
+
+static void mmc1_apply_chr(void) {
+    if (!s_chr_rom_data || s_chr_rom_banks == 0) return;
+
+    int chr_mode = (s_ctrl >> 4) & 1;
+    int total_4k = s_chr_rom_banks * 2; /* number of 4KB banks */
+
+    if (chr_mode == 0) {
+        /* 8KB mode: s_chr0 selects an 8KB bank (bit 0 ignored) */
+        int bank_8k = (s_chr0 >> 1) % s_chr_rom_banks;
+        memcpy(g_chr_ram, s_chr_rom_data + (size_t)bank_8k * 0x2000, 0x2000);
+    } else {
+        /* 4KB mode: s_chr0 selects $0000-$0FFF, s_chr1 selects $1000-$1FFF */
+        int bank0 = s_chr0 % total_4k;
+        int bank1 = s_chr1 % total_4k;
+        memcpy(g_chr_ram,          s_chr_rom_data + (size_t)bank0 * 0x1000, 0x1000);
+        memcpy(g_chr_ram + 0x1000, s_chr_rom_data + (size_t)bank1 * 0x1000, 0x1000);
+    }
+}
 
 /* ── MMC1 helper ───────────────────────────────────────────────────────────── */
 static void mmc1_apply_prg(void) {
@@ -92,6 +118,15 @@ void mapper_init(const uint8_t *prg_data, int prg_banks,
     printf("[Mapper] Init: %d PRG banks, Mapper %d\n", prg_banks, mapper_type);
 }
 
+void mapper_init_chr(const uint8_t *chr_data, int chr_banks) {
+    s_chr_rom_data  = chr_data;
+    s_chr_rom_banks = chr_banks;
+    if (chr_banks > 0) {
+        mmc1_apply_chr(); /* Load initial CHR bank into g_chr_ram */
+        printf("[Mapper] CHR ROM: %d x 8KB banks, initial bank switching applied\n", chr_banks);
+    }
+}
+
 void mapper_write(uint16_t addr, uint8_t val) {
     switch (s_mapper_type) {
         case 0:
@@ -111,9 +146,9 @@ void mapper_write(uint16_t addr, uint8_t val) {
             s_shift_count++;
             if (s_shift_count == 5) {
                 uint8_t data = s_shift_reg & 0x1F;
-                if      (addr <= 0x9FFF) { s_ctrl    = data; }
-                else if (addr <= 0xBFFF) { s_chr0    = data; }
-                else if (addr <= 0xDFFF) { s_chr1    = data; }
+                if      (addr <= 0x9FFF) { s_ctrl    = data; mmc1_apply_chr(); }
+                else if (addr <= 0xBFFF) { s_chr0    = data; mmc1_apply_chr(); }
+                else if (addr <= 0xDFFF) { s_chr1    = data; mmc1_apply_chr(); }
                 else                     { s_prg_reg = data; mmc1_apply_prg(); }
                 s_shift_reg   = 0x10;
                 s_shift_count = 0;
