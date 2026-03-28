@@ -109,6 +109,7 @@ extern int g_current_bank;
 /* Button bitmask: bit7=A, bit6=B, bit5=Select, bit4=Start,
  *                 bit3=Up, bit2=Down, bit1=Left, bit0=Right */
 extern uint8_t g_controller1_buttons;
+extern uint8_t g_controller2_buttons;
 
 /* ---- Dispatch miss monitor ---- */
 extern uint32_t g_miss_count_any;

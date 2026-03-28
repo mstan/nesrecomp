@@ -41,7 +41,9 @@ uint64_t g_frame_count = 0;
 
 /* ---- Controller state ---- */
 uint8_t g_controller1_buttons = 0;
+uint8_t g_controller2_buttons = 0;
 static uint8_t s_ctrl1_shift   = 0;
+static uint8_t s_ctrl2_shift   = 0;
 static bool    s_ctrl1_strobe  = false;
 
 static FILE *s_ppu_trace = NULL;
@@ -139,7 +141,12 @@ uint8_t nes_read(uint16_t addr) {
             s_ctrl1_shift <<= 1;
             return 0x40 | bit;
         }
-        if (addr == 0x4017) return 0x40; /* controller 2 not connected */
+        if (addr == 0x4017) {
+            if (s_ctrl1_strobe) return 0x40 | (g_controller2_buttons >> 7);
+            uint8_t bit = (s_ctrl2_shift & 0x80) ? 1 : 0;
+            s_ctrl2_shift <<= 1;
+            return 0x40 | bit;
+        }
         return 0;
     }
     if (addr >= 0x6000 && addr <= 0x7FFF) return g_sram[addr - 0x6000];
@@ -182,6 +189,7 @@ void nes_write(uint16_t addr, uint8_t val) {
         } else if (s_ctrl1_strobe) {
             s_ctrl1_strobe = false;
             s_ctrl1_shift  = g_controller1_buttons; /* latch on falling edge */
+            s_ctrl2_shift  = g_controller2_buttons;
         }
         return;
     }

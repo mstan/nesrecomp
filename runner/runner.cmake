@@ -21,6 +21,7 @@ set(NESRECOMP_RUNNER_SOURCES
     ${NESRECOMP_RUNNER_ROOT}/src/launcher.c
     ${NESRECOMP_RUNNER_ROOT}/src/crc32.c
     ${NESRECOMP_RUNNER_ROOT}/src/debug_server.c
+    ${NESRECOMP_RUNNER_ROOT}/src/keybinds.c
 )
 
 set(NESRECOMP_RUNNER_INCLUDE_DIRS ${NESRECOMP_RUNNER_ROOT}/include)

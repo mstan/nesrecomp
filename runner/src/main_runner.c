@@ -24,6 +24,7 @@
 #include "mapper.h"
 #include "game_extras.h"
 #include "debug_server.h"
+#include "keybinds.h"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
@@ -389,19 +390,10 @@ void nes_vblank_callback(void) {
         }
     }
 
-    /* Update controller 1 from keyboard state.
-     * Mapping: Z=A  X=B  Tab=Select  Enter=Start  Arrows=D-pad */
+    /* Update controllers from keyboard state via configurable keybinds */
     {
         const uint8_t *keys = SDL_GetKeyboardState(NULL);
-        uint8_t btn = 0;
-        if (keys[SDL_SCANCODE_Z])      btn |= 0x80; /* A */
-        if (keys[SDL_SCANCODE_X])      btn |= 0x40; /* B */
-        if (keys[SDL_SCANCODE_TAB])    btn |= 0x20; /* Select */
-        if (keys[SDL_SCANCODE_RETURN]) btn |= 0x10; /* Start */
-        if (keys[SDL_SCANCODE_UP])     btn |= 0x08; /* Up */
-        if (keys[SDL_SCANCODE_DOWN])   btn |= 0x04; /* Down */
-        if (keys[SDL_SCANCODE_LEFT])   btn |= 0x02; /* Left */
-        if (keys[SDL_SCANCODE_RIGHT])  btn |= 0x01; /* Right */
+        uint8_t btn = keybinds_read_player(keys, 1);
 
         /* Recording: capture keyboard state before script override */
         record_tick(g_frame_count, btn, g_turbo);
@@ -411,6 +403,7 @@ void nes_vblank_callback(void) {
         if (sp >= 0) btn = (uint8_t)sp;
 
         g_controller1_buttons = btn;
+        g_controller2_buttons = keybinds_read_player(keys, 2);
     }
 
     /* Per-frame script execution */
@@ -642,6 +635,7 @@ void nesrecomp_runner_run(int argc, char *argv[]) {
     g_rom_path_for_extras = argv[1];
 
     runtime_init();
+    keybinds_init(argv[0]);
     game_on_init();
 
     if (s_loadstate_path) savestate_load(s_loadstate_path);
