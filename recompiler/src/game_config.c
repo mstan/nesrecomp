@@ -346,6 +346,18 @@ static bool game_config_load_toml(GameConfig *cfg, const char *path) {
         }
     }
 
+    /* [[sram_map]] */
+    toml_array_t *smap = toml_array_in(root, "sram_map");
+    if (smap) for (int i = 0; i < toml_array_nelem(smap) && cfg->sram_map_count < GAME_CFG_MAX_SRAM_MAPS; i++) {
+        toml_table_t *t = toml_table_at(smap, i);
+        if (!t) continue;
+        int idx = cfg->sram_map_count++;
+        cfg->sram_maps[idx].sram_start = toml_hex(t, "sram_start");
+        cfg->sram_maps[idx].rom_start  = toml_hex(t, "rom_start");
+        cfg->sram_maps[idx].bank       = toml_int_or(t, "bank", -1);
+        cfg->sram_maps[idx].size       = toml_hex(t, "size");
+    }
+
     /* [[data_region]] */
     toml_array_t *dr = toml_array_in(root, "data_region");
     if (dr) for (int i = 0; i < toml_array_nelem(dr) && cfg->data_region_count < GAME_CFG_MAX_DATA_REGIONS; i++) {
