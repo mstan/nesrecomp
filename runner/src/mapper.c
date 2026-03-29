@@ -320,6 +320,22 @@ void mapper_write(uint16_t addr, uint8_t val) {
     }
 }
 
+int mapper_clock_scanline(void) {
+    if (s_mapper_type != 4) return 0; /* only MMC3 has scanline IRQ */
+
+    int fire = 0;
+    if (s_mmc3_irq_reload || s_mmc3_irq_counter == 0) {
+        s_mmc3_irq_counter = s_mmc3_irq_latch;
+        s_mmc3_irq_reload = 0;
+    } else {
+        s_mmc3_irq_counter--;
+    }
+    if (s_mmc3_irq_counter == 0 && s_mmc3_irq_enabled) {
+        fire = 1;
+    }
+    return fire;
+}
+
 const uint8_t *mapper_get_switchable_bank(void) {
     if (!s_prg_data) return NULL;
     switch (s_mapper_type) {

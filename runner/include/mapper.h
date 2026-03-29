@@ -44,3 +44,10 @@ typedef struct {
 
 void mapper_get_state(MapperState *out);
 void mapper_set_state(const MapperState *in);
+
+/*
+ * mapper_clock_scanline — clock the MMC3 scanline counter.
+ * Call once per visible scanline (0-239) during rendering.
+ * Returns 1 if an IRQ should fire (counter hit zero and IRQs enabled).
+ */
+int mapper_clock_scanline(void);

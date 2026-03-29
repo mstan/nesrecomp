@@ -516,8 +516,8 @@ void nes_vblank_callback(void) {
         if (ec >= 0) exit(ec);
     }
 
-    /* Rotating screenshot every 60 frames */
-    if (g_frame_count % 60 == 0) {
+    /* Rotating screenshot every ~2 seconds (120 frames) */
+    if (g_frame_count % 120 == 0) {
         save_screenshot();
     }
     g_frame_count++;
