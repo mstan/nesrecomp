@@ -344,7 +344,9 @@ static int walk_function(const NESRom *rom, FunctionList *list,
                     }
                 }
                 if (idsp) {
-                    add_function(list, idsp->addr, fixed_bank);
+                    /* Don't add the dispatch routine itself — its body uses
+                     * PLA-return-address patterns incompatible with recomp.
+                     * All call sites get inlined switch tables instead. */
                     uint16_t tpc = pc + 3;
                     while (1) {
                         uint8_t tlo = rom_read(rom, read_bank, tpc);

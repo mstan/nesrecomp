@@ -402,6 +402,10 @@ void nes_vblank_callback(void) {
         int sp = script_get_buttons();
         if (sp >= 0) btn = (uint8_t)sp;
 
+        /* TCP debug server override: set_input command */
+        int tcp_btn = debug_server_get_input_override();
+        if (tcp_btn >= 0) btn = (uint8_t)tcp_btn;
+
         g_controller1_buttons = btn;
         g_controller2_buttons = keybinds_read_player(keys, 2);
     }

@@ -132,6 +132,13 @@ static bool game_config_load_cfg(GameConfig *cfg, const char *path) {
                 cfg->nop_jsrs[cfg->nop_jsr_count++] = (uint16_t)addr;
             }
 
+        } else if (strcmp(key, "push_jsr") == 0) {
+            unsigned addr;
+            if (sscanf(rest, "%x", &addr) == 1 &&
+                cfg->push_jsr_count < GAME_CFG_MAX_NOP_JSRS) {
+                cfg->push_jsrs[cfg->push_jsr_count++] = (uint16_t)addr;
+            }
+
         } else if (strcmp(key, "inline_pointer") == 0) {
             unsigned addr, zp_lo, zp_hi;
             char extra[16] = {0};
@@ -190,6 +197,18 @@ static bool game_config_load_cfg(GameConfig *cfg, const char *path) {
                 cfg->merge_funcs[i].bank    = bank;
                 cfg->merge_funcs[i].addr_lo = (uint16_t)(a1 < a2 ? a1 : a2);
                 cfg->merge_funcs[i].addr_hi = (uint16_t)(a1 < a2 ? a2 : a1);
+            }
+
+        } else if (strcmp(key, "push_all_jsr") == 0) {
+            cfg->push_all_jsr = true;
+
+        } else if (strcmp(key, "replace_func") == 0) {
+            int bank; unsigned addr;
+            if (sscanf(rest, "%d %x", &bank, &addr) == 2 &&
+                cfg->replace_func_count < GAME_CFG_MAX_EXTRA_FUNCS) {
+                int i = cfg->replace_func_count++;
+                cfg->replace_funcs[i].bank = bank;
+                cfg->replace_funcs[i].addr = (uint16_t)addr;
             }
 
         } else {

@@ -191,6 +191,9 @@ typedef struct {
     uint16_t        nop_jsrs[GAME_CFG_MAX_NOP_JSRS]; /* JSR targets to skip entirely */
     int             nop_jsr_count;
 
+    uint16_t        push_jsrs[GAME_CFG_MAX_NOP_JSRS]; /* JSR targets that need 6502 return addr pushed */
+    int             push_jsr_count;
+
     ExtraFunc        extra_labels[GAME_CFG_MAX_EXTRA_LABELS];
     int              extra_label_count;
 
@@ -199,6 +202,11 @@ typedef struct {
 
     MergeFunc        merge_funcs[GAME_CFG_MAX_MERGE_FUNCS];
     int              merge_func_count;
+
+    ExtraFunc        replace_funcs[GAME_CFG_MAX_EXTRA_FUNCS];  /* body provided by extras.c */
+    int              replace_func_count;
+
+    bool             push_all_jsr;  /* emit 6502 stack push/pop on every JSR/RTS */
 } GameConfig;
 
 /* Initialize to empty (no dispatch tables, prefix derived from ROM name) */

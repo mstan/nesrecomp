@@ -152,7 +152,8 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                             const FunctionList *funcs,
                             const uint16_t *valid_starts, int valid_count,
                             const GameConfig *cfg, int sram_sourced,
-                            int effective_bank) {
+                            int effective_bank,
+                            const uint16_t *merge_partners, int merge_partner_count) {
     uint8_t opcode = rom_read(rom, bank, pc);
     const OpcodeEntry *e = &g_opcode_table[opcode];
     uint8_t op1 = (e->size > 1) ? rom_read(rom, bank, pc+1) : 0;
@@ -559,6 +560,26 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                     return 3;
                 }
             }
+            /* Push 6502 return address before call, matching real JSR behavior.
+             * Needed for any code that reads the 6502 stack (e.g., coroutine
+             * schedulers using TXS/TSX + PLA/RTS to save/resume contexts).
+             * JSR pushes (PC+2) hi then lo; RTS pops and adds 1.
+             * push_all_jsr: every JSR pushes.  push_jsr: only listed targets. */
+            {
+                bool do_push = cfg->push_all_jsr;
+                if (!do_push) {
+                    for (int ni = 0; ni < cfg->push_jsr_count; ni++) {
+                        if (abs16 == cfg->push_jsrs[ni]) { do_push = true; break; }
+                    }
+                }
+                if (do_push) {
+                    uint16_t ret_addr = pc + 2; /* 6502 JSR pushes PC+2 (last byte of JSR) */
+                    fprintf(f, "g_ram[0x100 + g_cpu.S] = 0x%02X; g_cpu.S--; ",
+                            (ret_addr >> 8) & 0xFF);
+                    fprintf(f, "g_ram[0x100 + g_cpu.S] = 0x%02X; g_cpu.S--; ",
+                            ret_addr & 0xFF);
+                }
+            }
             /* Check against inline_pointer: JSR to a routine that reads 2
              * inline bytes as a data pointer into zero page. */
             {
@@ -700,6 +721,9 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                     fprintf(f, "{ g_cpu.S++; uint8_t _lo=g_ram[0x100+g_cpu.S]; g_cpu.S++; uint8_t _hi=g_ram[0x100+g_cpu.S]; call_by_address(((uint16_t)_hi<<8|_lo)+1); }\n    ");
                 }
             }
+            if (cfg->push_all_jsr) {
+                fprintf(f, "g_cpu.S += 2; /* pop JSR return address */\n");
+            }
             fprintf(f, "\n#ifdef RECOMP_STACK_TRACKING\n    recomp_stack_pop();\n#endif\n    return;\n");
             break;
         case MN_RTI: fprintf(f, "/* RTI */ g_cpu.S++; { uint8_t p=g_ram[0x100+g_cpu.S]; g_cpu.N=(p>>7)&1; g_cpu.V=(p>>6)&1; g_cpu.D=(p>>3)&1; g_cpu.I=(p>>2)&1; g_cpu.Z=(p>>1)&1; g_cpu.C=p&1; } g_cpu.S++; g_cpu.S++; /* pop PCL, PCH */\n#ifdef RECOMP_STACK_TRACKING\n    recomp_stack_pop();\n#endif\n    return;\n"); break;
@@ -768,6 +792,16 @@ static int is_sram_sourced(const GameConfig *cfg, int bank, uint16_t addr) {
     return 0;
 }
 
+static int codegen_is_data_region(const GameConfig *cfg, int bank, uint16_t addr) {
+    for (int i = 0; i < cfg->data_region_count; i++) {
+        const DataRegion *dr = &cfg->data_regions[i];
+        if ((dr->bank == bank || dr->bank == -1) &&
+            addr >= dr->start && addr < dr->end)
+            return 1;
+    }
+    return 0;
+}
+
 static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
                           const FunctionList *funcs, const AnnotationTable *at,
                           const GameConfig *cfg) {
@@ -775,6 +809,13 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
     int bank = fe->bank;
     uint16_t pc = fe->addr;
     int sram_sourced = is_sram_sourced(cfg, bank, fe->addr);
+
+    /* Skip functions marked as replace_func — their bodies are provided
+     * by custom C implementations in extras.c. */
+    for (int ri = 0; ri < cfg->replace_func_count; ri++) {
+        int rb = (cfg->replace_funcs[ri].bank < 0) ? fixed_bank : cfg->replace_funcs[ri].bank;
+        if (rb == bank && cfg->replace_funcs[ri].addr == pc) return;
+    }
 
     /* Function-level annotation (appears before the signature) */
     const char *fann = annotation_lookup(at, bank, pc);
@@ -1056,7 +1097,9 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
             for (int b = 0; b < branch_targets_count; b++)
                 if (branch_targets[b] == cursor) { is_branch_tgt = true; break; }
             if (is_branch_tgt) {
-                fprintf(f, "    /* $%04X: 60 */\n#ifdef RECOMP_STACK_TRACKING\n    recomp_stack_pop();\n#endif\n    return; /* branch-target RTS */\n", cursor);
+                fprintf(f, "    /* $%04X: 60 */\n", cursor);
+                if (cfg->push_all_jsr) fprintf(f, "    g_cpu.S += 2; /* pop JSR return address */\n");
+                fprintf(f, "#ifdef RECOMP_STACK_TRACKING\n    recomp_stack_pop();\n#endif\n    return; /* branch-target RTS */\n");
                 if (pending_count == 0) break;
                 cursor += 1;
                 continue;
@@ -1065,7 +1108,8 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
 
         int consumed = emit_instruction(f, rom, bank, cursor, pc, fixed_bank, funcs,
                                         valid_starts, valid_count, cfg, sram_sourced,
-                                        effective_bank);
+                                        effective_bank,
+                                        merge_partners, merge_partner_count);
 
         /* If this PHA is immediately followed by a branch-target RTS, the fall-through path
          * must dispatch now (before reaching the RTS label, which is bypassed by branches).
