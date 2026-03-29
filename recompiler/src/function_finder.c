@@ -322,7 +322,7 @@ static int walk_function(const NESRom *rom, FunctionList *list,
                     uint8_t disp_bank = rom_read(rom, read_bank, pc + 3);
                     uint8_t disp_lo   = rom_read(rom, read_bank, pc + 4);
                     uint8_t disp_hi   = rom_read(rom, read_bank, pc + 5);
-                    uint16_t disp_addr = (disp_lo | ((uint16_t)disp_hi << 8)) + 1;
+                    uint16_t disp_addr = (disp_lo | ((uint16_t)disp_hi << 8)) + tramp->addr_adjust;
                     if (disp_addr >= 0x8000) {
                         int tbank = (disp_addr >= 0xC000) ? fixed_bank : (int)disp_bank;
                         add_function(list, disp_addr, tbank);

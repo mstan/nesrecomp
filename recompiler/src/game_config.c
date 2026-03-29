@@ -67,14 +67,19 @@ static bool game_config_load_cfg(GameConfig *cfg, const char *path) {
             sscanf(rest, "%63s", cfg->output_prefix);
 
         } else if (strcmp(key, "trampoline") == 0) {
-            unsigned addr, bs_fn;
-            int inline_bytes;
-            if (sscanf(rest, "%x %d %x", &addr, &inline_bytes, &bs_fn) == 3 &&
-                cfg->trampoline_count < GAME_CFG_MAX_TRAMPOLINES) {
+            unsigned addr, bs_fn, bank_save = 0x100;
+            int inline_bytes, adj = 1;
+            char breg = 'X';
+            int n = sscanf(rest, "%x %d %x %d %c %x",
+                           &addr, &inline_bytes, &bs_fn, &adj, &breg, &bank_save);
+            if (n >= 3 && cfg->trampoline_count < GAME_CFG_MAX_TRAMPOLINES) {
                 int i = cfg->trampoline_count++;
-                cfg->trampolines[i].addr         = (uint16_t)addr;
-                cfg->trampolines[i].inline_bytes  = inline_bytes;
-                cfg->trampolines[i].bs_fn_addr    = (uint16_t)bs_fn;
+                cfg->trampolines[i].addr           = (uint16_t)addr;
+                cfg->trampolines[i].inline_bytes    = inline_bytes;
+                cfg->trampolines[i].bs_fn_addr      = (uint16_t)bs_fn;
+                cfg->trampolines[i].addr_adjust     = adj;
+                cfg->trampolines[i].bank_reg        = (breg == 'A' || breg == 'a') ? 'A' : 'X';
+                cfg->trampolines[i].bank_save_addr  = (uint16_t)bank_save;
             }
 
         } else if (strcmp(key, "known_table") == 0) {
@@ -233,6 +238,17 @@ static int toml_int_or(toml_table_t *tbl, const char *key, int def) {
     return d.ok ? (int)d.u.i : def;
 }
 
+static uint16_t toml_hex_or(toml_table_t *tbl, const char *key, uint16_t def) {
+    toml_datum_t d = toml_int_in(tbl, key);
+    return d.ok ? (uint16_t)d.u.i : def;
+}
+
+static const char *toml_string_or(toml_table_t *tbl, const char *key, const char *def) {
+    toml_datum_t d = toml_string_in(tbl, key);
+    if (d.ok) return d.u.s;
+    return def;
+}
+
 static bool game_config_load_toml(GameConfig *cfg, const char *path) {
     game_config_init_empty(cfg);
 
@@ -289,6 +305,10 @@ static bool game_config_load_toml(GameConfig *cfg, const char *path) {
         cfg->trampolines[idx].addr        = toml_hex(t, "addr");
         cfg->trampolines[idx].inline_bytes = toml_int_or(t, "inline_bytes", 0);
         cfg->trampolines[idx].bs_fn_addr  = toml_hex(t, "bs_fn_addr");
+        cfg->trampolines[idx].addr_adjust  = toml_int_or(t, "addr_adjust", 1);
+        const char *breg = toml_string_or(t, "bank_reg", "X");
+        cfg->trampolines[idx].bank_reg    = (breg[0] == 'A' || breg[0] == 'a') ? 'A' : 'X';
+        cfg->trampolines[idx].bank_save_addr = toml_hex_or(t, "bank_save_addr", 0x100);
     }
 
     /* [[known_table]] */

@@ -409,16 +409,21 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                     uint8_t disp_bank = rom_read(rom, bank, pc + 3);
                     uint8_t disp_lo   = rom_read(rom, bank, pc + 4);
                     uint8_t disp_hi   = rom_read(rom, bank, pc + 5);
-                    uint16_t disp_addr = (disp_lo | ((uint16_t)disp_hi << 8)) + 1;
+                    uint16_t disp_addr = (disp_lo | ((uint16_t)disp_hi << 8)) + tramp->addr_adjust;
+                    const char *breg = (tramp->bank_reg == 'A') ? "A" : "X";
                     fprintf(f, "/* trampoline $%04X dispatch: bank=%d addr=$%04X */\n",
                             tramp->addr, disp_bank, disp_addr);
-                    fprintf(f, "{ nes_write(0xDE,g_cpu.A); nes_write(0xDF,g_cpu.X); nes_write(0xE0,g_cpu.Y);\n");
-                    fprintf(f, "  g_ram[0x100+g_cpu.S]=g_ram[0x100]; g_cpu.S--;\n");
-                    fprintf(f, "  g_cpu.X=0x%02X; func_%04X();\n", disp_bank, tramp->bs_fn_addr);
-                    fprintf(f, "  g_cpu.A=nes_read(0xDE); g_cpu.X=nes_read(0xDF); g_cpu.Y=nes_read(0xE0);\n");
+                    fprintf(f, "{ uint8_t _sa=g_cpu.A,_sx=g_cpu.X,_sy=g_cpu.Y;\n");
+                    if (tramp->bank_save_addr >= 0x8000)
+                        fprintf(f, "  uint8_t _sbank=nes_read(0x%04X);\n", tramp->bank_save_addr);
+                    else
+                        fprintf(f, "  uint8_t _sbank=g_ram[0x%04X];\n", tramp->bank_save_addr);
+                    fprintf(f, "  g_cpu.%s=0x%02X; func_%04X();\n", breg, disp_bank, tramp->bs_fn_addr);
+                    fprintf(f, "  g_cpu.A=_sa; g_cpu.X=_sx; g_cpu.Y=_sy;\n");
                     fprintf(f, "  call_by_address(0x%04X);\n", disp_addr);
-                    fprintf(f, "  g_cpu.S++; g_cpu.A=g_ram[0x100+g_cpu.S]; FLAG_NZ(g_cpu.A);\n");
-                    fprintf(f, "  g_cpu.X=g_cpu.A; FLAG_NZ(g_cpu.X); func_%04X(); }\n", tramp->bs_fn_addr);
+                    fprintf(f, "  _sa=g_cpu.A;\n");
+                    fprintf(f, "  g_cpu.%s=_sbank; func_%04X();\n", breg, tramp->bs_fn_addr);
+                    fprintf(f, "  g_cpu.A=_sa; }\n");
                     return 3 + tramp->inline_bytes;
                 }
             }

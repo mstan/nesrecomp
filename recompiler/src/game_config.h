@@ -33,6 +33,9 @@ typedef struct {
     uint16_t addr;          /* JSR target address (the trampoline entry) */
     int      inline_bytes;  /* extra data bytes following the JSR opcode  */
     uint16_t bs_fn_addr;    /* bank-switch function address in fixed bank  */
+    int      addr_adjust;   /* added to inline addr (1=RTS convention, 0=JMP indirect) */
+    char     bank_reg;      /* register holding bank number: 'A' or 'X' (default 'X') */
+    uint16_t bank_save_addr;/* address to read current bank from before switch */
 } TrampolineEntry;
 
 /*
