@@ -205,15 +205,10 @@ void ppu_render_frame(uint32_t *framebuf) {
         static int s_split_holdoff      = 0;
 
         int spr0_y  = (int)(g_ppu_oam[0]);
-        /* $0722 = ScrollFlag in SMB.  When zero, the game skips the sprite-0
-         * wait entirely — no scroll split is wanted (title screen init, mode
-         * transitions, death animation).  Only activate the split when the
-         * game's own flag says scrolling is active, OR when the counter-based
-         * sim already fired this frame. */
-        int scroll_flag = g_ram[0x0722];
+        /* Sprite-0 split: activate only when the hardware sprite-0 hit
+         * detection fired this frame. No game-specific RAM checks. */
         int split_y;
-        if (g_spr0_split_active ||
-            (scroll_flag && spr0_y > 0 && spr0_y < 200 && (g_ppumask & 0x18))) {
+        if (g_spr0_split_active) {
             split_y = (spr0_y + 15) & ~7;  /* tile-aligned */
             if (split_y > 240) split_y = 240;
             s_last_valid_split_y = split_y;
