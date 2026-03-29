@@ -621,14 +621,19 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                         fprintf(f, "maybe_trigger_vblank(); func_%04X(); return;\n", abs16);
                     }
                 } else if (abs16 >= 0x8000) {
+                    /* Check if target is a merge partner (use goto, not function call) */
+                    bool is_merge = false;
+                    for (int mi = 0; mi < merge_partner_count; mi++) {
+                        if (abs16 == merge_partners[mi]) { is_merge = true; break; }
+                    }
                     if (bank == fixed_bank || sram_sourced) {
                         fprintf(f, "maybe_trigger_vblank(); call_by_address(0x%04X); return;\n", abs16);
                     } else if (abs16 == func_base && pc == func_base) {
                         /* JMP $self at function start: true idle spin. */
                         fprintf(f, "while(1) { maybe_trigger_vblank(); }\n");
-                    } else if (abs16 == func_base) {
-                        /* JMP to own entry from within body: loop-back. */
-                        fprintf(f, "goto label_%04X;\n", abs16);
+                    } else if (abs16 == func_base || is_merge) {
+                        /* JMP to own entry or merge partner: loop-back via goto. */
+                        fprintf(f, "maybe_trigger_vblank();\n    goto label_%04X;\n", abs16);
                     } else {
                         fprintf(f, "maybe_trigger_vblank(); func_%04X_b%d(); return;\n", abs16, bank);
                     }
@@ -780,10 +785,24 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
      * forward branches remain). This prevents overrunning into neighboring functions. */
     uint16_t valid_starts[MAX_INSNS_PER_FUNC];
     int valid_count = 0;
+    /* Collect merge partner addresses for this function */
+    uint16_t merge_partners[GAME_CFG_MAX_MERGE_FUNCS];
+    int merge_partner_count = 0;
+    for (int mi = 0; mi < cfg->merge_func_count; mi++) {
+        if (cfg->merge_funcs[mi].bank != bank) continue;
+        if (cfg->merge_funcs[mi].addr_lo == pc) {
+            merge_partners[merge_partner_count++] = cfg->merge_funcs[mi].addr_hi;
+        }
+    }
+
     {
         uint16_t scan = pc;
         uint16_t ps_pending[256];
         int ps_pending_count = 0;
+        /* Seed pending list with merge partners so scanning includes their code */
+        for (int mi = 0; mi < merge_partner_count; mi++) {
+            ps_pending[ps_pending_count++] = merge_partners[mi];
+        }
         for (int i = 0; i < MAX_INSNS_PER_FUNC; i++) {
             if (scan < 0x8000) break;
             /* Remove this address from ps_pending (we're visiting it now) */
@@ -846,6 +865,27 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
                 }
                 default: break;
             }
+            /* For JMP to merge partner: add target as pending (continue scan through it) */
+            if (e2->mnemonic == MN_JMP && e2->addr_mode == AM_ABS) {
+                uint8_t jmp_lo = rom_read(rom, bank, scan + 1);
+                uint8_t jmp_hi = rom_read(rom, bank, scan + 2);
+                uint16_t jmp_tgt = jmp_lo | ((uint16_t)jmp_hi << 8);
+                for (int mi = 0; mi < merge_partner_count; mi++) {
+                    if (jmp_tgt == merge_partners[mi] && ps_pending_count < 256) {
+                        bool found = false;
+                        for (int p = 0; p < ps_pending_count; p++)
+                            if (ps_pending[p] == jmp_tgt) { found = true; break; }
+                        if (!found) ps_pending[ps_pending_count++] = jmp_tgt;
+                    }
+                }
+                /* Also add the function's own base as a merge partner target */
+                if (jmp_tgt == pc && ps_pending_count < 256) {
+                    bool found = false;
+                    for (int p = 0; p < ps_pending_count; p++)
+                        if (ps_pending[p] == jmp_tgt) { found = true; break; }
+                    if (!found) ps_pending[ps_pending_count++] = jmp_tgt;
+                }
+            }
             if (e2->mnemonic == MN_ILLEGAL) { scan += sz; continue; }
             /* 4-PHA dispatch RTS: continuation (scan+1) must be included in scan */
             if (e2->mnemonic == MN_RTS && scan >= 0x800D &&
@@ -868,7 +908,7 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
         }
     }
 
-    /* Detect secondary entry points (extra_label addresses inside this function).
+    /* Detect secondary entry points (extra_label and merge_func addresses inside this function).
      * If any exist, emit a multi-entry _body function with goto dispatch. */
     uint16_t secondary_addrs[64];
     int secondary_count = 0;
@@ -883,6 +923,22 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
             if (valid_starts[v] == lbl_addr) {
                 secondary_addrs[secondary_count++] = lbl_addr;
                 break;
+            }
+        }
+    }
+    /* Add merge_func partners as secondary entries */
+    for (int mi = 0; mi < merge_partner_count && secondary_count < 64; mi++) {
+        uint16_t mp = merge_partners[mi];
+        /* Check if already added */
+        bool found = false;
+        for (int si = 0; si < secondary_count; si++)
+            if (secondary_addrs[si] == mp) { found = true; break; }
+        if (!found) {
+            for (int v = 0; v < valid_count; v++) {
+                if (valid_starts[v] == mp) {
+                    secondary_addrs[secondary_count++] = mp;
+                    break;
+                }
             }
         }
     }
@@ -1231,6 +1287,16 @@ bool codegen_emit(const NESRom *rom, const FunctionList *funcs,
 
     int fixed_bank = rom->prg_banks - 1;
     for (int i = 0; i < funcs->count; i++) {
+        /* Skip merge_func addr_hi entries — they're generated as part of addr_lo's body */
+        bool is_merge_hi = false;
+        for (int mi = 0; mi < cfg->merge_func_count; mi++) {
+            if (funcs->entries[i].bank == cfg->merge_funcs[mi].bank &&
+                funcs->entries[i].addr == cfg->merge_funcs[mi].addr_hi) {
+                is_merge_hi = true;
+                break;
+            }
+        }
+        if (is_merge_hi) continue;
         emit_function(f_full, rom, &funcs->entries[i], funcs, at, cfg);
     }
 

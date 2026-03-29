@@ -21,6 +21,7 @@
 #define GAME_CFG_MAX_SRAM_MAPS         4
 #define GAME_CFG_MAX_EXTRA_LABELS   1024
 #define GAME_CFG_MAX_DATA_REGIONS    64
+#define GAME_CFG_MAX_MERGE_FUNCS     16
 
 /*
  * Trampoline: a JSR whose operand address is a known bank-switch dispatch
@@ -141,6 +142,21 @@ typedef struct {
     uint16_t end;     /* exclusive */
 } DataRegion;
 
+/*
+ * Merge functions: two function entry points that should be generated as
+ * a single function body with multiple labels. JMPs between them become
+ * goto statements instead of function calls. The lower address is the
+ * canonical entry; the higher is a secondary label within the same body.
+ *
+ * Usage in game.cfg:  merge_func <bank> <addr1_hex> <addr2_hex>
+ * Example:            merge_func 1 A046 A047
+ */
+typedef struct {
+    int      bank;
+    uint16_t addr_lo;   /* lower address (canonical function entry) */
+    uint16_t addr_hi;   /* higher address (secondary entry label) */
+} MergeFunc;
+
 typedef struct {
     char            output_prefix[64];  /* e.g. "faxanadu" → generated/faxanadu_full.c */
     char            annotations_path[512]; /* override for annotations.csv */
@@ -180,6 +196,9 @@ typedef struct {
 
     DataRegion       data_regions[GAME_CFG_MAX_DATA_REGIONS];
     int              data_region_count;
+
+    MergeFunc        merge_funcs[GAME_CFG_MAX_MERGE_FUNCS];
+    int              merge_func_count;
 } GameConfig;
 
 /* Initialize to empty (no dispatch tables, prefix derived from ROM name) */

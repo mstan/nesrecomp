@@ -182,6 +182,16 @@ static bool game_config_load_cfg(GameConfig *cfg, const char *path) {
                 cfg->data_regions[i].end   = (uint16_t)end;
             }
 
+        } else if (strcmp(key, "merge_func") == 0) {
+            int bank; unsigned a1, a2;
+            if (sscanf(rest, "%d %x %x", &bank, &a1, &a2) == 3 &&
+                cfg->merge_func_count < GAME_CFG_MAX_MERGE_FUNCS) {
+                int i = cfg->merge_func_count++;
+                cfg->merge_funcs[i].bank    = bank;
+                cfg->merge_funcs[i].addr_lo = (uint16_t)(a1 < a2 ? a1 : a2);
+                cfg->merge_funcs[i].addr_hi = (uint16_t)(a1 < a2 ? a2 : a1);
+            }
+
         } else {
             fprintf(stderr, "[GameConfig] Unknown directive '%s' at line %d\n", key, line_no);
         }
