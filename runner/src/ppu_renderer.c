@@ -205,14 +205,12 @@ void ppu_render_frame(uint32_t *framebuf) {
         static int s_split_holdoff      = 0;
 
         int spr0_y  = (int)(g_ppu_oam[0]);
-        /* Sprite-0 scroll split: only activate when the runtime's $2002
-         * counter-based simulation actually detected sprite-0 reads this
-         * frame, OR when the game is actively polling $2002 (reads > 0).
-         * Previous SMB-specific $0722 check removed — games use different
-         * RAM addresses for scroll flags; rely on the hardware sim instead. */
+        /* Sprite-0 scroll split: activate only when the hardware sprite-0 hit
+         * detection fired this frame. No game-specific RAM checks.
+         * The g_spr0_reads_ctr heuristic was removed — it false-triggers on
+         * games that poll $2002 for VBlank detection (e.g. Yoshi's Cookie). */
         int split_y;
-        if (g_spr0_split_active ||
-            (g_spr0_reads_ctr > 2 && spr0_y > 0 && spr0_y < 200 && (g_ppumask & 0x18))) {
+        if (g_spr0_split_active) {
             split_y = (spr0_y + 15) & ~7;  /* tile-aligned */
             if (split_y > 240) split_y = 240;
             s_last_valid_split_y = split_y;
