@@ -436,11 +436,18 @@ void nes_vblank_callback(void) {
 
 
     if (g_ppuctrl & 0x80) {
-        /* Simulate hardware NMI push so RTI in the handler restores stack. */
+        /* Simulate hardware NMI push so RTI in the handler restores stack.
+         * Real 6502 pushes 3 bytes: PCH, PCL, P (status flags).
+         * PCH/PCL are placeholders — recompiled code never uses the return
+         * address from RTI, but the NMI handler does stack-relative reads
+         * at offsets $106,X and $107,X that DEPEND on all 3 bytes being
+         * present.  With only 2 pushes the offsets overshoot into the OAM
+         * buffer at $0200 when S=$FF, corrupting sprite 0's Y position. */
         uint8_t p_save = (uint8_t)((g_cpu.N<<7)|(g_cpu.V<<6)|(1<<5)|
                                    (g_cpu.D<<3)|(g_cpu.I<<2)|(g_cpu.Z<<1)|g_cpu.C);
-        g_ram[0x100+g_cpu.S] = 0x00;   g_cpu.S--;
-        g_ram[0x100+g_cpu.S] = p_save; g_cpu.S--;
+        g_ram[0x100+g_cpu.S] = 0x00;   g_cpu.S--;   /* PCH placeholder */
+        g_ram[0x100+g_cpu.S] = 0x00;   g_cpu.S--;   /* PCL placeholder */
+        g_ram[0x100+g_cpu.S] = p_save; g_cpu.S--;   /* P (status flags) */
         game_run_nmi();
     }
 
