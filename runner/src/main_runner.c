@@ -522,10 +522,8 @@ void nes_vblank_callback(void) {
         if (ec >= 0) exit(ec);
     }
 
-    /* Rotating screenshot every ~2 seconds (120 frames) */
-    if (g_frame_count % 120 == 0) {
-        save_screenshot();
-    }
+    /* Auto-screenshot disabled — use F8 or input scripts for screenshots */
+    /* if (g_frame_count % 120 == 0) { save_screenshot(); } */
     g_frame_count++;
 
     /* Upload texture and present */
