@@ -82,6 +82,7 @@ void nes_vblank_callback(void);
  * Called from generated JMP instructions to ensure games with tight idle
  * loops (no memory reads) still receive timely NMI callbacks. */
 void maybe_trigger_vblank(void);
+void runtime_set_vblank_firing(int active);
 
 /* PPU registers */
 extern uint8_t g_ppuctrl;

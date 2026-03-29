@@ -452,7 +452,13 @@ void nes_vblank_callback(void) {
         g_ram[0x100+g_cpu.S] = 0x00;   g_cpu.S--;   /* PCH placeholder */
         g_ram[0x100+g_cpu.S] = 0x00;   g_cpu.S--;   /* PCL placeholder */
         g_ram[0x100+g_cpu.S] = p_save; g_cpu.S--;   /* P (status flags) */
+        /* Prevent maybe_trigger_vblank() from firing a nested NMI during
+         * the handler.  On real hardware NMI is non-reentrant; the handler's
+         * VRAM transfer uses the stack page ($0100+) as a data buffer and a
+         * nested NMI's hardware push would overwrite that data. */
+        runtime_set_vblank_firing(1);
         game_run_nmi();
+        runtime_set_vblank_firing(0);
     }
 
     game_post_nmi(g_frame_count);

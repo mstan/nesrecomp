@@ -124,9 +124,24 @@ void maybe_trigger_vblank(void) {
                                             * clear bits 0-1 (force NT0 for HUD),
                                             * clear bit 2 (VRAM inc — irrelevant),
                                             * clear bit 7 (NMI enable — irrelevant) */
-    /* Only fire NMI if $2000 bit7 (NMI enable) is set — gates init spin-waits correctly */
+    /* Only fire NMI if $2000 bit7 (NMI enable) is set — gates init spin-waits correctly.
+     * Save and restore the PPU address/scroll latch state around the NMI call.
+     * On real hardware, NMI only fires between frames — never mid-instruction-stream.
+     * The NMI handler reads $2002 which resets g_ppuaddr_latch.  If game code was
+     * between two $2006 writes (latch=1), the NMI's $2002 read would reset it,
+     * corrupting the VRAM address for all subsequent writes.  Similarly for scroll. */
+    int saved_ppuaddr_latch = g_ppuaddr_latch;
+    int saved_scroll_latch  = g_scroll_latch;
+    uint16_t saved_ppuaddr  = g_ppuaddr;
     if (g_ppuctrl & 0x80) nes_vblank_callback();
+    g_ppuaddr_latch = saved_ppuaddr_latch;
+    g_scroll_latch  = saved_scroll_latch;
+    g_ppuaddr       = saved_ppuaddr;
     s_vblank_firing = false;
+}
+
+void runtime_set_vblank_firing(int active) {
+    s_vblank_firing = active;
 }
 
 uint8_t nes_read(uint16_t addr) {
