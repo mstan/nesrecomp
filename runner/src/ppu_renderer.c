@@ -399,6 +399,41 @@ render_sprites:
         }
     }
 
+    /* DEBUG: dump OAM state once during gameplay */
+    {
+        static int s_oam_dump = 0;
+        if (s_oam_dump < 3 && g_frame_count > 200 && g_frame_count % 100 == 0) {
+            printf("[OAM] Frame %llu  PPUCTRL=$%02X PPUMASK=$%02X  spr_chr=$%04X  tall=%d\n",
+                   (unsigned long long)g_frame_count, g_ppuctrl, g_ppumask,
+                   (g_ppuctrl & 0x08) ? 0x1000 : 0x0000, (g_ppuctrl & 0x20) != 0);
+            printf("[OAM] Sprite palette: ");
+            for (int i = 16; i < 32; i++) printf("%02X ", g_ppu_pal[i]);
+            printf("\n");
+            int visible = 0;
+            for (int i = 0; i < 64; i++) {
+                uint8_t y = g_ppu_oam[i*4], t = g_ppu_oam[i*4+1];
+                uint8_t a = g_ppu_oam[i*4+2], x = g_ppu_oam[i*4+3];
+                if (y < 0xEF) {
+                    if (visible < 16)
+                        printf("  [%2d] Y=%3d T=$%02X A=$%02X X=%3d\n", i, y, t, a, x);
+                    visible++;
+                }
+            }
+            printf("[OAM] %d visible sprites\n", visible);
+            /* Dump first 32 bytes of OAM source page ($0200) */
+            printf("[OAM] RAM $0200: ");
+            for (int i = 0; i < 32; i++) printf("%02X ", g_ram[0x200 + i]);
+            printf("\n");
+            printf("[OAM] g_ppu_oam[0..31]: ");
+            for (int i = 0; i < 32; i++) printf("%02X ", g_ppu_oam[i]);
+            printf("\n");
+            /* Game state: $1A=NMIFlag, $1D=GameMode, $1E=MainRoutine, $24=ScrollDir */
+            printf("[STATE] $1A=%02X $1D=%02X $1E=%02X $1F=%02X $24=%02X $2E=%02X $2F=%02X\n",
+                   g_ram[0x1A], g_ram[0x1D], g_ram[0x1E], g_ram[0x1F], g_ram[0x24], g_ram[0x2E], g_ram[0x2F]);
+            s_oam_dump++;
+        }
+    }
+
     /* PPUCTRL bit 5: 0 = 8x8 sprites, 1 = 8x16 sprites */
     int spr_tall = (g_ppuctrl & 0x20) != 0;
     int spr_height = spr_tall ? 16 : 8;

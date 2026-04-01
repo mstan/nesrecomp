@@ -87,7 +87,9 @@ void runtime_init(void) {
  *
  * The threshold is tuned so games run at approximately correct speed
  * when combined with the wall-clock frame pacing in nes_vblank_callback. */
-static bool s_vblank_firing = false;
+static int  s_vblank_depth = 0;   /* NMI nesting depth (0 = not in NMI) */
+#define MAX_VBLANK_DEPTH 3        /* allow limited re-entrancy for games that
+                                   * spin-wait inside the NMI handler */
 static uint32_t s_ops_count = 0;
 
 /* Approximate instructions per frame.  On real NES: ~29780 CPU cycles,
@@ -96,7 +98,7 @@ static uint32_t s_ops_count = 0;
  * boundary (matching real 6502 NMI sampling).  nes_read/nes_write no
  * longer trigger VBlank — they represent bus cycles WITHIN an instruction,
  * and NMI cannot fire mid-instruction on real hardware. */
-#define OPS_PER_FRAME 3000
+#define OPS_PER_FRAME 10000
 
 /* bus_tick: called by nes_read/nes_write to count bus operations.
  * Does NOT fire NMI — only increments the counter.  NMI is checked
@@ -106,11 +108,11 @@ static inline void bus_tick(void) {
 }
 
 void maybe_trigger_vblank(void) {
-    if (s_vblank_firing) return;
+    if (s_vblank_depth >= MAX_VBLANK_DEPTH) return;
     s_ops_count++;  /* count instruction boundary as one bus cycle (for idle spin loops) */
     if (s_ops_count < OPS_PER_FRAME) return;
     s_ops_count = 0;
-    s_vblank_firing = true;
+    s_vblank_depth++;
     /* Set VBlank (bit7), clear sprite-0 hit (bit6) — standard NES VBlank start */
     g_ppustatus = (g_ppustatus & ~0x40) | 0x80;
     g_spr0_split_active = 0;  /* reset per-frame split state */
@@ -159,11 +161,14 @@ void maybe_trigger_vblank(void) {
     g_ppuaddr_latch = saved_ppuaddr_latch;
     g_scroll_latch  = saved_scroll_latch;
     g_ppuaddr       = saved_ppuaddr;
-    s_vblank_firing = false;
+    s_vblank_depth--;
 }
 
 void runtime_set_vblank_firing(int active) {
-    s_vblank_firing = active;
+    if (active)
+        s_vblank_depth++;
+    else if (s_vblank_depth > 0)
+        s_vblank_depth--;
 }
 
 uint8_t nes_read(uint16_t addr) {
@@ -211,6 +216,22 @@ void nes_write(uint16_t addr, uint8_t val) {
         if (a == g_write_bp_addr && g_write_bp_callback &&
             (g_write_bp_match_val == 0xFF || val == g_write_bp_match_val)) {
             g_write_bp_callback(a, g_ram[a], val);
+        }
+        /* Debug: trace GoBankInit dispatch pointer */
+        if (a == 0x0B && val >= 0xC0 && g_frame_count >= 120 && g_frame_count <= 130) {
+            printf("[JMP_IND] $000B=%02X (lo=$0A=%02X) → target=$%02X%02X frame=%llu A=%02X Y=%02X\n",
+                   val, g_ram[0x0A], val, g_ram[0x0A], (unsigned long long)g_frame_count,
+                   g_cpu.A, g_cpu.Y);
+        }
+        /* Debug: trace game state variables */
+        if ((a == 0x1D || a == 0x1E || a == 0x24) && val != g_ram[a]) {
+            static int s_state_log = 0;
+            if (s_state_log < 60) {
+                printf("[STATE] $%04X: %02X -> %02X (frame=%llu) A=%02X Y=%02X S=%02X depth=%d\n",
+                       a, g_ram[a], val, (unsigned long long)g_frame_count,
+                       g_cpu.A, g_cpu.Y, g_cpu.S, s_vblank_depth);
+            }
+            s_state_log++;
         }
         g_ram[a] = val; return;
     }
