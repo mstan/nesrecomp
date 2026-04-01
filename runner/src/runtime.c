@@ -90,14 +90,24 @@ void runtime_init(void) {
 static bool s_vblank_firing = false;
 static uint32_t s_ops_count = 0;
 
-/* Approximate bus operations per frame. On real NES: ~29780 CPU cycles.
- * Recompiled code doesn't map 1:1 to cycles, but memory operations are
- * a reasonable proxy. This value is tuned for SMB demo determinism. */
+/* Approximate instructions per frame.  On real NES: ~29780 CPU cycles,
+ * averaging ~3 cycles/instruction ≈ ~10000 instructions/frame.
+ * Recompiled code calls maybe_trigger_vblank() once per instruction
+ * boundary (matching real 6502 NMI sampling).  nes_read/nes_write no
+ * longer trigger VBlank — they represent bus cycles WITHIN an instruction,
+ * and NMI cannot fire mid-instruction on real hardware. */
 #define OPS_PER_FRAME 3000
+
+/* bus_tick: called by nes_read/nes_write to count bus operations.
+ * Does NOT fire NMI — only increments the counter.  NMI is checked
+ * at instruction boundaries via maybe_trigger_vblank(). */
+static inline void bus_tick(void) {
+    s_ops_count++;
+}
 
 void maybe_trigger_vblank(void) {
     if (s_vblank_firing) return;
-    s_ops_count++;
+    s_ops_count++;  /* count instruction boundary as one bus cycle (for idle spin loops) */
     if (s_ops_count < OPS_PER_FRAME) return;
     s_ops_count = 0;
     s_vblank_firing = true;
@@ -133,7 +143,19 @@ void maybe_trigger_vblank(void) {
     int saved_ppuaddr_latch = g_ppuaddr_latch;
     int saved_scroll_latch  = g_scroll_latch;
     uint16_t saved_ppuaddr  = g_ppuaddr;
-    if (g_ppuctrl & 0x80) nes_vblank_callback();
+    if (g_ppuctrl & 0x80) {
+        /* On real 6502, the CPU pushes PCH, PCL, P to the stack before
+         * entering the NMI handler.  RTI at the end pops these 3 bytes.
+         * We push them here so RTI has correct data.  Additionally, we
+         * save and restore S around the call to guarantee the stack is
+         * balanced even if the handler has internal imbalances. */
+        uint8_t p = (g_cpu.N<<7)|(g_cpu.V<<6)|0x20|(g_cpu.D<<3)|
+                    (g_cpu.I<<2)|(g_cpu.Z<<1)|g_cpu.C;
+        g_ram[0x100 + g_cpu.S] = 0x00; g_cpu.S--;  /* PCH (dummy) */
+        g_ram[0x100 + g_cpu.S] = 0x00; g_cpu.S--;  /* PCL (dummy) */
+        g_ram[0x100 + g_cpu.S] = p;    g_cpu.S--;  /* P */
+        nes_vblank_callback();
+    }
     g_ppuaddr_latch = saved_ppuaddr_latch;
     g_scroll_latch  = saved_scroll_latch;
     g_ppuaddr       = saved_ppuaddr;
@@ -145,7 +167,7 @@ void runtime_set_vblank_firing(int active) {
 }
 
 uint8_t nes_read(uint16_t addr) {
-    maybe_trigger_vblank();
+    bus_tick();
     if (addr <= 0x1FFF) return g_ram[addr & 0x07FF];
     if (addr >= 0x2000 && addr <= 0x3FFF) return ppu_read_reg(0x2000 + (addr & 7));
     if (addr >= 0x4000 && addr <= 0x401F) {
@@ -182,7 +204,7 @@ uint8_t  g_write_bp_match_val = 0xFF;
 write_bp_callback_t g_write_bp_callback = NULL;
 
 void nes_write(uint16_t addr, uint8_t val) {
-    maybe_trigger_vblank();
+    bus_tick();
 
     if (addr <= 0x1FFF) {
         uint16_t a = addr & 0x07FF;

@@ -160,8 +160,12 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
     uint8_t op2 = (e->size > 2) ? rom_read(rom, bank, pc+2) : 0;
     uint16_t abs16 = op1 | ((uint16_t)op2 << 8);
 
-    /* Label for branch targets */
-    fprintf(f, "    /* $%04X: %02X */ ", pc, opcode);
+    /* Label for branch targets.
+     * Emit maybe_trigger_vblank() at every instruction boundary — on real
+     * 6502, NMI is only sampled between instructions, never mid-instruction.
+     * nes_read/nes_write now only increment the bus-op counter (bus_tick),
+     * so VBlank can only fire here at the instruction boundary. */
+    fprintf(f, "    /* $%04X: %02X */ maybe_trigger_vblank(); ", pc, opcode);
 
     if (e->mnemonic == MN_ILLEGAL) {
         fprintf(f, "/* ILLEGAL $%02X — skip %d */\n", opcode, e->size);
@@ -669,7 +673,17 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                 }
             } else {
                 /* JMP (ind) — dispatch */
-                fprintf(f, "maybe_trigger_vblank(); call_by_address(nes_read16(0x%04X)); return;\n", abs16);
+                if (abs16 < 0x100) {
+                    /* Zero-page indirect: read the pointer BEFORE triggering VBlank.
+                     * On real 6502, JMP (ind) fetches both pointer bytes within a single
+                     * instruction — NMI is only sampled at instruction boundaries, so it
+                     * cannot fire between the preceding STA and the pointer read.
+                     * nes_read16zp reads g_ram[] directly (no maybe_trigger_vblank inside),
+                     * and handles the NMOS page-wrapping bug ($xxFF wraps within page). */
+                    fprintf(f, "{ uint16_t _jt = nes_read16zp(0x%02X); maybe_trigger_vblank(); call_by_address(_jt); return; }\n", (uint8_t)abs16);
+                } else {
+                    fprintf(f, "{ uint16_t _jt = nes_read16(0x%04X); maybe_trigger_vblank(); call_by_address(_jt); return; }\n", abs16);
+                }
             }
             break;
         case MN_RTS:
@@ -1281,15 +1295,18 @@ static void emit_dispatch(FILE *f, const FunctionList *funcs, const NESRom *rom,
                             fixed_bank, fb_equiv);
             }
 
+            bool has_default = false;
             for (int v = 0; v < nv; v++) {
                 int bk = variants[v];
-                if (bk == fixed_bank && addr >= 0xC000)
+                if (bk == fixed_bank && addr >= 0xC000) {
                     fprintf(f, "                default: func_%04X(); break;\n", addr);
-                else
+                    has_default = true;
+                } else
                     fprintf(f, "                case %d: func_%04X_b%d(); break;\n",
                             bk, addr, bk);
             }
-            fprintf(f, "                default: nes_log_dispatch_miss(addr); break;\n");
+            if (!has_default)
+                fprintf(f, "                default: nes_log_dispatch_miss(addr); break;\n");
             fprintf(f, "            }\n");
             fprintf(f, "            break;\n");
         }
