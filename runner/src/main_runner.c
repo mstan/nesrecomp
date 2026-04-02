@@ -298,6 +298,19 @@ void save_png(const char *path, int w, int h, const void *rgb, int stride) {
     stbi_write_png(path, w, h, 3, rgb, stride);
 }
 
+/* Save an ARGB8888 buffer as PNG. Callable from game code (emulated mode screenshots). */
+void runner_save_argb_png(const char *path, const uint32_t *argb, int w, int h) {
+    static uint8_t rgb[256 * 240 * 3];
+    int pixels = w * h;
+    for (int i = 0; i < pixels; i++) {
+        uint32_t px = argb[i];
+        rgb[i*3+0] = (px >> 16) & 0xFF;
+        rgb[i*3+1] = (px >>  8) & 0xFF;
+        rgb[i*3+2] = (px      ) & 0xFF;
+    }
+    stbi_write_png(path, w, h, 3, rgb, w * 3);
+}
+
 static void save_screenshot(void) {
     char path[128];
     snprintf(path, sizeof(path), "C:/temp/mm3_shot_%04llu.png",

@@ -40,6 +40,9 @@ typedef struct {
     /* Game-specific (filled by game_fill_frame_record hook) */
     uint8_t  game_data[16];
 
+    /* Zero page RAM snapshot ($00-$FF) for frame-level comparison */
+    uint8_t  ram_zp[256];
+
     /* Divergence diffs (verify mode only) */
     FrameDiffEntry diffs[MAX_FRAME_DIFFS];
 

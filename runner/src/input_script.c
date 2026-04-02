@@ -55,6 +55,7 @@ static int    s_loaded     = 0;
 static uint8_t s_buttons_held = 0;
 static char   s_shot_pending[128] = {0};
 static int    s_auto_shot_num = 1;
+static char   s_shot_prefix[32] = {0};
 
 /* For WAIT_RAM8 timeout */
 static uint64_t s_wait_ram_start_frame = 0;
@@ -219,7 +220,7 @@ void script_tick(uint64_t frame, const uint8_t *ram) {
                 if (c->sarg[0])
                     strncpy(name, c->sarg, sizeof(name)-1);
                 else
-                    snprintf(name, sizeof(name), "nes_script_%03d.png", s_auto_shot_num++);
+                    snprintf(name, sizeof(name), "%snes_script_%03d.png", s_shot_prefix, s_auto_shot_num++);
                 snprintf(s_shot_pending, sizeof(s_shot_pending), "%s", name);
                 printf("[Script] SCREENSHOT -> %s\n", s_shot_pending);
                 break;
@@ -301,6 +302,13 @@ int script_wants_screenshot(char *buf, int buflen) {
         snprintf(buf, buflen, "C:/temp/%s", s_shot_pending);
     s_shot_pending[0] = '\0';
     return 1;
+}
+
+void script_set_screenshot_prefix(const char *prefix) {
+    if (prefix)
+        snprintf(s_shot_prefix, sizeof(s_shot_prefix), "%s", prefix);
+    else
+        s_shot_prefix[0] = '\0';
 }
 
 /* ---- Recording ---- */

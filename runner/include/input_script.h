@@ -24,6 +24,8 @@ int  script_get_buttons(void);   /* -1 = no override; else returns button byte *
 int  script_check_exit(void);    /* -1 = still running; else exit code */
 /* Returns 1 and fills buf with "C:/temp/<name>" if a screenshot was requested this frame */
 int  script_wants_screenshot(char *buf, int buflen);
+/* Set a prefix for auto-named screenshots (e.g. "native_" or "emu_") */
+void script_set_screenshot_prefix(const char *prefix);
 
 /* Recording — call once per frame BEFORE applying script override */
 void record_open(const char *path);

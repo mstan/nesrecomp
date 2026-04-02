@@ -478,19 +478,31 @@ static void handle_get_frame(int id, const char *json)
     for (int i = 0; i < 16; i++)
         snprintf(gd_hex + i * 2, 3, "%02x", r->game_data[i]);
 
-    send_fmt("{\"id\":%d,\"ok\":true,"
+    /* Encode zero page as hex */
+    char zp_hex[513];
+    for (int i = 0; i < 256; i++)
+        snprintf(zp_hex + i * 2, 3, "%02x", r->ram_zp[i]);
+
+    /* Use malloc for the large response */
+    char *buf = (char *)malloc(2048);
+    if (!buf) { send_err(id, "alloc failed"); return; }
+    snprintf(buf, 2048,
+             "{\"id\":%d,\"ok\":true,"
              "\"frame\":%u,\"verify_pass\":%d,\"diff_count\":%d,"
              "\"cpu\":{\"A\":\"0x%02X\",\"X\":\"0x%02X\",\"Y\":\"0x%02X\",\"S\":\"0x%02X\"},"
              "\"ppu\":{\"ctrl\":\"0x%02X\",\"mask\":\"0x%02X\",\"scroll_x\":%d,\"scroll_y\":%d},"
              "\"bank\":%d,\"buttons\":\"0x%02X\","
              "\"game_data\":\"%s\","
+             "\"ram_zp\":\"%s\","
              "\"last_func\":\"%s\"}",
              id, r->frame_number, r->verify_pass, r->diff_count,
              r->cpu_a, r->cpu_x, r->cpu_y, r->cpu_s,
              r->ppuctrl, r->ppumask, r->ppuscroll_x, r->ppuscroll_y,
              r->current_bank, r->controller_buttons,
-             gd_hex,
+             gd_hex, zp_hex,
              r->last_func);
+    send_line(buf);
+    free(buf);
 }
 
 static void handle_frame_range(int id, const char *json)
@@ -875,6 +887,9 @@ void debug_server_record_frame(void)
     /* Mapper + input */
     r->current_bank       = g_current_bank;
     r->controller_buttons = g_controller1_buttons;
+
+    /* Zero page snapshot */
+    memcpy(r->ram_zp, g_ram, 256);
 
     /* Game-specific data (filled by game hook) */
     memset(r->game_data, 0, sizeof(r->game_data));

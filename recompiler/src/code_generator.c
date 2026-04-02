@@ -229,19 +229,21 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
         case MN_TSX: fprintf(f, "g_cpu.X = g_cpu.S; FLAG_NZ(g_cpu.X);\n"); break;
         case MN_TXS: fprintf(f, "g_cpu.S = g_cpu.X;\n"); break;
 
-        /* Stack */
+        /* Stack — bus_tick for each stack byte access (real 6502 does 1 bus
+         * cycle per stack push/pull; JSR/RTS also push/pull via the stack
+         * but their ticks are handled in the JSR/RTS emitters below). */
         case MN_PHA:
-            fprintf(f, "g_ram[0x100 + g_cpu.S] = g_cpu.A; g_cpu.S--;\n");
+            fprintf(f, "bus_tick(); g_ram[0x100 + g_cpu.S] = g_cpu.A; g_cpu.S--;\n");
             break;
         case MN_PLA:
-            fprintf(f, "g_cpu.S++; g_cpu.A = g_ram[0x100 + g_cpu.S]; FLAG_NZ(g_cpu.A);\n");
+            fprintf(f, "bus_tick(); g_cpu.S++; g_cpu.A = g_ram[0x100 + g_cpu.S]; FLAG_NZ(g_cpu.A);\n");
             break;
         case MN_PHP:
             fprintf(f, "{ uint8_t p = (g_cpu.N<<7)|(g_cpu.V<<6)|0x30|(g_cpu.D<<3)|(g_cpu.I<<2)|(g_cpu.Z<<1)|g_cpu.C;\n"
-                       "  g_ram[0x100 + g_cpu.S] = p; g_cpu.S--; }\n");
+                       "  bus_tick(); g_ram[0x100 + g_cpu.S] = p; g_cpu.S--; }\n");
             break;
         case MN_PLP:
-            fprintf(f, "{ g_cpu.S++; uint8_t p = g_ram[0x100 + g_cpu.S];\n"
+            fprintf(f, "{ bus_tick(); g_cpu.S++; uint8_t p = g_ram[0x100 + g_cpu.S];\n"
                        "  g_cpu.N=(p>>7)&1; g_cpu.V=(p>>6)&1; g_cpu.D=(p>>3)&1;\n"
                        "  g_cpu.I=(p>>2)&1; g_cpu.Z=(p>>1)&1; g_cpu.C=p&1; }\n");
             break;
@@ -583,9 +585,9 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                 }
                 if (do_push) {
                     uint16_t ret_addr = pc + 2; /* 6502 JSR pushes PC+2 (last byte of JSR) */
-                    fprintf(f, "g_ram[0x100 + g_cpu.S] = 0x%02X; g_cpu.S--; ",
+                    fprintf(f, "bus_tick(); g_ram[0x100 + g_cpu.S] = 0x%02X; g_cpu.S--; ",
                             (ret_addr >> 8) & 0xFF);
-                    fprintf(f, "g_ram[0x100 + g_cpu.S] = 0x%02X; g_cpu.S--; ",
+                    fprintf(f, "bus_tick(); g_ram[0x100 + g_cpu.S] = 0x%02X; g_cpu.S--; ",
                             ret_addr & 0xFF);
                 }
             }
@@ -741,11 +743,11 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                 }
             }
             if (cfg->push_all_jsr) {
-                fprintf(f, "g_cpu.S += 2; /* pop JSR return address */\n");
+                fprintf(f, "bus_tick(); bus_tick(); g_cpu.S += 2; /* pop JSR return address */\n");
             }
             fprintf(f, "\n#ifdef RECOMP_STACK_TRACKING\n    recomp_stack_pop();\n#endif\n    return;\n");
             break;
-        case MN_RTI: fprintf(f, "/* RTI */ g_cpu.S++; { uint8_t p=g_ram[0x100+g_cpu.S]; g_cpu.N=(p>>7)&1; g_cpu.V=(p>>6)&1; g_cpu.D=(p>>3)&1; g_cpu.I=(p>>2)&1; g_cpu.Z=(p>>1)&1; g_cpu.C=p&1; } g_cpu.S++; g_cpu.S++; /* pop PCL, PCH */\n#ifdef RECOMP_STACK_TRACKING\n    recomp_stack_pop();\n#endif\n    return;\n"); break;
+        case MN_RTI: fprintf(f, "/* RTI */ bus_tick(); g_cpu.S++; { uint8_t p=g_ram[0x100+g_cpu.S]; g_cpu.N=(p>>7)&1; g_cpu.V=(p>>6)&1; g_cpu.D=(p>>3)&1; g_cpu.I=(p>>2)&1; g_cpu.Z=(p>>1)&1; g_cpu.C=p&1; } bus_tick(); g_cpu.S++; bus_tick(); g_cpu.S++; /* pop PCL, PCH */\n#ifdef RECOMP_STACK_TRACKING\n    recomp_stack_pop();\n#endif\n    return;\n"); break;
 
         /* Flags */
         case MN_CLC: fprintf(f, "g_cpu.C = 0;\n"); break;
@@ -1117,7 +1119,7 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
                 if (branch_targets[b] == cursor) { is_branch_tgt = true; break; }
             if (is_branch_tgt) {
                 fprintf(f, "    /* $%04X: 60 */\n", cursor);
-                if (cfg->push_all_jsr) fprintf(f, "    g_cpu.S += 2; /* pop JSR return address */\n");
+                if (cfg->push_all_jsr) fprintf(f, "    bus_tick(); bus_tick(); g_cpu.S += 2; /* pop JSR return address */\n");
                 fprintf(f, "#ifdef RECOMP_STACK_TRACKING\n    recomp_stack_pop();\n#endif\n    return; /* branch-target RTS */\n");
                 if (pending_count == 0) break;
                 cursor += 1;
