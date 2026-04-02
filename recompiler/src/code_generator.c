@@ -161,11 +161,11 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
     uint16_t abs16 = op1 | ((uint16_t)op2 << 8);
 
     /* Label for branch targets.
-     * Emit maybe_trigger_vblank() at every instruction boundary — on real
+     * Emit maybe_trigger_vblank(2) at every instruction boundary — on real
      * 6502, NMI is only sampled between instructions, never mid-instruction.
      * nes_read/nes_write now only increment the bus-op counter (bus_tick),
      * so VBlank can only fire here at the instruction boundary. */
-    fprintf(f, "    /* $%04X: %02X */ maybe_trigger_vblank(); ", pc, opcode);
+    fprintf(f, "    /* $%04X: %02X */ maybe_trigger_vblank(%d); ", pc, opcode, e->cycles);
 
     if (e->mnemonic == MN_ILLEGAL) {
         fprintf(f, "/* ILLEGAL $%02X — skip %d */\n", opcode, e->size);
@@ -233,17 +233,17 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
          * cycle per stack push/pull; JSR/RTS also push/pull via the stack
          * but their ticks are handled in the JSR/RTS emitters below). */
         case MN_PHA:
-            fprintf(f, "bus_tick(); g_ram[0x100 + g_cpu.S] = g_cpu.A; g_cpu.S--;\n");
+            fprintf(f, "g_ram[0x100 + g_cpu.S] = g_cpu.A; g_cpu.S--;\n");
             break;
         case MN_PLA:
-            fprintf(f, "bus_tick(); g_cpu.S++; g_cpu.A = g_ram[0x100 + g_cpu.S]; FLAG_NZ(g_cpu.A);\n");
+            fprintf(f, "g_cpu.S++; g_cpu.A = g_ram[0x100 + g_cpu.S]; FLAG_NZ(g_cpu.A);\n");
             break;
         case MN_PHP:
             fprintf(f, "{ uint8_t p = (g_cpu.N<<7)|(g_cpu.V<<6)|0x30|(g_cpu.D<<3)|(g_cpu.I<<2)|(g_cpu.Z<<1)|g_cpu.C;\n"
-                       "  bus_tick(); g_ram[0x100 + g_cpu.S] = p; g_cpu.S--; }\n");
+                       "  g_ram[0x100 + g_cpu.S] = p; g_cpu.S--; }\n");
             break;
         case MN_PLP:
-            fprintf(f, "{ bus_tick(); g_cpu.S++; uint8_t p = g_ram[0x100 + g_cpu.S];\n"
+            fprintf(f, "{ g_cpu.S++; uint8_t p = g_ram[0x100 + g_cpu.S];\n"
                        "  g_cpu.N=(p>>7)&1; g_cpu.V=(p>>6)&1; g_cpu.D=(p>>3)&1;\n"
                        "  g_cpu.I=(p>>2)&1; g_cpu.Z=(p>>1)&1; g_cpu.C=p&1; }\n");
             break;
@@ -386,7 +386,7 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                 fprintf(f, "if (" cond_str ") { call_by_address(0x%04X); return; }\n", _tgt); \
             } else if (_tgt <= pc) { \
                 /* Backward branch (loop) — emit VBlank trigger + watchdog check */ \
-                fprintf(f, "if (" cond_str ") {\n    maybe_trigger_vblank();\n#ifdef WATCHDOG_ENABLED\n    watchdog_check();\n#endif\n    goto label_%04X;\n    }\n", _tgt); \
+                fprintf(f, "if (" cond_str ") {\n    maybe_trigger_vblank(2);\n#ifdef WATCHDOG_ENABLED\n    watchdog_check();\n#endif\n    goto label_%04X;\n    }\n", _tgt); \
             } else { \
                 fprintf(f, "if (" cond_str ") goto label_%04X;\n", _tgt); \
             } \
@@ -585,9 +585,9 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                 }
                 if (do_push) {
                     uint16_t ret_addr = pc + 2; /* 6502 JSR pushes PC+2 (last byte of JSR) */
-                    fprintf(f, "bus_tick(); g_ram[0x100 + g_cpu.S] = 0x%02X; g_cpu.S--; ",
+                    fprintf(f, "g_ram[0x100 + g_cpu.S] = 0x%02X; g_cpu.S--; ",
                             (ret_addr >> 8) & 0xFF);
-                    fprintf(f, "bus_tick(); g_ram[0x100 + g_cpu.S] = 0x%02X; g_cpu.S--; ",
+                    fprintf(f, "g_ram[0x100 + g_cpu.S] = 0x%02X; g_cpu.S--; ",
                             ret_addr & 0xFF);
                 }
             }
@@ -645,12 +645,12 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                     if (abs16 == func_base && pc == func_base) {
                         /* JMP $self at function start: true idle spin (single-instr).
                          * while(1) polls VBlank without recursion. */
-                        fprintf(f, "while(1) { maybe_trigger_vblank(); }\n");
+                        fprintf(f, "while(1) { maybe_trigger_vblank(2); }\n");
                     } else if (abs16 == func_base) {
                         /* JMP to own entry from within body: loop-back. */
                         fprintf(f, "goto label_%04X;\n", abs16);
                     } else {
-                        fprintf(f, "maybe_trigger_vblank(); func_%04X(); return;\n", abs16);
+                        fprintf(f, "maybe_trigger_vblank(2); func_%04X(); return;\n", abs16);
                     }
                 } else if (abs16 >= 0x8000) {
                     /* Check if target is a merge partner (use goto, not function call) */
@@ -659,19 +659,19 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                         if (abs16 == merge_partners[mi]) { is_merge = true; break; }
                     }
                     if (bank == fixed_bank || sram_sourced) {
-                        fprintf(f, "maybe_trigger_vblank(); call_by_address(0x%04X); return;\n", abs16);
+                        fprintf(f, "maybe_trigger_vblank(2); call_by_address(0x%04X); return;\n", abs16);
                     } else if (abs16 == func_base && pc == func_base) {
                         /* JMP $self at function start: true idle spin. */
-                        fprintf(f, "while(1) { maybe_trigger_vblank(); }\n");
+                        fprintf(f, "while(1) { maybe_trigger_vblank(2); }\n");
                     } else if (abs16 == func_base || is_merge) {
                         /* JMP to own entry or merge partner: loop-back via goto. */
-                        fprintf(f, "maybe_trigger_vblank();\n    goto label_%04X;\n", abs16);
+                        fprintf(f, "maybe_trigger_vblank(2);\n    goto label_%04X;\n", abs16);
                     } else {
-                        fprintf(f, "maybe_trigger_vblank(); func_%04X_b%d(); return;\n", abs16, bank);
+                        fprintf(f, "maybe_trigger_vblank(2); func_%04X_b%d(); return;\n", abs16, bank);
                     }
                 } else {
                     /* JMP to non-ROM address: dispatch at runtime */
-                    fprintf(f, "maybe_trigger_vblank(); call_by_address(0x%04X); return;\n", abs16);
+                    fprintf(f, "maybe_trigger_vblank(2); call_by_address(0x%04X); return;\n", abs16);
                 }
             } else {
                 /* JMP (ind) — dispatch */
@@ -682,9 +682,9 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                      * cannot fire between the preceding STA and the pointer read.
                      * nes_read16zp reads g_ram[] directly (no maybe_trigger_vblank inside),
                      * and handles the NMOS page-wrapping bug ($xxFF wraps within page). */
-                    fprintf(f, "{ uint16_t _jt = nes_read16zp(0x%02X); maybe_trigger_vblank(); call_by_address(_jt); return; }\n", (uint8_t)abs16);
+                    fprintf(f, "{ uint16_t _jt = nes_read16zp(0x%02X); maybe_trigger_vblank(2); call_by_address(_jt); return; }\n", (uint8_t)abs16);
                 } else {
-                    fprintf(f, "{ uint16_t _jt = nes_read16(0x%04X); maybe_trigger_vblank(); call_by_address(_jt); return; }\n", abs16);
+                    fprintf(f, "{ uint16_t _jt = nes_read16(0x%04X); maybe_trigger_vblank(2); call_by_address(_jt); return; }\n", abs16);
                 }
             }
             break;
@@ -743,11 +743,11 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                 }
             }
             if (cfg->push_all_jsr) {
-                fprintf(f, "bus_tick(); bus_tick(); g_cpu.S += 2; /* pop JSR return address */\n");
+                fprintf(f, "g_cpu.S += 2; /* pop JSR return address */\n");
             }
             fprintf(f, "\n#ifdef RECOMP_STACK_TRACKING\n    recomp_stack_pop();\n#endif\n    return;\n");
             break;
-        case MN_RTI: fprintf(f, "/* RTI */ bus_tick(); g_cpu.S++; { uint8_t p=g_ram[0x100+g_cpu.S]; g_cpu.N=(p>>7)&1; g_cpu.V=(p>>6)&1; g_cpu.D=(p>>3)&1; g_cpu.I=(p>>2)&1; g_cpu.Z=(p>>1)&1; g_cpu.C=p&1; } bus_tick(); g_cpu.S++; bus_tick(); g_cpu.S++; /* pop PCL, PCH */\n#ifdef RECOMP_STACK_TRACKING\n    recomp_stack_pop();\n#endif\n    return;\n"); break;
+        case MN_RTI: fprintf(f, "/* RTI */ g_cpu.S++; { uint8_t p=g_ram[0x100+g_cpu.S]; g_cpu.N=(p>>7)&1; g_cpu.V=(p>>6)&1; g_cpu.D=(p>>3)&1; g_cpu.I=(p>>2)&1; g_cpu.Z=(p>>1)&1; g_cpu.C=p&1; } g_cpu.S++; g_cpu.S++; /* pop PCL, PCH */\n#ifdef RECOMP_STACK_TRACKING\n    recomp_stack_pop();\n#endif\n    return;\n"); break;
 
         /* Flags */
         case MN_CLC: fprintf(f, "g_cpu.C = 0;\n"); break;
@@ -1119,7 +1119,7 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
                 if (branch_targets[b] == cursor) { is_branch_tgt = true; break; }
             if (is_branch_tgt) {
                 fprintf(f, "    /* $%04X: 60 */\n", cursor);
-                if (cfg->push_all_jsr) fprintf(f, "    bus_tick(); bus_tick(); g_cpu.S += 2; /* pop JSR return address */\n");
+                if (cfg->push_all_jsr) fprintf(f, "    g_cpu.S += 2; /* pop JSR return address */\n");
                 fprintf(f, "#ifdef RECOMP_STACK_TRACKING\n    recomp_stack_pop();\n#endif\n    return; /* branch-target RTS */\n");
                 if (pending_count == 0) break;
                 cursor += 1;

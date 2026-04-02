@@ -36,6 +36,7 @@ typedef struct {
     OpMnemonic mnemonic;
     AddrMode   addr_mode;
     int        size;        /* Instruction size in bytes (1, 2, or 3) */
+    int        cycles;      /* Base cycle count (not including page-cross penalties) */
 } OpcodeEntry;
 
 /* 256-entry opcode table */

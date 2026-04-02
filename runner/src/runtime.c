@@ -92,24 +92,25 @@ static int  s_vblank_depth = 0;   /* NMI nesting depth (0 = not in NMI) */
                                    * spin-wait inside the NMI handler */
 static uint32_t s_ops_count = 0;
 
-/* Approximate instructions per frame.  On real NES: ~29780 CPU cycles,
- * averaging ~3 cycles/instruction ≈ ~10000 instructions/frame.
- * Recompiled code calls maybe_trigger_vblank() once per instruction
- * boundary (matching real 6502 NMI sampling).  nes_read/nes_write no
- * longer trigger VBlank — they represent bus cycles WITHIN an instruction,
- * and NMI cannot fire mid-instruction on real hardware. */
-#define OPS_PER_FRAME 10000
+/* Cycle budget per frame.  Real NES: 29780.666 CPU cycles between NMIs
+ * (341*262/3 for NTSC).  Generated code passes each instruction's cycle
+ * count to maybe_trigger_vblank(). */
+#define OPS_PER_FRAME 29781
 
 /* bus_tick: called by nes_read/nes_write to count bus operations.
- * Does NOT fire NMI — only increments the counter.  NMI is checked
- * at instruction boundaries via maybe_trigger_vblank(). */
+ * Kept for backward compatibility but no longer critical for NMI timing
+ * since maybe_trigger_vblank now receives per-instruction cycle counts. */
 static inline void bus_tick(void) {
-    s_ops_count++;
+    /* no-op: cycle counting moved to per-instruction maybe_trigger_vblank */
 }
 
-void maybe_trigger_vblank(void) {
+void maybe_trigger_vblank(int cycles) {
+    /* Always count cycles, even during NMI handler execution.
+     * On real NES, the NMI handler consumes CPU cycles that reduce
+     * the frame budget.  Without this, the main loop gets a "free"
+     * full budget every frame, causing it to run ahead of real NES. */
+    s_ops_count += (cycles > 0) ? (uint32_t)cycles : 1;
     if (s_vblank_depth >= MAX_VBLANK_DEPTH) return;
-    s_ops_count++;  /* count instruction boundary as one bus cycle (for idle spin loops) */
     if (s_ops_count < OPS_PER_FRAME) return;
     s_ops_count = 0;
     s_vblank_depth++;
