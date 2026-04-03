@@ -672,7 +672,17 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                         /* JMP to own entry from within body: loop-back. */
                         fprintf(f, "goto label_%04X;\n", abs16);
                     } else {
-                        fprintf(f, "maybe_trigger_vblank(2); func_%04X(); return;\n", abs16);
+                        /* Check push_jmp: bail-containing targets need a dummy
+                         * push so the bail's RTS has something safe to pop. */
+                        int need_jmp_push = 0;
+                        for (int ji = 0; ji < cfg->push_jmp_count; ji++) {
+                            if (abs16 == cfg->push_jmps[ji]) { need_jmp_push = 1; break; }
+                        }
+                        if (need_jmp_push) {
+                            fprintf(f, "maybe_trigger_vblank(2); g_ram[0x100+g_cpu.S]=0; g_cpu.S--; g_ram[0x100+g_cpu.S]=0; g_cpu.S--; func_%04X(); return;\n", abs16);
+                        } else {
+                            fprintf(f, "maybe_trigger_vblank(2); func_%04X(); return;\n", abs16);
+                        }
                     }
                 } else if (abs16 >= 0x8000) {
                     /* Check if target is a merge partner (use goto, not function call) */
@@ -681,7 +691,16 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                         if (abs16 == merge_partners[mi]) { is_merge = true; break; }
                     }
                     if (bank == fixed_bank || sram_sourced) {
-                        fprintf(f, "maybe_trigger_vblank(2); call_by_address(0x%04X); return;\n", abs16);
+                        /* push_jmp check for cross-bank JMP via dispatch */
+                        int need_jmp_push = 0;
+                        for (int ji = 0; ji < cfg->push_jmp_count; ji++) {
+                            if (abs16 == cfg->push_jmps[ji]) { need_jmp_push = 1; break; }
+                        }
+                        if (need_jmp_push) {
+                            fprintf(f, "maybe_trigger_vblank(2); g_ram[0x100+g_cpu.S]=0; g_cpu.S--; g_ram[0x100+g_cpu.S]=0; g_cpu.S--; call_by_address(0x%04X); return;\n", abs16);
+                        } else {
+                            fprintf(f, "maybe_trigger_vblank(2); call_by_address(0x%04X); return;\n", abs16);
+                        }
                     } else if (abs16 == func_base && pc == func_base) {
                         /* JMP $self at function start: true idle spin. */
                         fprintf(f, "while(1) { maybe_trigger_vblank(2); }\n");
@@ -689,7 +708,16 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                         /* JMP to own entry or merge partner: loop-back via goto. */
                         fprintf(f, "maybe_trigger_vblank(2);\n    goto label_%04X;\n", abs16);
                     } else {
-                        fprintf(f, "maybe_trigger_vblank(2); func_%04X_b%d(); return;\n", abs16, bank);
+                        /* push_jmp check for same-bank JMP */
+                        int need_jmp_push = 0;
+                        for (int ji = 0; ji < cfg->push_jmp_count; ji++) {
+                            if (abs16 == cfg->push_jmps[ji]) { need_jmp_push = 1; break; }
+                        }
+                        if (need_jmp_push) {
+                            fprintf(f, "maybe_trigger_vblank(2); g_ram[0x100+g_cpu.S]=0; g_cpu.S--; g_ram[0x100+g_cpu.S]=0; g_cpu.S--; func_%04X_b%d(); return;\n", abs16, bank);
+                        } else {
+                            fprintf(f, "maybe_trigger_vblank(2); func_%04X_b%d(); return;\n", abs16, bank);
+                        }
                     }
                 } else {
                     /* JMP to non-ROM address: dispatch at runtime */
