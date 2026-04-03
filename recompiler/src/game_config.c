@@ -291,6 +291,8 @@ static bool game_config_load_toml(GameConfig *cfg, const char *path) {
     if (game) {
         toml_datum_t d = toml_string_in(game, "output_prefix");
         if (d.ok) { strncpy(cfg->output_prefix, d.u.s, sizeof(cfg->output_prefix) - 1); free(d.u.s); }
+        toml_datum_t paj = toml_bool_in(game, "push_all_jsr");
+        if (paj.ok) cfg->push_all_jsr = paj.u.b;
     }
 
     /* [mapper] */
@@ -419,6 +421,26 @@ static bool game_config_load_toml(GameConfig *cfg, const char *path) {
     if (sbf) for (int i = 0; i < toml_array_nelem(sbf) && cfg->stack_bail_func_count < GAME_CFG_MAX_STACK_BAIL_FUNCS; i++) {
         toml_table_t *t = toml_table_at(sbf, i);
         if (t) cfg->stack_bail_funcs[cfg->stack_bail_func_count++] = toml_hex(t, "addr");
+    }
+
+    /* [[merge_func]] */
+    toml_array_t *mf = toml_array_in(root, "merge_func");
+    if (mf) for (int i = 0; i < toml_array_nelem(mf) && cfg->merge_func_count < GAME_CFG_MAX_MERGE_FUNCS; i++) {
+        toml_table_t *t = toml_table_at(mf, i);
+        if (!t) continue;
+        int idx = cfg->merge_func_count++;
+        cfg->merge_funcs[idx].bank = toml_int_or(t, "bank", -1);
+        uint16_t a1 = toml_hex(t, "addr_lo");
+        uint16_t a2 = toml_hex(t, "addr_hi");
+        cfg->merge_funcs[idx].addr_lo = (a1 < a2) ? a1 : a2;
+        cfg->merge_funcs[idx].addr_hi = (a1 < a2) ? a2 : a1;
+    }
+
+    /* [[push_jsr]] */
+    toml_array_t *pj = toml_array_in(root, "push_jsr");
+    if (pj) for (int i = 0; i < toml_array_nelem(pj) && cfg->push_jsr_count < GAME_CFG_MAX_NOP_JSRS; i++) {
+        toml_table_t *t = toml_table_at(pj, i);
+        if (t) cfg->push_jsrs[cfg->push_jsr_count++] = toml_hex(t, "addr");
     }
 
     /* [[data_region]] */
