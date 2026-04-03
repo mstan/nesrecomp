@@ -650,20 +650,12 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                     fprintf(f, "call_by_address(0x%04X);\n", abs16);
             }
             /* stack_bail_func: target does PLA PLA + RTS to bail two levels.
-             * On real 6502: PLA PLA consumes inner return addr, RTS pops outer
-             * return addr, execution resumes at outer's caller.  Outer function
-             * is completely bypassed.
+             * On real 6502: PLA PLA consumes the bail's own JSR return addr,
+             * RTS pops the CALLER's JSR return addr (2nd level of bail).
              *
-             * In recompiled code: the bail func's PLA PLA + RTS adjusts g_cpu.S
-             * by +4.  Then C return chain exits the caller.  But the outer
-             * function also resumes and hits its RTS → extra g_cpu.S += 2.
-             *
-             * Fix: after calling the bail func, explicitly exit the caller
-             * (simulating the bail).  The outer function's RTS will pop the
-             * outer return address normally.  But the bail func's RTS already
-             * popped it → double-pop.  So also undo the bail func's RTS pop
-             * by doing g_cpu.S -= 2 to keep the outer return address for the
-             * outer function's own RTS. */
+             * In recompiled code: the bail func's RTS is unsuppressed and
+             * pops the caller's return addr.  After the call, `return;`
+             * exits the caller before its own RTS runs — no double-pop. */
             for (int sbi = 0; sbi < cfg->stack_bail_func_count; sbi++) {
                 if (abs16 == cfg->stack_bail_funcs[sbi]) {
                     fprintf(f, "return; /* stack_bail_func $%04X */\n", abs16);
@@ -778,13 +770,11 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
             if (cfg->push_all_jsr) {
                 /* All functions pop their JSR return address on RTS,
                  * including bail funcs.  A bail func ($C376 pattern:
-                 * PLA PLA RTS) pops its own JSR's return via PLA PLA,
-                 * then its RTS pops the CALLER's JSR return — this is
-                 * the second level of the bail.  The `return;` emitted
+                 * PLA PLA RTS) pops its own JSR return via PLA PLA,
+                 * then its RTS pops the CALLER's JSR return — the
+                 * second level of the bail.  The `return;` emitted
                  * after JSR $C376 at the call site exits the caller
-                 * before the caller's own RTS, so there's no double-pop.
-                 * The caller's caller eventually hits its own RTS to
-                 * pop its own bytes. */
+                 * before the caller's own RTS, preventing double-pop. */
                 fprintf(f, "g_cpu.S += 2; /* pop JSR return address */\n");
             }
             fprintf(f, "\n#ifdef RECOMP_STACK_TRACKING\n    recomp_stack_pop();\n#endif\n    return;\n");
