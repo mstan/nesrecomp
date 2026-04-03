@@ -2,6 +2,7 @@
  * runtime.c — NES memory map, PPU register stubs, hardware I/O
  */
 #include "nes_runtime.h"
+#include "debug_server.h"
 #include "mapper.h"
 #include "logger.h"
 #include "apu.h"
@@ -207,6 +208,7 @@ uint8_t nes_read(uint16_t addr) {
 /* Write breakpoint state */
 uint16_t g_write_bp_addr = 0xFFFF;
 uint8_t  g_write_bp_match_val = 0xFF;
+int      g_write_bp_block = 0;
 write_bp_callback_t g_write_bp_callback = NULL;
 
 void nes_write(uint16_t addr, uint8_t val) {
@@ -217,6 +219,7 @@ void nes_write(uint16_t addr, uint8_t val) {
         if (a == g_write_bp_addr && g_write_bp_callback &&
             (g_write_bp_match_val == 0xFF || val == g_write_bp_match_val)) {
             g_write_bp_callback(a, g_ram[a], val);
+            if (g_write_bp_block) return;  /* callback set block flag → skip write */
         }
         /* Debug: trace GoBankInit dispatch pointer */
         if (a == 0x0B && val >= 0xC0 && g_frame_count >= 120 && g_frame_count <= 130) {
@@ -233,6 +236,18 @@ void nes_write(uint16_t addr, uint8_t val) {
                        g_cpu.A, g_cpu.Y, g_cpu.S, s_vblank_depth);
             }
             s_state_log++;
+        }
+        /* Follower notification (write-level tracing via TCP) */
+        if (val != g_ram[a]) {
+            if (debug_server_has_follower(a)) {
+                debug_server_notify_write(a, g_ram[a], val);
+            }
+            /* Hard trace: print $FF changes to stderr for debugging follower issues */
+            if (a == 0xFF && g_frame_count < 300) {
+                fprintf(stderr, "[FF] %02X->%02X f=%llu has_follow=%d\n",
+                        g_ram[a], val, (unsigned long long)g_frame_count,
+                        debug_server_has_follower(a));
+            }
         }
         g_ram[a] = val; return;
     }
@@ -419,6 +434,33 @@ void runtime_set_latch_state(uint8_t ppuaddr_latch, uint8_t scroll_latch) {
     g_ppuaddr_latch = (int)ppuaddr_latch;
     g_scroll_latch  = (int)scroll_latch;
 }
+
+void runtime_get_vblank_state(uint32_t *ops_count, int *vblank_depth) {
+    *ops_count    = s_ops_count;
+    *vblank_depth = s_vblank_depth;
+}
+
+void runtime_set_vblank_state(uint32_t ops_count, int vblank_depth) {
+    s_ops_count    = ops_count;
+    s_vblank_depth = vblank_depth;
+}
+
+void runtime_get_controller_shift(uint8_t *shift1, uint8_t *shift2, uint8_t *strobe) {
+    *shift1  = s_ctrl1_shift;
+    *shift2  = s_ctrl2_shift;
+    *strobe  = (uint8_t)s_ctrl1_strobe;
+}
+
+void runtime_set_controller_shift(uint8_t shift1, uint8_t shift2, uint8_t strobe) {
+    s_ctrl1_shift  = shift1;
+    s_ctrl2_shift  = shift2;
+    s_ctrl1_strobe = (bool)strobe;
+}
+
+uint8_t runtime_get_ppudata_buf(void) { return g_ppudata_buf; }
+void    runtime_set_ppudata_buf(uint8_t val) { g_ppudata_buf = val; }
+uint16_t runtime_get_ppuaddr(void) { return g_ppuaddr; }
+void     runtime_set_ppuaddr(uint16_t addr) { g_ppuaddr = addr; }
 
 uint32_t g_miss_count_any   = 0;
 uint16_t g_miss_last_addr   = 0;

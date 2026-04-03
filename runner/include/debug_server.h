@@ -9,6 +9,7 @@
  */
 #pragma once
 #include <stdint.h>
+#include "mapper.h"
 
 /* ---- Ring buffer frame record ---- */
 
@@ -26,22 +27,51 @@ typedef struct {
     int      verify_pass;           /* 1=pass, 0=fail, -1=not checked */
     int      diff_count;            /* diverging bytes (verify mode) */
 
-    /* CPU state */
+    /* ---- CPU state (exhaustive) ---- */
     uint8_t  cpu_a, cpu_x, cpu_y, cpu_s, cpu_p;
+    uint8_t  cpu_n, cpu_v, cpu_d, cpu_i, cpu_z, cpu_c;  /* exploded flags */
 
-    /* PPU state */
-    uint8_t  ppuctrl, ppumask;
+    /* ---- PPU registers (exhaustive) ---- */
+    uint8_t  ppuctrl, ppumask, ppustatus;
+    uint8_t  oamaddr;
     uint8_t  ppuscroll_x, ppuscroll_y;
+    uint16_t ppuaddr;               /* full VRAM address ($2006) */
+    uint8_t  ppuaddr_latch;         /* $2006 write toggle (0=hi, 1=lo) */
+    uint8_t  scroll_latch;          /* $2005 write toggle */
+    uint8_t  ppudata_buf;           /* PPU read delay buffer */
 
-    /* Mapper + input */
+    /* ---- Sprite-0 split state ---- */
+    uint8_t  ppuscroll_x_hud, ppuscroll_y_hud, ppuctrl_hud;
+    int      spr0_split_active;
+    int      spr0_reads_ctr;
+
+    /* ---- VBlank / timing state ---- */
+    uint32_t ops_count;             /* cycle budget consumed this frame */
+    int      vblank_depth;          /* NMI nesting depth */
+
+    /* ---- Mapper (exhaustive) ---- */
     int      current_bank;
-    uint8_t  controller_buttons;
+    MapperState mapper;
 
-    /* Game-specific (filled by game_fill_frame_record hook) */
+    /* ---- Controller state (exhaustive) ---- */
+    uint8_t  controller1_buttons;
+    uint8_t  controller2_buttons;
+    uint8_t  ctrl1_shift;           /* shift register (button readout) */
+    uint8_t  ctrl2_shift;
+    uint8_t  ctrl1_strobe;
+
+    /* ---- Game-specific (filled by game_fill_frame_record hook) ---- */
     uint8_t  game_data[16];
 
-    /* Zero page RAM snapshot ($00-$FF) for frame-level comparison */
-    uint8_t  ram_zp[256];
+    /* ---- Full memory snapshots ---- */
+    uint8_t  ram_full[0x0800];      /* 2KB work RAM ($0000-$07FF) */
+    uint8_t  sram[0x2000];          /* 8KB SRAM ($6000-$7FFF) */
+    uint8_t  chr_ram[0x2000];       /* 8KB CHR RAM ($0000-$1FFF PPU) */
+    uint8_t  ppu_nt[0x1000];        /* 4KB nametable RAM */
+    uint8_t  ppu_pal[0x20];         /* 32-byte palette */
+    uint8_t  oam[0x100];            /* 256-byte OAM (sprite RAM) */
+
+    /* Legacy note: ram_zp is now ram_full (first 256 bytes = zero page) */
 
     /* Divergence diffs (verify mode only) */
     FrameDiffEntry diffs[MAX_FRAME_DIFFS];
@@ -79,6 +109,22 @@ int debug_server_is_connected(void);
 /* Check all watchpoints against current RAM values.
  * Sends JSON notification for any changes. */
 void debug_server_check_watchpoints(void);
+
+/* ---- RAM Followers (write-level tracing) ---- */
+
+/* Called from nes_write() when a followed address is written.
+ * Records frame, old/new values, and call stack to a ring buffer.
+ * Can optionally pause on a specific value (conditional breakpoint). */
+void debug_server_notify_write(uint16_t addr, uint8_t old_val, uint8_t new_val);
+
+/* Returns 1 if any follower is watching this address. Used by nes_write()
+ * to avoid the overhead of notify_write when no followers are active. */
+int  debug_server_has_follower(uint16_t addr);
+
+/* Register a follower programmatically (e.g., from game_on_init).
+ * break_on_val: -1 = no break, 0-255 = pause when this value is written.
+ * Returns slot index on success, -1 if full. */
+int  debug_server_add_follower(uint16_t addr, int break_on_val);
 
 /* ---- Input override ---- */
 

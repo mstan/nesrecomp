@@ -699,7 +699,7 @@ void nesrecomp_runner_run(int argc, char *argv[]) {
     {
         char window_title[64];
         snprintf(window_title, sizeof(window_title), "NESRecomp - %s", game_get_name());
-        Uint32 win_flags = s_script_path ? SDL_WINDOW_MINIMIZED : SDL_WINDOW_SHOWN;
+        Uint32 win_flags = SDL_WINDOW_SHOWN;
         win_flags |= SDL_WINDOW_RESIZABLE;
         s_window = SDL_CreateWindow(window_title,
             SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
@@ -738,7 +738,7 @@ void nesrecomp_runner_run(int argc, char *argv[]) {
             "OAM Debug",
             SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
             512, 512,   /* 256x256 content at 2x display scale */
-            s_script_path ? SDL_WINDOW_MINIMIZED : SDL_WINDOW_SHOWN
+            SDL_WINDOW_SHOWN
         );
         if (s_dbg_window) {
             s_dbg_renderer = SDL_CreateRenderer(s_dbg_window, -1,
@@ -769,7 +769,7 @@ void nesrecomp_runner_run(int argc, char *argv[]) {
             "RAM Watch",
             SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
             WATCH_W, wh,
-            s_script_path ? SDL_WINDOW_MINIMIZED : SDL_WINDOW_SHOWN
+            SDL_WINDOW_SHOWN
         );
         if (s_watch_window) {
             s_watch_renderer = SDL_CreateRenderer(s_watch_window, -1,
@@ -779,8 +779,7 @@ void nesrecomp_runner_run(int argc, char *argv[]) {
         }
     }
 
-    /* Raise main game window above debug windows */
-    SDL_RaiseWindow(s_window);
+    /* Don't force window on top — let the user manage window stacking */
 
     printf("[Runner] Starting main game loop...\n");
 

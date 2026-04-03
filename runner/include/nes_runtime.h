@@ -23,6 +23,7 @@ extern uint8_t      g_ram[0x0800];     /* 2KB work RAM */
  * Set to 0xFFFF to disable. */
 extern uint16_t g_write_bp_addr;
 extern uint8_t  g_write_bp_match_val; /* only break if val matches (0xFF = any) */
+extern int      g_write_bp_block;     /* set to 1 in callback to block the write */
 typedef void (*write_bp_callback_t)(uint16_t addr, uint8_t old_val, uint8_t new_val);
 extern write_bp_callback_t g_write_bp_callback;
 extern uint8_t      g_sram[0x2000];    /* 8KB battery-backed SRAM ($6000-$7FFF) */
@@ -111,6 +112,18 @@ extern int g_current_bank;
  *                 bit3=Up, bit2=Down, bit1=Left, bit0=Right */
 extern uint8_t g_controller1_buttons;
 extern uint8_t g_controller2_buttons;
+
+/* ---- State accessors for debug ring buffer ---- */
+/* These expose private statics from runtime.c for exhaustive state capture. */
+void    runtime_get_vblank_state(uint32_t *ops_count, int *vblank_depth);
+void    runtime_set_vblank_state(uint32_t ops_count, int vblank_depth);
+void    runtime_get_controller_shift(uint8_t *shift1, uint8_t *shift2, uint8_t *strobe);
+void    runtime_set_controller_shift(uint8_t shift1, uint8_t shift2, uint8_t strobe);
+uint8_t runtime_get_ppudata_buf(void);
+void    runtime_set_ppudata_buf(uint8_t val);
+uint16_t runtime_get_ppuaddr(void);
+void     runtime_set_ppuaddr(uint16_t addr);
+extern uint8_t g_oamaddr;
 
 /* ---- Dispatch miss monitor ---- */
 extern uint32_t g_miss_count_any;

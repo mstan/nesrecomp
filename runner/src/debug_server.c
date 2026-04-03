@@ -65,9 +65,9 @@ static uint32_t     s_run_to     = 0;   /* target frame for run_to_frame (0=disa
 /* ---- Input override ---- */
 static int s_input_override = -1;  /* -1 = no override */
 
-/* ---- Ring buffer ---- */
-static NESFrameRecord s_frame_history[FRAME_HISTORY_CAP];
-static uint64_t       s_history_count = 0;
+/* ---- Ring buffer (heap-allocated, ~540MB for full-state snapshots) ---- */
+static NESFrameRecord *s_frame_history = NULL;
+static uint64_t        s_history_count = 0;
 
 /* ---- Watchpoints ---- */
 #define MAX_WATCHPOINTS 8
@@ -77,6 +77,28 @@ typedef struct {
     int      active;
 } Watchpoint;
 static Watchpoint s_watchpoints[MAX_WATCHPOINTS];
+
+/* ---- RAM Followers (write-level tracing with call stack) ---- */
+#define MAX_FOLLOWERS     8
+#define FOLLOW_LOG_CAP    8192  /* entries per follower */
+
+typedef struct {
+    uint64_t frame;
+    uint8_t  old_val;
+    uint8_t  new_val;
+    char     call_stack[128];   /* captured recomp stack snapshot */
+} FollowEntry;
+
+typedef struct {
+    uint32_t     addr;
+    int          active;
+    int          break_on_val;  /* -1 = disabled, 0-255 = break when this value written */
+    FollowEntry  log[FOLLOW_LOG_CAP];
+    uint32_t     log_head;      /* next write position (circular) */
+    uint32_t     log_count;     /* total writes recorded */
+} Follower;
+
+static Follower s_followers[MAX_FOLLOWERS];
 
 /* ---- Recomp stack (extern if available) ---- */
 #ifdef RECOMP_STACK_TRACKING
@@ -481,24 +503,49 @@ static void handle_get_frame(int id, const char *json)
     /* Encode zero page as hex */
     char zp_hex[513];
     for (int i = 0; i < 256; i++)
-        snprintf(zp_hex + i * 2, 3, "%02x", r->ram_zp[i]);
+        snprintf(zp_hex + i * 2, 3, "%02x", r->ram_full[i]);
 
     /* Use malloc for the large response */
-    char *buf = (char *)malloc(2048);
+    char *buf = (char *)malloc(4096);
     if (!buf) { send_err(id, "alloc failed"); return; }
-    snprintf(buf, 2048,
+    snprintf(buf, 4096,
              "{\"id\":%d,\"ok\":true,"
              "\"frame\":%u,\"verify_pass\":%d,\"diff_count\":%d,"
-             "\"cpu\":{\"A\":\"0x%02X\",\"X\":\"0x%02X\",\"Y\":\"0x%02X\",\"S\":\"0x%02X\"},"
-             "\"ppu\":{\"ctrl\":\"0x%02X\",\"mask\":\"0x%02X\",\"scroll_x\":%d,\"scroll_y\":%d},"
-             "\"bank\":%d,\"buttons\":\"0x%02X\","
+             "\"cpu\":{\"A\":\"0x%02X\",\"X\":\"0x%02X\",\"Y\":\"0x%02X\","
+                      "\"S\":\"0x%02X\",\"P\":\"0x%02X\","
+                      "\"N\":%d,\"V\":%d,\"D\":%d,\"I\":%d,\"Z\":%d,\"C\":%d},"
+             "\"ppu\":{\"ctrl\":\"0x%02X\",\"mask\":\"0x%02X\",\"status\":\"0x%02X\","
+                      "\"oamaddr\":\"0x%02X\","
+                      "\"scroll_x\":%d,\"scroll_y\":%d,"
+                      "\"ppuaddr\":\"0x%04X\",\"addr_latch\":%d,\"scroll_latch\":%d,"
+                      "\"data_buf\":\"0x%02X\","
+                      "\"hud_sx\":%d,\"hud_sy\":%d,\"hud_ctrl\":\"0x%02X\","
+                      "\"spr0_active\":%d,\"spr0_reads\":%d},"
+             "\"timing\":{\"ops_count\":%u,\"vblank_depth\":%d},"
+             "\"bank\":%d,"
+             "\"mapper\":{\"type\":%d,\"shift_reg\":%d,\"shift_count\":%d,"
+                         "\"ctrl\":%d,\"chr0\":%d,\"chr1\":%d,\"prg_reg\":%d,\"mirror\":%d},"
+             "\"buttons1\":\"0x%02X\",\"buttons2\":\"0x%02X\","
+             "\"ctrl_shift1\":\"0x%02X\",\"ctrl_shift2\":\"0x%02X\",\"ctrl_strobe\":%d,"
              "\"game_data\":\"%s\","
              "\"ram_zp\":\"%s\","
              "\"last_func\":\"%s\"}",
              id, r->frame_number, r->verify_pass, r->diff_count,
-             r->cpu_a, r->cpu_x, r->cpu_y, r->cpu_s,
-             r->ppuctrl, r->ppumask, r->ppuscroll_x, r->ppuscroll_y,
-             r->current_bank, r->controller_buttons,
+             r->cpu_a, r->cpu_x, r->cpu_y, r->cpu_s, r->cpu_p,
+             r->cpu_n, r->cpu_v, r->cpu_d, r->cpu_i, r->cpu_z, r->cpu_c,
+             r->ppuctrl, r->ppumask, r->ppustatus, r->oamaddr,
+             r->ppuscroll_x, r->ppuscroll_y,
+             r->ppuaddr, r->ppuaddr_latch, r->scroll_latch,
+             r->ppudata_buf,
+             r->ppuscroll_x_hud, r->ppuscroll_y_hud, r->ppuctrl_hud,
+             r->spr0_split_active, r->spr0_reads_ctr,
+             r->ops_count, r->vblank_depth,
+             r->current_bank,
+             r->mapper.mapper_type, r->mapper.shift_reg, r->mapper.shift_count,
+             r->mapper.ctrl, r->mapper.chr0, r->mapper.chr1, r->mapper.prg_reg,
+             r->mapper.mirroring,
+             r->controller1_buttons, r->controller2_buttons,
+             r->ctrl1_shift, r->ctrl2_shift, r->ctrl1_strobe,
              gd_hex, zp_hex,
              r->last_func);
     send_line(buf);
@@ -549,7 +596,7 @@ static void handle_frame_range(int id, const char *json)
             "{\"frame\":%u,\"verify\":%d,\"bank\":%d,\"btn\":\"0x%02X\","
             "\"game_data\":\"%s\"}",
             r->frame_number, r->verify_pass,
-            r->current_bank, r->controller_buttons,
+            r->current_bank, r->controller1_buttons,
             gd_hex);
     }
 
@@ -603,7 +650,7 @@ static void handle_frame_timeseries(int id, const char *json)
             r->frame_number, r->verify_pass,
             r->cpu_a, r->cpu_x, r->cpu_y,
             r->ppuctrl, r->ppumask, r->ppuscroll_x, r->ppuscroll_y,
-            r->current_bank, r->controller_buttons,
+            r->current_bank, r->controller1_buttons,
             gd_hex);
     }
 
@@ -681,6 +728,215 @@ static void handle_quit(int id, const char *json)
     exit(0);
 }
 
+/* ---- Time-travel: read from historical frame snapshots ---- */
+
+static uint8_t frame_read_byte(const NESFrameRecord *r, uint32_t addr)
+{
+    /* CPU address space */
+    if (addr < 0x0800) return r->ram_full[addr];
+    if (addr < 0x2000) return r->ram_full[addr & 0x07FF];  /* RAM mirrors */
+    if (addr >= 0x6000 && addr < 0x8000) return r->sram[addr - 0x6000];
+    /* PPU address space (use addr >= 0x10000 for PPU, or standard ranges) */
+    if (addr >= 0x2000 && addr < 0x3000) return r->ppu_nt[addr - 0x2000];
+    if (addr >= 0x3F00 && addr < 0x3F20) return r->ppu_pal[addr - 0x3F00];
+    /* OAM via special range */
+    if (addr >= 0xFE00 && addr < 0xFF00) return r->oam[addr - 0xFE00];
+    /* CHR RAM via PPU range 0x0000-0x1FFF (use 0x10000+ to disambiguate from CPU) */
+    if (addr >= 0x10000 && addr < 0x12000) return r->chr_ram[addr - 0x10000];
+    /* Also support raw CHR range if addr < 0x2000 and > 0x07FF — ambiguous, prefer PPU */
+    return 0;
+}
+
+static void handle_read_frame_ram(int id, const char *json)
+{
+    int f = json_get_int(json, "frame", -1);
+    if (f < 0) { send_err(id, "missing frame"); return; }
+
+    char addr_str[32];
+    if (!json_get_str(json, "addr", addr_str, sizeof(addr_str))) {
+        send_err(id, "missing addr"); return;
+    }
+    uint32_t addr = hex_to_u32(addr_str);
+    int len = json_get_int(json, "len", 1);
+    if (len < 1) len = 1;
+    if (len > 256) len = 256;
+
+    if (!s_frame_history) { send_err(id, "ring buffer not allocated"); return; }
+
+    uint64_t oldest = (s_history_count > FRAME_HISTORY_CAP)
+                    ? s_history_count - FRAME_HISTORY_CAP : 0;
+    if ((uint64_t)f < oldest || (uint64_t)f >= s_history_count) {
+        send_err(id, "frame not in buffer"); return;
+    }
+
+    uint32_t idx = (uint32_t)f % FRAME_HISTORY_CAP;
+    const NESFrameRecord *r = &s_frame_history[idx];
+
+    /* Build hex string */
+    char hex[513];
+    for (int i = 0; i < len; i++)
+        snprintf(hex + i*2, 3, "%02x", frame_read_byte(r, addr + i));
+
+    send_fmt("{\"id\":%d,\"ok\":true,\"frame\":%d,\"addr\":\"0x%04X\",\"len\":%d,\"hex\":\"%s\"}",
+             id, f, addr, len, hex);
+}
+
+static void handle_restore_frame(int id, const char *json)
+{
+    int f = json_get_int(json, "frame", -1);
+    if (f < 0) { send_err(id, "missing frame"); return; }
+    if (!s_frame_history) { send_err(id, "ring buffer not allocated"); return; }
+
+    uint64_t oldest = (s_history_count > FRAME_HISTORY_CAP)
+                    ? s_history_count - FRAME_HISTORY_CAP : 0;
+    if ((uint64_t)f < oldest || (uint64_t)f >= s_history_count) {
+        send_err(id, "frame not in buffer"); return;
+    }
+
+    uint32_t idx = (uint32_t)f % FRAME_HISTORY_CAP;
+    const NESFrameRecord *r = &s_frame_history[idx];
+
+    /* ---- Restore CPU (exhaustive) ---- */
+    g_cpu.A = r->cpu_a;
+    g_cpu.X = r->cpu_x;
+    g_cpu.Y = r->cpu_y;
+    g_cpu.S = r->cpu_s;
+    g_cpu.P = r->cpu_p;
+    g_cpu.N = r->cpu_n; g_cpu.V = r->cpu_v; g_cpu.D = r->cpu_d;
+    g_cpu.I = r->cpu_i; g_cpu.Z = r->cpu_z; g_cpu.C = r->cpu_c;
+
+    /* ---- Restore PPU registers (exhaustive) ---- */
+    g_ppuctrl     = r->ppuctrl;
+    g_ppumask     = r->ppumask;
+    g_ppustatus   = r->ppustatus;
+    g_oamaddr     = r->oamaddr;
+    g_ppuscroll_x = r->ppuscroll_x;
+    g_ppuscroll_y = r->ppuscroll_y;
+    runtime_set_ppuaddr(r->ppuaddr);
+    runtime_set_latch_state(r->ppuaddr_latch, r->scroll_latch);
+    runtime_set_ppudata_buf(r->ppudata_buf);
+
+    /* ---- Restore sprite-0 split state ---- */
+    g_ppuscroll_x_hud  = r->ppuscroll_x_hud;
+    g_ppuscroll_y_hud  = r->ppuscroll_y_hud;
+    g_ppuctrl_hud      = r->ppuctrl_hud;
+    g_spr0_split_active = r->spr0_split_active;
+    g_spr0_reads_ctr    = r->spr0_reads_ctr;
+
+    /* ---- Restore VBlank / timing state ---- */
+    runtime_set_vblank_state(r->ops_count, r->vblank_depth);
+
+    /* ---- Restore mapper (exhaustive) ---- */
+    g_current_bank = r->current_bank;
+    mapper_set_state(&r->mapper);
+
+    /* ---- Restore controller state ---- */
+    g_controller1_buttons = r->controller1_buttons;
+    g_controller2_buttons = r->controller2_buttons;
+    runtime_set_controller_shift(r->ctrl1_shift, r->ctrl2_shift, r->ctrl1_strobe);
+
+    /* ---- Restore full memory state ---- */
+    memcpy(g_ram,     r->ram_full, sizeof(r->ram_full));
+    memcpy(g_sram,    r->sram,     sizeof(r->sram));
+    memcpy(g_chr_ram, r->chr_ram,  sizeof(r->chr_ram));
+    memcpy(g_ppu_nt,  r->ppu_nt,   sizeof(r->ppu_nt));
+    memcpy(g_ppu_pal, r->ppu_pal,  sizeof(r->ppu_pal));
+    memcpy(g_ppu_oam, r->oam,      sizeof(r->oam));
+
+    /* Reset frame counter to the restored frame */
+    g_frame_count = (uint64_t)f;
+
+    send_fmt("{\"id\":%d,\"ok\":true,\"restored_frame\":%d}", id, f);
+}
+
+/* ---- Follow commands ---- */
+
+static void handle_follow(int id, const char *json)
+{
+    char addr_str[32];
+    if (!json_get_str(json, "addr", addr_str, sizeof(addr_str))) {
+        send_err(id, "missing addr");
+        return;
+    }
+    uint32_t addr = hex_to_u32(addr_str);
+    int brk = json_get_int(json, "break_on", -1);
+
+    for (int i = 0; i < MAX_FOLLOWERS; i++) {
+        if (!s_followers[i].active) {
+            s_followers[i].addr = addr;
+            s_followers[i].active = 1;
+            s_followers[i].break_on_val = brk;
+            s_followers[i].log_head = 0;
+            s_followers[i].log_count = 0;
+            send_fmt("{\"id\":%d,\"ok\":true,\"slot\":%d,\"addr\":\"0x%04X\","
+                     "\"break_on\":%d}", id, i, addr, brk);
+            return;
+        }
+    }
+    send_err(id, "all follower slots full (max 8)");
+}
+
+static void handle_unfollow(int id, const char *json)
+{
+    char addr_str[32];
+    if (!json_get_str(json, "addr", addr_str, sizeof(addr_str))) {
+        send_err(id, "missing addr");
+        return;
+    }
+    uint32_t addr = hex_to_u32(addr_str);
+    for (int i = 0; i < MAX_FOLLOWERS; i++) {
+        if (s_followers[i].active && s_followers[i].addr == addr) {
+            s_followers[i].active = 0;
+            send_ok(id);
+            return;
+        }
+    }
+    send_err(id, "no follower at that address");
+}
+
+static void handle_follow_history(int id, const char *json)
+{
+    char addr_str[32];
+    if (!json_get_str(json, "addr", addr_str, sizeof(addr_str))) {
+        send_err(id, "missing addr");
+        return;
+    }
+    uint32_t addr = hex_to_u32(addr_str);
+    int limit = json_get_int(json, "limit", 50);
+    if (limit > FOLLOW_LOG_CAP) limit = FOLLOW_LOG_CAP;
+
+    Follower *f = NULL;
+    for (int i = 0; i < MAX_FOLLOWERS; i++) {
+        if (s_followers[i].active && s_followers[i].addr == addr) {
+            f = &s_followers[i];
+            break;
+        }
+    }
+    if (!f) { send_err(id, "no follower at that address"); return; }
+
+    /* Build JSON array of recent entries */
+    char buf[16384];
+    int pos = snprintf(buf, sizeof(buf),
+        "{\"id\":%d,\"ok\":true,\"addr\":\"0x%04X\",\"total\":%u,\"entries\":[",
+        id, addr, f->log_count);
+
+    uint32_t avail = f->log_count < FOLLOW_LOG_CAP ? f->log_count : FOLLOW_LOG_CAP;
+    uint32_t start = (avail > (uint32_t)limit) ? avail - (uint32_t)limit : 0;
+
+    int first = 1;
+    for (uint32_t j = start; j < avail && pos < (int)sizeof(buf) - 256; j++) {
+        uint32_t idx = (f->log_head - avail + j) % FOLLOW_LOG_CAP;
+        FollowEntry *e = &f->log[idx];
+        if (!first) buf[pos++] = ',';
+        first = 0;
+        pos += snprintf(buf + pos, sizeof(buf) - pos,
+            "{\"f\":%llu,\"old\":\"0x%02X\",\"new\":\"0x%02X\",\"stack\":\"%s\"}",
+            (unsigned long long)e->frame, e->old_val, e->new_val, e->call_stack);
+    }
+    pos += snprintf(buf + pos, sizeof(buf) - pos, "]}");
+    debug_server_send_line(buf);
+}
+
 /* ---- Command dispatch ---- */
 
 typedef void (*CmdHandler)(int id, const char *json);
@@ -700,6 +956,11 @@ static const CmdEntry s_commands[] = {
     { "mapper_state",      handle_mapper_state },
     { "watch",             handle_watch },
     { "unwatch",           handle_unwatch },
+    { "follow",            handle_follow },
+    { "unfollow",          handle_unfollow },
+    { "follow_history",    handle_follow_history },
+    { "read_frame_ram",    handle_read_frame_ram },
+    { "restore_frame",     handle_restore_frame },
     { "set_input",         handle_set_input },
     { "clear_input",       handle_clear_input },
     { "pause",             handle_pause },
@@ -786,8 +1047,17 @@ void debug_server_init(int port)
     listen(s_listen, 1);
     set_nonblocking(s_listen);
 
-    /* Initialize ring buffer */
-    memset(s_frame_history, 0, sizeof(s_frame_history));
+    /* Initialize ring buffer (heap-allocated for full-state snapshots) */
+    if (!s_frame_history) {
+        size_t sz = sizeof(NESFrameRecord) * FRAME_HISTORY_CAP;
+        s_frame_history = (NESFrameRecord *)calloc(FRAME_HISTORY_CAP, sizeof(NESFrameRecord));
+        if (!s_frame_history) {
+            fprintf(stderr, "[debug] Failed to allocate ring buffer (%zu MB)\n", sz / (1024*1024));
+            return;
+        }
+        fprintf(stderr, "[debug] Ring buffer allocated: %zu MB (%d frames × %zu bytes)\n",
+                sz / (1024*1024), FRAME_HISTORY_CAP, sizeof(NESFrameRecord));
+    }
     s_history_count = 0;
 
     /* Initialize watchpoints */
@@ -863,33 +1133,72 @@ void debug_server_poll(void)
 
 void debug_server_record_frame(void)
 {
+    if (!s_frame_history) return;
+
     uint32_t idx = (uint32_t)(g_frame_count % FRAME_HISTORY_CAP);
     NESFrameRecord *r = &s_frame_history[idx];
 
     r->frame_number = (uint32_t)g_frame_count;
-    r->verify_pass  = -1;  /* not checked unless verify mode is active */
+    r->verify_pass  = -1;
     r->diff_count   = 0;
 
-    /* CPU state */
+    /* ---- CPU state (exhaustive) ---- */
     r->cpu_a = g_cpu.A;
     r->cpu_x = g_cpu.X;
     r->cpu_y = g_cpu.Y;
     r->cpu_s = g_cpu.S;
     r->cpu_p = (uint8_t)((g_cpu.N<<7)|(g_cpu.V<<6)|(1<<5)|
                           (g_cpu.D<<3)|(g_cpu.I<<2)|(g_cpu.Z<<1)|g_cpu.C);
+    r->cpu_n = g_cpu.N; r->cpu_v = g_cpu.V; r->cpu_d = g_cpu.D;
+    r->cpu_i = g_cpu.I; r->cpu_z = g_cpu.Z; r->cpu_c = g_cpu.C;
 
-    /* PPU state */
-    r->ppuctrl    = g_ppuctrl;
-    r->ppumask    = g_ppumask;
+    /* ---- PPU registers (exhaustive) ---- */
+    r->ppuctrl     = g_ppuctrl;
+    r->ppumask     = g_ppumask;
+    r->ppustatus   = g_ppustatus;
+    r->oamaddr     = g_oamaddr;
     r->ppuscroll_x = g_ppuscroll_x;
     r->ppuscroll_y = g_ppuscroll_y;
+    r->ppuaddr     = runtime_get_ppuaddr();
+    {
+        uint8_t al, sl;
+        runtime_get_latch_state(&al, &sl);
+        r->ppuaddr_latch = al;
+        r->scroll_latch  = sl;
+    }
+    r->ppudata_buf = runtime_get_ppudata_buf();
 
-    /* Mapper + input */
-    r->current_bank       = g_current_bank;
-    r->controller_buttons = g_controller1_buttons;
+    /* ---- Sprite-0 split state ---- */
+    r->ppuscroll_x_hud = g_ppuscroll_x_hud;
+    r->ppuscroll_y_hud = g_ppuscroll_y_hud;
+    r->ppuctrl_hud     = g_ppuctrl_hud;
+    r->spr0_split_active = g_spr0_split_active;
+    r->spr0_reads_ctr    = g_spr0_reads_ctr;
 
-    /* Zero page snapshot */
-    memcpy(r->ram_zp, g_ram, 256);
+    /* ---- VBlank / timing state ---- */
+    {
+        uint32_t ops; int depth;
+        runtime_get_vblank_state(&ops, &depth);
+        r->ops_count    = ops;
+        r->vblank_depth = depth;
+    }
+
+    /* ---- Mapper (exhaustive) ---- */
+    r->current_bank = g_current_bank;
+    mapper_get_state(&r->mapper);
+
+    /* ---- Controller state (exhaustive) ---- */
+    r->controller1_buttons = g_controller1_buttons;
+    r->controller2_buttons = g_controller2_buttons;
+    runtime_get_controller_shift(&r->ctrl1_shift, &r->ctrl2_shift, &r->ctrl1_strobe);
+
+    /* ---- Full memory snapshots ---- */
+    memcpy(r->ram_full, g_ram,     0x0800);
+    memcpy(r->sram,     g_sram,    0x2000);
+    memcpy(r->chr_ram,  g_chr_ram, 0x2000);
+    memcpy(r->ppu_nt,   g_ppu_nt,  0x1000);
+    memcpy(r->ppu_pal,  g_ppu_pal, 0x20);
+    memcpy(r->oam,      g_ppu_oam, 0x100);
 
     /* Game-specific data (filled by game hook) */
     memset(r->game_data, 0, sizeof(r->game_data));
@@ -959,6 +1268,92 @@ void debug_server_check_watchpoints(void)
             s_watchpoints[i].prev_val = cur;
         }
     }
+}
+
+/* ---- Follower: write-level RAM tracing ---- */
+
+static void capture_stack(char *out, int out_sz)
+{
+#ifdef RECOMP_STACK_TRACKING
+    if (out_sz < 2) return;
+    out[0] = '\0';
+    int top = g_recomp_stack_top;
+    if (top <= 0 || top > 64) {
+        snprintf(out, out_sz, "(empty)");
+        return;
+    }
+    int pos = 0;
+    for (int i = top - 1; i >= 0 && pos < out_sz - 2; i--) {
+        if (i < top - 1)
+            out[pos++] = '<';
+        const char *fn = g_recomp_stack[i];
+        if (!fn) { fn = "?"; }
+        while (*fn && pos < out_sz - 2)
+            out[pos++] = *fn++;
+    }
+    out[pos] = '\0';
+#else
+    snprintf(out, out_sz, "(no tracking)");
+#endif
+}
+
+void debug_server_notify_write(uint16_t addr, uint8_t old_val, uint8_t new_val)
+{
+    for (int i = 0; i < MAX_FOLLOWERS; i++) {
+        if (!s_followers[i].active) continue;
+        if (s_followers[i].addr != (uint32_t)addr) continue;
+
+        /* Record to ring buffer */
+        uint32_t idx = s_followers[i].log_head % FOLLOW_LOG_CAP;
+        FollowEntry *e = &s_followers[i].log[idx];
+        e->frame   = g_frame_count;
+        e->old_val = old_val;
+        e->new_val = new_val;
+        capture_stack(e->call_stack, sizeof(e->call_stack));
+        s_followers[i].log_head++;
+        s_followers[i].log_count++;
+        if (addr == 0xFF && s_followers[i].log_count <= 3) {
+            fprintf(stderr, "[FOLLOW] slot=%d addr=%04X count=%u head=%u stack=%s\n",
+                    i, addr, s_followers[i].log_count, s_followers[i].log_head,
+                    e->call_stack);
+        }
+
+        /* Conditional break */
+        if (s_followers[i].break_on_val >= 0 &&
+            new_val == (uint8_t)s_followers[i].break_on_val) {
+            s_paused = 1;
+            send_fmt("{\"event\":\"follow_break\","
+                     "\"addr\":\"0x%04X\",\"old\":\"0x%02X\",\"new\":\"0x%02X\","
+                     "\"frame\":%llu,\"stack\":\"%s\"}",
+                     addr, old_val, new_val,
+                     (unsigned long long)g_frame_count,
+                     e->call_stack);
+        }
+    }
+}
+
+int debug_server_has_follower(uint16_t addr)
+{
+    for (int i = 0; i < MAX_FOLLOWERS; i++) {
+        if (s_followers[i].active && s_followers[i].addr == (uint32_t)addr)
+            return 1;
+    }
+    return 0;
+}
+
+int debug_server_add_follower(uint16_t addr, int break_on_val)
+{
+    for (int i = 0; i < MAX_FOLLOWERS; i++) {
+        if (!s_followers[i].active) {
+            s_followers[i].addr = (uint32_t)addr;
+            s_followers[i].active = 1;
+            s_followers[i].break_on_val = break_on_val;
+            s_followers[i].log_head = 0;
+            s_followers[i].log_count = 0;
+            return i;
+        }
+    }
+    return -1;
 }
 
 void debug_server_shutdown(void)
