@@ -649,13 +649,10 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                 else
                     fprintf(f, "call_by_address(0x%04X);\n", abs16);
             }
-            /* stack_bail_func: target does PLA PLA + RTS to bail two levels.
-             * On real 6502: PLA PLA consumes the bail's own JSR return addr,
-             * RTS pops the CALLER's JSR return addr (2nd level of bail).
-             *
-             * In recompiled code: the bail func's RTS is unsuppressed and
-             * pops the caller's return addr.  After the call, `return;`
-             * exits the caller before its own RTS runs — no double-pop. */
+            /* stack_bail_func: target does PLA PLA + RTS to bail two
+             * levels.  After the call, exit the caller (simulating the
+             * bail).  The bail func's unsuppressed RTS already popped
+             * the caller's JSR return addr from the 6502 stack. */
             for (int sbi = 0; sbi < cfg->stack_bail_func_count; sbi++) {
                 if (abs16 == cfg->stack_bail_funcs[sbi]) {
                     fprintf(f, "return; /* stack_bail_func $%04X */\n", abs16);
@@ -768,13 +765,13 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                 }
             }
             if (cfg->push_all_jsr) {
-                /* All functions pop their JSR return address on RTS,
-                 * including bail funcs.  A bail func ($C376 pattern:
-                 * PLA PLA RTS) pops its own JSR return via PLA PLA,
-                 * then its RTS pops the CALLER's JSR return — the
-                 * second level of the bail.  The `return;` emitted
-                 * after JSR $C376 at the call site exits the caller
-                 * before the caller's own RTS, preventing double-pop. */
+                /* All functions pop their JSR return on RTS, including
+                 * bail funcs.  The bail func's PLA PLA consumes its own
+                 * JSR return, then its RTS pops the CALLER's return (the
+                 * 2nd level of the bail).  After the call, `return;` at
+                 * the bail call site exits the caller before its own RTS
+                 * runs.  The caller's caller continues normally and its
+                 * own RTS pops its return addr. */
                 fprintf(f, "g_cpu.S += 2; /* pop JSR return address */\n");
             }
             fprintf(f, "\n#ifdef RECOMP_STACK_TRACKING\n    recomp_stack_pop();\n#endif\n    return;\n");

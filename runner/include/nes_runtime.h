@@ -16,6 +16,7 @@ typedef struct {
 
 extern CPU6502State g_cpu;
 extern uint8_t      g_ram[0x0800];     /* 2KB work RAM */
+extern int          g_bail_active;     /* set by stack_bail_func return; checked at JSR sites */
 
 /* ---- Write breakpoints ---- */
 /* Set g_write_bp_addr to a RAM address (0-$07FF) to enable.

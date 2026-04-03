@@ -14,6 +14,7 @@
 
 CPU6502State g_cpu;
 uint8_t      g_ram[0x0800];
+int          g_bail_active;  /* set by stack_bail_func, checked at JSR call sites */
 uint8_t      g_sram[0x2000]; /* $6000-$7FFF battery-backed SRAM (8KB) */
 uint8_t      g_chr_ram[0x2000];
 int          g_chr_is_rom = 0;
