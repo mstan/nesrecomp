@@ -198,7 +198,10 @@ typedef struct {
     uint16_t        push_jsrs[GAME_CFG_MAX_NOP_JSRS]; /* JSR targets that need 6502 return addr pushed */
     int             push_jsr_count;
 
-    uint16_t        push_jmps[GAME_CFG_MAX_NOP_JSRS]; /* JMP targets: push dummy before tail-call */
+    struct {
+        uint16_t target;  /* JMP destination that needs the dummy push */
+        uint16_t source;  /* 0 = match any JMP site; nonzero = only this JMP source PC */
+    }               push_jmps[GAME_CFG_MAX_NOP_JSRS];
     int             push_jmp_count;
 
     ExtraFunc        extra_labels[GAME_CFG_MAX_EXTRA_LABELS];

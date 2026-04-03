@@ -719,8 +719,6 @@ void nesrecomp_runner_run(int argc, char *argv[]) {
         fprintf(stderr, "SDL_CreateWindow: %s\n", SDL_GetError());
         exit(1);
     }
-    /* Game window always on top; debug windows stay beneath */
-    SDL_SetWindowAlwaysOnTop(s_window, SDL_TRUE);
 
     s_renderer = SDL_CreateRenderer(s_window, -1,
         SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);

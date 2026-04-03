@@ -673,10 +673,13 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                         fprintf(f, "goto label_%04X;\n", abs16);
                     } else {
                         /* Check push_jmp: bail-containing targets need a dummy
-                         * push so the bail's RTS has something safe to pop. */
+                         * push so the bail's RTS has something safe to pop.
+                         * source=0 matches any JMP site; nonzero matches only that PC. */
                         int need_jmp_push = 0;
                         for (int ji = 0; ji < cfg->push_jmp_count; ji++) {
-                            if (abs16 == cfg->push_jmps[ji]) { need_jmp_push = 1; break; }
+                            if (abs16 == cfg->push_jmps[ji].target &&
+                                (cfg->push_jmps[ji].source == 0 || cfg->push_jmps[ji].source == pc))
+                            { need_jmp_push = 1; break; }
                         }
                         if (need_jmp_push) {
                             fprintf(f, "maybe_trigger_vblank(2); g_ram[0x100+g_cpu.S]=0; g_cpu.S--; g_ram[0x100+g_cpu.S]=0; g_cpu.S--; func_%04X(); return;\n", abs16);
@@ -694,7 +697,9 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                         /* push_jmp check for cross-bank JMP via dispatch */
                         int need_jmp_push = 0;
                         for (int ji = 0; ji < cfg->push_jmp_count; ji++) {
-                            if (abs16 == cfg->push_jmps[ji]) { need_jmp_push = 1; break; }
+                            if (abs16 == cfg->push_jmps[ji].target &&
+                                (cfg->push_jmps[ji].source == 0 || cfg->push_jmps[ji].source == pc))
+                            { need_jmp_push = 1; break; }
                         }
                         if (need_jmp_push) {
                             fprintf(f, "maybe_trigger_vblank(2); g_ram[0x100+g_cpu.S]=0; g_cpu.S--; g_ram[0x100+g_cpu.S]=0; g_cpu.S--; call_by_address(0x%04X); return;\n", abs16);
@@ -711,7 +716,9 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                         /* push_jmp check for same-bank JMP */
                         int need_jmp_push = 0;
                         for (int ji = 0; ji < cfg->push_jmp_count; ji++) {
-                            if (abs16 == cfg->push_jmps[ji]) { need_jmp_push = 1; break; }
+                            if (abs16 == cfg->push_jmps[ji].target &&
+                                (cfg->push_jmps[ji].source == 0 || cfg->push_jmps[ji].source == pc))
+                            { need_jmp_push = 1; break; }
                         }
                         if (need_jmp_push) {
                             fprintf(f, "maybe_trigger_vblank(2); g_ram[0x100+g_cpu.S]=0; g_cpu.S--; g_ram[0x100+g_cpu.S]=0; g_cpu.S--; func_%04X_b%d(); return;\n", abs16, bank);
