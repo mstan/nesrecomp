@@ -171,6 +171,14 @@ void maybe_fire_pending_vblank(void) {
 
     if (g_ppuctrl & 0x80) {
         nes_vblank_callback();
+    } else if (s_vblank_depth > 1) {
+        /* NMI is disabled (bit 7 of $2000 cleared), but we're inside the
+         * NMI handler and a spin-wait is burning cycles.  The game disabled
+         * NMI as part of PPU transfer setup — on a real NES the next VBlank
+         * NMI would fire regardless because NMI is edge-triggered at the
+         * start of VBlank, not level-gated by PPUCTRL during the handler.
+         * Set $1A = 1 directly to break the spin-wait. */
+        g_ram[0x1A] = 1;
     }
     s_vblank_depth--;
 }

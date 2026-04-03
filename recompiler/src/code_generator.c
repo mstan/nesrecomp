@@ -426,7 +426,10 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                         fprintf(f, "  uint8_t _sbank=g_ram[0x%04X];\n", tramp->bank_save_addr);
                     fprintf(f, "  g_cpu.%s=0x%02X; func_%04X();\n", breg, disp_bank, tramp->bs_fn_addr);
                     fprintf(f, "  g_cpu.A=_sa; g_cpu.X=_sx; g_cpu.Y=_sy;\n");
-                    fprintf(f, "  call_by_address(0x%04X);\n", disp_addr);
+                    if (cfg->push_all_jsr)
+                        fprintf(f, "  if (!call_by_address(0x%04X)) g_cpu.S += 2;\n", disp_addr);
+                    else
+                        fprintf(f, "  call_by_address(0x%04X);\n", disp_addr);
                     fprintf(f, "  _sa=g_cpu.A;\n");
                     fprintf(f, "  g_cpu.%s=_sbank; func_%04X();\n", breg, tramp->bs_fn_addr);
                     fprintf(f, "  g_cpu.A=_sa; }\n");
@@ -612,9 +615,12 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                     if (ipp->call) {
                         if (abs16 >= 0xC000)
                             fprintf(f, "func_%04X();\n", abs16);
-                        else if (bank == fixed_bank)
-                            fprintf(f, "call_by_address(0x%04X);\n", abs16);
-                        else
+                        else if (bank == fixed_bank) {
+                            if (cfg->push_all_jsr)
+                                fprintf(f, "if (!call_by_address(0x%04X)) g_cpu.S += 2;\n", abs16);
+                            else
+                                fprintf(f, "call_by_address(0x%04X);\n", abs16);
+                        } else
                             fprintf(f, "func_%04X_b%d();\n", abs16, bank);
                     }
                     return 5;
@@ -629,16 +635,35 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                      * dispatch via call_by_address.  SRAM functions run from RAM
                      * and bank-switch during execution, so JSR targets in the
                      * switchable bank range must use dynamic dispatch. */
-                    fprintf(f, "call_by_address(0x%04X);\n", abs16);
+                    if (cfg->push_all_jsr)
+                        fprintf(f, "if (!call_by_address(0x%04X)) g_cpu.S += 2;\n", abs16);
+                    else
+                        fprintf(f, "call_by_address(0x%04X);\n", abs16);
                 } else {
                     fprintf(f, "func_%04X_b%d();\n", abs16, bank);
                 }
             } else {
                 /* JSR to non-ROM address (RAM/PPU): dispatch at runtime */
-                fprintf(f, "call_by_address(0x%04X);\n", abs16);
+                if (cfg->push_all_jsr)
+                    fprintf(f, "if (!call_by_address(0x%04X)) g_cpu.S += 2;\n", abs16);
+                else
+                    fprintf(f, "call_by_address(0x%04X);\n", abs16);
             }
             /* stack_bail_func: target does PLA PLA + RTS to bail two levels.
-             * In recompiled code, add return so the caller also exits. */
+             * On real 6502: PLA PLA consumes inner return addr, RTS pops outer
+             * return addr, execution resumes at outer's caller.  Outer function
+             * is completely bypassed.
+             *
+             * In recompiled code: the bail func's PLA PLA + RTS adjusts g_cpu.S
+             * by +4.  Then C return chain exits the caller.  But the outer
+             * function also resumes and hits its RTS → extra g_cpu.S += 2.
+             *
+             * Fix: after calling the bail func, explicitly exit the caller
+             * (simulating the bail).  The outer function's RTS will pop the
+             * outer return address normally.  But the bail func's RTS already
+             * popped it → double-pop.  So also undo the bail func's RTS pop
+             * by doing g_cpu.S -= 2 to keep the outer return address for the
+             * outer function's own RTS. */
             for (int sbi = 0; sbi < cfg->stack_bail_func_count; sbi++) {
                 if (abs16 == cfg->stack_bail_funcs[sbi]) {
                     fprintf(f, "return; /* stack_bail_func $%04X */\n", abs16);
@@ -751,7 +776,18 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                 }
             }
             if (cfg->push_all_jsr) {
-                fprintf(f, "g_cpu.S += 2; /* pop JSR return address */\n");
+                /* stack_bail_funcs handle their own stack via PLA PLA.
+                 * Their RTS should NOT pop because the C return chain
+                 * will reach the outer function whose RTS pops instead. */
+                int is_bail_func = 0;
+                for (int sbi = 0; sbi < cfg->stack_bail_func_count; sbi++) {
+                    if (func_base == cfg->stack_bail_funcs[sbi]) { is_bail_func = 1; break; }
+                }
+                if (!is_bail_func) {
+                    fprintf(f, "g_cpu.S += 2; /* pop JSR return address */\n");
+                } else {
+                    fprintf(f, "/* stack_bail_func: RTS pop suppressed — outer func's RTS pops */\n");
+                }
             }
             fprintf(f, "\n#ifdef RECOMP_STACK_TRACKING\n    recomp_stack_pop();\n#endif\n    return;\n");
             break;
@@ -1256,7 +1292,7 @@ static void emit_dispatch(FILE *f, const FunctionList *funcs, const NESRom *rom,
         "/* AUTO-GENERATED dispatch table. DO NOT EDIT. */\n"
         "#include \"nes_runtime.h\"\n"
         "extern int g_current_bank;\n\n"
-        "void call_by_address(uint16_t addr) {\n"
+        "int call_by_address(uint16_t addr) {\n"
         "    switch (addr) {\n"
     );
 
@@ -1316,7 +1352,7 @@ static void emit_dispatch(FILE *f, const FunctionList *funcs, const NESRom *rom,
                             bk, addr, bk);
             }
             if (!has_default)
-                fprintf(f, "                default: nes_log_dispatch_miss(addr); break;\n");
+                fprintf(f, "                default: nes_log_dispatch_miss(addr); return 0;\n");
             fprintf(f, "            }\n");
             fprintf(f, "            break;\n");
         }
@@ -1343,8 +1379,9 @@ static void emit_dispatch(FILE *f, const FunctionList *funcs, const NESRom *rom,
     fprintf(f,
         "        default:\n"
         "            nes_log_dispatch_miss(addr);\n"
-        "            break;\n"
+        "            return 0;\n"
         "    }\n"
+        "    return 1;\n"
         "}\n"
     );
 }

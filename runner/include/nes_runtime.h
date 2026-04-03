@@ -41,7 +41,7 @@ uint16_t nes_read16zp(uint8_t zp_addr);  /* Zero-page 16-bit (wraps at $FF) */
 
 /* ---- Dispatch ---- */
 /* Called for JMP (indirect) — dispatch to the correct recompiled function */
-void call_by_address(uint16_t addr);
+int call_by_address(uint16_t addr);  /* returns 1 on hit, 0 on miss */
 
 /* Logging for dispatch misses */
 void nes_log_dispatch_miss(uint16_t addr);
