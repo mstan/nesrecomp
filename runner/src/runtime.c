@@ -35,7 +35,8 @@ uint8_t g_ppuctrl_hud     = 0;
 int     g_spr0_split_active = 0;
 int     g_spr0_reads_ctr    = 0;  /* sprite-0 hit simulation read counter */
 static int     g_ppuaddr_latch = 0;
-static int     g_scroll_latch  = 0;
+/* NOTE: g_scroll_latch removed — real NES shares a single write toggle
+ * ("w" register) between $2005 and $2006.  g_ppuaddr_latch is that toggle. */
 static uint8_t g_ppudata_buf   = 0; /* PPUDATA read buffer (NES read-delay) */
 
 uint64_t g_frame_count = 0;
@@ -89,8 +90,9 @@ void runtime_init(void) {
  * The threshold is tuned so games run at approximately correct speed
  * when combined with the wall-clock frame pacing in nes_vblank_callback. */
 static int  s_vblank_depth = 0;   /* NMI nesting depth (0 = not in NMI) */
-#define MAX_VBLANK_DEPTH 3        /* allow limited re-entrancy for games that
-                                   * spin-wait inside the NMI handler */
+#define MAX_VBLANK_DEPTH 3        /* Some games (Metroid) spin-wait for NMI inside
+                                   * the NMI handler (column loader).  Allow
+                                   * re-entrancy so the wait loop can exit. */
 static uint32_t s_ops_count = 0;
 
 /* Cycle budget per frame.  Real NES: 29780.666 CPU cycles between NMIs
@@ -105,64 +107,71 @@ static inline void bus_tick(void) {
     /* no-op: cycle counting moved to per-instruction maybe_trigger_vblank */
 }
 
+static int s_vblank_pending = 0;   /* VBlank waiting to fire at next safe point */
+
 void maybe_trigger_vblank(int cycles) {
-    /* Always count cycles, even during NMI handler execution.
-     * On real NES, the NMI handler consumes CPU cycles that reduce
-     * the frame budget.  Without this, the main loop gets a "free"
-     * full budget every frame, causing it to run ahead of real NES. */
+    /* Count cycles — always, even during NMI handler execution. */
     s_ops_count += (cycles > 0) ? (uint32_t)cycles : 1;
-    if (s_vblank_depth >= MAX_VBLANK_DEPTH) return;
     if (s_ops_count < OPS_PER_FRAME) return;
+    if (s_vblank_depth >= MAX_VBLANK_DEPTH) return;
+
+    /* Frame budget exhausted.
+     *
+     * At depth 0 (main loop, not inside NMI): fire immediately.  The main
+     * loop's linear code (RESET init, PPU warmup) needs VBlank to fire even
+     * without backward branches.  This is safe because the main loop code
+     * that calls wait-for-NMI has already set up the correct bank/state.
+     *
+     * At depth > 0 (inside NMI handler): DEFER to next backward branch.
+     * The NMI handler calls subroutines that switch banks, modify ZP, and
+     * do multi-step PPU operations.  Firing a nested NMI mid-operation
+     * corrupts bank-dependent data reads ($9560 table) and ZP pointers.
+     * Deferring to backward branches ensures the code has reached a loop
+     * boundary (like the $1A spin-wait) where state is consistent. */
+    if (s_vblank_depth == 0) {
+        /* Immediate fire — safe at top level */
+        s_ops_count = 0;
+        s_vblank_depth++;
+        g_ppustatus = (g_ppustatus & ~0x40) | 0x80;
+        g_spr0_split_active = 0;
+        g_spr0_reads_ctr    = 0;
+        g_ppuscroll_x = 0;
+        g_ppuscroll_y = 0;
+        g_ppuscroll_x_hud = 0;
+        g_ppuscroll_y_hud = 0;
+        g_ppuctrl_hud     = g_ppuctrl & 0x38;
+        if (g_ppuctrl & 0x80) {
+            nes_vblank_callback();
+        }
+        s_vblank_depth--;
+    } else {
+        /* Deferred fire — wait for backward branch (loop boundary) */
+        s_vblank_pending = 1;
+    }
+}
+
+/* Called from watchdog_check() at backward branch (loop back-edge) points.
+ * This is the ONLY place NMI actually fires — at loop boundaries where
+ * the game's state is consistent (correct bank mapped, ZP set up, etc.). */
+void maybe_fire_pending_vblank(void) {
+    if (!s_vblank_pending) return;
+    s_vblank_pending = 0;
     s_ops_count = 0;
     s_vblank_depth++;
-    /* Set VBlank (bit7), clear sprite-0 hit (bit6) — standard NES VBlank start */
+
+    /* Standard VBlank start: set flags, reset sprite-0 state */
     g_ppustatus = (g_ppustatus & ~0x40) | 0x80;
-    g_spr0_split_active = 0;  /* reset per-frame split state */
-    g_spr0_reads_ctr    = 0;  /* reset sprite-0 hit counter */
-    /* Reset scroll to (0,0) at VBlank start so the HUD region renders with
-     * correct scroll.  The NMI handler writes PPUCTRL ($2000) early for the
-     * HUD nametable but does NOT write PPUSCROLL ($2005) until after the
-     * sprite-0 wait.  Without this reset the HUD captures stale gameplay
-     * scroll values from the previous frame, causing flicker. */
+    g_spr0_split_active = 0;
+    g_spr0_reads_ctr    = 0;
     g_ppuscroll_x = 0;
     g_ppuscroll_y = 0;
-    g_scroll_latch = 0;
-    /* Pre-capture HUD scroll as (0,0) with nametable 0.  On the real NES the
-     * sprite-0 hit always fires (it's hardware).  Our counter-based sim can
-     * miss because $2002 reads during PPU data transfers contaminate the
-     * counter.  By pre-setting valid HUD values here, the renderer can fall
-     * back to these even when the counter doesn't trigger. */
     g_ppuscroll_x_hud = 0;
     g_ppuscroll_y_hud = 0;
-    g_ppuctrl_hud     = g_ppuctrl & 0x38;  /* keep bits 3-5 (spr size, spr/bg pattern);
-                                            * clear bits 0-1 (force NT0 for HUD),
-                                            * clear bit 2 (VRAM inc — irrelevant),
-                                            * clear bit 7 (NMI enable — irrelevant) */
-    /* Only fire NMI if $2000 bit7 (NMI enable) is set — gates init spin-waits correctly.
-     * Save and restore the PPU address/scroll latch state around the NMI call.
-     * On real hardware, NMI only fires between frames — never mid-instruction-stream.
-     * The NMI handler reads $2002 which resets g_ppuaddr_latch.  If game code was
-     * between two $2006 writes (latch=1), the NMI's $2002 read would reset it,
-     * corrupting the VRAM address for all subsequent writes.  Similarly for scroll. */
-    int saved_ppuaddr_latch = g_ppuaddr_latch;
-    int saved_scroll_latch  = g_scroll_latch;
-    uint16_t saved_ppuaddr  = g_ppuaddr;
+    g_ppuctrl_hud     = g_ppuctrl & 0x38;
+
     if (g_ppuctrl & 0x80) {
-        /* On real 6502, the CPU pushes PCH, PCL, P to the stack before
-         * entering the NMI handler.  RTI at the end pops these 3 bytes.
-         * We push them here so RTI has correct data.  Additionally, we
-         * save and restore S around the call to guarantee the stack is
-         * balanced even if the handler has internal imbalances. */
-        uint8_t p = (g_cpu.N<<7)|(g_cpu.V<<6)|0x20|(g_cpu.D<<3)|
-                    (g_cpu.I<<2)|(g_cpu.Z<<1)|g_cpu.C;
-        g_ram[0x100 + g_cpu.S] = 0x00; g_cpu.S--;  /* PCH (dummy) */
-        g_ram[0x100 + g_cpu.S] = 0x00; g_cpu.S--;  /* PCL (dummy) */
-        g_ram[0x100 + g_cpu.S] = p;    g_cpu.S--;  /* P */
         nes_vblank_callback();
     }
-    g_ppuaddr_latch = saved_ppuaddr_latch;
-    g_scroll_latch  = saved_scroll_latch;
-    g_ppuaddr       = saved_ppuaddr;
     s_vblank_depth--;
 }
 
@@ -171,6 +180,10 @@ void runtime_set_vblank_firing(int active) {
         s_vblank_depth++;
     else if (s_vblank_depth > 0)
         s_vblank_depth--;
+}
+
+int runtime_get_vblank_depth(void) {
+    return s_vblank_depth;
 }
 
 uint8_t nes_read(uint16_t addr) {
@@ -292,11 +305,25 @@ void ppu_write_reg(uint16_t reg, uint8_t val) {
         case 0x2003: g_oamaddr = val; break;
         case 0x2004: g_ppu_oam[g_oamaddr++] = val; break;
         case 0x2005:
-            if (!g_scroll_latch) g_ppuscroll_x = val;
-            else                 g_ppuscroll_y = val;
-            g_scroll_latch ^= 1;
+            if (!g_ppuaddr_latch) g_ppuscroll_x = val;
+            else                  g_ppuscroll_y = val;
+            g_ppuaddr_latch ^= 1;
             break;
         case 0x2006:
+            /* === $2006 WRITE TRAP: frames 192-196 === */
+            {
+                static int ppu2006_trap_count = 0;
+                if (ppu2006_trap_count < 30 && g_frame_count >= 192 && g_frame_count <= 196) {
+                    extern int g_current_bank;
+                    fprintf(stderr, "[PPU2006] f=%llu val=$%02X ppuaddr=$%04X latch=%d vblank=%d bank=%d ram1D=$%02X ram1C=$%02X ram1B=$%02X\n",
+                            (unsigned long long)g_frame_count, val, g_ppuaddr, g_ppuaddr_latch,
+                            s_vblank_depth, g_current_bank,
+                            g_ram[0x1D], g_ram[0x1C], g_ram[0x1B]);
+                    fflush(stderr);
+                    ppu2006_trap_count++;
+                }
+            }
+            /* === END $2006 WRITE TRAP === */
             if (!g_ppuaddr_latch) g_ppuaddr = (uint16_t)val << 8;
             else                   g_ppuaddr |= val;
             g_ppuaddr_latch ^= 1;
@@ -310,6 +337,17 @@ void ppu_write_reg(uint16_t reg, uint8_t val) {
                 uint8_t idx = a & 0x1F;
                 if (idx == 0x10 || idx == 0x14 || idx == 0x18 || idx == 0x1C)
                     idx &= 0x0F;
+                if (idx == 0 && val == 0xBA && g_ppu_pal[0] != 0xBA) {
+                    fprintf(stderr, "\n!!! PAL[0] = $BA at frame %llu, ppuaddr=$%04X, val=$%02X, S=$%02X, ctrl=$%02X !!!\n",
+                            (unsigned long long)g_frame_count, g_ppuaddr, val, g_cpu.S, g_ppuctrl);
+#ifdef RECOMP_STACK_TRACKING
+                    extern const char *g_recomp_stack[];
+                    extern int g_recomp_stack_top;
+                    for (int i = g_recomp_stack_top - 1; i >= 0 && i >= g_recomp_stack_top - 12; i--)
+                        fprintf(stderr, "  [%d] %s\n", i, g_recomp_stack[i] ? g_recomp_stack[i] : "?");
+#endif
+                    fflush(stderr);
+                }
                 g_ppu_pal[idx] = val;
             } else if (a >= 0x2000) {
                 /* Apply mirroring to nametable writes so they land in the
@@ -326,6 +364,58 @@ void ppu_write_reg(uint16_t reg, uint8_t val) {
                 g_ppu_nt[pnt * 0x400 + (a & 0x3FF)] = val;
             }
             else if (!g_chr_is_rom) {
+                /* === CHR WRITE TRAP: frames 190-210 === */
+                {
+                    static int chr_trap_fired = 0;
+                    if (!chr_trap_fired && g_frame_count >= 190 && g_frame_count <= 210) {
+                        chr_trap_fired = 1;
+                        extern int g_current_bank;
+                        fprintf(stderr, "\n=== CHR WRITE TRAP ===\n");
+                        fprintf(stderr, "frame=%llu ppuaddr=$%04X mapped_a=$%04X val=$%02X\n",
+                                (unsigned long long)g_frame_count, g_ppuaddr, a, val);
+                        fprintf(stderr, "ctrl=$%02X latch=%d vblank_depth=%d\n",
+                                g_ppuctrl, g_ppuaddr_latch, s_vblank_depth);
+                        fprintf(stderr, "bank=%d\n", g_current_bank);
+                        /* ZP $00-$0F */
+                        fprintf(stderr, "ZP $00-$0F:");
+                        for (int zi = 0; zi < 16; zi++)
+                            fprintf(stderr, " %02X", g_ram[zi]);
+                        fprintf(stderr, "\n");
+                        /* Key ZP locations */
+                        fprintf(stderr, "$1A=%02X $1B=%02X $1C=%02X $1D=%02X $1E=%02X $5A=%02X\n",
+                                g_ram[0x1A], g_ram[0x1B], g_ram[0x1C],
+                                g_ram[0x1D], g_ram[0x1E], g_ram[0x5A]);
+                        /* Pointer at ($00/$01) and first 16 bytes it points to */
+                        {
+                            uint16_t ptr = g_ram[0x00] | ((uint16_t)g_ram[0x01] << 8);
+                            fprintf(stderr, "($00/$01) ptr=$%04X, data:", ptr);
+                            for (int di = 0; di < 16; di++) {
+                                uint16_t daddr = ptr + di;
+                                uint8_t dval = 0;
+                                if (daddr < 0x0800)
+                                    dval = g_ram[daddr];
+                                else if (daddr >= 0x6000 && daddr < 0x8000)
+                                    dval = g_sram[daddr - 0x6000];
+                                else
+                                    dval = 0xFF; /* unmapped for this dump */
+                                fprintf(stderr, " %02X", dval);
+                            }
+                            fprintf(stderr, "\n");
+                        }
+#ifdef RECOMP_STACK_TRACKING
+                        {
+                            extern const char *g_recomp_stack[];
+                            extern int g_recomp_stack_top;
+                            fprintf(stderr, "Recomp stack (top=%d):\n", g_recomp_stack_top);
+                            for (int si = g_recomp_stack_top - 1; si >= 0 && si >= g_recomp_stack_top - 20; si--)
+                                fprintf(stderr, "  [%d] %s\n", si, g_recomp_stack[si] ? g_recomp_stack[si] : "?");
+                        }
+#endif
+                        fprintf(stderr, "=== END CHR WRITE TRAP ===\n\n");
+                        fflush(stderr);
+                    }
+                }
+                /* === END CHR WRITE TRAP === */
                 g_chr_ram[a] = val; /* CHR RAM only — CHR ROM is read-only */
             }
             g_ppuaddr += (g_ppuctrl & 0x04) ? 32 : 1;
@@ -339,8 +429,7 @@ uint8_t ppu_read_reg(uint16_t reg) {
         case 0x2002: {
             uint8_t s = g_ppustatus;
             g_ppustatus &= ~0x80;  /* clear VBlank flag (standard NES) */
-            g_scroll_latch  = 0;
-            g_ppuaddr_latch = 0;
+            g_ppuaddr_latch = 0;  /* shared w toggle — clears for both $2005 and $2006 */
             /* Simulate sprite-0 hit (bit6) for split-screen spin-waits.
              * On real NES, bit6 is set by hardware during active rendering and
              * cleared only at the pre-render scanline — never by reading $2002.
@@ -427,12 +516,12 @@ uint8_t ppu_read_reg(uint16_t reg) {
 
 void runtime_get_latch_state(uint8_t *ppuaddr_latch, uint8_t *scroll_latch) {
     *ppuaddr_latch = (uint8_t)g_ppuaddr_latch;
-    *scroll_latch  = (uint8_t)g_scroll_latch;
+    *scroll_latch  = (uint8_t)g_ppuaddr_latch;  /* same toggle on real NES */
 }
 
 void runtime_set_latch_state(uint8_t ppuaddr_latch, uint8_t scroll_latch) {
+    (void)scroll_latch;  /* same toggle — only ppuaddr_latch matters */
     g_ppuaddr_latch = (int)ppuaddr_latch;
-    g_scroll_latch  = (int)scroll_latch;
 }
 
 void runtime_get_vblank_state(uint32_t *ops_count, int *vblank_depth) {

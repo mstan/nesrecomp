@@ -453,25 +453,34 @@ void nes_vblank_callback(void) {
 
 
     if (g_ppuctrl & 0x80) {
-        /* Simulate hardware NMI push so RTI in the handler restores stack.
-         * Real 6502 pushes 3 bytes: PCH, PCL, P (status flags).
-         * PCH/PCL are placeholders — recompiled code never uses the return
-         * address from RTI, but the NMI handler does stack-relative reads
-         * at offsets $106,X and $107,X that DEPEND on all 3 bytes being
-         * present.  With only 2 pushes the offsets overshoot into the OAM
-         * buffer at $0200 when S=$FF, corrupting sprite 0's Y position. */
-        uint8_t p_save = (uint8_t)((g_cpu.N<<7)|(g_cpu.V<<6)|(1<<5)|
-                                   (g_cpu.D<<3)|(g_cpu.I<<2)|(g_cpu.Z<<1)|g_cpu.C);
-        g_ram[0x100+g_cpu.S] = 0x00;   g_cpu.S--;   /* PCH placeholder */
-        g_ram[0x100+g_cpu.S] = 0x00;   g_cpu.S--;   /* PCL placeholder */
-        g_ram[0x100+g_cpu.S] = p_save; g_cpu.S--;   /* P (status flags) */
-        /* Prevent maybe_trigger_vblank() from firing a nested NMI during
-         * the handler.  On real hardware NMI is non-reentrant; the handler's
-         * VRAM transfer uses the stack page ($0100+) as a data buffer and a
-         * nested NMI's hardware push would overwrite that data. */
-        runtime_set_vblank_firing(1);
-        game_run_nmi();
-        runtime_set_vblank_firing(0);
+        /* Check if this is a NESTED NMI (already inside game_run_nmi).
+         * On real NES, NMI can nest — but the nested NMI runs a full frame
+         * later, when game state is consistent.  In the recompiler, nested
+         * NMI fires mid-VRAM-transfer when game state is inconsistent,
+         * causing the NMI handler's column loader to compute wrong PPU
+         * addresses (e.g. ppuaddr=$FFC0 → writes to palette instead of NT).
+         *
+         * Fix: for nested NMIs, just set $1A=1 to resolve the spin-wait
+         * that triggered the nesting.  Skip the full NMI handler to avoid
+         * VRAM transfers with corrupted state. */
+        if (runtime_get_vblank_depth() > 1) {
+            g_ram[0x1A] = 1;  /* signal the $1A spin-wait to exit */
+        } else {
+            /* Normal (non-nested) NMI: push stack frame and run handler.
+             * Real 6502 pushes 3 bytes: PCH, PCL, P (status flags).
+             * PCH/PCL are placeholders — recompiled code never uses the
+             * return address from RTI, but the NMI handler does stack-relative
+             * reads at $106,X and $107,X that DEPEND on all 3 bytes being
+             * present. */
+            uint8_t p_save = (uint8_t)((g_cpu.N<<7)|(g_cpu.V<<6)|(1<<5)|
+                                       (g_cpu.D<<3)|(g_cpu.I<<2)|(g_cpu.Z<<1)|g_cpu.C);
+            g_ram[0x100+g_cpu.S] = 0x00;   g_cpu.S--;   /* PCH placeholder */
+            g_ram[0x100+g_cpu.S] = 0x00;   g_cpu.S--;   /* PCL placeholder */
+            g_ram[0x100+g_cpu.S] = p_save; g_cpu.S--;   /* P (status flags) */
+            runtime_set_vblank_firing(1);
+            game_run_nmi();
+            runtime_set_vblank_firing(0);
+        }
     }
 
     game_post_nmi(g_frame_count);

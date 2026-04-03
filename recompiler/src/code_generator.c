@@ -637,6 +637,14 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                 /* JSR to non-ROM address (RAM/PPU): dispatch at runtime */
                 fprintf(f, "call_by_address(0x%04X);\n", abs16);
             }
+            /* stack_bail_func: target does PLA PLA + RTS to bail two levels.
+             * In recompiled code, add return so the caller also exits. */
+            for (int sbi = 0; sbi < cfg->stack_bail_func_count; sbi++) {
+                if (abs16 == cfg->stack_bail_funcs[sbi]) {
+                    fprintf(f, "return; /* stack_bail_func $%04X */\n", abs16);
+                    break;
+                }
+            }
             break;
         }
         case MN_JMP:

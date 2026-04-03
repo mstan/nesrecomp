@@ -366,6 +366,10 @@ int mapper_get_mirroring(void) {
     return s_mirroring;
 }
 
+void mapper_set_bank(int bank) {
+    g_current_bank = bank;
+}
+
 void mapper_get_state(MapperState *out) {
     out->mapper_type  = s_mapper_type;
     out->shift_reg    = s_shift_reg;

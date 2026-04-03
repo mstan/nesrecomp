@@ -22,6 +22,7 @@
 #define GAME_CFG_MAX_EXTRA_LABELS   1024
 #define GAME_CFG_MAX_DATA_REGIONS    64
 #define GAME_CFG_MAX_MERGE_FUNCS     16
+#define GAME_CFG_MAX_STACK_BAIL_FUNCS 16
 
 /*
  * Trampoline: a JSR whose operand address is a known bank-switch dispatch
@@ -208,6 +209,9 @@ typedef struct {
 
     ExtraFunc        replace_funcs[GAME_CFG_MAX_EXTRA_FUNCS];  /* body provided by extras.c */
     int              replace_func_count;
+
+    uint16_t         stack_bail_funcs[GAME_CFG_MAX_STACK_BAIL_FUNCS];
+    int              stack_bail_func_count;
 
     bool             push_all_jsr;  /* emit 6502 stack push/pop on every JSR/RTS */
 } GameConfig;

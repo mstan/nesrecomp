@@ -204,6 +204,13 @@ static bool game_config_load_cfg(GameConfig *cfg, const char *path) {
                 cfg->merge_funcs[i].addr_hi = (uint16_t)(a1 < a2 ? a2 : a1);
             }
 
+        } else if (strcmp(key, "stack_bail_func") == 0) {
+            unsigned addr;
+            if (sscanf(rest, "%x", &addr) == 1 &&
+                cfg->stack_bail_func_count < GAME_CFG_MAX_STACK_BAIL_FUNCS) {
+                cfg->stack_bail_funcs[cfg->stack_bail_func_count++] = (uint16_t)addr;
+            }
+
         } else if (strcmp(key, "push_all_jsr") == 0) {
             cfg->push_all_jsr = true;
 
@@ -405,6 +412,13 @@ static bool game_config_load_toml(GameConfig *cfg, const char *path) {
         cfg->sram_maps[idx].rom_start  = toml_hex(t, "rom_start");
         cfg->sram_maps[idx].bank       = toml_int_or(t, "bank", -1);
         cfg->sram_maps[idx].size       = toml_hex(t, "size");
+    }
+
+    /* [[stack_bail_func]] */
+    toml_array_t *sbf = toml_array_in(root, "stack_bail_func");
+    if (sbf) for (int i = 0; i < toml_array_nelem(sbf) && cfg->stack_bail_func_count < GAME_CFG_MAX_STACK_BAIL_FUNCS; i++) {
+        toml_table_t *t = toml_table_at(sbf, i);
+        if (t) cfg->stack_bail_funcs[cfg->stack_bail_func_count++] = toml_hex(t, "addr");
     }
 
     /* [[data_region]] */

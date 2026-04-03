@@ -23,6 +23,10 @@ const uint8_t *mapper_get_fixed_bank(void);
  */
 int mapper_get_mirroring(void);
 
+/* Force-set the switchable PRG bank (used by VBlank save/restore to undo
+ * bank switches made by the NMI handler). */
+void mapper_set_bank(int bank);
+
 typedef struct {
     int     mapper_type;
     uint8_t shift_reg;
