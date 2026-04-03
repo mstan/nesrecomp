@@ -587,6 +587,8 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                     }
                 }
                 if (do_push) {
+                    /* S trace: save S before JSR push for leak detection */
+                    fprintf(f, "\n#ifdef RECOMP_S_TRACE\n    { uint8_t _stb = g_cpu.S;\n#endif\n    ");
                     uint16_t ret_addr = pc + 2; /* 6502 JSR pushes PC+2 (last byte of JSR) */
                     fprintf(f, "g_ram[0x100 + g_cpu.S] = 0x%02X; g_cpu.S--; ",
                             (ret_addr >> 8) & 0xFF);
@@ -623,6 +625,19 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                         } else
                             fprintf(f, "func_%04X_b%d();\n", abs16, bank);
                     }
+                    /* S trace: close block for inline_pointer path */
+                    if (cfg->push_all_jsr || cfg->push_jsr_count > 0) {
+                        fprintf(f, "\n#ifdef RECOMP_S_TRACE\n"
+                            "    if (g_cpu.S != _stb) { "
+                            "if (!g_ram[0x787]) { "
+                            "g_ram[0x780] = 0x%02X; g_ram[0x781] = 0x%02X; "
+                            "g_ram[0x783] = 0x%02X; g_ram[0x784] = 0x%02X; "
+                            "g_ram[0x785] = _stb; g_ram[0x786] = g_cpu.S; "
+                            "} g_ram[0x787]++; g_ram[0x782] = g_cpu.S; "
+                            "} }\n#endif\n",
+                            pc & 0xFF, (pc >> 8) & 0xFF,
+                            abs16 & 0xFF, (abs16 >> 8) & 0xFF);
+                    }
                     return 5;
                 }
             }
@@ -648,6 +663,22 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                     fprintf(f, "if (!call_by_address(0x%04X)) g_cpu.S += 2;\n", abs16);
                 else
                     fprintf(f, "call_by_address(0x%04X);\n", abs16);
+            }
+            /* S trace: check if S returned to pre-JSR value.
+             * Write to g_ram[0x7F0-0x7F7].  Slot 0 (7F0-7F6) captures the
+             * FIRST leak; slot 1 (7F7) just increments the total count.
+             * This way we always know which JSR leaked FIRST. */
+            if (cfg->push_all_jsr || cfg->push_jsr_count > 0) {
+                fprintf(f, "\n#ifdef RECOMP_S_TRACE\n"
+                    "    if (g_cpu.S != _stb) { "
+                    "if (!g_ram[0x787]) { "  /* first leak only */
+                    "g_ram[0x780] = 0x%02X; g_ram[0x781] = 0x%02X; "
+                    "g_ram[0x783] = 0x%02X; g_ram[0x784] = 0x%02X; "
+                    "g_ram[0x785] = _stb; g_ram[0x786] = g_cpu.S; "
+                    "} g_ram[0x787]++; g_ram[0x782] = g_cpu.S; "
+                    "} }\n#endif\n",
+                    pc & 0xFF, (pc >> 8) & 0xFF,
+                    abs16 & 0xFF, (abs16 >> 8) & 0xFF);
             }
             /* stack_bail_func: target does PLA PLA + RTS to bail two levels.
              * On real 6502: PLA PLA consumes inner return addr, RTS pops outer
@@ -776,18 +807,16 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                 }
             }
             if (cfg->push_all_jsr) {
-                /* stack_bail_funcs handle their own stack via PLA PLA.
-                 * Their RTS should NOT pop because the C return chain
-                 * will reach the outer function whose RTS pops instead. */
-                int is_bail_func = 0;
-                for (int sbi = 0; sbi < cfg->stack_bail_func_count; sbi++) {
-                    if (func_base == cfg->stack_bail_funcs[sbi]) { is_bail_func = 1; break; }
-                }
-                if (!is_bail_func) {
-                    fprintf(f, "g_cpu.S += 2; /* pop JSR return address */\n");
-                } else {
-                    fprintf(f, "/* stack_bail_func: RTS pop suppressed — outer func's RTS pops */\n");
-                }
+                /* All functions pop their JSR return address on RTS,
+                 * including bail funcs.  A bail func ($C376 pattern:
+                 * PLA PLA RTS) pops its own JSR's return via PLA PLA,
+                 * then its RTS pops the CALLER's JSR return — this is
+                 * the second level of the bail.  The `return;` emitted
+                 * after JSR $C376 at the call site exits the caller
+                 * before the caller's own RTS, so there's no double-pop.
+                 * The caller's caller eventually hits its own RTS to
+                 * pop its own bytes. */
+                fprintf(f, "g_cpu.S += 2; /* pop JSR return address */\n");
             }
             fprintf(f, "\n#ifdef RECOMP_STACK_TRACKING\n    recomp_stack_pop();\n#endif\n    return;\n");
             break;
