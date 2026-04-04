@@ -579,28 +579,24 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
              * schedulers using TXS/TSX + PLA/RTS to save/resume contexts).
              * JSR pushes (PC+2) hi then lo; RTS pops and adds 1.
              * push_all_jsr: every JSR pushes.  push_jsr: only listed targets. */
-            {
-                bool do_push = cfg->push_all_jsr;
-                if (!do_push) {
-                    for (int ni = 0; ni < cfg->push_jsr_count; ni++) {
-                        if (abs16 == cfg->push_jsrs[ni]) { do_push = true; break; }
-                    }
+            bool did_push_jsr = cfg->push_all_jsr;
+            if (!did_push_jsr) {
+                for (int ni = 0; ni < cfg->push_jsr_count; ni++) {
+                    if (abs16 == cfg->push_jsrs[ni]) { did_push_jsr = true; break; }
                 }
-                /* cond_bail_func: save S before push for post-call bail check */
-                bool is_cond_bail_target = false;
-                for (int cbi = 0; cbi < cfg->cond_bail_func_count; cbi++) {
-                    if (abs16 == cfg->cond_bail_funcs[cbi]) { is_cond_bail_target = true; break; }
-                }
-                if (is_cond_bail_target && do_push) {
-                    fprintf(f, "{ uint8_t _cbs = g_cpu.S; ");
-                }
-                if (do_push) {
-                    uint16_t ret_addr = pc + 2; /* 6502 JSR pushes PC+2 (last byte of JSR) */
-                    fprintf(f, "g_ram[0x100 + g_cpu.S] = 0x%02X; g_cpu.S--; ",
-                            (ret_addr >> 8) & 0xFF);
-                    fprintf(f, "g_ram[0x100 + g_cpu.S] = 0x%02X; g_cpu.S--; ",
-                            ret_addr & 0xFF);
-                }
+            }
+            if (did_push_jsr) {
+                /* Universal bail detection: save S before push so we
+                 * can detect post-call stack unwind (PLA PLA RTS etc.).
+                 * If S changed after the call, the callee unwound one
+                 * or more frames — propagate by returning immediately.
+                 * Subsumes per-function stack_bail_func / cond_bail_func. */
+                fprintf(f, "{ uint8_t _cbs = g_cpu.S; ");
+                uint16_t ret_addr = pc + 2; /* 6502 JSR pushes PC+2 (last byte of JSR) */
+                fprintf(f, "g_ram[0x100 + g_cpu.S] = 0x%02X; g_cpu.S--; ",
+                        (ret_addr >> 8) & 0xFF);
+                fprintf(f, "g_ram[0x100 + g_cpu.S] = 0x%02X; g_cpu.S--; ",
+                        ret_addr & 0xFF);
             }
             /* Check against inline_pointer: JSR to a routine that reads 2
              * inline bytes as a data pointer into zero page. */
@@ -657,34 +653,11 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                 else
                     fprintf(f, "call_by_address(0x%04X);\n", abs16);
             }
-            /* stack_bail_func: target does PLA PLA + RTS to bail two
-             * levels.  After the call, exit the caller (simulating the
-             * bail).  The bail func's unsuppressed RTS already popped
-             * the caller's JSR return addr from the 6502 stack. */
-            {
-                bool is_bail = false;
-                for (int sbi = 0; sbi < cfg->stack_bail_func_count; sbi++) {
-                    if (abs16 == cfg->stack_bail_funcs[sbi]) { is_bail = true; break; }
-                }
-                if (is_bail) {
-                    fprintf(f, "return; /* stack_bail_func $%04X */\n", abs16);
-                }
-            }
-            /* cond_bail_func: function whose body CONTAINS inline bail code
-             * that fires conditionally.  Normal return: S restored (push/pop
-             * cancel).  Bail return: S over-popped by 2 (PLA PLA consumed
-             * the JSR push, RTS popped the outer return).
-             * Detect by comparing S before the push with S after the call. */
-            {
-                bool is_cond_bail = false;
-                for (int cbi = 0; cbi < cfg->cond_bail_func_count; cbi++) {
-                    if (abs16 == cfg->cond_bail_funcs[cbi]) { is_cond_bail = true; break; }
-                }
-                if (is_cond_bail) {
-                    /* _cbs was captured before the push in the open brace above */
-                    fprintf(f, "if (g_cpu.S != _cbs) return; /* cond_bail $%04X */\n", abs16);
-                    fprintf(f, "}\n");
-                }
+            /* Universal bail propagation: if S changed after the call
+             * (callee did PLA PLA RTS or similar stack unwind), propagate
+             * the unwind by returning immediately. */
+            if (did_push_jsr) {
+                fprintf(f, "if (g_cpu.S != _cbs) return; }\n");
             }
             break;
         }

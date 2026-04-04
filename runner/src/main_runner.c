@@ -474,6 +474,7 @@ void nes_vblank_callback(void) {
              * present. */
             uint8_t p_save = (uint8_t)((g_cpu.N<<7)|(g_cpu.V<<6)|(1<<5)|
                                        (g_cpu.D<<3)|(g_cpu.I<<2)|(g_cpu.Z<<1)|g_cpu.C);
+            uint8_t s_pre_nmi = g_cpu.S;   /* Save S before NMI */
             g_ram[0x100+g_cpu.S] = 0x00;   g_cpu.S--;   /* PCH placeholder */
             g_ram[0x100+g_cpu.S] = 0x00;   g_cpu.S--;   /* PCL placeholder */
             g_ram[0x100+g_cpu.S] = p_save; g_cpu.S--;   /* P (status flags) */
@@ -481,6 +482,11 @@ void nes_vblank_callback(void) {
             runtime_set_vblank_firing(1);
             game_run_nmi();
             runtime_set_vblank_firing(0);
+            /* On real 6502, RTI always restores S to pre-NMI value.
+             * The recompiled NMI handler may return early (e.g., due to
+             * universal bail detection triggering on internal JSRs).
+             * Enforce S restoration to prevent NMI-induced stack drift. */
+            g_cpu.S = s_pre_nmi;
             debug_server_check_s(); /* Track after NMI handler */
         }
     }
