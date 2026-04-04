@@ -583,8 +583,10 @@ void nes_log_dispatch_miss(uint16_t addr) {
         if (g_miss_unique_addrs[i] == addr) { found = 1; break; }
     if (!found && g_miss_unique_count < MAX_MISS_UNIQUE) {
         g_miss_unique_addrs[g_miss_unique_count++] = addr;
-        /* Append to dispatch_misses.log in game.cfg-compatible format */
-        FILE *mf = fopen("dispatch_misses.log", "a");
+        /* Append to dispatch_misses.log next to the executable */
+        char miss_path[300];
+        snprintf(miss_path, sizeof(miss_path), "%sdispatch_misses.log", g_exe_dir);
+        FILE *mf = fopen(miss_path, "a");
         if (mf) {
             fprintf(mf, "extra_func %d 0x%04X\n", g_current_bank, addr);
             fclose(mf);

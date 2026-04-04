@@ -24,9 +24,12 @@
 
 #include "game_extras.h"
 #include "crc32.h"
+#include "nes_runtime.h"
 
 /* Declared in main_runner.c */
 void nesrecomp_runner_run(int argc, char **argv);
+
+char g_exe_dir[260] = ".";
 
 /* ---- rom.cfg helpers ---- */
 
@@ -135,6 +138,13 @@ static int verify_rom(const char *path, uint32_t expected_crc) {
 
 int main(int argc, char *argv[]) {
     setvbuf(stdout, NULL, _IONBF, 0);
+
+    /* Set g_exe_dir to the directory containing the executable */
+#ifdef _WIN32
+    GetModuleFileNameA(NULL, g_exe_dir, sizeof(g_exe_dir));
+    char *sep = strrchr(g_exe_dir, '\\');
+    if (sep) *(sep + 1) = '\0';
+#endif
 
     static char rom_path[512];
     uint32_t expected_crc = game_get_expected_crc32();

@@ -136,5 +136,8 @@ extern uint64_t g_miss_last_frame;
 extern uint16_t g_miss_unique_addrs[MAX_MISS_UNIQUE];
 extern int      g_miss_unique_count;
 
+/* ---- Exe directory (for writing logs next to the binary) ---- */
+extern char g_exe_dir[260];  /* set once at startup by launcher */
+
 /* ---- Logger ---- */
 void log_on_change(const char *label, uint32_t value);
