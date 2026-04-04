@@ -423,6 +423,13 @@ static bool game_config_load_toml(GameConfig *cfg, const char *path) {
         if (t) cfg->stack_bail_funcs[cfg->stack_bail_func_count++] = toml_hex(t, "addr");
     }
 
+    /* [[cond_bail_func]] — functions containing inline bail code that fires conditionally */
+    toml_array_t *cbf = toml_array_in(root, "cond_bail_func");
+    if (cbf) for (int i = 0; i < toml_array_nelem(cbf) && cfg->cond_bail_func_count < GAME_CFG_MAX_STACK_BAIL_FUNCS; i++) {
+        toml_table_t *t = toml_table_at(cbf, i);
+        if (t) cfg->cond_bail_funcs[cfg->cond_bail_func_count++] = toml_hex(t, "addr");
+    }
+
     /* [[merge_func]] */
     toml_array_t *mf = toml_array_in(root, "merge_func");
     if (mf) for (int i = 0; i < toml_array_nelem(mf) && cfg->merge_func_count < GAME_CFG_MAX_MERGE_FUNCS; i++) {
@@ -434,6 +441,17 @@ static bool game_config_load_toml(GameConfig *cfg, const char *path) {
         uint16_t a2 = toml_hex(t, "addr_hi");
         cfg->merge_funcs[idx].addr_lo = (a1 < a2) ? a1 : a2;
         cfg->merge_funcs[idx].addr_hi = (a1 < a2) ? a2 : a1;
+    }
+
+    /* [[merge_range]] — merge ALL function entry points within an address range */
+    toml_array_t *mrng = toml_array_in(root, "merge_range");
+    if (mrng) for (int i = 0; i < toml_array_nelem(mrng) && cfg->merge_range_count < GAME_CFG_MAX_MERGE_RANGES; i++) {
+        toml_table_t *t = toml_table_at(mrng, i);
+        if (!t) continue;
+        int idx = cfg->merge_range_count++;
+        cfg->merge_ranges[idx].bank    = toml_int_or(t, "bank", -1);
+        cfg->merge_ranges[idx].addr_lo = toml_hex(t, "addr_lo");
+        cfg->merge_ranges[idx].addr_hi = toml_hex(t, "addr_hi");
     }
 
     /* [[push_jsr]] */

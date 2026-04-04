@@ -586,6 +586,14 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                         if (abs16 == cfg->push_jsrs[ni]) { do_push = true; break; }
                     }
                 }
+                /* cond_bail_func: save S before push for post-call bail check */
+                bool is_cond_bail_target = false;
+                for (int cbi = 0; cbi < cfg->cond_bail_func_count; cbi++) {
+                    if (abs16 == cfg->cond_bail_funcs[cbi]) { is_cond_bail_target = true; break; }
+                }
+                if (is_cond_bail_target && do_push) {
+                    fprintf(f, "{ uint8_t _cbs = g_cpu.S; ");
+                }
                 if (do_push) {
                     uint16_t ret_addr = pc + 2; /* 6502 JSR pushes PC+2 (last byte of JSR) */
                     fprintf(f, "g_ram[0x100 + g_cpu.S] = 0x%02X; g_cpu.S--; ",
@@ -653,10 +661,29 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
              * levels.  After the call, exit the caller (simulating the
              * bail).  The bail func's unsuppressed RTS already popped
              * the caller's JSR return addr from the 6502 stack. */
-            for (int sbi = 0; sbi < cfg->stack_bail_func_count; sbi++) {
-                if (abs16 == cfg->stack_bail_funcs[sbi]) {
+            {
+                bool is_bail = false;
+                for (int sbi = 0; sbi < cfg->stack_bail_func_count; sbi++) {
+                    if (abs16 == cfg->stack_bail_funcs[sbi]) { is_bail = true; break; }
+                }
+                if (is_bail) {
                     fprintf(f, "return; /* stack_bail_func $%04X */\n", abs16);
-                    break;
+                }
+            }
+            /* cond_bail_func: function whose body CONTAINS inline bail code
+             * that fires conditionally.  Normal return: S restored (push/pop
+             * cancel).  Bail return: S over-popped by 2 (PLA PLA consumed
+             * the JSR push, RTS popped the outer return).
+             * Detect by comparing S before the push with S after the call. */
+            {
+                bool is_cond_bail = false;
+                for (int cbi = 0; cbi < cfg->cond_bail_func_count; cbi++) {
+                    if (abs16 == cfg->cond_bail_funcs[cbi]) { is_cond_bail = true; break; }
+                }
+                if (is_cond_bail) {
+                    /* _cbs was captured before the push in the open brace above */
+                    fprintf(f, "if (g_cpu.S != _cbs) return; /* cond_bail $%04X */\n", abs16);
+                    fprintf(f, "}\n");
                 }
             }
             break;
@@ -693,6 +720,11 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                     for (int mi = 0; mi < merge_partner_count; mi++) {
                         if (abs16 == merge_partners[mi]) { is_merge = true; break; }
                     }
+                    /* For overlapping entries within a merge_range that can't be
+                     * fully merged: their JMP to a target within the range becomes
+                     * a call to the canonical merged function. This is safe because
+                     * the merged function's internal loop-back is a goto, and its
+                     * final RTS properly pops the caller's return address. */
                     if (bank == fixed_bank || sram_sourced) {
                         /* push_jmp check for cross-bank JMP via dispatch */
                         int need_jmp_push = 0;
@@ -912,13 +944,45 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
     uint16_t valid_starts[MAX_INSNS_PER_FUNC];
     int valid_count = 0;
     /* Collect merge partner addresses for this function */
-    uint16_t merge_partners[GAME_CFG_MAX_MERGE_FUNCS];
+    uint16_t merge_partners[256];
     int merge_partner_count = 0;
     for (int mi = 0; mi < cfg->merge_func_count; mi++) {
         if (cfg->merge_funcs[mi].bank != bank) continue;
         if (cfg->merge_funcs[mi].addr_lo == pc) {
-            merge_partners[merge_partner_count++] = cfg->merge_funcs[mi].addr_hi;
+            if (merge_partner_count < 256)
+                merge_partners[merge_partner_count++] = cfg->merge_funcs[mi].addr_hi;
         }
+    }
+    /* Expand merge_range: if this function is the canonical (lowest) entry in
+     * a merge_range, collect ALL other functions in the range as partners. */
+    for (int ri = 0; ri < cfg->merge_range_count; ri++) {
+        if (cfg->merge_ranges[ri].bank != bank) continue;
+        if (pc < cfg->merge_ranges[ri].addr_lo || pc > cfg->merge_ranges[ri].addr_hi) continue;
+        /* Find canonical (lowest) function entry in this range */
+        uint16_t canonical = 0xFFFF;
+        for (int fi = 0; fi < funcs->count; fi++) {
+            uint16_t fa = funcs->entries[fi].addr;
+            int fb = funcs->entries[fi].bank;
+            if (fb != bank) continue;
+            if (fa >= cfg->merge_ranges[ri].addr_lo && fa <= cfg->merge_ranges[ri].addr_hi) {
+                if (fa < canonical) canonical = fa;
+            }
+        }
+        if (pc != canonical) break; /* only canonical collects partners */
+        /* Add all other functions in the range as merge partners */
+        for (int fi = 0; fi < funcs->count; fi++) {
+            uint16_t fa = funcs->entries[fi].addr;
+            int fb = funcs->entries[fi].bank;
+            if (fb != bank || fa == pc) continue;
+            if (fa < cfg->merge_ranges[ri].addr_lo || fa > cfg->merge_ranges[ri].addr_hi) continue;
+            /* Deduplicate */
+            bool dup = false;
+            for (int di = 0; di < merge_partner_count; di++)
+                if (merge_partners[di] == fa) { dup = true; break; }
+            if (!dup && merge_partner_count < 256)
+                merge_partners[merge_partner_count++] = fa;
+        }
+        break;
     }
 
     {
@@ -1052,20 +1116,21 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
             }
         }
     }
-    /* Add merge_func partners as secondary entries */
+    /* Add merge_func/merge_range partners as secondary entries.
+     * Only add if the address is on a valid instruction boundary (in valid_starts).
+     * Overlapping mid-instruction entries (common in 6502 code) get different
+     * instruction streams and must remain as independent functions. */
     for (int mi = 0; mi < merge_partner_count && secondary_count < 64; mi++) {
         uint16_t mp = merge_partners[mi];
-        /* Check if already added */
         bool found = false;
         for (int si = 0; si < secondary_count; si++)
             if (secondary_addrs[si] == mp) { found = true; break; }
         if (!found) {
-            for (int v = 0; v < valid_count; v++) {
-                if (valid_starts[v] == mp) {
-                    secondary_addrs[secondary_count++] = mp;
-                    break;
-                }
-            }
+            bool valid = false;
+            for (int v = 0; v < valid_count; v++)
+                if (valid_starts[v] == mp) { valid = true; break; }
+            if (valid)
+                secondary_addrs[secondary_count++] = mp;
         }
     }
 
@@ -1099,9 +1164,13 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
     }
 
     /* Pending forward branch targets — branches that jump past a RTS/JMP.
-     * We continue emitting after the stop instruction until all pending are covered. */
+     * We continue emitting after the stop instruction until all pending are covered.
+     * Seed with merge partners so emission continues through their code. */
     uint16_t pending[256];
     int pending_count = 0;
+    for (int mi = 0; mi < merge_partner_count && pending_count < 256; mi++) {
+        pending[pending_count++] = merge_partners[mi];
+    }
     /* Branch-target set: RTS addresses that are direct branch targets bypass PHA setup;
      * they must be emitted as regular returns, not 2-PHA dispatches. */
     uint16_t branch_targets[256];
@@ -1430,6 +1499,40 @@ bool codegen_emit(const NESRom *rom, const FunctionList *funcs,
             }
         }
         if (is_merge_hi) continue;
+        /* Skip merge_range non-canonical entries — but only if they were
+         * actually emitted as secondary labels in the canonical function's body.
+         * Overlapping mid-instruction entries can't be merged and must be
+         * emitted as independent functions. */
+        bool is_range_secondary = false;
+        for (int ri = 0; ri < cfg->merge_range_count && !is_range_secondary; ri++) {
+            if (funcs->entries[i].bank != cfg->merge_ranges[ri].bank) continue;
+            uint16_t fa = funcs->entries[i].addr;
+            if (fa < cfg->merge_ranges[ri].addr_lo || fa > cfg->merge_ranges[ri].addr_hi) continue;
+            uint16_t canonical = 0xFFFF;
+            for (int fi = 0; fi < funcs->count; fi++) {
+                if (funcs->entries[fi].bank != cfg->merge_ranges[ri].bank) continue;
+                uint16_t ca = funcs->entries[fi].addr;
+                if (ca >= cfg->merge_ranges[ri].addr_lo && ca <= cfg->merge_ranges[ri].addr_hi) {
+                    if (ca < canonical) canonical = ca;
+                }
+            }
+            if (fa == canonical) break; /* canonical is not secondary */
+            /* Check if the canonical function's pre-scan covers this address
+             * by doing a quick instruction walk from canonical to see if fa
+             * falls on an instruction boundary. */
+            uint16_t walk = canonical;
+            int bank_for_walk = funcs->entries[i].bank;
+            for (int wi = 0; wi < 512; wi++) {
+                if (walk == fa) { is_range_secondary = true; break; }
+                if (walk > fa || walk > cfg->merge_ranges[ri].addr_hi) break;
+                uint8_t op = rom_read(rom, bank_for_walk, walk);
+                extern const OpcodeEntry g_opcode_table[];
+                const OpcodeEntry *ew = &g_opcode_table[op];
+                int wsz = (ew->size > 0) ? ew->size : 1;
+                walk += wsz;
+            }
+        }
+        if (is_range_secondary) continue;
         emit_function(f_full, rom, &funcs->entries[i], funcs, at, cfg);
     }
 

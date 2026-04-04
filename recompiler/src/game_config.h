@@ -22,6 +22,7 @@
 #define GAME_CFG_MAX_EXTRA_LABELS   1024
 #define GAME_CFG_MAX_DATA_REGIONS    64
 #define GAME_CFG_MAX_MERGE_FUNCS     16
+#define GAME_CFG_MAX_MERGE_RANGES    16
 #define GAME_CFG_MAX_STACK_BAIL_FUNCS 16
 
 /*
@@ -161,6 +162,25 @@ typedef struct {
     uint16_t addr_hi;   /* higher address (secondary entry label) */
 } MergeFunc;
 
+/*
+ * Merge range: ALL function entry points within [addr_lo, addr_hi] in the
+ * given bank are merged into a single body.  The lowest-addressed entry point
+ * becomes the canonical function; all others become secondary labels.
+ * JMPs targeting any address within the range generate `goto` instead of
+ * tail-calls, fixing loop-back JMPs that would otherwise over-pop S.
+ *
+ * Usage in game.toml:
+ *   [[merge_range]]
+ *   bank = 7
+ *   addr_lo = 0xEF11
+ *   addr_hi = 0xEF8D
+ */
+typedef struct {
+    int      bank;
+    uint16_t addr_lo;   /* inclusive lower bound */
+    uint16_t addr_hi;   /* inclusive upper bound */
+} MergeRange;
+
 typedef struct {
     char            output_prefix[64];  /* e.g. "faxanadu" → generated/faxanadu_full.c */
     char            annotations_path[512]; /* override for annotations.csv */
@@ -213,11 +233,22 @@ typedef struct {
     MergeFunc        merge_funcs[GAME_CFG_MAX_MERGE_FUNCS];
     int              merge_func_count;
 
+    MergeRange       merge_ranges[GAME_CFG_MAX_MERGE_RANGES];
+    int              merge_range_count;
+
     ExtraFunc        replace_funcs[GAME_CFG_MAX_EXTRA_FUNCS];  /* body provided by extras.c */
     int              replace_func_count;
 
     uint16_t         stack_bail_funcs[GAME_CFG_MAX_STACK_BAIL_FUNCS];
     int              stack_bail_func_count;
+
+    /* Conditional bail functions: functions whose body CONTAINS inline bail
+     * code (PLA PLA + RTS) that fires conditionally.  Unlike stack_bail_func
+     * (which ALWAYS bails), these sometimes return normally.  At JSR call
+     * sites, the codegen emits an S check: if S changed beyond the JSR
+     * push/pop, the bail fired and the caller must also return. */
+    uint16_t         cond_bail_funcs[GAME_CFG_MAX_STACK_BAIL_FUNCS];
+    int              cond_bail_func_count;
 
     bool             push_all_jsr;  /* emit 6502 stack push/pop on every JSR/RTS */
 } GameConfig;
