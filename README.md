@@ -61,6 +61,27 @@ A `keybinds.ini` file is auto-generated next to the game executable on first run
 | `nop_jsr <addr>` | Skip this JSR entirely (for stack-manipulation routines incompatible with recompilation) |
 | `data_region <bank> <start> <end>` | Exclude byte range from pointer scanner (known data, not code) |
 
+### Function Discovery: Table-Run Scanner
+
+The recompiler discovers functions in two phases:
+
+1. **BFS from vectors**: Walk RESET/NMI/IRQ, follow JSR/JMP, discover all statically reachable functions.
+2. **Pointer table scanner**: Find dynamically-dispatched functions (enemy AI handlers, state machine callbacks) that are only reachable via indirect jumps at runtime.
+
+The table-run scanner finds pointer tables by looking for runs of 4+ consecutive 16-bit LE values in $8000-$BFFF where each target passes a deep-decode validation (7+ valid 6502 instructions without hitting an illegal opcode, or clean termination via RTS/JMP).
+
+It scans both:
+- **Switchable banks** (tables embedded in the same bank as handlers)
+- **Fixed bank → switchable** (dispatch tables in the fixed bank pointing to switchable bank handlers)
+
+This catches dispatch patterns that use indirect addressing (`(ZP),Y`, stack-based) where no direct `abs,X`/`abs,Y` code reference to the table exists.
+
+**Harmful vs harmless false positives**: The deep-decode check eliminates "harmful" false positives (data misidentified as code, which would generate invalid C). "Harmless" false positives (valid code in another bank's context) are accepted — they generate unused but compilable functions. Adding `data_region` entries for known data areas eliminates remaining edge cases where structured data happens to decode as 7+ valid instructions.
+
+**Expected results** (validated against Zelda with exhaustive disassembly ground truth):
+- ~80-93% recall of dispatch table targets, 0 harmful false positives
+- Remaining targets (small inline tables, direct-call-only functions) require `extra_func` entries
+
 ### extra_func vs extra_label
 
 - **`extra_func`**: Creates a standalone function. Use for addresses NOT inside any existing function.

@@ -83,6 +83,34 @@ static bool is_data_region(const GameConfig *cfg, int bank, uint16_t addr) {
     return false;
 }
 
+/* Deep-decode validation: decode min_valid instructions at target.
+ * Returns true if the stream is valid code (no illegal opcodes).
+ * RTS/JMP/RTI/JMP(ind) count as clean terminators.
+ * BRK at position 0 is rejected. RTS at position 0 = null handler = accepted. */
+#define TABLE_RUN_MIN_VALID 7
+#define TABLE_RUN_MIN_RUN   4
+
+static bool validate_code_target(const NESRom *rom, int bank,
+                                 uint16_t addr, int min_valid) {
+    uint8_t first = rom_read(rom, bank, addr);
+    if (g_opcode_table[first].mnemonic == MN_ILLEGAL) return false;
+    if (first == 0x00) return false;  /* BRK at function entry = suspicious */
+    if (first == 0x60) return true;   /* RTS = null handler */
+    int count = 0;
+    uint16_t pc = addr;
+    for (int i = 0; i < min_valid; i++) {
+        uint8_t op = rom_read(rom, bank, pc);
+        if (g_opcode_table[op].mnemonic == MN_ILLEGAL) return false;
+        int sz = g_opcode_table[op].size;
+        if (sz == 0) sz = 1;
+        pc += sz;
+        count++;
+        if (op == 0x60 || op == 0x4C || op == 0x6C || op == 0x40)
+            return true;  /* clean terminator */
+    }
+    return true;
+}
+
 /* Register propagation statistics */
 static int s_bank_switches_detected = 0;
 static int s_regprop_targeted_adds = 0;
@@ -592,33 +620,79 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
     }
     printf("[FuncFinder] Fixed-bank pointer scan added %d candidates\n", out->count - before_scan);
 
-    /* Switchable-bank pointer scan: scan for RTS-as-JMP dispatch table entries.
-     * These tables store (target-1) as 16-bit LE values in the switchable bank.
-     * Pattern: candidate byte = ILLEGAL opcode (not a real entry point),
-     *          candidate+1 byte = valid opcode (the real function start).
-     * Only add candidate+1 in this case — avoids false positives from data bytes
-     * that happen to form valid-looking addresses pointing to real code. */
+    /* Switchable-bank table-run scanner: find runs of TABLE_RUN_MIN_RUN+
+     * consecutive 16-bit LE values in $8000-$BFFF where each target passes
+     * deep-decode validation (TABLE_RUN_MIN_VALID valid instructions without
+     * hitting an illegal opcode, or clean termination via RTS/JMP/RTI).
+     *
+     * Scans both the switchable bank itself and the fixed bank for pointer
+     * tables targeting the switchable range. This catches:
+     * - Inline dispatch tables embedded in switchable bank code
+     * - Fixed-bank dispatch tables that index into switchable bank handlers
+     * - Indirect (ZP),Y dispatch tables (not referenced by abs,X/Y)
+     *
+     * data_region exclusions apply to both scan source and target addresses.
+     * Harmless FPs (valid code in wrong bank context) are accepted — they
+     * generate unused but valid functions. Harmful FPs (data decoded as code)
+     * are eliminated by the deep-decode check + data_region exclusions. */
     int before_sw_scan = out->count;
     for (int b = 0; b < fixed_bank; b++) {
-        for (uint16_t off = 0; off <= 0x3FFD; off++) {
-            uint16_t addr = 0x8000 + off;
-            if (is_data_region(cfg, b, addr)) continue;
-            uint8_t lo = rom_read(rom, b, addr);
-            uint8_t hi = rom_read(rom, b, addr + 1);
-            uint16_t candidate = lo | ((uint16_t)hi << 8);
-            if (candidate < 0x8000 || candidate > 0xBFFD) continue;
-            if (is_data_region(cfg, b, candidate)) continue;
-            /* Only the RTS-as-JMP case: candidate has ILLEGAL opcode,
-             * meaning the stored value is (target-1) — skip candidate itself,
-             * add candidate+1 if it has a valid opcode. */
-            uint8_t fb = rom_read(rom, b, candidate);
-            if (g_opcode_table[fb].mnemonic != MN_ILLEGAL) continue;
-            uint16_t candidate1 = candidate + 1;
-            if (candidate1 > 0xBFFD) continue;
-            if (function_list_contains(out, candidate1, b)) continue;
-            uint8_t fb1 = rom_read(rom, b, candidate1);
-            if (g_opcode_table[fb1].mnemonic != MN_ILLEGAL)
-                add_function(out, candidate1, b);
+        /* Scan source: switchable bank b (tables within the bank itself) */
+        for (uint16_t off = 0; off <= 0x3FFD; ) {
+            uint16_t scan_addr = 0x8000 + off;
+            if (is_data_region(cfg, b, scan_addr)) { off++; continue; }
+            /* Try to build a run of consecutive valid pointer entries */
+            uint16_t run_start = off;
+            int run_len = 0;
+            uint16_t run_targets[256];
+            while (off <= 0x3FFD && run_len < 256) {
+                uint16_t a = 0x8000 + off;
+                if (is_data_region(cfg, b, a)) break;
+                uint8_t lo = rom_read(rom, b, a);
+                uint8_t hi = rom_read(rom, b, a + 1);
+                uint16_t candidate = lo | ((uint16_t)hi << 8);
+                if (candidate < 0x8000 || candidate > 0xBFFD) break;
+                if (is_data_region(cfg, b, candidate)) break;
+                if (!validate_code_target(rom, b, candidate, TABLE_RUN_MIN_VALID)) break;
+                run_targets[run_len++] = candidate;
+                off += 2;
+            }
+            if (run_len >= TABLE_RUN_MIN_RUN) {
+                for (int r = 0; r < run_len; r++) {
+                    if (!function_list_contains(out, run_targets[r], b))
+                        add_function(out, run_targets[r], b);
+                }
+            } else {
+                off = run_start + 1;
+            }
+        }
+        /* Scan source: fixed bank, targeting switchable bank b */
+        for (uint16_t off = 0; off <= 0x3FFD; ) {
+            uint16_t scan_addr = 0xC000 + off;
+            if (is_data_region(cfg, fixed_bank, scan_addr)) { off++; continue; }
+            uint16_t run_start = off;
+            int run_len = 0;
+            uint16_t run_targets[256];
+            while (off <= 0x3FFD && run_len < 256) {
+                uint16_t a = 0xC000 + off;
+                if (is_data_region(cfg, fixed_bank, a)) break;
+                uint8_t lo = rom_read(rom, fixed_bank, a);
+                uint8_t hi = rom_read(rom, fixed_bank, a + 1);
+                uint16_t candidate = lo | ((uint16_t)hi << 8);
+                if (candidate < 0x8000 || candidate > 0xBFFD) break;
+                if (is_data_region(cfg, b, candidate)) break;
+                if (!validate_code_target(rom, b, candidate, TABLE_RUN_MIN_VALID)) break;
+                run_targets[run_len++] = candidate;
+                off += 2;
+            }
+            if (run_len >= TABLE_RUN_MIN_RUN) {
+                for (int r = 0; r < run_len; r++) {
+                    if (!function_list_contains(out, run_targets[r], b))
+                        add_function(out, run_targets[r], b);
+                }
+            } else {
+                off = run_start + 1;
+            }
         }
     }
     /* BFS for switchable-bank scan candidates */
@@ -633,7 +707,7 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
             }
         }
     }
-    printf("[FuncFinder] Switchable-bank pointer scan added %d candidates\n",
+    printf("[FuncFinder] Switchable-bank table-run scanner added %d candidates\n",
            out->count - before_sw_scan);
 
     /* Known dispatch table scanner (game-config-driven).
