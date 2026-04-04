@@ -825,22 +825,24 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                     }
                 }
                 if (has_outer_cont) {
-                    /* Pop inner handler, call it, discard outer cont bytes, call cont */
+                    /* Pop inner handler, call it, discard outer cont bytes, call cont.
+                     * The dispatched function's RTS consumes the caller's JSR push,
+                     * so skip the standard RTS pop below. */
                     fprintf(f, "{ g_cpu.S++; uint8_t _lo=g_ram[0x100+g_cpu.S]; g_cpu.S++; uint8_t _hi=g_ram[0x100+g_cpu.S]; call_by_address(((uint16_t)_hi<<8|_lo)+1); g_cpu.S+=2; call_by_address(0x%04X); }\n    ", outer_cont_target);
                 } else {
+                    /* Pop pushed address, dispatch to computed target.
+                     * The dispatched function's RTS consumes the caller's JSR push,
+                     * so skip the standard RTS pop below. */
                     fprintf(f, "{ g_cpu.S++; uint8_t _lo=g_ram[0x100+g_cpu.S]; g_cpu.S++; uint8_t _hi=g_ram[0x100+g_cpu.S]; call_by_address(((uint16_t)_hi<<8|_lo)+1); }\n    ");
                 }
+                /* RTS-as-JMP: the dispatched function's own RTS pops the
+                 * caller's JSR return from the 6502 stack. Don't double-pop. */
+                goto rts_done;
             }
             if (cfg->push_all_jsr) {
-                /* All functions pop their JSR return on RTS, including
-                 * bail funcs.  The bail func's PLA PLA consumes its own
-                 * JSR return, then its RTS pops the CALLER's return (the
-                 * 2nd level of the bail).  After the call, `return;` at
-                 * the bail call site exits the caller before its own RTS
-                 * runs.  The caller's caller continues normally and its
-                 * own RTS pops its return addr. */
                 fprintf(f, "g_cpu.S += 2; /* pop JSR return address */\n");
             }
+            rts_done:
             fprintf(f, "\n#ifdef RECOMP_STACK_TRACKING\n    recomp_stack_pop();\n#endif\n    return;\n");
             break;
         case MN_RTI: fprintf(f, "/* RTI */ g_cpu.S++; { uint8_t p=g_ram[0x100+g_cpu.S]; g_cpu.N=(p>>7)&1; g_cpu.V=(p>>6)&1; g_cpu.D=(p>>3)&1; g_cpu.I=(p>>2)&1; g_cpu.Z=(p>>1)&1; g_cpu.C=p&1; } g_cpu.S++; g_cpu.S++; /* pop PCL, PCH */\n#ifdef RECOMP_STACK_TRACKING\n    recomp_stack_pop();\n#endif\n    return;\n"); break;

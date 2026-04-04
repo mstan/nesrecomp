@@ -477,9 +477,11 @@ void nes_vblank_callback(void) {
             g_ram[0x100+g_cpu.S] = 0x00;   g_cpu.S--;   /* PCH placeholder */
             g_ram[0x100+g_cpu.S] = 0x00;   g_cpu.S--;   /* PCL placeholder */
             g_ram[0x100+g_cpu.S] = p_save; g_cpu.S--;   /* P (status flags) */
+            debug_server_check_s(); /* Track runner's NMI push */
             runtime_set_vblank_firing(1);
             game_run_nmi();
             runtime_set_vblank_firing(0);
+            debug_server_check_s(); /* Track after NMI handler */
         }
     }
 

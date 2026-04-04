@@ -117,6 +117,13 @@ void debug_server_check_watchpoints(void);
  * Can optionally pause on a specific value (conditional breakpoint). */
 void debug_server_notify_write(uint16_t addr, uint8_t old_val, uint8_t new_val);
 
+/* ---- S-register change tracking ---- */
+
+/* Check if S register changed since last call. If watch_s is enabled and
+ * S changed, records the change with call stack to a ring buffer.
+ * Call from maybe_trigger_vblank() for per-instruction tracking. */
+void debug_server_check_s(void);
+
 /* Returns 1 if any follower is watching this address. Used by nes_write()
  * to avoid the overhead of notify_write when no followers are active. */
 int  debug_server_has_follower(uint16_t addr);

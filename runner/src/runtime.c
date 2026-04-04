@@ -111,6 +111,9 @@ static inline void bus_tick(void) {
 static int s_vblank_pending = 0;   /* VBlank waiting to fire at next safe point */
 
 void maybe_trigger_vblank(int cycles) {
+    /* S-register change tracking (per-instruction) */
+    debug_server_check_s();
+
     /* Count cycles — always, even during NMI handler execution. */
     s_ops_count += (cycles > 0) ? (uint32_t)cycles : 1;
     if (s_ops_count < OPS_PER_FRAME) return;

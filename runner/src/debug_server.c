@@ -100,6 +100,25 @@ typedef struct {
 
 static Follower s_followers[MAX_FOLLOWERS];
 
+/* ---- S-register change tracker ---- */
+#define S_TRACK_LOG_CAP 4096
+
+typedef struct {
+    uint64_t frame;
+    uint8_t  old_val;
+    uint8_t  new_val;
+    char     call_stack[128];
+} STrackEntry;
+
+static int          s_track_s_enabled = 0;
+static uint8_t      s_track_s_prev = 0xFF;
+static STrackEntry  s_track_s_log[S_TRACK_LOG_CAP];
+static uint32_t     s_track_s_head = 0;
+static uint32_t     s_track_s_count = 0;
+static int          s_track_s_break_on_change = 0;  /* pause when S changes */
+static uint64_t     s_track_s_frame_lo = 0;  /* only track in this frame range */
+static uint64_t     s_track_s_frame_hi = UINT64_MAX;
+
 /* ---- Recomp stack (extern if available) ---- */
 #ifdef RECOMP_STACK_TRACKING
 extern const char *g_recomp_stack[];
@@ -937,6 +956,66 @@ static void handle_follow_history(int id, const char *json)
     debug_server_send_line(buf);
 }
 
+/* ---- S-register tracking commands ---- */
+
+static void handle_watch_s(int id, const char *json)
+{
+    int brk = json_get_int(json, "break_on_change", 0);
+    int frame_lo = json_get_int(json, "frame_lo", 0);
+    int frame_hi = json_get_int(json, "frame_hi", 999999999);
+    s_track_s_enabled = 1;
+    s_track_s_prev = g_cpu.S;
+    s_track_s_head = 0;
+    s_track_s_count = 0;
+    s_track_s_break_on_change = brk;
+    s_track_s_frame_lo = (uint64_t)frame_lo;
+    s_track_s_frame_hi = (uint64_t)frame_hi;
+    send_fmt("{\"id\":%d,\"ok\":true,\"watching_s\":true,\"initial_s\":\"0x%02X\","
+             "\"break_on_change\":%d,\"frame_lo\":%d,\"frame_hi\":%d}",
+             id, g_cpu.S, brk, frame_lo, frame_hi);
+}
+
+static void handle_unwatch_s(int id, const char *json)
+{
+    (void)json;
+    s_track_s_enabled = 0;
+    send_ok(id);
+}
+
+static void handle_watch_s_history(int id, const char *json)
+{
+    int limit = json_get_int(json, "limit", 64);
+    int offset = json_get_int(json, "offset", -1); /* -1 = last N entries */
+    if (limit > (int)S_TRACK_LOG_CAP) limit = S_TRACK_LOG_CAP;
+
+    char buf[32768];
+    int pos = snprintf(buf, sizeof(buf),
+        "{\"id\":%d,\"ok\":true,\"total\":%u,\"entries\":[",
+        id, s_track_s_count);
+
+    uint32_t avail = s_track_s_count < S_TRACK_LOG_CAP ? s_track_s_count : S_TRACK_LOG_CAP;
+    uint32_t start;
+    if (offset >= 0) {
+        start = (uint32_t)offset;
+        if (start >= avail) start = avail;
+    } else {
+        start = (avail > (uint32_t)limit) ? avail - (uint32_t)limit : 0;
+    }
+
+    int first = 1;
+    for (uint32_t j = start; j < avail && pos < (int)sizeof(buf) - 256; j++) {
+        uint32_t idx = (s_track_s_head - avail + j) % S_TRACK_LOG_CAP;
+        STrackEntry *e = &s_track_s_log[idx];
+        if (!first) buf[pos++] = ',';
+        first = 0;
+        pos += snprintf(buf + pos, sizeof(buf) - pos,
+            "{\"f\":%llu,\"old\":\"0x%02X\",\"new\":\"0x%02X\",\"stack\":\"%s\"}",
+            (unsigned long long)e->frame, e->old_val, e->new_val, e->call_stack);
+    }
+    pos += snprintf(buf + pos, sizeof(buf) - pos, "]}");
+    debug_server_send_line(buf);
+}
+
 /* ---- Command dispatch ---- */
 
 typedef void (*CmdHandler)(int id, const char *json);
@@ -959,6 +1038,9 @@ static const CmdEntry s_commands[] = {
     { "follow",            handle_follow },
     { "unfollow",          handle_unfollow },
     { "follow_history",    handle_follow_history },
+    { "watch_s",           handle_watch_s },
+    { "unwatch_s",         handle_unwatch_s },
+    { "watch_s_history",   handle_watch_s_history },
     { "read_frame_ram",    handle_read_frame_ram },
     { "restore_frame",     handle_restore_frame },
     { "set_input",         handle_set_input },
@@ -1329,6 +1411,43 @@ void debug_server_notify_write(uint16_t addr, uint8_t old_val, uint8_t new_val)
                      (unsigned long long)g_frame_count,
                      e->call_stack);
         }
+    }
+}
+
+void debug_server_check_s(void)
+{
+    if (!s_track_s_enabled) return;
+    if (g_cpu.S == s_track_s_prev) return;
+
+    uint8_t prev = s_track_s_prev;
+    s_track_s_prev = g_cpu.S;
+
+    /* Only record in the specified frame range */
+    if (g_frame_count < s_track_s_frame_lo || g_frame_count > s_track_s_frame_hi)
+        return;
+
+    int diff = (int)g_cpu.S - (int)prev;
+    if (diff < 0) diff = -diff;
+
+    /* S change in range — record it */
+    uint32_t idx = s_track_s_head % S_TRACK_LOG_CAP;
+    STrackEntry *e = &s_track_s_log[idx];
+    e->frame   = g_frame_count;
+    e->old_val = prev;
+    e->new_val = g_cpu.S;
+    capture_stack(e->call_stack, sizeof(e->call_stack));
+    s_track_s_head++;
+    s_track_s_count++;
+
+    /* Break on large changes (> 10 in either direction) */
+    if (s_track_s_break_on_change && diff > 10) {
+        s_paused = 1;
+        send_fmt("{\"event\":\"s_change_break\","
+                 "\"old\":\"0x%02X\",\"new\":\"0x%02X\","
+                 "\"frame\":%llu,\"stack\":\"%s\"}",
+                 prev, g_cpu.S,
+                 (unsigned long long)g_frame_count,
+                 e->call_stack);
     }
 }
 
