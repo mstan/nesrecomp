@@ -153,7 +153,8 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                             const uint16_t *valid_starts, int valid_count,
                             const GameConfig *cfg, int sram_sourced,
                             int effective_bank,
-                            const uint16_t *merge_partners, int merge_partner_count) {
+                            const uint16_t *merge_partners, int merge_partner_count,
+                            const uint16_t *emitted_addrs, int emitted_count) {
     uint8_t opcode = rom_read(rom, bank, pc);
     const OpcodeEntry *e = &g_opcode_table[opcode];
     uint8_t op1 = (e->size > 1) ? rom_read(rom, bank, pc+1) : 0;
@@ -657,7 +658,7 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
              * (callee did PLA PLA RTS or similar stack unwind), propagate
              * the unwind by returning immediately. */
             if (did_push_jsr) {
-                fprintf(f, "if (g_cpu.S != _cbs) return; }\n");
+                fprintf(f, "if (g_cpu.S != _cbs) {\n#ifdef RECOMP_STACK_TRACKING\n    recomp_stack_pop();\n#endif\n    return; } }\n");
             }
             break;
         }
@@ -671,6 +672,21 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                     } else if (abs16 == func_base) {
                         /* JMP to own entry from within body: loop-back. */
                         fprintf(f, "goto label_%04X;\n", abs16);
+                    } else if (abs16 >= func_base && abs16 < pc) {
+                        /* JMP to an address already emitted within this function body.
+                         * Use goto to avoid mutual tail-call recursion: if $C0BC's body
+                         * includes $C0CB as a label, JMP $C0CB must be a goto, not a
+                         * call to the separate func_C0CB() — otherwise they recurse
+                         * every frame and overflow the C stack.
+                         * Verify the label actually exists (function may have gaps). */
+                        bool label_exists = false;
+                        for (int ei = 0; ei < emitted_count; ei++) {
+                            if (emitted_addrs[ei] == abs16) { label_exists = true; break; }
+                        }
+                        if (label_exists)
+                            fprintf(f, "goto label_%04X;\n", abs16);
+                        else
+                            fprintf(f, "maybe_trigger_vblank(2); func_%04X(); return;\n", abs16);
                     } else {
                         /* Check push_jmp: bail-containing targets need a dummy
                          * push so the bail's RTS has something safe to pop.
@@ -1152,6 +1168,11 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
     int branch_targets_count = 0;
     int pending_pha_count = 0; /* net PHAs pushed without matching PLA (for non-adjacent dispatch) */
 
+    /* Track addresses emitted as labels in this function, so JMP can use goto
+     * for backward jumps within the function body (avoiding mutual tail-call recursion). */
+    uint16_t emitted_addrs[MAX_INSNS_PER_FUNC];
+    int emitted_count = 0;
+
     /* effective_bank is passed to emit_instruction for inline_dispatch resolution.
      * For switchable-bank functions, effective_bank == bank.
      * For fixed-bank functions, each inline_dispatch does its own backward scan. */
@@ -1160,6 +1181,8 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
     uint16_t cursor = pc;
     for (int insn = 0; insn < MAX_INSNS_PER_FUNC; insn++) {
         fprintf(f, "label_%04X:;\n", cursor);
+        if (emitted_count < MAX_INSNS_PER_FUNC)
+            emitted_addrs[emitted_count++] = cursor;
 
         /* Instruction-level annotation (skipped at function start — already shown above) */
         if (cursor != pc) {
@@ -1238,7 +1261,8 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
         int consumed = emit_instruction(f, rom, bank, cursor, pc, fixed_bank, funcs,
                                         valid_starts, valid_count, cfg, sram_sourced,
                                         effective_bank,
-                                        merge_partners, merge_partner_count);
+                                        merge_partners, merge_partner_count,
+                                        emitted_addrs, emitted_count);
 
         /* If this PHA is immediately followed by a branch-target RTS, the fall-through path
          * must dispatch now (before reaching the RTS label, which is bypassed by branches).

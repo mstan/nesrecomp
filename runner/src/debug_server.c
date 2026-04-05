@@ -715,18 +715,26 @@ static void handle_ppu_state(int id, const char *json)
 static void handle_call_stack(int id, const char *json)
 {
     (void)json;
-    char buf[2048];
-    int pos = snprintf(buf, sizeof(buf),
-        "{\"id\":%d,\"ok\":true,\"depth\":%d,\"stack\":[",
-        id, g_recomp_stack_top);
+    /* Dynamic alloc: each entry ~25 chars avg, plus JSON overhead */
+    int top = g_recomp_stack_top;
+    int bufsz = 256 + top * 30;
+    if (bufsz < 2048) bufsz = 2048;
+    char *buf = (char *)malloc(bufsz);
+    if (!buf) { send_err(id, "OOM"); return; }
 
-    for (int i = g_recomp_stack_top - 1; i >= 0; i--) {
-        if (i < g_recomp_stack_top - 1) buf[pos++] = ',';
-        pos += snprintf(buf + pos, sizeof(buf) - pos,
+    int pos = snprintf(buf, bufsz,
+        "{\"id\":%d,\"ok\":true,\"depth\":%d,\"stack\":[",
+        id, top);
+
+    for (int i = top - 1; i >= 0; i--) {
+        if (i < top - 1 && pos < bufsz - 1) buf[pos++] = ',';
+        pos += snprintf(buf + pos, bufsz - pos,
             "\"%s\"", g_recomp_stack[i] ? g_recomp_stack[i] : "(null)");
+        if (pos >= bufsz - 2) break;
     }
-    pos += snprintf(buf + pos, sizeof(buf) - pos, "]}");
+    pos += snprintf(buf + pos, bufsz - pos, "]}");
     send_line(buf);
+    free(buf);
 }
 #endif
 
