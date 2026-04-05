@@ -1454,6 +1454,25 @@ static void emit_dispatch(FILE *f, const FunctionList *funcs, const NESRom *rom,
         "#include \"nes_runtime.h\"\n"
         "extern int g_current_bank;\n\n"
         "int call_by_address(uint16_t addr) {\n"
+    );
+
+    /* MMC3 (mapper 4): 8KB bank remapping for dispatch.
+     * The recompiler generates code at 16KB offsets ($8000 or $A000), but
+     * MMC3 swaps 8KB banks independently. When R6 is odd, the $8000-$9FFF
+     * range contains the upper 8KB of a 16KB bank (recompiler offset $A000).
+     * When R7 is even, $A000-$BFFF contains the lower 8KB ($8000 offset).
+     * Remap the address so the dispatch finds the right function. */
+    if (rom->mapper == 4) {
+        fprintf(f,
+            "    extern int g_mmc3_r6_odd, g_mmc3_r7_even;\n"
+            "    if (g_mmc3_r6_odd && addr >= 0x8000 && addr < 0xA000)\n"
+            "        addr += 0x2000; /* 8KB bank odd: $8000 range -> $A000 offset */\n"
+            "    else if (g_mmc3_r7_even && addr >= 0xA000 && addr < 0xC000)\n"
+            "        addr -= 0x2000; /* 8KB bank even: $A000 range -> $8000 offset */\n"
+        );
+    }
+
+    fprintf(f,
         "    switch (addr) {\n"
     );
 

@@ -554,12 +554,25 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
     add_function(out, rom->irq_vector,   VEC_BANK(rom->irq_vector));
 #undef VEC_BANK
 
-    /* Seed each switchable bank from $8000 so cross-bank calls from the
-     * fixed bank get proper per-bank function bodies. */
+    /* Seed each switchable bank so cross-bank calls from the fixed bank
+     * get proper per-bank function bodies.
+     *
+     * For mappers with 8KB bank switching (MMC3 = mapper 4), the 16KB
+     * switchable window ($8000-$BFFF) is actually two independent 8KB
+     * banks. Seed $8000 AND $A000 separately — either half may be code
+     * or data, and they're switched independently. For 16KB mappers
+     * (MMC1, NROM), seed just $8000 as before. */
+    int is_8kb_mapper = (rom->mapper == 4);  /* MMC3 */
     for (int b = 0; b < fixed_bank; b++) {
         uint8_t first = rom_read(rom, b, 0x8000);
         if (g_opcode_table[first].mnemonic != MN_ILLEGAL)
             add_function(out, 0x8000, b);
+
+        if (is_8kb_mapper) {
+            uint8_t first_a = rom_read(rom, b, 0xA000);
+            if (g_opcode_table[first_a].mnemonic != MN_ILLEGAL)
+                add_function(out, 0xA000, b);
+        }
     }
 
     /* BFS */
