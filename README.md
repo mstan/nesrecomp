@@ -90,6 +90,36 @@ This catches dispatch patterns that use indirect addressing (`(ZP),Y`, stack-bas
 
 This distinction is critical when importing complete disassembly function lists. Adding an address as `extra_func` when it's inside an existing function **splits that function**, breaking internal gotos and causing freezes. `extra_label` preserves the parent's control flow while making the address callable from the dispatch table.
 
+### Undocumented 6502 Opcodes
+
+The NMOS 6502 has 256 possible opcodes but only 151 are officially documented. The remaining 105 have deterministic behavior on the physical chip because the internal decode logic combines signals from multiple "official" instruction paths. Some are genuinely useful:
+
+| Opcode | Name | Behavior |
+|--------|------|----------|
+| LAX | Load A+X | `LDA addr; LDX addr` in one instruction |
+| SAX | Store A&X | `STA addr` with value `A AND X` |
+| DCP | Decrement+Compare | `DEC addr; CMP addr` |
+| ISC | Increment+Subtract | `INC addr; SBC addr` |
+| SLO | Shift-left+OR | `ASL addr; ORA addr` |
+| RLA | Rotate-left+AND | `ROL addr; AND addr` |
+| SRE | Shift-right+XOR | `LSR addr; EOR addr` |
+| RRA | Rotate-right+Add | `ROR addr; ADC addr` |
+| ANC | AND+set-carry | `AND #imm` with carry = bit 7 |
+| ALR | AND+shift-right | `AND #imm; LSR A` |
+| ARR | AND+rotate-right | `AND #imm; ROR A` (with special flag behavior) |
+| AXS | A&X minus imm | `X = (A & X) - imm` |
+| DOP/TOP | Double/Triple NOP | 2-byte or 3-byte NOPs (skip operand bytes) |
+
+A handful of NES games use these intentionally for speed or code density. Examples include *Elite* (LAX), *Super Cars* (LAX/SAX), and some unlicensed titles.
+
+**Current status in NESRecomp:** The decoder (`cpu6502_decoder.c`) recognizes all undocumented opcodes with correct instruction sizes and cycle counts, but the code generator treats them as sized NOPs — it skips the correct number of bytes without emitting any operation. This means:
+
+- **Instruction stream stays aligned**: the decoder advances by the right number of bytes, so subsequent instructions decode correctly.
+- **Side effects are lost**: the actual read-modify-write behavior is not emitted. Games relying on LAX to load two registers, or DCP to decrement-and-compare, will behave incorrectly.
+- **Dispatch safety**: the dispatch table (`emit_dispatch`) skips bank variants where >50% of the first 8 instructions are illegal opcodes. This prevents data tables (which frequently contain byte values in the illegal opcode range) from being misidentified as code and executed, which could corrupt RAM.
+
+**If a game uses undocumented opcodes**: implement their semantics in `code_generator.c` alongside the existing official opcodes. The decoder already provides the correct addressing mode and operand size — only the emit logic is missing.
+
 ## Building
 
 Requires Visual Studio 2022 and CMake 3.20+.

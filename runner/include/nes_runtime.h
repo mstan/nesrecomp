@@ -110,6 +110,15 @@ extern uint64_t g_frame_count;
 /* Current switchable PRG bank (set by mapper_write) */
 extern int g_current_bank;
 
+/* MMC3 8KB bank alignment flags.
+ * The recompiler uses 16KB banks, but MMC3 switches 8KB banks.
+ * When R6 is odd, $8000-$9FFF contains the upper 8KB of the 16KB bank,
+ * so dispatch addresses in that range need +$2000 offset.
+ * When R7 is even, $A000-$BFFF contains the lower 8KB of the 16KB bank,
+ * so dispatch addresses in that range need -$2000 offset. */
+extern int g_mmc3_r6_odd;   /* 1 if R6 is odd — $8000 addresses need +$2000 */
+extern int g_mmc3_r7_even;  /* 1 if R7 is even — $A000 addresses need -$2000 */
+
 /* ---- Controller ---- */
 /* Button bitmask: bit7=A, bit6=B, bit5=Select, bit4=Start,
  *                 bit3=Up, bit2=Down, bit1=Left, bit0=Right */

@@ -493,6 +493,17 @@ void nes_vblank_callback(void) {
 
     game_post_nmi(g_frame_count);
 
+    /* Nested VBlanks (depth > 1) exist only to resolve spin-waits ($1A).
+     * They must NOT render, present, or advance frame count — doing so
+     * re-enters ppu_render_frame which fires scanline IRQs that corrupt
+     * game state ($FD scroll, PPUCTRL nametable bits). */
+    if (runtime_get_vblank_depth() > 1)
+        return;
+
+    /* Record frame state to ring buffer for TCP timeseries queries */
+    debug_server_record_frame();
+    debug_server_check_watchpoints();
+
     /* Generate one frame of audio after NMI (APU registers now up-to-date).
      * Skip in turbo mode — queued audio would pile up faster than it drains. */
     if (s_audio_dev && !g_turbo) {
@@ -556,11 +567,15 @@ void nes_vblank_callback(void) {
     /* if (g_frame_count % 120 == 0) { save_screenshot(); } */
     g_frame_count++;
 
-    /* Upload texture and present */
-    SDL_UpdateTexture(s_texture, NULL, s_framebuf, 256 * 4);
-    SDL_RenderClear(s_renderer);
-    SDL_RenderCopy(s_renderer, s_texture, NULL, NULL);
-    SDL_RenderPresent(s_renderer);
+    /* Upload texture and present.
+     * In turbo mode, only present every 16th frame to avoid vsync blocking
+     * on every SDL_RenderPresent call (~6ms each on a 165Hz monitor). */
+    if (!g_turbo || (g_frame_count & 15) == 0) {
+        SDL_UpdateTexture(s_texture, NULL, s_framebuf, 256 * 4);
+        SDL_RenderClear(s_renderer);
+        SDL_RenderCopy(s_renderer, s_texture, NULL, NULL);
+        SDL_RenderPresent(s_renderer);
+    }
 
     /* 60Hz pacing — skipped in turbo mode */
     if (!g_turbo) {

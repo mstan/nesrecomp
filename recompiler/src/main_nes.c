@@ -25,6 +25,16 @@ int main(int argc, char *argv[]) {
         if (strcmp(argv[i], "--game") == 0 && i+1 < argc) game_path = argv[++i];
     }
 
+    /* Auto-detect game.toml / game.cfg in current directory if not specified */
+    if (!game_path) {
+        FILE *f = fopen("game.toml", "r");
+        if (f) { fclose(f); game_path = "game.toml"; }
+    }
+    if (!game_path) {
+        FILE *f = fopen("game.cfg", "r");
+        if (f) { fclose(f); game_path = "game.cfg"; }
+    }
+
     printf("[NESRecomp] Loading ROM: %s\n", rom_path);
 
     /* Parse ROM */

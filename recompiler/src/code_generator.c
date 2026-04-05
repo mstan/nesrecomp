@@ -1448,6 +1448,26 @@ static void emit_dispatch(FILE *f, const FunctionList *funcs, const NESRom *rom,
             bool has_default = false;
             for (int v = 0; v < nv; v++) {
                 int bk = variants[v];
+                /* Skip bank variants that contain mostly illegal opcodes.
+                 * These are data tables misidentified as code by the
+                 * function finder.  Dispatching to them corrupts RAM.
+                 * Check: decode up to 8 instructions; if >50% are illegal
+                 * or the first 3 instructions include an illegal one, skip. */
+                if (bk != fixed_bank || addr < 0xC000) {
+                    int illegal_count = 0, total = 0;
+                    uint16_t scan = addr;
+                    for (int si = 0; si < 8 && scan < 0xFFFF; si++) {
+                        uint8_t op = rom_read(rom, bk, scan);
+                        int sz = g_opcode_table[op].size;
+                        if (sz == 0) sz = 1;
+                        if (g_opcode_table[op].mnemonic == MN_ILLEGAL)
+                            illegal_count++;
+                        total++;
+                        scan += sz;
+                    }
+                    if (total > 0 && (illegal_count * 2 >= total))
+                        continue;  /* >50% illegal — skip this bank variant */
+                }
                 if (bk == fixed_bank && addr >= 0xC000) {
                     fprintf(f, "                default: func_%04X(); break;\n", addr);
                     has_default = true;

@@ -230,13 +230,17 @@ void ppu_render_frame(uint32_t *framebuf) {
             /* Clock MMC3 scanline counter.  When it fires, run the game's
              * IRQ handler so it can swap CHR banks mid-frame (e.g. MM3
              * status bar vs. playfield use different tile sets). */
-            if (mapper_clock_scanline()) {
-                /* Push PCH, PCL, P — same convention as NMI so RTI can pop them */
+            if (mapper_clock_scanline() && !g_cpu.I) {
+                /* Push PCH, PCL, P — same convention as NMI so RTI can pop them.
+                 * Real 6502: IRQ pushes P with current I flag, then sets I=1
+                 * to prevent nested IRQs. RTI restores original P (with I=0). */
                 uint8_t p_irq = (uint8_t)((g_cpu.N<<7)|(g_cpu.V<<6)|(1<<5)|
                                            (g_cpu.D<<3)|(g_cpu.I<<2)|(g_cpu.Z<<1)|g_cpu.C);
                 g_ram[0x100+g_cpu.S] = 0x00;    g_cpu.S--;  /* PCH */
                 g_ram[0x100+g_cpu.S] = 0x00;    g_cpu.S--;  /* PCL */
                 g_ram[0x100+g_cpu.S] = p_irq;   g_cpu.S--;  /* P   */
+                g_cpu.I = 1;  /* Mask further IRQs until RTI */
+
                 func_IRQ();
             }
 

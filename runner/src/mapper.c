@@ -17,6 +17,8 @@
 static const uint8_t *s_prg_data  = NULL;
 static int            s_prg_banks = 0;
 int                   g_current_bank = 0;
+int                   g_mmc3_r6_odd  = 0;
+int                   g_mmc3_r7_even = 0;
 static int            s_mapper_type  = 0;
 static int            s_mirroring    = 3; /* default: horizontal */
 
@@ -105,8 +107,13 @@ static void mmc3_apply_prg(void) {
     memcpy(s_mmc3_prg_high + 0x2000, bank_e000, 0x2000);
 
     /* Expose the 16KB bank index for recompiler dispatch.
-     * Recompiler uses 16KB banks (0-15); MMC3 R6 is an 8KB index (0-31). */
+     * Recompiler uses 16KB banks (0-15); MMC3 R6 is an 8KB index (0-31).
+     * Also track 8KB alignment: when R6 is odd, $8000-$9FFF contains the
+     * upper 8KB of the 16KB bank (recompiler generated this at $A000 offset).
+     * When R7 is even, $A000-$BFFF contains the lower 8KB (at $8000 offset). */
     g_current_bank = r6 / 2;
+    g_mmc3_r6_odd  = r6 & 1;
+    g_mmc3_r7_even = !(r7 & 1);
 
     if (s_mapper_trace) {
         fprintf(s_mapper_trace, "MMC3_PRG,R6=%d,R7=%d,mode=%d,F=%llu\n",

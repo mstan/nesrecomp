@@ -62,8 +62,21 @@ static void ppu_trace_init(void) {
 static void ppu_trace_write(uint16_t reg, uint8_t val) {
     static uint32_t s_trace_count = 0;
     if (s_ppu_trace && s_trace_count < 50000) {
-        fprintf(s_ppu_trace, "W,$%04X,$%02X,PC=?,F=%llu\n",
-                reg, val, (unsigned long long)g_frame_count);
+#ifdef RECOMP_STACK_TRACKING
+        extern const char *g_recomp_stack[];
+        extern int g_recomp_stack_top;
+        /* For $2000 writes, include the top of the recomp call stack */
+        if (reg == 0x2000 && g_recomp_stack_top > 0) {
+            const char *caller = g_recomp_stack[g_recomp_stack_top - 1];
+            fprintf(s_ppu_trace, "W,$%04X,$%02X,%s,F=%llu\n",
+                    reg, val, caller ? caller : "?",
+                    (unsigned long long)g_frame_count);
+        } else
+#endif
+        {
+            fprintf(s_ppu_trace, "W,$%04X,$%02X,PC=?,F=%llu\n",
+                    reg, val, (unsigned long long)g_frame_count);
+        }
         fflush(s_ppu_trace);
         s_trace_count++;
     }
