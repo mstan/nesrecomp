@@ -162,7 +162,8 @@ static int walk_function(const NESRom *rom, FunctionList *list,
         insn_count++;
 
         if (entry->mnemonic == MN_ILLEGAL) {
-            pc += 1;
+            int sz = entry->size;
+            pc += (sz > 0) ? sz : 1;
             continue;
         }
 
