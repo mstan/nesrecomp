@@ -1388,23 +1388,6 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
 }
 
 /* Emit dispatch table */
-/* Check if a function at (bank, addr) is mostly illegal opcodes (data-as-code).
- * Returns true if >50% of the first 8 instructions are illegal. */
-static bool is_mostly_illegal(const NESRom *rom, int bank, uint16_t addr, int fixed_bank) {
-    if (bank == fixed_bank && addr >= 0xC000) return false;  /* fixed bank always valid */
-    int ill = 0, tot = 0;
-    uint16_t scan = addr;
-    for (int si = 0; si < 8 && scan < 0xFFFF; si++) {
-        uint8_t op = rom_read(rom, bank, scan);
-        int sz = g_opcode_table[op].size;
-        if (sz == 0) sz = 1;
-        if (g_opcode_table[op].mnemonic == MN_ILLEGAL) ill++;
-        tot++;
-        scan += sz;
-    }
-    return (tot > 0 && ill * 4 >= tot * 3);  /* >75% illegal */
-}
-
 static void emit_dispatch(FILE *f, const FunctionList *funcs, const NESRom *rom,
                           const GameConfig *cfg) {
     int fixed_bank = rom->prg_banks - 1;
@@ -1439,9 +1422,7 @@ static void emit_dispatch(FILE *f, const FunctionList *funcs, const NESRom *rom,
 
         if (nv == 1) {
             int bk = variants[0];
-            if (cfg && cfg->skip_illegal_bodies && is_mostly_illegal(rom, bk, addr, fixed_bank)) {
-                fprintf(f, "            nes_log_dispatch_miss(addr); return 0;\n");
-            } else if (bk == fixed_bank && addr >= 0xC000) {
+            if (bk == fixed_bank && addr >= 0xC000) {
                 fprintf(f, "            func_%04X(); break;\n", addr);
             } else {
                 fprintf(f, "            func_%04X_b%d(); break;\n", addr, bk);
@@ -1468,9 +1449,6 @@ static void emit_dispatch(FILE *f, const FunctionList *funcs, const NESRom *rom,
             bool has_default = false;
             for (int v = 0; v < nv; v++) {
                 int bk = variants[v];
-                /* Skip bank variants that are mostly illegal opcodes (data-as-code) */
-                if (cfg && cfg->skip_illegal_bodies && is_mostly_illegal(rom, bk, addr, fixed_bank))
-                    continue;
                 if (bk == fixed_bank && addr >= 0xC000) {
                     fprintf(f, "                default: func_%04X(); break;\n", addr);
                     has_default = true;
@@ -1571,21 +1549,6 @@ bool codegen_emit(const NESRom *rom, const FunctionList *funcs,
             }
         }
         if (is_range_secondary) continue;
-
-        /* Generate empty stubs for functions that are mostly illegal opcodes
-         * (data-as-code).  Full body generation is skipped to save compile time
-         * and binary size, but stubs are needed because other same-bank functions
-         * may reference them via direct JSR calls. */
-        if (cfg && cfg->skip_illegal_bodies &&
-            is_mostly_illegal(rom, funcs->entries[i].bank, funcs->entries[i].addr, fixed_bank)) {
-            int bk = funcs->entries[i].bank;
-            uint16_t fa = funcs->entries[i].addr;
-            if (bk == fixed_bank && fa >= 0xC000)
-                fprintf(f_full, "void func_%04X(void) { /* data-as-code stub */ }\n", fa);
-            else
-                fprintf(f_full, "void func_%04X_b%d(void) { /* data-as-code stub */ }\n", fa, bk);
-            continue;
-        }
 
         emit_function(f_full, rom, &funcs->entries[i], funcs, at, cfg);
     }

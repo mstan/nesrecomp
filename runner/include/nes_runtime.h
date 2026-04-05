@@ -116,8 +116,9 @@ extern int g_current_bank;
  * so dispatch addresses in that range need +$2000 offset.
  * When R7 is even, $A000-$BFFF contains the lower 8KB of the 16KB bank,
  * so dispatch addresses in that range need -$2000 offset. */
-extern int g_mmc3_r6_odd;   /* 1 if R6 is odd — $8000 addresses need +$2000 */
-extern int g_mmc3_r7_even;  /* 1 if R7 is even — $A000 addresses need -$2000 */
+extern int g_mmc3_r6_odd;     /* 1 if R6 is odd — $8000 addresses need +$2000 */
+extern int g_mmc3_r7_even;   /* 1 if R7 is even — $A000 addresses need -$2000 */
+extern int g_mmc3_bank_a000; /* R7/2 — 16KB bank index for $A000-$BFFF dispatch */
 
 /* ---- Controller ---- */
 /* Button bitmask: bit7=A, bit6=B, bit5=Select, bit4=Start,
