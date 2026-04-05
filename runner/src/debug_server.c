@@ -380,8 +380,23 @@ static void handle_read_ppu(int id, const char *json)
 static void handle_mapper_state(int id, const char *json)
 {
     (void)json;
-    send_fmt("{\"id\":%d,\"ok\":true,\"bank\":%d}",
-             id, g_current_bank);
+    MapperState ms;
+    mapper_get_state(&ms);
+    send_fmt("{\"id\":%d,\"ok\":true,\"bank\":%d,"
+             "\"type\":%d,\"mirror\":%d,"
+             "\"mmc3_bank_sel\":%d,"
+             "\"mmc3_regs\":[%d,%d,%d,%d,%d,%d,%d,%d],"
+             "\"mmc3_irq_latch\":%d,\"mmc3_irq_counter\":%d,"
+             "\"mmc3_irq_reload\":%d,\"mmc3_irq_enabled\":%d}",
+             id, g_current_bank,
+             ms.mapper_type, ms.mirroring,
+             ms.mmc3_bank_select,
+             ms.mmc3_regs[0], ms.mmc3_regs[1],
+             ms.mmc3_regs[2], ms.mmc3_regs[3],
+             ms.mmc3_regs[4], ms.mmc3_regs[5],
+             ms.mmc3_regs[6], ms.mmc3_regs[7],
+             ms.mmc3_irq_latch, ms.mmc3_irq_counter,
+             ms.mmc3_irq_reload, ms.mmc3_irq_enabled);
 }
 
 static void handle_watch(int id, const char *json)
@@ -525,9 +540,9 @@ static void handle_get_frame(int id, const char *json)
         snprintf(zp_hex + i * 2, 3, "%02x", r->ram_full[i]);
 
     /* Use malloc for the large response */
-    char *buf = (char *)malloc(4096);
+    char *buf = (char *)malloc(5120);
     if (!buf) { send_err(id, "alloc failed"); return; }
-    snprintf(buf, 4096,
+    snprintf(buf, 5120,
              "{\"id\":%d,\"ok\":true,"
              "\"frame\":%u,\"verify_pass\":%d,\"diff_count\":%d,"
              "\"cpu\":{\"A\":\"0x%02X\",\"X\":\"0x%02X\",\"Y\":\"0x%02X\","
@@ -543,7 +558,11 @@ static void handle_get_frame(int id, const char *json)
              "\"timing\":{\"ops_count\":%u,\"vblank_depth\":%d},"
              "\"bank\":%d,"
              "\"mapper\":{\"type\":%d,\"shift_reg\":%d,\"shift_count\":%d,"
-                         "\"ctrl\":%d,\"chr0\":%d,\"chr1\":%d,\"prg_reg\":%d,\"mirror\":%d},"
+                         "\"ctrl\":%d,\"chr0\":%d,\"chr1\":%d,\"prg_reg\":%d,\"mirror\":%d,"
+                         "\"mmc3_bank_sel\":%d,"
+                         "\"mmc3_regs\":[%d,%d,%d,%d,%d,%d,%d,%d],"
+                         "\"mmc3_irq_latch\":%d,\"mmc3_irq_counter\":%d,"
+                         "\"mmc3_irq_reload\":%d,\"mmc3_irq_enabled\":%d},"
              "\"buttons1\":\"0x%02X\",\"buttons2\":\"0x%02X\","
              "\"ctrl_shift1\":\"0x%02X\",\"ctrl_shift2\":\"0x%02X\",\"ctrl_strobe\":%d,"
              "\"game_data\":\"%s\","
@@ -563,6 +582,13 @@ static void handle_get_frame(int id, const char *json)
              r->mapper.mapper_type, r->mapper.shift_reg, r->mapper.shift_count,
              r->mapper.ctrl, r->mapper.chr0, r->mapper.chr1, r->mapper.prg_reg,
              r->mapper.mirroring,
+             r->mapper.mmc3_bank_select,
+             r->mapper.mmc3_regs[0], r->mapper.mmc3_regs[1],
+             r->mapper.mmc3_regs[2], r->mapper.mmc3_regs[3],
+             r->mapper.mmc3_regs[4], r->mapper.mmc3_regs[5],
+             r->mapper.mmc3_regs[6], r->mapper.mmc3_regs[7],
+             r->mapper.mmc3_irq_latch, r->mapper.mmc3_irq_counter,
+             r->mapper.mmc3_irq_reload, r->mapper.mmc3_irq_enabled,
              r->controller1_buttons, r->controller2_buttons,
              r->ctrl1_shift, r->ctrl2_shift, r->ctrl1_strobe,
              gd_hex, zp_hex,
