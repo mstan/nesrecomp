@@ -12,6 +12,7 @@ A static 6502 recompiler framework for NES games. Translates NES ROM machine cod
 | Dr. Mario | Playable (1P tested) | [DrMarioNesRecomp](https://github.com/mstan/DrMarioNesRecomp) |
 | Faxanadu | Believed mostly playable, minor bugs | [FaxanaduRecomp](https://github.com/mstan/FaxanaduRecomp) |
 | Super Mario Bros. | Believed mostly playable, minor bugs | [SuperMarioBrosNESRecomp](https://github.com/mstan/SuperMarioBrosNESRecomp) |
+| Metroid | Starting area playable, early foundation | [MetroidNESRecomp](https://github.com/mstan/MetroidNESRecomp) |
 
 ## Architecture
 
