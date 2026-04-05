@@ -17,6 +17,7 @@
 
 void game_config_init_empty(GameConfig *cfg) {
     memset(cfg, 0, sizeof(*cfg));
+    cfg->skip_illegal_bodies = true;  /* on by default — set false in game.toml to disable */
 }
 
 static bool game_config_load_cfg(GameConfig *cfg, const char *path) {
@@ -293,6 +294,8 @@ static bool game_config_load_toml(GameConfig *cfg, const char *path) {
         if (d.ok) { strncpy(cfg->output_prefix, d.u.s, sizeof(cfg->output_prefix) - 1); free(d.u.s); }
         toml_datum_t paj = toml_bool_in(game, "push_all_jsr");
         if (paj.ok) cfg->push_all_jsr = paj.u.b;
+        toml_datum_t sib = toml_bool_in(game, "skip_illegal_bodies");
+        if (sib.ok) cfg->skip_illegal_bodies = sib.u.b;
     }
 
     /* [mapper] */

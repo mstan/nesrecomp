@@ -1402,7 +1402,7 @@ static bool is_mostly_illegal(const NESRom *rom, int bank, uint16_t addr, int fi
         tot++;
         scan += sz;
     }
-    return (tot > 0 && ill * 2 >= tot);
+    return (tot > 0 && ill * 4 >= tot * 3);  /* >75% illegal */
 }
 
 static void emit_dispatch(FILE *f, const FunctionList *funcs, const NESRom *rom,
@@ -1439,7 +1439,7 @@ static void emit_dispatch(FILE *f, const FunctionList *funcs, const NESRom *rom,
 
         if (nv == 1) {
             int bk = variants[0];
-            if (is_mostly_illegal(rom, bk, addr, fixed_bank)) {
+            if (cfg && cfg->skip_illegal_bodies && is_mostly_illegal(rom, bk, addr, fixed_bank)) {
                 fprintf(f, "            nes_log_dispatch_miss(addr); return 0;\n");
             } else if (bk == fixed_bank && addr >= 0xC000) {
                 fprintf(f, "            func_%04X(); break;\n", addr);
@@ -1469,7 +1469,7 @@ static void emit_dispatch(FILE *f, const FunctionList *funcs, const NESRom *rom,
             for (int v = 0; v < nv; v++) {
                 int bk = variants[v];
                 /* Skip bank variants that are mostly illegal opcodes (data-as-code) */
-                if (is_mostly_illegal(rom, bk, addr, fixed_bank))
+                if (cfg && cfg->skip_illegal_bodies && is_mostly_illegal(rom, bk, addr, fixed_bank))
                     continue;
                 if (bk == fixed_bank && addr >= 0xC000) {
                     fprintf(f, "                default: func_%04X(); break;\n", addr);
@@ -1576,7 +1576,8 @@ bool codegen_emit(const NESRom *rom, const FunctionList *funcs,
          * (data-as-code).  Full body generation is skipped to save compile time
          * and binary size, but stubs are needed because other same-bank functions
          * may reference them via direct JSR calls. */
-        if (is_mostly_illegal(rom, funcs->entries[i].bank, funcs->entries[i].addr, fixed_bank)) {
+        if (cfg && cfg->skip_illegal_bodies &&
+            is_mostly_illegal(rom, funcs->entries[i].bank, funcs->entries[i].addr, fixed_bank)) {
             int bk = funcs->entries[i].bank;
             uint16_t fa = funcs->entries[i].addr;
             if (bk == fixed_bank && fa >= 0xC000)

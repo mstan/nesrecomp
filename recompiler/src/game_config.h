@@ -251,6 +251,7 @@ typedef struct {
     int              cond_bail_func_count;
 
     bool             push_all_jsr;  /* emit 6502 stack push/pop on every JSR/RTS */
+    bool             skip_illegal_bodies; /* stub functions with >75% illegal opcodes (default: true, set false to disable) */
 } GameConfig;
 
 /* Initialize to empty (no dispatch tables, prefix derived from ROM name) */
