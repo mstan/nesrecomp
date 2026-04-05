@@ -136,8 +136,112 @@ static int verify_rom(const char *path, uint32_t expected_crc) {
 
 /* ---- main ---- */
 
+/* ---- Crash handler (Windows SEH + VEH) ---- */
+#ifdef _WIN32
+#include <dbghelp.h>   /* StackWalk64 — link with dbghelp.lib */
+#pragma comment(lib, "dbghelp.lib")
+
+static void atexit_handler(void) {
+    extern const char *g_recomp_stack[];
+    extern int g_recomp_stack_top;
+    extern uint64_t g_frame_count;
+    /* Only log if the game exited unexpectedly (recomp stack still active) */
+    if (g_recomp_stack_top > 0) {
+        printf("[EXIT] Unexpected exit at frame %llu, recomp stack (top=%d):\n",
+               (unsigned long long)g_frame_count, g_recomp_stack_top);
+        for (int i = g_recomp_stack_top - 1; i >= 0 && i >= g_recomp_stack_top - 20; i--)
+            printf("  [%d] %s\n", i, g_recomp_stack[i] ? g_recomp_stack[i] : "?");
+        fflush(stdout);
+    }
+}
+
+static LONG WINAPI vectored_handler(EXCEPTION_POINTERS *ep) {
+    DWORD code = ep->ExceptionRecord->ExceptionCode;
+    /* Skip benign exceptions (breakpoints, C++ exceptions, etc.) */
+    if (code == EXCEPTION_BREAKPOINT || code == 0x406D1388 /* SetThreadName */
+        || code == 0xE06D7363 /* C++ exception */)
+        return EXCEPTION_CONTINUE_SEARCH;
+    printf("\n[VEH] Exception 0x%08lX at %p\n", code, ep->ExceptionRecord->ExceptionAddress);
+    if (code == EXCEPTION_ACCESS_VIOLATION && ep->ExceptionRecord->NumberParameters >= 2)
+        printf("[VEH] Access violation: %s of %p\n",
+               ep->ExceptionRecord->ExceptionInformation[0] ? "WRITE" : "READ",
+               (void *)ep->ExceptionRecord->ExceptionInformation[1]);
+    if (code == EXCEPTION_STACK_OVERFLOW)
+        printf("[VEH] STACK OVERFLOW detected\n");
+    fflush(stdout);
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+
+static LONG WINAPI crash_handler(EXCEPTION_POINTERS *ep) {
+    /* Write crash info next to the exe */
+    char path[512];
+    GetModuleFileNameA(NULL, path, sizeof(path));
+    char *s = strrchr(path, '\\');
+    if (s) *(s + 1) = '\0';
+    strcat(path, "crash_report.txt");
+
+    FILE *f = fopen(path, "w");
+    if (!f) f = stderr;
+
+    DWORD code = ep->ExceptionRecord->ExceptionCode;
+    void *addr = ep->ExceptionRecord->ExceptionAddress;
+    fprintf(f, "=== CRASH ===\n");
+    fprintf(f, "Exception: 0x%08lX at %p\n", code, addr);
+    if (code == EXCEPTION_ACCESS_VIOLATION && ep->ExceptionRecord->NumberParameters >= 2) {
+        const char *op = ep->ExceptionRecord->ExceptionInformation[0] ? "WRITE" : "READ";
+        fprintf(f, "Access violation: %s of address %p\n",
+                op, (void *)ep->ExceptionRecord->ExceptionInformation[1]);
+    }
+    CONTEXT *ctx = ep->ContextRecord;
+    fprintf(f, "RIP=%p RSP=%p RBP=%p\n", (void *)ctx->Rip, (void *)ctx->Rsp, (void *)ctx->Rbp);
+    fprintf(f, "RAX=%p RBX=%p RCX=%p RDX=%p\n",
+            (void *)ctx->Rax, (void *)ctx->Rbx, (void *)ctx->Rcx, (void *)ctx->Rdx);
+
+    /* Walk the native call stack */
+    fprintf(f, "\nCall stack:\n");
+    HANDLE proc = GetCurrentProcess();
+    HANDLE thread = GetCurrentThread();
+    SymInitialize(proc, NULL, TRUE);
+    STACKFRAME64 sf;
+    memset(&sf, 0, sizeof(sf));
+    sf.AddrPC.Offset    = ctx->Rip;
+    sf.AddrPC.Mode      = AddrModeFlat;
+    sf.AddrFrame.Offset = ctx->Rbp;
+    sf.AddrFrame.Mode   = AddrModeFlat;
+    sf.AddrStack.Offset = ctx->Rsp;
+    sf.AddrStack.Mode   = AddrModeFlat;
+    for (int i = 0; i < 64; i++) {
+        if (!StackWalk64(IMAGE_FILE_MACHINE_AMD64, proc, thread, &sf, ctx,
+                         NULL, SymFunctionTableAccess64, SymGetModuleBase64, NULL))
+            break;
+        char sym_buf[sizeof(SYMBOL_INFO) + 256];
+        SYMBOL_INFO *sym = (SYMBOL_INFO *)sym_buf;
+        sym->SizeOfStruct = sizeof(SYMBOL_INFO);
+        sym->MaxNameLen = 255;
+        DWORD64 disp = 0;
+        if (SymFromAddr(proc, sf.AddrPC.Offset, &disp, sym))
+            fprintf(f, "  [%d] %s+0x%llx (%p)\n", i, sym->Name, (unsigned long long)disp, (void *)sf.AddrPC.Offset);
+        else
+            fprintf(f, "  [%d] %p\n", i, (void *)sf.AddrPC.Offset);
+    }
+
+    if (f != stderr) fclose(f);
+
+    /* Also print to stdout for redirected output */
+    printf("\n=== CRASH === Exception 0x%08lX at %p — see crash_report.txt\n", code, addr);
+    fflush(stdout);
+
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+#endif
+
 int main(int argc, char *argv[]) {
     setvbuf(stdout, NULL, _IONBF, 0);
+#ifdef _WIN32
+    SetUnhandledExceptionFilter(crash_handler);
+    AddVectoredExceptionHandler(1, vectored_handler);
+    atexit(atexit_handler);
+#endif
 
     /* Set g_exe_dir to the directory containing the executable */
 #ifdef _WIN32
