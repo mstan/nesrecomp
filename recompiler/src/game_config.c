@@ -473,6 +473,16 @@ static bool game_config_load_toml(GameConfig *cfg, const char *path) {
         }
     }
 
+    /* [[replace_func]] — functions replaced by extras.c, exclude from codegen */
+    toml_array_t *rf = toml_array_in(root, "replace_func");
+    if (rf) for (int i = 0; i < toml_array_nelem(rf) && cfg->replace_func_count < GAME_CFG_MAX_EXTRA_FUNCS; i++) {
+        toml_table_t *t = toml_table_at(rf, i);
+        if (!t) continue;
+        int idx = cfg->replace_func_count++;
+        cfg->replace_funcs[idx].bank = toml_int_or(t, "bank", -1);
+        cfg->replace_funcs[idx].addr = toml_hex(t, "addr");
+    }
+
     /* [[data_region]] */
     toml_array_t *dr = toml_array_in(root, "data_region");
     if (dr) for (int i = 0; i < toml_array_nelem(dr) && cfg->data_region_count < GAME_CFG_MAX_DATA_REGIONS; i++) {

@@ -656,9 +656,25 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
             }
             /* Universal bail propagation: if S changed after the call
              * (callee did PLA PLA RTS or similar stack unwind), propagate
-             * the unwind by returning immediately. */
+             * the unwind by returning immediately.
+             *
+             * Skip bail for call_by_address() targets: dynamic dispatch may
+             * reach coroutine yields or context switches that legitimately
+             * change S mid-call.  Bail propagation is only reliable for
+             * direct function calls where we know the target's behavior. */
             if (did_push_jsr) {
-                fprintf(f, "if (g_cpu.S != _cbs) {\n#ifdef RECOMP_STACK_TRACKING\n    recomp_stack_pop();\n#endif\n    return; } }\n");
+                if (cfg->push_all_jsr) {
+                    /* push_all_jsr mode: skip bail propagation entirely.
+                     * Games using push_all_jsr have coroutine schedulers
+                     * that legitimately manipulate S (yield/resume), and
+                     * maybe_trigger_vblank can fire NMI/IRQ mid-call which
+                     * temporarily changes S.  Bail detection is incompatible
+                     * with these patterns — false positives cause the entire
+                     * call chain to unwind. */
+                    fprintf(f, "}\n");
+                } else {
+                    fprintf(f, "if (g_cpu.S != _cbs) {\n#ifdef RECOMP_STACK_TRACKING\n    recomp_stack_pop();\n#endif\n    return; } }\n");
+                }
             }
             break;
         }
