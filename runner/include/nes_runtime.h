@@ -132,6 +132,8 @@ void    runtime_get_vblank_state(uint32_t *ops_count, int *vblank_depth);
 void    runtime_set_vblank_state(uint32_t ops_count, int vblank_depth);
 void    runtime_get_controller_shift(uint8_t *shift1, uint8_t *shift2, uint8_t *strobe);
 void    runtime_set_controller_shift(uint8_t shift1, uint8_t shift2, uint8_t strobe);
+void    runtime_sync_scroll_from_t(void);  /* Derive scroll_x/y from PPU t register */
+void    runtime_sync_scroll_from_v(void);  /* Derive scroll_x/y from PPU v (g_ppuaddr) */
 uint8_t runtime_get_ppudata_buf(void);
 void    runtime_set_ppudata_buf(uint8_t val);
 uint16_t runtime_get_ppuaddr(void);

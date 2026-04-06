@@ -40,6 +40,24 @@ static int     g_ppuaddr_latch = 0;
  * ("w" register) between $2005 and $2006.  g_ppuaddr_latch is that toggle. */
 static uint8_t g_ppudata_buf   = 0; /* PPUDATA read buffer (NES read-delay) */
 
+/* ---- PPU internal t/v registers (Loopy's scrolling model) ----
+ * The NES PPU has two 15-bit address registers:
+ *   t (temporary) — written by $2000/$2005/$2006, holds pending scroll/address
+ *   v (current)   — used for rendering; copied from t at frame start
+ * Both $2005 and $2006 write to the SAME t register.  This means $2006 writes
+ * for VRAM access also affect scroll, and vice versa.
+ *
+ * Bit layout of t/v:  yyy NN YYYYY XXXXX
+ *   bits  0-4:  coarse X scroll (tile column, 0-31)
+ *   bits  5-9:  coarse Y scroll (tile row, 0-29)
+ *   bits 10-11: nametable select (from PPUCTRL bits 0-1)
+ *   bits 12-14: fine Y scroll (pixel row within tile, 0-7)
+ *
+ * g_ppuaddr acts as v (used by $2007 reads/writes). */
+static uint16_t s_ppu_t      = 0;
+static uint8_t  s_ppu_fine_x = 0;
+static uint16_t s_ppu_v_at_2006 = 0;  /* v captured at $2006 second write, before $2007 increments */
+
 uint64_t g_frame_count = 0;
 
 /* ---- Controller state ---- */
@@ -50,6 +68,13 @@ static uint8_t s_ctrl2_shift   = 0;
 static bool    s_ctrl1_strobe  = false;
 
 static FILE *s_ppu_trace = NULL;
+
+/* Scroll write trace — last 64 writes to $2005 */
+#define SCROLL_TRACE_SIZE 64
+typedef struct { uint64_t frame; uint8_t val; uint8_t which; /* 0=X, 1=Y */ } ScrollTraceEntry;
+static ScrollTraceEntry s_scroll_trace[SCROLL_TRACE_SIZE];
+static int s_scroll_trace_idx = 0;
+static int s_scroll_trace_count = 0;
 
 static void ppu_trace_init(void) {
     s_ppu_trace = fopen("C:/temp/ppu_trace.csv", "w");
@@ -319,15 +344,37 @@ void ppu_write_reg(uint16_t reg, uint8_t val) {
      * Reset the counter so only consecutive $2002 reads trigger the hit. */
     g_spr0_reads_ctr = 0;
     switch (reg) {
-        case 0x2000: g_ppuctrl = val; break;
+        case 0x2000:
+            g_ppuctrl = val;
+            /* $2000 bits 0-1 → t bits 10-11 (nametable select) */
+            s_ppu_t = (s_ppu_t & 0xF3FF) | ((uint16_t)(val & 3) << 10);
+            break;
         case 0x2001: g_ppumask = val; break;
         case 0x2003: g_oamaddr = val; break;
         case 0x2004: g_ppu_oam[g_oamaddr++] = val; break;
-        case 0x2005:
-            if (!g_ppuaddr_latch) g_ppuscroll_x = val;
-            else                  g_ppuscroll_y = val;
+        case 0x2005: {
+            ScrollTraceEntry *se = &s_scroll_trace[s_scroll_trace_idx];
+            se->frame = g_frame_count;
+            se->val = val;
+            se->which = g_ppuaddr_latch; /* 0=X, 1=Y */
+            s_scroll_trace_idx = (s_scroll_trace_idx + 1) % SCROLL_TRACE_SIZE;
+            if (s_scroll_trace_count < SCROLL_TRACE_SIZE) s_scroll_trace_count++;
+
+            if (!g_ppuaddr_latch) {
+                /* First write (w=0): coarse X → t[0:4], fine X → separate reg */
+                s_ppu_t = (s_ppu_t & 0xFFE0) | ((uint16_t)val >> 3);
+                s_ppu_fine_x = val & 7;
+                g_ppuscroll_x = val;
+            } else {
+                /* Second write (w=1): fine Y → t[12:14], coarse Y → t[5:9] */
+                s_ppu_t = (s_ppu_t & 0x0C1F) |
+                          ((uint16_t)(val & 7) << 12) |
+                          ((uint16_t)(val >> 3) << 5);
+                g_ppuscroll_y = val;
+            }
             g_ppuaddr_latch ^= 1;
             break;
+        }
         case 0x2006:
             /* === $2006 WRITE TRAP: frames 192-196 === */
             {
@@ -343,8 +390,16 @@ void ppu_write_reg(uint16_t reg, uint8_t val) {
                 }
             }
             /* === END $2006 WRITE TRAP === */
-            if (!g_ppuaddr_latch) g_ppuaddr = (uint16_t)val << 8;
-            else                   g_ppuaddr |= val;
+            if (!g_ppuaddr_latch) {
+                /* First write (w=0): val[5:0] → t[13:8], clear t bit 14 */
+                s_ppu_t = (s_ppu_t & 0x00FF) | ((uint16_t)(val & 0x3F) << 8);
+                g_ppuaddr = (uint16_t)val << 8; /* legacy: keep ppuaddr in sync */
+            } else {
+                /* Second write (w=1): val → t[7:0], then v = t */
+                s_ppu_t = (s_ppu_t & 0xFF00) | val;
+                g_ppuaddr = s_ppu_t & 0x3FFF; /* v = t (14-bit VRAM address) */
+                s_ppu_v_at_2006 = g_ppuaddr;  /* capture v before $2007 increments */
+            }
             g_ppuaddr_latch ^= 1;
             g_ppudata_buf = 0; /* writing $2006 resets the read buffer */
             break;
@@ -617,4 +672,96 @@ void nes_log_inline_miss(uint16_t dispatch_pc, uint8_t a_val) {
         last = key;
     }
     g_miss_count_any++;
+}
+
+/* ---- PPU t register: derive scroll from t for rendering ---- */
+static uint8_t s_last_sync_sx = 0, s_last_sync_sy = 0;
+static uint16_t s_last_sync_t = 0;
+static uint64_t s_last_sync_frame = 0;
+
+void runtime_sync_scroll_from_t(void) {
+    /* At frame start, derive scroll from t (PPU copies t→v at pre-render).
+     * This captures scroll set by $2005/$2006 during the NMI handler. */
+    g_ppuscroll_x = (uint8_t)(((s_ppu_t & 0x1F) << 3) | (s_ppu_fine_x & 7));
+    g_ppuscroll_y = (uint8_t)((((s_ppu_t >> 5) & 0x1F) << 3) | ((s_ppu_t >> 12) & 7));
+    g_ppuctrl = (g_ppuctrl & 0xFC) | ((s_ppu_t >> 10) & 3);
+
+    s_last_sync_sx = g_ppuscroll_x;
+    s_last_sync_sy = g_ppuscroll_y;
+    s_last_sync_t = s_ppu_t;
+    s_last_sync_frame = g_frame_count;
+}
+
+/* Mid-frame scroll sync: derive scroll from v (g_ppuaddr), not t.
+ * On real NES, mid-frame $2006 writes immediately update v, and the PPU
+ * uses v for rendering.  $2005 writes modify t but NOT v during rendering.
+ * So after an IRQ handler sets scroll via $2006+$2005, the rendering scroll
+ * comes from v ($2006), while t ($2005) is for the NEXT frame. */
+void runtime_sync_scroll_from_v(void) {
+    uint16_t v = s_ppu_v_at_2006; /* use v as set by last $2006, not incremented by $2007 */
+    g_ppuscroll_x = (uint8_t)(((v & 0x1F) << 3) | (s_ppu_fine_x & 7));
+    g_ppuscroll_y = (uint8_t)((((v >> 5) & 0x1F) << 3) | ((v >> 12) & 7));
+    g_ppuctrl = (g_ppuctrl & 0xFC) | ((v >> 10) & 3);
+}
+
+static uint8_t s_frame_start_sx = 0, s_frame_start_sy = 0;
+static uint16_t s_frame_start_t = 0;
+static uint64_t s_frame_start_frame = 0;
+
+void runtime_record_frame_start_scroll(void) {
+    s_frame_start_sx = g_ppuscroll_x;
+    s_frame_start_sy = g_ppuscroll_y;
+    s_frame_start_t = s_ppu_t;
+    s_frame_start_frame = g_frame_count;
+}
+
+void runtime_get_frame_start_scroll(uint8_t *sx, uint8_t *sy, uint16_t *t, uint64_t *frame) {
+    if (sx) *sx = s_frame_start_sx;
+    if (sy) *sy = s_frame_start_sy;
+    if (t) *t = s_frame_start_t;
+    if (frame) *frame = s_frame_start_frame;
+}
+
+void runtime_get_last_sync(uint8_t *sx, uint8_t *sy, uint16_t *t, uint64_t *frame) {
+    if (sx) *sx = s_last_sync_sx;
+    if (sy) *sy = s_last_sync_sy;
+    if (t) *t = s_last_sync_t;
+    if (frame) *frame = s_last_sync_frame;
+}
+
+uint16_t runtime_get_ppu_t(void) { return s_ppu_t; }
+uint8_t  runtime_get_ppu_fine_x(void) { return s_ppu_fine_x; }
+
+/* IRQ scanline recording for debug */
+#define IRQ_SCANLINE_LOG_SIZE 8
+static int s_irq_scanlines[IRQ_SCANLINE_LOG_SIZE];
+static int s_irq_scanline_count = 0;
+static uint64_t s_irq_scanline_frame = 0;
+
+void runtime_record_irq_scanline(int scanline) {
+    if (g_frame_count != s_irq_scanline_frame) {
+        s_irq_scanline_count = 0;
+        s_irq_scanline_frame = g_frame_count;
+    }
+    if (s_irq_scanline_count < IRQ_SCANLINE_LOG_SIZE)
+        s_irq_scanlines[s_irq_scanline_count++] = scanline;
+}
+
+void runtime_get_irq_scanlines(int *out, int *count, uint64_t *frame) {
+    for (int i = 0; i < s_irq_scanline_count && i < IRQ_SCANLINE_LOG_SIZE; i++)
+        out[i] = s_irq_scanlines[i];
+    *count = s_irq_scanline_count;
+    *frame = s_irq_scanline_frame;
+}
+
+/* ---- Scroll write trace accessors ---- */
+void runtime_get_scroll_trace(int *out_count, int *out_idx) {
+    if (out_count) *out_count = s_scroll_trace_count;
+    if (out_idx) *out_idx = s_scroll_trace_idx;
+}
+
+typedef struct { uint64_t frame; uint8_t val; uint8_t which; } ScrollTraceEntryExport;
+
+const void *runtime_get_scroll_trace_buf(void) {
+    return s_scroll_trace;
 }

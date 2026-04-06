@@ -55,3 +55,27 @@ void mapper_set_state(const MapperState *in);
  * Returns 1 if an IRQ should fire (counter hit zero and IRQs enabled).
  */
 int mapper_clock_scanline(void);
+
+/* Debug: get $A000 mirroring write stats */
+void mapper_get_a000_debug(int *count, uint8_t *last_val, uint64_t *last_frame);
+
+/* Debug: $A000 trace ring buffer (64 entries) */
+typedef struct {
+    uint64_t    frame;
+    uint8_t     val;
+    const char *caller;
+} A000TraceEntry;
+void mapper_get_a000_trace(int *out_count, int *out_idx);
+const void *mapper_get_a000_trace_buf(void);
+
+/* Debug: CHR bank change trace ring buffer (256 entries) */
+#define CHR_TRACE_SIZE 256
+typedef struct {
+    uint64_t    frame;
+    uint8_t     regs[6];       /* R0-R5 CHR bank values */
+    uint8_t     bank_select;   /* full $8000 value (bit 7 = chr_a12_inv) */
+    const char *caller;
+} ChrTraceEntry;
+void mapper_get_chr_trace(int *out_count, int *out_idx);
+const void *mapper_get_chr_trace_buf(void);
+void mapper_get_mmc3_chr_regs(uint8_t *regs6_out, uint8_t *bank_select_out);

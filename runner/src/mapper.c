@@ -23,6 +23,22 @@ int                   g_mmc3_bank_a000 = 0;
 static int            s_mapper_type  = 0;
 static int            s_mirroring    = 3; /* default: horizontal */
 
+/* Debug: track $A000 mirroring writes */
+static int            s_a000_write_count = 0;
+static uint8_t        s_a000_last_val    = 0;
+static uint64_t       s_a000_last_frame  = 0;
+
+/* Trace ring buffer for $A000 writes */
+#define A000_TRACE_SIZE 64
+static A000TraceEntry s_a000_trace[A000_TRACE_SIZE];
+static int            s_a000_trace_idx = 0;  /* next write position */
+static int            s_a000_trace_count = 0;
+
+/* Trace ring buffer for CHR bank changes */
+static ChrTraceEntry s_chr_trace[CHR_TRACE_SIZE];
+static int            s_chr_trace_idx = 0;
+static int            s_chr_trace_count = 0;
+
 /* ── CHR ROM data (for bank switching) ─────────────────────────────────────── */
 static const uint8_t *s_chr_rom_data = NULL;
 static int            s_chr_rom_banks = 0; /* number of 8KB CHR ROM banks */
@@ -38,6 +54,7 @@ static uint8_t s_prg_reg = 0;
 /* Trace file */
 static FILE *s_mapper_trace = NULL;
 extern uint64_t g_frame_count; /* defined in runtime.c */
+extern const char *g_last_recomp_func; /* defined in recomp_stack.c */
 
 /* ── MMC1 CHR bank switching ───────────────────────────────────────────────── */
 extern uint8_t g_chr_ram[0x2000];
@@ -157,6 +174,16 @@ static void mmc3_apply_chr(void) {
         memcpy(g_chr_ram + 0x1000, s_chr_rom_data + (size_t)r0 * 0x0400, 0x0800);
         memcpy(g_chr_ram + 0x1800, s_chr_rom_data + (size_t)r1 * 0x0400, 0x0800);
     }
+
+    /* Record CHR bank change in trace ring buffer */
+    ChrTraceEntry *e = &s_chr_trace[s_chr_trace_idx];
+    e->frame = g_frame_count;
+    for (int i = 0; i < 6; i++)
+        e->regs[i] = s_mmc3_regs[i];
+    e->bank_select = s_mmc3_bank_select;
+    e->caller = g_last_recomp_func;
+    s_chr_trace_idx = (s_chr_trace_idx + 1) % CHR_TRACE_SIZE;
+    if (s_chr_trace_count < CHR_TRACE_SIZE) s_chr_trace_count++;
 }
 
 /* ── MMC1 helper ───────────────────────────────────────────────────────────── */
@@ -301,7 +328,16 @@ void mapper_write(uint16_t addr, uint8_t val) {
                     /* $A001: PRG RAM protect (ignored for recomp) */
                 } else {
                     /* $A000: Mirroring */
+                    s_a000_write_count++;
+                    s_a000_last_val = val;
+                    s_a000_last_frame = g_frame_count;
                     s_mirroring = (val & 1) ? 3 : 2; /* 0=vertical, 1=horizontal */
+                    /* Record in trace ring buffer */
+                    s_a000_trace[s_a000_trace_idx].frame = g_frame_count;
+                    s_a000_trace[s_a000_trace_idx].val = val;
+                    s_a000_trace[s_a000_trace_idx].caller = g_last_recomp_func;
+                    s_a000_trace_idx = (s_a000_trace_idx + 1) % A000_TRACE_SIZE;
+                    if (s_a000_trace_count < A000_TRACE_SIZE) s_a000_trace_count++;
                 }
             } else if (addr <= 0xDFFF) {
                 if (addr & 1) {
@@ -373,6 +409,38 @@ const uint8_t *mapper_get_fixed_bank(void) {
 
 int mapper_get_mirroring(void) {
     return s_mirroring;
+}
+
+void mapper_get_a000_debug(int *count, uint8_t *last_val, uint64_t *last_frame) {
+    if (count) *count = s_a000_write_count;
+    if (last_val) *last_val = s_a000_last_val;
+    if (last_frame) *last_frame = s_a000_last_frame;
+}
+
+void mapper_get_a000_trace(int *out_count, int *out_idx) {
+    if (out_count) *out_count = s_a000_trace_count;
+    if (out_idx) *out_idx = s_a000_trace_idx;
+}
+
+const void *mapper_get_a000_trace_buf(void) {
+    return s_a000_trace;
+}
+
+void mapper_get_chr_trace(int *out_count, int *out_idx) {
+    if (out_count) *out_count = s_chr_trace_count;
+    if (out_idx) *out_idx = s_chr_trace_idx;
+}
+
+const void *mapper_get_chr_trace_buf(void) {
+    return s_chr_trace;
+}
+
+void mapper_get_mmc3_chr_regs(uint8_t *regs6_out, uint8_t *bank_select_out) {
+    if (regs6_out)
+        for (int i = 0; i < 6; i++)
+            regs6_out[i] = s_mmc3_regs[i];
+    if (bank_select_out)
+        *bank_select_out = s_mmc3_bank_select;
 }
 
 void mapper_set_bank(int bank) {
