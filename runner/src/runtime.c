@@ -681,10 +681,14 @@ static uint64_t s_last_sync_frame = 0;
 
 void runtime_sync_scroll_from_t(void) {
     /* At frame start, derive scroll from t (PPU copies t→v at pre-render).
-     * This captures scroll set by $2005/$2006 during the NMI handler. */
+     * This captures scroll set by $2005/$2006 during the NMI handler.
+     * NOTE: Do NOT sync g_ppuctrl bits 0-1 from t here.  Games that write
+     * $2000 (PPUCTRL) after $2006 expect bits 0-1 to come from $2000, but
+     * $2006 writes may have modified t bits 10-11.  The game's $2000 write
+     * already sets both g_ppuctrl AND t bits 10-11, so they stay in sync
+     * naturally for the NT-select case. */
     g_ppuscroll_x = (uint8_t)(((s_ppu_t & 0x1F) << 3) | (s_ppu_fine_x & 7));
     g_ppuscroll_y = (uint8_t)((((s_ppu_t >> 5) & 0x1F) << 3) | ((s_ppu_t >> 12) & 7));
-    g_ppuctrl = (g_ppuctrl & 0xFC) | ((s_ppu_t >> 10) & 3);
 
     s_last_sync_sx = g_ppuscroll_x;
     s_last_sync_sy = g_ppuscroll_y;
@@ -698,10 +702,9 @@ void runtime_sync_scroll_from_t(void) {
  * So after an IRQ handler sets scroll via $2006+$2005, the rendering scroll
  * comes from v ($2006), while t ($2005) is for the NEXT frame. */
 void runtime_sync_scroll_from_v(void) {
-    uint16_t v = s_ppu_v_at_2006; /* use v as set by last $2006, not incremented by $2007 */
+    uint16_t v = s_ppu_v_at_2006;
     g_ppuscroll_x = (uint8_t)(((v & 0x1F) << 3) | (s_ppu_fine_x & 7));
     g_ppuscroll_y = (uint8_t)((((v >> 5) & 0x1F) << 3) | ((v >> 12) & 7));
-    g_ppuctrl = (g_ppuctrl & 0xFC) | ((v >> 10) & 3);
 }
 
 static uint8_t s_frame_start_sx = 0, s_frame_start_sy = 0;

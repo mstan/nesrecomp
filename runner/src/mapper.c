@@ -411,6 +411,10 @@ int mapper_get_mirroring(void) {
     return s_mirroring;
 }
 
+int mapper_get_type(void) {
+    return s_mapper_type;
+}
+
 void mapper_get_a000_debug(int *count, uint8_t *last_val, uint64_t *last_frame) {
     if (count) *count = s_a000_write_count;
     if (last_val) *last_val = s_a000_last_val;

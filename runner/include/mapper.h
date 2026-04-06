@@ -22,6 +22,7 @@ const uint8_t *mapper_get_fixed_bank(void);
  *   3 = horizontal mirroring
  */
 int mapper_get_mirroring(void);
+int mapper_get_type(void);
 
 /* Force-set the switchable PRG bank (used by VBlank save/restore to undo
  * bank switches made by the NMI handler). */
