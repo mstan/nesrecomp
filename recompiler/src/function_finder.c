@@ -742,6 +742,94 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
     printf("[FuncFinder] Switchable-bank table-run scanner added %d candidates\n",
            out->count - before_sw_scan);
 
+    /* Split-table indirect JMP dispatch scanner (auto-detected).
+     *
+     * 6502 idiom for dispatching on a state index:
+     *     LDA lo_table,Y    ; B9/BD lo hi
+     *     STA zp
+     *     LDA hi_table,Y    ; B9/BD lo hi
+     *     STA zp+1
+     *     JMP (zp)          ; 6C zp 00
+     *
+     * Two parallel byte tables store the low and high halves of the target
+     * addresses separately; the combined (hi<<8 | lo) pair is the handler
+     * address. This cannot be detected by the contiguous-pointer scanners
+     * above because the tables aren't 16-bit LE runs.
+     *
+     * The existing JMP (ind) handler in walk_function only resolves vectors
+     * stored in ROM — indirect JMPs through zero page (where the pointer is
+     * computed at runtime from ROM tables) were invisible. This pass scans
+     * every bank for the exact byte pattern, extracts both tables, and seeds
+     * every table entry as a function. Table length is bounded by
+     * validate_code_target on each candidate. */
+    int before_split = out->count;
+    int split_sites = 0;
+    for (int b = 0; b <= fixed_bank; b++) {
+        uint16_t scan_base = (b == fixed_bank) ? 0xC000 : 0x8000;
+        uint16_t scan_end  = (b == fixed_bank) ? 0xFFFE : 0xBFFE;
+        for (uint16_t pc = scan_base; pc + 12 <= scan_end; pc++) {
+            uint8_t b0  = rom_read(rom, b, pc);
+            if (b0 != 0xB9 && b0 != 0xBD) continue;
+            uint8_t b3  = rom_read(rom, b, pc + 3);
+            if (b3 != 0x85) continue;
+            uint8_t b5  = rom_read(rom, b, pc + 5);
+            if (b5 != 0xB9 && b5 != 0xBD) continue;
+            uint8_t b8  = rom_read(rom, b, pc + 8);
+            if (b8 != 0x85) continue;
+            uint8_t b10 = rom_read(rom, b, pc + 10);
+            if (b10 != 0x6C) continue;
+            uint8_t z1    = rom_read(rom, b, pc + 4);
+            uint8_t z2    = rom_read(rom, b, pc + 9);
+            uint8_t zj_lo = rom_read(rom, b, pc + 11);
+            uint8_t zj_hi = rom_read(rom, b, pc + 12);
+            if (z2 != (uint8_t)(z1 + 1)) continue;
+            if (zj_hi != 0 || zj_lo != z1) continue;
+            uint16_t lo_tbl = rom_read(rom, b, pc + 1) |
+                              ((uint16_t)rom_read(rom, b, pc + 2) << 8);
+            uint16_t hi_tbl = rom_read(rom, b, pc + 6) |
+                              ((uint16_t)rom_read(rom, b, pc + 7) << 8);
+            if (lo_tbl < 0x8000 || hi_tbl < 0x8000) continue;
+            int lo_bank = (lo_tbl >= 0xC000) ? fixed_bank : b;
+            int hi_bank = (hi_tbl >= 0xC000) ? fixed_bank : b;
+            int site_added = 0;
+            for (int i = 0; i < 64; i++) {
+                if (lo_tbl + i > 0xFFFF || hi_tbl + i > 0xFFFF) break;
+                /* Do NOT check is_data_region for the lo/hi table positions:
+                 * the tables ARE data, and will typically be declared as
+                 * data_region precisely so they aren't decoded as code. */
+                uint8_t tl = rom_read(rom, lo_bank, (uint16_t)(lo_tbl + i));
+                uint8_t th = rom_read(rom, hi_bank, (uint16_t)(hi_tbl + i));
+                uint16_t target = tl | ((uint16_t)th << 8);
+                if (target < 0x8000 || target > 0xFFFE) break;
+                int tbank = (target >= 0xC000) ? fixed_bank : b;
+                if (is_data_region(cfg, tbank, target)) break;
+                if (!validate_code_target(rom, tbank, target, TABLE_RUN_MIN_VALID)) break;
+                if (!function_list_contains(out, target, tbank)) {
+                    add_function(out, target, tbank);
+                    site_added++;
+                }
+            }
+            printf("[SplitTbl] site=$%04X bank=%d lo=$%04X hi=$%04X +%d\n",
+                   pc, b, lo_tbl, hi_tbl, site_added);
+            split_sites++;
+            pc += 12; /* skip past the matched pattern */
+        }
+    }
+    /* BFS for split-table candidates */
+    while (queue_pop(&item)) {
+        for (int i = 0; i < out->count; i++) {
+            if (out->entries[i].addr == item.addr &&
+                out->entries[i].bank == item.bank &&
+                out->entries[i].size == 0)
+            {
+                out->entries[i].size = walk_function(rom, out, item.addr, item.bank, cfg);
+                break;
+            }
+        }
+    }
+    printf("[FuncFinder] Split-table scanner: %d sites, %d new functions\n",
+           split_sites, out->count - before_split);
+
     /* Known dispatch table scanner (game-config-driven).
      * These are PHA/PHA/RTS jump tables that use (target-1) entries where the
      * byte at (target-1) is a VALID opcode, so the conservative illegal-opcode

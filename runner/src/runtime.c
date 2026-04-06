@@ -636,10 +636,21 @@ void     runtime_set_ppuaddr(uint16_t addr) { g_ppuaddr = addr; }
 uint32_t g_miss_count_any   = 0;
 uint16_t g_miss_last_addr   = 0;
 uint64_t g_miss_last_frame  = 0;
+int      g_miss_last_bank   = 0;
+char     g_miss_last_caller[64]  = "(none)";
+char     g_miss_last_stack2[64]  = "(none)";
+uint8_t  g_miss_last_sp           = 0;
+uint8_t  g_miss_last_stack_bytes[16];
 
 #define MAX_MISS_UNIQUE 12
 uint16_t g_miss_unique_addrs[MAX_MISS_UNIQUE];
 int      g_miss_unique_count = 0;
+
+#ifdef RECOMP_STACK_TRACKING
+extern const char *g_recomp_stack[];
+extern int         g_recomp_stack_top;
+extern const char *g_last_recomp_func;
+#endif
 
 void nes_log_dispatch_miss(uint16_t addr) {
     /* Let the game handle unmapped addresses (e.g. SRAM code remapping) */
@@ -653,6 +664,22 @@ void nes_log_dispatch_miss(uint16_t addr) {
     g_miss_count_any++;
     g_miss_last_addr  = addr;
     g_miss_last_frame = g_frame_count;
+    g_miss_last_bank  = g_current_bank;
+    /* Capture caller context: top of recomp call stack + 6502 stack snapshot */
+#ifdef RECOMP_STACK_TRACKING
+    const char *c0 = (g_recomp_stack_top > 0) ? g_recomp_stack[g_recomp_stack_top - 1] : g_last_recomp_func;
+    const char *c1 = (g_recomp_stack_top > 1) ? g_recomp_stack[g_recomp_stack_top - 2] : "(none)";
+    strncpy(g_miss_last_caller, c0 ? c0 : "(none)", sizeof(g_miss_last_caller)-1);
+    g_miss_last_caller[sizeof(g_miss_last_caller)-1] = '\0';
+    strncpy(g_miss_last_stack2, c1 ? c1 : "(none)", sizeof(g_miss_last_stack2)-1);
+    g_miss_last_stack2[sizeof(g_miss_last_stack2)-1] = '\0';
+#endif
+    g_miss_last_sp = g_cpu.S;
+    /* Snapshot 16 bytes above SP (the most recent pushes) */
+    for (int i = 0; i < 16; i++) {
+        uint8_t s = (uint8_t)(g_cpu.S + 1 + i);
+        g_miss_last_stack_bytes[i] = g_ram[0x100 + s];
+    }
     /* Add to unique list if not already present; log new misses to file */
     int found = 0;
     for (int i = 0; i < g_miss_unique_count; i++)
