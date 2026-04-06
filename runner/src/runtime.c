@@ -57,6 +57,7 @@ static uint8_t g_ppudata_buf   = 0; /* PPUDATA read buffer (NES read-delay) */
 static uint16_t s_ppu_t      = 0;
 static uint8_t  s_ppu_fine_x = 0;
 static uint16_t s_ppu_v_at_2006 = 0;  /* v captured at $2006 second write, before $2007 increments */
+static int      s_scroll_2005_complete = 0; /* 1 if $2005 pair completed after last $2006 pair */
 
 uint64_t g_frame_count = 0;
 
@@ -230,6 +231,11 @@ int runtime_get_vblank_depth(void) {
     return s_vblank_depth;
 }
 
+void runtime_reset_vblank_depth(void) {
+    s_vblank_depth = 0;
+    s_vblank_pending = 0;
+}
+
 uint8_t nes_read(uint16_t addr) {
     bus_tick();
     if (addr <= 0x1FFF) return g_ram[addr & 0x07FF];
@@ -371,6 +377,7 @@ void ppu_write_reg(uint16_t reg, uint8_t val) {
                           ((uint16_t)(val & 7) << 12) |
                           ((uint16_t)(val >> 3) << 5);
                 g_ppuscroll_y = val;
+                s_scroll_2005_complete = 1;
             }
             g_ppuaddr_latch ^= 1;
             break;
@@ -399,6 +406,7 @@ void ppu_write_reg(uint16_t reg, uint8_t val) {
                 s_ppu_t = (s_ppu_t & 0xFF00) | val;
                 g_ppuaddr = s_ppu_t & 0x3FFF; /* v = t (14-bit VRAM address) */
                 s_ppu_v_at_2006 = g_ppuaddr;  /* capture v before $2007 increments */
+                s_scroll_2005_complete = 0;    /* $2006 pair completed — t now holds VRAM addr */
             }
             g_ppuaddr_latch ^= 1;
             g_ppudata_buf = 0; /* writing $2006 resets the read buffer */
@@ -685,8 +693,7 @@ void runtime_sync_scroll_from_t(void) {
      * NOTE: Do NOT sync g_ppuctrl bits 0-1 from t here.  Games that write
      * $2000 (PPUCTRL) after $2006 expect bits 0-1 to come from $2000, but
      * $2006 writes may have modified t bits 10-11.  The game's $2000 write
-     * already sets both g_ppuctrl AND t bits 10-11, so they stay in sync
-     * naturally for the NT-select case. */
+     * already sets both g_ppuctrl AND t bits 10-11, so they stay in sync. */
     g_ppuscroll_x = (uint8_t)(((s_ppu_t & 0x1F) << 3) | (s_ppu_fine_x & 7));
     g_ppuscroll_y = (uint8_t)((((s_ppu_t >> 5) & 0x1F) << 3) | ((s_ppu_t >> 12) & 7));
 
@@ -702,9 +709,10 @@ void runtime_sync_scroll_from_t(void) {
  * So after an IRQ handler sets scroll via $2006+$2005, the rendering scroll
  * comes from v ($2006), while t ($2005) is for the NEXT frame. */
 void runtime_sync_scroll_from_v(void) {
-    uint16_t v = s_ppu_v_at_2006;
+    uint16_t v = s_ppu_v_at_2006; /* use v as set by last $2006, not incremented by $2007 */
     g_ppuscroll_x = (uint8_t)(((v & 0x1F) << 3) | (s_ppu_fine_x & 7));
     g_ppuscroll_y = (uint8_t)((((v >> 5) & 0x1F) << 3) | ((v >> 12) & 7));
+    g_ppuctrl = (g_ppuctrl & 0xFC) | ((v >> 10) & 3);
 }
 
 static uint8_t s_frame_start_sx = 0, s_frame_start_sy = 0;
@@ -734,6 +742,7 @@ void runtime_get_last_sync(uint8_t *sx, uint8_t *sy, uint16_t *t, uint64_t *fram
 
 uint16_t runtime_get_ppu_t(void) { return s_ppu_t; }
 uint8_t  runtime_get_ppu_fine_x(void) { return s_ppu_fine_x; }
+int      runtime_scroll_from_t_valid(void) { return s_scroll_2005_complete; }
 
 /* IRQ scanline recording for debug */
 #define IRQ_SCANLINE_LOG_SIZE 8

@@ -53,3 +53,35 @@ int coroutine_is_active(void);
 
 /* Returns 1 if the given channel has a saved context (can be resumed). */
 int coroutine_has_context(int channel);
+
+/* Debug counters for coroutine diagnostics. */
+void coroutine_get_debug_counters(int *yields, int *resumes, int *starts,
+                                   uint8_t *yield_sp, uint8_t *resume_sp);
+
+/* Scheduler event trace ring buffer */
+#define SCHED_TRACE_SIZE 64
+
+typedef enum {
+    SCHED_EVT_START  = 0,
+    SCHED_EVT_RESUME = 1,
+    SCHED_EVT_YIELD  = 2
+} SchedEventType;
+
+typedef struct {
+    uint64_t frame;
+    int      channel;
+    uint16_t addr;       /* start/resume address, or 0 for yield */
+    uint8_t  sp_before;  /* g_cpu.S before the event */
+    uint8_t  event_type; /* SchedEventType */
+} SchedTraceEntry;
+
+void coroutine_get_sched_trace(int *out_count, int *out_idx);
+const SchedTraceEntry *coroutine_get_sched_trace_buf(void);
+
+/* Get current channel being dispatched (-1 if none) */
+int coroutine_get_current_channel(void);
+
+/* Check if a coroutine requested scheduler restart (JMP $FEAA from game code).
+ * Returns 1 and cleans up all fibers if restart was requested, 0 otherwise.
+ * The scheduler loop should call this after START/RESUME returns. */
+int coroutine_restart_requested(void);

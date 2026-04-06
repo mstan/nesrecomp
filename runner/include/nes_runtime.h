@@ -87,6 +87,7 @@ void maybe_trigger_vblank(int cycles);
 void maybe_fire_pending_vblank(void);
 void runtime_set_vblank_firing(int active);
 int  runtime_get_vblank_depth(void);
+void runtime_reset_vblank_depth(void);
 
 /* PPU registers */
 extern uint8_t g_ppuctrl;
