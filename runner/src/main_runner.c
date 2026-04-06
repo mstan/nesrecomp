@@ -326,6 +326,12 @@ static void save_screenshot(void) {
     printf("[Shot] Saved %s\n", path);
 }
 
+/* Save the current native framebuffer to a given path as PNG.
+ * Callable from game hooks (e.g. TCP screenshot command). */
+void runner_screenshot(const char *path) {
+    runner_save_argb_png(path, s_framebuf, 256, 240);
+}
+
 /* ---- Debug trace log (C:/temp/debug_trace.txt) ---- */
 static FILE *s_debug_log = NULL;
 

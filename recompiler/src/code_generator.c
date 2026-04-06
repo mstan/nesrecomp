@@ -646,12 +646,19 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
             if (abs16 >= 0xC000) {
                 fprintf(f, "func_%04X();\n", abs16);
             } else if (abs16 >= 0x8000) {
-                if (bank == fixed_bank || sram_sourced) {
+                /* MMC3 (mapper 4): 8KB banks at $8000-$9FFF and $A000-$BFFF
+                 * are switched independently.  A JSR from one 8KB half to
+                 * the other within the same 16KB bank must use runtime
+                 * dispatch because the target 8KB bank is unknown at
+                 * compile time. */
+                int cross_8kb = (rom->mapper == 4 &&
+                                 pc >= 0x8000 && pc < 0xC000 &&
+                                 (pc < 0xA000) != (abs16 < 0xA000));
+                if (bank == fixed_bank || sram_sourced || cross_8kb) {
                     /* Cross-bank call from fixed bank, OR call from SRAM-sourced
-                     * function: bank is determined at runtime by the mapper, so
-                     * dispatch via call_by_address.  SRAM functions run from RAM
-                     * and bank-switch during execution, so JSR targets in the
-                     * switchable bank range must use dynamic dispatch. */
+                     * function, OR MMC3 cross-8KB-boundary call: bank is
+                     * determined at runtime by the mapper, so dispatch via
+                     * call_by_address. */
                     if (cfg->push_all_jsr)
                         fprintf(f, "if (!call_by_address(0x%04X)) g_cpu.S += 2;\n", abs16);
                     else
@@ -751,7 +758,11 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                      * a call to the canonical merged function. This is safe because
                      * the merged function's internal loop-back is a goto, and its
                      * final RTS properly pops the caller's return address. */
-                    if (bank == fixed_bank || sram_sourced) {
+                    /* MMC3 cross-8KB check (same as JSR path above) */
+                    int jmp_cross_8kb = (rom->mapper == 4 &&
+                                         pc >= 0x8000 && pc < 0xC000 &&
+                                         (pc < 0xA000) != (abs16 < 0xA000));
+                    if (bank == fixed_bank || sram_sourced || jmp_cross_8kb) {
                         /* push_jmp check for cross-bank JMP via dispatch */
                         int need_jmp_push = 0;
                         for (int ji = 0; ji < cfg->push_jmp_count; ji++) {
@@ -830,7 +841,7 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
              * PHAs at pc-12, pc-9, pc-5, pc-1.  Continuation = pc+1.
              * The 2 cont bytes must be cleaned off the stack unconditionally
              * (target may have internal PHA/PLA imbalance — can't be conditional). */
-            if (pc >= 0x800D &&
+            if (pc >= 0x800D && (pc - 12) >= func_base &&
                 rom_read(rom, bank, pc-1)  == 0x48 &&
                 rom_read(rom, bank, pc-5)  == 0x48 &&
                 rom_read(rom, bank, pc-9)  == 0x48 &&
@@ -843,7 +854,7 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
              * misses this because the PHAs are not at fixed offsets (computation
              * breaks the pc-9/pc-12 spacing).  After calling the inner handler,
              * we must also call the static outer continuation. */
-            } else if (pc >= 0x8001 && rom_read(rom, bank, pc - 1) == 0x48 /* PHA */) {
+            } else if (pc >= 0x8001 && (pc - 1) >= func_base && rom_read(rom, bank, pc - 1) == 0x48 /* PHA */) {
                 /* Check for outer continuation: scan backwards for LDA #hi/PHA/LDA #lo/PHA.
                  * Works both when the pattern is at func_base (original case) and when it
                  * starts at a branch-target block entry within the function (e.g., $BAD9
@@ -854,6 +865,7 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                 for (int _back = 6; _back <= 128; _back++) {
                     if (pc < (uint16_t)(0x8000 + _back + 5)) break;
                     uint16_t _probe = (uint16_t)(pc - _back);
+                    if (_probe < func_base) break;  /* don't scan into preceding function */
                     if (rom_read(rom, bank, _probe)   == 0xA9 /* LDA #imm */ &&
                         rom_read(rom, bank, _probe+2) == 0x48 /* PHA */ &&
                         rom_read(rom, bank, _probe+3) == 0xA9 /* LDA #imm */ &&
@@ -1456,11 +1468,11 @@ static void emit_dispatch(FILE *f, const FunctionList *funcs, const NESRom *rom,
         "int call_by_address(uint16_t addr) {\n"
     );
 
-    /* MMC3 (mapper 4): 8KB bank remapping for dispatch.
+    /* MMC3 (mapper 4): 8KB address remapping for dispatch.
      * The recompiler generates code at 16KB offsets ($8000 or $A000), but
-     * MMC3 swaps 8KB banks independently. When R6 is odd, the $8000-$9FFF
-     * range contains the upper 8KB of a 16KB bank (recompiler offset $A000).
-     * When R7 is even, $A000-$BFFF contains the lower 8KB ($8000 offset).
+     * MMC3 swaps 8KB banks independently via R6 ($8000-$9FFF) and R7
+     * ($A000-$BFFF). When R6 is odd, $8000-$9FFF contains the upper 8KB
+     * of a 16KB bank — the recompiler generated this at $A000 offset.
      * Remap the address so the dispatch finds the right function. */
     if (rom->mapper == 4) {
         fprintf(f,

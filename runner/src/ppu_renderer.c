@@ -225,19 +225,21 @@ void ppu_render_frame(uint32_t *framebuf) {
             split_y = 240;
         }
 
-        /* MMC3 (mapper 4) only: derive scroll from PPU internal t register.
-         * On the real NES, $2005 and $2006 both write to the shared t register,
-         * so $2006 VRAM address writes affect scroll.  For MMC3 games with
-         * mid-frame IRQ scroll splits, the t-based scroll is essential.
-         * For simpler mappers (NROM, MMC1), $2005 writes to g_ppuscroll_x/y
-         * directly are sufficient and the t-based sync would corrupt scroll
-         * with stale $2006 VRAM addresses. */
-        {
-            extern int mapper_get_type(void);
-            if (mapper_get_type() == 4) {
-                extern uint16_t runtime_get_ppu_t(void);
-                runtime_sync_scroll_from_t();
-            }
+        /* Derive scroll from PPU internal t register.
+         * On the real NES, the PPU copies t→v at the start of rendering.
+         * $2005 and $2006 both write to t, so $2006 VRAM address writes
+         * can affect scroll.
+         *
+         * However, if $2006 was the LAST complete write pair (game did VRAM
+         * access after setting scroll), t is contaminated with a VRAM address.
+         * In that case, keep the direct g_ppuscroll_x/y values from $2005.
+         * Only sync scroll from t when $2005 completed after the last $2006. */
+        extern uint16_t runtime_get_ppu_t(void);
+        extern void runtime_set_ppuaddr(uint16_t addr);
+        extern int runtime_scroll_from_t_valid(void);
+        runtime_set_ppuaddr(runtime_get_ppu_t() & 0x3FFF);  /* v = t (always, for VRAM addr) */
+        if (runtime_scroll_from_t_valid()) {
+            runtime_sync_scroll_from_t();
         }
 
         /* Capture frame-start scroll for debug queries */

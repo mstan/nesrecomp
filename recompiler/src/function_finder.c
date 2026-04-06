@@ -438,6 +438,17 @@ static int walk_function(const NESRom *rom, FunctionList *list,
                     add_function(list, target, effective_bank);
                     if (effective_bank != switchable_bank)
                         s_regprop_targeted_adds++;
+                    /* MMC3: cross-8KB boundary — also add the remapped target.
+                     * When code at $A000+ calls $8xxx, the $8xxx range may be
+                     * from a different 8KB bank at runtime. The remapped address
+                     * ($8xxx + $2000 = $Axxx) represents this target in the
+                     * recompiler's view of the same 16KB bank. */
+                    if (rom->mapper == 4 && target >= 0x8000 && target < 0xA000 &&
+                        pc >= 0xA000 && pc < 0xC000)
+                        add_function(list, target + 0x2000, effective_bank);
+                    else if (rom->mapper == 4 && target >= 0xA000 && target < 0xC000 &&
+                             pc >= 0x8000 && pc < 0xA000)
+                        add_function(list, target - 0x2000, effective_bank);
                 } else {
                     /* Fixed bank calling switchable region: bank unknown statically.
                      * Add for ALL switchable banks so each gets a correct body.
@@ -467,6 +478,13 @@ static int walk_function(const NESRom *rom, FunctionList *list,
                     add_function(list, target, effective_bank);
                     if (effective_bank != switchable_bank)
                         s_regprop_targeted_adds++;
+                    /* MMC3 cross-8KB mirror (same as JSR path above) */
+                    if (rom->mapper == 4 && target >= 0x8000 && target < 0xA000 &&
+                        pc >= 0xA000 && pc < 0xC000)
+                        add_function(list, target + 0x2000, effective_bank);
+                    else if (rom->mapper == 4 && target >= 0xA000 && target < 0xC000 &&
+                             pc >= 0x8000 && pc < 0xA000)
+                        add_function(list, target - 0x2000, effective_bank);
                 } else {
                     for (int _b = 0; _b < fixed_bank; _b++)
                         add_function(list, target, _b);

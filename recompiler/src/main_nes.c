@@ -1,6 +1,6 @@
 /*
  * main_nes.c — NESRecomp entry point
- * Usage: NESRecomp.exe <rom.nes> [--game <path/to/game.cfg>]
+ * Usage: NESRecomp.exe <rom.nes> [--game <path/to/game.toml>]
  * Output: generated/<prefix>_full.c + generated/<prefix>_dispatch.c
  */
 #include <stdio.h>
@@ -14,7 +14,7 @@
 
 int main(int argc, char *argv[]) {
     if (argc < 2) {
-        fprintf(stderr, "Usage: NESRecomp <rom.nes> [--game <path/to/game.cfg>]\n");
+        fprintf(stderr, "Usage: NESRecomp <rom.nes> [--game <path/to/game.toml>]\n");
         return 1;
     }
 
@@ -25,14 +25,10 @@ int main(int argc, char *argv[]) {
         if (strcmp(argv[i], "--game") == 0 && i+1 < argc) game_path = argv[++i];
     }
 
-    /* Auto-detect game.toml / game.cfg in current directory if not specified */
+    /* Auto-detect game.toml in current directory if not specified */
     if (!game_path) {
         FILE *f = fopen("game.toml", "r");
         if (f) { fclose(f); game_path = "game.toml"; }
-    }
-    if (!game_path) {
-        FILE *f = fopen("game.cfg", "r");
-        if (f) { fclose(f); game_path = "game.cfg"; }
     }
 
     printf("[NESRecomp] Loading ROM: %s\n", rom_path);

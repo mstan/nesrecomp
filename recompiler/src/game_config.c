@@ -1,13 +1,9 @@
 /*
- * game_config.c — game.cfg file parser
+ * game_config.c — TOML-only game config loader
  *
- * Format (# comments, blank lines ignored):
- *   output_prefix    <name>
- *   trampoline       <hex_addr> <inline_bytes> <hex_bs_fn_addr>
- *   known_table      <bank> <hex_start> <hex_end>
- *   split_table      <bank> <hex_lo> <hex_hi> <count> <stride>
- *   extra_func       <bank> <hex_addr>
- *   inline_dispatch  <hex_addr>
+ * The old .cfg text format has been removed.  All game projects must use
+ * game.toml.  If a .cfg path is passed, the loader prints a migration
+ * message and returns failure.
  */
 #include "game_config.h"
 #include "toml.h"
@@ -19,220 +15,7 @@ void game_config_init_empty(GameConfig *cfg) {
     memset(cfg, 0, sizeof(*cfg));
 }
 
-static bool game_config_load_cfg(GameConfig *cfg, const char *path) {
-    game_config_init_empty(cfg);
-
-    FILE *f = fopen(path, "r");
-    if (!f) return false;
-
-    /* Derive annotations path: same directory as game.cfg, file "annotations.csv" */
-    {
-        const char *slash = NULL;
-        const char *p = path;
-        while (*p) {
-            if (*p == '/' || *p == '\\') slash = p;
-            p++;
-        }
-        if (slash) {
-            size_t dir_len = (size_t)(slash - path) + 1;
-            if (dir_len + 20 < sizeof(cfg->annotations_path)) {
-                memcpy(cfg->annotations_path, path, dir_len);
-                strcpy(cfg->annotations_path + dir_len, "annotations.csv");
-            }
-        } else {
-            strcpy(cfg->annotations_path, "annotations.csv");
-        }
-    }
-
-    char line[512];
-    int line_no = 0;
-    while (fgets(line, sizeof(line), f)) {
-        line_no++;
-
-        /* Strip comment */
-        char *hash = strchr(line, '#');
-        if (hash) *hash = '\0';
-
-        /* Trim leading whitespace */
-        char *p = line;
-        while (*p == ' ' || *p == '\t') p++;
-        if (*p == '\0' || *p == '\n' || *p == '\r') continue;
-
-        char key[64];
-        if (sscanf(p, "%63s", key) != 1) continue;
-        char *rest = p + strlen(key);
-        while (*rest == ' ' || *rest == '\t') rest++;
-
-        if (strcmp(key, "output_prefix") == 0) {
-            sscanf(rest, "%63s", cfg->output_prefix);
-
-        } else if (strcmp(key, "trampoline") == 0) {
-            unsigned addr, bs_fn, bank_save = 0x100;
-            int inline_bytes, adj = 1;
-            char breg = 'X';
-            int n = sscanf(rest, "%x %d %x %d %c %x",
-                           &addr, &inline_bytes, &bs_fn, &adj, &breg, &bank_save);
-            if (n >= 3 && cfg->trampoline_count < GAME_CFG_MAX_TRAMPOLINES) {
-                int i = cfg->trampoline_count++;
-                cfg->trampolines[i].addr           = (uint16_t)addr;
-                cfg->trampolines[i].inline_bytes    = inline_bytes;
-                cfg->trampolines[i].bs_fn_addr      = (uint16_t)bs_fn;
-                cfg->trampolines[i].addr_adjust     = adj;
-                cfg->trampolines[i].bank_reg        = (breg == 'A' || breg == 'a') ? 'A' : 'X';
-                cfg->trampolines[i].bank_save_addr  = (uint16_t)bank_save;
-            }
-
-        } else if (strcmp(key, "known_table") == 0) {
-            int bank; unsigned start, end;
-            if (sscanf(rest, "%d %x %x", &bank, &start, &end) == 3 &&
-                cfg->known_table_count < GAME_CFG_MAX_KNOWN_TABLES) {
-                int i = cfg->known_table_count++;
-                cfg->known_tables[i].bank  = bank;
-                cfg->known_tables[i].start = (uint16_t)start;
-                cfg->known_tables[i].end   = (uint16_t)end;
-            }
-
-        } else if (strcmp(key, "split_table") == 0) {
-            int bank, count, stride; unsigned lo, hi;
-            if (sscanf(rest, "%d %x %x %d %d", &bank, &lo, &hi, &count, &stride) == 5 &&
-                cfg->known_split_table_count < GAME_CFG_MAX_SPLIT_TABLES) {
-                int i = cfg->known_split_table_count++;
-                cfg->known_split_tables[i].bank      = bank;
-                cfg->known_split_tables[i].lo_start  = (uint16_t)lo;
-                cfg->known_split_tables[i].hi_start  = (uint16_t)hi;
-                cfg->known_split_tables[i].count     = count;
-                cfg->known_split_tables[i].stride    = stride;
-            }
-
-        } else if (strcmp(key, "extra_func") == 0) {
-            int bank; unsigned addr;
-            if (sscanf(rest, "%d %x", &bank, &addr) == 2 &&
-                cfg->extra_func_count < GAME_CFG_MAX_EXTRA_FUNCS) {
-                int i = cfg->extra_func_count++;
-                cfg->extra_funcs[i].addr = (uint16_t)addr;
-                cfg->extra_funcs[i].bank = bank;
-            }
-
-        } else if (strcmp(key, "extra_label") == 0) {
-            int bank; unsigned addr;
-            if (sscanf(rest, "%d %x", &bank, &addr) == 2 &&
-                cfg->extra_label_count < GAME_CFG_MAX_EXTRA_LABELS) {
-                int i = cfg->extra_label_count++;
-                cfg->extra_labels[i].addr = (uint16_t)addr;
-                cfg->extra_labels[i].bank = bank;
-            }
-
-        } else if (strcmp(key, "inline_dispatch") == 0) {
-            unsigned addr;
-            if (sscanf(rest, "%x", &addr) == 1 &&
-                cfg->inline_dispatch_count < GAME_CFG_MAX_INLINE_DISPATCHES) {
-                int i = cfg->inline_dispatch_count++;
-                cfg->inline_dispatches[i].addr = (uint16_t)addr;
-            }
-
-        } else if (strcmp(key, "nop_jsr") == 0) {
-            unsigned addr;
-            if (sscanf(rest, "%x", &addr) == 1 &&
-                cfg->nop_jsr_count < GAME_CFG_MAX_NOP_JSRS) {
-                cfg->nop_jsrs[cfg->nop_jsr_count++] = (uint16_t)addr;
-            }
-
-        } else if (strcmp(key, "push_jsr") == 0) {
-            unsigned addr;
-            if (sscanf(rest, "%x", &addr) == 1 &&
-                cfg->push_jsr_count < GAME_CFG_MAX_NOP_JSRS) {
-                cfg->push_jsrs[cfg->push_jsr_count++] = (uint16_t)addr;
-            }
-
-        } else if (strcmp(key, "inline_pointer") == 0) {
-            unsigned addr, zp_lo, zp_hi;
-            char extra[16] = {0};
-            if (sscanf(rest, "%x %x %x %15s", &addr, &zp_lo, &zp_hi, extra) >= 3 &&
-                cfg->inline_pointer_count < GAME_CFG_MAX_INLINE_POINTERS) {
-                int i = cfg->inline_pointer_count++;
-                cfg->inline_pointers[i].addr  = (uint16_t)addr;
-                cfg->inline_pointers[i].zp_lo = (uint8_t)zp_lo;
-                cfg->inline_pointers[i].zp_hi = (uint8_t)zp_hi;
-                cfg->inline_pointers[i].call  = (strcmp(extra, "call") == 0) ? 1 : 0;
-            }
-
-        } else if (strcmp(key, "ram_read_hook") == 0) {
-            unsigned addr;
-            if (sscanf(rest, "%x", &addr) == 1 &&
-                cfg->ram_read_hook_count < GAME_CFG_MAX_RAM_READ_HOOKS) {
-                int i = cfg->ram_read_hook_count++;
-                cfg->ram_read_hooks[i].addr = (uint16_t)addr;
-            }
-
-        } else if (strcmp(key, "sram_map") == 0) {
-            unsigned sram_start, rom_start, size;
-            int bank;
-            if (sscanf(rest, "%x %x %d %x", &sram_start, &rom_start, &bank, &size) == 4 &&
-                cfg->sram_map_count < GAME_CFG_MAX_SRAM_MAPS) {
-                int i = cfg->sram_map_count++;
-                cfg->sram_maps[i].sram_start = (uint16_t)sram_start;
-                cfg->sram_maps[i].rom_start  = (uint16_t)rom_start;
-                cfg->sram_maps[i].bank       = bank;
-                cfg->sram_maps[i].size       = (uint16_t)size;
-            }
-
-        } else if (strcmp(key, "bank_switch") == 0) {
-            unsigned addr;
-            if (sscanf(rest, "%x", &addr) == 1 &&
-                cfg->bank_switch_count < GAME_CFG_MAX_BANK_SWITCHES) {
-                int i = cfg->bank_switch_count++;
-                cfg->bank_switches[i].addr = (uint16_t)addr;
-            }
-
-        } else if (strcmp(key, "data_region") == 0) {
-            int bank; unsigned start, end;
-            if (sscanf(rest, "%d %x %x", &bank, &start, &end) == 3 &&
-                cfg->data_region_count < GAME_CFG_MAX_DATA_REGIONS) {
-                int i = cfg->data_region_count++;
-                cfg->data_regions[i].bank  = bank;
-                cfg->data_regions[i].start = (uint16_t)start;
-                cfg->data_regions[i].end   = (uint16_t)end;
-            }
-
-        } else if (strcmp(key, "merge_func") == 0) {
-            int bank; unsigned a1, a2;
-            if (sscanf(rest, "%d %x %x", &bank, &a1, &a2) == 3 &&
-                cfg->merge_func_count < GAME_CFG_MAX_MERGE_FUNCS) {
-                int i = cfg->merge_func_count++;
-                cfg->merge_funcs[i].bank    = bank;
-                cfg->merge_funcs[i].addr_lo = (uint16_t)(a1 < a2 ? a1 : a2);
-                cfg->merge_funcs[i].addr_hi = (uint16_t)(a1 < a2 ? a2 : a1);
-            }
-
-        } else if (strcmp(key, "stack_bail_func") == 0) {
-            unsigned addr;
-            if (sscanf(rest, "%x", &addr) == 1 &&
-                cfg->stack_bail_func_count < GAME_CFG_MAX_STACK_BAIL_FUNCS) {
-                cfg->stack_bail_funcs[cfg->stack_bail_func_count++] = (uint16_t)addr;
-            }
-
-        } else if (strcmp(key, "push_all_jsr") == 0) {
-            cfg->push_all_jsr = true;
-
-        } else if (strcmp(key, "replace_func") == 0) {
-            int bank; unsigned addr;
-            if (sscanf(rest, "%d %x", &bank, &addr) == 2 &&
-                cfg->replace_func_count < GAME_CFG_MAX_EXTRA_FUNCS) {
-                int i = cfg->replace_func_count++;
-                cfg->replace_funcs[i].bank = bank;
-                cfg->replace_funcs[i].addr = (uint16_t)addr;
-            }
-
-        } else {
-            fprintf(stderr, "[GameConfig] Unknown directive '%s' at line %d\n", key, line_no);
-        }
-    }
-
-    fclose(f);
-    return true;
-}
-
-/* ── TOML format loader ───────────────────────────────────────────────────── */
+/* ── TOML helpers ────────────────────────────────────────────────────────── */
 
 static uint16_t toml_hex(toml_table_t *tbl, const char *key) {
     toml_datum_t d = toml_int_in(tbl, key);
@@ -255,6 +38,8 @@ static const char *toml_string_or(toml_table_t *tbl, const char *key, const char
     if (d.ok) return d.u.s;
     return def;
 }
+
+/* ── TOML loader ─────────────────────────────────────────────────────────── */
 
 static bool game_config_load_toml(GameConfig *cfg, const char *path) {
     game_config_init_empty(cfg);
@@ -375,6 +160,13 @@ static bool game_config_load_toml(GameConfig *cfg, const char *path) {
         if (t) cfg->nop_jsrs[cfg->nop_jsr_count++] = toml_hex(t, "addr");
     }
 
+    /* [[ram_read_hook]] */
+    toml_array_t *rrh = toml_array_in(root, "ram_read_hook");
+    if (rrh) for (int i = 0; i < toml_array_nelem(rrh) && cfg->ram_read_hook_count < GAME_CFG_MAX_RAM_READ_HOOKS; i++) {
+        toml_table_t *t = toml_table_at(rrh, i);
+        if (t) cfg->ram_read_hooks[cfg->ram_read_hook_count++].addr = toml_hex(t, "addr");
+    }
+
     /* [[extra_label]] */
     toml_array_t *elbl = toml_array_in(root, "extra_label");
     if (elbl) for (int i = 0; i < toml_array_nelem(elbl) && cfg->extra_label_count < GAME_CFG_MAX_EXTRA_LABELS; i++) {
@@ -385,7 +177,7 @@ static bool game_config_load_toml(GameConfig *cfg, const char *path) {
         cfg->extra_labels[idx].bank = toml_int_or(t, "bank", -1);
     }
 
-    /* [functions] */
+    /* [functions] — preferred bulk format: fixed = [...], bankN = [...] */
     toml_table_t *funcs = toml_table_in(root, "functions");
     if (funcs) {
         toml_array_t *fixed = toml_array_in(funcs, "fixed");
@@ -402,6 +194,16 @@ static bool game_config_load_toml(GameConfig *cfg, const char *path) {
                 if (d.ok) { int idx = cfg->extra_func_count++; cfg->extra_funcs[idx].addr = (uint16_t)d.u.i; cfg->extra_funcs[idx].bank = b; }
             }
         }
+    }
+
+    /* [[extra_func]] — individual entries: bank + addr */
+    toml_array_t *ef = toml_array_in(root, "extra_func");
+    if (ef) for (int i = 0; i < toml_array_nelem(ef) && cfg->extra_func_count < GAME_CFG_MAX_EXTRA_FUNCS; i++) {
+        toml_table_t *t = toml_table_at(ef, i);
+        if (!t) continue;
+        int idx = cfg->extra_func_count++;
+        cfg->extra_funcs[idx].addr = toml_hex(t, "addr");
+        cfg->extra_funcs[idx].bank = toml_int_or(t, "bank", -1);
     }
 
     /* [[sram_map]] */
@@ -508,7 +310,12 @@ static bool has_extension(const char *path, const char *ext) {
 }
 
 bool game_config_load(GameConfig *cfg, const char *path) {
-    if (has_extension(path, ".toml"))
-        return game_config_load_toml(cfg, path);
-    return game_config_load_cfg(cfg, path);
+    if (has_extension(path, ".cfg")) {
+        fprintf(stderr,
+            "[GameConfig] ERROR: .cfg format is no longer supported.\n"
+            "  Migrate '%s' to game.toml (TOML format).\n"
+            "  See nesrecomp CLAUDE.md for the TOML schema.\n", path);
+        return false;
+    }
+    return game_config_load_toml(cfg, path);
 }

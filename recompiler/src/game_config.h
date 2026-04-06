@@ -1,7 +1,7 @@
 /*
  * game_config.h — Per-game recompiler configuration
  *
- * Loaded from games/<name>/game.cfg at recompile time.
+ * Loaded from game.toml (TOML format only — .cfg is no longer supported).
  * Encapsulates all game-specific addresses that the generic recompiler
  * needs to handle correctly (dispatch tables, bank-switch trampolines, etc.).
  */
@@ -80,7 +80,7 @@ typedef struct {
  * Table entries are 2-byte little-endian absolute addresses.
  * Table ends when a hi byte < 0x80 is found (no valid ROM address).
  *
- * Usage in game.cfg:  inline_dispatch <hex_addr>
+ * Usage in game.toml:  inline_dispatch <hex_addr>
  * Example (SMB):      inline_dispatch 8E04
  */
 typedef struct {
@@ -99,7 +99,7 @@ typedef struct {
  * absolute addressing, wrap the value through game_ram_read_hook(pc, addr, val).
  * This lets game-specific extras.c adjust the returned value per-call-site.
  *
- * Usage in game.cfg:  ram_read_hook <hex_addr>
+ * Usage in game.toml:  ram_read_hook <hex_addr>
  * Example (SMB):      ram_read_hook 071D
  */
 typedef struct {
@@ -110,7 +110,7 @@ typedef struct {
  * Bank-switch routine: a JSR target that switches the mapper's switchable
  * bank to the value currently in the A register.
  *
- * Usage in game.cfg:  bank_switch <hex_addr>
+ * Usage in game.toml:  bank_switch <hex_addr>
  * Example (Zelda):    bank_switch FFAC
  */
 typedef struct {
@@ -123,7 +123,7 @@ typedef struct {
  * it translates to the corresponding ROM address and adds it as a function.
  * The ROM entry point is also seeded so internal calls get walked.
  *
- * Usage in game.cfg:  sram_map <sram_start> <rom_start> <bank> <size>
+ * Usage in game.toml:  sram_map <sram_start> <rom_start> <bank> <size>
  * Example (Zelda):    sram_map 6C90 A500 1 1370
  */
 typedef struct {
@@ -138,7 +138,7 @@ typedef struct {
  * The pointer scanner will not scan these bytes for function pointers,
  * and the function walker will not try to walk them as code.
  *
- * Usage in game.cfg:  data_region <bank> <hex_start> <hex_end>
+ * Usage in game.toml:  data_region <bank> <hex_start> <hex_end>
  * Example:            data_region 0 A200 A800
  */
 typedef struct {
@@ -153,7 +153,7 @@ typedef struct {
  * goto statements instead of function calls. The lower address is the
  * canonical entry; the higher is a secondary label within the same body.
  *
- * Usage in game.cfg:  merge_func <bank> <addr1_hex> <addr2_hex>
+ * Usage in game.toml:  merge_func <bank> <addr1_hex> <addr2_hex>
  * Example:            merge_func 1 A046 A047
  */
 typedef struct {
@@ -257,7 +257,7 @@ typedef struct {
 void game_config_init_empty(GameConfig *cfg);
 
 /*
- * Load config from a game.cfg file.
+ * Load config from a game.toml file (.cfg is no longer supported).
  * Returns true on success; cfg remains empty on failure.
  * game_dir is set to the directory containing the file (for annotations lookup).
  */
