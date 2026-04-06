@@ -1113,16 +1113,16 @@ static void process_command(const char *line)
 
     int id = json_get_int(line, "id", 0);
 
+    /* Try game-specific command handler first (allows overriding built-ins) */
+    if (game_handle_debug_cmd(cmd, id, line))
+        return;
+
     for (const CmdEntry *e = s_commands; e->name; e++) {
         if (strcmp(cmd, e->name) == 0) {
             e->handler(id, line);
             return;
         }
     }
-
-    /* Try game-specific command handler */
-    if (game_handle_debug_cmd(cmd, id, line))
-        return;
 
     send_err(id, "unknown command");
 }

@@ -61,7 +61,7 @@ typedef struct {
     uint8_t  ctrl1_strobe;
 
     /* ---- Game-specific (filled by game_fill_frame_record hook) ---- */
-    uint8_t  game_data[16];
+    uint8_t  game_data[32];
 
     /* ---- Full memory snapshots ---- */
     uint8_t  ram_full[0x0800];      /* 2KB work RAM ($0000-$07FF) */
