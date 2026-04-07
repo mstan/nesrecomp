@@ -264,6 +264,16 @@ void ppu_render_frame(uint32_t *framebuf) {
         int prev_scroll_y = -1;
         int prev_ppuctrl_nt = -1;
 
+        /* Canonical PPU vertical state — used only when scroll_y >= 240
+         * (the "negative Y scroll" trick: writing $2005 with y in 240..255
+         * sets coarse_y to 30 or 31, which on real hardware wraps to 0
+         * within the SAME nametable, not the next one).  The abs_nt_y
+         * linear model above does not honor that wrap rule, but is correct
+         * for normal scroll values; we keep it as the default path so games
+         * that never use negative-Y get bit-for-bit identical behavior. */
+        int v_coarse_y = 0, v_fine_y = 0, v_nt_row = 0;
+        int use_canonical = 0;
+
         for (int sy = 0; sy < 240; sy++) {
             /* Clock MMC3 scanline counter.  When it fires, run the game's
              * IRQ handler so it can swap CHR banks mid-frame (e.g. MM3
@@ -308,20 +318,37 @@ void ppu_render_frame(uint32_t *framebuf) {
             if (abs_nt_y < 0 || scroll_y != prev_scroll_y ||
                 cur_nt_y_bit != prev_ppuctrl_nt) {
                 /* First scanline or scroll changed — set absolute position */
-                abs_nt_y = scroll_y + cur_nt_y_bit;
                 prev_scroll_y = scroll_y;
                 prev_ppuctrl_nt = cur_nt_y_bit;
+                if (scroll_y >= 240) {
+                    /* Negative-Y trick — switch this scroll source to the
+                     * canonical PPU state machine which honors the
+                     * coarse_y 31→0 same-NT wrap rule. */
+                    use_canonical = 1;
+                    v_coarse_y = (scroll_y >> 3) & 0x1F;
+                    v_fine_y   = scroll_y & 0x07;
+                    v_nt_row   = (ppuctrl_row & 0x02) ? 1 : 0;
+                } else {
+                    use_canonical = 0;
+                    abs_nt_y = scroll_y + cur_nt_y_bit;
+                }
             }
 
-            int nt_y = abs_nt_y;
-            if (nt_y >= 480) nt_y -= 480;
-            int tile_y   = nt_y / 8;
-            int tile_row = nt_y % 8;
-
-            /* Increment abs_nt_y for next scanline (PPU auto-increment) */
-            abs_nt_y++;
-            int nt_row   = (tile_y >= 30) ? 1 : 0;
-            int local_ty = tile_y % 30;
+            int nt_row, local_ty, tile_row;
+            if (use_canonical) {
+                nt_row   = v_nt_row;
+                local_ty = v_coarse_y;
+                tile_row = v_fine_y;
+            } else {
+                int nt_y = abs_nt_y;
+                if (nt_y >= 480) nt_y -= 480;
+                int tile_y = nt_y / 8;
+                tile_row = nt_y % 8;
+                /* Increment abs_nt_y for next scanline (PPU auto-increment) */
+                abs_nt_y++;
+                nt_row   = (tile_y >= 30) ? 1 : 0;
+                local_ty = tile_y % 30;
+            }
 
             for (int sx = 0; sx < 256; sx++) {
                 int nt_x      = (origin_x + sx) & 0x1FF;
@@ -354,6 +381,22 @@ void ppu_render_frame(uint32_t *framebuf) {
                 int color_idx = ((g_chr_ram[chr_off] >> bit) & 1) |
                                 (((g_chr_ram[chr_off + 8] >> bit) & 1) << 1);
                 framebuf[sy * 256 + sx] = bg_color(pal_base, color_idx);
+            }
+
+            /* Canonical-mode per-scanline advance (only when active). */
+            if (use_canonical) {
+                v_fine_y++;
+                if (v_fine_y == 8) {
+                    v_fine_y = 0;
+                    if (v_coarse_y == 29) {
+                        v_coarse_y = 0;
+                        v_nt_row ^= 1;
+                    } else if (v_coarse_y == 31) {
+                        v_coarse_y = 0;          /* same-NT wrap, no toggle */
+                    } else {
+                        v_coarse_y = (v_coarse_y + 1) & 0x1F;
+                    }
+                }
             }
         }
     }
