@@ -69,6 +69,18 @@ static int s_input_override = -1;  /* -1 = no override */
 static NESFrameRecord *s_frame_history = NULL;
 static uint64_t        s_history_count = 0;
 
+/* ---- Verify-mode pending state ----
+ * Caller (a game's verify_mode.c) calls debug_server_set_verify_result()
+ * after running the diff for the current frame. record_frame() consumes
+ * these and writes them into the new record at frame end. The deferred
+ * pattern avoids any assumption about whether set_verify_result() runs
+ * before or after the frame's record_frame() in the host loop. */
+static int            s_pending_verify_set        = 0;
+static int            s_pending_verify_pass       = -1;
+static int            s_pending_verify_diff_count = 0;
+static FrameDiffEntry s_pending_verify_diffs[MAX_FRAME_DIFFS];
+static int            s_pending_verify_n_diffs    = 0;
+
 /* ---- Watchpoints ---- */
 #define MAX_WATCHPOINTS 8
 typedef struct {
@@ -1255,8 +1267,24 @@ void debug_server_record_frame(void)
     NESFrameRecord *r = &s_frame_history[idx];
 
     r->frame_number = (uint32_t)g_frame_count;
-    r->verify_pass  = -1;
-    r->diff_count   = 0;
+
+    /* ---- Verify-mode result (set by a game's verify_mode via setter) ---- */
+    if (s_pending_verify_set) {
+        r->verify_pass = s_pending_verify_pass;
+        r->diff_count  = s_pending_verify_diff_count;
+        int n = s_pending_verify_n_diffs;
+        if (n > MAX_FRAME_DIFFS) n = MAX_FRAME_DIFFS;
+        memset(r->diffs, 0, sizeof(r->diffs));
+        for (int i = 0; i < n; i++) r->diffs[i] = s_pending_verify_diffs[i];
+        s_pending_verify_set        = 0;
+        s_pending_verify_pass       = -1;
+        s_pending_verify_diff_count = 0;
+        s_pending_verify_n_diffs    = 0;
+    } else {
+        r->verify_pass = -1;
+        r->diff_count  = 0;
+        memset(r->diffs, 0, sizeof(r->diffs));
+    }
 
     /* ---- CPU state (exhaustive) ---- */
     r->cpu_a = g_cpu.A;
@@ -1533,4 +1561,17 @@ int debug_server_is_connected(void)
 int debug_server_get_input_override(void)
 {
     return s_input_override;
+}
+
+void debug_server_set_verify_result(int passed, int diff_count,
+                                    const FrameDiffEntry *diffs, int n_diffs)
+{
+    s_pending_verify_set        = 1;
+    s_pending_verify_pass       = passed ? 1 : 0;
+    s_pending_verify_diff_count = diff_count;
+    if (n_diffs < 0) n_diffs = 0;
+    if (n_diffs > MAX_FRAME_DIFFS) n_diffs = MAX_FRAME_DIFFS;
+    s_pending_verify_n_diffs = n_diffs;
+    if (diffs && n_diffs > 0)
+        memcpy(s_pending_verify_diffs, diffs, n_diffs * sizeof(FrameDiffEntry));
 }

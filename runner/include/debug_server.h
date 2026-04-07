@@ -139,6 +139,21 @@ int  debug_server_add_follower(uint16_t addr, int break_on_val);
  * -1 if no override is active. */
 int debug_server_get_input_override(void);
 
+/* ---- Verify-mode result reporting ---- */
+
+/* Called from a game's verify_mode after diffing native vs the oracle for
+ * the current frame. The result is stashed in pending state and consumed
+ * by the next debug_server_record_frame() call into that frame's record's
+ * verify_pass / diff_count / diffs[] fields, regardless of which order the
+ * caller invokes set_verify_result and record_frame in.
+ *
+ *   passed:     1 = no diffs, 0 = at least one diff
+ *   diff_count: total number of diverging bytes (may exceed n_diffs)
+ *   diffs:      first n_diffs entries (clipped to MAX_FRAME_DIFFS)
+ *   n_diffs:    length of `diffs` array (0..MAX_FRAME_DIFFS) */
+void debug_server_set_verify_result(int passed, int diff_count,
+                                    const FrameDiffEntry *diffs, int n_diffs);
+
 /* ---- Public send helpers (for game command handlers) ---- */
 
 /* Send a complete JSON line to the connected client. */
