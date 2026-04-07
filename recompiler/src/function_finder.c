@@ -776,13 +776,40 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
             if (b5 != 0xB9 && b5 != 0xBD) continue;
             uint8_t b8  = rom_read(rom, b, pc + 8);
             if (b8 != 0x85) continue;
-            uint8_t b10 = rom_read(rom, b, pc + 10);
-            if (b10 != 0x6C) continue;
             uint8_t z1    = rom_read(rom, b, pc + 4);
             uint8_t z2    = rom_read(rom, b, pc + 9);
-            uint8_t zj_lo = rom_read(rom, b, pc + 11);
-            uint8_t zj_hi = rom_read(rom, b, pc + 12);
             if (z2 != (uint8_t)(z1 + 1)) continue;
+
+            /* Locate the JMP (zp) that consumes the staged pointer.
+             *
+             * Two emission shapes appear:
+             *   (a) STA z2 immediately followed by JMP (zp)
+             *           ... 85 z2  6C z1 00
+             *   (b) STA z2 followed by a PHA/PHA fake-return prologue and
+             *       then JMP (zp). This is the "manual JSR" idiom — the
+             *       called handler RTSes to (high<<8|low)+1, where high/low
+             *       are the two pushed bytes. Bytes:
+             *           ... 85 z2  A9 hi 48  A9 lo 48  6C z1 00
+             *
+             * To stay generic without overfitting MM3, we accept either
+             * shape. The PHA/PHA prologue is recognised by the literal
+             * sequence (LDA #imm; PHA) twice. */
+            uint16_t jmp_off;
+            uint8_t b10 = rom_read(rom, b, pc + 10);
+            if (b10 == 0x6C) {
+                jmp_off = 10;                       /* shape (a) */
+            } else if (b10 == 0xA9 &&
+                       rom_read(rom, b, pc + 12) == 0x48 &&
+                       rom_read(rom, b, pc + 13) == 0xA9 &&
+                       rom_read(rom, b, pc + 15) == 0x48 &&
+                       (uint32_t)pc + 18 <= (uint32_t)scan_end &&
+                       rom_read(rom, b, pc + 16) == 0x6C) {
+                jmp_off = 16;                       /* shape (b) */
+            } else {
+                continue;
+            }
+            uint8_t zj_lo = rom_read(rom, b, pc + jmp_off + 1);
+            uint8_t zj_hi = rom_read(rom, b, pc + jmp_off + 2);
             if (zj_hi != 0 || zj_lo != z1) continue;
             uint16_t lo_tbl = rom_read(rom, b, pc + 1) |
                               ((uint16_t)rom_read(rom, b, pc + 2) << 8);
@@ -792,27 +819,49 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
             int lo_bank = (lo_tbl >= 0xC000) ? fixed_bank : b;
             int hi_bank = (hi_tbl >= 0xC000) ? fixed_bank : b;
             int site_added = 0;
-            for (int i = 0; i < 64; i++) {
+            /* The hard cap bounds runaway scans on accidental matches; the
+             * loop normally stops earlier on validate_code_target. 256 covers
+             * tables indexed by a full byte, which MM3's player-state
+             * dispatcher exercises (entries past index $80 observed). */
+            /* Per-entry validation strategy:
+             *
+             * Each split-table entry is INDEPENDENTLY a pointer; failures at
+             * one index don't imply the table has ended. We therefore skip
+             * past individual failures rather than breaking — but cap on
+             * consecutive failures so we don't run off the end of the table
+             * indefinitely.
+             *
+             * Note: is_data_region is NOT used to gate targets. Auto-generated
+             * data_regions often span the lo/hi tables AND a few bytes past,
+             * which can swallow the first handler (e.g. a "do nothing" RTS
+             * stub immediately following the hi table). Whether the target
+             * byte is code is determined by validate_code_target alone. */
+            int consecutive_fail = 0;
+            const int MAX_CONSEC_FAIL = 16;
+            for (int i = 0; i < 256; i++) {
                 if (lo_tbl + i > 0xFFFF || hi_tbl + i > 0xFFFF) break;
-                /* Do NOT check is_data_region for the lo/hi table positions:
-                 * the tables ARE data, and will typically be declared as
-                 * data_region precisely so they aren't decoded as code. */
                 uint8_t tl = rom_read(rom, lo_bank, (uint16_t)(lo_tbl + i));
                 uint8_t th = rom_read(rom, hi_bank, (uint16_t)(hi_tbl + i));
                 uint16_t target = tl | ((uint16_t)th << 8);
-                if (target < 0x8000 || target > 0xFFFE) break;
+                if (target < 0x8000 || target > 0xFFFE) {
+                    if (++consecutive_fail >= MAX_CONSEC_FAIL) break;
+                    continue;
+                }
                 int tbank = (target >= 0xC000) ? fixed_bank : b;
-                if (is_data_region(cfg, tbank, target)) break;
-                if (!validate_code_target(rom, tbank, target, TABLE_RUN_MIN_VALID)) break;
+                if (!validate_code_target(rom, tbank, target, TABLE_RUN_MIN_VALID)) {
+                    if (++consecutive_fail >= MAX_CONSEC_FAIL) break;
+                    continue;
+                }
+                consecutive_fail = 0;
                 if (!function_list_contains(out, target, tbank)) {
                     add_function(out, target, tbank);
                     site_added++;
                 }
             }
-            printf("[SplitTbl] site=$%04X bank=%d lo=$%04X hi=$%04X +%d\n",
-                   pc, b, lo_tbl, hi_tbl, site_added);
+            printf("[SplitTbl] site=$%04X bank=%d lo=$%04X hi=$%04X jmp_off=%u +%d\n",
+                   pc, b, lo_tbl, hi_tbl, (unsigned)jmp_off, site_added);
             split_sites++;
-            pc += 12; /* skip past the matched pattern */
+            pc += jmp_off + 2; /* skip past the matched pattern */
         }
     }
     /* BFS for split-table candidates */
