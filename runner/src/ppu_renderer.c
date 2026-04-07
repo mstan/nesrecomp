@@ -12,6 +12,9 @@
 /* PNG save wrapper — implemented in main_runner.c */
 extern void save_png(const char *path, int w, int h, const void *rgb, int stride);
 
+/* Debug toggle — when set, suppress MMC3 IRQ firing during rendering. */
+int g_disable_render_irq = 0;
+
 /* NES system palette — 64 colors as ARGB8888 */
 static const uint32_t NES_PALETTE[64] = {
     0xFF545454,0xFF001E74,0xFF081090,0xFF300088,0xFF440064,0xFF5C0030,0xFF540400,0xFF3C1800,
@@ -207,6 +210,16 @@ void ppu_render_frame(uint32_t *framebuf) {
     if (!(g_ppumask & 0x08)) goto render_sprites;
 
     {
+        /* Frame-start sync of v from t — see 81b8a47 commit message for rationale */
+        runtime_set_ppuaddr(runtime_get_ppu_t() & 0x3FFF);
+        if (runtime_scroll_from_t_valid()) {
+            runtime_sync_scroll_from_t();
+        }
+        {
+            extern void runtime_record_frame_start_scroll(void);
+            runtime_record_frame_start_scroll();
+        }
+
         /* Split-screen: rows 0..split_y-1 use HUD scroll (captured at sprite-0 hit);
          * rows split_y..239 use the post-split game-area scroll.
          * When no split occurred this frame, all rows use current scroll. */
@@ -265,11 +278,15 @@ void ppu_render_frame(uint32_t *framebuf) {
         int v_last_scroll_y = -1;
         int v_last_ppuctrl_nt = -1;
 
+        /* Incremental absolute nametable Y — models real PPU v register
+         * auto-increment so MMC3 IRQ scroll splits don't double-count. */
+        int abs_nt_y = -1;
+
         for (int sy = 0; sy < 240; sy++) {
             /* Clock MMC3 scanline counter.  When it fires, run the game's
              * IRQ handler so it can swap CHR banks mid-frame (e.g. MM3
              * status bar vs. playfield use different tile sets). */
-            if (mapper_clock_scanline()) {
+            if (mapper_clock_scanline() && !g_disable_render_irq) {
                 /* Push PCH, PCL, P — same convention as NMI so RTI can pop them */
                 uint8_t p_irq = (uint8_t)((g_cpu.N<<7)|(g_cpu.V<<6)|(1<<5)|
                                            (g_cpu.D<<3)|(g_cpu.I<<2)|(g_cpu.Z<<1)|g_cpu.C);
@@ -314,6 +331,7 @@ void ppu_render_frame(uint32_t *framebuf) {
                 v_last_use_hud    = use_hud;
                 v_last_scroll_y   = scroll_y;
                 v_last_ppuctrl_nt = cur_nt_y_bit;
+                abs_nt_y = scroll_y + (cur_nt_y_bit ? 240 : 0);
             }
 
             int nt_row, local_ty, tile_row;
@@ -322,7 +340,7 @@ void ppu_render_frame(uint32_t *framebuf) {
                 local_ty = v_coarse_y;
                 tile_row = v_fine_y;
             } else {
-                int nt_y = origin_y + sy;
+                int nt_y = abs_nt_y;
                 if (nt_y >= 480) nt_y -= 480;
                 int tile_y = nt_y / 8;
                 tile_row = nt_y % 8;
@@ -377,6 +395,8 @@ void ppu_render_frame(uint32_t *framebuf) {
                         v_coarse_y = (v_coarse_y + 1) & 0x1F;
                     }
                 }
+            } else {
+                abs_nt_y++;
             }
         }
     }
