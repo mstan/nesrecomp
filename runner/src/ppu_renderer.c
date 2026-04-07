@@ -9,8 +9,6 @@
 #include <string.h>
 #include <stdio.h>
 
-int g_disable_render_irq = 0; /* debug: disable IRQ during rendering */
-
 /* PNG save wrapper — implemented in main_runner.c */
 extern void save_png(const char *path, int w, int h, const void *rgb, int stride);
 
@@ -167,14 +165,39 @@ void ppu_render_oam_debug(uint32_t *buf) {
     }
 }
 
+/* Diagnostic counters for the title-screen first-divergence investigation.
+ * Disabled by default — re-enable by setting RECOMP_RENDER_DIAG to 1. */
+#define RECOMP_RENDER_DIAG 0
+#if RECOMP_RENDER_DIAG
+uint32_t g_ppu_render_calls   = 0;
+uint32_t g_ppu_render_skipped = 0;
+uint8_t  g_ppu_render_last_mask = 0;
+uint8_t  g_ppu_render_last_ctrl = 0;
+uint8_t  g_ppu_render_last_pal0 = 0;
+uint8_t  g_ppu_render_last_chr00 = 0;  /* g_chr_ram[0x1000] (BG ptn $00 row 0) */
+#endif
+
 void ppu_render_frame(uint32_t *framebuf) {
+#if RECOMP_RENDER_DIAG
+    g_ppu_render_calls++;
+    g_ppu_render_last_mask  = g_ppumask;
+    g_ppu_render_last_ctrl  = g_ppuctrl;
+    g_ppu_render_last_pal0  = g_ppu_pal[0];
+    g_ppu_render_last_chr00 = g_chr_ram[0x1000];
+#endif
+
     /* When rendering is fully disabled (BG + sprites off), keep the previous
      * frame's content rather than blanking.  On real NES the CRT continues
      * displaying the last rendered scanlines, so brief rendering-off windows
      * during nametable loads (ppumask=$06) are invisible.  Without this,
      * those frames flash the universal background color — visible as HUD
      * flicker on LCD displays. */
-    if (!(g_ppumask & 0x18)) return;
+    if (!(g_ppumask & 0x18)) {
+#if RECOMP_RENDER_DIAG
+        g_ppu_render_skipped++;
+#endif
+        return;
+    }
 
     /* Universal background color */
     uint32_t bg = NES_PALETTE[g_ppu_pal[0] & 0x3F];
@@ -225,80 +248,40 @@ void ppu_render_frame(uint32_t *framebuf) {
             split_y = 240;
         }
 
-        /* Derive scroll from PPU internal t register.
-         * On the real NES, the PPU copies t→v at the start of rendering.
-         * $2005 and $2006 both write to t, so $2006 VRAM address writes
-         * can affect scroll.
-         *
-         * However, if $2006 was the LAST complete write pair (game did VRAM
-         * access after setting scroll), t is contaminated with a VRAM address.
-         * In that case, keep the direct g_ppuscroll_x/y values from $2005.
-         * Only sync scroll from t when $2005 completed after the last $2006. */
-        extern uint16_t runtime_get_ppu_t(void);
-        extern void runtime_set_ppuaddr(uint16_t addr);
-        extern int runtime_scroll_from_t_valid(void);
-        runtime_set_ppuaddr(runtime_get_ppu_t() & 0x3FFF);  /* v = t (always, for VRAM addr) */
-        if (runtime_scroll_from_t_valid()) {
-            runtime_sync_scroll_from_t();
-        }
-
-        /* Capture frame-start scroll for debug queries */
-        {
-            extern void runtime_record_frame_start_scroll(void);
-            runtime_record_frame_start_scroll();
-        }
-
         /* MMC1 mirroring — look up once per frame, not per pixel */
         int mirroring = mapper_get_mirroring();
-
-        /* Track the absolute nametable Y position incrementally.
-         * On the real NES, the PPU's v register auto-increments Y each
-         * scanline.  Mid-frame scroll changes ($2005/$2006 in the IRQ
-         * handler) SET v to an absolute position — they don't add to the
-         * current scanline number.
-         *
-         * prev_scroll_y tracks the last scroll_y we saw.  When it changes
-         * (IRQ fired), we reset abs_nt_y to the new scroll value for the
-         * current scanline. Otherwise we increment abs_nt_y each scanline. */
-        int abs_nt_y = -1;       /* initialized on first scanline */
-        int prev_scroll_y = -1;
-        int prev_ppuctrl_nt = -1;
 
         /* Canonical PPU vertical state — used only when scroll_y >= 240
          * (the "negative Y scroll" trick: writing $2005 with y in 240..255
          * sets coarse_y to 30 or 31, which on real hardware wraps to 0
-         * within the SAME nametable, not the next one).  The abs_nt_y
-         * linear model above does not honor that wrap rule, but is correct
-         * for normal scroll values; we keep it as the default path so games
-         * that never use negative-Y get bit-for-bit identical behavior. */
+         * within the SAME nametable, not the next one).  The default linear
+         * nt_y model below does not honor that wrap rule, but is correct
+         * for normal scroll values; we keep it as the default path so the
+         * frame-by-frame behavior on non-negative-Y screens is unchanged. */
         int v_coarse_y = 0, v_fine_y = 0, v_nt_row = 0;
         int use_canonical = 0;
+        int v_initialized = 0;
+        int v_last_use_hud = -1;
+        int v_last_scroll_y = -1;
+        int v_last_ppuctrl_nt = -1;
 
         for (int sy = 0; sy < 240; sy++) {
             /* Clock MMC3 scanline counter.  When it fires, run the game's
              * IRQ handler so it can swap CHR banks mid-frame (e.g. MM3
              * status bar vs. playfield use different tile sets). */
-            if (mapper_clock_scanline() && !g_cpu.I && !g_disable_render_irq) {
-                /* Push PCH, PCL, P — same convention as NMI so RTI can pop them.
-                 * Real 6502: IRQ pushes P with current I flag, then sets I=1
-                 * to prevent nested IRQs. RTI restores original P (with I=0). */
+            if (mapper_clock_scanline()) {
+                /* Push PCH, PCL, P — same convention as NMI so RTI can pop them */
                 uint8_t p_irq = (uint8_t)((g_cpu.N<<7)|(g_cpu.V<<6)|(1<<5)|
                                            (g_cpu.D<<3)|(g_cpu.I<<2)|(g_cpu.Z<<1)|g_cpu.C);
                 g_ram[0x100+g_cpu.S] = 0x00;    g_cpu.S--;  /* PCH */
                 g_ram[0x100+g_cpu.S] = 0x00;    g_cpu.S--;  /* PCL */
                 g_ram[0x100+g_cpu.S] = p_irq;   g_cpu.S--;  /* P   */
-                g_cpu.I = 1;  /* Mask further IRQs until RTI */
-
                 func_IRQ();
-
-                /* Record IRQ scanline for debug */
-                {
-                    extern void runtime_record_irq_scanline(int scanline);
-                    runtime_record_irq_scanline(sy);
-                }
             }
 
-            /* Choose scroll source for this scanline. */
+            /* Choose scroll source for this scanline.
+             * When split_y==240 (no sprite-0 split), use main game scroll for
+             * all scanlines — the HUD values are stale (0,0) from VBlank reset. */
             int use_hud = (split_y < 240 && sy < split_y);
             uint8_t ppuctrl_row = use_hud ? g_ppuctrl_hud  : g_ppuctrl;
             int     scroll_x    = use_hud ? g_ppuscroll_x_hud : g_ppuscroll_x;
@@ -307,31 +290,30 @@ void ppu_render_frame(uint32_t *framebuf) {
             /* BG pattern table: PPUCTRL bit 4 selects $0000 or $1000 */
             int chr_base = (ppuctrl_row & 0x10) ? 0x1000 : 0x0000;
 
-            /* Horizontal scroll origin (unchanged — sx is pixel-within-scanline) */
+            /* Scroll origin in combined 512×480 nametable space.
+             * PPUCTRL bits 0-1 select the base nametable (add 256 or 240 to scroll). */
             int origin_x = scroll_x + ((ppuctrl_row & 0x01) ? 256 : 0);
+            int origin_y = scroll_y + ((ppuctrl_row & 0x02) ? 240 : 0);
 
-            /* Nametable Y position: track ABSOLUTE position.
-             * When scroll_y changes (IRQ wrote $2005), reset abs_nt_y to the
-             * new scroll value.  Otherwise, increment each scanline.
-             * This models the real PPU's v register auto-increment behavior. */
-            int cur_nt_y_bit = (ppuctrl_row & 0x02) ? 240 : 0;
-            if (abs_nt_y < 0 || scroll_y != prev_scroll_y ||
-                cur_nt_y_bit != prev_ppuctrl_nt) {
-                /* First scanline or scroll changed — set absolute position */
-                prev_scroll_y = scroll_y;
-                prev_ppuctrl_nt = cur_nt_y_bit;
+            /* (Re)initialize the canonical state on first scanline, on
+             * use_hud transition, OR if scroll source changed mid-frame. */
+            int cur_nt_y_bit = (ppuctrl_row & 0x02) ? 1 : 0;
+            if (!v_initialized
+                || use_hud != v_last_use_hud
+                || scroll_y != v_last_scroll_y
+                || cur_nt_y_bit != v_last_ppuctrl_nt) {
                 if (scroll_y >= 240) {
-                    /* Negative-Y trick — switch this scroll source to the
-                     * canonical PPU state machine which honors the
-                     * coarse_y 31→0 same-NT wrap rule. */
                     use_canonical = 1;
                     v_coarse_y = (scroll_y >> 3) & 0x1F;
                     v_fine_y   = scroll_y & 0x07;
-                    v_nt_row   = (ppuctrl_row & 0x02) ? 1 : 0;
+                    v_nt_row   = cur_nt_y_bit;
                 } else {
                     use_canonical = 0;
-                    abs_nt_y = scroll_y + cur_nt_y_bit;
                 }
+                v_initialized     = 1;
+                v_last_use_hud    = use_hud;
+                v_last_scroll_y   = scroll_y;
+                v_last_ppuctrl_nt = cur_nt_y_bit;
             }
 
             int nt_row, local_ty, tile_row;
@@ -340,12 +322,10 @@ void ppu_render_frame(uint32_t *framebuf) {
                 local_ty = v_coarse_y;
                 tile_row = v_fine_y;
             } else {
-                int nt_y = abs_nt_y;
+                int nt_y = origin_y + sy;
                 if (nt_y >= 480) nt_y -= 480;
                 int tile_y = nt_y / 8;
                 tile_row = nt_y % 8;
-                /* Increment abs_nt_y for next scanline (PPU auto-increment) */
-                abs_nt_y++;
                 nt_row   = (tile_y >= 30) ? 1 : 0;
                 local_ty = tile_y % 30;
             }
