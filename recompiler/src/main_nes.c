@@ -15,6 +15,10 @@
 int main(int argc, char *argv[]) {
     if (argc < 2) {
         fprintf(stderr, "Usage: NESRecomp <rom.nes> [--game <path/to/game.toml>]\n");
+        fprintf(stderr, "\n");
+        fprintf(stderr, "  game.toml is REQUIRED. If --game is omitted, NESRecomp\n");
+        fprintf(stderr, "  looks for ./game.toml in the current working directory.\n");
+        fprintf(stderr, "  The TOML must define [game] / output_prefix = \"<kebab-name>\".\n");
         return 1;
     }
 
@@ -25,10 +29,24 @@ int main(int argc, char *argv[]) {
         if (strcmp(argv[i], "--game") == 0 && i+1 < argc) game_path = argv[++i];
     }
 
-    /* Auto-detect game.toml in current directory if not specified */
+    /* Auto-detect ./game.toml if --game wasn't given */
     if (!game_path) {
         FILE *f = fopen("game.toml", "r");
         if (f) { fclose(f); game_path = "game.toml"; }
+    }
+
+    /* game.toml is mandatory — every project must declare its output_prefix
+     * so generated/<prefix>_full.c naming is uniform across all projects.
+     * The previous "rom-filename fallback" silently produced inconsistent
+     * names (e.g. "Yoshi's_Cookie_#_NES_full.c") that drift out of sync
+     * with the project's CMakeLists references. */
+    if (!game_path) {
+        fprintf(stderr, "[NESRecomp] ERROR: no game.toml found.\n");
+        fprintf(stderr, "  Provide one with --game <path>, or place ./game.toml in CWD.\n");
+        fprintf(stderr, "  Minimum contents:\n");
+        fprintf(stderr, "      [game]\n");
+        fprintf(stderr, "      output_prefix = \"<kebab-name>\"\n");
+        return 1;
     }
 
     printf("[NESRecomp] Loading ROM: %s\n", rom_path);
@@ -46,38 +64,26 @@ int main(int argc, char *argv[]) {
 
     /* Load game config */
     GameConfig cfg = {0};
-    if (game_path) {
-        if (game_config_load(&cfg, game_path))
-            printf("[NESRecomp] Game config: %s  (prefix='%s', %d trampolines, "
-                   "%d known tables, %d split tables, %d extra funcs)\n",
-                   game_path, cfg.output_prefix,
-                   cfg.trampoline_count, cfg.known_table_count,
-                   cfg.known_split_table_count, cfg.extra_func_count);
-        else
-            fprintf(stderr, "[NESRecomp] Warning: could not load game config '%s'\n", game_path);
-    } else {
-        game_config_init_empty(&cfg);
-        printf("[NESRecomp] No --game config; using empty dispatch tables\n");
+    if (!game_config_load(&cfg, game_path)) {
+        fprintf(stderr, "[NESRecomp] ERROR: could not load game config '%s'\n", game_path);
+        rom_free(&rom);
+        return 1;
     }
+    printf("[NESRecomp] Game config: %s  (prefix='%s', %d trampolines, "
+           "%d known tables, %d split tables, %d extra funcs)\n",
+           game_path, cfg.output_prefix,
+           cfg.trampoline_count, cfg.known_table_count,
+           cfg.known_split_table_count, cfg.extra_func_count);
 
-    /* Determine output prefix: from config, or derived from ROM basename */
-    char output_prefix[128];
-    if (cfg.output_prefix[0]) {
-        snprintf(output_prefix, sizeof(output_prefix), "%s", cfg.output_prefix);
-    } else {
-        /* Derive from ROM filename without path or extension */
-        const char *base = rom_path;
-        const char *s = rom_path;
-        while (*s) { if (*s == '/' || *s == '\\') base = s+1; s++; }
-        size_t len = strlen(base);
-        const char *dot = strrchr(base, '.');
-        if (dot) len = (size_t)(dot - base);
-        if (len >= sizeof(output_prefix)) len = sizeof(output_prefix) - 1;
-        memcpy(output_prefix, base, len);
-        output_prefix[len] = '\0';
-        /* Replace spaces with underscores */
-        for (char *p = output_prefix; *p; p++) if (*p == ' ') *p = '_';
+    /* output_prefix is mandatory — see comment on game.toml requirement above. */
+    if (!cfg.output_prefix[0]) {
+        fprintf(stderr, "[NESRecomp] ERROR: game.toml '%s' is missing [game]/output_prefix.\n", game_path);
+        fprintf(stderr, "  Add: output_prefix = \"<kebab-name>\"  (e.g. \"yoshis-cookie\")\n");
+        rom_free(&rom);
+        return 1;
     }
+    char output_prefix[128];
+    snprintf(output_prefix, sizeof(output_prefix), "%s", cfg.output_prefix);
 
     /* Load annotations sidecar */
     AnnotationTable at = {0};
