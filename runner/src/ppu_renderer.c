@@ -279,7 +279,9 @@ void ppu_render_frame(uint32_t *framebuf) {
         int v_last_ppuctrl_nt = -1;
 
         /* Incremental absolute nametable Y — models real PPU v register
-         * auto-increment so MMC3 IRQ scroll splits don't double-count. */
+         * auto-increment so MMC3 IRQ scroll splits don't double-count.
+         * Only reset when scroll_y or nt_bit actually changes (IRQ case),
+         * NOT on sprite-0 HUD/game transitions where Y stays the same. */
         int abs_nt_y = -1;
 
         for (int sy = 0; sy < 240; sy++) {
@@ -329,9 +331,17 @@ void ppu_render_frame(uint32_t *framebuf) {
                 }
                 v_initialized     = 1;
                 v_last_use_hud    = use_hud;
+                /* Reset abs_nt_y only when the Y scroll source actually
+                 * changed (IRQ mid-frame split).  A sprite-0 HUD/game
+                 * transition with the same scroll_y must NOT reset — the
+                 * incremental counter is already correct from prior rows. */
+                if (abs_nt_y < 0
+                    || scroll_y != v_last_scroll_y
+                    || cur_nt_y_bit != v_last_ppuctrl_nt) {
+                    abs_nt_y = scroll_y + (cur_nt_y_bit ? 240 : 0);
+                }
                 v_last_scroll_y   = scroll_y;
                 v_last_ppuctrl_nt = cur_nt_y_bit;
-                abs_nt_y = scroll_y + (cur_nt_y_bit ? 240 : 0);
             }
 
             int nt_row, local_ty, tile_row;
