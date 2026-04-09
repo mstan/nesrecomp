@@ -16,7 +16,7 @@ extern void save_png(const char *path, int w, int h, const void *rgb, int stride
 int g_disable_render_irq = 0;
 
 /* NES system palette — 64 colors as ARGB8888 */
-static const uint32_t NES_PALETTE[64] = {
+const uint32_t g_nes_palette[64] = {
     0xFF545454,0xFF001E74,0xFF081090,0xFF300088,0xFF440064,0xFF5C0030,0xFF540400,0xFF3C1800,
     0xFF202A00,0xFF083A00,0xFF004000,0xFF003C00,0xFF00323C,0xFF000000,0xFF000000,0xFF000000,
     0xFF989698,0xFF084CC4,0xFF3032EC,0xFF5C1EE4,0xFF8814B0,0xFFA01464,0xFF982220,0xFF783C00,
@@ -33,10 +33,10 @@ static const uint32_t NES_PALETTE[64] = {
 static uint32_t bg_color(int pal_base, int color_idx) {
     if (color_idx == 0) {
         /* Universal background color */
-        return NES_PALETTE[g_ppu_pal[0] & 0x3F];
+        return g_nes_palette[g_ppu_pal[0] & 0x3F];
     }
     uint8_t nes_color = g_ppu_pal[(pal_base * 4 + color_idx) & 0x1F] & 0x3F;
-    return NES_PALETTE[nes_color];
+    return g_nes_palette[nes_color];
 }
 
 /* Render one 8x8 tile row into framebuf row.
@@ -139,7 +139,7 @@ void ppu_render_oam_debug(uint32_t *buf) {
                     color = off_screen ? 0xFF181818 : 0xFF200020; /* transparent: dark magenta */
                 } else {
                     uint8_t nc = g_ppu_pal[(spr_pal * 4 + ci) & 0x1F] & 0x3F;
-                    color = NES_PALETTE[nc];
+                    color = g_nes_palette[nc];
                     if (off_screen) {
                         /* Dim off-screen sprites to 25% brightness */
                         uint8_t r = ((color >> 16) & 0xFF) >> 2;
@@ -203,7 +203,7 @@ void ppu_render_frame(uint32_t *framebuf) {
     }
 
     /* Universal background color */
-    uint32_t bg = NES_PALETTE[g_ppu_pal[0] & 0x3F];
+    uint32_t bg = g_nes_palette[g_ppu_pal[0] & 0x3F];
     for (int i = 0; i < g_render_width * 240; i++) framebuf[i] = bg;
 
     /* Only render if BG rendering is enabled ($2001 bit 3) */
@@ -460,7 +460,7 @@ render_sprites:
                         color = 0xFFFF00FF; /* transparent = magenta */
                     else {
                         uint8_t nc = g_ppu_pal[(sp*4+ci) & 0x1F] & 0x3F;
-                        color = NES_PALETTE[nc];
+                        color = g_nes_palette[nc];
                     }
                     int px0 = ox + (7 - b) * SCALE;
                     int py0 = oy + tr * SCALE;
@@ -572,7 +572,7 @@ render_sprites:
                 /* Priority=1: sprite behind BG — only draw where BG is transparent */
                 if (priority && framebuf[py * g_render_width + fb_x] != bg) continue;
                 uint8_t nes_color = g_ppu_pal[(spr_pal * 4 + color_idx) & 0x1F] & 0x3F;
-                framebuf[py * g_render_width + fb_x] = NES_PALETTE[nes_color];
+                framebuf[py * g_render_width + fb_x] = g_nes_palette[nes_color];
             }
         }
     }

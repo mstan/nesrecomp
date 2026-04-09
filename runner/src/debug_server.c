@@ -64,6 +64,7 @@ static uint32_t     s_run_to     = 0;   /* target frame for run_to_frame (0=disa
 
 /* ---- Input override ---- */
 static int s_input_override = -1;  /* -1 = no override */
+static int s_input_frames   = 0;   /* frames remaining for auto-clear (0=permanent) */
 
 /* ---- Ring buffer (heap-allocated, ~540MB for full-state snapshots) ---- */
 static NESFrameRecord *s_frame_history = NULL;
@@ -488,6 +489,19 @@ static void handle_set_input(int id, const char *json)
         return;
     }
     s_input_override = (int)hex_to_u32(val_str);
+    s_input_frames = 0;  /* permanent until clear_input */
+    send_ok(id);
+}
+
+/* press: set input for exactly N frames, then auto-clear.
+ * Useful for edge-triggered buttons (Start on title screen). */
+static void handle_press(int id, const char *json)
+{
+    int buttons = json_get_int(json, "buttons", -1);
+    int frames  = json_get_int(json, "frames", 2);  /* default: 2 frames */
+    if (buttons < 0) { send_err(id, "missing buttons"); return; }
+    s_input_override = buttons;
+    s_input_frames   = frames;
     send_ok(id);
 }
 
@@ -495,6 +509,7 @@ static void handle_clear_input(int id, const char *json)
 {
     (void)json;
     s_input_override = -1;
+    s_input_frames   = 0;
     send_ok(id);
 }
 
@@ -1185,6 +1200,7 @@ static const CmdEntry s_commands[] = {
     { "read_frame_ram",    handle_read_frame_ram },
     { "restore_frame",     handle_restore_frame },
     { "set_input",         handle_set_input },
+    { "press",             handle_press },
     { "clear_input",       handle_clear_input },
     { "pause",             handle_pause },
     { "continue",          handle_continue },
@@ -1657,6 +1673,10 @@ int debug_server_is_connected(void)
 
 int debug_server_get_input_override(void)
 {
+    if (s_input_override >= 0 && s_input_frames > 0) {
+        if (--s_input_frames == 0)
+            s_input_override = -1;  /* auto-clear after N frames */
+    }
     return s_input_override;
 }
 

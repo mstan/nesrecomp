@@ -74,6 +74,11 @@ void game_run_nmi(void);
  */
 void game_run_main(void);
 
+/* Called after ppu_render_frame() — allows the game to render additional
+ * content into the framebuffer (e.g. widescreen margin sprites).
+ * framebuf is g_render_width * 240 ARGB8888 pixels. */
+void game_post_render(uint32_t *framebuf);
+
 /* Fill game-specific data in the debug frame record.
  * Called each frame from debug_server_record_frame().
  * Cast record to NESFrameRecord* and write up to 16 bytes into game_data[]. */

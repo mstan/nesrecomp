@@ -529,6 +529,9 @@ void nes_vblank_callback(void) {
     /* Render PPU to framebuffer */
     ppu_render_frame(s_framebuf);
 
+    /* Game-specific post-render (e.g. widescreen margin sprites) */
+    game_post_render(s_framebuf);
+
     /* OAM debug window — updated every 6 frames to avoid flicker/lag */
     if (s_debug && s_dbg_texture && g_frame_count % 6 == 0) {
         ppu_render_oam_debug(s_dbg_buf);
