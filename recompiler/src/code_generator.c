@@ -978,6 +978,9 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                 }
             }
             if (abs16 >= 0xC000) {
+                if (codegen_is_data_region(cfg, fixed_bank, abs16)) {
+                    fprintf(f, "/* JSR to data region $%04X — skipped */\n", abs16);
+                } else {
                 uint16_t alias_owner = 0;
                 int alias_bank = -1;
                 int alias_entry = 0;
@@ -986,6 +989,7 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                     fprintf(f, "func_%04X_body(%d);\n", alias_owner, alias_entry);
                 else
                     fprintf(f, "func_%04X();\n", abs16);
+                }
             } else if (abs16 >= 0x8000) {
                 /* MMC3 (mapper 4): 8KB banks at $8000-$9FFF and $A000-$BFFF
                  * are switched independently.  A JSR from one 8KB half to
@@ -1048,7 +1052,9 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
         }
         case MN_JMP:
             if (e->addr_mode == AM_ABS) {
-                if (abs16 >= 0xC000) {
+                if (abs16 >= 0xC000 && codegen_is_data_region(cfg, fixed_bank, abs16)) {
+                    fprintf(f, "/* JMP to data region $%04X — skipped */ return;\n", abs16);
+                } else if (abs16 >= 0xC000) {
                     uint16_t alias_owner = 0;
                     int alias_bank = -1;
                     int alias_entry = 0;
@@ -1898,6 +1904,12 @@ static void emit_dispatch(FILE *f, const EmittedWrapper *wrappers, int wrapper_c
      * ($A000-$BFFF). When R6 is odd, $8000-$9FFF contains the upper 8KB
      * of a 16KB bank — the recompiler generated this at $A000 offset.
      * Remap the address so the dispatch finds the right function. */
+    /* Reject sub-$8000 addresses — these are never valid code targets on NES.
+     * They come from data-as-code false positives in the function finder. */
+    fprintf(f,
+        "    if (addr < 0x8000) { nes_log_dispatch_miss(addr); return 0; }\n"
+    );
+
     if (rom->mapper == 4) {
         fprintf(f,
             "    extern int g_mmc3_r6_odd, g_mmc3_r7_even;\n"

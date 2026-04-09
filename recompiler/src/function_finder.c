@@ -129,6 +129,62 @@ static uint16_t sram_translate(const GameConfig *cfg, uint16_t addr, int *out_ba
     return 0;
 }
 
+/* Auto-detect contiguous zero-fill runs in each bank and add them as
+ * data_region entries.  Zero-fill is unused ROM — not code, not data —
+ * and must never be decoded as instructions.  Minimum run length of 16
+ * bytes avoids flagging legitimate short zero sequences (e.g. a BRK
+ * followed by padding inside a function). */
+#define ZERO_FILL_MIN_RUN 16
+
+static void detect_zero_fill_regions(const NESRom *rom, GameConfig *cfg) {
+    int total_added = 0;
+    for (int bank = 0; bank < rom->prg_banks; bank++) {
+        uint16_t base = (bank == rom->prg_banks - 1) ? 0xC000 : 0x8000;
+        uint16_t end  = (bank == rom->prg_banks - 1) ? 0xFFFA : 0xC000;
+        /* 0xFFFA: stop before interrupt vectors */
+        uint16_t run_start = 0;
+        bool in_run = false;
+
+        for (uint16_t addr = base; addr < end; addr++) {
+            uint8_t b = rom_read(rom, bank, addr);
+            if (b == 0x00) {
+                if (!in_run) {
+                    run_start = addr;
+                    in_run = true;
+                }
+            } else {
+                if (in_run) {
+                    uint16_t run_len = addr - run_start;
+                    if (run_len >= ZERO_FILL_MIN_RUN &&
+                        cfg->data_region_count < GAME_CFG_MAX_DATA_REGIONS) {
+                        DataRegion *dr = &cfg->data_regions[cfg->data_region_count++];
+                        dr->bank  = bank;
+                        dr->start = run_start;
+                        dr->end   = addr;  /* exclusive */
+                        total_added++;
+                    }
+                    in_run = false;
+                }
+            }
+        }
+        /* Close trailing run */
+        if (in_run) {
+            uint16_t run_len = end - run_start;
+            if (run_len >= ZERO_FILL_MIN_RUN &&
+                cfg->data_region_count < GAME_CFG_MAX_DATA_REGIONS) {
+                DataRegion *dr = &cfg->data_regions[cfg->data_region_count++];
+                dr->bank  = bank;
+                dr->start = run_start;
+                dr->end   = end;
+                total_added++;
+            }
+        }
+    }
+    if (total_added > 0)
+        printf("[FuncFinder] Zero-fill scan: excluded %d regions across all banks\n",
+               total_added);
+}
+
 /* Check if an address falls within a declared data region */
 static bool is_data_region(const GameConfig *cfg, int bank, uint16_t addr) {
     for (int i = 0; i < cfg->data_region_count; i++) {
@@ -899,6 +955,9 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
     s_regprop_targeted_adds = 0;
 
     int fixed_bank = rom->prg_banks - 1;
+
+    /* Auto-detect zero-fill regions before any function discovery */
+    detect_zero_fill_regions(rom, cfg);
 
     /* Seed from interrupt vectors */
     printf("[FuncFinder] Seeding from NMI=$%04X RESET=$%04X IRQ=$%04X\n",
