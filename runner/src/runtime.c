@@ -771,6 +771,35 @@ uint16_t runtime_get_ppu_t(void) { return s_ppu_t; }
 uint8_t  runtime_get_ppu_fine_x(void) { return s_ppu_fine_x; }
 int      runtime_scroll_from_t_valid(void) { return s_scroll_2005_complete; }
 
+/* Save/restore PPU internal state for runahead (game_post_render). */
+void runtime_get_ppu_internals(uint16_t *t, uint8_t *fine_x, int *scroll_complete,
+                               uint16_t *last_sync_t, uint8_t *last_sync_sx, uint8_t *last_sync_sy,
+                               uint16_t *frame_start_t, uint8_t *frame_start_sx, uint8_t *frame_start_sy) {
+    *t = s_ppu_t;
+    *fine_x = s_ppu_fine_x;
+    *scroll_complete = s_scroll_2005_complete;
+    *last_sync_t = s_last_sync_t;
+    *last_sync_sx = s_last_sync_sx;
+    *last_sync_sy = s_last_sync_sy;
+    *frame_start_t = s_frame_start_t;
+    *frame_start_sx = s_frame_start_sx;
+    *frame_start_sy = s_frame_start_sy;
+}
+
+void runtime_set_ppu_internals(uint16_t t, uint8_t fine_x, int scroll_complete,
+                               uint16_t last_sync_t, uint8_t last_sync_sx, uint8_t last_sync_sy,
+                               uint16_t frame_start_t, uint8_t frame_start_sx, uint8_t frame_start_sy) {
+    s_ppu_t = t;
+    s_ppu_fine_x = fine_x;
+    s_scroll_2005_complete = scroll_complete;
+    s_last_sync_t = last_sync_t;
+    s_last_sync_sx = last_sync_sx;
+    s_last_sync_sy = last_sync_sy;
+    s_frame_start_t = frame_start_t;
+    s_frame_start_sx = frame_start_sx;
+    s_frame_start_sy = frame_start_sy;
+}
+
 /* IRQ scanline recording for debug */
 #define IRQ_SCANLINE_LOG_SIZE 8
 static int s_irq_scanlines[IRQ_SCANLINE_LOG_SIZE];
