@@ -17,7 +17,20 @@
 #include "function_finder.h"
 #include "cpu6502_decoder.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+
+static bool env_var_enabled(const char *name) {
+    const char *value = getenv(name);
+    if (!value || !*value) return false;
+    return strcmp(value, "1") == 0 ||
+           strcmp(value, "true") == 0 ||
+           strcmp(value, "TRUE") == 0 ||
+           strcmp(value, "yes") == 0 ||
+           strcmp(value, "YES") == 0 ||
+           strcmp(value, "on") == 0 ||
+           strcmp(value, "ON") == 0;
+}
 
 /* Work queue for BFS */
 typedef struct {
@@ -41,22 +54,66 @@ static bool queue_pop(WorkItem *out) {
     return true;
 }
 
-static void add_function(FunctionList *list, uint16_t addr, int bank) {
-    if (function_list_contains(list, addr, bank)) return;
+static int function_list_find_index(const FunctionList *list, uint16_t addr, int bank) {
+    for (int i = 0; i < list->count; i++) {
+        if (list->entries[i].addr == addr && list->entries[i].bank == bank)
+            return i;
+    }
+    return -1;
+}
+
+static void add_function_with_source(FunctionList *list, uint16_t addr, int bank,
+                                     uint8_t source_flags) {
+    int existing = function_list_find_index(list, addr, bank);
+    if (existing >= 0) {
+        list->entries[existing].source_flags |= source_flags;
+        if (list->entries[existing].evidence_count < 0xFFFF)
+            list->entries[existing].evidence_count++;
+        return;
+    }
     if (list->count >= MAX_FUNCTIONS) {
         fprintf(stderr, "function_finder: MAX_FUNCTIONS exceeded!\n");
         return;
     }
-    list->entries[list->count++] = (FunctionEntry){addr, bank, 0};
+    list->entries[list->count++] = (FunctionEntry){
+        addr, bank, 0, addr, bank, addr, bank, FUNCTION_KIND_STANDALONE, source_flags, 1
+    };
     queue_push(addr, bank);
 }
 
+static void add_function(FunctionList *list, uint16_t addr, int bank) {
+    add_function_with_source(list, addr, bank, FUNCTION_SOURCE_CONTROL);
+}
+
+static uint8_t propagated_discovery_source(uint8_t walk_source_flags) {
+    uint8_t strong_sources =
+        FUNCTION_SOURCE_CONTROL |
+        FUNCTION_SOURCE_MANUAL |
+        FUNCTION_SOURCE_KNOWN_TABLE |
+        FUNCTION_SOURCE_SPLIT_TABLE;
+    uint8_t weak_sources =
+        FUNCTION_SOURCE_PTR_SCAN |
+        FUNCTION_SOURCE_TABLE_RUN |
+        FUNCTION_SOURCE_XBANK |
+        FUNCTION_SOURCE_BANK_SEED;
+
+    if (walk_source_flags & strong_sources) return FUNCTION_SOURCE_CONTROL;
+    if (walk_source_flags & weak_sources) return (walk_source_flags & weak_sources);
+    return FUNCTION_SOURCE_CONTROL;
+}
+
+static void add_function_propagated(FunctionList *list, uint16_t addr, int bank,
+                                    uint8_t walk_source_flags) {
+    add_function_with_source(list, addr, bank,
+                             propagated_discovery_source(walk_source_flags));
+}
+
+static void add_function_uncertain_bank(FunctionList *list, uint16_t addr, int bank) {
+    add_function_with_source(list, addr, bank, FUNCTION_SOURCE_XBANK);
+}
+
 bool function_list_contains(const FunctionList *list, uint16_t addr, int bank) {
-    for (int i = 0; i < list->count; i++) {
-        if (list->entries[i].addr == addr && list->entries[i].bank == bank)
-            return true;
-    }
-    return false;
+    return function_list_find_index(list, addr, bank) >= 0;
 }
 
 /* Translate an SRAM address to ROM address via game config sram_map.
@@ -70,6 +127,62 @@ static uint16_t sram_translate(const GameConfig *cfg, uint16_t addr, int *out_ba
         }
     }
     return 0;
+}
+
+/* Auto-detect contiguous zero-fill runs in each bank and add them as
+ * data_region entries.  Zero-fill is unused ROM — not code, not data —
+ * and must never be decoded as instructions.  Minimum run length of 16
+ * bytes avoids flagging legitimate short zero sequences (e.g. a BRK
+ * followed by padding inside a function). */
+#define ZERO_FILL_MIN_RUN 16
+
+static void detect_zero_fill_regions(const NESRom *rom, GameConfig *cfg) {
+    int total_added = 0;
+    for (int bank = 0; bank < rom->prg_banks; bank++) {
+        uint16_t base = (bank == rom->prg_banks - 1) ? 0xC000 : 0x8000;
+        uint16_t end  = (bank == rom->prg_banks - 1) ? 0xFFFA : 0xC000;
+        /* 0xFFFA: stop before interrupt vectors */
+        uint16_t run_start = 0;
+        bool in_run = false;
+
+        for (uint16_t addr = base; addr < end; addr++) {
+            uint8_t b = rom_read(rom, bank, addr);
+            if (b == 0x00) {
+                if (!in_run) {
+                    run_start = addr;
+                    in_run = true;
+                }
+            } else {
+                if (in_run) {
+                    uint16_t run_len = addr - run_start;
+                    if (run_len >= ZERO_FILL_MIN_RUN &&
+                        cfg->data_region_count < GAME_CFG_MAX_DATA_REGIONS) {
+                        DataRegion *dr = &cfg->data_regions[cfg->data_region_count++];
+                        dr->bank  = bank;
+                        dr->start = run_start;
+                        dr->end   = addr;  /* exclusive */
+                        total_added++;
+                    }
+                    in_run = false;
+                }
+            }
+        }
+        /* Close trailing run */
+        if (in_run) {
+            uint16_t run_len = end - run_start;
+            if (run_len >= ZERO_FILL_MIN_RUN &&
+                cfg->data_region_count < GAME_CFG_MAX_DATA_REGIONS) {
+                DataRegion *dr = &cfg->data_regions[cfg->data_region_count++];
+                dr->bank  = bank;
+                dr->start = run_start;
+                dr->end   = end;
+                total_added++;
+            }
+        }
+    }
+    if (total_added > 0)
+        printf("[FuncFinder] Zero-fill scan: excluded %d regions across all banks\n",
+               total_added);
 }
 
 /* Check if an address falls within a declared data region */
@@ -111,6 +224,299 @@ static bool validate_code_target(const NESRom *rom, int bank,
     return true;
 }
 
+void scan_function_boundaries(const NESRom *rom, uint16_t start_addr,
+                              int bank, const GameConfig *cfg,
+                              uint16_t *out_addrs, int *out_count,
+                              int max_addrs) {
+    uint16_t pc = start_addr;
+    uint16_t pending[256];
+    int pending_count = 0;
+
+    *out_count = 0;
+
+    for (int i = 0; i < MAX_INSNS_PER_FUNC && *out_count < max_addrs; i++) {
+        if (pc < 0x8000) break;
+
+        for (int p = 0; p < pending_count; p++) {
+            if (pending[p] == pc) {
+                pending[p] = pending[--pending_count];
+                break;
+            }
+        }
+
+        out_addrs[(*out_count)++] = pc;
+
+        int read_bank = (pc >= 0xC000) ? (rom->prg_banks - 1) : bank;
+        uint8_t op = rom_read(rom, read_bank, pc);
+        const OpcodeEntry *e = &g_opcode_table[op];
+        int sz = (e->size > 0) ? e->size : 1;
+
+        if (e->mnemonic == MN_JSR) {
+            uint16_t target = rom_read(rom, read_bank, pc + 1) |
+                              ((uint16_t)rom_read(rom, read_bank, pc + 2) << 8);
+            for (int ti = 0; ti < cfg->trampoline_count; ti++) {
+                if (target == cfg->trampolines[ti].addr) {
+                    sz = 3 + cfg->trampolines[ti].inline_bytes;
+                    break;
+                }
+            }
+            for (int ti = 0; ti < cfg->inline_dispatch_count; ti++) {
+                if (target == cfg->inline_dispatches[ti].addr) {
+                    uint16_t tpc = pc + 3;
+                    while (rom_read(rom, read_bank, tpc + 1) >= 0x80) tpc += 2;
+                    sz = (int)(tpc - pc);
+                    break;
+                }
+            }
+            for (int ti = 0; ti < cfg->inline_pointer_count; ti++) {
+                if (target == cfg->inline_pointers[ti].addr) {
+                    sz = 5;
+                    break;
+                }
+            }
+            for (int ti = 0; ti < cfg->nop_jsr_count; ti++) {
+                if (target == cfg->nop_jsrs[ti]) {
+                    sz = 3;
+                    break;
+                }
+            }
+        }
+
+        switch (e->mnemonic) {
+            case MN_BCC: case MN_BCS: case MN_BEQ: case MN_BNE:
+            case MN_BMI: case MN_BPL: case MN_BVC: case MN_BVS: {
+                int8_t off = (int8_t)rom_read(rom, read_bank, pc + 1);
+                uint16_t tgt = (uint16_t)(pc + 2 + off);
+                if (tgt > pc && tgt >= start_addr && pending_count < 256) {
+                    bool found = false;
+                    for (int p = 0; p < pending_count; p++)
+                        if (pending[p] == tgt) { found = true; break; }
+                    if (!found) pending[pending_count++] = tgt;
+                }
+                break;
+            }
+            default: break;
+        }
+
+        if (e->mnemonic == MN_ILLEGAL) {
+            pc += sz;
+            continue;
+        }
+
+        if (e->mnemonic == MN_RTS && pc >= 0x800D &&
+            rom_read(rom, read_bank, pc - 1)  == 0x48 &&
+            rom_read(rom, read_bank, pc - 5)  == 0x48 &&
+            rom_read(rom, read_bank, pc - 9)  == 0x48 &&
+            rom_read(rom, read_bank, pc - 12) == 0x48) {
+            uint16_t cont = pc + 1;
+            bool found = false;
+            for (int p = 0; p < pending_count; p++)
+                if (pending[p] == cont) { found = true; break; }
+            if (!found && pending_count < 256) pending[pending_count++] = cont;
+        }
+
+        if (e->mnemonic == MN_RTS || e->mnemonic == MN_RTI ||
+            e->mnemonic == MN_BRK || e->mnemonic == MN_JMP) {
+            if (pending_count == 0) break;
+        }
+
+        pc += sz;
+    }
+}
+
+typedef struct {
+    int idx;
+    int bank;
+    uint16_t addr;
+    int priority;
+} FunctionOrderEntry;
+
+static int function_entry_priority(const FunctionEntry *entry) {
+    if (entry->source_flags & FUNCTION_SOURCE_CONTROL) return 4;
+    if (entry->source_flags & FUNCTION_SOURCE_MANUAL) return 3;
+    if (entry->source_flags & FUNCTION_SOURCE_KNOWN_TABLE) return 2;
+    if (entry->source_flags & FUNCTION_SOURCE_SPLIT_TABLE) return 1;
+    return 0;
+}
+
+static bool can_demote_control_stub(const NESRom *rom, const FunctionEntry *entry) {
+    int read_bank = (entry->addr >= 0xC000) ? (rom->prg_banks - 1) : entry->bank;
+    uint8_t op0 = rom_read(rom, read_bank, entry->addr);
+    if (entry->size <= 1) {
+        return op0 == 0x60 || op0 == 0x40;
+    }
+    if (entry->size == 2 && (op0 == 0x4C || op0 == 0x6C)) {
+        return true;
+    }
+    return false;
+}
+
+static const char *classify_missing_manual_entry(const NESRom *rom, const GameConfig *cfg,
+                                                 uint16_t addr, int bank) {
+    int fixed_bank = rom->prg_banks - 1;
+    if (bank >= 0 && bank < fixed_bank && addr >= 0xC000)
+        return "LIKELY_BAD_SEED_WRONG_BANK";
+    if (bank >= 0 && bank <= fixed_bank && is_data_region(cfg, bank, addr))
+        return "LIKELY_BAD_SEED_DATA_REGION";
+    if (addr >= 0x8000 && bank >= 0 && bank <= fixed_bank) {
+        if (!validate_code_target(rom, bank, addr, TABLE_RUN_MIN_VALID)) {
+            uint16_t a1 = addr + 1;
+            if (a1 >= 0x8000 && a1 <= 0xFFFD &&
+                !is_data_region(cfg, bank, a1) &&
+                validate_code_target(rom, bank, a1, TABLE_RUN_MIN_VALID)) {
+                return "LIKELY_BAD_SEED_OFF_BY_ONE_PLUS1";
+            }
+            if (addr > 0x8000) {
+                uint16_t am1 = addr - 1;
+                if (!is_data_region(cfg, bank, am1) &&
+                    validate_code_target(rom, bank, am1, TABLE_RUN_MIN_VALID)) {
+                    return "LIKELY_BAD_SEED_OFF_BY_ONE_MINUS1";
+                }
+            }
+            return "MISSING";
+        }
+    }
+    return "MISSING";
+}
+
+static void source_flags_to_string(uint8_t flags, char *buf, size_t buf_size) {
+    size_t used = 0;
+    buf[0] = '\0';
+
+    struct SourceName { uint8_t flag; const char *name; };
+    static const struct SourceName names[] = {
+        { FUNCTION_SOURCE_CONTROL,     "control" },
+        { FUNCTION_SOURCE_PTR_SCAN,    "ptr_scan" },
+        { FUNCTION_SOURCE_TABLE_RUN,   "table_run" },
+        { FUNCTION_SOURCE_SPLIT_TABLE, "split_table" },
+        { FUNCTION_SOURCE_KNOWN_TABLE, "known_table" },
+        { FUNCTION_SOURCE_XBANK,       "xbank" },
+        { FUNCTION_SOURCE_MANUAL,      "manual" },
+        { FUNCTION_SOURCE_BANK_SEED,   "bank_seed" },
+    };
+
+    for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); i++) {
+        if ((flags & names[i].flag) == 0) continue;
+        if (used > 0 && used + 1 < buf_size)
+            buf[used++] = '|';
+        for (const char *p = names[i].name; *p && used + 1 < buf_size; p++)
+            buf[used++] = *p;
+        buf[used] = '\0';
+    }
+
+    if (used == 0 && buf_size > 0) {
+        snprintf(buf, buf_size, "none");
+    }
+}
+
+static int compare_function_order(const void *lhs, const void *rhs) {
+    const FunctionOrderEntry *a = (const FunctionOrderEntry *)lhs;
+    const FunctionOrderEntry *b = (const FunctionOrderEntry *)rhs;
+    if (a->priority != b->priority) return b->priority - a->priority;
+    if (a->bank != b->bank) return a->bank - b->bank;
+    if (a->addr < b->addr) return -1;
+    if (a->addr > b->addr) return 1;
+    return a->idx - b->idx;
+}
+
+static int classify_secondary_entries(const NESRom *rom, FunctionList *list,
+                                      const GameConfig *cfg, int *out_coverage) {
+    int fixed_bank = rom->prg_banks - 1;
+    int bank_count = fixed_bank + 1;
+    size_t table_elems = (size_t)bank_count * 65536u;
+    int *entry_lookup = (int *)malloc(table_elems * sizeof(int));
+    FunctionOrderEntry *order = (FunctionOrderEntry *)malloc((size_t)list->count * sizeof(FunctionOrderEntry));
+    uint16_t boundaries[MAX_INSNS_PER_FUNC];
+    int secondary_count = 0;
+
+    if (!entry_lookup || !order) {
+        free(entry_lookup);
+        free(order);
+        return 0;
+    }
+
+    for (size_t i = 0; i < table_elems; i++) {
+        out_coverage[i] = -1;
+        entry_lookup[i] = -1;
+    }
+
+    for (int i = 0; i < list->count; i++) {
+        list->entries[i].kind = FUNCTION_KIND_STANDALONE;
+        list->entries[i].canonical_addr = list->entries[i].addr;
+        list->entries[i].canonical_bank = list->entries[i].bank;
+        list->entries[i].covering_addr = list->entries[i].addr;
+        list->entries[i].covering_bank = list->entries[i].bank;
+        order[i].idx = i;
+        order[i].bank = list->entries[i].bank;
+        order[i].addr = list->entries[i].addr;
+        order[i].priority = function_entry_priority(&list->entries[i]);
+        entry_lookup[(size_t)list->entries[i].bank * 65536u + list->entries[i].addr] = i;
+    }
+
+    qsort(order, (size_t)list->count, sizeof(FunctionOrderEntry), compare_function_order);
+
+    for (int oi = 0; oi < list->count; oi++) {
+        int idx = order[oi].idx;
+        FunctionEntry *entry = &list->entries[idx];
+        if (entry->kind == FUNCTION_KIND_SECONDARY) continue;
+        if (order[oi].priority == 0)
+            continue;
+
+        int boundary_count = 0;
+        scan_function_boundaries(rom, entry->addr, entry->bank, cfg,
+                                 boundaries, &boundary_count, MAX_INSNS_PER_FUNC);
+
+        for (int bi = 0; bi < boundary_count; bi++) {
+            uint16_t boundary = boundaries[bi];
+            if (entry->addr < 0xC000 && boundary >= 0xC000) continue;
+            int boundary_bank = (boundary >= 0xC000) ? fixed_bank : entry->bank;
+            size_t key = (size_t)boundary_bank * 65536u + boundary;
+            if (out_coverage[key] < 0) out_coverage[key] = idx;
+            if (boundary == entry->addr) continue;
+
+            int other_idx = entry_lookup[key];
+            if (other_idx < 0 || other_idx == idx) continue;
+
+            FunctionEntry *other = &list->entries[other_idx];
+            if (other->covering_addr == other->addr &&
+                other->covering_bank == other->bank) {
+                other->covering_addr = entry->addr;
+                other->covering_bank = entry->bank;
+            }
+            if ((other->source_flags & FUNCTION_SOURCE_CONTROL) &&
+                !can_demote_control_stub(rom, other)) {
+                continue;
+            }
+            if (other->kind == FUNCTION_KIND_SECONDARY) {
+                int prev_idx = function_list_find_index(list,
+                                                        other->canonical_addr,
+                                                        other->canonical_bank);
+                int prev_priority = 0;
+                if (prev_idx >= 0)
+                    prev_priority = function_entry_priority(&list->entries[prev_idx]);
+                if (prev_priority > order[oi].priority) continue;
+                if (prev_priority == order[oi].priority &&
+                    (other->canonical_bank < entry->bank ||
+                     (other->canonical_bank == entry->bank &&
+                      other->canonical_addr <= entry->addr))) {
+                    continue;
+                }
+            }
+
+            other->kind = FUNCTION_KIND_SECONDARY;
+            other->canonical_addr = entry->addr;
+            other->canonical_bank = entry->bank;
+            other->covering_addr = entry->addr;
+            other->covering_bank = entry->bank;
+            secondary_count++;
+        }
+    }
+
+    free(entry_lookup);
+    free(order);
+    return secondary_count;
+}
+
 /* Register propagation statistics */
 static int s_bank_switches_detected = 0;
 static int s_regprop_targeted_adds = 0;
@@ -127,7 +533,7 @@ static int s_regprop_targeted_adds = 0;
  * switches and provide precise bank context for target resolution. */
 static int walk_function(const NESRom *rom, FunctionList *list,
                          uint16_t start_addr, int switchable_bank,
-                         const GameConfig *cfg) {
+                         const GameConfig *cfg, uint8_t walk_source_flags) {
     uint16_t pc = start_addr;
     int insn_count = 0;
     int fixed_bank = rom->prg_banks - 1;
@@ -297,7 +703,7 @@ static int walk_function(const NESRom *rom, FunctionList *list,
                     /* Backward branch before this function's start: that code
                      * is only reachable via this branch, register as new function. */
                     int tbank = (tgt >= 0xC000) ? fixed_bank : switchable_bank;
-                    add_function(list, tgt, tbank);
+                    add_function_propagated(list, tgt, tbank, walk_source_flags);
                 }
                 break;
             }
@@ -347,14 +753,14 @@ static int walk_function(const NESRom *rom, FunctionList *list,
                     }
                 }
                 if (tramp) {
-                    add_function(list, tramp->addr, fixed_bank);
+                    add_function_propagated(list, tramp->addr, fixed_bank, walk_source_flags);
                     uint8_t disp_bank = rom_read(rom, read_bank, pc + 3);
                     uint8_t disp_lo   = rom_read(rom, read_bank, pc + 4);
                     uint8_t disp_hi   = rom_read(rom, read_bank, pc + 5);
                     uint16_t disp_addr = (disp_lo | ((uint16_t)disp_hi << 8)) + tramp->addr_adjust;
                     if (disp_addr >= 0x8000) {
                         int tbank = (disp_addr >= 0xC000) ? fixed_bank : (int)disp_bank;
-                        add_function(list, disp_addr, tbank);
+                        add_function_propagated(list, disp_addr, tbank, walk_source_flags);
                     }
                     pc += 3 + tramp->inline_bytes;
                     continue;
@@ -382,22 +788,22 @@ static int walk_function(const NESRom *rom, FunctionList *list,
                         uint8_t thi = rom_read(rom, read_bank, tpc + 1);
                         uint16_t dest = (uint16_t)tlo | ((uint16_t)thi << 8);
                         if (dest >= 0xC000) {
-                            add_function(list, dest, fixed_bank);
+                            add_function_propagated(list, dest, fixed_bank, walk_source_flags);
                         } else if (dest >= 0x8000) {
                             if (effective_bank != fixed_bank) {
-                                add_function(list, dest, effective_bank);
+                                add_function_propagated(list, dest, effective_bank, walk_source_flags);
                                 if (effective_bank != switchable_bank)
                                     s_regprop_targeted_adds++;
                             } else {
                                 for (int _b = 0; _b < fixed_bank; _b++)
-                                    add_function(list, dest, _b);
+                                    add_function_uncertain_bank(list, dest, _b);
                             }
                         } else {
                             /* Entry < $8000 — try SRAM translation */
                             int sram_bank;
                             uint16_t rom_addr = sram_translate(cfg, dest, &sram_bank);
                             if (rom_addr >= 0x8000) {
-                                add_function(list, rom_addr, sram_bank);
+                                add_function_propagated(list, rom_addr, sram_bank, walk_source_flags);
                             } else {
                                 break; /* Not ROM and not mapped SRAM — end of table */
                             }
@@ -424,18 +830,18 @@ static int walk_function(const NESRom *rom, FunctionList *list,
                     if (target == cfg->inline_pointers[ti].addr) { ipp = &cfg->inline_pointers[ti]; break; }
                 }
                 if (ipp) {
-                    add_function(list, ipp->addr, fixed_bank);
+                    add_function_propagated(list, ipp->addr, fixed_bank, walk_source_flags);
                     pc += 5; continue;
                 }
             }
 
             if (target >= 0xC000) {
                 /* Fixed bank target — always knowable */
-                add_function(list, target, fixed_bank);
+                add_function_propagated(list, target, fixed_bank, walk_source_flags);
             } else if (target >= 0x8000) {
                 if (effective_bank != fixed_bank) {
                     /* Bank known via walk context or bank-switch detection */
-                    add_function(list, target, effective_bank);
+                    add_function_propagated(list, target, effective_bank, walk_source_flags);
                     if (effective_bank != switchable_bank)
                         s_regprop_targeted_adds++;
                     /* MMC3: cross-8KB boundary — also add the remapped target.
@@ -445,23 +851,23 @@ static int walk_function(const NESRom *rom, FunctionList *list,
                      * recompiler's view of the same 16KB bank. */
                     if (rom->mapper == 4 && target >= 0x8000 && target < 0xA000 &&
                         pc >= 0xA000 && pc < 0xC000)
-                        add_function(list, target + 0x2000, effective_bank);
+                        add_function_propagated(list, target + 0x2000, effective_bank, walk_source_flags);
                     else if (rom->mapper == 4 && target >= 0xA000 && target < 0xC000 &&
                              pc >= 0x8000 && pc < 0xA000)
-                        add_function(list, target - 0x2000, effective_bank);
+                        add_function_propagated(list, target - 0x2000, effective_bank, walk_source_flags);
                 } else {
                     /* Fixed bank calling switchable region: bank unknown statically.
                      * Add for ALL switchable banks so each gets a correct body.
                      * At runtime call_by_address() selects via g_current_bank. */
                     for (int _b = 0; _b < fixed_bank; _b++)
-                        add_function(list, target, _b);
+                        add_function_uncertain_bank(list, target, _b);
                 }
             } else {
                 /* Target in RAM — try SRAM-to-ROM translation */
                 int sram_bank;
                 uint16_t rom_addr = sram_translate(cfg, target, &sram_bank);
                 if (rom_addr >= 0x8000)
-                    add_function(list, rom_addr, sram_bank);
+                    add_function_propagated(list, rom_addr, sram_bank, walk_source_flags);
             }
             pc += entry->size;
             continue;
@@ -472,29 +878,29 @@ static int walk_function(const NESRom *rom, FunctionList *list,
             uint8_t hi = rom_read(rom, read_bank, pc + 2);
             uint16_t target = lo | ((uint16_t)hi << 8);
             if (target >= 0xC000) {
-                add_function(list, target, fixed_bank);
+                add_function_propagated(list, target, fixed_bank, walk_source_flags);
             } else if (target >= 0x8000) {
                 if (effective_bank != fixed_bank) {
-                    add_function(list, target, effective_bank);
+                    add_function_propagated(list, target, effective_bank, walk_source_flags);
                     if (effective_bank != switchable_bank)
                         s_regprop_targeted_adds++;
                     /* MMC3 cross-8KB mirror (same as JSR path above) */
                     if (rom->mapper == 4 && target >= 0x8000 && target < 0xA000 &&
                         pc >= 0xA000 && pc < 0xC000)
-                        add_function(list, target + 0x2000, effective_bank);
+                        add_function_propagated(list, target + 0x2000, effective_bank, walk_source_flags);
                     else if (rom->mapper == 4 && target >= 0xA000 && target < 0xC000 &&
                              pc >= 0x8000 && pc < 0xA000)
-                        add_function(list, target - 0x2000, effective_bank);
+                        add_function_propagated(list, target - 0x2000, effective_bank, walk_source_flags);
                 } else {
                     for (int _b = 0; _b < fixed_bank; _b++)
-                        add_function(list, target, _b);
+                        add_function_uncertain_bank(list, target, _b);
                 }
             } else {
                 /* Target in RAM — try SRAM-to-ROM translation */
                 int sram_bank;
                 uint16_t rom_addr = sram_translate(cfg, target, &sram_bank);
                 if (rom_addr >= 0x8000)
-                    add_function(list, rom_addr, sram_bank);
+                    add_function_propagated(list, rom_addr, sram_bank, walk_source_flags);
             }
             if (pending_count == 0) break;
             pc += entry->size;
@@ -514,7 +920,7 @@ static int walk_function(const NESRom *rom, FunctionList *list,
                 uint16_t target = tlo | ((uint16_t)thi << 8);
                 if (target >= 0x8000) {
                     int tbank = (target >= 0xC000) ? fixed_bank : effective_bank;
-                    add_function(list, target, tbank);
+                    add_function_propagated(list, target, tbank, walk_source_flags);
                 }
             }
             if (pending_count == 0) break;
@@ -538,12 +944,20 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
     memset(out, 0, sizeof(*out));
     s_queue_head = 0;
     s_queue_tail = 0;
+    bool legacy_mode = env_var_enabled("NESRECOMP_LEGACY_FUNCTION_FINDER");
+    FILE *audit = NULL;
+    FILE *entries_audit = NULL;
+    char audit_path[256];
+    char entries_audit_path[256];
 
     /* Reset propagation stats */
     s_bank_switches_detected = 0;
     s_regprop_targeted_adds = 0;
 
     int fixed_bank = rom->prg_banks - 1;
+
+    /* Auto-detect zero-fill regions before any function discovery */
+    detect_zero_fill_regions(rom, cfg);
 
     /* Seed from interrupt vectors */
     printf("[FuncFinder] Seeding from NMI=$%04X RESET=$%04X IRQ=$%04X\n",
@@ -584,12 +998,12 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
     for (int b = 0; b < fixed_bank; b++) {
         uint8_t first = rom_read(rom, b, 0x8000);
         if (g_opcode_table[first].mnemonic != MN_ILLEGAL)
-            add_function(out, 0x8000, b);
+            add_function_with_source(out, 0x8000, b, FUNCTION_SOURCE_BANK_SEED);
 
         if (is_8kb_mapper) {
             uint8_t first_a = rom_read(rom, b, 0xA000);
             if (g_opcode_table[first_a].mnemonic != MN_ILLEGAL)
-                add_function(out, 0xA000, b);
+                add_function_with_source(out, 0xA000, b, FUNCTION_SOURCE_BANK_SEED);
         }
     }
 
@@ -602,17 +1016,30 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
                 out->entries[i].bank == item.bank &&
                 out->entries[i].size == 0)
             {
-                out->entries[i].size = walk_function(rom, out, item.addr, item.bank, cfg);
+                out->entries[i].size = walk_function(rom, out, item.addr, item.bank, cfg,
+                                                    out->entries[i].source_flags);
                 break;
             }
         }
     }
 
+    if (legacy_mode) {
+        printf("[FuncFinder] Legacy mode enabled via NESRECOMP_LEGACY_FUNCTION_FINDER; "
+               "skipping heuristic discovery passes\n");
+    } else {
     /* ROM pointer scan: scan fixed bank for 16-bit values that look like
      * function pointers into ROM. Discovers targets of RAM-based dispatch
      * tables (loaded from ROM at runtime, invisible to JSR BFS).
-     * Criteria: value in $C000-$FFFD, first byte at target is non-illegal opcode.
-     * Skip addresses in declared data_region ranges (both source and target). */
+     *
+     * Scans for TWO target ranges:
+     *   1. $C000-$FFFD (fixed bank) — moderate validation (4 instructions)
+     *      because functions using inline dispatch (JSR $XXXX; .word table...)
+     *      have inline data bytes that fail deep-decode.
+     *   2. $8000-$BFFD (switchable bank) — deep-decode validation per bank.
+     *      Cross-range pointers have higher false-positive risk.
+     *
+     * data_region exclusions apply to both source and target. Also checks
+     * target+1 for RTS-as-JMP conventions. */
     int before_scan = out->count;
     for (uint16_t off = 0; off <= 0x3FFD; off++) {
         uint16_t addr = 0xC000 + off;
@@ -620,22 +1047,20 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
         uint8_t lo = rom_read(rom, fixed_bank, addr);
         uint8_t hi = rom_read(rom, fixed_bank, addr + 1);
         uint16_t candidate = lo | ((uint16_t)hi << 8);
-        if (candidate < 0xC000 || candidate > 0xFFFD) continue;
-        if (is_data_region(cfg, fixed_bank, candidate)) continue;
-        /* Add candidate if it has a valid opcode. */
-        uint8_t first_byte = rom_read(rom, fixed_bank, candidate);
-        if (g_opcode_table[first_byte].mnemonic != MN_ILLEGAL &&
-            !function_list_contains(out, candidate, fixed_bank))
-            add_function(out, candidate, fixed_bank);
-        /* Also add candidate+1: RTS-as-JMP dispatch tables store target-1,
-         * so the actual called function is one byte past the stored pointer.
-         * Check this even when candidate itself has an illegal opcode. */
-        uint16_t candidate1 = candidate + 1;
-        if (candidate1 >= 0xC000 && candidate1 <= 0xFFFD &&
-            !function_list_contains(out, candidate1, fixed_bank)) {
-            uint8_t fb1 = rom_read(rom, fixed_bank, candidate1);
-            if (g_opcode_table[fb1].mnemonic != MN_ILLEGAL)
-                add_function(out, candidate1, fixed_bank);
+        if (candidate >= 0xC000 && candidate <= 0xFFFD) {
+            #define FIXED_PTR_MIN_VALID 4
+            if (!is_data_region(cfg, fixed_bank, candidate) &&
+                validate_code_target(rom, fixed_bank, candidate, FIXED_PTR_MIN_VALID) &&
+                !function_list_contains(out, candidate, fixed_bank))
+                add_function_with_source(out, candidate, fixed_bank, FUNCTION_SOURCE_PTR_SCAN);
+            #undef FIXED_PTR_MIN_VALID
+        } else if (candidate >= 0x8000 && candidate <= 0xBFFD) {
+            for (int cb = 0; cb < fixed_bank; cb++) {
+                if (is_data_region(cfg, cb, candidate)) continue;
+                if (validate_code_target(rom, cb, candidate, TABLE_RUN_MIN_VALID) &&
+                    !function_list_contains(out, candidate, cb))
+                    add_function_with_source(out, candidate, cb, FUNCTION_SOURCE_PTR_SCAN);
+            }
         }
     }
     /* BFS again for newly added candidates */
@@ -645,12 +1070,47 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
                 out->entries[i].bank == item.bank &&
                 out->entries[i].size == 0)
             {
-                out->entries[i].size = walk_function(rom, out, item.addr, item.bank, cfg);
+                out->entries[i].size = walk_function(rom, out, item.addr, item.bank, cfg,
+                                                    out->entries[i].source_flags);
                 break;
             }
         }
     }
     printf("[FuncFinder] Fixed-bank pointer scan added %d candidates\n", out->count - before_scan);
+
+    /* Switchable-bank → fixed-bank pointer scan: scan each switchable bank
+     * for 16-bit LE values that look like function pointers into the fixed
+     * bank ($C000-$FFFD). Uses deep-decode validation since cross-bank
+     * pointer matches have a higher false-positive rate. */
+    int before_sw_fixed_scan = out->count;
+    for (int b = 0; b < fixed_bank; b++) {
+        for (uint16_t off = 0; off <= 0x3FFD; off++) {
+            uint16_t addr = 0x8000 + off;
+            if (is_data_region(cfg, b, addr)) continue;
+            uint8_t lo = rom_read(rom, b, addr);
+            uint8_t hi = rom_read(rom, b, addr + 1);
+            uint16_t candidate = lo | ((uint16_t)hi << 8);
+            if (candidate < 0xC000 || candidate > 0xFFFD) continue;
+            if (is_data_region(cfg, fixed_bank, candidate)) continue;
+            if (validate_code_target(rom, fixed_bank, candidate, TABLE_RUN_MIN_VALID) &&
+                !function_list_contains(out, candidate, fixed_bank))
+                add_function_with_source(out, candidate, fixed_bank, FUNCTION_SOURCE_PTR_SCAN);
+        }
+    }
+    while (queue_pop(&item)) {
+        for (int i = 0; i < out->count; i++) {
+            if (out->entries[i].addr == item.addr &&
+                out->entries[i].bank == item.bank &&
+                out->entries[i].size == 0)
+            {
+                out->entries[i].size = walk_function(rom, out, item.addr, item.bank, cfg,
+                                                    out->entries[i].source_flags);
+                break;
+            }
+        }
+    }
+    printf("[FuncFinder] Switchable->fixed pointer scan added %d candidates\n",
+           out->count - before_sw_fixed_scan);
 
     /* Switchable-bank table-run scanner: find runs of TABLE_RUN_MIN_RUN+
      * consecutive 16-bit LE values in $8000-$BFFF where each target passes
@@ -692,7 +1152,7 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
             if (run_len >= TABLE_RUN_MIN_RUN) {
                 for (int r = 0; r < run_len; r++) {
                     if (!function_list_contains(out, run_targets[r], b))
-                        add_function(out, run_targets[r], b);
+                        add_function_with_source(out, run_targets[r], b, FUNCTION_SOURCE_TABLE_RUN);
                 }
             } else {
                 off = run_start + 1;
@@ -720,7 +1180,7 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
             if (run_len >= TABLE_RUN_MIN_RUN) {
                 for (int r = 0; r < run_len; r++) {
                     if (!function_list_contains(out, run_targets[r], b))
-                        add_function(out, run_targets[r], b);
+                        add_function_with_source(out, run_targets[r], b, FUNCTION_SOURCE_TABLE_RUN);
                 }
             } else {
                 off = run_start + 1;
@@ -734,7 +1194,8 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
                 out->entries[i].bank == item.bank &&
                 out->entries[i].size == 0)
             {
-                out->entries[i].size = walk_function(rom, out, item.addr, item.bank, cfg);
+                out->entries[i].size = walk_function(rom, out, item.addr, item.bank, cfg,
+                                                    out->entries[i].source_flags);
                 break;
             }
         }
@@ -819,15 +1280,17 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
             int lo_bank = (lo_tbl >= 0xC000) ? fixed_bank : b;
             int hi_bank = (hi_tbl >= 0xC000) ? fixed_bank : b;
             int site_added = 0;
-            /* The hard cap bounds runaway scans on accidental matches; the
-             * loop normally stops earlier on validate_code_target. 256 covers
-             * tables indexed by a full byte, which MM3's player-state
-             * dispatcher exercises (entries past index $80 observed). */
+            /* Contiguous table detection: when hi_tbl == lo_tbl + 1, the
+             * lo/hi bytes are interleaved in a single table. The Y/X index
+             * is already doubled (ASL A or equivalent), so entries are at
+             * stride 2. For true split tables (separate lo/hi arrays),
+             * entries are at stride 1. */
+            int entry_stride = (hi_tbl == lo_tbl + 1) ? 2 : 1;
             /* Per-entry validation strategy:
              *
-             * Each split-table entry is INDEPENDENTLY a pointer; failures at
-             * one index don't imply the table has ended. We therefore skip
-             * past individual failures rather than breaking — but cap on
+             * Each table entry is INDEPENDENTLY a pointer; failures at one
+             * index don't imply the table has ended. We therefore skip past
+             * individual failures rather than breaking — but cap on
              * consecutive failures so we don't run off the end of the table
              * indefinitely.
              *
@@ -839,9 +1302,10 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
             int consecutive_fail = 0;
             const int MAX_CONSEC_FAIL = 16;
             for (int i = 0; i < 256; i++) {
-                if (lo_tbl + i > 0xFFFF || hi_tbl + i > 0xFFFF) break;
-                uint8_t tl = rom_read(rom, lo_bank, (uint16_t)(lo_tbl + i));
-                uint8_t th = rom_read(rom, hi_bank, (uint16_t)(hi_tbl + i));
+                int off = i * entry_stride;
+                if (lo_tbl + off > 0xFFFF || hi_tbl + off > 0xFFFF) break;
+                uint8_t tl = rom_read(rom, lo_bank, (uint16_t)(lo_tbl + off));
+                uint8_t th = rom_read(rom, hi_bank, (uint16_t)(hi_tbl + off));
                 uint16_t target = tl | ((uint16_t)th << 8);
                 if (target < 0x8000 || target > 0xFFFE) {
                     if (++consecutive_fail >= MAX_CONSEC_FAIL) break;
@@ -854,7 +1318,7 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
                 }
                 consecutive_fail = 0;
                 if (!function_list_contains(out, target, tbank)) {
-                    add_function(out, target, tbank);
+                    add_function_with_source(out, target, tbank, FUNCTION_SOURCE_SPLIT_TABLE);
                     site_added++;
                 }
             }
@@ -871,7 +1335,8 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
                 out->entries[i].bank == item.bank &&
                 out->entries[i].size == 0)
             {
-                out->entries[i].size = walk_function(rom, out, item.addr, item.bank, cfg);
+                out->entries[i].size = walk_function(rom, out, item.addr, item.bank, cfg,
+                                                    out->entries[i].source_flags);
                 break;
             }
         }
@@ -893,10 +1358,10 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
             uint16_t target = (lo | ((uint16_t)hi << 8)) + 1;
             if (target >= 0x8000 && target <= 0xBFFD) {
                 if (!function_list_contains(out, target, kb))
-                    add_function(out, target, kb);
+                    add_function_with_source(out, target, kb, FUNCTION_SOURCE_KNOWN_TABLE);
             } else if (target >= 0xC000 && target <= 0xFFFD) {
                 if (!function_list_contains(out, target, fixed_bank))
-                    add_function(out, target, fixed_bank);
+                    add_function_with_source(out, target, fixed_bank, FUNCTION_SOURCE_KNOWN_TABLE);
             }
         }
     }
@@ -914,10 +1379,10 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
             uint16_t target = (lo | ((uint16_t)hi << 8)) + 1;
             if (target >= 0x8000 && target <= 0xBFFD) {
                 if (!function_list_contains(out, target, kb))
-                    add_function(out, target, kb);
+                    add_function_with_source(out, target, kb, FUNCTION_SOURCE_KNOWN_TABLE);
             } else if (target >= 0xC000 && target <= 0xFFFD) {
                 if (!function_list_contains(out, target, fixed_bank))
-                    add_function(out, target, fixed_bank);
+                    add_function_with_source(out, target, fixed_bank, FUNCTION_SOURCE_KNOWN_TABLE);
             }
         }
     }
@@ -928,7 +1393,8 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
                 out->entries[i].bank == item.bank &&
                 out->entries[i].size == 0)
             {
-                out->entries[i].size = walk_function(rom, out, item.addr, item.bank, cfg);
+                out->entries[i].size = walk_function(rom, out, item.addr, item.bank, cfg,
+                                                    out->entries[i].source_flags);
                 break;
             }
         }
@@ -936,26 +1402,245 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
     printf("[FuncFinder] Known dispatch table scan added %d candidates\n",
            out->count - before_kt);
 
-    /* Extra function seeds from game config: functions dispatched dynamically
-     * but not discoverable via static pointer/table scans. */
-    for (int i = 0; i < cfg->extra_func_count; i++) {
-        int bank = (cfg->extra_funcs[i].bank < 0) ? fixed_bank : cfg->extra_funcs[i].bank;
-        add_function(out, cfg->extra_funcs[i].addr, bank);
+    /* Cross-bank function propagation: for each function discovered in a
+     * switchable bank ($8000-$BFFF), check if other switchable banks have
+     * identical code bytes at the same address. If the first 8 bytes match
+     * and the target isn't a data region, propagate the function to that
+     * bank. This catches shared code regions (e.g., Metroid's common
+     * routines duplicated across all PRG banks). */
+    int before_xbank = out->count;
+    {
+        #define XBANK_MATCH_BYTES 8
+        int snapshot_count = out->count;
+        for (int i = 0; i < snapshot_count; i++) {
+            uint16_t addr = out->entries[i].addr;
+            int src_bank = out->entries[i].bank;
+            if (src_bank == fixed_bank) continue;
+            if (addr < 0x8000 || addr >= 0xC000) continue;
+            if (is_data_region(cfg, src_bank, addr)) continue;
+            uint8_t ref[XBANK_MATCH_BYTES];
+            for (int j = 0; j < XBANK_MATCH_BYTES; j++)
+                ref[j] = rom_read(rom, src_bank, addr + j);
+            for (int ob = 0; ob < fixed_bank; ob++) {
+                if (ob == src_bank) continue;
+                if (function_list_contains(out, addr, ob)) continue;
+                if (is_data_region(cfg, ob, addr)) continue;
+                bool match = true;
+                for (int j = 0; j < XBANK_MATCH_BYTES && match; j++) {
+                    if (rom_read(rom, ob, addr + j) != ref[j])
+                        match = false;
+                }
+                if (match)
+                    add_function_with_source(out, addr, ob, FUNCTION_SOURCE_XBANK);
+            }
+        }
+        #undef XBANK_MATCH_BYTES
     }
-    /* BFS for hardcoded seeds */
     while (queue_pop(&item)) {
         for (int i = 0; i < out->count; i++) {
             if (out->entries[i].addr == item.addr &&
                 out->entries[i].bank == item.bank &&
                 out->entries[i].size == 0)
             {
-                out->entries[i].size = walk_function(rom, out, item.addr, item.bank, cfg);
+                out->entries[i].size = walk_function(rom, out, item.addr, item.bank, cfg,
+                                                    out->entries[i].source_flags);
+                break;
+            }
+        }
+    }
+    printf("[FuncFinder] Cross-bank propagation added %d candidates\n",
+           out->count - before_xbank);
+    }
+
+    int bank_count = fixed_bank + 1;
+    size_t coverage_elems = (size_t)bank_count * 65536u;
+    int *coverage_map = (int *)malloc(coverage_elems * sizeof(int));
+    if (coverage_map) {
+        int secondary_count = classify_secondary_entries(rom, out, cfg, coverage_map);
+        printf("[FuncFinder] Structural classification marked %d secondary entries\n",
+               secondary_count);
+    }
+    if (cfg->output_prefix[0])
+        snprintf(audit_path, sizeof(audit_path), "%s_finder_audit.csv", cfg->output_prefix);
+    else
+        snprintf(audit_path, sizeof(audit_path), "finder_audit.csv");
+    if (cfg->output_prefix[0])
+        snprintf(entries_audit_path, sizeof(entries_audit_path), "%s_auto_entries.csv", cfg->output_prefix);
+    else
+        snprintf(entries_audit_path, sizeof(entries_audit_path), "auto_entries.csv");
+    audit = fopen(audit_path, "w");
+    if (audit)
+        fprintf(audit, "entry_type,addr,bank,status,canonical_addr,canonical_bank\n");
+    entries_audit = fopen(entries_audit_path, "w");
+    if (entries_audit)
+        fprintf(entries_audit, "addr,bank,kind,canonical_addr,canonical_bank,covering_addr,covering_bank,evidence_count,source_flags_hex,source_flags\n");
+
+    /* ── Evaluation: report extra_func coverage ─────────────────────────── */
+    int auto_discovered_before_extras = out->count;
+    {
+        int standalone = 0, secondary = 0, suspicious = 0, missed = 0;
+        for (int i = 0; i < cfg->extra_func_count; i++) {
+            uint16_t addr = cfg->extra_funcs[i].addr;
+            int bank = (cfg->extra_funcs[i].bank < 0) ? fixed_bank : cfg->extra_funcs[i].bank;
+            int found_idx = function_list_find_index(out, addr, bank);
+            bool is_found = (found_idx >= 0);
+            if (!is_found && cfg->extra_funcs[i].bank < 0 &&
+                addr >= 0x8000 && addr < 0xC000) {
+                for (int b = 0; b < fixed_bank; b++) {
+                    found_idx = function_list_find_index(out, addr, b);
+                    if (found_idx >= 0) {
+                        is_found = true; bank = b; break;
+                    }
+                }
+            }
+            if (is_found) {
+                const FunctionEntry *fe = &out->entries[found_idx];
+                if (fe->kind == FUNCTION_KIND_SECONDARY) {
+                    printf("[Eval] extra_func $%04X bank=%d: AUTO_DISCOVERED_AS_SECONDARY via $%04X bank=%d\n",
+                           addr, bank, fe->canonical_addr, fe->canonical_bank);
+                    if (audit) fprintf(audit, "extra_func,%04X,%d,AUTO_DISCOVERED_AS_SECONDARY,%04X,%d\n",
+                                       addr, bank, fe->canonical_addr, fe->canonical_bank);
+                    secondary++;
+                } else {
+                    printf("[Eval] extra_func $%04X bank=%d: AUTO_DISCOVERED\n", addr, bank);
+                    if (audit) fprintf(audit, "extra_func,%04X,%d,AUTO_DISCOVERED,,\n",
+                                       addr, bank);
+                    standalone++;
+                }
+            } else if (coverage_map &&
+                       bank >= 0 && bank < bank_count &&
+                       coverage_map[(size_t)bank * 65536u + addr] >= 0) {
+                int cover_idx = coverage_map[(size_t)bank * 65536u + addr];
+                printf("[Eval] extra_func $%04X bank=%d: DISCOVERABLE_AS_SECONDARY via $%04X bank=%d\n",
+                       addr, bank, out->entries[cover_idx].addr, out->entries[cover_idx].bank);
+                if (audit) fprintf(audit, "extra_func,%04X,%d,DISCOVERABLE_AS_SECONDARY,%04X,%d\n",
+                                   addr, bank, out->entries[cover_idx].addr, out->entries[cover_idx].bank);
+                secondary++;
+            } else {
+                const char *status = classify_missing_manual_entry(rom, cfg, addr, bank);
+                printf("[Eval] extra_func $%04X bank=%d: %s\n", addr, bank, status);
+                if (audit) fprintf(audit, "extra_func,%04X,%d,%s,,\n", addr, bank, status);
+                if (strcmp(status, "MISSING") == 0)
+                    missed++;
+                else
+                    suspicious++;
+            }
+        }
+        printf("[Eval] Coverage: %d/%d extra_funcs resolved (%d standalone, %d secondary, %d suspicious, %d missing)\n",
+               standalone + secondary, cfg->extra_func_count,
+               standalone, secondary, suspicious, missed);
+    }
+    {
+        int standalone = 0, secondary = 0, missing = 0;
+        for (int i = 0; i < cfg->extra_label_count; i++) {
+            uint16_t addr = cfg->extra_labels[i].addr;
+            int bank = (cfg->extra_labels[i].bank < 0) ? fixed_bank : cfg->extra_labels[i].bank;
+            int found_idx = function_list_find_index(out, addr, bank);
+            if (found_idx >= 0) {
+                if (out->entries[found_idx].kind == FUNCTION_KIND_SECONDARY) {
+                    printf("[Eval] extra_label $%04X bank=%d: AUTO_DISCOVERED_AS_SECONDARY via $%04X bank=%d\n",
+                           addr, bank,
+                           out->entries[found_idx].canonical_addr,
+                           out->entries[found_idx].canonical_bank);
+                    if (audit) fprintf(audit, "extra_label,%04X,%d,AUTO_DISCOVERED_AS_SECONDARY,%04X,%d\n",
+                                       addr, bank,
+                                       out->entries[found_idx].canonical_addr,
+                                       out->entries[found_idx].canonical_bank);
+                    secondary++;
+                } else {
+                    printf("[Eval] extra_label $%04X bank=%d: AUTO_DISCOVERED_AS_STANDALONE\n",
+                           addr, bank);
+                    if (audit) fprintf(audit, "extra_label,%04X,%d,AUTO_DISCOVERED_AS_STANDALONE,,\n",
+                                       addr, bank);
+                    standalone++;
+                }
+            } else if (coverage_map &&
+                       bank >= 0 && bank < bank_count &&
+                       coverage_map[(size_t)bank * 65536u + addr] >= 0) {
+                int cover_idx = coverage_map[(size_t)bank * 65536u + addr];
+                printf("[Eval] extra_label $%04X bank=%d: DISCOVERABLE_AS_SECONDARY via $%04X bank=%d\n",
+                       addr, bank, out->entries[cover_idx].addr, out->entries[cover_idx].bank);
+                if (audit) fprintf(audit, "extra_label,%04X,%d,DISCOVERABLE_AS_SECONDARY,%04X,%d\n",
+                                   addr, bank, out->entries[cover_idx].addr, out->entries[cover_idx].bank);
+                secondary++;
+            } else {
+                printf("[Eval] extra_label $%04X bank=%d: MISSING\n", addr, bank);
+                if (audit) fprintf(audit, "extra_label,%04X,%d,MISSING,,\n", addr, bank);
+                missing++;
+            }
+        }
+        printf("[Eval] Extra-label coverage: %d/%d secondary, %d standalone, %d missing\n",
+               secondary, cfg->extra_label_count, standalone, missing);
+    }
+    {
+        int fp_count = 0;
+        for (int i = 0; i < auto_discovered_before_extras; i++) {
+            uint16_t addr = out->entries[i].addr;
+            int bank = out->entries[i].bank;
+            if (is_data_region(cfg, bank, addr)) {
+                printf("[Eval] FP_SUSPECT $%04X bank=%d: in data_region\n", addr, bank);
+                fp_count++; continue;
+            }
+            if (!validate_code_target(rom, bank, addr, TABLE_RUN_MIN_VALID)) {
+                printf("[Eval] FP_SUSPECT $%04X bank=%d: fails decode validation\n", addr, bank);
+                fp_count++;
+            }
+        }
+        printf("[Eval] False positive suspects: %d/%d auto-discovered functions\n",
+               fp_count, auto_discovered_before_extras);
+    }
+    if (entries_audit) {
+        for (int i = 0; i < auto_discovered_before_extras; i++) {
+            char source_buf[128];
+            source_flags_to_string(out->entries[i].source_flags, source_buf, sizeof(source_buf));
+            fprintf(entries_audit, "%04X,%d,%s,%04X,%d,%04X,%d,%u,0x%02X,%s\n",
+                    out->entries[i].addr,
+                    out->entries[i].bank,
+                    (out->entries[i].kind == FUNCTION_KIND_SECONDARY) ? "secondary" : "standalone",
+                    out->entries[i].canonical_addr,
+                    out->entries[i].canonical_bank,
+                    out->entries[i].covering_addr,
+                    out->entries[i].covering_bank,
+                    out->entries[i].evidence_count,
+                    out->entries[i].source_flags,
+                    source_buf);
+        }
+    }
+
+    /* Extra function seeds from game config */
+    for (int i = 0; i < cfg->extra_func_count; i++) {
+        int bank = (cfg->extra_funcs[i].bank < 0) ? fixed_bank : cfg->extra_funcs[i].bank;
+        add_function_with_source(out, cfg->extra_funcs[i].addr, bank, FUNCTION_SOURCE_MANUAL);
+    }
+    while (queue_pop(&item)) {
+        for (int i = 0; i < out->count; i++) {
+            if (out->entries[i].addr == item.addr &&
+                out->entries[i].bank == item.bank &&
+                out->entries[i].size == 0)
+            {
+                out->entries[i].size = walk_function(rom, out, item.addr, item.bank, cfg,
+                                                    out->entries[i].source_flags);
                 break;
             }
         }
     }
 
-    printf("[FuncFinder] Total functions found: %d\n", out->count);
+    if (coverage_map) {
+        classify_secondary_entries(rom, out, cfg, coverage_map);
+        free(coverage_map);
+    }
+    if (audit) {
+        fclose(audit);
+        printf("[Eval] Finder audit written: %s\n", audit_path);
+    }
+    if (entries_audit) {
+        fclose(entries_audit);
+        printf("[Eval] Auto-entry audit written: %s\n", entries_audit_path);
+    }
+
+    printf("[FuncFinder] Total functions found: %d (auto=%d + extras=%d)\n",
+           out->count, auto_discovered_before_extras,
+           out->count - auto_discovered_before_extras);
     printf("[RegProp] Bank switches detected: %d, targeted adds via propagation: %d\n",
            s_bank_switches_detected, s_regprop_targeted_adds);
 }

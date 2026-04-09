@@ -77,6 +77,8 @@ It scans both:
 
 This catches dispatch patterns that use indirect addressing (`(ZP),Y`, stack-based) where no direct `abs,X`/`abs,Y` code reference to the table exists.
 
+Set `NESRECOMP_LEGACY_FUNCTION_FINDER=1` to disable the newer heuristic discovery passes and fall back to the older BFS-first finder behavior for comparison runs.
+
 **Harmful vs harmless false positives**: The deep-decode check eliminates "harmful" false positives (data misidentified as code, which would generate invalid C). "Harmless" false positives (valid code in another bank's context) are accepted — they generate unused but compilable functions. Adding `data_region` entries for known data areas eliminates remaining edge cases where structured data happens to decode as 7+ valid instructions.
 
 **Expected results** (validated against Zelda with exhaustive disassembly ground truth):
