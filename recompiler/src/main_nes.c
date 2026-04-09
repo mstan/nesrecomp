@@ -344,19 +344,64 @@ static void run_iterative_proposal(const NESRom *rom, const char *output_prefix,
     delete_if_exists(proposal_path);
 }
 
+static void print_usage(void) {
+    fprintf(stderr,
+        "NESRecomp — static NES recompiler (6502 → C)\n"
+        "\n"
+        "Usage:\n"
+        "  NESRecomp <rom.nes>                        Recompile ROM to C\n"
+        "  NESRecomp <rom.nes> --game <game.toml>     Recompile with game config\n"
+        "\n"
+        "Options:\n"
+        "  --game <path>          Game-specific config (trampolines, dispatch tables, etc.)\n"
+        "                         If omitted, auto-detects ./game.toml or uses defaults.\n"
+        "  --proposal-out <path>  Write a proposed game.toml based on auto-discovery.\n"
+        "  --help, -h             Show this help message.\n"
+        "\n"
+        "Output:\n"
+        "  generated/<prefix>_full.c       All recompiled functions\n"
+        "  generated/<prefix>_dispatch.c   Address-to-function dispatch table\n"
+        "\n"
+        "  The output prefix comes from game.toml [game]/output_prefix, or is\n"
+        "  derived from the ROM filename if no config is provided.\n"
+        "\n"
+        "Examples:\n"
+        "  NESRecomp \"Super Mario Bros.nes\"                    # quick start\n"
+        "  NESRecomp \"Super Mario Bros.nes\" --game game.toml   # with config\n"
+    );
+}
+
 int main(int argc, char *argv[]) {
     if (argc < 2) {
-        fprintf(stderr, "Usage: NESRecomp <rom.nes> [--game <path/to/game.toml>] [--proposal-out <path/to/proposal.toml>]\n");
+        print_usage();
         return 1;
     }
 
-    const char *rom_path  = argv[1];
+    const char *rom_path  = NULL;
     const char *game_path = NULL;
     const char *proposal_out = NULL;
 
-    for (int i = 2; i < argc; i++) {
-        if (strcmp(argv[i], "--game") == 0 && i+1 < argc) game_path = argv[++i];
-        else if (strcmp(argv[i], "--proposal-out") == 0 && i+1 < argc) proposal_out = argv[++i];
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
+            print_usage();
+            return 0;
+        } else if (strcmp(argv[i], "--game") == 0 && i+1 < argc) {
+            game_path = argv[++i];
+        } else if (strcmp(argv[i], "--proposal-out") == 0 && i+1 < argc) {
+            proposal_out = argv[++i];
+        } else if (!rom_path) {
+            rom_path = argv[i];
+        } else {
+            fprintf(stderr, "Error: unexpected argument '%s'\n\n", argv[i]);
+            print_usage();
+            return 1;
+        }
+    }
+
+    if (!rom_path) {
+        fprintf(stderr, "Error: no ROM file specified.\n\n");
+        print_usage();
+        return 1;
     }
 
     /* Auto-detect game.toml in current directory if not specified */
