@@ -733,10 +733,16 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                         fprintf(f, "  uint8_t _sbank=g_ram[0x%04X];\n", tramp->bank_save_addr);
                     fprintf(f, "  g_cpu.%s=0x%02X; func_%04X();\n", breg, disp_bank, tramp->bs_fn_addr);
                     fprintf(f, "  g_cpu.A=_sa; g_cpu.X=_sx; g_cpu.Y=_sy;\n");
-                    if (cfg->push_all_jsr)
-                        fprintf(f, "  if (!call_by_address(0x%04X)) g_cpu.S += 2;\n", disp_addr);
-                    else
+                    /* Dispatch directly to the statically-known bank+addr target.
+                     * Using call_by_address() would race with NMI (which can change
+                     * g_current_bank between the bank switch and the dispatch). */
+                    if (disp_addr >= 0xC000) {
+                        fprintf(f, "  func_%04X();\n", disp_addr);
+                    } else if (disp_addr >= 0x8000) {
+                        fprintf(f, "  func_%04X_b%d();\n", disp_addr, disp_bank);
+                    } else {
                         fprintf(f, "  call_by_address(0x%04X);\n", disp_addr);
+                    }
                     fprintf(f, "  _sa=g_cpu.A;\n");
                     fprintf(f, "  g_cpu.%s=_sbank; func_%04X();\n", breg, tramp->bs_fn_addr);
                     fprintf(f, "  g_cpu.A=_sa; }\n");
