@@ -427,11 +427,33 @@ static uint16_t codegen_sram_translate(const GameConfig *cfg, uint16_t addr, int
 }
 
 /* Check if an address is a valid inline_dispatch table entry:
- * either in ROM range ($8000+) or in a configured SRAM map range
- * whose translated ROM address has a generated function. */
+ * either in ROM range ($8000+) with a known function that is actually
+ * emitted (not in a data region, not zero-fill), or in a configured
+ * SRAM map range whose translated ROM address has a generated function.
+ * dispatch_bank: bank for switchable-range ($8000-$BFFF) targets.
+ * fixed_bank:    bank index for fixed range ($C000+) targets.
+ * rom:           ROM data for code validation (NULL to skip). */
 static int is_valid_dispatch_target(const GameConfig *cfg, uint16_t addr,
-                                     const FunctionList *funcs) {
-    if (addr >= 0x8000) return 1;
+                                     const FunctionList *funcs,
+                                     int dispatch_bank, int fixed_bank,
+                                     const NESRom *rom) {
+    if (addr >= 0x8000) {
+        int check_bank = (addr >= 0xC000) ? fixed_bank : dispatch_bank;
+        /* Reject targets where the first byte is BRK ($00) — indicates
+         * zero-fill or unused ROM, not a valid function entry. */
+        if (rom && check_bank >= 0 && rom_read(rom, check_bank, addr) == 0x00)
+            return 0;
+        /* Require a discovered function at the target. */
+        if (funcs) {
+            if (check_bank >= 0 &&
+                function_list_contains(funcs, addr, check_bank)) return 1;
+            /* If dispatch bank unknown for switchable range, accept
+             * cautiously (can't validate without bank info). */
+            if (addr < 0xC000 && dispatch_bank < 0) return 1;
+            return 0;
+        }
+        return 1;  /* No function list: accept all ROM targets */
+    }
     int sram_bank = -1;
     uint16_t rom_addr = codegen_sram_translate(cfg, addr, &sram_bank);
     if (!rom_addr) return 0;
@@ -758,37 +780,18 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                     if (abs16 == cfg->inline_dispatches[ti].addr) { idsp = &cfg->inline_dispatches[ti]; break; }
                 }
                 if (idsp) {
-                    uint16_t tpc = pc + 3;
-                    int entry_count = 0;
-                    /* Count entries: valid targets are ROM ($8000+) or SRAM-mapped
-                     * with a known function at the translated ROM address. */
-                    while (1) {
-                        uint8_t lo = rom_read(rom, bank, tpc);
-                        uint8_t hi = rom_read(rom, bank, tpc + 1);
-                        uint16_t addr = (uint16_t)lo | ((uint16_t)hi << 8);
-                        if (!is_valid_dispatch_target(cfg, addr, funcs)) break;
-                        tpc += 2;
-                        entry_count++;
-                    }
-                    /* Determine which bank to use for switchable-range targets.
-                     * Scan backward from this JSR TableJump for the nearest
-                     * LDA #imm; JSR SwitchBank pattern (within ~20 bytes). */
+                    /* Determine which bank to use for switchable-range targets
+                     * BEFORE counting table entries, so the validator can check
+                     * targets against the discovered function list. */
                     int dispatch_bank = -1;
                     if (bank != fixed_bank) {
                         dispatch_bank = bank;
                     } else {
-                        /* Fixed bank: check inline_dispatch bank hints in config.
-                         * Then fall back to backward scan for LDA #imm; JSR SwitchBank.
-                         * Look for the dominating bank switch by scanning backward
-                         * up to 64 bytes, skipping conditional branch targets. */
+                        /* Fixed bank: scan backward from this JSR for the nearest
+                         * LDA #imm; JSR SwitchBank pattern (within ~64 bytes). */
                         for (int bk = 5; bk <= 64; bk++) {
                             if (pc < (uint16_t)(0xC000 + bk)) break;
                             uint16_t probe = (uint16_t)(pc - bk);
-                            /* Skip if this location is after a conditional branch
-                             * (indicating we're in a branch-taken path, not the
-                             * main code flow).  Heuristic: if a JMP (4C) immediately
-                             * precedes this JSR SwitchBank, it's a tail-call from a
-                             * branch and the bank is not the dominating one. */
                             for (int bi2 = 0; bi2 < cfg->bank_switch_count; bi2++) {
                                 uint16_t bs_addr = cfg->bank_switches[bi2].addr;
                                 if (rom_read(rom, bank, probe) == 0x20 &&
@@ -797,9 +800,6 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                                     probe >= 2 && rom_read(rom, bank, probe - 2) == 0xA9) {
                                     int bval = rom_read(rom, bank, probe - 1);
                                     if (bval < fixed_bank) {
-                                        /* Check if a JMP follows this bank switch within 6 bytes.
-                                         * If so, this is a branch-only bank switch (tail call),
-                                         * not the dominating one. Skip it. */
                                         int is_tail = 0;
                                         for (int fwd = 3; fwd <= 8; fwd++) {
                                             if (rom_read(rom, bank, probe + fwd) == 0x4C) {
@@ -815,6 +815,21 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                             }
                         }
                         dispatch_bank_found:;
+                    }
+
+                    uint16_t tpc = pc + 3;
+                    int entry_count = 0;
+                    /* Count entries: require each target to have a discovered
+                     * function.  This prevents table over-reads into trailing
+                     * data (e.g. zero-fill regions with bytes like $FE, $FF
+                     * that look like high ROM addresses). */
+                    while (1) {
+                        uint8_t lo = rom_read(rom, bank, tpc);
+                        uint8_t hi = rom_read(rom, bank, tpc + 1);
+                        uint16_t addr = (uint16_t)lo | ((uint16_t)hi << 8);
+                        if (!is_valid_dispatch_target(cfg, addr, funcs, dispatch_bank, fixed_bank, rom)) break;
+                        tpc += 2;
+                        entry_count++;
                     }
                     fprintf(f, "/* inline_dispatch $%04X: %d entries (bank=%d) */\n",
                             idsp->addr, entry_count, dispatch_bank);

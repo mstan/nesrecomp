@@ -785,6 +785,60 @@ static void handle_watchdog_status(int id, const char *json)
              g_watchdog_stack_dump ? g_watchdog_stack_dump : "");
 }
 
+static void handle_dispatch_miss_info(int id, const char *json)
+{
+    (void)json;
+    extern uint32_t g_miss_count_any;
+    extern uint16_t g_miss_last_addr;
+    extern uint64_t g_miss_last_frame;
+    extern int      g_miss_last_bank;
+    extern char     g_miss_last_caller[64];
+    extern char     g_miss_last_stack2[64];
+    extern uint8_t  g_miss_last_sp;
+    extern uint8_t  g_miss_last_stack_bytes[16];
+    extern uint16_t g_miss_unique_addrs[];
+    extern int      g_miss_unique_count;
+
+    /* Build hex string for stack bytes */
+    char stack_hex[48];
+    for (int i = 0; i < 16; i++)
+        snprintf(stack_hex + i*3, 4, "%02X ", g_miss_last_stack_bytes[i]);
+    if (stack_hex[0]) stack_hex[47] = '\0';
+
+    /* Build unique misses array */
+    char unique_buf[256];
+    int pos = 0;
+    unique_buf[pos++] = '[';
+    for (int i = 0; i < g_miss_unique_count; i++) {
+        if (i) unique_buf[pos++] = ',';
+        pos += snprintf(unique_buf + pos, sizeof(unique_buf) - pos,
+                        "\"$%04X\"", g_miss_unique_addrs[i]);
+    }
+    unique_buf[pos++] = ']';
+    unique_buf[pos] = '\0';
+
+    send_fmt("{\"id\":%d,\"ok\":true,"
+             "\"total_misses\":%u,"
+             "\"last_addr\":\"$%04X\","
+             "\"last_bank\":%d,"
+             "\"last_frame\":%llu,"
+             "\"last_caller\":\"%s\","
+             "\"last_stack2\":\"%s\","
+             "\"last_sp\":\"$%02X\","
+             "\"stack_bytes\":\"%s\","
+             "\"unique_misses\":%s}",
+             id,
+             (unsigned)g_miss_count_any,
+             g_miss_last_addr,
+             g_miss_last_bank,
+             (unsigned long long)g_miss_last_frame,
+             g_miss_last_caller,
+             g_miss_last_stack2,
+             g_miss_last_sp,
+             stack_hex,
+             unique_buf);
+}
+
 static void handle_quit(int id, const char *json)
 {
     (void)json;
@@ -1118,6 +1172,7 @@ static const CmdEntry s_commands[] = {
 #ifdef RECOMP_STACK_TRACKING
     { "call_stack",        handle_call_stack },
 #endif
+    { "dispatch_miss_info", handle_dispatch_miss_info },
     { "quit",              handle_quit },
     { "screenshot",        handle_screenshot },
     { NULL, NULL }
