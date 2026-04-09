@@ -95,19 +95,16 @@ static const char *operand_addr_expr(AddrMode am, uint8_t op1, uint8_t op2) {
 }
 
 /* Check if a branch target is a valid instruction-start address within this function.
- * valid_starts[] is the pre-scan list; also checks if tgt == last_instr + size
- * (valid continuation point right after the last scanned instruction). */
+ * Only addresses we actually pre-scanned are safe goto labels. Treating
+ * one-past-the-last-scanned instruction as local can emit gotos to labels that
+ * never appear in the body when the pre-scan stopped at a function boundary. */
 static bool is_valid_label_target(uint16_t tgt, const uint16_t *vs, int vc,
-                                   const NESRom *rom, int bank) {
+                                    const NESRom *rom, int bank) {
+    (void)rom;
+    (void)bank;
     for (int i = 0; i < vc; i++)
         if (vs[i] == tgt) return true;
-    if (vc == 0) return false;
-    /* Check if tgt is exactly one instruction past the last scanned instruction */
-    uint16_t last = vs[vc - 1];
-    uint8_t op = rom_read(rom, bank, last);
-    int sz = g_opcode_table[op].size;
-    if (sz <= 0) sz = 1;
-    return (tgt == (uint16_t)(last + sz));
+    return false;
 }
 
 /* Check if a RAM address has a read hook registered in game.cfg */
@@ -335,6 +332,10 @@ static int collect_internal_alias_addrs(const NESRom *rom, const FunctionList *f
         const FunctionEntry *fe = &funcs->entries[fi];
         if (fe->bank != entry->bank) continue;
         if (fe->addr == entry->addr) continue;
+        /* Only alias entries that are intentionally omitted as standalone wrappers.
+         * Pulling in arbitrary discovered functions here can collapse unrelated code
+         * into a single mega-body when the boundary scan is over-permissive. */
+        if (!entry_is_merge_range_secondary(rom, funcs, cfg, fi)) continue;
         if (codegen_has_emitted_wrapper(fe->addr, fe->bank)) continue;
         if (contains_addr(existing_addrs, existing_count, fe->addr)) continue;
 
@@ -350,6 +351,7 @@ static int collect_internal_alias_addrs(const NESRom *rom, const FunctionList *f
 }
 
 #define MAX_BODY_ALIASES (MAX_FUNCTIONS * 4)
+#define MAX_SECONDARY_ENTRIES 256
 
 static int collect_body_aliases(const NESRom *rom, const FunctionList *funcs,
                                 const GameConfig *cfg, BodyAlias *aliases,
@@ -361,12 +363,13 @@ static int collect_body_aliases(const NESRom *rom, const FunctionList *funcs,
         if (!entry_emits_standalone(funcs, cfg, entry)) continue;
         if (entry_is_merge_range_secondary(rom, funcs, cfg, i)) continue;
 
-        uint16_t public_addrs[64];
-        int public_count = collect_secondary_addrs(rom, funcs, cfg, i, public_addrs, 64);
-        uint16_t internal_addrs[64];
+        uint16_t public_addrs[MAX_SECONDARY_ENTRIES];
+        int public_count = collect_secondary_addrs(rom, funcs, cfg, i,
+                                                   public_addrs, MAX_SECONDARY_ENTRIES);
+        uint16_t internal_addrs[MAX_SECONDARY_ENTRIES];
         int internal_count = collect_internal_alias_addrs(rom, funcs, cfg, i,
                                                           public_addrs, public_count,
-                                                          internal_addrs, 64);
+                                                          internal_addrs, MAX_SECONDARY_ENTRIES);
         for (int ai = 0; ai < internal_count && alias_count < max_aliases; ai++) {
             aliases[alias_count++] = (BodyAlias){
                 internal_addrs[ai], entry->bank, entry->addr, entry->bank,
@@ -392,9 +395,9 @@ static int collect_emitted_wrappers(const NESRom *rom, const FunctionList *funcs
 
         wrapper_list_add(wrappers, &wrapper_count, max_wrappers, entry->addr, entry->bank);
 
-        uint16_t secondary_addrs[64];
+        uint16_t secondary_addrs[MAX_SECONDARY_ENTRIES];
         int secondary_count = collect_secondary_addrs(rom, funcs, cfg, i,
-                                                      secondary_addrs, 64);
+                                                      secondary_addrs, MAX_SECONDARY_ENTRIES);
         for (int si = 0; si < secondary_count; si++) {
             uint16_t sa = secondary_addrs[si];
             if (prefer_merge_range_wrapper(cfg, entry->bank, entry->addr, sa))
@@ -833,15 +836,32 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                         uint8_t lo = rom_read(rom, bank, tpc);
                         uint8_t hi = rom_read(rom, bank, tpc + 1);
                         uint16_t dest = (uint16_t)lo | ((uint16_t)hi << 8);
+                        uint16_t alias_owner = 0;
+                        int alias_bank = -1;
+                        int alias_entry = 0;
                         fprintf(f, "  case %d: ", ei);
                         if (dest >= 0xC000) {
-                            fprintf(f, "func_%04X(); return;\n", dest);
+                            if (codegen_lookup_body_alias(dest, fixed_bank,
+                                                          &alias_owner, &alias_bank, &alias_entry))
+                                fprintf(f, "func_%04X_body(%d); return;\n", alias_owner, alias_entry);
+                            else
+                                fprintf(f, "func_%04X(); return;\n", dest);
                         } else if (dest >= 0x8000) {
                             if (dispatch_bank >= 0) {
                                 /* Bank known from register propagation, validated */
-                                fprintf(f, "func_%04X_b%d(); return;\n", dest, dispatch_bank);
+                                if (codegen_lookup_body_alias(dest, dispatch_bank,
+                                                              &alias_owner, &alias_bank, &alias_entry))
+                                    fprintf(f, "func_%04X_b%d_body(%d); return;\n",
+                                            alias_owner, alias_bank, alias_entry);
+                                else
+                                    fprintf(f, "func_%04X_b%d(); return;\n", dest, dispatch_bank);
                             } else if (bank != fixed_bank) {
-                                fprintf(f, "func_%04X_b%d(); return;\n", dest, bank);
+                                if (codegen_lookup_body_alias(dest, bank,
+                                                              &alias_owner, &alias_bank, &alias_entry))
+                                    fprintf(f, "func_%04X_b%d_body(%d); return;\n",
+                                            alias_owner, alias_bank, alias_entry);
+                                else
+                                    fprintf(f, "func_%04X_b%d(); return;\n", dest, bank);
                             } else {
                                 /* Fixed bank, no bank-switch or missing targets: runtime */
                                 fprintf(f, "call_by_address(0x%04X); return;\n", dest);
@@ -852,9 +872,19 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                             uint16_t rom_addr = codegen_sram_translate(cfg, dest, &sram_bank);
                             if (rom_addr) {
                                 if (rom_addr >= 0xC000) {
-                                    fprintf(f, "func_%04X(); return;\n", rom_addr);
+                                    if (codegen_lookup_body_alias(rom_addr, fixed_bank,
+                                                                  &alias_owner, &alias_bank, &alias_entry))
+                                        fprintf(f, "func_%04X_body(%d); return;\n",
+                                                alias_owner, alias_entry);
+                                    else
+                                        fprintf(f, "func_%04X(); return;\n", rom_addr);
                                 } else {
-                                    fprintf(f, "func_%04X_b%d(); return;\n", rom_addr, sram_bank);
+                                    if (codegen_lookup_body_alias(rom_addr, sram_bank,
+                                                                  &alias_owner, &alias_bank, &alias_entry))
+                                        fprintf(f, "func_%04X_b%d_body(%d); return;\n",
+                                                alias_owner, alias_bank, alias_entry);
+                                    else
+                                        fprintf(f, "func_%04X_b%d(); return;\n", rom_addr, sram_bank);
                                 }
                             } else {
                                 fprintf(f, "call_by_address(0x%04X); return;\n", dest);
@@ -917,21 +947,41 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                         fprintf(f, "g_cpu.Y = 2; FLAG_NZ(g_cpu.Y);\n");
                     }
                     if (ipp->call) {
-                        if (abs16 >= 0xC000)
-                            fprintf(f, "func_%04X();\n", abs16);
-                        else if (bank == fixed_bank) {
+                        uint16_t alias_owner = 0;
+                        int alias_bank = -1;
+                        int alias_entry = 0;
+                        if (abs16 >= 0xC000) {
+                            if (codegen_lookup_body_alias(abs16, fixed_bank,
+                                                          &alias_owner, &alias_bank, &alias_entry))
+                                fprintf(f, "func_%04X_body(%d);\n", alias_owner, alias_entry);
+                            else
+                                fprintf(f, "func_%04X();\n", abs16);
+                        } else if (bank == fixed_bank) {
                             if (cfg->push_all_jsr)
                                 fprintf(f, "if (!call_by_address(0x%04X)) g_cpu.S += 2;\n", abs16);
                             else
                                 fprintf(f, "call_by_address(0x%04X);\n", abs16);
-                        } else
-                            fprintf(f, "func_%04X_b%d();\n", abs16, bank);
+                        } else {
+                            if (codegen_lookup_body_alias(abs16, bank,
+                                                          &alias_owner, &alias_bank, &alias_entry))
+                                fprintf(f, "func_%04X_b%d_body(%d);\n",
+                                        alias_owner, alias_bank, alias_entry);
+                            else
+                                fprintf(f, "func_%04X_b%d();\n", abs16, bank);
+                        }
                     }
                     return 5;
                 }
             }
             if (abs16 >= 0xC000) {
-                fprintf(f, "func_%04X();\n", abs16);
+                uint16_t alias_owner = 0;
+                int alias_bank = -1;
+                int alias_entry = 0;
+                if (codegen_lookup_body_alias(abs16, fixed_bank,
+                                              &alias_owner, &alias_bank, &alias_entry))
+                    fprintf(f, "func_%04X_body(%d);\n", alias_owner, alias_entry);
+                else
+                    fprintf(f, "func_%04X();\n", abs16);
             } else if (abs16 >= 0x8000) {
                 /* MMC3 (mapper 4): 8KB banks at $8000-$9FFF and $A000-$BFFF
                  * are switched independently.  A JSR from one 8KB half to
@@ -951,7 +1001,15 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                     else
                         fprintf(f, "call_by_address(0x%04X);\n", abs16);
                 } else {
-                    fprintf(f, "func_%04X_b%d();\n", abs16, bank);
+                    uint16_t alias_owner = 0;
+                    int alias_bank = -1;
+                    int alias_entry = 0;
+                    if (codegen_lookup_body_alias(abs16, bank,
+                                                  &alias_owner, &alias_bank, &alias_entry))
+                        fprintf(f, "func_%04X_b%d_body(%d);\n",
+                                alias_owner, alias_bank, alias_entry);
+                    else
+                        fprintf(f, "func_%04X_b%d();\n", abs16, bank);
                 }
             } else {
                 /* JSR to non-ROM address (RAM/PPU): dispatch at runtime */
@@ -1466,9 +1524,9 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
     /* Detect secondary entry points (extra_label and merge_func addresses inside this function).
      * Also add alias-only entry labels for omitted in-body function entries so direct
      * JMPs can target the owning body without requiring a standalone wrapper. */
-    uint16_t secondary_addrs[64];
+    uint16_t secondary_addrs[MAX_SECONDARY_ENTRIES];
     int secondary_count = 0;
-    for (int fi = 0; fi < funcs->count && secondary_count < 64; fi++) {
+    for (int fi = 0; fi < funcs->count && secondary_count < MAX_SECONDARY_ENTRIES; fi++) {
         const FunctionEntry *fe = &funcs->entries[fi];
         if (fe->kind != FUNCTION_KIND_SECONDARY) continue;
         if (fe->canonical_bank != bank || fe->canonical_addr != pc) continue;
@@ -1479,7 +1537,7 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
         if (valid && !contains_addr(secondary_addrs, secondary_count, fe->addr))
             secondary_addrs[secondary_count++] = fe->addr;
     }
-    for (int li = 0; li < cfg->extra_label_count && secondary_count < 64; li++) {
+    for (int li = 0; li < cfg->extra_label_count && secondary_count < MAX_SECONDARY_ENTRIES; li++) {
         int lbl_bank = cfg->extra_labels[li].bank;
         uint16_t lbl_addr = cfg->extra_labels[li].addr;
         if (lbl_bank != bank) continue;
@@ -1498,7 +1556,7 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
      * Only add if the address is on a valid instruction boundary (in valid_starts).
      * Overlapping mid-instruction entries (common in 6502 code) get different
      * instruction streams and must remain as independent functions. */
-    for (int mi = 0; mi < merge_partner_count && secondary_count < 64; mi++) {
+    for (int mi = 0; mi < merge_partner_count && secondary_count < MAX_SECONDARY_ENTRIES; mi++) {
         uint16_t mp = merge_partners[mi];
         bool found = false;
         for (int si = 0; si < secondary_count; si++)
@@ -1512,12 +1570,12 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
         }
     }
     int public_secondary_count = secondary_count;
-    uint16_t internal_alias_addrs[64];
+    uint16_t internal_alias_addrs[MAX_SECONDARY_ENTRIES];
     int internal_alias_count = collect_internal_alias_addrs(rom, funcs, cfg,
                                                             codegen_find_function_index(funcs, pc, bank),
                                                             secondary_addrs, secondary_count,
-                                                            internal_alias_addrs, 64);
-    for (int ai = 0; ai < internal_alias_count && secondary_count < 64; ai++) {
+                                                            internal_alias_addrs, MAX_SECONDARY_ENTRIES);
+    for (int ai = 0; ai < internal_alias_count && secondary_count < MAX_SECONDARY_ENTRIES; ai++) {
         secondary_addrs[secondary_count++] = internal_alias_addrs[ai];
     }
 

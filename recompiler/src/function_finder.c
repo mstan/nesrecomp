@@ -20,6 +20,18 @@
 #include <stdlib.h>
 #include <string.h>
 
+static bool env_var_enabled(const char *name) {
+    const char *value = getenv(name);
+    if (!value || !*value) return false;
+    return strcmp(value, "1") == 0 ||
+           strcmp(value, "true") == 0 ||
+           strcmp(value, "TRUE") == 0 ||
+           strcmp(value, "yes") == 0 ||
+           strcmp(value, "YES") == 0 ||
+           strcmp(value, "on") == 0 ||
+           strcmp(value, "ON") == 0;
+}
+
 /* Work queue for BFS */
 typedef struct {
     uint16_t addr;
@@ -876,6 +888,7 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
     memset(out, 0, sizeof(*out));
     s_queue_head = 0;
     s_queue_tail = 0;
+    bool legacy_mode = env_var_enabled("NESRECOMP_LEGACY_FUNCTION_FINDER");
     FILE *audit = NULL;
     FILE *entries_audit = NULL;
     char audit_path[256];
@@ -951,6 +964,10 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
         }
     }
 
+    if (legacy_mode) {
+        printf("[FuncFinder] Legacy mode enabled via NESRECOMP_LEGACY_FUNCTION_FINDER; "
+               "skipping heuristic discovery passes\n");
+    } else {
     /* ROM pointer scan: scan fixed bank for 16-bit values that look like
      * function pointers into ROM. Discovers targets of RAM-based dispatch
      * tables (loaded from ROM at runtime, invisible to JSR BFS).
@@ -1374,6 +1391,7 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
     }
     printf("[FuncFinder] Cross-bank propagation added %d candidates\n",
            out->count - before_xbank);
+    }
 
     int bank_count = fixed_bank + 1;
     size_t coverage_elems = (size_t)bank_count * 65536u;
