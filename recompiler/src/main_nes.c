@@ -8,6 +8,7 @@
 #include <string.h>
 #include <direct.h>
 #include "rom_parser.h"
+#include "cpu6502_decoder.h"
 #include "function_finder.h"
 #include "code_generator.h"
 #include "annotations.h"
@@ -40,27 +41,164 @@ static bool rom_addr_in_sram_map(const GameConfig *cfg, int bank, uint16_t addr)
     return false;
 }
 
-static bool proposal_emit_standalone(const NESRom *rom, const FunctionEntry *fe) {
+static bool rom_addr_in_data_region(const GameConfig *cfg, int bank, uint16_t addr) {
+    for (int i = 0; i < cfg->data_region_count; i++) {
+        const DataRegion *dr = &cfg->data_regions[i];
+        if (dr->bank != bank) continue;
+        if (addr >= dr->start && addr < dr->end) return true;
+    }
+    return false;
+}
+
+static bool is_stop_mnemonic(OpMnemonic mn) {
+    return mn == MN_JMP || mn == MN_RTS || mn == MN_RTI || mn == MN_BRK;
+}
+
+static bool proposal_emit_standalone_basic(const NESRom *rom, const GameConfig *cfg,
+                                           const FunctionEntry *fe) {
     int fixed_bank = rom->prg_banks - 1;
     uint8_t curated_sources =
         FUNCTION_SOURCE_MANUAL |
         FUNCTION_SOURCE_KNOWN_TABLE |
         FUNCTION_SOURCE_SPLIT_TABLE;
     uint8_t fixed_bank_sources = curated_sources | FUNCTION_SOURCE_CONTROL;
-
     if (fe->kind != FUNCTION_KIND_STANDALONE) return false;
+    if (rom_addr_in_data_region(cfg, fe->bank, fe->addr)) return false;
     if (fe->source_flags & FUNCTION_SOURCE_BANK_SEED) return false;
+    if (fe->source_flags == FUNCTION_SOURCE_CONTROL && fe->evidence_count <= 1)
+        return false;
+    if (fe->bank == fixed_bank && fe->addr >= 0xFFEB)
+        return false;
+    if (fe->bank == fixed_bank &&
+        fe->covering_addr != fe->addr &&
+        fe->covering_bank == fe->bank &&
+        fe->addr < 0xFE00 &&
+        (fe->source_flags & curated_sources) == 0) {
+        return false;
+    }
     if (fe->bank == fixed_bank)
         return (fe->source_flags & fixed_bank_sources) != 0;
     return (fe->source_flags & curated_sources) != 0;
 }
 
+static const FunctionEntry *find_shadow_sibling(const NESRom *rom, const GameConfig *cfg,
+                                                const FunctionList *funcs,
+                                                const FunctionEntry *fe,
+                                                bool want_next) {
+    const FunctionEntry *best = NULL;
+    for (int i = 0; i < funcs->count; i++) {
+        const FunctionEntry *other = &funcs->entries[i];
+        if (other == fe) continue;
+        if (!proposal_emit_standalone_basic(rom, cfg, other)) continue;
+        if (other->bank != fe->bank) continue;
+        if (other->covering_bank != fe->covering_bank ||
+            other->covering_addr != fe->covering_addr) {
+            continue;
+        }
+        if (want_next) {
+            if (other->addr <= fe->addr) continue;
+            if (!best || other->addr < best->addr) best = other;
+        } else {
+            if (other->addr >= fe->addr) continue;
+            if (!best || other->addr > best->addr) best = other;
+        }
+    }
+    return best;
+}
+
+static bool shadowed_fixed_bank_internal_split(const NESRom *rom, const GameConfig *cfg,
+                                               const FunctionList *funcs,
+                                               const FunctionEntry *fe) {
+    int fixed_bank = rom->prg_banks - 1;
+    uint8_t curated_sources =
+        FUNCTION_SOURCE_MANUAL |
+        FUNCTION_SOURCE_KNOWN_TABLE |
+        FUNCTION_SOURCE_SPLIT_TABLE;
+
+    if (fe->bank != fixed_bank) return false;
+    if (fe->covering_bank != fe->bank || fe->covering_addr == fe->addr) return false;
+    if (fe->addr < 0xFE00 || fe->addr >= 0xFFEB) return false;
+    if (fe->source_flags & curated_sources) return false;
+
+    const FunctionEntry *prev = find_shadow_sibling(rom, cfg, funcs, fe, false);
+    uint8_t opcode = rom_read(rom, fe->bank, fe->addr);
+    const OpcodeEntry *entry = &g_opcode_table[opcode];
+
+    {
+        uint16_t later_siblings[8];
+        int later_count = 0;
+        for (int i = 0; i < funcs->count && later_count < 8; i++) {
+            const FunctionEntry *other = &funcs->entries[i];
+            if (other == fe) continue;
+            if (!proposal_emit_standalone_basic(rom, cfg, other)) continue;
+            if (other->bank != fe->bank) continue;
+            if (other->covering_bank != fe->covering_bank ||
+                other->covering_addr != fe->covering_addr) {
+                continue;
+            }
+            if (other->addr <= fe->addr || other->addr - fe->addr > 0x10) continue;
+            later_siblings[later_count++] = other->addr;
+        }
+
+        for (int off = 0; off < 8; ) {
+            uint16_t pc = (uint16_t)(fe->addr + off);
+            uint8_t op = rom_read(rom, fe->bank, pc);
+            const OpcodeEntry *e = &g_opcode_table[op];
+            int size = (e->size > 0) ? e->size : 1;
+            if (e->mnemonic == MN_ILLEGAL) break;
+            if (e->addr_mode == AM_REL) {
+                int8_t rel = (int8_t)rom_read(rom, fe->bank, pc + 1);
+                uint16_t tgt = (uint16_t)(pc + size + rel);
+                for (int li = 0; li < later_count; li++) {
+                    if (tgt == later_siblings[li]) return true;
+                }
+            }
+            if (is_stop_mnemonic(e->mnemonic)) break;
+            off += size;
+        }
+    }
+
+    if (prev && fe->addr - prev->addr <= 0x10) {
+        if (entry->mnemonic == MN_STA || entry->mnemonic == MN_STX || entry->mnemonic == MN_STY) {
+            for (int off = 0; off < 8; ) {
+                uint16_t pc = (uint16_t)(fe->addr + off);
+                uint8_t op = rom_read(rom, fe->bank, pc);
+                const OpcodeEntry *e = &g_opcode_table[op];
+                int size = (e->size > 0) ? e->size : 1;
+                if (e->mnemonic == MN_JMP) return true;
+                if (e->mnemonic == MN_ILLEGAL || is_stop_mnemonic(e->mnemonic)) break;
+                off += size;
+            }
+        }
+    }
+
+    return false;
+}
+
+static bool proposal_emit_standalone(const NESRom *rom, const GameConfig *cfg,
+                                     const FunctionList *funcs,
+                                     const FunctionEntry *fe) {
+    if (!proposal_emit_standalone_basic(rom, cfg, fe)) return false;
+    if (shadowed_fixed_bank_internal_split(rom, cfg, funcs, fe)) return false;
+    return true;
+}
+
 static bool proposal_emit_extra_label(const NESRom *rom, const GameConfig *cfg,
                                       const FunctionEntry *fe, const FunctionList *funcs) {
-    if (fe->kind == FUNCTION_KIND_STANDALONE &&
-        (fe->source_flags & FUNCTION_SOURCE_CONTROL) &&
-        rom_addr_in_sram_map(cfg, fe->bank, fe->addr)) {
-        return true;
+    bool in_sram = rom_addr_in_sram_map(cfg, fe->bank, fe->addr);
+
+    if (in_sram) {
+        if (fe->kind == FUNCTION_KIND_SECONDARY &&
+            (fe->source_flags & FUNCTION_SOURCE_PTR_SCAN) &&
+            (fe->source_flags & FUNCTION_SOURCE_CONTROL) == 0 &&
+            fe->evidence_count >= 6) {
+            return true;
+        }
+        if (fe->kind == FUNCTION_KIND_STANDALONE &&
+            (fe->source_flags & FUNCTION_SOURCE_CONTROL) &&
+            (fe->covering_addr != fe->addr || fe->covering_bank != fe->bank)) {
+            return true;
+        }
     }
 
     if (fe->source_flags & FUNCTION_SOURCE_BANK_SEED) return false;
@@ -76,7 +214,7 @@ static bool proposal_emit_extra_label(const NESRom *rom, const GameConfig *cfg,
             funcs->entries[i].bank != fe->canonical_bank) {
             continue;
         }
-        return proposal_emit_standalone(rom, &funcs->entries[i]);
+        return proposal_emit_standalone(rom, cfg, funcs, &funcs->entries[i]);
     }
 
     return false;
@@ -113,7 +251,7 @@ static void emit_game_toml_proposal(const char *path, const char *output_prefix,
     int fixed_count = 0;
     for (int i = 0; i < funcs->count; i++) {
         const FunctionEntry *fe = &funcs->entries[i];
-        if (!proposal_emit_standalone(rom, fe)) continue;
+        if (!proposal_emit_standalone(rom, cfg, funcs, fe)) continue;
         if (fe->bank != fixed_bank) continue;
         emitted_standalone++;
         if (fixed_count++ > 0) fprintf(f, ",");
@@ -128,7 +266,7 @@ static void emit_game_toml_proposal(const char *path, const char *output_prefix,
         int count = 0;
         for (int i = 0; i < funcs->count; i++) {
             const FunctionEntry *fe = &funcs->entries[i];
-            if (!proposal_emit_standalone(rom, fe)) continue;
+            if (!proposal_emit_standalone(rom, cfg, funcs, fe)) continue;
             if (fe->bank != bank) continue;
             count++;
         }
@@ -137,7 +275,7 @@ static void emit_game_toml_proposal(const char *path, const char *output_prefix,
         int emitted = 0;
         for (int i = 0; i < funcs->count; i++) {
             const FunctionEntry *fe = &funcs->entries[i];
-            if (!proposal_emit_standalone(rom, fe)) continue;
+            if (!proposal_emit_standalone(rom, cfg, funcs, fe)) continue;
             if (fe->bank != bank) continue;
             emitted_standalone++;
             if (emitted++ > 0) fprintf(f, ",");
@@ -167,7 +305,7 @@ static int count_proposal_entries(const NESRom *rom, const GameConfig *cfg,
                                   const FunctionList *funcs) {
     int count = 0;
     for (int i = 0; i < funcs->count; i++) {
-        if (proposal_emit_standalone(rom, &funcs->entries[i])) count++;
+        if (proposal_emit_standalone(rom, cfg, funcs, &funcs->entries[i])) count++;
         if (proposal_emit_extra_label(rom, cfg, &funcs->entries[i], funcs)) count++;
     }
     return count;

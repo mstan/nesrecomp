@@ -16,6 +16,8 @@ typedef struct {
     int      size;          /* Number of instructions */
     uint16_t canonical_addr;/* Canonical function body for secondary entries */
     int      canonical_bank;
+    uint16_t covering_addr; /* Stronger body covering this entry, if any */
+    int      covering_bank;
     uint8_t  kind;          /* FUNCTION_KIND_* */
     uint8_t  source_flags;  /* FUNCTION_SOURCE_* */
     uint16_t evidence_count;/* Number of independent discoveries / reinforcements */

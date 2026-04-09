@@ -64,7 +64,7 @@ static void add_function_with_source(FunctionList *list, uint16_t addr, int bank
         return;
     }
     list->entries[list->count++] = (FunctionEntry){
-        addr, bank, 0, addr, bank, FUNCTION_KIND_STANDALONE, source_flags, 1
+        addr, bank, 0, addr, bank, addr, bank, FUNCTION_KIND_STANDALONE, source_flags, 1
     };
     queue_push(addr, bank);
 }
@@ -376,6 +376,8 @@ static int classify_secondary_entries(const NESRom *rom, FunctionList *list,
         list->entries[i].kind = FUNCTION_KIND_STANDALONE;
         list->entries[i].canonical_addr = list->entries[i].addr;
         list->entries[i].canonical_bank = list->entries[i].bank;
+        list->entries[i].covering_addr = list->entries[i].addr;
+        list->entries[i].covering_bank = list->entries[i].bank;
         order[i].idx = i;
         order[i].bank = list->entries[i].bank;
         order[i].addr = list->entries[i].addr;
@@ -408,6 +410,11 @@ static int classify_secondary_entries(const NESRom *rom, FunctionList *list,
             if (other_idx < 0 || other_idx == idx) continue;
 
             FunctionEntry *other = &list->entries[other_idx];
+            if (other->covering_addr == other->addr &&
+                other->covering_bank == other->bank) {
+                other->covering_addr = entry->addr;
+                other->covering_bank = entry->bank;
+            }
             if ((other->source_flags & FUNCTION_SOURCE_CONTROL) &&
                 !can_demote_control_stub(rom, other)) {
                 continue;
@@ -431,6 +438,8 @@ static int classify_secondary_entries(const NESRom *rom, FunctionList *list,
             other->kind = FUNCTION_KIND_SECONDARY;
             other->canonical_addr = entry->addr;
             other->canonical_bank = entry->bank;
+            other->covering_addr = entry->addr;
+            other->covering_bank = entry->bank;
             secondary_count++;
         }
     }
@@ -1387,7 +1396,7 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
         fprintf(audit, "entry_type,addr,bank,status,canonical_addr,canonical_bank\n");
     entries_audit = fopen(entries_audit_path, "w");
     if (entries_audit)
-        fprintf(entries_audit, "addr,bank,kind,canonical_addr,canonical_bank,evidence_count,source_flags_hex,source_flags\n");
+        fprintf(entries_audit, "addr,bank,kind,canonical_addr,canonical_bank,covering_addr,covering_bank,evidence_count,source_flags_hex,source_flags\n");
 
     /* ── Evaluation: report extra_func coverage ─────────────────────────── */
     int auto_discovered_before_extras = out->count;
@@ -1507,12 +1516,14 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
         for (int i = 0; i < auto_discovered_before_extras; i++) {
             char source_buf[128];
             source_flags_to_string(out->entries[i].source_flags, source_buf, sizeof(source_buf));
-            fprintf(entries_audit, "%04X,%d,%s,%04X,%d,%u,0x%02X,%s\n",
+            fprintf(entries_audit, "%04X,%d,%s,%04X,%d,%04X,%d,%u,0x%02X,%s\n",
                     out->entries[i].addr,
                     out->entries[i].bank,
                     (out->entries[i].kind == FUNCTION_KIND_SECONDARY) ? "secondary" : "standalone",
                     out->entries[i].canonical_addr,
                     out->entries[i].canonical_bank,
+                    out->entries[i].covering_addr,
+                    out->entries[i].covering_bank,
                     out->entries[i].evidence_count,
                     out->entries[i].source_flags,
                     source_buf);
