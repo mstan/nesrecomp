@@ -449,6 +449,36 @@ int main(int argc, char *argv[]) {
         emit_game_toml_proposal(proposal_out, output_prefix, &rom, &cfg, &funcs, true);
     }
 
+    /* Remove clearly-bogus entries that would cause codegen to reference
+     * undefined symbols.  Targets: CONTROL-only with evidence_count <= 1
+     * that point to zero-fill (BRK opcode).  These pass function_list_contains
+     * but never get emitted as C code by the full emission filter. */
+    {
+        int dst = 0;
+        for (int i = 0; i < funcs.count; i++) {
+            const FunctionEntry *fe = &funcs.entries[i];
+            bool reject = false;
+            if (fe->kind == FUNCTION_KIND_STANDALONE &&
+                fe->source_flags == FUNCTION_SOURCE_CONTROL &&
+                fe->evidence_count <= 1) {
+                /* Check if the target is BRK ($00) — zero-fill */
+                int rb = (fe->addr >= 0xC000) ? rom.prg_banks - 1 : fe->bank;
+                if (rom_read(&rom, rb, fe->addr) == 0x00)
+                    reject = true;
+            }
+            /* Also reject entries in data regions */
+            if (fe->kind == FUNCTION_KIND_STANDALONE &&
+                rom_addr_in_data_region(&cfg, fe->bank, fe->addr))
+                reject = true;
+            if (!reject)
+                funcs.entries[dst++] = funcs.entries[i];
+        }
+        int removed = funcs.count - dst;
+        funcs.count = dst;
+        if (removed > 0)
+            printf("[NESRecomp] Filtered %d bogus entries before codegen\n", removed);
+    }
+
     /* Emit C */
     ensure_output_dir_exists();
     char out_full[256], out_dispatch[256];
