@@ -463,6 +463,19 @@ static int is_valid_dispatch_target(const GameConfig *cfg, uint16_t addr,
     return 0;
 }
 
+/* If `addr` points to a single JMP abs (opcode $4C), return the JMP target.
+ * Otherwise return `addr` unchanged.  Used to auto-detect thunks like
+ *   $C000: JMP $F573   — JSR $C000 should be treated as JSR $F573.
+ * The address must be in the fixed bank range ($C000-$FFFF) so we read
+ * from `fixed_bank`. */
+static uint16_t resolve_jmp_thunk(const NESRom *rom, int fixed_bank, uint16_t addr) {
+    if (addr < 0xC000) return addr;           /* switchable range — skip */
+    if (rom_read(rom, fixed_bank, addr) != 0x4C) return addr;  /* not JMP abs */
+    uint8_t lo = rom_read(rom, fixed_bank, addr + 1);
+    uint8_t hi = rom_read(rom, fixed_bank, addr + 2);
+    return (uint16_t)(lo | ((uint16_t)hi << 8));
+}
+
 /* Emit C for one instruction. Returns bytes consumed.
  * sched_reset_addr: if non-zero, we're inside a coroutine scheduler function.
  * This is the address of the LDX #$FF; TXS stack-reset (scheduler loop entry).
@@ -737,8 +750,9 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
              * Inline the full dispatch+call+restore sequence and consume 3+inline_bytes. */
             {
                 const TrampolineEntry *tramp = NULL;
+                uint16_t resolved_tramp = resolve_jmp_thunk(rom, fixed_bank, abs16);
                 for (int ti = 0; ti < cfg->trampoline_count; ti++) {
-                    if (abs16 == cfg->trampolines[ti].addr) { tramp = &cfg->trampolines[ti]; break; }
+                    if (resolved_tramp == cfg->trampolines[ti].addr) { tramp = &cfg->trampolines[ti]; break; }
                 }
                 if (tramp) {
                     uint8_t disp_bank = rom_read(rom, bank, pc + 3);
@@ -776,8 +790,9 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
              * Table ends when hi byte < 0x80.  Emit a switch on g_cpu.A. */
             {
                 const InlineDispatch *idsp = NULL;
+                uint16_t resolved_idsp = resolve_jmp_thunk(rom, fixed_bank, abs16);
                 for (int ti = 0; ti < cfg->inline_dispatch_count; ti++) {
-                    if (abs16 == cfg->inline_dispatches[ti].addr) { idsp = &cfg->inline_dispatches[ti]; break; }
+                    if (resolved_idsp == cfg->inline_dispatches[ti].addr) { idsp = &cfg->inline_dispatches[ti]; break; }
                 }
                 if (idsp) {
                     /* Determine which bank to use for switchable-range targets
