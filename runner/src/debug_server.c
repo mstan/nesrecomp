@@ -1062,6 +1062,19 @@ static void handle_watch_s_history(int id, const char *json)
     debug_server_send_line(buf);
 }
 
+/* ---- Screenshot ---- */
+
+static void handle_screenshot(int id, const char *json)
+{
+    char path[256];
+    if (!json_get_str(json, "path", path, sizeof(path))) {
+        snprintf(path, sizeof(path), "screenshot_%04llu.png",
+                 (unsigned long long)g_frame_count);
+    }
+    runner_screenshot(path);
+    send_fmt("{\"id\":%d,\"ok\":true,\"path\":\"%s\"}", id, path);
+}
+
 /* ---- Command dispatch ---- */
 
 typedef void (*CmdHandler)(int id, const char *json);
@@ -1106,6 +1119,7 @@ static const CmdEntry s_commands[] = {
     { "call_stack",        handle_call_stack },
 #endif
     { "quit",              handle_quit },
+    { "screenshot",        handle_screenshot },
     { NULL, NULL }
 };
 

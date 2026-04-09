@@ -108,6 +108,9 @@ extern int     g_spr0_reads_ctr;
 /* Frame counter incremented each VBlank */
 extern uint64_t g_frame_count;
 
+/* Save the current native framebuffer as a PNG */
+void runner_screenshot(const char *path);
+
 /* Current switchable PRG bank (set by mapper_write) */
 extern int g_current_bank;
 
