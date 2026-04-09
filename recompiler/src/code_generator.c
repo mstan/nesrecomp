@@ -383,6 +383,8 @@ static int collect_body_aliases(const NESRom *rom, const FunctionList *funcs,
 
 #define MAX_EMITTED_WRAPPERS (MAX_FUNCTIONS * 2)
 
+static int codegen_is_data_region(const GameConfig *cfg, int bank, uint16_t addr);
+
 static int collect_emitted_wrappers(const NESRom *rom, const FunctionList *funcs,
                                     const GameConfig *cfg, EmittedWrapper *wrappers,
                                     int max_wrappers) {
@@ -392,6 +394,7 @@ static int collect_emitted_wrappers(const NESRom *rom, const FunctionList *funcs
         const FunctionEntry *entry = &funcs->entries[i];
         if (!entry_emits_standalone(funcs, cfg, entry)) continue;
         if (entry_is_merge_range_secondary(rom, funcs, cfg, i)) continue;
+        if (codegen_is_data_region(cfg, entry->bank, entry->addr)) continue;
 
         wrapper_list_add(wrappers, &wrapper_count, max_wrappers, entry->addr, entry->bank);
 
@@ -402,6 +405,7 @@ static int collect_emitted_wrappers(const NESRom *rom, const FunctionList *funcs
             uint16_t sa = secondary_addrs[si];
             if (prefer_merge_range_wrapper(cfg, entry->bank, entry->addr, sa))
                 continue;
+            if (codegen_is_data_region(cfg, entry->bank, sa)) continue;
             wrapper_list_add(wrappers, &wrapper_count, max_wrappers, sa, entry->bank);
         }
     }
@@ -1418,6 +1422,18 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
         }
         for (int i = 0; i < MAX_INSNS_PER_FUNC; i++) {
             if (scan < 0x8000) break;
+            /* Skip data regions */
+            if (codegen_is_data_region(cfg, bank, scan)) {
+                for (int dri = 0; dri < cfg->data_region_count; dri++) {
+                    const DataRegion *dr = &cfg->data_regions[dri];
+                    if ((dr->bank == bank || dr->bank == -1) &&
+                        scan >= dr->start && scan < dr->end) {
+                        scan = dr->end;
+                        break;
+                    }
+                }
+                continue;
+            }
             /* Remove this address from ps_pending (we're visiting it now) */
             for (int p = 0; p < ps_pending_count; p++) {
                 if (ps_pending[p] == scan) {
@@ -1645,6 +1661,22 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
 
     uint16_t cursor = pc;
     for (int insn = 0; insn < MAX_INSNS_PER_FUNC; insn++) {
+        /* Skip data regions embedded within the function body */
+        if (codegen_is_data_region(cfg, bank, cursor)) {
+            /* Find the end of this data region and skip past it */
+            for (int dri = 0; dri < cfg->data_region_count; dri++) {
+                const DataRegion *dr = &cfg->data_regions[dri];
+                if ((dr->bank == bank || dr->bank == -1) &&
+                    cursor >= dr->start && cursor < dr->end) {
+                    fprintf(f, "    /* data region $%04X-$%04X skipped */\n",
+                            dr->start, dr->end);
+                    cursor = dr->end;
+                    break;
+                }
+            }
+            continue;
+        }
+
         fprintf(f, "label_%04X:;\n", cursor);
         if (emitted_count < MAX_INSNS_PER_FUNC)
             emitted_addrs[emitted_count++] = cursor;
@@ -2004,6 +2036,7 @@ bool codegen_emit(const NESRom *rom, const FunctionList *funcs,
          * Overlapping mid-instruction entries can't be merged and must be
          * emitted as independent functions. */
         if (entry_is_merge_range_secondary(rom, funcs, cfg, i)) continue;
+        if (codegen_is_data_region(cfg, funcs->entries[i].bank, funcs->entries[i].addr)) continue;
 
         emit_function(f_full, rom, &funcs->entries[i], funcs, at, cfg);
     }
