@@ -202,12 +202,40 @@ static uint32_t hex_to_u32(const char *s)
 
 /* ---- Send helpers (public API) ---- */
 
+/* Temporarily switch socket to blocking, send all bytes, restore non-blocking.
+ * This avoids WOULDBLOCK retry loops that can re-enter the game loop via
+ * SDL_Delay and corrupt state (e.g. watchdog firing during send). */
+static void send_all_blocking(sock_t sock, const char *data, int len)
+{
+#ifdef _WIN32
+    u_long mode = 0;  /* blocking */
+    ioctlsocket(sock, FIONBIO, &mode);
+#else
+    int flags = fcntl(sock, F_GETFL, 0);
+    fcntl(sock, F_SETFL, flags & ~O_NONBLOCK);
+#endif
+
+    int sent = 0;
+    while (sent < len) {
+        int n = send(sock, data + sent, len - sent, 0);
+        if (n > 0) { sent += n; continue; }
+        break;  /* error — give up */
+    }
+
+#ifdef _WIN32
+    mode = 1;  /* non-blocking */
+    ioctlsocket(sock, FIONBIO, &mode);
+#else
+    fcntl(sock, F_SETFL, flags);
+#endif
+}
+
 void debug_server_send_line(const char *json)
 {
     if (s_client == SOCK_INVALID) return;
     int len = (int)strlen(json);
-    send(s_client, json, len, 0);
-    send(s_client, "\n", 1, 0);
+    send_all_blocking(s_client, json, len);
+    send_all_blocking(s_client, "\n", 1);
 }
 
 void debug_server_send_fmt(const char *fmt, ...)

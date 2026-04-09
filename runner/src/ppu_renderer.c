@@ -55,9 +55,9 @@ static void render_tile_row(uint32_t *framebuf,
     uint8_t hi = g_chr_ram[chr_offset + 8];
     for (int bit = 7; bit >= 0; bit--) {
         int x = px_x + (7 - bit);
-        if (x < 0 || x >= 256) continue;
+        if (x < 0 || x >= g_render_width) continue;
         int color_idx = ((lo >> bit) & 1) | (((hi >> bit) & 1) << 1);
-        framebuf[px_y * 256 + x] = bg_color(pal_base, color_idx);
+        framebuf[px_y * g_render_width + x] = bg_color(pal_base, color_idx);
     }
 }
 
@@ -204,7 +204,7 @@ void ppu_render_frame(uint32_t *framebuf) {
 
     /* Universal background color */
     uint32_t bg = NES_PALETTE[g_ppu_pal[0] & 0x3F];
-    for (int i = 0; i < 256 * 240; i++) framebuf[i] = bg;
+    for (int i = 0; i < g_render_width * 240; i++) framebuf[i] = bg;
 
     /* Only render if BG rendering is enabled ($2001 bit 3) */
     if (!(g_ppumask & 0x08)) goto render_sprites;
@@ -358,8 +358,8 @@ void ppu_render_frame(uint32_t *framebuf) {
                 local_ty = tile_y % 30;
             }
 
-            for (int sx = 0; sx < 256; sx++) {
-                int nt_x      = (origin_x + sx) & 0x1FF;
+            for (int sx = -g_widescreen_left; sx < 256 + g_widescreen_right; sx++) {
+                int nt_x      = (origin_x + sx) & 0x1FF;  /* 9-bit wrap (512px nametable) */
                 int tile_x    = nt_x / 8;
                 int pixel_col = nt_x % 8;
                 int nt_col    = (tile_x >= 32) ? 1 : 0;
@@ -388,7 +388,8 @@ void ppu_render_frame(uint32_t *framebuf) {
                 int chr_off = chr_base + tile_id * 16 + tile_row;
                 int color_idx = ((g_chr_ram[chr_off] >> bit) & 1) |
                                 (((g_chr_ram[chr_off + 8] >> bit) & 1) << 1);
-                framebuf[sy * 256 + sx] = bg_color(pal_base, color_idx);
+                int fb_x = sx + g_widescreen_left;
+                framebuf[sy * g_render_width + fb_x] = bg_color(pal_base, color_idx);
             }
 
             /* Canonical-mode per-scanline advance (only when active). */
@@ -566,10 +567,12 @@ render_sprites:
                 if (px < 0 || px >= 256) continue;
                 int color_idx = ((lo >> chr_bit) & 1) | (((hi >> chr_bit) & 1) << 1);
                 if (color_idx == 0) continue; /* transparent */
+                /* Offset sprite X into widescreen framebuffer */
+                int fb_x = px + g_widescreen_left;
                 /* Priority=1: sprite behind BG — only draw where BG is transparent */
-                if (priority && framebuf[py * 256 + px] != bg) continue;
+                if (priority && framebuf[py * g_render_width + fb_x] != bg) continue;
                 uint8_t nes_color = g_ppu_pal[(spr_pal * 4 + color_idx) & 0x1F] & 0x3F;
-                framebuf[py * 256 + px] = NES_PALETTE[nes_color];
+                framebuf[py * g_render_width + fb_x] = NES_PALETTE[nes_color];
             }
         }
     }

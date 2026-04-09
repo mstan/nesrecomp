@@ -105,6 +105,16 @@ extern uint8_t g_ppuctrl_hud;
 extern int     g_spr0_split_active;
 extern int     g_spr0_reads_ctr;
 
+/* Widescreen rendering: games set these in game_on_init() to widen the
+ * BG render pass.  Default 256/0/0 = standard 4:3 NES output.
+ * g_render_width  = total output width in pixels (e.g. 512 for 2x)
+ * g_widescreen_left  = extra pixels rendered left of column 0
+ * g_widescreen_right = extra pixels rendered right of column 255
+ * Invariant: g_render_width == 256 + g_widescreen_left + g_widescreen_right */
+extern int g_render_width;
+extern int g_widescreen_left;
+extern int g_widescreen_right;
+
 /* Frame counter incremented each VBlank */
 extern uint64_t g_frame_count;
 

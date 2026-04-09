@@ -38,7 +38,13 @@ static const char *s_loadstate_path = NULL;
 static SDL_Window        *s_window    = NULL;
 static SDL_Renderer      *s_renderer  = NULL;
 static SDL_Texture       *s_texture   = NULL;
-static uint32_t           s_framebuf[256 * 240];
+/* Widescreen globals — default to standard 4:3 NES output.
+ * Games override these in game_on_init() before the first frame. */
+int g_render_width    = 256;
+int g_widescreen_left = 0;
+int g_widescreen_right = 0;
+
+static uint32_t           s_framebuf[512 * 240];  /* sized for max 512px width */
 
 /* ---- OAM debug window (--debug flag) ---- */
 static int                s_debug         = 0;
@@ -300,7 +306,7 @@ void save_png(const char *path, int w, int h, const void *rgb, int stride) {
 
 /* Save an ARGB8888 buffer as PNG. Callable from game code (emulated mode screenshots). */
 void runner_save_argb_png(const char *path, const uint32_t *argb, int w, int h) {
-    static uint8_t rgb[256 * 240 * 3];
+    static uint8_t rgb[512 * 240 * 3];  /* max widescreen width */
     int pixels = w * h;
     for (int i = 0; i < pixels; i++) {
         uint32_t px = argb[i];
@@ -329,7 +335,7 @@ static void save_screenshot(void) {
 /* Save the current native framebuffer to a given path as PNG.
  * Callable from game hooks (e.g. TCP screenshot command). */
 void runner_screenshot(const char *path) {
-    runner_save_argb_png(path, s_framebuf, 256, 240);
+    runner_save_argb_png(path, s_framebuf, g_render_width, 240);
 }
 
 /* ---- Debug trace log (C:/temp/debug_trace.txt) ---- */
@@ -551,14 +557,15 @@ void nes_vblank_callback(void) {
     {
         char shot_path[256];
         if (script_wants_screenshot(shot_path, sizeof(shot_path))) {
-            static uint8_t rgb[256 * 240 * 3];
-            for (int i = 0; i < 256 * 240; i++) {
+            static uint8_t rgb[512 * 240 * 3];  /* max width */
+            int npx = g_render_width * 240;
+            for (int i = 0; i < npx; i++) {
                 uint32_t px = s_framebuf[i];
                 rgb[i*3+0] = (px >> 16) & 0xFF;
                 rgb[i*3+1] = (px >>  8) & 0xFF;
                 rgb[i*3+2] = (px      ) & 0xFF;
             }
-            stbi_write_png(shot_path, 256, 240, 3, rgb, 256*3);
+            stbi_write_png(shot_path, g_render_width, 240, 3, rgb, g_render_width*3);
             printf("[Shot] %s\n", shot_path);
         }
     }
@@ -577,7 +584,7 @@ void nes_vblank_callback(void) {
      * In turbo mode, only present every 16th frame to avoid vsync blocking
      * on every SDL_RenderPresent call (~6ms each on a 165Hz monitor). */
     if (!g_turbo || (g_frame_count & 15) == 0) {
-        SDL_UpdateTexture(s_texture, NULL, s_framebuf, 256 * 4);
+        SDL_UpdateTexture(s_texture, NULL, s_framebuf, g_render_width * 4);
         SDL_RenderClear(s_renderer);
         SDL_RenderCopy(s_renderer, s_texture, NULL, NULL);
         SDL_RenderPresent(s_renderer);
@@ -599,7 +606,7 @@ void nes_vblank_callback(void) {
  * Used by the emulated mode frame loop (Nestopia drives rendering). */
 void runner_present_framebuf(const uint32_t *argb_buf) {
     if (!s_texture || !s_renderer || !argb_buf) return;
-    SDL_UpdateTexture(s_texture, NULL, argb_buf, 256 * 4);
+    SDL_UpdateTexture(s_texture, NULL, argb_buf, g_render_width * 4);
     SDL_RenderClear(s_renderer);
     SDL_RenderCopy(s_renderer, s_texture, NULL, NULL);
     SDL_RenderPresent(s_renderer);
@@ -741,7 +748,7 @@ void nesrecomp_runner_run(int argc, char *argv[]) {
         win_flags |= SDL_WINDOW_RESIZABLE;
         s_window = SDL_CreateWindow(window_title,
             SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-            768, 720,
+            g_render_width * 3, 720,
             win_flags);
     }
     if (!s_window) {
@@ -759,12 +766,12 @@ void nesrecomp_runner_run(int argc, char *argv[]) {
     s_texture = SDL_CreateTexture(s_renderer,
         SDL_PIXELFORMAT_ARGB8888,
         SDL_TEXTUREACCESS_STREAMING,
-        256, 240);
+        g_render_width, 240);
     if (!s_texture) {
         fprintf(stderr, "SDL_CreateTexture: %s\n", SDL_GetError());
         exit(1);
     }
-    SDL_RenderSetLogicalSize(s_renderer, 256, 240);
+    SDL_RenderSetLogicalSize(s_renderer, g_render_width, 240);
 
     memset(s_framebuf, 0, sizeof(s_framebuf));
 
