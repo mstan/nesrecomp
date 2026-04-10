@@ -145,6 +145,12 @@ extern int g_zapper_enabled;         /* set to 1 to enable Zapper on port 2 */
 extern int g_zapper_x, g_zapper_y;   /* aim coordinates (pixels, 0-255 x 0-239) */
 extern int g_zapper_trigger;         /* 1 = trigger pulled */
 void runtime_set_zapper_framebuf(const uint32_t *fb); /* set framebuf for light detection */
+/* On-demand render callback for Zapper detection.  Detection sequences
+ * change PPUMASK mid-frame, so the last-rendered framebuffer may not
+ * reflect the current PPU state.  The runner registers a callback that
+ * re-renders into the Zapper framebuffer when needed. */
+typedef void (*zapper_render_fn)(void);
+void runtime_set_zapper_render_callback(zapper_render_fn fn);
 
 /* ---- State accessors for debug ring buffer ---- */
 /* These expose private statics from runtime.c for exhaustive state capture. */

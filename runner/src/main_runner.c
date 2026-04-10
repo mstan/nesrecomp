@@ -46,6 +46,15 @@ int g_widescreen_right = 0;
 
 static uint32_t           s_framebuf[512 * 240];  /* sized for max 512px width */
 
+/* On-demand render for Zapper light detection.  Called when a detection
+ * sequence changes PPUMASK (e.g. enabling sprites for the flash phase)
+ * and the framebuffer hasn't been re-rendered yet.  Renders the current
+ * PPU state into s_framebuf so the Zapper sees the correct brightness. */
+static void zapper_on_demand_render(void) {
+    ppu_render_frame(s_framebuf);
+    runtime_set_zapper_framebuf(s_framebuf);
+}
+
 /* ---- OAM debug window (--debug flag) ---- */
 static int                s_debug         = 0;
 static SDL_Window        *s_dbg_window    = NULL;
@@ -522,6 +531,13 @@ void nes_vblank_callback(void) {
          * VRAM transfers with corrupted state. */
         if (runtime_get_vblank_depth() > 1) {
             g_ram[0x1A] = 1;  /* signal the $1A spin-wait to exit */
+            g_ram[0x20] = 1;  /* signal VBlank to the game — needed for
+                               * detection loops (e.g. Duck Hunt Zapper at
+                               * $D1CD/$D222) that poll $20 as a timeout.
+                               * On real NES these loops run in the main loop
+                               * (not inside NMI), so VBlank fires normally.
+                               * In the recomp they run inside the NMI handler
+                               * so the nested VBlank must set this flag. */
         } else {
             /* Normal (non-nested) NMI: push stack frame and run handler.
              * Real 6502 pushes 3 bytes: PCH, PCL, P (status flags).
@@ -782,8 +798,11 @@ void nesrecomp_runner_run(int argc, char *argv[]) {
     keybinds_init(argv[0]);
     game_on_init();
 
-    if (g_zapper_enabled && keybinds_zapper_mouse())
-        printf("[Zapper] Mouse mode enabled — left click to shoot\n");
+    if (g_zapper_enabled) {
+        runtime_set_zapper_render_callback(zapper_on_demand_render);
+        if (keybinds_zapper_mouse())
+            printf("[Zapper] Mouse mode enabled — left click to shoot\n");
+    }
 
     if (s_loadstate_path) savestate_load(s_loadstate_path);
     if (s_record_path) { record_open(s_record_path); atexit(record_close); }
