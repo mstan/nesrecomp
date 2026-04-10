@@ -1005,10 +1005,9 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
                "skipping heuristic discovery passes\n");
     } else {
     /* ROM pointer scan: scan fixed bank for 16-bit values that look like
-     * function pointers into ROM. Discovers targets of RAM-based dispatch
-     * tables (loaded from ROM at runtime, invisible to JSR BFS).
-     * Criteria: value in $C000-$FFFD, first byte at target is non-illegal opcode.
-     * Skip addresses in declared data_region ranges (both source and target). */
+     * function pointers into the fixed bank ($C000-$FFFD).
+     * Criteria: first byte at target is non-illegal opcode.
+     * Also checks candidate+1 for RTS-as-JMP dispatch tables. */
     int before_scan = out->count;
     for (uint16_t off = 0; off <= 0x3FFD; off++) {
         uint16_t addr = 0xC000 + off;
@@ -1018,14 +1017,10 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
         uint16_t candidate = lo | ((uint16_t)hi << 8);
         if (candidate < 0xC000 || candidate > 0xFFFD) continue;
         if (is_data_region(cfg, fixed_bank, candidate)) continue;
-        /* Add candidate if it has a valid opcode. */
         uint8_t first_byte = rom_read(rom, fixed_bank, candidate);
         if (g_opcode_table[first_byte].mnemonic != MN_ILLEGAL &&
             !function_list_contains(out, candidate, fixed_bank))
             add_function_with_source(out, candidate, fixed_bank, FUNCTION_SOURCE_PTR_SCAN);
-        /* Also add candidate+1: RTS-as-JMP dispatch tables store target-1,
-         * so the actual called function is one byte past the stored pointer.
-         * Check this even when candidate itself has an illegal opcode. */
         uint16_t candidate1 = candidate + 1;
         if (candidate1 >= 0xC000 && candidate1 <= 0xFFFD &&
             !function_list_contains(out, candidate1, fixed_bank)) {
@@ -1048,6 +1043,40 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
         }
     }
     printf("[FuncFinder] Fixed-bank pointer scan added %d candidates\n", out->count - before_scan);
+
+    /* Switchable-bank → fixed-bank pointer scan: scan each switchable bank
+     * for 16-bit LE values pointing into the fixed bank ($C000-$FFFD).
+     * Uses validate_code_target for deeper validation since cross-bank
+     * pointer matches have higher false-positive risk. */
+    int before_sw_fixed_scan = out->count;
+    for (int b = 0; b < fixed_bank; b++) {
+        for (uint16_t off = 0; off <= 0x3FFD; off++) {
+            uint16_t addr = 0x8000 + off;
+            if (is_data_region(cfg, b, addr)) continue;
+            uint8_t lo = rom_read(rom, b, addr);
+            uint8_t hi = rom_read(rom, b, addr + 1);
+            uint16_t candidate = lo | ((uint16_t)hi << 8);
+            if (candidate < 0xC000 || candidate > 0xFFFD) continue;
+            if (is_data_region(cfg, fixed_bank, candidate)) continue;
+            if (validate_code_target(rom, fixed_bank, candidate, TABLE_RUN_MIN_VALID) &&
+                !function_list_contains(out, candidate, fixed_bank))
+                add_function_with_source(out, candidate, fixed_bank, FUNCTION_SOURCE_PTR_SCAN);
+        }
+    }
+    while (queue_pop(&item)) {
+        for (int i = 0; i < out->count; i++) {
+            if (out->entries[i].addr == item.addr &&
+                out->entries[i].bank == item.bank &&
+                out->entries[i].size == 0)
+            {
+                out->entries[i].size = walk_function(rom, out, item.addr, item.bank, cfg,
+                                                    out->entries[i].source_flags);
+                break;
+            }
+        }
+    }
+    printf("[FuncFinder] Switchable->fixed pointer scan added %d candidates\n",
+           out->count - before_sw_fixed_scan);
 
     /* Switchable-bank table-run scanner: find runs of TABLE_RUN_MIN_RUN+
      * consecutive 16-bit LE values in $8000-$BFFF where each target passes
