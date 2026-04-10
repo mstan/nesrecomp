@@ -41,7 +41,7 @@ enum {
     FUNCTION_SOURCE_KNOWN_TABLE = 1 << 4,
     FUNCTION_SOURCE_XBANK       = 1 << 5,
     FUNCTION_SOURCE_MANUAL      = 1 << 6,
-    FUNCTION_SOURCE_BANK_SEED   = 1 << 7,
+    /* 1 << 7 was BANK_SEED (removed — too many false positives) */
 };
 
 void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig *cfg);

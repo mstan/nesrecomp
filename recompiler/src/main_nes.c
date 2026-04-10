@@ -64,7 +64,6 @@ static bool proposal_emit_standalone_basic(const NESRom *rom, const GameConfig *
     uint8_t fixed_bank_sources = curated_sources | FUNCTION_SOURCE_CONTROL;
     if (fe->kind != FUNCTION_KIND_STANDALONE) return false;
     if (rom_addr_in_data_region(cfg, fe->bank, fe->addr)) return false;
-    if (fe->source_flags & FUNCTION_SOURCE_BANK_SEED) return false;
     if (fe->source_flags == FUNCTION_SOURCE_CONTROL && fe->evidence_count <= 1)
         return false;
     if (fe->bank == fixed_bank && fe->addr >= 0xFFEB)
@@ -188,20 +187,12 @@ static bool proposal_emit_extra_label(const NESRom *rom, const GameConfig *cfg,
     bool in_sram = rom_addr_in_sram_map(cfg, fe->bank, fe->addr);
 
     if (in_sram) {
-        if (fe->kind == FUNCTION_KIND_SECONDARY &&
-            (fe->source_flags & FUNCTION_SOURCE_PTR_SCAN) &&
-            (fe->source_flags & FUNCTION_SOURCE_CONTROL) == 0 &&
-            fe->evidence_count >= 6) {
-            return true;
-        }
         if (fe->kind == FUNCTION_KIND_STANDALONE &&
             (fe->source_flags & FUNCTION_SOURCE_CONTROL) &&
             (fe->covering_addr != fe->addr || fe->covering_bank != fe->bank)) {
             return true;
         }
     }
-
-    if (fe->source_flags & FUNCTION_SOURCE_BANK_SEED) return false;
 
     if (fe->kind != FUNCTION_KIND_SECONDARY) return false;
     if ((fe->source_flags & (FUNCTION_SOURCE_MANUAL |
@@ -511,10 +502,11 @@ int main(int argc, char *argv[]) {
                 if (rom_read(&rom, rb, fe->addr) == 0x00)
                     reject = true;
             }
-            /* Also reject entries in data regions */
-            if (fe->kind == FUNCTION_KIND_STANDALONE &&
-                rom_addr_in_data_region(&cfg, fe->bank, fe->addr))
-                reject = true;
+            /* Warn about entries in data regions — may indicate game.toml
+             * data_region overlaps with real code */
+            if (rom_addr_in_data_region(&cfg, fe->bank, fe->addr))
+                printf("[NESRecomp] Warning: function $%04X bank=%d is inside a data_region\n",
+                       fe->addr, fe->bank);
             if (!reject)
                 funcs.entries[dst++] = funcs.entries[i];
         }

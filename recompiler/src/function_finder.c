@@ -94,8 +94,7 @@ static uint8_t propagated_discovery_source(uint8_t walk_source_flags) {
     uint8_t weak_sources =
         FUNCTION_SOURCE_PTR_SCAN |
         FUNCTION_SOURCE_TABLE_RUN |
-        FUNCTION_SOURCE_XBANK |
-        FUNCTION_SOURCE_BANK_SEED;
+        FUNCTION_SOURCE_XBANK;
 
     if (walk_source_flags & strong_sources) return FUNCTION_SOURCE_CONTROL;
     if (walk_source_flags & weak_sources) return (walk_source_flags & weak_sources);
@@ -392,7 +391,6 @@ static void source_flags_to_string(uint8_t flags, char *buf, size_t buf_size) {
         { FUNCTION_SOURCE_KNOWN_TABLE, "known_table" },
         { FUNCTION_SOURCE_XBANK,       "xbank" },
         { FUNCTION_SOURCE_MANUAL,      "manual" },
-        { FUNCTION_SOURCE_BANK_SEED,   "bank_seed" },
     };
 
     for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); i++) {
@@ -986,27 +984,6 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
     add_function(out, rom->irq_vector,   VEC_BANK(rom->irq_vector));
 #undef VEC_BANK
 
-    /* Seed each switchable bank so cross-bank calls from the fixed bank
-     * get proper per-bank function bodies.
-     *
-     * For mappers with 8KB bank switching (MMC3 = mapper 4), the 16KB
-     * switchable window ($8000-$BFFF) is actually two independent 8KB
-     * banks. Seed $8000 AND $A000 separately — either half may be code
-     * or data, and they're switched independently. For 16KB mappers
-     * (MMC1, NROM), seed just $8000 as before. */
-    int is_8kb_mapper = (rom->mapper == 4);  /* MMC3 */
-    for (int b = 0; b < fixed_bank; b++) {
-        uint8_t first = rom_read(rom, b, 0x8000);
-        if (g_opcode_table[first].mnemonic != MN_ILLEGAL)
-            add_function_with_source(out, 0x8000, b, FUNCTION_SOURCE_BANK_SEED);
-
-        if (is_8kb_mapper) {
-            uint8_t first_a = rom_read(rom, b, 0xA000);
-            if (g_opcode_table[first_a].mnemonic != MN_ILLEGAL)
-                add_function_with_source(out, 0xA000, b, FUNCTION_SOURCE_BANK_SEED);
-        }
-    }
-
     /* BFS */
     WorkItem item;
     while (queue_pop(&item)) {
@@ -1030,16 +1007,8 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
     /* ROM pointer scan: scan fixed bank for 16-bit values that look like
      * function pointers into ROM. Discovers targets of RAM-based dispatch
      * tables (loaded from ROM at runtime, invisible to JSR BFS).
-     *
-     * Scans for TWO target ranges:
-     *   1. $C000-$FFFD (fixed bank) — moderate validation (4 instructions)
-     *      because functions using inline dispatch (JSR $XXXX; .word table...)
-     *      have inline data bytes that fail deep-decode.
-     *   2. $8000-$BFFD (switchable bank) — deep-decode validation per bank.
-     *      Cross-range pointers have higher false-positive risk.
-     *
-     * data_region exclusions apply to both source and target. Also checks
-     * target+1 for RTS-as-JMP conventions. */
+     * Criteria: value in $C000-$FFFD, first byte at target is non-illegal opcode.
+     * Skip addresses in declared data_region ranges (both source and target). */
     int before_scan = out->count;
     for (uint16_t off = 0; off <= 0x3FFD; off++) {
         uint16_t addr = 0xC000 + off;
@@ -1047,23 +1016,25 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
         uint8_t lo = rom_read(rom, fixed_bank, addr);
         uint8_t hi = rom_read(rom, fixed_bank, addr + 1);
         uint16_t candidate = lo | ((uint16_t)hi << 8);
-        if (candidate >= 0xC000 && candidate <= 0xFFFD) {
-            #define FIXED_PTR_MIN_VALID 4
-            if (!is_data_region(cfg, fixed_bank, candidate) &&
-                validate_code_target(rom, fixed_bank, candidate, FIXED_PTR_MIN_VALID) &&
-                !function_list_contains(out, candidate, fixed_bank))
-                add_function_with_source(out, candidate, fixed_bank, FUNCTION_SOURCE_PTR_SCAN);
-            #undef FIXED_PTR_MIN_VALID
-        } else if (candidate >= 0x8000 && candidate <= 0xBFFD) {
-            for (int cb = 0; cb < fixed_bank; cb++) {
-                if (is_data_region(cfg, cb, candidate)) continue;
-                if (validate_code_target(rom, cb, candidate, TABLE_RUN_MIN_VALID) &&
-                    !function_list_contains(out, candidate, cb))
-                    add_function_with_source(out, candidate, cb, FUNCTION_SOURCE_PTR_SCAN);
-            }
+        if (candidate < 0xC000 || candidate > 0xFFFD) continue;
+        if (is_data_region(cfg, fixed_bank, candidate)) continue;
+        /* Add candidate if it has a valid opcode. */
+        uint8_t first_byte = rom_read(rom, fixed_bank, candidate);
+        if (g_opcode_table[first_byte].mnemonic != MN_ILLEGAL &&
+            !function_list_contains(out, candidate, fixed_bank))
+            add_function_with_source(out, candidate, fixed_bank, FUNCTION_SOURCE_PTR_SCAN);
+        /* Also add candidate+1: RTS-as-JMP dispatch tables store target-1,
+         * so the actual called function is one byte past the stored pointer.
+         * Check this even when candidate itself has an illegal opcode. */
+        uint16_t candidate1 = candidate + 1;
+        if (candidate1 >= 0xC000 && candidate1 <= 0xFFFD &&
+            !function_list_contains(out, candidate1, fixed_bank)) {
+            uint8_t fb1 = rom_read(rom, fixed_bank, candidate1);
+            if (g_opcode_table[fb1].mnemonic != MN_ILLEGAL)
+                add_function_with_source(out, candidate1, fixed_bank, FUNCTION_SOURCE_PTR_SCAN);
         }
     }
-    /* BFS again for newly added candidates */
+    /* BFS for newly added candidates */
     while (queue_pop(&item)) {
         for (int i = 0; i < out->count; i++) {
             if (out->entries[i].addr == item.addr &&
@@ -1077,40 +1048,6 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
         }
     }
     printf("[FuncFinder] Fixed-bank pointer scan added %d candidates\n", out->count - before_scan);
-
-    /* Switchable-bank → fixed-bank pointer scan: scan each switchable bank
-     * for 16-bit LE values that look like function pointers into the fixed
-     * bank ($C000-$FFFD). Uses deep-decode validation since cross-bank
-     * pointer matches have a higher false-positive rate. */
-    int before_sw_fixed_scan = out->count;
-    for (int b = 0; b < fixed_bank; b++) {
-        for (uint16_t off = 0; off <= 0x3FFD; off++) {
-            uint16_t addr = 0x8000 + off;
-            if (is_data_region(cfg, b, addr)) continue;
-            uint8_t lo = rom_read(rom, b, addr);
-            uint8_t hi = rom_read(rom, b, addr + 1);
-            uint16_t candidate = lo | ((uint16_t)hi << 8);
-            if (candidate < 0xC000 || candidate > 0xFFFD) continue;
-            if (is_data_region(cfg, fixed_bank, candidate)) continue;
-            if (validate_code_target(rom, fixed_bank, candidate, TABLE_RUN_MIN_VALID) &&
-                !function_list_contains(out, candidate, fixed_bank))
-                add_function_with_source(out, candidate, fixed_bank, FUNCTION_SOURCE_PTR_SCAN);
-        }
-    }
-    while (queue_pop(&item)) {
-        for (int i = 0; i < out->count; i++) {
-            if (out->entries[i].addr == item.addr &&
-                out->entries[i].bank == item.bank &&
-                out->entries[i].size == 0)
-            {
-                out->entries[i].size = walk_function(rom, out, item.addr, item.bank, cfg,
-                                                    out->entries[i].source_flags);
-                break;
-            }
-        }
-    }
-    printf("[FuncFinder] Switchable->fixed pointer scan added %d candidates\n",
-           out->count - before_sw_fixed_scan);
 
     /* Switchable-bank table-run scanner: find runs of TABLE_RUN_MIN_RUN+
      * consecutive 16-bit LE values in $8000-$BFFF where each target passes
@@ -1402,54 +1339,6 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
     printf("[FuncFinder] Known dispatch table scan added %d candidates\n",
            out->count - before_kt);
 
-    /* Cross-bank function propagation: for each function discovered in a
-     * switchable bank ($8000-$BFFF), check if other switchable banks have
-     * identical code bytes at the same address. If the first 8 bytes match
-     * and the target isn't a data region, propagate the function to that
-     * bank. This catches shared code regions (e.g., Metroid's common
-     * routines duplicated across all PRG banks). */
-    int before_xbank = out->count;
-    {
-        #define XBANK_MATCH_BYTES 8
-        int snapshot_count = out->count;
-        for (int i = 0; i < snapshot_count; i++) {
-            uint16_t addr = out->entries[i].addr;
-            int src_bank = out->entries[i].bank;
-            if (src_bank == fixed_bank) continue;
-            if (addr < 0x8000 || addr >= 0xC000) continue;
-            if (is_data_region(cfg, src_bank, addr)) continue;
-            uint8_t ref[XBANK_MATCH_BYTES];
-            for (int j = 0; j < XBANK_MATCH_BYTES; j++)
-                ref[j] = rom_read(rom, src_bank, addr + j);
-            for (int ob = 0; ob < fixed_bank; ob++) {
-                if (ob == src_bank) continue;
-                if (function_list_contains(out, addr, ob)) continue;
-                if (is_data_region(cfg, ob, addr)) continue;
-                bool match = true;
-                for (int j = 0; j < XBANK_MATCH_BYTES && match; j++) {
-                    if (rom_read(rom, ob, addr + j) != ref[j])
-                        match = false;
-                }
-                if (match)
-                    add_function_with_source(out, addr, ob, FUNCTION_SOURCE_XBANK);
-            }
-        }
-        #undef XBANK_MATCH_BYTES
-    }
-    while (queue_pop(&item)) {
-        for (int i = 0; i < out->count; i++) {
-            if (out->entries[i].addr == item.addr &&
-                out->entries[i].bank == item.bank &&
-                out->entries[i].size == 0)
-            {
-                out->entries[i].size = walk_function(rom, out, item.addr, item.bank, cfg,
-                                                    out->entries[i].source_flags);
-                break;
-            }
-        }
-    }
-    printf("[FuncFinder] Cross-bank propagation added %d candidates\n",
-           out->count - before_xbank);
     }
 
     int bank_count = fixed_bank + 1;
