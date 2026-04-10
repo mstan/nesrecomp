@@ -1368,6 +1368,54 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
     printf("[FuncFinder] Known dispatch table scan added %d candidates\n",
            out->count - before_kt);
 
+    /* Cross-bank function propagation: for each function discovered in a
+     * switchable bank ($8000-$BFFF), check if other switchable banks have
+     * identical code bytes at the same address. If the first 8 bytes match
+     * and the target isn't a data region, propagate the function to that
+     * bank. This catches shared code regions (e.g., Metroid's common
+     * routines duplicated across all PRG banks). */
+    int before_xbank = out->count;
+    {
+        #define XBANK_MATCH_BYTES 8
+        int snapshot_count = out->count;
+        for (int i = 0; i < snapshot_count; i++) {
+            uint16_t addr = out->entries[i].addr;
+            int src_bank = out->entries[i].bank;
+            if (src_bank == fixed_bank) continue;
+            if (addr < 0x8000 || addr >= 0xC000) continue;
+            if (is_data_region(cfg, src_bank, addr)) continue;
+            uint8_t ref[XBANK_MATCH_BYTES];
+            for (int j = 0; j < XBANK_MATCH_BYTES; j++)
+                ref[j] = rom_read(rom, src_bank, addr + j);
+            for (int ob = 0; ob < fixed_bank; ob++) {
+                if (ob == src_bank) continue;
+                if (function_list_contains(out, addr, ob)) continue;
+                if (is_data_region(cfg, ob, addr)) continue;
+                bool match = true;
+                for (int j = 0; j < XBANK_MATCH_BYTES && match; j++) {
+                    if (rom_read(rom, ob, addr + j) != ref[j])
+                        match = false;
+                }
+                if (match)
+                    add_function_with_source(out, addr, ob, FUNCTION_SOURCE_XBANK);
+            }
+        }
+        #undef XBANK_MATCH_BYTES
+    }
+    while (queue_pop(&item)) {
+        for (int i = 0; i < out->count; i++) {
+            if (out->entries[i].addr == item.addr &&
+                out->entries[i].bank == item.bank &&
+                out->entries[i].size == 0)
+            {
+                out->entries[i].size = walk_function(rom, out, item.addr, item.bank, cfg,
+                                                    out->entries[i].source_flags);
+                break;
+            }
+        }
+    }
+    printf("[FuncFinder] Cross-bank propagation added %d candidates\n",
+           out->count - before_xbank);
     }
 
     int bank_count = fixed_bank + 1;
