@@ -881,8 +881,10 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                             if (codegen_lookup_body_alias(dest, fixed_bank,
                                                           &alias_owner, &alias_bank, &alias_entry))
                                 fprintf(f, "func_%04X_body(%d); return;\n", alias_owner, alias_entry);
-                            else
+                            else if (codegen_has_emitted_wrapper(dest, fixed_bank))
                                 fprintf(f, "func_%04X(); return;\n", dest);
+                            else
+                                fprintf(f, "call_by_address(0x%04X); return;\n", dest);
                         } else if (dest >= 0x8000) {
                             if (dispatch_bank >= 0) {
                                 /* Bank known from register propagation, validated */
@@ -890,15 +892,19 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                                                               &alias_owner, &alias_bank, &alias_entry))
                                     fprintf(f, "func_%04X_b%d_body(%d); return;\n",
                                             alias_owner, alias_bank, alias_entry);
-                                else
+                                else if (codegen_has_emitted_wrapper(dest, dispatch_bank))
                                     fprintf(f, "func_%04X_b%d(); return;\n", dest, dispatch_bank);
+                                else
+                                    fprintf(f, "call_by_address(0x%04X); return;\n", dest);
                             } else if (bank != fixed_bank) {
                                 if (codegen_lookup_body_alias(dest, bank,
                                                               &alias_owner, &alias_bank, &alias_entry))
                                     fprintf(f, "func_%04X_b%d_body(%d); return;\n",
                                             alias_owner, alias_bank, alias_entry);
-                                else
+                                else if (codegen_has_emitted_wrapper(dest, bank))
                                     fprintf(f, "func_%04X_b%d(); return;\n", dest, bank);
+                                else
+                                    fprintf(f, "call_by_address(0x%04X); return;\n", dest);
                             } else {
                                 /* Fixed bank, no bank-switch or missing targets: runtime */
                                 fprintf(f, "call_by_address(0x%04X); return;\n", dest);
@@ -913,15 +919,19 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                                                                   &alias_owner, &alias_bank, &alias_entry))
                                         fprintf(f, "func_%04X_body(%d); return;\n",
                                                 alias_owner, alias_entry);
-                                    else
+                                    else if (codegen_has_emitted_wrapper(rom_addr, fixed_bank))
                                         fprintf(f, "func_%04X(); return;\n", rom_addr);
+                                    else
+                                        fprintf(f, "call_by_address(0x%04X); return;\n", rom_addr);
                                 } else {
                                     if (codegen_lookup_body_alias(rom_addr, sram_bank,
                                                                   &alias_owner, &alias_bank, &alias_entry))
                                         fprintf(f, "func_%04X_b%d_body(%d); return;\n",
                                                 alias_owner, alias_bank, alias_entry);
-                                    else
+                                    else if (codegen_has_emitted_wrapper(rom_addr, sram_bank))
                                         fprintf(f, "func_%04X_b%d(); return;\n", rom_addr, sram_bank);
+                                    else
+                                        fprintf(f, "call_by_address(0x%04X); return;\n", rom_addr);
                                 }
                             } else {
                                 fprintf(f, "call_by_address(0x%04X); return;\n", dest);
@@ -1111,8 +1121,10 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                         else if (codegen_lookup_body_alias(abs16, fixed_bank,
                                                            &alias_owner, &alias_bank, &alias_entry))
                             fprintf(f, "func_%04X_body(%d); return;\n", alias_owner, alias_entry);
-                        else
+                        else if (codegen_has_emitted_wrapper(abs16, fixed_bank))
                             fprintf(f, "maybe_trigger_vblank(2); func_%04X(); return;\n", abs16);
+                        else
+                            fprintf(f, "maybe_trigger_vblank(2); call_by_address(0x%04X); return;\n", abs16);
                     } else if (pc >= 0xC003 &&
                                rom_read(rom, bank, pc - 3) == 0xBA /* TSX */ &&
                                rom_read(rom, bank, pc - 2) == 0x96 /* STX zp,Y */) {
@@ -1132,14 +1144,16 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                                 (cfg->push_jmps[ji].source == 0 || cfg->push_jmps[ji].source == pc))
                             { need_jmp_push = 1; break; }
                         }
-                        if (need_jmp_push) {
+                        if (need_jmp_push && codegen_has_emitted_wrapper(abs16, fixed_bank)) {
                             fprintf(f, "maybe_trigger_vblank(2); g_ram[0x100+g_cpu.S]=0; g_cpu.S--; g_ram[0x100+g_cpu.S]=0; g_cpu.S--; func_%04X(); return;\n", abs16);
                         } else if (codegen_lookup_body_alias(abs16, fixed_bank,
                                                              &alias_owner, &alias_bank, &alias_entry)) {
                             fprintf(f, "maybe_trigger_vblank(2); func_%04X_body(%d); return;\n",
                                     alias_owner, alias_entry);
-                        } else {
+                        } else if (codegen_has_emitted_wrapper(abs16, fixed_bank)) {
                             fprintf(f, "maybe_trigger_vblank(2); func_%04X(); return;\n", abs16);
+                        } else {
+                            fprintf(f, "maybe_trigger_vblank(2); call_by_address(0x%04X); return;\n", abs16);
                         }
                     }
                 } else if (abs16 >= 0x8000) {
@@ -1187,14 +1201,16 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                                 (cfg->push_jmps[ji].source == 0 || cfg->push_jmps[ji].source == pc))
                             { need_jmp_push = 1; break; }
                         }
-                        if (need_jmp_push) {
+                        if (need_jmp_push && codegen_has_emitted_wrapper(abs16, bank)) {
                             fprintf(f, "maybe_trigger_vblank(2); g_ram[0x100+g_cpu.S]=0; g_cpu.S--; g_ram[0x100+g_cpu.S]=0; g_cpu.S--; func_%04X_b%d(); return;\n", abs16, bank);
                         } else if (codegen_lookup_body_alias(abs16, bank,
                                                              &alias_owner, &alias_bank, &alias_entry)) {
                             fprintf(f, "maybe_trigger_vblank(2); func_%04X_b%d_body(%d); return;\n",
                                     alias_owner, alias_bank, alias_entry);
-                        } else {
+                        } else if (codegen_has_emitted_wrapper(abs16, bank)) {
                             fprintf(f, "maybe_trigger_vblank(2); func_%04X_b%d(); return;\n", abs16, bank);
+                        } else {
+                            fprintf(f, "maybe_trigger_vblank(2); call_by_address(0x%04X); return;\n", abs16);
                         }
                     }
                 } else {
