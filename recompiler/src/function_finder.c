@@ -448,7 +448,8 @@ static int classify_secondary_entries(const NESRom *rom, FunctionList *list,
         order[i].bank = list->entries[i].bank;
         order[i].addr = list->entries[i].addr;
         order[i].priority = function_entry_priority(&list->entries[i]);
-        entry_lookup[(size_t)list->entries[i].bank * 65536u + list->entries[i].addr] = i;
+        if (list->entries[i].bank >= 0 && list->entries[i].bank < bank_count)
+            entry_lookup[(size_t)list->entries[i].bank * 65536u + list->entries[i].addr] = i;
     }
 
     qsort(order, (size_t)list->count, sizeof(FunctionOrderEntry), compare_function_order);
@@ -468,6 +469,7 @@ static int classify_secondary_entries(const NESRom *rom, FunctionList *list,
             uint16_t boundary = boundaries[bi];
             if (entry->addr < 0xC000 && boundary >= 0xC000) continue;
             int boundary_bank = (boundary >= 0xC000) ? fixed_bank : entry->bank;
+            if (boundary_bank < 0 || boundary_bank >= bank_count) continue;
             size_t key = (size_t)boundary_bank * 65536u + boundary;
             if (out_coverage[key] < 0) out_coverage[key] = idx;
             if (boundary == entry->addr) continue;
