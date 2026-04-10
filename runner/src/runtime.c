@@ -68,6 +68,93 @@ static uint8_t s_ctrl1_shift   = 0;
 static uint8_t s_ctrl2_shift   = 0;
 static bool    s_ctrl1_strobe  = false;
 
+/* ---- Zapper (light gun) state ---- */
+int     g_zapper_enabled = 0;       /* 1 if Zapper connected on port 2 */
+int     g_zapper_x = 0;             /* aim X (0-255) */
+int     g_zapper_y = 0;             /* aim Y (0-239) */
+int     g_zapper_trigger = 0;       /* 1 if trigger pulled */
+static const uint32_t *s_zapper_framebuf = NULL; /* last rendered frame for light detection */
+
+void runtime_set_zapper_framebuf(const uint32_t *fb) { s_zapper_framebuf = fb; }
+
+/* Check OAM shadow RAM ($0200-$02FF) for any visible sprite overlapping the
+ * Zapper aim point.  This catches the detection flash sprites that have been
+ * written to OAM shadow but not yet rendered to the framebuffer — which is
+ * the normal situation in a frame-at-a-time renderer.  On real NES the PPU
+ * draws sprites scanline-by-scanline while the game polls $4017 mid-frame. */
+static int zapper_oam_shadow_hit(void) {
+    int x = g_zapper_x, y = g_zapper_y;
+    int sprite_h = (g_ppuctrl & 0x20) ? 16 : 8;
+    int visible_count = 0;
+    for (int i = 0; i < 64; i++) {
+        uint8_t sy   = g_ram[0x200 + i * 4 + 0]; /* sprite Y (top - 1) */
+        uint8_t tile = g_ram[0x200 + i * 4 + 1];
+        /* uint8_t attr = g_ram[0x200 + i * 4 + 2]; */
+        uint8_t sx   = g_ram[0x200 + i * 4 + 3]; /* sprite X */
+        if (sy >= 0xEF) continue; /* offscreen / hidden */
+        visible_count++;
+        int top = sy + 1; /* OAM Y is one less than display Y */
+        if (x >= sx && x < sx + 8 && y >= top && y < top + sprite_h) {
+            fprintf(stderr, "[Zapper] OAM HIT sprite %d: tile=$%02X pos=(%d,%d) aim=(%d,%d)\n",
+                    i, tile, sx, top, x, y);
+            return 1;
+        }
+    }
+    if (g_zapper_trigger) {
+        static int s_oam_log = 0;
+        if (s_oam_log < 30) {
+            s_oam_log++;
+            fprintf(stderr, "[Zapper] OAM MISS aim=(%d,%d) visible_sprites=%d sprite_h=%d\n",
+                    x, y, visible_count, sprite_h);
+            /* Dump first few visible sprites */
+            for (int i = 0; i < 64 && visible_count > 0; i++) {
+                uint8_t sy = g_ram[0x200 + i*4+0];
+                if (sy >= 0xEF) continue;
+                uint8_t tile = g_ram[0x200 + i*4+1];
+                uint8_t sx = g_ram[0x200 + i*4+3];
+                fprintf(stderr, "  sprite %d: Y=%d tile=$%02X X=%d (range X:%d-%d Y:%d-%d)\n",
+                        i, sy, tile, sx, sx, sx+7, sy+1, sy+sprite_h);
+            }
+        }
+    }
+    return 0;
+}
+
+/* Check if the pixel at Zapper aim (x,y) is "bright" in the framebuffer.
+ * The NES Zapper detects white/bright pixels during the detection flash.
+ * Returns 1 if bright (light detected), 0 if dark. */
+static int zapper_light_detected(void) {
+    /* During early init (before enough frames render), report light detected.
+     * This simulates the Zapper pointing at a lit TV screen at power-on,
+     * which is how real NES hardware detects the Zapper on combo carts. */
+    if (!s_zapper_framebuf || g_frame_count < 2) return 1;
+    extern int g_render_width;
+    int x = g_zapper_x, y = g_zapper_y;
+    if (x < 0 || x >= 256 || y < 0 || y >= 240) return 0;
+    /* Sample a small area around the aim point for robustness */
+    int total_lum = 0, count = 0;
+    for (int dy = -4; dy <= 4; dy += 4) {
+        for (int dx = -4; dx <= 4; dx += 4) {
+            int sx = x + dx, sy = y + dy;
+            if (sx < 0 || sx >= 256 || sy < 0 || sy >= 240) continue;
+            uint32_t pixel = s_zapper_framebuf[sy * g_render_width + sx];
+            int r = (pixel >> 16) & 0xFF;
+            int g = (pixel >> 8) & 0xFF;
+            int b = pixel & 0xFF;
+            total_lum += (r * 3 + g * 6 + b) / 10;
+            count++;
+        }
+    }
+    int result = (count > 0 && total_lum / count > 30) ? 1 : 0;
+    /* Fallback: check OAM shadow RAM directly for sprites at the aim point.
+     * During the detection flash, the game writes white target sprites to
+     * $0200 then immediately polls $4017 — but ppu_render_frame hasn't run
+     * yet so the framebuffer is stale (previous frame, usually black). */
+    if (!result)
+        result = zapper_oam_shadow_hit();
+    return result;
+}
+
 static FILE *s_ppu_trace = NULL;
 
 /* Scroll write trace — last 64 writes to $2005 */
@@ -249,6 +336,15 @@ uint8_t nes_read(uint16_t addr) {
             return 0x40 | bit;
         }
         if (addr == 0x4017) {
+            if (g_zapper_enabled) {
+                /* Zapper on port 2:
+                 *   bit 3: light sensor (active low: 0=detected, 1=not detected)
+                 *   bit 4: trigger (active low: 0=pulled, 1=not pulled) */
+                uint8_t val = 0x40;
+                if (!zapper_light_detected()) val |= 0x08;
+                if (!g_zapper_trigger) val |= 0x10;
+                return val;
+            }
             if (s_ctrl1_strobe) return 0x40 | (g_controller2_buttons >> 7);
             uint8_t bit = (s_ctrl2_shift & 0x80) ? 1 : 0;
             s_ctrl2_shift <<= 1;

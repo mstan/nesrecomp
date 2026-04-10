@@ -34,6 +34,10 @@ static KeyBinds s_binds = {
         .left   = SDL_SCANCODE_A,
         .right  = SDL_SCANCODE_D,
     },
+    .zapper = {
+        .mouse_enabled = 0,
+        .crosshair = 0,
+    },
 };
 
 /* ── Button name mapping ──────────────────────────────────────────────────── */
@@ -126,6 +130,12 @@ static void write_defaults(const char *path) {
     fprintf(f, "# A, B, C, ..., W, S, D, K, L, Space, Left Shift, Right Shift\n\n");
     write_player(f, "player1", &s_binds.p1);
     write_player(f, "player2", &s_binds.p2);
+    fprintf(f, "[zapper]\n");
+    fprintf(f, "# Set mouse = true to use the mouse as a Zapper light gun.\n");
+    fprintf(f, "# Left click = trigger, mouse position = aim point.\n");
+    fprintf(f, "mouse = false\n");
+    fprintf(f, "# Set crosshair = true to show a crosshair at the aim point.\n");
+    fprintf(f, "crosshair = false\n\n");
     fclose(f);
     printf("[Keybinds] Generated %s\n", path);
 }
@@ -135,6 +145,7 @@ static void load_ini(const char *path) {
     if (!f) return;
 
     PlayerBinds *current = NULL;
+    int in_zapper = 0;
     char line[256];
     while (fgets(line, sizeof(line), f)) {
         trim(line);
@@ -145,13 +156,13 @@ static void load_ini(const char *path) {
             char *end = strchr(line, ']');
             if (end) *end = '\0';
             char *section = line + 1;
+            in_zapper = 0;
+            current = NULL;
             if (strcmp(section, "player1") == 0) current = &s_binds.p1;
             else if (strcmp(section, "player2") == 0) current = &s_binds.p2;
-            else current = NULL;
+            else if (strcmp(section, "zapper") == 0) in_zapper = 1;
             continue;
         }
-
-        if (!current) continue;
 
         /* key = value */
         char *eq = strchr(line, '=');
@@ -160,8 +171,21 @@ static void load_ini(const char *path) {
         char *key = line, *val = eq + 1;
         trim(key); trim(val);
 
-        /* Convert to lowercase for matching */
+        /* Convert key to lowercase for matching */
         for (char *c = key; *c; c++) *c = (char)tolower((unsigned char)*c);
+
+        if (in_zapper) {
+            /* Accept true/false/1/0/yes/no for boolean zapper keys */
+            for (char *c = val; *c; c++) *c = (char)tolower((unsigned char)*c);
+            int bval = (strcmp(val, "true") == 0 || strcmp(val, "1") == 0 || strcmp(val, "yes") == 0);
+            if (strcmp(key, "mouse") == 0)
+                s_binds.zapper.mouse_enabled = bval;
+            else if (strcmp(key, "crosshair") == 0)
+                s_binds.zapper.crosshair = bval;
+            continue;
+        }
+
+        if (!current) continue;
 
         for (const ButtonDef *bd = s_buttons; bd->name; bd++) {
             if (strcmp(key, bd->name) == 0) {
@@ -211,4 +235,12 @@ uint8_t keybinds_read_player(const uint8_t *keys, int player) {
     if (keys[pb->left])   btn |= 0x02;
     if (keys[pb->right])  btn |= 0x01;
     return btn;
+}
+
+int keybinds_zapper_mouse(void) {
+    return s_binds.zapper.mouse_enabled;
+}
+
+int keybinds_zapper_crosshair(void) {
+    return s_binds.zapper.crosshair;
 }

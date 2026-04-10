@@ -338,6 +338,10 @@ void runner_screenshot(const char *path) {
     runner_save_argb_png(path, s_framebuf, g_render_width, 240);
 }
 
+uint32_t *runner_get_framebuffer(void) {
+    return s_framebuf;
+}
+
 /* ---- Debug trace log (C:/temp/debug_trace.txt) ---- */
 static FILE *s_debug_log = NULL;
 
@@ -388,6 +392,39 @@ static void debug_log_frame(uint64_t frame) {
     fflush(s_debug_log);
 }
 
+/* ---- Zapper mouse → NES coordinate conversion ---- */
+static void zapper_mouse_to_nes(int mouse_x, int mouse_y) {
+    if (!s_renderer || !s_window) return;
+    /* Get the actual renderer output size (accounts for DPI scaling) */
+    int out_w, out_h;
+    SDL_GetRendererOutputSize(s_renderer, &out_w, &out_h);
+    /* Get window size to compute DPI ratio */
+    int win_w, win_h;
+    SDL_GetWindowSize(s_window, &win_w, &win_h);
+    /* Mouse events use window coordinates — scale to output pixels */
+    float dpi_x = (float)out_w / win_w;
+    float dpi_y = (float)out_h / win_h;
+    float px = mouse_x * dpi_x;
+    float py = mouse_y * dpi_y;
+    /* Compute letterboxed render area within the output */
+    float scale_x = (float)out_w / g_render_width;
+    float scale_y = (float)out_h / 240.0f;
+    float scale = (scale_x < scale_y) ? scale_x : scale_y;
+    float render_w = g_render_width * scale;
+    float render_h = 240.0f * scale;
+    float offset_x = (out_w - render_w) / 2.0f;
+    float offset_y = (out_h - render_h) / 2.0f;
+    /* Map to NES coordinates */
+    int nes_x = (int)((px - offset_x) * g_render_width / render_w);
+    int nes_y = (int)((py - offset_y) * 240.0f / render_h);
+    if (nes_x < 0) nes_x = 0;
+    if (nes_x > 255) nes_x = 255;
+    if (nes_y < 0) nes_y = 0;
+    if (nes_y > 239) nes_y = 239;
+    g_zapper_x = nes_x;
+    g_zapper_y = nes_y;
+}
+
 /* ---- VBlank callback (called from ppu_read_reg when $2002 bit7 fires) ---- */
 void nes_vblank_callback(void) {
     static uint64_t s_cb_count = 0;
@@ -413,6 +450,14 @@ void nes_vblank_callback(void) {
             savestate_load("C:/temp/quicksave.sav");
             record_sync_frame(g_frame_count); /* g_frame_count now = restored value */
         }
+    }
+
+    /* Zapper mouse input: poll absolute mouse position each frame */
+    if (g_zapper_enabled && keybinds_zapper_mouse() && s_window) {
+        int mx, my;
+        Uint32 buttons = SDL_GetMouseState(&mx, &my);
+        zapper_mouse_to_nes(mx, my);
+        g_zapper_trigger = (buttons & SDL_BUTTON_LMASK) ? 1 : 0;
     }
 
     /* Update controllers from keyboard state via configurable keybinds */
@@ -529,6 +574,9 @@ void nes_vblank_callback(void) {
     /* Render PPU to framebuffer */
     ppu_render_frame(s_framebuf);
 
+    /* Update Zapper light sensor framebuffer for next frame's $4017 reads */
+    runtime_set_zapper_framebuf(s_framebuf);
+
     /* Game-specific post-render (e.g. widescreen margin sprites) */
     game_post_render(s_framebuf);
 
@@ -582,6 +630,24 @@ void nes_vblank_callback(void) {
     /* Auto-screenshot disabled — use F8 or input scripts for screenshots */
     /* if (g_frame_count % 120 == 0) { save_screenshot(); } */
     g_frame_count++;
+
+    /* Zapper crosshair — always visible when enabled in keybinds.ini */
+    if (g_zapper_enabled && keybinds_zapper_mouse() && keybinds_zapper_crosshair()) {
+        int cx = g_zapper_x, cy = g_zapper_y;
+        uint32_t color = g_zapper_trigger ? 0xFFFF0000 : 0xFFFFFFFF; /* red on fire, white otherwise */
+        /* Draw crosshair: horizontal and vertical lines, 11px each */
+        for (int d = -5; d <= 5; d++) {
+            if (d == 0) continue; /* skip center, drawn separately */
+            int hx = cx + d, vy = cy + d;
+            if (hx >= 0 && hx < g_render_width && cy >= 0 && cy < 240)
+                s_framebuf[cy * g_render_width + hx] = color;
+            if (cx >= 0 && cx < g_render_width && vy >= 0 && vy < 240)
+                s_framebuf[vy * g_render_width + cx] = color;
+        }
+        /* Center dot — always bright */
+        if (cx >= 0 && cx < g_render_width && cy >= 0 && cy < 240)
+            s_framebuf[cy * g_render_width + cx] = 0xFFFFFFFF;
+    }
 
     /* Upload texture and present.
      * In turbo mode, only present every 16th frame to avoid vsync blocking
@@ -715,6 +781,9 @@ void nesrecomp_runner_run(int argc, char *argv[]) {
     runtime_init();
     keybinds_init(argv[0]);
     game_on_init();
+
+    if (g_zapper_enabled && keybinds_zapper_mouse())
+        printf("[Zapper] Mouse mode enabled — left click to shoot\n");
 
     if (s_loadstate_path) savestate_load(s_loadstate_path);
     if (s_record_path) { record_open(s_record_path); atexit(record_close); }
