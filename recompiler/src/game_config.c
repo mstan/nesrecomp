@@ -78,6 +78,10 @@ static bool game_config_load_toml(GameConfig *cfg, const char *path) {
         if (d.ok) { strncpy(cfg->output_prefix, d.u.s, sizeof(cfg->output_prefix) - 1); free(d.u.s); }
         toml_datum_t paj = toml_bool_in(game, "push_all_jsr");
         if (paj.ok) cfg->push_all_jsr = paj.u.b;
+        toml_datum_t dps = toml_bool_in(game, "disable_ptr_scan");
+        if (dps.ok) cfg->disable_ptr_scan = dps.u.b;
+        toml_datum_t ds = toml_bool_in(game, "disable_secondary");
+        if (ds.ok) cfg->disable_secondary = ds.u.b;
     }
 
     /* [mapper] */

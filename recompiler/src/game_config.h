@@ -251,6 +251,8 @@ typedef struct {
     int              cond_bail_func_count;
 
     bool             push_all_jsr;  /* emit 6502 stack push/pop on every JSR/RTS */
+    bool             disable_ptr_scan; /* skip switchable→fixed ROM pointer scan */
+    bool             disable_secondary; /* skip secondary entry classification */
 } GameConfig;
 
 /* Initialize to empty (no dispatch tables, prefix derived from ROM name) */

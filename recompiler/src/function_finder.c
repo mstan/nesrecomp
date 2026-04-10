@@ -1046,6 +1046,9 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
     }
     printf("[FuncFinder] Fixed-bank pointer scan added %d candidates\n", out->count - before_scan);
 
+    if (cfg->disable_ptr_scan) {
+        printf("[FuncFinder] Switchable->fixed pointer scan skipped via disable_ptr_scan\n");
+    } else {
     /* Switchable-bank → fixed-bank pointer scan: scan each switchable bank
      * for 16-bit LE values pointing into the fixed bank ($C000-$FFFD).
      * Uses validate_code_target for deeper validation since cross-bank
@@ -1079,6 +1082,7 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
     }
     printf("[FuncFinder] Switchable->fixed pointer scan added %d candidates\n",
            out->count - before_sw_fixed_scan);
+    } /* end disable_ptr_scan guard */
 
     /* Switchable-bank table-run scanner: find runs of TABLE_RUN_MIN_RUN+
      * consecutive 16-bit LE values in $8000-$BFFF where each target passes
@@ -1423,10 +1427,12 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
     int bank_count = fixed_bank + 1;
     size_t coverage_elems = (size_t)bank_count * 65536u;
     int *coverage_map = (int *)malloc(coverage_elems * sizeof(int));
-    if (coverage_map) {
+    if (coverage_map && !cfg->disable_secondary) {
         int secondary_count = classify_secondary_entries(rom, out, cfg, coverage_map);
         printf("[FuncFinder] Structural classification marked %d secondary entries\n",
                secondary_count);
+    } else if (cfg->disable_secondary) {
+        printf("[FuncFinder] Secondary entry classification skipped via disable_secondary\n");
     }
     if (cfg->output_prefix[0])
         snprintf(audit_path, sizeof(audit_path), "%s_finder_audit.csv", cfg->output_prefix);
@@ -1594,7 +1600,8 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
     }
 
     if (coverage_map) {
-        classify_secondary_entries(rom, out, cfg, coverage_map);
+        if (!cfg->disable_secondary)
+            classify_secondary_entries(rom, out, cfg, coverage_map);
         free(coverage_map);
     }
     if (audit) {
