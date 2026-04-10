@@ -26,3 +26,13 @@ set(NESRECOMP_RUNNER_SOURCES
 )
 
 set(NESRECOMP_RUNNER_INCLUDE_DIRS ${NESRECOMP_RUNNER_ROOT}/include)
+
+# ---- Optional Nestopia Oracle ----
+# Games opt in by setting ENABLE_NESTOPIA_ORACLE=ON and optionally NESTOPIA_DIR.
+if(ENABLE_NESTOPIA_ORACLE)
+    list(APPEND NESRECOMP_RUNNER_SOURCES
+        ${NESRECOMP_RUNNER_ROOT}/src/nestopia_bridge.cpp
+        ${NESRECOMP_RUNNER_ROOT}/src/nestopia_oracle_cmds.c
+    )
+    include(${NESRECOMP_RUNNER_ROOT}/nestopia_cmake.cmake)
+endif()

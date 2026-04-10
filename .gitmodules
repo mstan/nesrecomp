@@ -1,0 +1,3 @@
+[submodule "runner/nestopia-core"]
+	path = runner/nestopia-core
+	url = https://github.com/libretro/nestopia.git

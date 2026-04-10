@@ -13,6 +13,9 @@
  */
 #include "debug_server.h"
 #include "game_extras.h"
+#ifdef ENABLE_NESTOPIA_ORACLE
+#include "nestopia_oracle_cmds.h"
+#endif
 #include "nes_runtime.h"
 
 #include <stdio.h>
@@ -1172,6 +1175,47 @@ static void handle_screenshot(int id, const char *json)
     send_fmt("{\"id\":%d,\"ok\":true,\"path\":\"%s\"}", id, path);
 }
 
+/* ---- Scroll trace ---- */
+
+static void handle_scroll_trace(int id, const char *json)
+{
+    (void)json;
+    extern void runtime_get_scroll_trace(int *out_count, int *out_idx);
+    extern const void *runtime_get_scroll_trace_buf(void);
+    extern uint16_t runtime_get_ppu_t(void);
+    extern uint8_t  runtime_get_ppu_fine_x(void);
+    extern int      runtime_scroll_from_t_valid(void);
+
+    int count, idx;
+    runtime_get_scroll_trace(&count, &idx);
+
+    typedef struct { uint64_t frame; uint8_t val; uint8_t which; } STE;
+    const STE *buf = (const STE *)runtime_get_scroll_trace_buf();
+
+    /* Start from oldest entry, walk forward */
+    int start = (count < 64) ? 0 : idx; /* ring buffer start */
+    int n = count < 64 ? count : 64;
+
+    char entries[4096];
+    int pos = 0;
+    pos += snprintf(entries + pos, sizeof(entries) - pos, "[");
+    for (int i = 0; i < n && pos < (int)sizeof(entries) - 80; i++) {
+        int j = (start + i) % 64;
+        if (i > 0) pos += snprintf(entries + pos, sizeof(entries) - pos, ",");
+        pos += snprintf(entries + pos, sizeof(entries) - pos,
+            "{\"f\":%llu,\"v\":%d,\"w\":\"%s\"}",
+            (unsigned long long)buf[j].frame,
+            buf[j].val,
+            buf[j].which ? "Y" : "X");
+    }
+    pos += snprintf(entries + pos, sizeof(entries) - pos, "]");
+
+    send_fmt("{\"id\":%d,\"ok\":true,\"count\":%d,\"t\":\"0x%04X\",\"fine_x\":%d,"
+             "\"scroll_2005_complete\":%d,\"entries\":%s}",
+             id, count, runtime_get_ppu_t(), runtime_get_ppu_fine_x(),
+             runtime_scroll_from_t_valid(), entries);
+}
+
 /* ---- Command dispatch ---- */
 
 typedef void (*CmdHandler)(int id, const char *json);
@@ -1219,6 +1263,7 @@ static const CmdEntry s_commands[] = {
     { "dispatch_miss_info", handle_dispatch_miss_info },
     { "quit",              handle_quit },
     { "screenshot",        handle_screenshot },
+    { "scroll_trace",      handle_scroll_trace },
     { NULL, NULL }
 };
 
@@ -1241,6 +1286,12 @@ static void process_command(const char *line)
     /* Try game-specific command handler first (allows overriding built-ins) */
     if (game_handle_debug_cmd(cmd, id, line))
         return;
+
+#ifdef ENABLE_NESTOPIA_ORACLE
+    /* Try generic Nestopia oracle commands */
+    if (nestopia_oracle_handle_cmd(cmd, id, line))
+        return;
+#endif
 
     for (const CmdEntry *e = s_commands; e->name; e++) {
         if (strcmp(cmd, e->name) == 0) {

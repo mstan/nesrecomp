@@ -1,0 +1,771 @@
+diff --git a/libretro/libretro.cpp b/libretro/libretro.cpp
+index 03ab6b8..d051544 100644
+--- a/libretro/libretro.cpp
++++ b/libretro/libretro.cpp
+@@ -56,6 +56,10 @@ static uint32_t* video_buffer = NULL;
+ static int16_t audio_buffer[(SAMPLERATE / 50) << 1];
+ static int16_t audio_stereo_buffer[(SAMPLERATE / 50) << 1];
+ static Api::Emulator emulator;
++
++/* Oracle-mode accessor: lets nestopia_bridge.cpp reach the Emulator instance */
++Nes::Api::Emulator& nestopia_get_emulator_instance(void) { return emulator; }
++
+ static Api::Machine *machine;
+ static Api::Fds *fds;
+ static char g_basename[256];
+diff --git a/source/core/NstCartridge.hpp b/source/core/NstCartridge.hpp
+index 4143689..17cfd86 100644
+--- a/source/core/NstCartridge.hpp
++++ b/source/core/NstCartridge.hpp
+@@ -1,142 +1,150 @@
+-////////////////////////////////////////////////////////////////////////////////////////
+-//
+-// Nestopia - NES/Famicom emulator written in C++
+-//
+-// Copyright (C) 2003-2008 Martin Freij
+-//
+-// This file is part of Nestopia.
+-//
+-// Nestopia is free software; you can redistribute it and/or modify
+-// it under the terms of the GNU General Public License as published by
+-// the Free Software Foundation; either version 2 of the License, or
+-// (at your option) any later version.
+-//
+-// Nestopia is distributed in the hope that it will be useful,
+-// but WITHOUT ANY WARRANTY; without even the implied warranty of
+-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+-// GNU General Public License for more details.
+-//
+-// You should have received a copy of the GNU General Public License
+-// along with Nestopia; if not, write to the Free Software
+-// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+-//
+-////////////////////////////////////////////////////////////////////////////////////////
+-
+-#ifndef NST_CARTRIDGE_H
+-#define NST_CARTRIDGE_H
+-
+-#include "NstRam.hpp"
+-#include "NstImage.hpp"
+-#include "NstFile.hpp"
+-#include "api/NstApiCartridge.hpp"
+-
+-#ifdef NST_PRAGMA_ONCE
+-#pragma once
+-#endif
+-
+-namespace Nes
+-{
+-	namespace Core
+-	{
+-		namespace Boards
+-		{
+-			class Board;
+-		}
+-
+-		class Cartridge : public Image
+-		{
+-		public:
+-
+-			explicit Cartridge(Context&);
+-
+-			void BeginFrame(const Api::Input&,Input::Controllers*);
+-
+-			typedef Api::Cartridge::Profile Profile;
+-
+-			static void ReadRomset(std::istream&,FavoredSystem,bool,Profile&);
+-			static void ReadInes(std::istream&,FavoredSystem,Profile&);
+-			static void ReadUnif(std::istream&,FavoredSystem,Profile&);
+-
+-			class Ines;
+-			class Unif;
+-			class Romset;
+-
+-		private:
+-
+-			~Cartridge();
+-
+-			struct ProfileEx
+-			{
+-				ProfileEx();
+-
+-				enum Nmt
+-				{
+-					NMT_DEFAULT,
+-					NMT_HORIZONTAL,
+-					NMT_VERTICAL,
+-					NMT_SINGLESCREEN,
+-					NMT_FOURSCREEN,
+-					NMT_CONTROLLED
+-				};
+-
+-				Nmt nmt;
+-				bool battery;
+-				bool wramAuto;
+-				Ram trainer;
+-				uchar inputDevice;
+-			};
+-
+-			class VsSystem;
+-
+-			static Result SetupBoard
+-			(
+-				Ram&,
+-				Ram&,
+-				Boards::Board**,
+-				const Context*,
+-				Profile&,
+-				const ProfileEx&,
+-				dword*,
+-				bool=false
+-			);
+-
+-			void Reset(bool);
+-			bool PowerOff();
+-			void LoadState(State::Loader&);
+-			void SaveState(State::Saver&,dword) const;
+-			void Destroy();
+-			void VSync();
+-
+-			uint GetDesiredController(uint) const;
+-			uint GetDesiredAdapter() const;
+-			void DetectControllers(uint);
+-			Region GetDesiredRegion() const;
+-			System GetDesiredSystem(Region,CpuModel*,PpuModel*) const;
+-
+-			ExternalDevice QueryExternalDevice(ExternalDeviceType);
+-
+-			Boards::Board* board;
+-			VsSystem* vs;
+-			Ram prg;
+-			Ram chr;
+-			Profile profile;
+-			dword prgCrc;
+-			File savefile;
+-			const FavoredSystem favoredSystem;
+-
+-		public:
+-
+-			const Profile& GetProfile() const
+-			{
+-				return profile;
+-			}
+-
+-			dword GetPrgCrc() const
+-			{
+-				return prgCrc;
+-			}
+-		};
+-	}
+-}
+-
+-#endif
++////////////////////////////////////////////////////////////////////////////////////////
++//
++// Nestopia - NES/Famicom emulator written in C++
++//
++// Copyright (C) 2003-2008 Martin Freij
++//
++// This file is part of Nestopia.
++//
++// Nestopia is free software; you can redistribute it and/or modify
++// it under the terms of the GNU General Public License as published by
++// the Free Software Foundation; either version 2 of the License, or
++// (at your option) any later version.
++//
++// Nestopia is distributed in the hope that it will be useful,
++// but WITHOUT ANY WARRANTY; without even the implied warranty of
++// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++// GNU General Public License for more details.
++//
++// You should have received a copy of the GNU General Public License
++// along with Nestopia; if not, write to the Free Software
++// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++//
++////////////////////////////////////////////////////////////////////////////////////////
++
++#ifndef NST_CARTRIDGE_H
++#define NST_CARTRIDGE_H
++
++#include "NstRam.hpp"
++#include "NstImage.hpp"
++#include "NstFile.hpp"
++#include "api/NstApiCartridge.hpp"
++
++#ifdef NST_PRAGMA_ONCE
++#pragma once
++#endif
++
++namespace Nes
++{
++	namespace Core
++	{
++		namespace Boards
++		{
++			class Board;
++		}
++
++		class Cartridge : public Image
++		{
++		public:
++
++			explicit Cartridge(Context&);
++
++			void BeginFrame(const Api::Input&,Input::Controllers*);
++
++			typedef Api::Cartridge::Profile Profile;
++
++			static void ReadRomset(std::istream&,FavoredSystem,bool,Profile&);
++			static void ReadInes(std::istream&,FavoredSystem,Profile&);
++			static void ReadUnif(std::istream&,FavoredSystem,Profile&);
++
++			class Ines;
++			class Unif;
++			class Romset;
++
++		private:
++
++			~Cartridge();
++
++			struct ProfileEx
++			{
++				ProfileEx();
++
++				enum Nmt
++				{
++					NMT_DEFAULT,
++					NMT_HORIZONTAL,
++					NMT_VERTICAL,
++					NMT_SINGLESCREEN,
++					NMT_FOURSCREEN,
++					NMT_CONTROLLED
++				};
++
++				Nmt nmt;
++				bool battery;
++				bool wramAuto;
++				Ram trainer;
++				uchar inputDevice;
++			};
++
++			class VsSystem;
++
++			static Result SetupBoard
++			(
++				Ram&,
++				Ram&,
++				Boards::Board**,
++				const Context*,
++				Profile&,
++				const ProfileEx&,
++				dword*,
++				bool=false
++			);
++
++			void Reset(bool);
++			bool PowerOff();
++			void LoadState(State::Loader&);
++			void SaveState(State::Saver&,dword) const;
++			void Destroy();
++			void VSync();
++
++			uint GetDesiredController(uint) const;
++			uint GetDesiredAdapter() const;
++			void DetectControllers(uint);
++			Region GetDesiredRegion() const;
++			System GetDesiredSystem(Region,CpuModel*,PpuModel*) const;
++
++			ExternalDevice QueryExternalDevice(ExternalDeviceType);
++
++		public:
++			Boards::Board* GetBoard() const { return board; }
++
++		private:
++			Boards::Board* board;
++
++			VsSystem* vs;
++			Ram prg;
++			Ram chr;
++			Profile profile;
++			dword prgCrc;
++			File savefile;
++			const FavoredSystem favoredSystem;
++
++		public:
++
++			const Profile& GetProfile() const
++			{
++				return profile;
++			}
++
++			dword GetPrgCrc() const
++			{
++				return prgCrc;
++			}
++
++			public:
++
++		};
++	}
++}
++
++#endif
+diff --git a/source/core/NstCpu.hpp b/source/core/NstCpu.hpp
+index 7b61985..ac32ef1 100644
+--- a/source/core/NstCpu.hpp
++++ b/source/core/NstCpu.hpp
+@@ -628,6 +628,15 @@ namespace Nes
+ 			{
+ 				linker.Remove( address, Io::Port(t,u,v), map );
+ 			}
++
++			/* Oracle-mode accessors (used by nestopia_bridge for CPU state extraction) */
++
++			uint GetA()  const { return a;  }
++			uint GetX()  const { return x;  }
++			uint GetY()  const { return y;  }
++			uint GetSP() const { return sp; }
++			uint GetPC() const { return pc; }
++			uint GetFlags() const { return flags.Pack(); }
+ 		};
+ 	}
+ }
+diff --git a/source/core/NstPpu.hpp b/source/core/NstPpu.hpp
+index 0a1267d..a896d1a 100644
+--- a/source/core/NstPpu.hpp
++++ b/source/core/NstPpu.hpp
+@@ -560,6 +560,55 @@ namespace Nes
+ 			{
+ 				overclocked = overclock2x;
+ 			}
++
++			/* Oracle-mode accessors (used by nestopia_bridge for PPU state extraction) */
++
++			uint GetScrollAddress() const
++			{
++				return scroll.address;
++			}
++
++			uint GetScrollXFine() const
++			{
++				return scroll.xFine;
++			}
++
++			uint GetScrollLatch() const
++			{
++				return scroll.latch;
++			}
++
++			uint GetScrollToggle() const
++			{
++				return scroll.toggle;
++			}
++
++			uint GetStatus() const
++			{
++				return regs.status;
++			}
++
++			uint GetOamAddr() const
++			{
++				return regs.oam;
++			}
++
++			int GetScanlinePos() const
++			{
++				return scanline;
++			}
++
++			void GetOamRam(byte *out) const
++			{
++				for (int i = 0; i < 0x100; i++)
++					out[i] = oam.ram[i];
++			}
++
++			void GetPaletteRam(byte *out) const
++			{
++				for (int i = 0; i < 0x20; i++)
++					out[i] = palette.ram[i];
++			}
+ 		};
+ 	}
+ }
+diff --git a/source/core/api/NstApiEmulator.hpp b/source/core/api/NstApiEmulator.hpp
+index 9b1b725..c668124 100644
+--- a/source/core/api/NstApiEmulator.hpp
++++ b/source/core/api/NstApiEmulator.hpp
+@@ -103,6 +103,11 @@ namespace Nes
+ 			{
+ 				return machine;
+ 			}
++
++			Core::Machine& GetMachine()
++			{
++				return machine;
++			}
+ 		};
+ 	}
+ }
+diff --git a/source/core/board/NstBoardMmc3.hpp b/source/core/board/NstBoardMmc3.hpp
+index f2da2ed..5bc35b6 100644
+--- a/source/core/board/NstBoardMmc3.hpp
++++ b/source/core/board/NstBoardMmc3.hpp
+@@ -1,171 +1,187 @@
+-////////////////////////////////////////////////////////////////////////////////////////
+-//
+-// Nestopia - NES/Famicom emulator written in C++
+-//
+-// Copyright (C) 2003-2008 Martin Freij
+-//
+-// This file is part of Nestopia.
+-//
+-// Nestopia is free software; you can redistribute it and/or modify
+-// it under the terms of the GNU General Public License as published by
+-// the Free Software Foundation; either version 2 of the License, or
+-// (at your option) any later version.
+-//
+-// Nestopia is distributed in the hope that it will be useful,
+-// but WITHOUT ANY WARRANTY; without even the implied warranty of
+-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+-// GNU General Public License for more details.
+-//
+-// You should have received a copy of the GNU General Public License
+-// along with Nestopia; if not, write to the Free Software
+-// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+-//
+-////////////////////////////////////////////////////////////////////////////////////////
+-
+-#ifndef NST_BOARD_MMC3_H
+-#define NST_BOARD_MMC3_H
+-
+-#ifdef NST_PRAGMA_ONCE
+-#pragma once
+-#endif
+-
+-#include "../NstTimer.hpp"
+-
+-namespace Nes
+-{
+-	namespace Core
+-	{
+-		namespace Boards
+-		{
+-			class NST_NO_VTABLE Mmc3 : public Board
+-			{
+-				class BaseIrq
+-				{
+-				public:
+-
+-					enum
+-					{
+-						CLOCK_FILTER = 16
+-					};
+-
+-					void Reset(bool);
+-					void LoadState(State::Loader&);
+-					void SaveState(State::Saver&,dword) const;
+-
+-				private:
+-
+-					uint count;
+-					uint latch;
+-					ibool reload;
+-					ibool enabled;
+-					const ibool persistent;
+-
+-				public:
+-
+-					explicit BaseIrq(bool p)
+-					: persistent(p) {}
+-
+-					NST_FORCE_INLINE bool Clock()
+-					{
+-						const bool tmp = count || reload;
+-
+-						if (!count || reload)
+-						{
+-							count = latch;
+-						}
+-						else
+-						{
+-							--count;
+-						}
+-
+-						reload = false;
+-						return (tmp | persistent) && !count && enabled;
+-					}
+-
+-					void SetLatch(uint data)
+-					{
+-						latch = data;
+-					}
+-
+-					void Reload()
+-					{
+-						reload = true;
+-					}
+-
+-					void Enable()
+-					{
+-						enabled = true;
+-					}
+-
+-					void Disable(Cpu& cpu)
+-					{
+-						enabled = false;
+-						cpu.ClearIRQ();
+-					}
+-				};
+-
+-			public:
+-
+-				enum Revision
+-				{
+-					REV_A,
+-					REV_B,
+-					REV_C
+-				};
+-
+-				template<uint Delay=0, uint ClockFilter=BaseIrq::CLOCK_FILTER>
+-				struct Irq : Timer::A12<BaseIrq,ClockFilter,Delay>
+-				{
+-					Irq(Cpu& c,Ppu& p,bool persistent)
+-					: Timer::A12<BaseIrq,ClockFilter,Delay>(c,p,persistent) {}
+-				};
+-
+-			protected:
+-
+-				explicit Mmc3(const Context&,Revision=REV_B);
+-
+-				void SubReset(bool);
+-				void SubSave(State::Saver&) const;
+-				void SubLoad(State::Loader&,dword);
+-				void Sync(Event,Input::Controllers*);
+-
+-				void UpdatePrg();
+-				void UpdateChr() const;
+-
+-				virtual void NST_FASTCALL UpdatePrg(uint,uint);
+-				virtual void NST_FASTCALL UpdateChr(uint,uint) const;
+-
+-				NES_DECL_POKE( 8000 );
+-				NES_DECL_POKE( 8001 );
+-				NES_DECL_POKE( A001 );
+-				NES_DECL_POKE( C000 );
+-				NES_DECL_POKE( C001 );
+-				NES_DECL_POKE( E000 );
+-				NES_DECL_POKE( E001 );
+-
+-				enum
+-				{
+-					CTRL1_WRAM_READONLY = 0x40,
+-					CTRL1_WRAM_ENABLED  = 0x80,
+-					CTRL1_WRAM          = CTRL1_WRAM_ENABLED|CTRL1_WRAM_READONLY
+-				};
+-
+-				struct Regs
+-				{
+-					uint ctrl0;
+-					uint ctrl1;
+-				}   regs;
+-
+-				struct
+-				{
+-					byte prg[4];
+-					byte chr[8];
+-				}   banks;
+-
+-				Irq<> irq;
+-			};
+-		}
+-	}
+-}
+-
+-#endif
++////////////////////////////////////////////////////////////////////////////////////////
++//
++// Nestopia - NES/Famicom emulator written in C++
++//
++// Copyright (C) 2003-2008 Martin Freij
++//
++// This file is part of Nestopia.
++//
++// Nestopia is free software; you can redistribute it and/or modify
++// it under the terms of the GNU General Public License as published by
++// the Free Software Foundation; either version 2 of the License, or
++// (at your option) any later version.
++//
++// Nestopia is distributed in the hope that it will be useful,
++// but WITHOUT ANY WARRANTY; without even the implied warranty of
++// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++// GNU General Public License for more details.
++//
++// You should have received a copy of the GNU General Public License
++// along with Nestopia; if not, write to the Free Software
++// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++//
++////////////////////////////////////////////////////////////////////////////////////////
++
++#ifndef NST_BOARD_MMC3_H
++#define NST_BOARD_MMC3_H
++
++#ifdef NST_PRAGMA_ONCE
++#pragma once
++#endif
++
++#include "../NstTimer.hpp"
++
++namespace Nes
++{
++	namespace Core
++	{
++		namespace Boards
++		{
++			class NST_NO_VTABLE Mmc3 : public Board
++			{
++				class BaseIrq
++				{
++				public:
++
++					enum
++					{
++						CLOCK_FILTER = 16
++					};
++
++					void Reset(bool);
++					void LoadState(State::Loader&);
++					void SaveState(State::Saver&,dword) const;
++
++				private:
++
++					uint count;
++					uint latch;
++					ibool reload;
++					ibool enabled;
++					const ibool persistent;
++
++				public:
++
++					explicit BaseIrq(bool p)
++					: persistent(p) {}
++
++					NST_FORCE_INLINE bool Clock()
++					{
++						const bool tmp = count || reload;
++
++						if (!count || reload)
++						{
++							count = latch;
++						}
++						else
++						{
++							--count;
++						}
++
++						reload = false;
++						return (tmp | persistent) && !count && enabled;
++					}
++
++					void SetLatch(uint data)
++					{
++						latch = data;
++					}
++
++					void Reload()
++					{
++						reload = true;
++					}
++
++					void Enable()
++					{
++						enabled = true;
++					}
++
++					void Disable(Cpu& cpu)
++					{
++						enabled = false;
++						cpu.ClearIRQ();
++					}
++
++					/* Oracle accessors for MMC3 IRQ state */
++					uint GetCount() const { return count; }
++					uint GetLatch() const { return latch; }
++					ibool GetReload() const { return reload; }
++					ibool GetEnabled() const { return enabled; }
++				};
++
++			public:
++
++				enum Revision
++				{
++					REV_A,
++					REV_B,
++					REV_C
++				};
++
++				template<uint Delay=0, uint ClockFilter=BaseIrq::CLOCK_FILTER>
++				struct Irq : Timer::A12<BaseIrq,ClockFilter,Delay>
++				{
++					Irq(Cpu& c,Ppu& p,bool persistent)
++					: Timer::A12<BaseIrq,ClockFilter,Delay>(c,p,persistent) {}
++				};
++
++			protected:
++
++				explicit Mmc3(const Context&,Revision=REV_B);
++
++				void SubReset(bool);
++				void SubSave(State::Saver&) const;
++				void SubLoad(State::Loader&,dword);
++				void Sync(Event,Input::Controllers*);
++
++				void UpdatePrg();
++				void UpdateChr() const;
++
++				virtual void NST_FASTCALL UpdatePrg(uint,uint);
++				virtual void NST_FASTCALL UpdateChr(uint,uint) const;
++
++				NES_DECL_POKE( 8000 );
++				NES_DECL_POKE( 8001 );
++				NES_DECL_POKE( A001 );
++				NES_DECL_POKE( C000 );
++				NES_DECL_POKE( C001 );
++				NES_DECL_POKE( E000 );
++				NES_DECL_POKE( E001 );
++
++				enum
++				{
++					CTRL1_WRAM_READONLY = 0x40,
++					CTRL1_WRAM_ENABLED  = 0x80,
++					CTRL1_WRAM          = CTRL1_WRAM_ENABLED|CTRL1_WRAM_READONLY
++				};
++
++				struct Regs
++				{
++					uint ctrl0;
++					uint ctrl1;
++				}   regs;
++
++				struct
++				{
++					byte prg[4];
++					byte chr[8];
++				}   banks;
++
++				Irq<> irq;
++
++			public:
++				/* Oracle accessors for MMC3 state */
++				uint GetRegsCtrl0() const { return regs.ctrl0; }
++				const byte* GetBanksPrg() const { return banks.prg; }
++				const byte* GetBanksChr() const { return banks.chr; }
++				uint GetIrqLatch() const { return irq.unit.GetLatch(); }
++				uint GetIrqCount() const { return irq.unit.GetCount(); }
++				ibool GetIrqReload() const { return irq.unit.GetReload(); }
++				ibool GetIrqEnabled() const { return irq.unit.GetEnabled(); }
++			};
++		}
++	}
++}
++
++#endif

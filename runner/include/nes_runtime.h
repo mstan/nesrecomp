@@ -140,6 +140,12 @@ extern int g_mmc3_bank_a000; /* R7/2 — 16KB bank index for $A000-$BFFF dispatc
 extern uint8_t g_controller1_buttons;
 extern uint8_t g_controller2_buttons;
 
+/* ---- Zapper (light gun) on port 2 ---- */
+extern int g_zapper_enabled;         /* set to 1 to enable Zapper on port 2 */
+extern int g_zapper_x, g_zapper_y;   /* aim coordinates (pixels, 0-255 x 0-239) */
+extern int g_zapper_trigger;         /* 1 = trigger pulled */
+void runtime_set_zapper_framebuf(const uint32_t *fb); /* set framebuf for light detection */
+
 /* ---- State accessors for debug ring buffer ---- */
 /* These expose private statics from runtime.c for exhaustive state capture. */
 void    runtime_get_vblank_state(uint32_t *ops_count, int *vblank_depth);
