@@ -1165,8 +1165,8 @@ static void handle_screenshot(int id, const char *json)
 {
     char path[256];
     if (!json_get_str(json, "path", path, sizeof(path))) {
-        snprintf(path, sizeof(path), "screenshot_%04llu.png",
-                 (unsigned long long)g_frame_count);
+        snprintf(path, sizeof(path), "%s_shot_%04llu.png",
+                 game_get_name(), (unsigned long long)g_frame_count);
     }
     runner_screenshot(path);
     send_fmt("{\"id\":%d,\"ok\":true,\"path\":\"%s\"}", id, path);

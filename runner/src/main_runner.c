@@ -609,6 +609,8 @@ void nes_vblank_callback(void) {
  * Used by the emulated mode frame loop (Nestopia drives rendering). */
 void runner_present_framebuf(const uint32_t *argb_buf) {
     if (!s_texture || !s_renderer || !argb_buf) return;
+    /* Copy to s_framebuf so TCP screenshot works in emulated mode */
+    memcpy(s_framebuf, argb_buf, (size_t)g_render_width * 240 * 4);
     SDL_UpdateTexture(s_texture, NULL, argb_buf, g_render_width * 4);
     SDL_RenderClear(s_renderer);
     SDL_RenderCopy(s_renderer, s_texture, NULL, NULL);

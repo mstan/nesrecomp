@@ -389,7 +389,11 @@ void ppu_render_frame(uint32_t *framebuf) {
                 int color_idx = ((g_chr_ram[chr_off] >> bit) & 1) |
                                 (((g_chr_ram[chr_off + 8] >> bit) & 1) << 1);
                 int fb_x = sx + g_widescreen_left;
-                framebuf[sy * g_render_width + fb_x] = bg_color(pal_base, color_idx);
+                /* PPUMASK bit 1: clip leftmost 8 BG pixels to background color */
+                if (sx >= 0 && sx < 8 && !(g_ppumask & 0x02))
+                    framebuf[sy * g_render_width + fb_x] = bg;
+                else
+                    framebuf[sy * g_render_width + fb_x] = bg_color(pal_base, color_idx);
             }
 
             /* Canonical-mode per-scanline advance (only when active). */
@@ -567,6 +571,8 @@ render_sprites:
                 if (px < 0 || px >= 256) continue;
                 int color_idx = ((lo >> chr_bit) & 1) | (((hi >> chr_bit) & 1) << 1);
                 if (color_idx == 0) continue; /* transparent */
+                /* PPUMASK bit 2: clip leftmost 8 sprite pixels */
+                if (px < 8 && !(g_ppumask & 0x04)) continue;
                 /* Offset sprite X into widescreen framebuffer */
                 int fb_x = px + g_widescreen_left;
                 /* Priority=1: sprite behind BG — only draw where BG is transparent */
