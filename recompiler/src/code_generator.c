@@ -1018,8 +1018,14 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                 if (codegen_lookup_body_alias(abs16, fixed_bank,
                                               &alias_owner, &alias_bank, &alias_entry))
                     fprintf(f, "func_%04X_body(%d);\n", alias_owner, alias_entry);
-                else
+                else if (codegen_has_emitted_wrapper(abs16, fixed_bank))
                     fprintf(f, "func_%04X();\n", abs16);
+                else {
+                    if (cfg->push_all_jsr)
+                        fprintf(f, "if (!call_by_address(0x%04X)) g_cpu.S += 2;\n", abs16);
+                    else
+                        fprintf(f, "call_by_address(0x%04X);\n", abs16);
+                }
                 }
             } else if (abs16 >= 0x8000) {
                 /* MMC3 (mapper 4): 8KB banks at $8000-$9FFF and $A000-$BFFF
@@ -1047,8 +1053,14 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                                                   &alias_owner, &alias_bank, &alias_entry))
                         fprintf(f, "func_%04X_b%d_body(%d);\n",
                                 alias_owner, alias_bank, alias_entry);
-                    else
+                    else if (codegen_has_emitted_wrapper(abs16, bank))
                         fprintf(f, "func_%04X_b%d();\n", abs16, bank);
+                    else {
+                        if (cfg->push_all_jsr)
+                            fprintf(f, "if (!call_by_address(0x%04X)) g_cpu.S += 2;\n", abs16);
+                        else
+                            fprintf(f, "call_by_address(0x%04X);\n", abs16);
+                    }
                 }
             } else {
                 /* JSR to non-ROM address (RAM/PPU): dispatch at runtime */
