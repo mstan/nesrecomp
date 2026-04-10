@@ -868,6 +868,10 @@ void nesrecomp_runner_run(int argc, char *argv[]) {
 
     memset(s_framebuf, 0, sizeof(s_framebuf));
 
+    /* Hide OS cursor when the Zapper crosshair replaces it */
+    if (g_zapper_enabled && keybinds_zapper_mouse() && keybinds_zapper_crosshair())
+        SDL_ShowCursor(SDL_DISABLE);
+
     /* OAM debug window — created only when --debug is passed */
     if (s_debug) {
         s_dbg_window = SDL_CreateWindow(
