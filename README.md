@@ -19,16 +19,16 @@ A static 6502 recompiler framework for NES games. Translates NES ROM machine cod
 
 ### Mapper Support
 
-| Mapper | Name | Supported | Notable unsupported games |
-|--------|------|-----------|---------------------------|
-| 0 | NROM | Yes | — |
-| 1 | MMC1 / SxROM | Yes | Mega Man 2, Castlevania II, Blaster Master |
-| 2 | UxROM | No | Mega Man, Castlevania, Contra, DuckTales |
-| 3 | CNROM | No | Gradius, Paperboy, Arkanoid |
-| 4 | MMC3 / TxROM | Yes | Mega Man 3–6, Kirby's Adventure, Super Mario Bros. 2/3 |
-| 7 | AxROM | No | Battletoads, Marble Madness |
-| 9 | MMC2 / PxROM | No | Punch-Out!! |
-| 66 | GxROM | No | Super Mario Bros. / Duck Hunt (multicart) |
+| Mapper | Name | Supported | Games |
+|--------|------|-----------|-------|
+| 0 | NROM | Yes | Super Mario Bros., Duck Hunt |
+| 1 | MMC1 / SxROM | Yes | Zelda, Metroid, Dr. Mario, Faxanadu, Yoshi |
+| 2 | UxROM | Not yet | — |
+| 3 | CNROM | Not yet | — |
+| 4 | MMC3 / TxROM | Yes | Yoshi's Cookie |
+| 7 | AxROM | Not yet | — |
+| 9 | MMC2 / PxROM | Not yet | — |
+| 66 | GxROM | Not yet | — |
 
 Mappers 0, 1, and 4 cover roughly 75% of the licensed NES library.
 
