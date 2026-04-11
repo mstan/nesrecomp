@@ -505,8 +505,9 @@ static void write_dump_manifest(void) {
 static void record_asset(uint16_t ppu_addr, const uint8_t *data, int len) {
     s_total_transfers++;
 
-    /* Only track transfers that are tile-aligned (multiple of 16 bytes) */
-    if (len < 16) return;
+    /* Only track multi-tile transfers (tilesheets, not per-frame single-tile
+     * updates for scrolling/animation).  64 bytes = 4 tiles minimum. */
+    if (len < 64) return;
 
     uint32_t crc = crc32_compute(data, len);
 
@@ -542,11 +543,12 @@ static void record_asset(uint16_t ppu_addr, const uint8_t *data, int len) {
     FILE *f = fopen(path, "wb");
     if (f) { fwrite(data, 1, len, f); fclose(f); }
 
-    /* Write .png (only if tile-aligned) */
-    if (len % 16 == 0) {
+    /* Write .png — truncate to tile boundary if needed */
+    int png_len = (len / 16) * 16;
+    if (png_len >= 16) {
         snprintf(path, sizeof(path), "%s/asset_%04d_addr%04X.png",
                  s_dump_dir, idx, ppu_addr);
-        chr_write_png(path, data, len);
+        chr_write_png(path, data, png_len);
     }
 
     /* Update index CSV */
