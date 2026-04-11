@@ -43,6 +43,10 @@ static int            s_chr_trace_count = 0;
 static const uint8_t *s_chr_rom_data = NULL;
 static int            s_chr_rom_banks = 0; /* number of 8KB CHR ROM banks */
 
+/* ── Post-CHR-switch callback (for override/dump systems) ─────────────────── */
+static mapper_chr_callback_t s_chr_callback = NULL;
+static void *s_chr_callback_ctx = NULL;
+
 /* ── Mapper 1 (MMC1) state ─────────────────────────────────────────────────── */
 static uint8_t s_shift_reg   = 0x10; /* Reset state: bit 4 set */
 static int     s_shift_count  = 0;
@@ -76,6 +80,9 @@ static void mmc1_apply_chr(void) {
         memcpy(g_chr_ram,          s_chr_rom_data + (size_t)bank0 * 0x1000, 0x1000);
         memcpy(g_chr_ram + 0x1000, s_chr_rom_data + (size_t)bank1 * 0x1000, 0x1000);
     }
+
+    if (s_chr_callback)
+        s_chr_callback(g_chr_ram, 0x2000, s_chr_callback_ctx);
 }
 
 /* ── Mapper 4 (MMC3) state ─────────────────────────────────────────────────── */
@@ -184,6 +191,9 @@ static void mmc3_apply_chr(void) {
     e->caller = g_last_recomp_func;
     s_chr_trace_idx = (s_chr_trace_idx + 1) % CHR_TRACE_SIZE;
     if (s_chr_trace_count < CHR_TRACE_SIZE) s_chr_trace_count++;
+
+    if (s_chr_callback)
+        s_chr_callback(g_chr_ram, 0x2000, s_chr_callback_ctx);
 }
 
 /* ── MMC1 helper ───────────────────────────────────────────────────────────── */
@@ -468,6 +478,11 @@ void mapper_get_state(MapperState *out) {
     out->mmc3_irq_counter = s_mmc3_irq_counter;
     out->mmc3_irq_reload  = s_mmc3_irq_reload;
     out->mmc3_irq_enabled = s_mmc3_irq_enabled;
+}
+
+void mapper_set_chr_callback(mapper_chr_callback_t cb, void *ctx) {
+    s_chr_callback = cb;
+    s_chr_callback_ctx = ctx;
 }
 
 void mapper_set_state(const MapperState *in) {

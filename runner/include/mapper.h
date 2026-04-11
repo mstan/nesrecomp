@@ -50,6 +50,15 @@ typedef struct {
 void mapper_get_state(MapperState *out);
 void mapper_set_state(const MapperState *in);
 
+/* Post-CHR-switch callback.  Fired after mmc1_apply_chr / mmc3_apply_chr
+ * copies new bank data into g_chr_ram.  Override systems use this to
+ * patch CHR data before the PPU renderer sees it.
+ *   chr_data = g_chr_ram (8KB, writable)
+ *   size     = 0x2000
+ *   ctx      = opaque pointer passed at registration */
+typedef void (*mapper_chr_callback_t)(uint8_t *chr_data, int size, void *ctx);
+void mapper_set_chr_callback(mapper_chr_callback_t cb, void *ctx);
+
 /*
  * mapper_clock_scanline — clock the MMC3 scanline counter.
  * Call once per visible scanline (0-239) during rendering.
