@@ -824,6 +824,17 @@ static bool load_rom(const char *path) {
     return true;
 }
 
+/* ---- PRG ROM writable accessor (for runtime text/data overrides) ----
+ * Returns a writable pointer to the start of the given 16KB PRG bank,
+ * or NULL if bank_num is out of range or ROM not yet loaded.
+ * The caller may write override bytes into this buffer; nes_read() will
+ * return the patched values on subsequent reads from that address range.
+ * Safe to call from game_on_init() after ROM is loaded. */
+uint8_t *runner_get_prg_bank_rw(int bank_num) {
+    if (!s_prg_data || bank_num < 0 || bank_num >= s_prg_banks) return NULL;
+    return s_prg_data + (size_t)bank_num * 0x4000;
+}
+
 /*
  * nesrecomp_runner_run — main runner entry point, called by launcher.c after
  * ROM discovery and CRC verification. argv[1] is guaranteed to be the ROM path.

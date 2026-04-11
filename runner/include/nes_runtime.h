@@ -73,6 +73,13 @@ void mapper_init(const uint8_t *prg_data, int prg_banks);
 /* ---- Runtime Init ---- */
 void runtime_init(void);
 
+/* ---- PRG ROM writable accessor ----
+ * Returns a writable pointer to the start of the given 16KB PRG bank (0-based).
+ * Use from game_on_init() to patch data overrides into the ROM shadow buffer.
+ * Returns NULL if bank_num is out of range or ROM not yet loaded.
+ * Example: runner_get_prg_bank_rw(12)[0x9DBD - 0x8000] = new_tile_byte; */
+uint8_t *runner_get_prg_bank_rw(int bank_num);
+
 /* ---- VBlank Callback ---- */
 /* Called by ppu_read_reg when simulated VBlank fires (game reading $2002 with bit7 set).
  * Runner implements this to call func_NMI() + render the frame.
