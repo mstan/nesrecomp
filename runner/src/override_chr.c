@@ -52,6 +52,8 @@ typedef struct {
     int      length;       /* bytes of CHR data to patch */
     uint8_t *data;         /* decoded CHR data (owned, freed on reload) */
     char     file[256];    /* source file path (relative to manifest dir) */
+    char     full_path[512]; /* resolved absolute path for mtime checks */
+    time_t   file_mtime;  /* last known mtime of source file */
 } ChrOverrideEntry;
 
 static ChrOverrideEntry s_overrides[MAX_OVERRIDES];
@@ -276,6 +278,11 @@ static int parse_manifest(const char *json_text) {
                     entry.length = 0x2000 - entry.offset;
                 }
 
+                /* Store resolved path and mtime for hot reload */
+                snprintf(entry.full_path, sizeof(entry.full_path), "%s", full_path);
+                StatBuf fst;
+                entry.file_mtime = (STAT_CALL(full_path, &fst) == 0) ? fst.st_mtime : 0;
+
                 s_overrides[s_num_overrides++] = entry;
                 printf("[ChrOverride] Loaded: %s -> offset=0x%04X, %d bytes\n",
                        entry.file, entry.offset, entry.length);
@@ -344,12 +351,33 @@ void chr_override_reload_if_changed(void) {
     if (++s_reload_ticks < RELOAD_INTERVAL) return;
     s_reload_ticks = 0;
 
+    /* Check manifest mtime */
+    int changed = 0;
     StatBuf st;
-    if (STAT_CALL(s_manifest_path, &st) != 0) return;
-    if (st.st_mtime == s_manifest_mtime) return;
+    if (STAT_CALL(s_manifest_path, &st) == 0 && st.st_mtime != s_manifest_mtime) {
+        changed = 1;
+    }
 
-    printf("[ChrOverride] Change detected, reloading %s...\n", s_manifest_path);
-    s_manifest_mtime = st.st_mtime;
+    /* Check referenced file mtimes (detect PNG edits without manifest change) */
+    if (!changed) {
+        for (int i = 0; i < s_num_overrides; i++) {
+            StatBuf fst;
+            if (s_overrides[i].full_path[0] &&
+                STAT_CALL(s_overrides[i].full_path, &fst) == 0 &&
+                fst.st_mtime != s_overrides[i].file_mtime) {
+                changed = 1;
+                break;
+            }
+        }
+    }
+
+    if (!changed) return;
+
+    printf("[ChrOverride] Change detected, reloading...\n");
+
+    /* Update manifest mtime so we don't re-trigger next poll */
+    if (STAT_CALL(s_manifest_path, &st) == 0)
+        s_manifest_mtime = st.st_mtime;
 
     FILE *f = fopen(s_manifest_path, "r");
     if (!f) return;
