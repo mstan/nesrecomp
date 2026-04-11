@@ -110,6 +110,12 @@ Source of truth: the `s_commands[]` table in
 | `read_ppu` | Read CHR / nametable / palette ($0000–$3FFF PPU space). |
 | `ppu_state` | PPUCTRL, PPUMASK, PPUSTATUS, scroll, latch state. |
 | `scroll_trace` | Recent PPU $2005/$2006 write history. |
+| `scroll_info` | High-level effective scroll state (origin, split, mirror). |
+| `read_nametable` | Formatted 32×30 nametable grid + attribute table. addr=$2000/$2400/$2800/$2C00. |
+| `dump_nametables` | Full 4KB nametable RAM dump in one call + mirror mode. |
+| `read_palette` | Formatted palette dump (universal + 4 BG + 4 sprite palettes). |
+| `read_oam` | Formatted sprite list (64 entries with x/y/tile/attr/palette/flip/visible). |
+| `read_chr` | CHR tile dump. Optional `decode:1` returns 2-bitplane pixel arrays. |
 | `screenshot` | Render current frame to PNG (optional path param). |
 
 ### Mapper
@@ -158,6 +164,8 @@ Source of truth: the `s_commands[]` table in
 | `frame_range` | Snapshots over a range (compact). |
 | `frame_timeseries` | Specific fields over a range (very compact). |
 | `first_failure` | First frame where verify-mode failed. |
+| `frame_diff` | Show verify diffs for one frame, or compare two frames' RAM/NT/PAL/OAM. |
+| `memory_diff` | Compare current RAM/NT/PAL/OAM vs a historical frame. region param: ram/nt/pal/oam/all. |
 
 ### Diagnostics
 | Command | Purpose |
