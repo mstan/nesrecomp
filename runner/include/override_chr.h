@@ -19,6 +19,10 @@
 #pragma once
 #include <stdint.h>
 
+/* Returns 1 if the CHR override system is active (init was called).
+ * Runtime.c checks this to avoid calling hooks when inactive. */
+int chr_override_active(void);
+
 /* Initialize the CHR override system.  Registers the mapper callback.
  * Call once from game_on_init() after mapper_init_chr(). */
 void chr_override_init(void);
@@ -38,10 +42,26 @@ int chr_override_load_manifest(const char *dir);
  * Call from game_on_frame(). */
 void chr_override_reload_if_changed(void);
 
-/* Snapshot g_chr_ram for CHR RAM games (no mapper bank switching).
- * Call from game_post_nmi() — after NMI handler has finished $2007 writes.
- * This is the CHR RAM equivalent of the mapper callback for CHR ROM games. */
-void chr_override_frame_snapshot(void);
+/* ── CHR RAM transfer tracking (for CHR RAM games) ────────────────────────
+ * These are called from runtime.c at the $2006/$2007 write points.
+ * They track individual DMA-style transfers into CHR RAM and capture
+ * each as a discrete asset (e.g. "David's sprites", "town tileset").
+ *
+ * A transfer starts when $2006 sets an address in $0000-$1FFF.
+ * It ends when $2006 sets a new address, or a frame boundary is hit.
+ * Each unique transfer (same dest + same content) is one asset. */
+
+/* Called when $2006 pair completes (PPU address is set).
+ * new_addr = the full 14-bit PPU address just written. */
+void chr_override_on_ppuaddr(uint16_t new_addr);
+
+/* Called on each $2007 write to CHR RAM ($0000-$1FFF).
+ * addr = mapped CHR address, val = byte written. */
+void chr_override_on_chr_write(uint16_t addr, uint8_t val);
+
+/* Called at frame boundary (end of VBlank / start of rendering).
+ * Flushes any in-progress transfer and applies overrides. */
+void chr_override_frame_end(void);
 
 /* Get dump statistics. */
 void chr_override_get_dump_stats(int *unique_snapshots, int *total_switches);

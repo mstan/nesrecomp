@@ -7,6 +7,7 @@
 #include "logger.h"
 #include "apu.h"
 #include "game_extras.h"
+#include "override_chr.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -510,6 +511,8 @@ void ppu_write_reg(uint16_t reg, uint8_t val) {
                 g_ppuaddr = s_ppu_t & 0x3FFF; /* v = t (14-bit VRAM address) */
                 s_ppu_v_at_2006 = g_ppuaddr;  /* capture v before $2007 increments */
                 s_scroll_2005_complete = 0;    /* $2006 pair completed — t now holds VRAM addr */
+                if (chr_override_active())
+                    chr_override_on_ppuaddr(g_ppuaddr);
             }
             g_ppuaddr_latch ^= 1;
             g_ppudata_buf = 0; /* writing $2006 resets the read buffer */
@@ -601,6 +604,8 @@ void ppu_write_reg(uint16_t reg, uint8_t val) {
                     }
                 }
                 /* === END CHR WRITE TRAP === */
+                if (chr_override_active())
+                    chr_override_on_chr_write(a, val);
                 g_chr_ram[a] = val; /* CHR RAM only — CHR ROM is read-only */
             }
             g_ppuaddr += (g_ppuctrl & 0x04) ? 32 : 1;
