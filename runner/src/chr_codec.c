@@ -12,6 +12,8 @@
 #include "stb_image.h"
 
 #include "chr_codec.h"
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -254,5 +256,60 @@ int chr_load_cached(const char *png_path, uint8_t **out_data, int *out_size) {
                png_path, *out_size);
     }
 
+    return 0;
+}
+
+/* ── CHR -> PNG ───────────────────────────────────────────────────────────── */
+
+/* Grayscale palette for 2bpp NES tiles. */
+static const uint8_t s_pal[4][3] = {
+    {0x00, 0x00, 0x00},  /* 0 = black */
+    {0x55, 0x55, 0x55},  /* 1 = dark gray */
+    {0xAA, 0xAA, 0xAA},  /* 2 = light gray */
+    {0xFF, 0xFF, 0xFF},  /* 3 = white */
+};
+
+int chr_write_png(const char *png_path, const uint8_t *chr_data, int chr_size) {
+    if (chr_size < 16 || chr_size % 16 != 0) {
+        fprintf(stderr, "[ChrCodec] Invalid CHR size %d for PNG write\n", chr_size);
+        return -1;
+    }
+
+    int num_tiles = chr_size / 16;
+    int cols = 16;
+    if (num_tiles < cols) cols = num_tiles;
+    int rows = (num_tiles + cols - 1) / cols;
+    int img_w = cols * 8;
+    int img_h = rows * 8;
+
+    uint8_t *rgb = (uint8_t *)calloc(1, img_w * img_h * 3);
+    if (!rgb) return -1;
+
+    for (int t = 0; t < num_tiles; t++) {
+        const uint8_t *tile = chr_data + t * 16;
+        int tx = (t % cols) * 8;
+        int ty = (t / cols) * 8;
+
+        for (int y = 0; y < 8; y++) {
+            uint8_t bp0 = tile[y];
+            uint8_t bp1 = tile[y + 8];
+            for (int x = 0; x < 8; x++) {
+                int bit = 7 - x;
+                int val = ((bp0 >> bit) & 1) | (((bp1 >> bit) & 1) << 1);
+                int px = ((ty + y) * img_w + (tx + x)) * 3;
+                rgb[px + 0] = s_pal[val][0];
+                rgb[px + 1] = s_pal[val][1];
+                rgb[px + 2] = s_pal[val][2];
+            }
+        }
+    }
+
+    int ok = stbi_write_png(png_path, img_w, img_h, 3, rgb, img_w * 3);
+    free(rgb);
+
+    if (!ok) {
+        fprintf(stderr, "[ChrCodec] Failed to write PNG: %s\n", png_path);
+        return -1;
+    }
     return 0;
 }

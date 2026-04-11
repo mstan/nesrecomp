@@ -7,7 +7,7 @@
  *      apply overrides after each bank switch / frame.
  */
 #include "override_chr.h"
-#include "chr_codec.h"
+#include "chr_codec.h"  /* chr_write_png */
 #include "mapper.h"
 #include "nes_runtime.h"
 #include "crc32.h"
@@ -470,6 +470,22 @@ static int crc_already_seen(uint32_t crc) {
     return 0;
 }
 
+/* Write manifest.json pointing to the latest snapshot PNG.
+ * The manifest always references the most recent (= most complete) snapshot,
+ * so the user can immediately use --chr-overrides chr_dump and edit in place. */
+static void write_dump_manifest(int latest_idx) {
+    char path[512];
+    snprintf(path, sizeof(path), "%s/manifest.json", s_dump_dir);
+    FILE *f = fopen(path, "w");
+    if (!f) return;
+
+    fprintf(f, "{\n  \"overrides\": [\n");
+    fprintf(f, "    { \"offset\": 0, \"file\": \"snapshot_%04d.png\" }\n",
+            latest_idx);
+    fprintf(f, "  ]\n}\n");
+    fclose(f);
+}
+
 static void dump_snapshot(const uint8_t *data, int size) {
     s_total_switches++;
 
@@ -488,6 +504,7 @@ static void dump_snapshot(const uint8_t *data, int size) {
     s_seen_crcs[s_num_unique] = crc;
     int idx = s_num_unique++;
 
+    /* Write raw .bin */
     char path[512];
     snprintf(path, sizeof(path), "%s/snapshot_%04d.bin", s_dump_dir, idx);
     FILE *f = fopen(path, "wb");
@@ -496,12 +513,19 @@ static void dump_snapshot(const uint8_t *data, int size) {
         fclose(f);
     }
 
+    /* Write decoded .png (ready for user editing) */
+    snprintf(path, sizeof(path), "%s/snapshot_%04d.png", s_dump_dir, idx);
+    chr_write_png(path, data, size);
+
+    /* Update manifest to point to latest (most complete) snapshot */
+    write_dump_manifest(idx);
+
     if (s_index_file) {
         fprintf(s_index_file, "%d,0x%08X,%llu,%d\n",
                 idx, crc, (unsigned long long)g_frame_count, size);
         fflush(s_index_file);
     }
 
-    printf("[ChrOverride] Dump: snapshot_%04d.bin (CRC=0x%08X, frame=%llu)\n",
+    printf("[ChrOverride] Dump: snapshot_%04d.bin + .png (CRC=0x%08X, frame=%llu)\n",
            idx, crc, (unsigned long long)g_frame_count);
 }

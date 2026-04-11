@@ -37,3 +37,16 @@ int chr_decode_png(const char *png_path, uint8_t **out_data, int *out_size);
  * Returns 0 on success, -1 on error.
  */
 int chr_load_cached(const char *png_path, uint8_t **out_data, int *out_size);
+
+/*
+ * chr_write_png — Convert NES 2bpp CHR data to a PNG file.
+ *
+ * Tiles are arranged 16 per row, grayscale palette (black/dark/light/white).
+ *
+ *   png_path:    output PNG path
+ *   chr_data:    raw CHR data (must be multiple of 16 bytes)
+ *   chr_size:    size in bytes
+ *
+ * Returns 0 on success, -1 on error.
+ */
+int chr_write_png(const char *png_path, const uint8_t *chr_data, int chr_size);
