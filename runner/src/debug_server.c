@@ -1175,6 +1175,477 @@ static void handle_screenshot(int id, const char *json)
     send_fmt("{\"id\":%d,\"ok\":true,\"path\":\"%s\"}", id, path);
 }
 
+/* ---- frame_diff: show verify divergence diffs for a frame, or compare two frames' RAM ---- */
+
+static void handle_frame_diff(int id, const char *json)
+{
+    int frame_a = json_get_int(json, "frame", -1);
+    int frame_b = json_get_int(json, "frame_b", -1);
+
+    if (!s_frame_history) { send_err(id, "ring buffer not allocated"); return; }
+
+    uint64_t oldest = (s_history_count > FRAME_HISTORY_CAP)
+                    ? s_history_count - FRAME_HISTORY_CAP : 0;
+
+    /* Mode 1: single frame — return verify-mode diffs from that frame's record */
+    if (frame_a >= 0 && frame_b < 0) {
+        if ((uint64_t)frame_a < oldest || (uint64_t)frame_a >= s_history_count) {
+            send_err(id, "frame not in buffer"); return;
+        }
+        uint32_t idx = (uint32_t)frame_a % FRAME_HISTORY_CAP;
+        const NESFrameRecord *r = &s_frame_history[idx];
+        if (r->frame_number != (uint32_t)frame_a) {
+            send_err(id, "frame record mismatch"); return;
+        }
+
+        char *buf = (char *)malloc(8192);
+        if (!buf) { send_err(id, "alloc failed"); return; }
+
+        int pos = snprintf(buf, 8192,
+            "{\"id\":%d,\"ok\":true,\"frame\":%u,"
+            "\"verify_pass\":%d,\"diff_count\":%d,\"diffs\":[",
+            id, r->frame_number, r->verify_pass, r->diff_count);
+
+        int n = r->diff_count < MAX_FRAME_DIFFS ? r->diff_count : MAX_FRAME_DIFFS;
+        for (int i = 0; i < n && pos < 8000; i++) {
+            if (i > 0) buf[pos++] = ',';
+            pos += snprintf(buf + pos, 8192 - pos,
+                "{\"addr\":\"0x%04X\",\"mine\":\"0x%02X\",\"theirs\":\"0x%02X\"}",
+                r->diffs[i].addr, r->diffs[i].mine, r->diffs[i].theirs);
+        }
+        pos += snprintf(buf + pos, 8192 - pos,
+            "],\"last_func\":\"%s\"}", r->last_func);
+        send_line(buf);
+        free(buf);
+        return;
+    }
+
+    /* Mode 2: compare two frames' work RAM (0x0000-0x07FF) */
+    if (frame_a >= 0 && frame_b >= 0) {
+        if ((uint64_t)frame_a < oldest || (uint64_t)frame_a >= s_history_count ||
+            (uint64_t)frame_b < oldest || (uint64_t)frame_b >= s_history_count) {
+            send_err(id, "frame not in buffer"); return;
+        }
+        uint32_t idx_a = (uint32_t)frame_a % FRAME_HISTORY_CAP;
+        uint32_t idx_b = (uint32_t)frame_b % FRAME_HISTORY_CAP;
+        const NESFrameRecord *ra = &s_frame_history[idx_a];
+        const NESFrameRecord *rb = &s_frame_history[idx_b];
+        if (ra->frame_number != (uint32_t)frame_a || rb->frame_number != (uint32_t)frame_b) {
+            send_err(id, "frame record mismatch"); return;
+        }
+
+        /* Compare RAM, nametable, palette, OAM — report up to 256 diffs */
+        char *buf = (char *)malloc(65536);
+        if (!buf) { send_err(id, "alloc failed"); return; }
+
+        int pos = snprintf(buf, 65536,
+            "{\"id\":%d,\"ok\":true,\"frame_a\":%u,\"frame_b\":%u,\"diffs\":[",
+            id, ra->frame_number, rb->frame_number);
+
+        int diff_count = 0;
+        int max_diffs = 256;
+
+        /* Work RAM */
+        for (int i = 0; i < 0x0800 && diff_count < max_diffs; i++) {
+            if (ra->ram_full[i] != rb->ram_full[i]) {
+                if (diff_count > 0) buf[pos++] = ',';
+                pos += snprintf(buf + pos, 65536 - pos,
+                    "{\"addr\":\"0x%04X\",\"region\":\"ram\",\"a\":\"0x%02X\",\"b\":\"0x%02X\"}",
+                    i, ra->ram_full[i], rb->ram_full[i]);
+                diff_count++;
+            }
+        }
+
+        /* Nametable */
+        for (int i = 0; i < 0x1000 && diff_count < max_diffs; i++) {
+            if (ra->ppu_nt[i] != rb->ppu_nt[i]) {
+                if (diff_count > 0) buf[pos++] = ',';
+                pos += snprintf(buf + pos, 65536 - pos,
+                    "{\"addr\":\"0x%04X\",\"region\":\"nt\",\"a\":\"0x%02X\",\"b\":\"0x%02X\"}",
+                    0x2000 + i, ra->ppu_nt[i], rb->ppu_nt[i]);
+                diff_count++;
+            }
+        }
+
+        /* Palette */
+        for (int i = 0; i < 0x20 && diff_count < max_diffs; i++) {
+            if (ra->ppu_pal[i] != rb->ppu_pal[i]) {
+                if (diff_count > 0) buf[pos++] = ',';
+                pos += snprintf(buf + pos, 65536 - pos,
+                    "{\"addr\":\"0x%04X\",\"region\":\"pal\",\"a\":\"0x%02X\",\"b\":\"0x%02X\"}",
+                    0x3F00 + i, ra->ppu_pal[i], rb->ppu_pal[i]);
+                diff_count++;
+            }
+        }
+
+        /* OAM */
+        for (int i = 0; i < 0x100 && diff_count < max_diffs; i++) {
+            if (ra->oam[i] != rb->oam[i]) {
+                if (diff_count > 0) buf[pos++] = ',';
+                pos += snprintf(buf + pos, 65536 - pos,
+                    "{\"addr\":\"0x%04X\",\"region\":\"oam\",\"a\":\"0x%02X\",\"b\":\"0x%02X\"}",
+                    0xFE00 + i, ra->oam[i], rb->oam[i]);
+                diff_count++;
+            }
+        }
+
+        pos += snprintf(buf + pos, 65536 - pos,
+            "],\"total_diffs\":%d}", diff_count);
+        send_line(buf);
+        free(buf);
+        return;
+    }
+
+    send_err(id, "missing frame (and optionally frame_b)");
+}
+
+/* ---- read_nametable: formatted nametable dump ---- */
+
+static void handle_read_nametable(int id, const char *json)
+{
+    char addr_str[32];
+    uint32_t base = 0x2000;
+    if (json_get_str(json, "addr", addr_str, sizeof(addr_str)))
+        base = hex_to_u32(addr_str);
+
+    /* Validate: must be 0x2000, 0x2400, 0x2800, or 0x2C00 */
+    if (base != 0x2000 && base != 0x2400 && base != 0x2800 && base != 0x2C00) {
+        send_err(id, "addr must be 0x2000/0x2400/0x2800/0x2C00");
+        return;
+    }
+
+    uint32_t nt_off = base - 0x2000;
+
+    /* Encode 32x30 = 960 tile bytes as hex */
+    char tile_hex[1921];  /* 960 * 2 + 1 */
+    for (int i = 0; i < 960; i++)
+        snprintf(tile_hex + i * 2, 3, "%02x", g_ppu_nt[nt_off + i]);
+
+    /* Encode 64-byte attribute table as hex */
+    char attr_hex[129];
+    for (int i = 0; i < 64; i++)
+        snprintf(attr_hex + i * 2, 3, "%02x", g_ppu_nt[nt_off + 960 + i]);
+
+    char *buf = (char *)malloc(4096);
+    if (!buf) { send_err(id, "alloc failed"); return; }
+
+    snprintf(buf, 4096,
+        "{\"id\":%d,\"ok\":true,\"addr\":\"0x%04X\","
+        "\"width\":32,\"height\":30,"
+        "\"tiles\":\"%s\",\"attributes\":\"%s\"}",
+        id, base, tile_hex, attr_hex);
+    send_line(buf);
+    free(buf);
+}
+
+/* ---- read_oam: formatted sprite list ---- */
+
+static void handle_read_oam(int id, const char *json)
+{
+    (void)json;
+    int sprite_size = (g_ppuctrl & 0x20) ? 16 : 8;
+
+    char *buf = (char *)malloc(32768);
+    if (!buf) { send_err(id, "alloc failed"); return; }
+
+    int pos = snprintf(buf, 32768,
+        "{\"id\":%d,\"ok\":true,\"sprite_size\":%d,\"sprites\":[",
+        id, sprite_size);
+
+    int first = 1;
+    for (int i = 0; i < 64 && pos < 32000; i++) {
+        uint8_t y    = g_ppu_oam[i * 4 + 0];
+        uint8_t tile = g_ppu_oam[i * 4 + 1];
+        uint8_t attr = g_ppu_oam[i * 4 + 2];
+        uint8_t x    = g_ppu_oam[i * 4 + 3];
+
+        if (!first) buf[pos++] = ',';
+        first = 0;
+
+        pos += snprintf(buf + pos, 32768 - pos,
+            "{\"i\":%d,\"x\":%d,\"y\":%d,\"tile\":\"0x%02X\","
+            "\"attr\":\"0x%02X\",\"palette\":%d,"
+            "\"priority\":%d,\"flip_h\":%d,\"flip_v\":%d,"
+            "\"visible\":%d}",
+            i, x, y, tile, attr,
+            attr & 0x03,             /* palette */
+            (attr >> 5) & 1,         /* priority: 0=front, 1=behind bg */
+            (attr >> 6) & 1,         /* horizontal flip */
+            (attr >> 7) & 1,         /* vertical flip */
+            (y < 0xEF) ? 1 : 0);    /* visible if Y < 239 */
+    }
+
+    pos += snprintf(buf + pos, 32768 - pos, "]}");
+    send_line(buf);
+    free(buf);
+}
+
+/* ---- read_palette: formatted palette dump ---- */
+
+static void handle_read_palette(int id, const char *json)
+{
+    (void)json;
+    /* Build hex string for all 32 palette bytes */
+    char hex[65];
+    for (int i = 0; i < 32; i++)
+        snprintf(hex + i * 2, 3, "%02x", g_ppu_pal[i]);
+
+    /* Also build the individual palette groups for convenience */
+    send_fmt("{\"id\":%d,\"ok\":true,"
+             "\"universal\":\"0x%02X\","
+             "\"bg\":[[\"0x%02X\",\"0x%02X\",\"0x%02X\",\"0x%02X\"],"
+                     "[\"0x%02X\",\"0x%02X\",\"0x%02X\",\"0x%02X\"],"
+                     "[\"0x%02X\",\"0x%02X\",\"0x%02X\",\"0x%02X\"],"
+                     "[\"0x%02X\",\"0x%02X\",\"0x%02X\",\"0x%02X\"]],"
+             "\"spr\":[[\"0x%02X\",\"0x%02X\",\"0x%02X\",\"0x%02X\"],"
+                      "[\"0x%02X\",\"0x%02X\",\"0x%02X\",\"0x%02X\"],"
+                      "[\"0x%02X\",\"0x%02X\",\"0x%02X\",\"0x%02X\"],"
+                      "[\"0x%02X\",\"0x%02X\",\"0x%02X\",\"0x%02X\"]],"
+             "\"hex\":\"%s\"}",
+             id,
+             g_ppu_pal[0],
+             /* BG palettes 0-3 */
+             g_ppu_pal[0x00], g_ppu_pal[0x01], g_ppu_pal[0x02], g_ppu_pal[0x03],
+             g_ppu_pal[0x04], g_ppu_pal[0x05], g_ppu_pal[0x06], g_ppu_pal[0x07],
+             g_ppu_pal[0x08], g_ppu_pal[0x09], g_ppu_pal[0x0A], g_ppu_pal[0x0B],
+             g_ppu_pal[0x0C], g_ppu_pal[0x0D], g_ppu_pal[0x0E], g_ppu_pal[0x0F],
+             /* Sprite palettes 0-3 */
+             g_ppu_pal[0x10], g_ppu_pal[0x11], g_ppu_pal[0x12], g_ppu_pal[0x13],
+             g_ppu_pal[0x14], g_ppu_pal[0x15], g_ppu_pal[0x16], g_ppu_pal[0x17],
+             g_ppu_pal[0x18], g_ppu_pal[0x19], g_ppu_pal[0x1A], g_ppu_pal[0x1B],
+             g_ppu_pal[0x1C], g_ppu_pal[0x1D], g_ppu_pal[0x1E], g_ppu_pal[0x1F],
+             hex);
+}
+
+/* ---- memory_diff: compare current RAM vs historical frame ---- */
+
+static void handle_memory_diff(int id, const char *json)
+{
+    int f = json_get_int(json, "frame", -1);
+    if (f < 0) { send_err(id, "missing frame"); return; }
+    if (!s_frame_history) { send_err(id, "ring buffer not allocated"); return; }
+
+    uint64_t oldest = (s_history_count > FRAME_HISTORY_CAP)
+                    ? s_history_count - FRAME_HISTORY_CAP : 0;
+    if ((uint64_t)f < oldest || (uint64_t)f >= s_history_count) {
+        send_err(id, "frame not in buffer"); return;
+    }
+
+    uint32_t idx = (uint32_t)f % FRAME_HISTORY_CAP;
+    const NESFrameRecord *r = &s_frame_history[idx];
+    if (r->frame_number != (uint32_t)f) {
+        send_err(id, "frame record mismatch"); return;
+    }
+
+    /* Optional: restrict to a region */
+    char region_str[32];
+    const char *region = json_get_str(json, "region", region_str, sizeof(region_str));
+    /* Default: compare RAM only. Options: "ram", "nt", "pal", "oam", "all" */
+    int do_ram = 1, do_nt = 0, do_pal = 0, do_oam = 0;
+    if (region) {
+        if (strcmp(region, "all") == 0)  { do_ram = do_nt = do_pal = do_oam = 1; }
+        else if (strcmp(region, "nt") == 0)   { do_ram = 0; do_nt = 1; }
+        else if (strcmp(region, "pal") == 0)  { do_ram = 0; do_pal = 1; }
+        else if (strcmp(region, "oam") == 0)  { do_ram = 0; do_oam = 1; }
+        /* "ram" is the default */
+    }
+
+    char *buf = (char *)malloc(65536);
+    if (!buf) { send_err(id, "alloc failed"); return; }
+
+    int pos = snprintf(buf, 65536,
+        "{\"id\":%d,\"ok\":true,\"frame\":%u,\"diffs\":[",
+        id, r->frame_number);
+
+    int diff_count = 0;
+    int max_diffs = 256;
+
+    if (do_ram) {
+        for (int i = 0; i < 0x0800 && diff_count < max_diffs; i++) {
+            if (g_ram[i] != r->ram_full[i]) {
+                if (diff_count > 0) buf[pos++] = ',';
+                pos += snprintf(buf + pos, 65536 - pos,
+                    "{\"addr\":\"0x%04X\",\"region\":\"ram\",\"current\":\"0x%02X\",\"historical\":\"0x%02X\"}",
+                    i, g_ram[i], r->ram_full[i]);
+                diff_count++;
+            }
+        }
+    }
+
+    if (do_nt) {
+        for (int i = 0; i < 0x1000 && diff_count < max_diffs; i++) {
+            if (g_ppu_nt[i] != r->ppu_nt[i]) {
+                if (diff_count > 0) buf[pos++] = ',';
+                pos += snprintf(buf + pos, 65536 - pos,
+                    "{\"addr\":\"0x%04X\",\"region\":\"nt\",\"current\":\"0x%02X\",\"historical\":\"0x%02X\"}",
+                    0x2000 + i, g_ppu_nt[i], r->ppu_nt[i]);
+                diff_count++;
+            }
+        }
+    }
+
+    if (do_pal) {
+        for (int i = 0; i < 0x20 && diff_count < max_diffs; i++) {
+            if (g_ppu_pal[i] != r->ppu_pal[i]) {
+                if (diff_count > 0) buf[pos++] = ',';
+                pos += snprintf(buf + pos, 65536 - pos,
+                    "{\"addr\":\"0x%04X\",\"region\":\"pal\",\"current\":\"0x%02X\",\"historical\":\"0x%02X\"}",
+                    0x3F00 + i, g_ppu_pal[i], r->ppu_pal[i]);
+                diff_count++;
+            }
+        }
+    }
+
+    if (do_oam) {
+        for (int i = 0; i < 0x100 && diff_count < max_diffs; i++) {
+            if (g_ppu_oam[i] != r->oam[i]) {
+                if (diff_count > 0) buf[pos++] = ',';
+                pos += snprintf(buf + pos, 65536 - pos,
+                    "{\"addr\":\"0x%04X\",\"region\":\"oam\",\"current\":\"0x%02X\",\"historical\":\"0x%02X\"}",
+                    0xFE00 + i, g_ppu_oam[i], r->oam[i]);
+                diff_count++;
+            }
+        }
+    }
+
+    pos += snprintf(buf + pos, 65536 - pos, "],\"total_diffs\":%d}", diff_count);
+    send_line(buf);
+    free(buf);
+}
+
+/* ---- read_chr: CHR tile dump with optional decode ---- */
+
+static void handle_read_chr(int id, const char *json)
+{
+    char addr_str[32];
+    uint32_t addr = 0;
+    if (json_get_str(json, "addr", addr_str, sizeof(addr_str)))
+        addr = hex_to_u32(addr_str);
+
+    int len = json_get_int(json, "len", 16);  /* default: 1 tile (16 bytes) */
+    if (len < 1) len = 1;
+    if (len > 8192) len = 8192;  /* max: entire CHR bank */
+
+    if (addr + len > 0x2000) {
+        send_err(id, "addr+len exceeds CHR range ($0000-$1FFF)");
+        return;
+    }
+
+    /* Build hex string */
+    char *hex = (char *)malloc(len * 2 + 1);
+    if (!hex) { send_err(id, "alloc failed"); return; }
+    for (int i = 0; i < len; i++)
+        snprintf(hex + i * 2, 3, "%02x", g_chr_ram[addr + i]);
+
+    /* Check if caller wants tile decode */
+    int decode = json_get_int(json, "decode", 0);
+
+    if (!decode) {
+        char *buf = (char *)malloc(len * 2 + 256);
+        if (!buf) { free(hex); send_err(id, "alloc failed"); return; }
+        snprintf(buf, len * 2 + 256,
+            "{\"id\":%d,\"ok\":true,\"addr\":\"0x%04X\",\"len\":%d,\"hex\":\"%s\"}",
+            id, addr, len, hex);
+        send_line(buf);
+        free(buf);
+        free(hex);
+        return;
+    }
+
+    /* Decode tiles: each 16 bytes = 1 tile, output 8x8 grid of palette indices (0-3) */
+    int n_tiles = len / 16;
+    /* Each tile: "00112233..." 64 chars. Allocate generously */
+    char *buf = (char *)malloc(n_tiles * 80 + len * 2 + 1024);
+    if (!buf) { free(hex); send_err(id, "alloc failed"); return; }
+
+    int pos = snprintf(buf, n_tiles * 80 + len * 2 + 1024,
+        "{\"id\":%d,\"ok\":true,\"addr\":\"0x%04X\",\"len\":%d,"
+        "\"hex\":\"%s\",\"tiles\":[",
+        id, addr, len, hex);
+
+    for (int t = 0; t < n_tiles && pos < (int)(n_tiles * 80 + len * 2 + 800); t++) {
+        if (t > 0) buf[pos++] = ',';
+        buf[pos++] = '"';
+        const uint8_t *tile = &g_chr_ram[addr + t * 16];
+        for (int row = 0; row < 8; row++) {
+            uint8_t bp0 = tile[row];
+            uint8_t bp1 = tile[row + 8];
+            for (int col = 7; col >= 0; col--) {
+                int px = ((bp1 >> col) & 1) << 1 | ((bp0 >> col) & 1);
+                buf[pos++] = '0' + px;
+            }
+        }
+        buf[pos++] = '"';
+    }
+
+    pos += snprintf(buf + pos, 256, "]}");
+    send_line(buf);
+    free(buf);
+    free(hex);
+}
+
+/* ---- scroll_info: high-level effective scroll state ---- */
+
+static void handle_scroll_info(int id, const char *json)
+{
+    (void)json;
+
+    /* Calculate effective origin in virtual 512x480 nametable space */
+    int origin_x = g_ppuscroll_x + ((g_ppuctrl & 0x01) ? 256 : 0);
+    int origin_y = g_ppuscroll_y + ((g_ppuctrl & 0x02) ? 240 : 0);
+
+    int hud_origin_x = 0, hud_origin_y = 0;
+    if (g_spr0_split_active) {
+        hud_origin_x = g_ppuscroll_x_hud + ((g_ppuctrl_hud & 0x01) ? 256 : 0);
+        hud_origin_y = g_ppuscroll_y_hud + ((g_ppuctrl_hud & 0x02) ? 240 : 0);
+    }
+
+    MapperState ms;
+    mapper_get_state(&ms);
+
+    send_fmt("{\"id\":%d,\"ok\":true,"
+             "\"origin_x\":%d,\"origin_y\":%d,"
+             "\"scroll_x\":%d,\"scroll_y\":%d,"
+             "\"nt_select\":%d,"
+             "\"split_active\":%d,"
+             "\"hud_origin_x\":%d,\"hud_origin_y\":%d,"
+             "\"hud_scroll_x\":%d,\"hud_scroll_y\":%d,"
+             "\"mirror_mode\":%d}",
+             id,
+             origin_x, origin_y,
+             g_ppuscroll_x, g_ppuscroll_y,
+             g_ppuctrl & 0x03,
+             g_spr0_split_active,
+             hud_origin_x, hud_origin_y,
+             g_ppuscroll_x_hud, g_ppuscroll_y_hud,
+             ms.mirroring);
+}
+
+/* ---- dump_nametable_all: dump all 4 nametables in one call ---- */
+
+static void handle_dump_nametables(int id, const char *json)
+{
+    (void)json;
+    /* 4096 bytes of nametable RAM, hex-encoded = 8192 chars */
+    char *hex = (char *)malloc(8193);
+    if (!hex) { send_err(id, "alloc failed"); return; }
+    for (int i = 0; i < 0x1000; i++)
+        snprintf(hex + i * 2, 3, "%02x", g_ppu_nt[i]);
+
+    MapperState ms;
+    mapper_get_state(&ms);
+
+    char *buf = (char *)malloc(8193 + 256);
+    if (!buf) { free(hex); send_err(id, "alloc failed"); return; }
+
+    snprintf(buf, 8193 + 256,
+        "{\"id\":%d,\"ok\":true,\"mirror_mode\":%d,\"hex\":\"%s\"}",
+        id, ms.mirroring, hex);
+    send_line(buf);
+    free(buf);
+    free(hex);
+}
+
 /* ---- Scroll trace ---- */
 
 static void handle_scroll_trace(int id, const char *json)
@@ -1264,6 +1735,14 @@ static const CmdEntry s_commands[] = {
     { "quit",              handle_quit },
     { "screenshot",        handle_screenshot },
     { "scroll_trace",      handle_scroll_trace },
+    { "frame_diff",        handle_frame_diff },
+    { "read_nametable",    handle_read_nametable },
+    { "read_oam",          handle_read_oam },
+    { "read_palette",      handle_read_palette },
+    { "memory_diff",       handle_memory_diff },
+    { "read_chr",          handle_read_chr },
+    { "scroll_info",       handle_scroll_info },
+    { "dump_nametables",   handle_dump_nametables },
     { NULL, NULL }
 };
 
