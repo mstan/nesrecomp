@@ -42,6 +42,11 @@ int chr_override_load_manifest(const char *dir);
  * Call from game_on_frame(). */
 void chr_override_reload_if_changed(void);
 
+/* Batch-compile all PNGs in dir to .chr.bin cache files.
+ * Standalone operation — does not require the game to be running.
+ * Returns count of PNGs compiled, or -1 on error. */
+int chr_override_compile_dir(const char *dir);
+
 /* ── CHR RAM transfer tracking (for CHR RAM games) ────────────────────────
  * These are called from runtime.c at the $2006/$2007 write points.
  * They track individual DMA-style transfers into CHR RAM and capture

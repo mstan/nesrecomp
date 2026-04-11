@@ -18,6 +18,8 @@
 #include <string.h>
 
 #ifdef _WIN32
+#  define WIN32_LEAN_AND_MEAN
+#  include <windows.h>
 #  include <direct.h>
 #  include <sys/types.h>
 #  include <sys/stat.h>
@@ -27,6 +29,7 @@
 #else
 #  include <sys/stat.h>
 #  include <sys/types.h>
+#  include <dirent.h>
 #  define MKDIR(p) mkdir(p, 0755)
 #  define STAT_CALL stat
 #  define StatBuf   struct stat
@@ -37,8 +40,8 @@
 static int s_active = 0;
 static int s_dump_enabled = 0;
 static int s_dump_dir_created = 0;
-static const char *s_dump_dir = "chr_dump";
-static FILE *s_index_file = NULL;
+static const char *s_dump_dir = "tiles";
+/* index.csv removed — tiles/ is user-facing, not a debug dump */
 
 /* ── Transfer tracking ────────────────────────────────────────────────────
  * A "transfer" is a contiguous run of $2007 writes to CHR RAM that
@@ -66,6 +69,8 @@ typedef struct {
     int      length;       /* bytes */
     uint32_t crc;          /* content hash */
     int      dump_idx;     /* index in dump output (for filename) */
+    int      lead_bytes;   /* partial tile bytes before first complete tile */
+    int      trail_bytes;  /* partial tile bytes after last complete tile */
 } KnownAsset;
 
 static KnownAsset s_known[MAX_KNOWN_ASSETS];
@@ -80,6 +85,8 @@ typedef struct {
     uint16_t ppu_addr;      /* CHR RAM destination to match */
     int      length;        /* expected transfer length (0 = any) */
     uint32_t match_crc;     /* CRC to match (0 = match by addr only) */
+    int      lead_bytes;    /* partial tile bytes before tiles in .bin */
+    int      trail_bytes;   /* partial tile bytes after tiles in .bin */
     uint8_t *data;          /* replacement CHR data (owned) */
     int      data_len;      /* replacement data length */
     char     file[256];     /* source file (for display) */
@@ -140,35 +147,92 @@ static const char *parse_int_val(const char *p, int *out) {
     return end;
 }
 
-static int load_override_file(const char *file_path, ChrOverrideEntry *entry) {
-    const char *ext = strrchr(file_path, '.');
-    if (ext && (strcmp(ext, ".png") == 0 || strcmp(ext, ".PNG") == 0)) {
-        uint8_t *data = NULL;
-        int size = 0;
-        if (chr_load_cached(file_path, &data, &size) != 0)
-            return -1;
-        entry->data = data;
-        entry->data_len = size;
-        return 0;
-    }
-
-    FILE *f = fopen(file_path, "rb");
-    if (!f) {
-        fprintf(stderr, "[ChrOverride] Cannot open: %s\n", file_path);
-        return -1;
-    }
+/* Read a raw binary file into a malloc'd buffer. Returns size, or -1. */
+static int read_bin_file(const char *path, uint8_t **out_data) {
+    FILE *f = fopen(path, "rb");
+    if (!f) return -1;
     fseek(f, 0, SEEK_END);
     long sz = ftell(f);
     fseek(f, 0, SEEK_SET);
     if (sz <= 0) { fclose(f); return -1; }
-
     uint8_t *data = (uint8_t *)malloc(sz);
     if (!data) { fclose(f); return -1; }
     fread(data, 1, sz, f);
     fclose(f);
+    *out_data = data;
+    return (int)sz;
+}
 
+static int load_override_file(const char *file_path, ChrOverrideEntry *entry) {
+    const char *ext = strrchr(file_path, '.');
+    if (ext && (strcmp(ext, ".png") == 0 || strcmp(ext, ".PNG") == 0)) {
+        /* Decode PNG → tile-aligned CHR data */
+        uint8_t *png_data = NULL;
+        int png_size = 0;
+        if (chr_load_cached(file_path, &png_data, &png_size) != 0)
+            return -1;
+
+        int lead = entry->lead_bytes;
+        int trail = entry->trail_bytes;
+
+        if (lead == 0 && trail == 0) {
+            /* Tile-aligned transfer — PNG is the complete data */
+            entry->data = png_data;
+            entry->data_len = png_size;
+            return 0;
+        }
+
+        /* Non-tile-aligned: reconstruct lead + PNG tiles + trail from .bin.
+         * The .bin has the exact original bytes; we splice the user's
+         * edited PNG tiles into the middle. */
+        char bin_path[512];
+        {
+            int prefix_len = (int)(ext - file_path);
+            snprintf(bin_path, sizeof(bin_path), "%.*s.bin", prefix_len, file_path);
+        }
+
+        uint8_t *bin_data = NULL;
+        int bin_size = read_bin_file(bin_path, &bin_data);
+        if (bin_size < 0) {
+            fprintf(stderr, "[ChrOverride] Need companion .bin for non-tile-aligned "
+                    "asset but not found: %s\n", bin_path);
+            entry->data = png_data;
+            entry->data_len = png_size;
+            return 0;
+        }
+
+        /* Reconstruct: [lead from .bin] [tiles from PNG] [trail from .bin] */
+        int total = lead + png_size + trail;
+        uint8_t *merged = (uint8_t *)malloc(total);
+        if (!merged) { free(png_data); free(bin_data); return -1; }
+
+        /* Lead partial bytes from original .bin */
+        if (lead > 0 && lead <= bin_size)
+            memcpy(merged, bin_data, lead);
+
+        /* Tile data from user-edited PNG */
+        memcpy(merged + lead, png_data, png_size);
+
+        /* Trail partial bytes from original .bin */
+        if (trail > 0 && lead + png_size <= bin_size)
+            memcpy(merged + lead + png_size,
+                   bin_data + bin_size - trail, trail);
+
+        free(png_data);
+        free(bin_data);
+        entry->data = merged;
+        entry->data_len = total;
+        return 0;
+    }
+
+    uint8_t *data = NULL;
+    int sz = read_bin_file(file_path, &data);
+    if (sz < 0) {
+        fprintf(stderr, "[ChrOverride] Cannot open: %s\n", file_path);
+        return -1;
+    }
     entry->data = data;
-    entry->data_len = (int)sz;
+    entry->data_len = sz;
     return 0;
 }
 
@@ -263,6 +327,10 @@ static int parse_manifest(const char *json_text) {
                     } else {
                         entry.match_crc = (uint32_t)strtoul(p, (char **)&p, 0);
                     }
+                } else if (strcmp(field, "lead_bytes") == 0) {
+                    int v; p = parse_int_val(p, &v); entry.lead_bytes = v;
+                } else if (strcmp(field, "trail_bytes") == 0) {
+                    int v; p = parse_int_val(p, &v); entry.trail_bytes = v;
                 } else if (strcmp(field, "file") == 0) {
                     p = parse_string(p, entry.file, sizeof(entry.file));
                     if (!p) break;
@@ -340,6 +408,52 @@ int chr_override_load_manifest(const char *dir) {
     int count = parse_manifest(buf);
     free(buf);
     printf("[ChrOverride] Loaded %d override(s) from %s\n", count, s_manifest_path);
+    return count;
+}
+
+int chr_override_compile_dir(const char *dir) {
+    int count = 0;
+#ifdef _WIN32
+    char pattern[512];
+    snprintf(pattern, sizeof(pattern), "%s\\*.png", dir);
+    WIN32_FIND_DATAA fd;
+    HANDLE h = FindFirstFileA(pattern, &fd);
+    if (h == INVALID_HANDLE_VALUE) {
+        fprintf(stderr, "[ChrOverride] No PNGs found in %s\n", dir);
+        return 0;
+    }
+    do {
+        char path[512];
+        snprintf(path, sizeof(path), "%s/%s", dir, fd.cFileName);
+        uint8_t *data = NULL;
+        int size = 0;
+        if (chr_load_cached(path, &data, &size) == 0) {
+            free(data);
+            count++;
+        }
+    } while (FindNextFileA(h, &fd));
+    FindClose(h);
+#else
+    DIR *d = opendir(dir);
+    if (!d) {
+        fprintf(stderr, "[ChrOverride] Cannot open %s\n", dir);
+        return -1;
+    }
+    struct dirent *ent;
+    while ((ent = readdir(d)) != NULL) {
+        const char *ext = strrchr(ent->d_name, '.');
+        if (!ext || strcmp(ext, ".png") != 0) continue;
+        char path[512];
+        snprintf(path, sizeof(path), "%s/%s", dir, ent->d_name);
+        uint8_t *data = NULL;
+        int size = 0;
+        if (chr_load_cached(path, &data, &size) == 0) {
+            free(data);
+            count++;
+        }
+    }
+    closedir(d);
+#endif
     return count;
 }
 
@@ -473,13 +587,7 @@ static void ensure_dump_dir(void) {
     MKDIR(s_dump_dir);
     s_dump_dir_created = 1;
 
-    char path[512];
-    snprintf(path, sizeof(path), "%s/index.csv", s_dump_dir);
-    s_index_file = fopen(path, "w");
-    if (s_index_file) {
-        fprintf(s_index_file, "idx,ppu_addr,length,crc32,frame\n");
-        fflush(s_index_file);
-    }
+    /* (index.csv removed — tiles/ is user-facing) */
 }
 
 static void write_dump_manifest(void) {
@@ -495,6 +603,8 @@ static void write_dump_manifest(void) {
         fprintf(f, "      \"ppu_addr\": \"0x%04X\",\n", a->ppu_addr);
         fprintf(f, "      \"length\": %d,\n", a->length);
         fprintf(f, "      \"crc\": \"0x%08X\",\n", a->crc);
+        fprintf(f, "      \"lead_bytes\": %d,\n", a->lead_bytes);
+        fprintf(f, "      \"trail_bytes\": %d,\n", a->trail_bytes);
         fprintf(f, "      \"file\": \"asset_%04d_addr%04X.png\"\n", a->dump_idx, a->ppu_addr);
         fprintf(f, "    }%s\n", (i < s_num_known - 1) ? "," : "");
     }
@@ -529,33 +639,40 @@ static void record_asset(uint16_t ppu_addr, const uint8_t *data, int len) {
         return;
     }
 
+    /* Compute tile alignment split:
+     *   lead  = bytes before first complete tile boundary
+     *   tiles = complete 8x8 tiles (16 bytes each) → goes to PNG
+     *   trail = leftover bytes after last complete tile */
+    int lead = (16 - (ppu_addr % 16)) % 16;
+    if (lead > len) lead = len;
+    int remaining = len - lead;
+    int tile_bytes = (remaining / 16) * 16;
+    int trail = remaining - tile_bytes;
+
     int idx = s_num_known;
     s_known[idx].ppu_addr = ppu_addr;
     s_known[idx].length = len;
     s_known[idx].crc = crc;
     s_known[idx].dump_idx = idx;
+    s_known[idx].lead_bytes = lead;
+    s_known[idx].trail_bytes = trail;
     s_num_known++;
 
-    /* Write .bin */
     char path[512];
-    snprintf(path, sizeof(path), "%s/asset_%04d_addr%04X.bin",
-             s_dump_dir, idx, ppu_addr);
-    FILE *f = fopen(path, "wb");
-    if (f) { fwrite(data, 1, len, f); fclose(f); }
 
-    /* Write .png — truncate to tile boundary if needed */
-    int png_len = (len / 16) * 16;
-    if (png_len >= 16) {
-        snprintf(path, sizeof(path), "%s/asset_%04d_addr%04X.png",
+    /* Write .bin only for non-tile-aligned transfers (need lead/trail bytes) */
+    if (lead > 0 || trail > 0) {
+        snprintf(path, sizeof(path), "%s/asset_%04d_addr%04X.bin",
                  s_dump_dir, idx, ppu_addr);
-        chr_write_png(path, data, png_len);
+        FILE *f = fopen(path, "wb");
+        if (f) { fwrite(data, 1, len, f); fclose(f); }
     }
 
-    /* Update index CSV */
-    if (s_index_file) {
-        fprintf(s_index_file, "%d,0x%04X,%d,0x%08X,%llu\n",
-                idx, ppu_addr, len, crc, (unsigned long long)g_frame_count);
-        fflush(s_index_file);
+    /* Write .png — tile-aligned middle only (user-editable) */
+    if (tile_bytes >= 16) {
+        snprintf(path, sizeof(path), "%s/asset_%04d_addr%04X.png",
+                 s_dump_dir, idx, ppu_addr);
+        chr_write_png(path, data + lead, tile_bytes);
     }
 
     /* Update manifest */

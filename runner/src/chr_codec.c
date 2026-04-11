@@ -29,91 +29,44 @@
 #  define StatBuf   struct stat
 #endif
 
-/* ── Helpers ───────────────────────────────────────────────────────────────── */
-
-static int cmp_int_asc(const void *a, const void *b) {
-    int va = *(const int *)a, vb = *(const int *)b;
-    return (va > vb) - (va < vb);
-}
-
 /* ── Pixel -> 2bpp CHR encode ─────────────────────────────────────────────── */
 
-/* Luminance of an RGB pixel (fixed-point approximation). */
-static int pixel_luma(uint8_t r, uint8_t g, uint8_t b) {
-    return (int)(77 * r + 150 * g + 29 * b); /* 0..65536 range */
-}
+/* Fixed grayscale palette matching chr_write_png's s_pal[].
+ * Encode must use the SAME index assignment as decode so round-trips
+ * are lossless.  Nearest-match to the four canonical grayscale values. */
+static const int s_pal_luma[4] = {
+    0,          /* index 0 = black   (0x00) */
+    0x55,       /* index 1 = dark    (0x55) */
+    0xAA,       /* index 2 = light   (0xAA) */
+    0xFF,       /* index 3 = white   (0xFF) */
+};
 
 /*
- * Quantize an image to 4 levels by luminance.
+ * Map each pixel to the nearest of the 4 fixed grayscale levels.
  * Returns a malloc'd buffer of w*h uint8_t values (0-3), or NULL on error.
  */
 static uint8_t *quantize_4color(const uint8_t *pixels, int w, int h, int comp) {
-    /* Collect unique luma values (up to a reasonable limit). */
-    int *lumas = (int *)malloc(w * h * sizeof(int));
-    if (!lumas) return NULL;
+    uint8_t *result = (uint8_t *)malloc(w * h);
+    if (!result) return NULL;
 
     for (int i = 0; i < w * h; i++) {
         const uint8_t *p = pixels + i * comp;
-        lumas[i] = pixel_luma(p[0], p[1], p[2]);
-    }
+        /* Simple average for grayscale — matches the encoder's RGB output */
+        int gray = (p[0] + p[1] + p[2]) / 3;
 
-    /* Find unique luma values. */
-    int unique[256];
-    int num_unique = 0;
-
-    /* Simple approach: sort all lumas, deduplicate. For small tile images
-     * (typically < 32K pixels) this is fast enough. */
-    /* Actually, let's use a smarter approach: histogram-based. */
-    int *sorted = (int *)malloc(w * h * sizeof(int));
-    if (!sorted) { free(lumas); return NULL; }
-    memcpy(sorted, lumas, w * h * sizeof(int));
-
-    /* Sort for deduplication. */
-    qsort(sorted, w * h, sizeof(int), cmp_int_asc);
-
-    num_unique = 0;
-    for (int i = 0; i < w * h; i++) {
-        if (num_unique == 0 || sorted[i] != unique[num_unique - 1]) {
-            if (num_unique >= 256) break;
-            unique[num_unique++] = sorted[i];
-        }
-    }
-    free(sorted);
-
-    if (num_unique > 4) {
-        /* More than 4 unique luma levels — quantize by nearest.
-         * Split luma range into 4 equal bands. */
-        int lo = unique[0];
-        int hi = unique[num_unique - 1];
-        int range = hi - lo;
-        if (range == 0) range = 1;
-
-        uint8_t *result = (uint8_t *)malloc(w * h);
-        if (!result) { free(lumas); return NULL; }
-
-        for (int i = 0; i < w * h; i++) {
-            int band = (lumas[i] - lo) * 3 / range; /* 0..3 */
-            if (band > 3) band = 3;
-            result[i] = (uint8_t)band;
-        }
-        free(lumas);
-        return result;
-    }
-
-    /* <= 4 unique lumas — exact mapping. */
-    uint8_t *result = (uint8_t *)malloc(w * h);
-    if (!result) { free(lumas); return NULL; }
-
-    for (int i = 0; i < w * h; i++) {
-        for (int j = 0; j < num_unique; j++) {
-            if (lumas[i] == unique[j]) {
-                result[i] = (uint8_t)j;
-                break;
+        /* Nearest-match to fixed palette */
+        int best = 0;
+        int best_dist = abs(gray - s_pal_luma[0]);
+        for (int j = 1; j < 4; j++) {
+            int dist = abs(gray - s_pal_luma[j]);
+            if (dist < best_dist) {
+                best = j;
+                best_dist = dist;
             }
         }
+        result[i] = (uint8_t)best;
     }
 
-    free(lumas);
     return result;
 }
 
@@ -276,9 +229,15 @@ int chr_write_png(const char *png_path, const uint8_t *chr_data, int chr_size) {
     }
 
     int num_tiles = chr_size / 16;
+
+    /* Pick grid width that divides tile count evenly — no phantom tiles.
+     * Prefer widths near 16 for readability, but exact fit is mandatory
+     * so PNG round-trips are lossless (cols * rows == num_tiles). */
     int cols = 16;
     if (num_tiles < cols) cols = num_tiles;
-    int rows = (num_tiles + cols - 1) / cols;
+    while (cols > 1 && (num_tiles % cols) != 0)
+        cols--;
+    int rows = num_tiles / cols;
     int img_w = cols * 8;
     int img_h = rows * 8;
 
