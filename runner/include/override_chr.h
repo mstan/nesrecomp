@@ -38,5 +38,10 @@ int chr_override_load_manifest(const char *dir);
  * Call from game_on_frame(). */
 void chr_override_reload_if_changed(void);
 
+/* Snapshot g_chr_ram for CHR RAM games (no mapper bank switching).
+ * Call from game_post_nmi() — after NMI handler has finished $2007 writes.
+ * This is the CHR RAM equivalent of the mapper callback for CHR ROM games. */
+void chr_override_frame_snapshot(void);
+
 /* Get dump statistics. */
 void chr_override_get_dump_stats(int *unique_snapshots, int *total_switches);

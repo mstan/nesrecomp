@@ -76,7 +76,16 @@ void chr_override_get_dump_stats(int *unique_snapshots, int *total_switches) {
     if (total_switches) *total_switches = s_total_switches;
 }
 
-/* ── Mapper callback ──────────────────────────────────────────────────────── */
+/* ── Per-frame snapshot (for CHR RAM games) ──────────────────────────────── */
+
+void chr_override_frame_snapshot(void) {
+    if (s_dump_enabled)
+        dump_snapshot(g_chr_ram, sizeof(g_chr_ram));
+
+    /* Phase 3: apply overrides here too (CHR RAM path) */
+}
+
+/* ── Mapper callback (for CHR ROM games) ─────────────────────────────────── */
 
 static void chr_callback(uint8_t *chr_data, int size, void *ctx) {
     (void)ctx;
