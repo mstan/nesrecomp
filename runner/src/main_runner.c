@@ -25,6 +25,7 @@
 #include "game_extras.h"
 #include "debug_server.h"
 #include "keybinds.h"
+#include "crc32.h"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
@@ -33,6 +34,15 @@
 static const char *s_script_path    = NULL;
 static const char *s_record_path    = NULL;
 static const char *s_loadstate_path = NULL;
+
+/* ---- Smoke test mode (--smoke N) ---- */
+static int         s_smoke_frames   = 0;     /* 0 = normal, >0 = headless smoke test */
+static int         s_smoke_interval = 100;   /* hash framebuffer every N frames */
+static const char *s_smoke_output   = NULL;  /* output file path (NULL = stdout) */
+#define SMOKE_MAX_HASHES 10000
+static uint32_t    s_smoke_hashes[SMOKE_MAX_HASHES];
+static int         s_smoke_hash_frames[SMOKE_MAX_HASHES];
+static int         s_smoke_hash_count = 0;
 
 /* ---- SDL state (file-level so nes_vblank_callback can access) ---- */
 static SDL_Window        *s_window    = NULL;
@@ -434,6 +444,30 @@ static void zapper_mouse_to_nes(int mouse_x, int mouse_y) {
     g_zapper_y = nes_y;
 }
 
+/* ---- Smoke test results ---- */
+static void smoke_write_results(void) {
+    FILE *f = s_smoke_output ? fopen(s_smoke_output, "w") : stdout;
+    if (!f) f = stdout;
+    fprintf(f, "{\n");
+    fprintf(f, "  \"frames_run\": %llu,\n", (unsigned long long)g_frame_count);
+    fprintf(f, "  \"dispatch_miss_count\": %u,\n", g_miss_count_any);
+    fprintf(f, "  \"dispatch_miss_unique\": %d,\n", g_miss_unique_count);
+    fprintf(f, "  \"dispatch_misses\": [");
+    for (int i = 0; i < g_miss_unique_count; i++) {
+        fprintf(f, "%s\"$%04X\"", i ? ", " : "", g_miss_unique_addrs[i]);
+    }
+    fprintf(f, "],\n");
+    fprintf(f, "  \"frame_hashes\": {\n");
+    for (int i = 0; i < s_smoke_hash_count; i++) {
+        fprintf(f, "    \"%d\": \"%08x\"%s\n",
+                s_smoke_hash_frames[i], s_smoke_hashes[i],
+                (i < s_smoke_hash_count - 1) ? "," : "");
+    }
+    fprintf(f, "  }\n");
+    fprintf(f, "}\n");
+    if (s_smoke_output && f != stdout) fclose(f);
+}
+
 /* ---- VBlank callback (called from ppu_read_reg when $2002 bit7 fires) ---- */
 void nes_vblank_callback(void) {
     static uint64_t s_cb_count = 0;
@@ -442,6 +476,9 @@ void nes_vblank_callback(void) {
     if (s_debug && (s_cb_count <= 100 || s_cb_count % 60 == 0))
         printf("[VBlank] callback #%llu frame=%llu\n",
                (unsigned long long)s_cb_count, (unsigned long long)g_frame_count);
+
+    /* In smoke mode, skip all SDL input/event handling */
+    if (s_smoke_frames) goto smoke_skip_input;
 
     /* Handle SDL events */
     SDL_Event ev;
@@ -489,11 +526,15 @@ void nes_vblank_callback(void) {
         g_controller2_buttons = keybinds_read_player(keys, 2);
     }
 
+smoke_skip_input:
+
     /* Per-frame script execution */
+    if (!s_smoke_frames)
     script_tick(g_frame_count, g_ram);
 
     /* TCP debug server: poll for commands each frame */
-    debug_server_poll();
+    if (!s_smoke_frames)
+        debug_server_poll();
 
     /* Log per-frame state BEFORE NMI runs */
     debug_log_frame(s_cb_count);
@@ -579,7 +620,7 @@ void nes_vblank_callback(void) {
 
     /* Generate one frame of audio after NMI (APU registers now up-to-date).
      * Skip in turbo mode — queued audio would pile up faster than it drains. */
-    if (s_audio_dev && !g_turbo) {
+    if (s_audio_dev && !g_turbo && !s_smoke_frames) {
         /* Don't over-buffer: skip if more than 6 frames already queued */
         if (SDL_GetQueuedAudioSize(s_audio_dev) < AUDIO_SAMPLES_PER_FRAME * sizeof(int16_t) * 6) {
             apu_generate(s_audio_frame, AUDIO_SAMPLES_PER_FRAME);
@@ -595,6 +636,24 @@ void nes_vblank_callback(void) {
 
     /* Game-specific post-render (e.g. widescreen margin sprites) */
     game_post_render(s_framebuf);
+
+    /* Smoke test: hash framebuffer at intervals and check exit */
+    if (s_smoke_frames) {
+        if (g_frame_count % s_smoke_interval == 0 &&
+            s_smoke_hash_count < SMOKE_MAX_HASHES) {
+            s_smoke_hashes[s_smoke_hash_count] =
+                crc32_compute((const uint8_t *)s_framebuf,
+                              (size_t)g_render_width * 240 * sizeof(uint32_t));
+            s_smoke_hash_frames[s_smoke_hash_count] = (int)g_frame_count;
+            s_smoke_hash_count++;
+        }
+        g_frame_count++;
+        if ((int)g_frame_count >= s_smoke_frames) {
+            smoke_write_results();
+            exit(0);
+        }
+        return; /* skip all SDL rendering/pacing */
+    }
 
     /* OAM debug window — updated every 6 frames to avoid flicker/lag */
     if (s_debug && s_dbg_texture && g_frame_count % 6 == 0) {
@@ -777,6 +836,9 @@ void nesrecomp_runner_run(int argc, char *argv[]) {
         else if (strcmp(argv[i], "--record")    == 0 && i+1 < argc) s_record_path    = argv[++i];
         else if (strcmp(argv[i], "--loadstate") == 0 && i+1 < argc) s_loadstate_path = argv[++i];
         else if (strcmp(argv[i], "--debug")     == 0) s_debug = 1;
+        else if (strcmp(argv[i], "--smoke")     == 0 && i+1 < argc) s_smoke_frames   = atoi(argv[++i]);
+        else if (strcmp(argv[i], "--smoke-interval") == 0 && i+1 < argc) s_smoke_interval = atoi(argv[++i]);
+        else if (strcmp(argv[i], "--smoke-output")   == 0 && i+1 < argc) s_smoke_output   = argv[++i];
         else {
             /* Offer remaining args to the game-specific handler */
             const char *val = (i+1 < argc && argv[i+1][0] != '-') ? argv[i+1] : NULL;
@@ -807,6 +869,16 @@ void nesrecomp_runner_run(int argc, char *argv[]) {
     if (s_loadstate_path) savestate_load(s_loadstate_path);
     if (s_record_path) { record_open(s_record_path); atexit(record_close); }
     if (s_script_path) script_load(s_script_path);
+
+    /* In smoke mode, skip all SDL initialization — run headless */
+    if (s_smoke_frames) {
+        printf("[Smoke] Headless mode: running %d frames, hashing every %d\n",
+               s_smoke_frames, s_smoke_interval);
+        memset(s_framebuf, 0, sizeof(s_framebuf));
+        game_run_main();
+        /* Unreachable — game_run_main never returns, smoke exits from vblank */
+        exit(0);
+    }
 
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
         fprintf(stderr, "SDL_Init: %s\n", SDL_GetError());
