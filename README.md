@@ -6,13 +6,47 @@ A static 6502 recompiler framework for NES games. Translates NES ROM machine cod
 
 ## Game Projects
 
-| Game | Status | Repository |
-|------|--------|------------|
-| The Legend of Zelda | Believed 100% playable | [LegendOfZeldaNESRecomp](https://github.com/mstan/LegendOfZeldaNESRecomp) |
-| Dr. Mario | Playable (1P tested) | [DrMarioNesRecomp](https://github.com/mstan/DrMarioNesRecomp) |
-| Faxanadu | Believed mostly playable, minor bugs | [FaxanaduRecomp](https://github.com/mstan/FaxanaduRecomp) |
-| Super Mario Bros. | Believed mostly playable, minor bugs | [SuperMarioBrosNESRecomp](https://github.com/mstan/SuperMarioBrosNESRecomp) |
-| Metroid | Starting area playable, early foundation | [MetroidNESRecomp](https://github.com/mstan/MetroidNESRecomp) |
+| Game | Mapper | Status | Repository |
+|------|--------|--------|------------|
+| Super Mario Bros. | NROM (0) | Fully playable | [SuperMarioBrosNESRecomp](https://github.com/mstan/SuperMarioBrosNESRecomp) |
+| Duck Hunt | NROM (0) | Fully playable (mouse-as-Zapper) | [DuckHuntNESRecomp](https://github.com/mstan/DuckHuntNESRecomp) |
+| Dr. Mario | MMC1 (1) | Playable (1P tested) | [DrMarioNesRecomp](https://github.com/mstan/DrMarioNesRecomp) |
+| The Legend of Zelda | MMC1 (1) | Believed 100% playable | [LegendOfZeldaNESRecomp](https://github.com/mstan/LegendOfZeldaNESRecomp) |
+| Metroid | MMC1 (1) | Starting area playable, early foundation | [MetroidNESRecomp](https://github.com/mstan/MetroidNESRecomp) |
+| Faxanadu | MMC1 (1) | Fully playable, text override showcase | [FaxanaduRecomp](https://github.com/mstan/FaxanaduRecomp) |
+| Yoshi | MMC1 (1) | Believed fully playable | [YoshiNESRecomp](https://github.com/mstan/YoshiNESRecomp) |
+| Yoshi's Cookie | MMC3 (4) | Believed 100% playable | [YoshisCookieRecomp](https://github.com/mstan/YoshisCookieRecomp) |
+
+### Mapper Support
+
+| Mapper | Name | Supported | Notable unsupported games |
+|--------|------|-----------|---------------------------|
+| 0 | NROM | Yes | — |
+| 1 | MMC1 / SxROM | Yes | Mega Man 2, Castlevania II, Blaster Master |
+| 2 | UxROM | No | Mega Man, Castlevania, Contra, DuckTales |
+| 3 | CNROM | No | Gradius, Paperboy, Arkanoid |
+| 4 | MMC3 / TxROM | Yes | Mega Man 3–6, Kirby's Adventure, Super Mario Bros. 2/3 |
+| 7 | AxROM | No | Battletoads, Marble Madness |
+| 9 | MMC2 / PxROM | No | Punch-Out!! |
+| 66 | GxROM | No | Super Mario Bros. / Duck Hunt (multicart) |
+
+Mappers 0, 1, and 4 cover roughly 75% of the licensed NES library.
+
+### Text Override System
+
+NESRecomp includes a runtime text replacement system that allows modifying in-game
+text without editing the ROM. The runner exposes writable PRG ROM bank accessors
+(`runner_get_prg_bank_rw()`) that game plugins use to patch string data at load time.
+
+[FaxanaduRecomp](https://github.com/mstan/FaxanaduRecomp) is the first game to
+exercise this feature, implementing a JSON-driven override system with:
+- Multiple encoding registries (ASCII, tile-based dialogue fonts)
+- PRG ROM patching for all rendering paths (direct PPU writes, DMA queues)
+- Hot-reload — edit `text_overrides.json` while the game is running and changes
+  apply within ~1 second
+
+This enables localization, retranslation, and accessibility improvements without
+ROM hacking. See `override_text.h` in FaxanaduRecomp for the full API.
 
 ## Architecture
 
