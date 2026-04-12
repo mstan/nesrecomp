@@ -184,6 +184,7 @@ typedef struct {
 typedef struct {
     char            output_prefix[64];  /* e.g. "faxanadu" → generated/faxanadu_full.c */
     char            annotations_path[512]; /* override for annotations.csv */
+    char            symbol_file[512]; /* optional .sym file for readable codegen comments */
 
     TrampolineEntry trampolines[GAME_CFG_MAX_TRAMPOLINES];
     int             trampoline_count;

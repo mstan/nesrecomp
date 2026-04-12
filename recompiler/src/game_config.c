@@ -82,6 +82,8 @@ static bool game_config_load_toml(GameConfig *cfg, const char *path) {
         if (dps.ok) cfg->disable_ptr_scan = dps.u.b;
         toml_datum_t ds = toml_bool_in(game, "disable_secondary");
         if (ds.ok) cfg->disable_secondary = ds.u.b;
+        toml_datum_t sf = toml_string_in(game, "symbol_file");
+        if (sf.ok) { strncpy(cfg->symbol_file, sf.u.s, sizeof(cfg->symbol_file) - 1); free(sf.u.s); }
     }
 
     /* [mapper] */

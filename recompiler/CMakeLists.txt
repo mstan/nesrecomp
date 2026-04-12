@@ -11,6 +11,7 @@ add_executable(NESRecomp
     src/function_finder.c
     src/code_generator.c
     src/annotations.c
+    src/symbol_table.c
     src/game_config.c
     src/toml.c
 )
