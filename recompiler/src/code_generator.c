@@ -82,6 +82,9 @@ static void emit_header(FILE *f) {
         "#define FLAG_NZC_SUB(r,a,b) do { int16_t _r=(r); g_cpu.C=(_r>=0)?1:0; \\\n"
         "    g_cpu.N=((_r&0xFF)>>7); g_cpu.Z=((_r&0xFF)==0)?1:0; \\\n"
         "    g_cpu.V=(((a)^(b))&((a)^_r)&0x80)?1:0; } while(0)\n\n"
+        "/* RTI hijack support: NMI handler stores hijacked return address here;\n"
+        " * func_NMI dispatches to it after the handler returns (outside NMI context). */\n"
+        "extern uint16_t g_rti_target;\n\n"
     );
 }
 
@@ -497,6 +500,22 @@ static uint16_t resolve_jmp_thunk(const NESRom *rom, int fixed_bank, uint16_t ad
     uint8_t lo = rom_read(rom, fixed_bank, addr + 1);
     uint8_t hi = rom_read(rom, fixed_bank, addr + 2);
     return (uint16_t)(lo | ((uint16_t)hi << 8));
+}
+
+/* Addresses of coroutine yield function entry points.
+ * Multiple function entries can alias into the same body containing
+ * the yield pattern (TSX; STX zp,Y; JMP scheduler).  JSRs to ANY of
+ * these addresses skip the universal bail check because the scheduler's
+ * RESUME path (PLA+PLA+S+=2) legitimately changes S across the
+ * yield/resume boundary. */
+#define MAX_YIELD_FUNCS 16
+static uint16_t s_yield_func_addrs[MAX_YIELD_FUNCS];
+static int s_yield_func_count = 0;
+
+static int is_yield_func(uint16_t addr) {
+    for (int i = 0; i < s_yield_func_count; i++)
+        if (s_yield_func_addrs[i] == addr) return 1;
+    return 0;
 }
 
 /* ---- Emission helpers (used by emit_instruction and the wrapper emitters) ---- */
@@ -1087,12 +1106,22 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
              * (callee did PLA PLA RTS or similar stack unwind), propagate
              * the unwind by returning immediately.
              *
-             * Skip bail for call_by_address() targets: dynamic dispatch may
-             * reach coroutine yields or context switches that legitimately
-             * change S mid-call.  Bail propagation is only reliable for
-             * direct function calls where we know the target's behavior. */
+             * Skip bail for:
+             *  - call_by_address() targets: dynamic dispatch may reach
+             *    coroutine yields or context switches that legitimately
+             *    change S mid-call.
+             *  - the coroutine yield function: the scheduler's RESUME
+             *    path (PLA+PLA+S+=2) changes S by +4 while the yield
+             *    only pushed 3 bytes.  The +1 mismatch always triggers
+             *    the bail, and on game-state transitions the bail
+             *    cascades to the coroutine entry, killing the fiber. */
             if (did_push_jsr) {
-                fprintf(f, "if (g_cpu.S != _cbs) {\n#ifdef RECOMP_STACK_TRACKING\n    bail_trace(0x%04X, _cbs);\n    recomp_stack_pop();\n#endif\n    return; } }\n", pc);
+                if (is_yield_func(abs16)) {
+                    /* Yield function: close the brace but skip the bail check */
+                    fprintf(f, "}\n");
+                } else {
+                    fprintf(f, "if (g_cpu.S != _cbs) {\n#ifdef RECOMP_STACK_TRACKING\n    bail_trace(0x%04X, _cbs);\n    recomp_stack_pop();\n#endif\n    return; } }\n", pc);
+                }
             }
             break;
         }
@@ -1336,103 +1365,17 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
             rts_done:
             fprintf(f, "\n#ifdef RECOMP_STACK_TRACKING\n    recomp_stack_pop();\n#endif\n    return;\n");
             break;
-        case MN_RTI: {
-            /* RTI-hijack detection: NMI handlers that overwrite their own
-             * hardware-pushed return PC on the stack before executing RTI,
-             * causing control to resume at a different address than the
-             * interrupted code. Common idiom for post-NMI trampolines
-             * (e.g. MM3's $C000 hijacks to $C121 to run the sound engine).
-             *
-             * On real hardware RTI pops the modified stack; in the recomp,
-             * func_NMI() returns without following the hijack. We detect
-             * the pattern and emit an explicit call_by_address() before
-             * the return.
-             *
-             * Pattern (scanning backward from RTI, within the NMI handler):
-             *   Two `STA $01NN,X` (opcode 9D) writes to adjacent stack-page
-             *   slots, each fed by a preceding `LDA #imm` (A9). The higher
-             *   slot holds PCH, the lower holds PCL. Target = (PCH << 8) |
-             *   PCL, must be >= $C000 (fixed bank).
-             *
-             * Gated by func_base == rom->nmi_vector to avoid over-firing on
-             * non-NMI functions that manipulate the stack for other reasons.
-             */
-            int hijack_found = 0;
-            uint16_t hijack_target = 0;
-            if (func_base == rom->nmi_vector) {
-                /* Scan backward from RTI for first STA $01NN,X */
-                uint16_t sta1_pc = 0, sta2_pc = 0;
-                uint8_t off1 = 0, off2 = 0;
-                int sta1_ok = 0, sta2_ok = 0;
-                for (int back1 = 1; back1 <= 16; back1++) {
-                    if ((int)pc - back1 - 2 < (int)func_base) break;
-                    uint16_t p1 = (uint16_t)(pc - back1);
-                    if (rom_read(rom, bank, p1) == 0x9D /* STA abs,X */ &&
-                        rom_read(rom, bank, (uint16_t)(p1 + 2)) == 0x01 /* high byte = $01 */) {
-                        sta1_pc = p1;
-                        off1 = rom_read(rom, bank, (uint16_t)(p1 + 1));
-                        sta1_ok = 1;
-                        break;
-                    }
-                }
-                if (sta1_ok) {
-                    for (int back2 = 1; back2 <= 12; back2++) {
-                        if ((int)sta1_pc - back2 - 2 < (int)func_base) break;
-                        uint16_t p2 = (uint16_t)(sta1_pc - back2);
-                        if (rom_read(rom, bank, p2) == 0x9D &&
-                            rom_read(rom, bank, (uint16_t)(p2 + 2)) == 0x01) {
-                            uint8_t o2 = rom_read(rom, bank, (uint16_t)(p2 + 1));
-                            if ((o2 == (uint8_t)(off1 + 1)) || ((uint8_t)(o2 + 1) == off1)) {
-                                sta2_pc = p2;
-                                off2 = o2;
-                                sta2_ok = 1;
-                                break;
-                            }
-                        }
-                    }
-                }
-                if (sta2_ok) {
-                    /* Higher offset holds PCH, lower offset holds PCL */
-                    uint16_t pc_hi_sta = (off1 > off2) ? sta1_pc : sta2_pc;
-                    uint16_t pc_lo_sta = (off1 < off2) ? sta1_pc : sta2_pc;
-                    int pch_ok = 0, pcl_ok = 0;
-                    uint8_t pch_val = 0, pcl_val = 0;
-                    for (int lb = 1; lb <= 8; lb++) {
-                        if ((int)pc_hi_sta - lb - 1 < (int)func_base) break;
-                        uint16_t pl = (uint16_t)(pc_hi_sta - lb);
-                        if (rom_read(rom, bank, pl) == 0xA9 /* LDA #imm */) {
-                            pch_val = rom_read(rom, bank, (uint16_t)(pl + 1));
-                            pch_ok = 1;
-                            break;
-                        }
-                    }
-                    for (int lb = 1; lb <= 8; lb++) {
-                        if ((int)pc_lo_sta - lb - 1 < (int)func_base) break;
-                        uint16_t pl = (uint16_t)(pc_lo_sta - lb);
-                        if (rom_read(rom, bank, pl) == 0xA9) {
-                            pcl_val = rom_read(rom, bank, (uint16_t)(pl + 1));
-                            pcl_ok = 1;
-                            break;
-                        }
-                    }
-                    if (pch_ok && pcl_ok) {
-                        uint16_t tgt = ((uint16_t)pch_val << 8) | pcl_val;
-                        /* Fixed bank only — switchable-bank targets may be
-                         * unsafe to invoke statically (bank may have changed). */
-                        if (tgt >= 0xC000) {
-                            hijack_found = 1;
-                            hijack_target = tgt;
-                        }
-                    }
-                }
-            }
-            if (hijack_found) {
-                fprintf(f, "/* RTI-hijack → $%04X */ g_cpu.S++; { uint8_t p=g_ram[0x100+g_cpu.S]; g_cpu.N=(p>>7)&1; g_cpu.V=(p>>6)&1; g_cpu.D=(p>>3)&1; g_cpu.I=(p>>2)&1; g_cpu.Z=(p>>1)&1; g_cpu.C=p&1; } g_cpu.S++; g_cpu.S++; /* pop PCL, PCH */ call_by_address(0x%04X);\n#ifdef RECOMP_STACK_TRACKING\n    recomp_stack_pop();\n#endif\n    return;\n", hijack_target, hijack_target);
-            } else {
-                fprintf(f, "/* RTI */ g_cpu.S++; { uint8_t p=g_ram[0x100+g_cpu.S]; g_cpu.N=(p>>7)&1; g_cpu.V=(p>>6)&1; g_cpu.D=(p>>3)&1; g_cpu.I=(p>>2)&1; g_cpu.Z=(p>>1)&1; g_cpu.C=p&1; } g_cpu.S++; g_cpu.S++; /* pop PCL, PCH */\n#ifdef RECOMP_STACK_TRACKING\n    recomp_stack_pop();\n#endif\n    return;\n");
-            }
+        case MN_RTI:
+            fprintf(f, "/* RTI */ g_cpu.S++; "
+                "{ uint8_t p=g_ram[0x100+g_cpu.S]; "
+                "g_cpu.N=(p>>7)&1; g_cpu.V=(p>>6)&1; g_cpu.D=(p>>3)&1; "
+                "g_cpu.I=(p>>2)&1; g_cpu.Z=(p>>1)&1; g_cpu.C=p&1; }\n"
+                "    g_cpu.S++; { uint8_t _rti_lo = g_ram[0x100+g_cpu.S];\n"
+                "    g_cpu.S++; uint8_t _rti_hi = g_ram[0x100+g_cpu.S];\n"
+                "    g_rti_target = (_rti_hi << 8) | _rti_lo; }\n"
+                "#ifdef RECOMP_STACK_TRACKING\n    recomp_stack_pop();\n#endif\n"
+                "    return;\n");
             break;
-        }
 
         /* Flags */
         case MN_CLC: fprintf(f, "g_cpu.C = 0;\n"); break;
@@ -2228,6 +2171,39 @@ bool codegen_emit(const NESRom *rom, const FunctionList *funcs,
         }
         fprintf(f_full, "\n");
     }
+    /* Pre-scan: find coroutine yield function entry points.
+     * The yield function contains: TSX ($BA); STX zp,Y ($96 nn);
+     * JMP scheduler ($4C lo hi).  Multiple function entries may alias
+     * into the same body (e.g. $FF14, $FF16, $FF21 all share one body).
+     * Collect ALL function entries within range of the pattern so that
+     * JSR bail checks can be skipped for any of them. */
+    s_yield_func_count = 0;
+    for (uint16_t scan = 0xC003; scan < 0xFFF0; scan++) {
+        if (rom_read(rom, fixed_bank, scan - 3) == 0xBA /* TSX */ &&
+            rom_read(rom, fixed_bank, scan - 2) == 0x96 /* STX zp,Y */ &&
+            rom_read(rom, fixed_bank, scan)     == 0x4C /* JMP abs */) {
+            /* Found the yield tail at 'scan'.  Collect all function entries
+             * whose address falls within [scan-0x40, scan] — these are all
+             * entry points into the yield function body. */
+            for (int fi = 0; fi < funcs->count; fi++) {
+                if (funcs->entries[fi].bank == fixed_bank &&
+                    funcs->entries[fi].addr <= scan &&
+                    funcs->entries[fi].addr >= scan - 0x40 &&
+                    s_yield_func_count < MAX_YIELD_FUNCS) {
+                    s_yield_func_addrs[s_yield_func_count++] = funcs->entries[fi].addr;
+                }
+            }
+            if (s_yield_func_count > 0) {
+                fprintf(stderr, "[codegen] Detected %d coroutine yield function entries:",
+                        s_yield_func_count);
+                for (int yi = 0; yi < s_yield_func_count; yi++)
+                    fprintf(stderr, " $%04X", s_yield_func_addrs[yi]);
+                fprintf(stderr, "\n");
+            }
+            break;
+        }
+    }
+
     for (int i = 0; i < funcs->count; i++) {
         if (!entry_emits_standalone(funcs, cfg, &funcs->entries[i])) continue;
         /* Skip merge_range non-canonical entries — but only if they were
@@ -2248,7 +2224,31 @@ bool codegen_emit(const NESRom *rom, const FunctionList *funcs,
     const char *nmi_sfx   = (rom->nmi_vector   < 0xC000) ? "_b0" : "";
     const char *irq_sfx   = (rom->irq_vector   < 0xC000) ? "_b0" : "";
     fprintf(f_full, "void func_RESET(void) { func_%04X%s(); }\n", rom->reset_vector, reset_sfx);
-    fprintf(f_full, "void func_NMI(void)   { func_%04X%s(); }\n", rom->nmi_vector,   nmi_sfx);
+    fprintf(f_full, "uint16_t g_rti_target = 0; /* RTI hijack target (set by RTI, consumed by func_NMI) */\n\n");
+    fprintf(f_full, "void func_NMI(void)   {\n"
+           "    /* Simulate 6502 NMI hardware: push PCH, PCL, P onto stack.\n"
+           "     * Uses $0000 as sentinel PC — RTI stores the target in g_rti_target.\n"
+           "     * If the handler modified the return address (RTI hijack),\n"
+           "     * we dispatch to the hijacked target AFTER the handler returns,\n"
+           "     * so the post-NMI code runs outside the NMI context (depth 0). */\n"
+           "    uint8_t _nmi_p = (g_cpu.N<<7)|(g_cpu.V<<6)|0x20|\n"
+           "                     (g_cpu.D<<3)|(g_cpu.I<<2)|(g_cpu.Z<<1)|g_cpu.C;\n"
+           "    g_ram[0x100 + g_cpu.S] = 0x00; g_cpu.S--; /* PCH (sentinel) */\n"
+           "    g_ram[0x100 + g_cpu.S] = 0x00; g_cpu.S--; /* PCL (sentinel) */\n"
+           "    g_ram[0x100 + g_cpu.S] = _nmi_p; g_cpu.S--; /* P */\n"
+           "    g_rti_target = 0;\n"
+           "    func_%04X%s();\n"
+           "    if (g_rti_target != 0) {\n"
+           "        /* Post-NMI code runs outside NMI context on real hardware\n"
+           "         * (RTI re-enables interrupts, NMI is edge-triggered).\n"
+           "         * Clear pending VBlank to prevent re-entrant NMI during\n"
+           "         * the post-NMI path — real hardware only fires NMI once\n"
+           "         * per VBlank transition. */\n"
+           "        runtime_begin_post_nmi();\n"
+           "        call_by_address(g_rti_target);\n"
+           "        runtime_end_post_nmi();\n"
+           "    }\n"
+           "}\n", rom->nmi_vector, nmi_sfx);
     fprintf(f_full, "void func_IRQ(void)   { func_%04X%s(); }\n", rom->irq_vector,   irq_sfx);
 
     fclose(f_full);

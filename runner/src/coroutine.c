@@ -179,6 +179,12 @@ void coroutine_yield(void)
     s_last_yield_sp = g_cpu.S;
     sched_trace_record(SCHED_EVT_YIELD, s_current_channel, 0);
     wal_log("(in coroutine)", "YIELD->scheduler", s_current_channel, 0);
+    /* Save S before switching to scheduler.  The scheduler's RESUME path
+     * ($FEE2-$FEF1) manipulates g_cpu.S via PLA/PLA/S+=2 to restore
+     * 6502 registers from the simulated stack.  Save/restore S so the
+     * coroutine sees S unchanged across the yield boundary; the
+     * scheduler's S changes still happen but the final S value
+     * presented to the coroutine matches what it expects. */
     uint8_t s_before = g_cpu.S;
     SwitchToFiber(s_scheduler_fiber);
     wal_log("RESUMED from scheduler", "(coroutine continues)", s_current_channel, 0);

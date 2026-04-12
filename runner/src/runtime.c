@@ -408,14 +408,26 @@ int runtime_get_vblank_depth(void) {
     return s_vblank_depth;
 }
 
+static int s_saved_vblank_depth = 0;
+
+void runtime_begin_post_nmi(void) {
+    /* Post-NMI code (e.g. RTI hijack trampoline) runs outside the NMI on
+     * real hardware, but must NOT trigger new VBlanks — NMI is edge-triggered
+     * and only fires once per VBlank transition.  Push depth to MAX so
+     * maybe_trigger_vblank() returns immediately without setting pending. */
+    s_vblank_pending = 0;
+    s_saved_vblank_depth = s_vblank_depth;
+    s_vblank_depth = MAX_VBLANK_DEPTH;
+}
+
+void runtime_end_post_nmi(void) {
+    s_vblank_depth = s_saved_vblank_depth;
+}
+
 void runtime_reset_vblank_depth(void) {
     s_vblank_depth = 0;
     s_vblank_pending = 0;
 }
-
-/* Stubs for codegen compatibility (full impl was in d4505ab) */
-void runtime_begin_post_nmi(void) {}
-void runtime_end_post_nmi(void) {}
 
 uint8_t nes_read(uint16_t addr) {
     bus_tick();
