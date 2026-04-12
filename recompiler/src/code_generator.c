@@ -65,6 +65,9 @@ static void emit_header(FILE *f) {
         "#define FLAG_NZC_SUB(r,a,b) do { int16_t _r=(r); g_cpu.C=(_r>=0)?1:0; \\\n"
         "    g_cpu.N=((_r>>7)&1); g_cpu.Z=((_r&0xFF)==0)?1:0; \\\n"
         "    g_cpu.V=(((a)^(b))&((a)^_r)&0x80)?1:0; } while(0)\n\n"
+        "/* RTI hijack support: NMI handler stores hijacked return address here;\n"
+        " * func_NMI dispatches to it after the handler returns (outside NMI context). */\n"
+        "extern uint16_t g_rti_target;\n\n"
     );
 }
 
@@ -484,6 +487,22 @@ static uint16_t resolve_jmp_thunk(const NESRom *rom, int fixed_bank, uint16_t ad
     uint8_t lo = rom_read(rom, fixed_bank, addr + 1);
     uint8_t hi = rom_read(rom, fixed_bank, addr + 2);
     return (uint16_t)(lo | ((uint16_t)hi << 8));
+}
+
+/* Addresses of coroutine yield function entry points.
+ * Multiple function entries can alias into the same body containing
+ * the yield pattern (TSX; STX zp,Y; JMP scheduler).  JSRs to ANY of
+ * these addresses skip the universal bail check because the scheduler's
+ * RESUME path (PLA+PLA+S+=2) legitimately changes S across the
+ * yield/resume boundary. */
+#define MAX_YIELD_FUNCS 16
+static uint16_t s_yield_func_addrs[MAX_YIELD_FUNCS];
+static int s_yield_func_count = 0;
+
+static int is_yield_func(uint16_t addr) {
+    for (int i = 0; i < s_yield_func_count; i++)
+        if (s_yield_func_addrs[i] == addr) return 1;
+    return 0;
 }
 
 /* Emit C for one instruction. Returns bytes consumed.
@@ -975,6 +994,7 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                     if (abs16 == cfg->push_jsrs[ni]) { did_push_jsr = true; break; }
                 }
             }
+            bool used_call_by_address = false;
             if (did_push_jsr) {
                 /* Universal bail detection: save S before push so we
                  * can detect post-call stack unwind (PLA PLA RTS etc.).
@@ -1048,6 +1068,7 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                         fprintf(f, "if (!call_by_address(0x%04X)) g_cpu.S += 2;\n", abs16);
                     else
                         fprintf(f, "call_by_address(0x%04X);\n", abs16);
+                    used_call_by_address = true;
                 }
                 }
             } else if (abs16 >= 0x8000) {
@@ -1068,6 +1089,7 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                         fprintf(f, "if (!call_by_address(0x%04X)) g_cpu.S += 2;\n", abs16);
                     else
                         fprintf(f, "call_by_address(0x%04X);\n", abs16);
+                    used_call_by_address = true;
                 } else {
                     uint16_t alias_owner = 0;
                     int alias_bank = -1;
@@ -1083,6 +1105,7 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                             fprintf(f, "if (!call_by_address(0x%04X)) g_cpu.S += 2;\n", abs16);
                         else
                             fprintf(f, "call_by_address(0x%04X);\n", abs16);
+                        used_call_by_address = true;
                     }
                 }
             } else {
@@ -1091,17 +1114,36 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                     fprintf(f, "if (!call_by_address(0x%04X)) g_cpu.S += 2;\n", abs16);
                 else
                     fprintf(f, "call_by_address(0x%04X);\n", abs16);
+                used_call_by_address = true;
             }
             /* Universal bail propagation: if S changed after the call
              * (callee did PLA PLA RTS or similar stack unwind), propagate
              * the unwind by returning immediately.
              *
-             * Skip bail for call_by_address() targets: dynamic dispatch may
-             * reach coroutine yields or context switches that legitimately
-             * change S mid-call.  Bail propagation is only reliable for
-             * direct function calls where we know the target's behavior. */
+             * Skip bail for:
+             *  - call_by_address() targets: dynamic dispatch may reach
+             *    coroutine yields or context switches that legitimately
+             *    change S mid-call.
+             *  - the coroutine yield function: the scheduler's RESUME
+             *    path (PLA+PLA+S+=2) changes S by +4 while the yield
+             *    only pushed 3 bytes.  The +1 mismatch always triggers
+             *    the bail, and on game-state transitions the bail
+             *    cascades to the coroutine entry, killing the fiber. */
             if (did_push_jsr) {
-                fprintf(f, "if (g_cpu.S != _cbs) {\n#ifdef RECOMP_STACK_TRACKING\n    recomp_stack_pop();\n#endif\n    return; } }\n");
+                if (is_yield_func(abs16) || used_call_by_address) {
+                    /* Yield function or call_by_address: close the brace
+                     * but skip the bail check.  Dynamic dispatch may reach
+                     * coroutine yields or context switches that legitimately
+                     * change S mid-call. */
+                    fprintf(f, "}\n");
+                } else {
+                    fprintf(f, "if (g_cpu.S != _cbs) {\n"
+                               "#ifdef RECOMP_STACK_TRACKING\n"
+                               "    bail_trace(0x%04X, _cbs);\n"
+                               "    recomp_stack_pop();\n"
+                               "#endif\n"
+                               "    return; } }\n", pc);
+                }
             }
             break;
         }
@@ -1335,7 +1377,17 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
             rts_done:
             fprintf(f, "\n#ifdef RECOMP_STACK_TRACKING\n    recomp_stack_pop();\n#endif\n    return;\n");
             break;
-        case MN_RTI: fprintf(f, "/* RTI */ g_cpu.S++; { uint8_t p=g_ram[0x100+g_cpu.S]; g_cpu.N=(p>>7)&1; g_cpu.V=(p>>6)&1; g_cpu.D=(p>>3)&1; g_cpu.I=(p>>2)&1; g_cpu.Z=(p>>1)&1; g_cpu.C=p&1; } g_cpu.S++; g_cpu.S++; /* pop PCL, PCH */\n#ifdef RECOMP_STACK_TRACKING\n    recomp_stack_pop();\n#endif\n    return;\n"); break;
+        case MN_RTI:
+            fprintf(f, "/* RTI */ g_cpu.S++; "
+                "{ uint8_t p=g_ram[0x100+g_cpu.S]; "
+                "g_cpu.N=(p>>7)&1; g_cpu.V=(p>>6)&1; g_cpu.D=(p>>3)&1; "
+                "g_cpu.I=(p>>2)&1; g_cpu.Z=(p>>1)&1; g_cpu.C=p&1; }\n"
+                "    g_cpu.S++; { uint8_t _rti_lo = g_ram[0x100+g_cpu.S];\n"
+                "    g_cpu.S++; uint8_t _rti_hi = g_ram[0x100+g_cpu.S];\n"
+                "    g_rti_target = (_rti_hi << 8) | _rti_lo; }\n"
+                "#ifdef RECOMP_STACK_TRACKING\n    recomp_stack_pop();\n#endif\n"
+                "    return;\n");
+            break;
 
         /* Flags */
         case MN_CLC: fprintf(f, "g_cpu.C = 0;\n"); break;
@@ -2098,6 +2150,39 @@ bool codegen_emit(const NESRom *rom, const FunctionList *funcs,
         }
         fprintf(f_full, "\n");
     }
+    /* Pre-scan: find coroutine yield function entry points.
+     * The yield function contains: TSX ($BA); STX zp,Y ($96 nn);
+     * JMP scheduler ($4C lo hi).  Multiple function entries may alias
+     * into the same body (e.g. $FF14, $FF16, $FF21 all share one body).
+     * Collect ALL function entries within range of the pattern so that
+     * JSR bail checks can be skipped for any of them. */
+    s_yield_func_count = 0;
+    for (uint16_t scan = 0xC003; scan < 0xFFF0; scan++) {
+        if (rom_read(rom, fixed_bank, scan - 3) == 0xBA /* TSX */ &&
+            rom_read(rom, fixed_bank, scan - 2) == 0x96 /* STX zp,Y */ &&
+            rom_read(rom, fixed_bank, scan)     == 0x4C /* JMP abs */) {
+            /* Found the yield tail at 'scan'.  Collect all function entries
+             * whose address falls within [scan-0x40, scan] — these are all
+             * entry points into the yield function body. */
+            for (int fi = 0; fi < funcs->count; fi++) {
+                if (funcs->entries[fi].bank == fixed_bank &&
+                    funcs->entries[fi].addr <= scan &&
+                    funcs->entries[fi].addr >= scan - 0x40 &&
+                    s_yield_func_count < MAX_YIELD_FUNCS) {
+                    s_yield_func_addrs[s_yield_func_count++] = funcs->entries[fi].addr;
+                }
+            }
+            if (s_yield_func_count > 0) {
+                fprintf(stderr, "[codegen] Detected %d coroutine yield function entries:",
+                        s_yield_func_count);
+                for (int yi = 0; yi < s_yield_func_count; yi++)
+                    fprintf(stderr, " $%04X", s_yield_func_addrs[yi]);
+                fprintf(stderr, "\n");
+            }
+            break;
+        }
+    }
+
     for (int i = 0; i < funcs->count; i++) {
         if (!entry_emits_standalone(funcs, cfg, &funcs->entries[i])) continue;
         /* Skip merge_range non-canonical entries — but only if they were
@@ -2116,7 +2201,31 @@ bool codegen_emit(const NESRom *rom, const FunctionList *funcs,
     const char *nmi_sfx   = (rom->nmi_vector   < 0xC000) ? "_b0" : "";
     const char *irq_sfx   = (rom->irq_vector   < 0xC000) ? "_b0" : "";
     fprintf(f_full, "void func_RESET(void) { func_%04X%s(); }\n", rom->reset_vector, reset_sfx);
-    fprintf(f_full, "void func_NMI(void)   { func_%04X%s(); }\n", rom->nmi_vector,   nmi_sfx);
+    fprintf(f_full, "uint16_t g_rti_target = 0; /* RTI hijack target (set by RTI, consumed by func_NMI) */\n\n");
+    fprintf(f_full, "void func_NMI(void)   {\n"
+           "    /* Simulate 6502 NMI hardware: push PCH, PCL, P onto stack.\n"
+           "     * Uses $0000 as sentinel PC — RTI stores the target in g_rti_target.\n"
+           "     * If the handler modified the return address (RTI hijack),\n"
+           "     * we dispatch to the hijacked target AFTER the handler returns,\n"
+           "     * so the post-NMI code runs outside the NMI context (depth 0). */\n"
+           "    uint8_t _nmi_p = (g_cpu.N<<7)|(g_cpu.V<<6)|0x20|\n"
+           "                     (g_cpu.D<<3)|(g_cpu.I<<2)|(g_cpu.Z<<1)|g_cpu.C;\n"
+           "    g_ram[0x100 + g_cpu.S] = 0x00; g_cpu.S--; /* PCH (sentinel) */\n"
+           "    g_ram[0x100 + g_cpu.S] = 0x00; g_cpu.S--; /* PCL (sentinel) */\n"
+           "    g_ram[0x100 + g_cpu.S] = _nmi_p; g_cpu.S--; /* P */\n"
+           "    g_rti_target = 0;\n"
+           "    func_%04X%s();\n"
+           "    if (g_rti_target != 0) {\n"
+           "        /* Post-NMI code runs outside NMI context on real hardware\n"
+           "         * (RTI re-enables interrupts, NMI is edge-triggered).\n"
+           "         * Clear pending VBlank to prevent re-entrant NMI during\n"
+           "         * the post-NMI path — real hardware only fires NMI once\n"
+           "         * per VBlank transition. */\n"
+           "        runtime_begin_post_nmi();\n"
+           "        call_by_address(g_rti_target);\n"
+           "        runtime_end_post_nmi();\n"
+           "    }\n"
+           "}\n", rom->nmi_vector, nmi_sfx);
     fprintf(f_full, "void func_IRQ(void)   { func_%04X%s(); }\n", rom->irq_vector,   irq_sfx);
 
     fclose(f_full);

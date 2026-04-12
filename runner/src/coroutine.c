@@ -179,7 +179,22 @@ void coroutine_yield(void)
     s_last_yield_sp = g_cpu.S;
     sched_trace_record(SCHED_EVT_YIELD, s_current_channel, 0);
     wal_log("(in coroutine)", "YIELD->scheduler", s_current_channel, 0);
-    SwitchToFiber(s_scheduler_fiber);
+    /* Save S before switching to scheduler.  The scheduler's RESUME path
+     * ($FEE2-$FEF1) manipulates g_cpu.S via PLA/PLA/S+=2 to restore
+     * 6502 registers from the simulated stack.  On real hardware these
+     * are paired with the pushes in the yield function.  In the recomp,
+     * the yield/resume happens via fiber switch — the generated scheduler
+     * code and the coroutine's bail checks both see g_cpu.S, but they
+     * disagree on what it should be.  Save/restore S so the coroutine
+     * sees S unchanged across the yield boundary.  The scheduler's S
+     * changes still happen (they modify g_ram and g_cpu registers), but
+     * the final S value presented to the coroutine matches what it
+     * expects for its bail checks. */
+    {
+        uint8_t s_before_yield = g_cpu.S;
+        SwitchToFiber(s_scheduler_fiber);
+        g_cpu.S = s_before_yield;
+    }
     wal_log("RESUMED from scheduler", "(coroutine continues)", s_current_channel, 0);
     /* When we get here, the scheduler has resumed us via coroutine_resume.
      * The generated code after coroutine_yield() does `return;` which
