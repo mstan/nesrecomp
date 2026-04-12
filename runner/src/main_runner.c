@@ -601,6 +601,7 @@ smoke_skip_input:
              * universal bail detection triggering on internal JSRs).
              * Enforce S restoration to prevent NMI-induced stack drift. */
             g_cpu.S = s_pre_nmi;
+
             debug_server_check_s(); /* Track after NMI handler */
         }
     }

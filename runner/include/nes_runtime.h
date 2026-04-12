@@ -95,6 +95,8 @@ void maybe_fire_pending_vblank(void);
 void runtime_set_vblank_firing(int active);
 int  runtime_get_vblank_depth(void);
 void runtime_reset_vblank_depth(void);
+void runtime_begin_post_nmi(void);
+void runtime_end_post_nmi(void);
 
 /* PPU registers */
 extern uint8_t g_ppuctrl;
