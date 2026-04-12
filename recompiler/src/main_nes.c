@@ -12,6 +12,7 @@
 #include "function_finder.h"
 #include "code_generator.h"
 #include "annotations.h"
+#include "symbol_table.h"
 #include "game_config.h"
 
 static bool file_exists(const char *path) {
@@ -516,13 +517,43 @@ int main(int argc, char *argv[]) {
             printf("[NESRecomp] Filtered %d bogus entries before codegen\n", removed);
     }
 
+    /* Load symbol table (optional) */
+    SymbolTable symtab = {0};
+    if (cfg.symbol_file[0]) {
+        /* Resolve symbol_file relative to game.toml directory */
+        char sym_path[512];
+        if (game_path) {
+            const char *slash = NULL;
+            const char *p = game_path;
+            while (*p) { if (*p == '/' || *p == '\\') slash = p; p++; }
+            if (slash) {
+                size_t dir_len = (size_t)(slash - game_path) + 1;
+                if (dir_len + strlen(cfg.symbol_file) < sizeof(sym_path)) {
+                    memcpy(sym_path, game_path, dir_len);
+                    strcpy(sym_path + dir_len, cfg.symbol_file);
+                } else {
+                    strncpy(sym_path, cfg.symbol_file, sizeof(sym_path) - 1);
+                }
+            } else {
+                strncpy(sym_path, cfg.symbol_file, sizeof(sym_path) - 1);
+            }
+        } else {
+            strncpy(sym_path, cfg.symbol_file, sizeof(sym_path) - 1);
+        }
+        sym_path[sizeof(sym_path) - 1] = '\0';
+        if (symbol_table_load(&symtab, sym_path))
+            printf("[NESRecomp] Symbols: %d entries from %s\n", symtab.count, sym_path);
+        else
+            fprintf(stderr, "[NESRecomp] Warning: could not load symbol file '%s'\n", sym_path);
+    }
+
     /* Emit C */
     ensure_output_dir_exists();
     char out_full[256], out_dispatch[256];
     snprintf(out_full,     sizeof(out_full),     "generated/%s_full.c",     output_prefix);
     snprintf(out_dispatch, sizeof(out_dispatch), "generated/%s_dispatch.c", output_prefix);
 
-    if (!codegen_emit(&rom, &funcs, out_full, out_dispatch, &at, &cfg)) {
+    if (!codegen_emit(&rom, &funcs, out_full, out_dispatch, &at, &cfg, &symtab)) {
         fprintf(stderr, "[NESRecomp] Code generation failed\n");
         rom_free(&rom);
         function_list_free(&funcs);
@@ -534,5 +565,6 @@ int main(int argc, char *argv[]) {
     rom_free(&rom);
     function_list_free(&funcs);
     annotations_free(&at);
+    symbol_table_free(&symtab);
     return 0;
 }

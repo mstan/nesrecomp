@@ -36,6 +36,15 @@ static const EmittedWrapper *g_codegen_wrappers = NULL;
 static int g_codegen_wrapper_count = 0;
 static BodyAlias *g_codegen_aliases = NULL;
 static int g_codegen_alias_count = 0;
+static SymbolTable *g_symtab = NULL;
+
+/* Emit a block comment with the symbol name for addr, if one exists.
+ * Writes nothing if no symbol is found or the table is NULL. */
+static void emit_sym(FILE *f, uint16_t addr) {
+    if (!g_symtab) return;
+    const char *name = symbol_lookup(g_symtab, addr);
+    if (name) fprintf(f, " /* %s */", name);
+}
 
 static void emit_header(FILE *f) {
     fprintf(f,
@@ -67,9 +76,13 @@ static void emit_forward_decls(FILE *f, const EmittedWrapper *wrappers, int wrap
         int bank = wrappers[i].bank;
         int fixed = rom->prg_banks - 1;
         if (bank == fixed && addr >= 0xC000) {
-            fprintf(f, "void func_%04X(void);\n", addr);
+            fprintf(f, "void func_%04X(void);", addr);
+            emit_sym(f, addr);
+            fprintf(f, "\n");
         } else {
-            fprintf(f, "void func_%04X_b%d(void);\n", addr, bank);
+            fprintf(f, "void func_%04X_b%d(void);", addr, bank);
+            emit_sym(f, addr);
+            fprintf(f, "\n");
         }
     }
     fprintf(f, "\n");
@@ -1628,12 +1641,15 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
     int is_multi_entry = (secondary_count > 0);
 
     /* Emit function signature — for multi-entry, emit a static _body function */
+    const char *sym_name = g_symtab ? symbol_lookup(g_symtab, pc) : NULL;
     if (is_multi_entry) {
         if (bank == fixed_bank && pc >= 0xC000) {
-            fprintf(f, "static void func_%04X_body(int _entry) {\n", pc);
+            fprintf(f, "static void func_%04X_body(int _entry) {", pc);
         } else {
-            fprintf(f, "static void func_%04X_b%d_body(int _entry) {\n", pc, bank);
+            fprintf(f, "static void func_%04X_b%d_body(int _entry) {", pc, bank);
         }
+        if (sym_name) fprintf(f, " /* %s */", sym_name);
+        fprintf(f, "\n");
         /* Entry dispatch — jump to secondary entry label */
         fprintf(f, "    switch (_entry) {\n");
         for (int si = 0; si < secondary_count; si++) {
@@ -1642,12 +1658,16 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
         fprintf(f, "    }\n");
     } else {
         if (bank == fixed_bank && pc >= 0xC000) {
-            fprintf(f, "void func_%04X(void) {\n", pc);
+            fprintf(f, "void func_%04X(void) {", pc);
+            if (sym_name) fprintf(f, " /* %s */", sym_name);
+            fprintf(f, "\n");
             fprintf(f, "#ifdef RECOMP_STACK_TRACKING\n");
             fprintf(f, "    recomp_stack_push(\"func_%04X\");\n", pc);
             fprintf(f, "#endif\n");
         } else {
-            fprintf(f, "void func_%04X_b%d(void) {\n", pc, bank);
+            fprintf(f, "void func_%04X_b%d(void) {", pc, bank);
+            if (sym_name) fprintf(f, " /* %s */", sym_name);
+            fprintf(f, "\n");
             fprintf(f, "#ifdef RECOMP_STACK_TRACKING\n");
             fprintf(f, "    recomp_stack_push(\"func_%04X_b%d\");\n", pc, bank);
             fprintf(f, "#endif\n");
@@ -1691,7 +1711,9 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
 
     uint16_t cursor = pc;
     for (int insn = 0; insn < MAX_INSNS_PER_FUNC; insn++) {
-        fprintf(f, "label_%04X:;\n", cursor);
+        fprintf(f, "label_%04X:;", cursor);
+        emit_sym(f, cursor);
+        fprintf(f, "\n");
         if (emitted_count < MAX_INSNS_PER_FUNC)
             emitted_addrs[emitted_count++] = cursor;
 
@@ -1844,7 +1866,9 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
     if (is_multi_entry) {
         /* Primary entry wrapper */
         if (bank == fixed_bank && pc >= 0xC000) {
-            fprintf(f, "void func_%04X(void) {\n", pc);
+            fprintf(f, "void func_%04X(void) {", pc);
+            if (sym_name) fprintf(f, " /* %s */", sym_name);
+            fprintf(f, "\n");
             fprintf(f, "#ifdef RECOMP_STACK_TRACKING\n");
             fprintf(f, "    recomp_stack_push(\"func_%04X\");\n", pc);
             fprintf(f, "#endif\n");
@@ -1854,7 +1878,9 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
             fprintf(f, "#endif\n");
             fprintf(f, "}\n\n");
         } else {
-            fprintf(f, "void func_%04X_b%d(void) {\n", pc, bank);
+            fprintf(f, "void func_%04X_b%d(void) {", pc, bank);
+            if (sym_name) fprintf(f, " /* %s */", sym_name);
+            fprintf(f, "\n");
             fprintf(f, "#ifdef RECOMP_STACK_TRACKING\n");
             fprintf(f, "    recomp_stack_push(\"func_%04X_b%d\");\n", pc, bank);
             fprintf(f, "#endif\n");
@@ -1867,10 +1893,13 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
         /* Secondary entry wrappers */
         for (int si = 0; si < public_secondary_count; si++) {
             uint16_t sa = secondary_addrs[si];
+            const char *sa_sym = g_symtab ? symbol_lookup(g_symtab, sa) : NULL;
             if (prefer_merge_range_wrapper(cfg, bank, pc, sa))
                 continue;
             if (bank == fixed_bank && sa >= 0xC000) {
-                fprintf(f, "void func_%04X(void) {\n", sa);
+                fprintf(f, "void func_%04X(void) {", sa);
+                if (sa_sym) fprintf(f, " /* %s */", sa_sym);
+                fprintf(f, "\n");
                 fprintf(f, "#ifdef RECOMP_STACK_TRACKING\n");
                 fprintf(f, "    recomp_stack_push(\"func_%04X\");\n", sa);
                 fprintf(f, "#endif\n");
@@ -1880,7 +1909,9 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
                 fprintf(f, "#endif\n");
                 fprintf(f, "}\n\n");
             } else {
-                fprintf(f, "void func_%04X_b%d(void) {\n", sa, bank);
+                fprintf(f, "void func_%04X_b%d(void) {", sa, bank);
+                if (sa_sym) fprintf(f, " /* %s */", sa_sym);
+                fprintf(f, "\n");
                 fprintf(f, "#ifdef RECOMP_STACK_TRACKING\n");
                 fprintf(f, "    recomp_stack_push(\"func_%04X_b%d\");\n", sa, bank);
                 fprintf(f, "#endif\n");
@@ -2017,7 +2048,9 @@ static void emit_dispatch(FILE *f, const EmittedWrapper *wrappers, int wrapper_c
 
 bool codegen_emit(const NESRom *rom, const FunctionList *funcs,
                   const char *out_full_path, const char *out_dispatch_path,
-                  const AnnotationTable *at, const GameConfig *cfg) {
+                  const AnnotationTable *at, const GameConfig *cfg,
+                  SymbolTable *st) {
+    g_symtab = st;
     EmittedWrapper *wrappers = (EmittedWrapper *)malloc(
         (size_t)MAX_EMITTED_WRAPPERS * sizeof(EmittedWrapper));
     if (!wrappers) {
@@ -2049,6 +2082,22 @@ bool codegen_emit(const NESRom *rom, const FunctionList *funcs,
     emit_forward_decls(f_full, wrappers, wrapper_count, rom);
 
     int fixed_bank = rom->prg_banks - 1;
+
+    /* Emit symbol name aliases as #defines (optional, from .sym file) */
+    if (st && st->count > 0) {
+        fprintf(f_full, "/* Symbol aliases (from .sym file) */\n");
+        for (int i = 0; i < wrapper_count; i++) {
+            uint16_t addr = wrappers[i].addr;
+            int bank = wrappers[i].bank;
+            const char *name = symbol_lookup(st, addr);
+            if (!name) continue;
+            if (bank == fixed_bank && addr >= 0xC000)
+                fprintf(f_full, "#define %s func_%04X\n", name, addr);
+            else
+                fprintf(f_full, "#define %s func_%04X_b%d\n", name, addr, bank);
+        }
+        fprintf(f_full, "\n");
+    }
     for (int i = 0; i < funcs->count; i++) {
         if (!entry_emits_standalone(funcs, cfg, &funcs->entries[i])) continue;
         /* Skip merge_range non-canonical entries — but only if they were
@@ -2087,6 +2136,7 @@ bool codegen_emit(const NESRom *rom, const FunctionList *funcs,
     g_codegen_alias_count = 0;
     g_codegen_wrappers = NULL;
     g_codegen_wrapper_count = 0;
+    g_symtab = NULL;
     free(aliases);
     free(wrappers);
     return true;
