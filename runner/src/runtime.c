@@ -129,6 +129,18 @@ static int zapper_light_detected(void) {
      * shot is rejected. */
     if (!(g_ppumask & 0x18)) return 0;
 
+    /* Gate on sprite-0 hit.  On real NES, the CRT electron beam scans
+     * top-to-bottom.  The Zapper can only see light once the beam has
+     * passed the target area.  Games use sprite-0 hit as a scanline
+     * marker: the detection loop polls $2002 (spr0) and $4017 (light)
+     * simultaneously.  Before spr0 fires, the beam hasn't reached the
+     * detection zone, so the Zapper sees no light.
+     *
+     * Without this gate, zapper_light_detected() checks the full
+     * framebuffer and may report light BEFORE spr0 fires, triggering
+     * the anti-cheat path (light before spr0 = pointing at a lamp). */
+    if (!g_spr0_split_active) return 0;
+
     /* If PPUMASK changed since the framebuffer was last rendered, do an
      * on-demand render so it reflects the current PPU state (e.g. the
      * detection flash sprites that are now visible). */
@@ -349,10 +361,18 @@ void maybe_trigger_vblank(int cycles) {
      * Deferring to backward branches ensures the code has reached a loop
      * boundary (like the $1A spin-wait) where state is consistent. */
     if (s_vblank_depth == 0) {
-        /* Immediate fire — safe at top level */
-        s_ops_count = 0;
+        /* Immediate fire — safe at top level.
+         * Reset ops count AFTER the NMI handler returns, not before.
+         * On real NES, the NMI handler executes during VBlank; the main
+         * loop resumes with a full frame budget (29781 cycles).  If we
+         * reset before, NMI cycles count against the main loop budget,
+         * causing premature next-VBlank that can corrupt ZP pointers
+         * used by bank-switch dispatch (GxROM GoBankInit pattern). */
         s_vblank_depth++;
         g_ppustatus = (g_ppustatus & ~0x40) | 0x80;
+        /* Save spr0 counter — NMI handler PPU writes reset it */
+        int saved_ctr0 = g_spr0_reads_ctr;
+        int saved_act0 = g_spr0_split_active;
         g_spr0_split_active = 0;
         g_spr0_reads_ctr    = 0;
         g_ppuscroll_x = 0;
@@ -363,7 +383,11 @@ void maybe_trigger_vblank(int cycles) {
         if (g_ppuctrl & 0x80) {
             nes_vblank_callback();
         }
+        /* Restore spr0 counter for outer code's detection loop */
+        g_spr0_reads_ctr    = saved_ctr0;
+        g_spr0_split_active = saved_act0;
         s_vblank_depth--;
+        s_ops_count = 0;
     } else {
         /* Deferred fire — wait for backward branch (loop boundary) */
         s_vblank_pending = 1;
@@ -379,8 +403,22 @@ void maybe_fire_pending_vblank(void) {
     s_ops_count = 0;
     s_vblank_depth++;
 
-    /* Standard VBlank start: set flags, reset sprite-0 state */
+    /* Standard VBlank start: set VBlank flag, reset sprite-0 state.
+     * PRESERVE spr0_reads_ctr if we're inside a nested NMI.  Zapper
+     * detection loops poll $2002+$4017 across many iterations — the
+     * pending VBlank fires at the loop back-edge (watchdog_check) and
+     * would reset the counter before it reaches 3, making sprite-0
+     * hit impossible during light detection. */
     g_ppustatus = (g_ppustatus & ~0x40) | 0x80;
+
+    /* Save spr0 counter across nested VBlanks.  Detection loops (Zapper
+     * $2002/$4017 polling) accumulate consecutive $2002 reads to trigger
+     * sprite-0 hit.  A nested NMI runs the handler which does PPU writes
+     * that reset g_spr0_reads_ctr.  Preserve the counter so the detection
+     * loop can still reach the 3-read threshold after the nested NMI. */
+    int saved_spr0_ctr    = g_spr0_reads_ctr;
+    int saved_spr0_active = g_spr0_split_active;
+
     g_spr0_split_active = 0;
     g_spr0_reads_ctr    = 0;
     g_ppuscroll_x = 0;
@@ -394,6 +432,11 @@ void maybe_fire_pending_vblank(void) {
     } else if (s_vblank_depth > 1) {
         g_ram[0x1A] = 1;
     }
+
+    /* Restore spr0 counter for the outer loop's detection */
+    g_spr0_reads_ctr    = saved_spr0_ctr;
+    g_spr0_split_active = saved_spr0_active;
+
     s_vblank_depth--;
 }
 
@@ -444,11 +487,12 @@ uint8_t nes_read(uint16_t addr) {
         if (addr == 0x4017) {
             if (g_zapper_enabled) {
                 /* Zapper on port 2:
-                 *   bit 3: light sensor (active low: 0=detected, 1=not detected)
-                 *   bit 4: trigger (active low: 0=pulled, 1=not pulled) */
+                 *   bit 3: light sensor (0=detected, 1=not detected)
+                 *   bit 4: trigger (1=pulled, 0=not pulled)
+                 * Verified against Nestopia (NstInpZapper.cpp line 174). */
                 uint8_t val = 0x40;
                 if (!zapper_light_detected()) val |= 0x08;
-                if (!g_zapper_trigger) val |= 0x10;
+                if (g_zapper_trigger) val |= 0x10;
                 return val;
             }
             if (s_ctrl1_strobe) return 0x40 | (g_controller2_buttons >> 7);
@@ -519,8 +563,11 @@ void ppu_write_reg(uint16_t reg, uint8_t val) {
     ppu_trace_write(reg, val);
     /* Any PPU write between $2002 reads means the read was a latch reset
      * (e.g., LDA $2002; STA $2006), not a sprite-0 spin-wait poll.
-     * Reset the counter so only consecutive $2002 reads trigger the hit. */
-    g_spr0_reads_ctr = 0;
+     * Reset the counter so only consecutive $2002 reads trigger the hit.
+     * But DON'T reset during nested NMIs — the outer detection loop's
+     * counter must survive the NMI handler's PPU register setup. */
+    if (s_vblank_depth <= 1)
+        g_spr0_reads_ctr = 0;
     switch (reg) {
         case 0x2000:
             g_ppuctrl = val;
@@ -688,6 +735,19 @@ uint8_t ppu_read_reg(uint16_t reg) {
             uint8_t s = g_ppustatus;
             g_ppustatus &= ~0x80;  /* clear VBlank flag (standard NES) */
             g_ppuaddr_latch = 0;  /* shared w toggle — clears for both $2005 and $2006 */
+            /* When Zapper trigger is active, force sprite-0 hit immediately.
+             * The Zapper detection loop ($B4B5 etc.) polls $2002 for spr0 hit
+             * while checking $4017 for light.  On real NES, spr0 fires at the
+             * sprite's scanline — deterministic and fast.  The normal 3-read
+             * counter simulation doesn't work here because nested VBlanks
+             * (which fire during the long detection loop) reset the counter.
+             * Forcing spr0 hit when trigger is active gives the detection loop
+             * the scanline marker it needs to proceed to light checking. */
+            if (g_zapper_trigger && g_zapper_enabled && !(s & 0x40)) {
+                g_ppustatus |= 0x40;
+                g_spr0_split_active = 1;
+                s |= 0x40;  /* return hit immediately */
+            }
             /* Simulate sprite-0 hit (bit6) for split-screen spin-waits.
              * On real NES, bit6 is set by hardware during active rendering and
              * cleared only at the pre-render scanline — never by reading $2002.
