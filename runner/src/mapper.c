@@ -5,6 +5,7 @@
  *   0 — NROM (Super Mario Bros., etc.)   No bank switching; PRG fixed at $8000-$FFFF.
  *   1 — MMC1 (Faxanadu, etc.)            5-bit serial shift register, 4 sub-registers.
  *   4 — MMC3 (Mega Man 3, SMB3, etc.)    Bank select/data registers, scanline IRQ.
+ *  66 — GxROM (Gumshoe, etc.)            Simple 32KB PRG + 8KB CHR bank select.
  *
  * Add new mappers: extend mapper_init() and mapper_write() with a new case.
  */
@@ -46,6 +47,9 @@ static int            s_chr_rom_banks = 0; /* number of 8KB CHR ROM banks */
 /* ── Post-CHR-switch callback (for override/dump systems) ─────────────────── */
 static mapper_chr_callback_t s_chr_callback = NULL;
 static void *s_chr_callback_ctx = NULL;
+
+/* ── Mapper 66 (GxROM) state ────────────────────────────────────────────────── */
+static int s_gxrom_chr_bank = 0;  /* 8KB CHR bank selected by bits 0-1 */
 
 /* ── Mapper 1 (MMC1) state ─────────────────────────────────────────────────── */
 static uint8_t s_shift_reg   = 0x10; /* Reset state: bit 4 set */
@@ -260,6 +264,15 @@ void mapper_init(const uint8_t *prg_data, int prg_banks,
         mmc3_apply_prg(); /* Set up initial PRG windows */
     }
 
+    /* GxROM: power-on selects the last 32KB bank (vectors live there).
+     * g_current_bank is in 16KB units; GxROM 32KB bank N = 16KB banks 2N, 2N+1.
+     * Set to 2N so get_switchable returns lower half, get_fixed returns upper. */
+    if (mapper_type == 66) {
+        int total_32k = prg_banks / 2;
+        g_current_bank = (total_32k - 1) * 2; /* e.g. 8 16KB banks → bank 6 */
+        s_gxrom_chr_bank = 0;
+    }
+
     s_mapper_trace = fopen("C:/temp/mapper_trace.csv", "w");
     if (s_mapper_trace) {
         fprintf(s_mapper_trace, "EVENT,bank,PC,FRAME\n");
@@ -279,6 +292,13 @@ void mapper_init_chr(const uint8_t *chr_data, int chr_banks) {
     if (chr_banks > 0 && s_mapper_type == 4) {
         mmc3_apply_chr(); /* Load initial CHR banks into g_chr_ram */
         printf("[Mapper] CHR ROM: %d x 8KB banks (MMC3), initial bank switching applied\n", chr_banks);
+    }
+    if (chr_banks > 0 && s_mapper_type == 66) {
+        /* GxROM: load initial CHR bank 0 */
+        memcpy(g_chr_ram, s_chr_rom_data, 0x2000);
+        printf("[Mapper] CHR ROM: %d x 8KB banks (GxROM), initial bank 0 loaded\n", chr_banks);
+        if (s_chr_callback)
+            s_chr_callback(g_chr_ram, 0x2000, s_chr_callback_ctx);
     }
 }
 
@@ -369,6 +389,38 @@ void mapper_write(uint16_t addr, uint8_t val) {
             }
             return;
 
+        case 66:
+            /* GxROM: bits 4-5 select 32KB PRG bank, bits 0-1 select 8KB CHR bank.
+             * Any write to $8000-$FFFF triggers the bank switch. */
+        {
+            int prg_32k = (val >> 4) & 0x03;
+            int chr_8k  = val & 0x03;
+            int new_bank = prg_32k * 2; /* convert to 16KB bank index (lower half) */
+
+            if (new_bank != g_current_bank) {
+                g_current_bank = new_bank;
+                if (s_mapper_trace) {
+                    fprintf(s_mapper_trace, "GXROM_PRG,bank32k=%d,bank16k=%d,F=%llu\n",
+                            prg_32k, new_bank, (unsigned long long)g_frame_count);
+                    fflush(s_mapper_trace);
+                }
+            }
+
+            if (chr_8k != s_gxrom_chr_bank && s_chr_rom_data && s_chr_rom_banks > 0) {
+                s_gxrom_chr_bank = chr_8k;
+                int bank_idx = chr_8k % s_chr_rom_banks;
+                memcpy(g_chr_ram, s_chr_rom_data + (size_t)bank_idx * 0x2000, 0x2000);
+                if (s_mapper_trace) {
+                    fprintf(s_mapper_trace, "GXROM_CHR,bank=%d,F=%llu\n",
+                            chr_8k, (unsigned long long)g_frame_count);
+                    fflush(s_mapper_trace);
+                }
+                if (s_chr_callback)
+                    s_chr_callback(g_chr_ram, 0x2000, s_chr_callback_ctx);
+            }
+            return;
+        }
+
         default:
             /* Unknown mapper: ignore writes */
             return;
@@ -400,6 +452,9 @@ const uint8_t *mapper_get_switchable_bank(void) {
         case 4:
             /* MMC3: pre-built 16KB buffer from 2x 8KB banks */
             return s_mmc3_prg_low;
+        case 66:
+            /* GxROM: g_current_bank is the lower 16KB index of the 32KB pair */
+            return s_prg_data + (size_t)g_current_bank * 0x4000;
         default:
             return s_prg_data + (size_t)g_current_bank * 0x4000;
     }
@@ -411,6 +466,9 @@ const uint8_t *mapper_get_fixed_bank(void) {
         case 4:
             /* MMC3: pre-built 16KB buffer from 2x 8KB banks */
             return s_mmc3_prg_high;
+        case 66:
+            /* GxROM: upper 16KB of the current 32KB bank (g_current_bank + 1) */
+            return s_prg_data + (size_t)(g_current_bank + 1) * 0x4000;
         default:
             /* Mapper 0 and Mapper 1: fixed bank = last 16KB of PRG */
             return s_prg_data + (size_t)(s_prg_banks - 1) * 0x4000;
