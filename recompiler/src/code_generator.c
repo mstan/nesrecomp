@@ -1101,7 +1101,7 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
              * change S mid-call.  Bail propagation is only reliable for
              * direct function calls where we know the target's behavior. */
             if (did_push_jsr) {
-                fprintf(f, "if (g_cpu.S != _cbs) {\n#ifdef RECOMP_STACK_TRACKING\n    recomp_stack_pop();\n#endif\n    return; } }\n");
+                fprintf(f, "if (g_cpu.S != _cbs) {\n#ifdef RECOMP_STACK_TRACKING\n    bail_trace(0x%04X, _cbs);\n    recomp_stack_pop();\n#endif\n    return; } }\n", pc);
             }
             break;
         }
@@ -1980,8 +1980,10 @@ static void emit_dispatch(FILE *f, const EmittedWrapper *wrappers, int wrapper_c
     if (rom->mapper == 4) {
         fprintf(f,
             "    extern int g_mmc3_r6_odd, g_mmc3_r7_even;\n"
-            "    /* TODO: For $A000-$BFFF, the correct bank is g_mmc3_bank_a000 (R7/2).\n"
-            "     * Blocked on Issue 8 — see DIVERGENCE.md Divergence 3/4. */\n"
+            "    extern int g_mmc3_bank_a000;\n"
+            "    /* For $A000-$BFFF addresses, the active bank is R7/2 (g_mmc3_bank_a000),\n"
+            "     * not R6/2 (g_current_bank).  Capture before remapping changes addr. */\n"
+            "    int _bank = (addr >= 0xA000 && addr < 0xC000) ? g_mmc3_bank_a000 : g_current_bank;\n"
             "    if (g_mmc3_r6_odd && addr >= 0x8000 && addr < 0xA000)\n"
             "        addr += 0x2000; /* 8KB bank odd: $8000 range -> $A000 offset */\n"
             "    else if (g_mmc3_r7_even && addr >= 0xA000 && addr < 0xC000)\n"
@@ -2026,13 +2028,12 @@ static void emit_dispatch(FILE *f, const EmittedWrapper *wrappers, int wrapper_c
             }
         } else {
             /* Multiple bank variants: dispatch by current bank.
-             * TODO: For MMC3, $A000-$BFFF addresses should use g_mmc3_bank_a000
-             * (R7/2) instead of g_current_bank (R6/2). The _bank variable is
-             * computed correctly above but CURRENTLY NOT USED here because
-             * enabling it exposes Issue 8: the intro code at $A593 expects
-             * a coroutine context that isn't set up, causing a freeze.
-             * Re-enable once Issue 8 (coroutine scheduling for intro) is fixed. */
-            fprintf(f, "            switch (g_current_bank) {\n");
+             * For MMC3, use _bank which selects g_mmc3_bank_a000 for
+             * $A000-$BFFF addresses and g_current_bank for $8000-$9FFF. */
+            if (rom->mapper == 4)
+                fprintf(f, "            switch (_bank) {\n");
+            else
+                fprintf(f, "            switch (g_current_bank) {\n");
 
             /* Check if bank 15 (fixed) is already a variant. If not, and if the
              * fixed-bank equivalent (addr + $4000) exists, add a bank-15 alias.
