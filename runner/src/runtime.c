@@ -503,6 +503,15 @@ void nes_write(uint16_t addr, uint8_t val) {
             }
             s_state_log++;
         }
+        /* Trace entity slot 0 writes ($600-$60B) */
+        if (a >= 0x600 && a <= 0x60B && val != g_ram[a]) {
+            static int s_e0_log = 0;
+            if (s_e0_log < 100) {
+                zapper_trace("  [ENT0] $%03X: %02X->%02X frame=%llu (offset=%d)\n",
+                    a, g_ram[a], val, (unsigned long long)g_frame_count, a - 0x600);
+                s_e0_log++;
+            }
+        }
         /* Follower notification (write-level tracing via TCP) */
         if (val != g_ram[a]) {
             if (debug_server_has_follower(a)) {

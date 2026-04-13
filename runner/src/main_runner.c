@@ -529,11 +529,20 @@ void nes_vblank_callback(void) {
             ztrace("  $C5=%02X $24=%02X $4F=%02X $CD=%02X $E3=%02X $E4=%02X\n",
                 g_ram[0xC5], g_ram[0x24], g_ram[0x4F], g_ram[0xCD],
                 g_ram[0xE3], g_ram[0xE4]);
-            ztrace("  guards: $8B=%02X $53=%02X $4E=%02X $0B=%02X $84=%02X $C9=%02X $D2=%02X\n",
-                g_ram[0x8B], g_ram[0x53], g_ram[0x4E], g_ram[0x0B],
+            ztrace("  guards: $25=%02X $8B=%02X $53=%02X $4E=%02X $0B=%02X $84=%02X $C9=%02X $D2=%02X\n",
+                g_ram[0x25], g_ram[0x8B], g_ram[0x53], g_ram[0x4E], g_ram[0x0B],
                 g_ram[0x84], g_ram[0xC9], g_ram[0xD2]);
             ztrace("  ppumask=%02X ppustatus=%02X spr0_act=%d\n",
                 g_ppumask, g_ppustatus, g_spr0_split_active);
+            /* Entity table snapshot for detection */
+            ztrace("  entities:");
+            for (int ei = 0; ei < 21; ei++) {
+                uint8_t e0 = g_ram[0x600 + ei*12];
+                uint8_t e2 = g_ram[0x602 + ei*12];
+                uint8_t e7 = g_ram[0x607 + ei*12];
+                if (e0) ztrace(" [%d:%02X/%02X/%02X]", ei, e0, e2, e7);
+            }
+            ztrace("\n");
         }
         if (!g_zapper_trigger && prev) {
             ztrace("[ZAPPER] TRIGGER OFF frame=%llu\n", (unsigned long long)g_frame_count);
@@ -574,6 +583,16 @@ void nes_vblank_callback(void) {
 
 smoke_skip_input:
 
+    /* Monitor entity slot 0 byte 7 ($607) changes */
+    {
+        static uint8_t s_prev_607 = 0;
+        if (g_ram[0x607] != s_prev_607) {
+            ztrace("[E0.7] %02X -> %02X frame=%llu  b0=%02X b2=%02X\n",
+                s_prev_607, g_ram[0x607], (unsigned long long)g_frame_count,
+                g_ram[0x600], g_ram[0x602]);
+            s_prev_607 = g_ram[0x607];
+        }
+    }
     /* Monitor $C5 changes for detection debug */
     {
         static uint8_t s_prev_c5 = 0;
