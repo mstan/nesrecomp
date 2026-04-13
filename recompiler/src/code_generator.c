@@ -1984,6 +1984,11 @@ static void emit_dispatch(FILE *f, const EmittedWrapper *wrappers, int wrapper_c
             "    /* For $A000-$BFFF addresses, the active bank is R7/2 (g_mmc3_bank_a000),\n"
             "     * not R6/2 (g_current_bank).  Capture before remapping changes addr. */\n"
             "    int _bank = (addr >= 0xA000 && addr < 0xC000) ? g_mmc3_bank_a000 : g_current_bank;\n"
+            "    /* When R6 is odd, code from the $8000 range gets remapped to $A000 offset.\n"
+            "     * Calls from that code to $A000+ targets may need R6's bank, not R7's.\n"
+            "     * Enable fallback: try g_mmc3_bank_a000 first, retry with g_current_bank. */\n"
+            "    int _a000_r6_fallback = (g_mmc3_r6_odd && addr >= 0xA000 && addr < 0xC000\n"
+            "                             && g_current_bank != g_mmc3_bank_a000);\n"
             "    if (g_mmc3_r6_odd && addr >= 0x8000 && addr < 0xA000)\n"
             "        addr += 0x2000; /* 8KB bank odd: $8000 range -> $A000 offset */\n"
             "    else if (g_mmc3_r7_even && addr >= 0xA000 && addr < 0xC000)\n"
@@ -1992,6 +1997,7 @@ static void emit_dispatch(FILE *f, const EmittedWrapper *wrappers, int wrapper_c
     }
 
     fprintf(f,
+        "_dispatch_retry:\n"
         "    switch (addr) {\n"
     );
 
@@ -2065,8 +2071,12 @@ static void emit_dispatch(FILE *f, const EmittedWrapper *wrappers, int wrapper_c
                     fprintf(f, "                case %d: func_%04X_b%d(); break;\n",
                             bk, addr, bk);
             }
-            if (!has_default)
-                fprintf(f, "                default: nes_log_dispatch_miss(addr); return 0;\n");
+            if (!has_default) {
+                if (rom->mapper == 4)
+                    fprintf(f, "                default: if (_a000_r6_fallback) { _bank = g_current_bank; _a000_r6_fallback = 0; goto _dispatch_retry; } nes_log_dispatch_miss(addr); return 0;\n");
+                else
+                    fprintf(f, "                default: nes_log_dispatch_miss(addr); return 0;\n");
+            }
             fprintf(f, "            }\n");
             fprintf(f, "            break;\n");
         }
