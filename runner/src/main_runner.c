@@ -524,6 +524,31 @@ void nes_vblank_callback(void) {
 
         g_controller1_buttons = btn;
         g_controller2_buttons = keybinds_read_player(keys, 2);
+
+        /* DEBUG: activate $14 trace when START is held */
+        {
+            extern int s_14_trace_active;
+            extern int s_14_trace_read_count;
+            extern uint8_t s_14_trace_bits[];
+            static int s_14_trace_logged = 0;
+            if ((btn & 0x10) && s_14_trace_logged < 5) {
+                s_14_trace_active = 1;
+                s_14_trace_read_count = 0;
+                printf("[T14] START held f=%llu ctrl1=%02X $14=%02X $15=%02X\n",
+                    (unsigned long long)g_frame_count, btn, g_ram[0x14], g_ram[0x15]);
+                fflush(stdout);
+                s_14_trace_logged++;
+            } else if (!(btn & 0x10) && s_14_trace_active) {
+                /* Dump final state when START released */
+                printf("[T14] END f=%llu $14=%02X reads=%d bits=",
+                    (unsigned long long)g_frame_count, g_ram[0x14], s_14_trace_read_count);
+                for (int i = 0; i < s_14_trace_read_count && i < 16; i++)
+                    printf("%d", s_14_trace_bits[i]);
+                printf("\n");
+                fflush(stdout);
+                s_14_trace_active = 0;
+            }
+        }
     }
 
 smoke_skip_input:

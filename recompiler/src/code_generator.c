@@ -63,7 +63,7 @@ static void emit_header(FILE *f) {
         "    g_cpu.N=((_r>>7)&1); g_cpu.Z=((_r&0xFF)==0)?1:0; \\\n"
         "    g_cpu.V=(~((a)^(b))&((a)^_r)&0x80)?1:0; } while(0)\n"
         "#define FLAG_NZC_SUB(r,a,b) do { int16_t _r=(r); g_cpu.C=(_r>=0)?1:0; \\\n"
-        "    g_cpu.N=((_r>>7)&1); g_cpu.Z=((_r&0xFF)==0)?1:0; \\\n"
+        "    g_cpu.N=((_r&0xFF)>>7); g_cpu.Z=((_r&0xFF)==0)?1:0; \\\n"
         "    g_cpu.V=(((a)^(b))&((a)^_r)&0x80)?1:0; } while(0)\n\n"
     );
 }
@@ -1239,11 +1239,39 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                          * coroutine entry, loop back when it yields. */
                         fprintf(f, "{ uint16_t _jt = nes_read16zp(0x%02X); maybe_trigger_vblank(2); coroutine_start(g_ram[0x91], _jt); goto label_%04X; }\n",
                                 (uint8_t)abs16, sched_reset_addr);
+                    } else if (pc >= 6 &&
+                               rom_read(rom, bank, pc - 6) == 0xA9 &&
+                               rom_read(rom, bank, pc - 4) == 0x48 &&
+                               rom_read(rom, bank, pc - 3) == 0xA9 &&
+                               rom_read(rom, bank, pc - 1) == 0x48) {
+                        /* 2-PHA indirect JSR: LDA #hi/PHA/LDA #lo/PHA/JMP (zp).
+                         * The pushed return address is (hi:lo)+1.  The callee's
+                         * RTS consumes the 2 pushed bytes, so after call_by_address
+                         * returns, S is restored and we fall through to the
+                         * continuation address. */
+                        uint8_t cont_hi = rom_read(rom, bank, pc - 5);
+                        uint8_t cont_lo = rom_read(rom, bank, pc - 2);
+                        uint16_t cont = (((uint16_t)cont_hi << 8) | cont_lo) + 1;
+                        fprintf(f, "{ uint16_t _jt = nes_read16zp(0x%02X); maybe_trigger_vblank(2); call_by_address(_jt); } goto label_%04X;\n",
+                                (uint8_t)abs16, cont);
                     } else {
                         fprintf(f, "{ uint16_t _jt = nes_read16zp(0x%02X); maybe_trigger_vblank(2); call_by_address(_jt); return; }\n", (uint8_t)abs16);
                     }
                 } else {
-                    fprintf(f, "{ uint16_t _jt = nes_read16(0x%04X); maybe_trigger_vblank(2); call_by_address(_jt); return; }\n", abs16);
+                    /* Non-ZP indirect: check for 2-PHA pattern too. */
+                    if (pc >= 6 &&
+                        rom_read(rom, bank, pc - 6) == 0xA9 &&
+                        rom_read(rom, bank, pc - 4) == 0x48 &&
+                        rom_read(rom, bank, pc - 3) == 0xA9 &&
+                        rom_read(rom, bank, pc - 1) == 0x48) {
+                        uint8_t cont_hi = rom_read(rom, bank, pc - 5);
+                        uint8_t cont_lo = rom_read(rom, bank, pc - 2);
+                        uint16_t cont = (((uint16_t)cont_hi << 8) | cont_lo) + 1;
+                        fprintf(f, "{ uint16_t _jt = nes_read16(0x%04X); maybe_trigger_vblank(2); call_by_address(_jt); } goto label_%04X;\n",
+                                abs16, cont);
+                    } else {
+                        fprintf(f, "{ uint16_t _jt = nes_read16(0x%04X); maybe_trigger_vblank(2); call_by_address(_jt); return; }\n", abs16);
+                    }
                 }
             }
             break;
@@ -1952,6 +1980,8 @@ static void emit_dispatch(FILE *f, const EmittedWrapper *wrappers, int wrapper_c
     if (rom->mapper == 4) {
         fprintf(f,
             "    extern int g_mmc3_r6_odd, g_mmc3_r7_even;\n"
+            "    /* TODO: For $A000-$BFFF, the correct bank is g_mmc3_bank_a000 (R7/2).\n"
+            "     * Blocked on Issue 8 — see DIVERGENCE.md Divergence 3/4. */\n"
             "    if (g_mmc3_r6_odd && addr >= 0x8000 && addr < 0xA000)\n"
             "        addr += 0x2000; /* 8KB bank odd: $8000 range -> $A000 offset */\n"
             "    else if (g_mmc3_r7_even && addr >= 0xA000 && addr < 0xC000)\n"
@@ -1995,7 +2025,13 @@ static void emit_dispatch(FILE *f, const EmittedWrapper *wrappers, int wrapper_c
                 fprintf(f, "            func_%04X_b%d(); break;\n", addr, bk);
             }
         } else {
-            /* Multiple bank variants: dispatch by current bank */
+            /* Multiple bank variants: dispatch by current bank.
+             * TODO: For MMC3, $A000-$BFFF addresses should use g_mmc3_bank_a000
+             * (R7/2) instead of g_current_bank (R6/2). The _bank variable is
+             * computed correctly above but CURRENTLY NOT USED here because
+             * enabling it exposes Issue 8: the intro code at $A593 expects
+             * a coroutine context that isn't set up, causing a freeze.
+             * Re-enable once Issue 8 (coroutine scheduling for intro) is fixed. */
             fprintf(f, "            switch (g_current_bank) {\n");
 
             /* Check if bank 15 (fixed) is already a variant. If not, and if the
