@@ -36,6 +36,7 @@ typedef enum {
     CMD_WRITE_RAM8, CMD_WRITE_SRAM8,
     CMD_DUMP_RAM,
     CMD_SAVE_STATE, CMD_LOAD_STATE,
+    CMD_TRIGGER, CMD_TRIGGER_OFF,
 } CmdType;
 
 typedef struct {
@@ -52,6 +53,7 @@ static int    s_cmd_cursor = 0;
 static int    s_wait_left  = 0;
 static int    s_exit_code  = -1;
 static int    s_loaded     = 0;
+static int    s_trigger_override = 0; /* 1 = script controls zapper trigger */
 static uint8_t s_buttons_held = 0;
 static char   s_shot_pending[128] = {0};
 static int    s_auto_shot_num = 1;
@@ -143,6 +145,17 @@ int script_load(const char *path) {
         } else if (strcmp(tok, "LOAD_STATE") == 0 && n >= 2) {
             c.type = CMD_LOAD_STATE;
             strncpy(c.sarg, arg1, sizeof(c.sarg)-1);
+        } else if (strcmp(tok, "TRIGGER") == 0) {
+            c.type = CMD_TRIGGER;
+            /* Optional: TRIGGER x y (pixel coords, default 128 120 = center) */
+            if (n >= 3) {
+                c.iarg = atoi(arg1);       /* x */
+                c.barg = (uint8_t)atoi(arg2); /* y */
+            } else {
+                c.iarg = 128; c.barg = 120;
+            }
+        } else if (strcmp(tok, "TRIGGER_OFF") == 0) {
+            c.type = CMD_TRIGGER_OFF;
         } else {
             fprintf(stderr, "[Script] Unknown command: %s\n", tok);
             continue;
@@ -272,6 +285,18 @@ void script_tick(uint64_t frame, const uint8_t *ram) {
                 printf("\n");
                 break;
             }
+            case CMD_TRIGGER:
+                g_zapper_trigger = 1;
+                g_zapper_x = c->iarg;
+                g_zapper_y = c->barg;
+                s_trigger_override = 1;
+                printf("[Script] TRIGGER at (%d,%d)\n", g_zapper_x, g_zapper_y);
+                break;
+            case CMD_TRIGGER_OFF:
+                g_zapper_trigger = 0;
+                s_trigger_override = 0;
+                printf("[Script] TRIGGER_OFF\n");
+                break;
             default: break;
         }
         s_cmd_cursor++;
@@ -291,6 +316,10 @@ int script_get_buttons(void) {
 
 int script_check_exit(void) {
     return s_exit_code;
+}
+
+int script_has_trigger_override(void) {
+    return s_trigger_override;
 }
 
 int script_wants_screenshot(char *buf, int buflen) {

@@ -27,6 +27,9 @@ int  script_wants_screenshot(char *buf, int buflen);
 /* Set a prefix for auto-named screenshots (e.g. "native_" or "emu_") */
 void script_set_screenshot_prefix(const char *prefix);
 
+/* Returns 1 if the script is currently overriding the zapper trigger */
+int  script_has_trigger_override(void);
+
 /* Recording — call once per frame BEFORE applying script override */
 void record_open(const char *path);
 void record_tick(uint64_t frame, uint8_t buttons, int turbo);

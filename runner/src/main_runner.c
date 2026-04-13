@@ -522,7 +522,8 @@ void nes_vblank_callback(void) {
         Uint32 buttons = SDL_GetMouseState(&mx, &my);
         zapper_mouse_to_nes(mx, my);
         int prev = g_zapper_trigger;
-        g_zapper_trigger = (buttons & SDL_BUTTON_LMASK) ? 1 : 0;
+        if (!script_has_trigger_override())
+            g_zapper_trigger = (buttons & SDL_BUTTON_LMASK) ? 1 : 0;
         if (g_zapper_trigger && !prev) {
             ztrace("[ZAPPER] TRIGGER ON frame=%llu aim=(%d,%d) buttons=0x%X\n",
                 (unsigned long long)g_frame_count, g_zapper_x, g_zapper_y, buttons);

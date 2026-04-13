@@ -503,6 +503,18 @@ void nes_write(uint16_t addr, uint8_t val) {
             }
             s_state_log++;
         }
+        /* Debug: trace spawn-chain variables $25 $26 $E7 $5E $DB (skip $2C noise) */
+        if ((a == 0x25 || a == 0x26 || a == 0xE7 || a == 0x5E || a == 0xDB) && val != g_ram[a]) {
+            static int s_spawn_log = 0;
+            if (s_spawn_log < 400) {
+                printf("[SPAWN] $%04X: %02X -> %02X (frame=%llu) $24=%02X $25=%02X $26=%02X $E7=%02X $DB=%02X bank=%d $5F0=%02X $5BB=%02X\n",
+                       a, g_ram[a], val, (unsigned long long)g_frame_count,
+                       g_ram[0x24], g_ram[0x25], g_ram[0x26], g_ram[0xE7],
+                       g_ram[0xDB], g_current_bank,
+                       g_ram[0x5F0], g_ram[0x5BB]);
+            }
+            s_spawn_log++;
+        }
         /* Trace entity slot 0 writes ($600-$60B) */
         if (a >= 0x600 && a <= 0x60B && val != g_ram[a]) {
             static int s_e0_log = 0;
