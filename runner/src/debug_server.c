@@ -51,6 +51,20 @@
 
 #include <SDL.h>  /* for SDL_PollEvent in pause loop */
 
+/* Render-IRQ diagnostic (defined in ppu_renderer.c) */
+extern int      g_render_irq_fired;
+extern int      g_render_irq_scanline;
+extern uint8_t  g_render_irq_ppuctrl_before;
+extern uint8_t  g_render_irq_ppuctrl_after;
+extern uint8_t  g_render_irq_scrollx_after;
+extern uint8_t  g_render_irq_scrolly_after;
+extern uint8_t  g_render_post_irq_ppuctrl_row;
+extern int      g_render_post_irq_chr_base;
+extern int      g_render_post_irq_origin_y;
+extern int      g_render_post_irq_phys_nt;
+extern int      g_render_post_irq_use_hud;
+extern int      g_render_post_irq_split_y;
+
 /* ---- Server state ---- */
 static sock_t s_listen  = SOCK_INVALID;
 static sock_t s_client  = SOCK_INVALID;
@@ -788,11 +802,25 @@ static void handle_ppu_state(int id, const char *json)
              "\"ppustatus\":\"0x%02X\","
              "\"scroll_x\":%d,\"scroll_y\":%d,"
              "\"spr0_split\":%d,\"spr0_reads\":%d,"
-             "\"chr_is_rom\":%d}",
+             "\"chr_is_rom\":%d,"
+             "\"render_irq_fired\":%d,\"render_irq_scanline\":%d,"
+             "\"render_irq_ctrl_before\":\"0x%02X\","
+             "\"render_irq_ctrl_after\":\"0x%02X\","
+             "\"render_irq_scrollx\":%d,\"render_irq_scrolly\":%d,"
+             "\"post_irq_ppuctrl_row\":\"0x%02X\","
+             "\"post_irq_chr_base\":\"0x%04X\","
+             "\"post_irq_use_hud\":%d,\"post_irq_split_y\":%d,"
+             "\"post_irq_origin_y\":%d,\"post_irq_nt_row\":%d}",
              id, g_ppuctrl, g_ppumask, g_ppustatus,
              g_ppuscroll_x, g_ppuscroll_y,
              g_spr0_split_active, g_spr0_reads_ctr,
-             g_chr_is_rom);
+             g_chr_is_rom,
+             g_render_irq_fired, g_render_irq_scanline,
+             g_render_irq_ppuctrl_before, g_render_irq_ppuctrl_after,
+             g_render_irq_scrollx_after, g_render_irq_scrolly_after,
+             g_render_post_irq_ppuctrl_row, g_render_post_irq_chr_base,
+             g_render_post_irq_use_hud, g_render_post_irq_split_y,
+             g_render_post_irq_origin_y, g_render_post_irq_phys_nt);
 }
 
 #ifdef RECOMP_STACK_TRACKING
