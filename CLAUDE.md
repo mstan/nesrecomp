@@ -69,6 +69,27 @@ If a function does ANY of these, stop and check PATTERNS.md:
 
 ---
 
+## ██████████████████████████████████████████████████████████████████████████
+## ██  RULE 3: CHECK DISPATCH MISSES AFTER EVERY RUN. EVERY. SINGLE. ONE. ██
+## ██████████████████████████████████████████████████████████████████████████
+
+After EVERY game run (manual, scripted, or test), check `dispatch_misses.log`
+next to the executable. If it contains entries:
+
+1. Add each `extra_func <bank> <addr>` to `game.toml` under `[functions]`
+2. Regenerate: `NESRecomp.exe <rom.nes>`
+3. Rebuild game project
+4. Re-run and check again
+5. Repeat until `dispatch_misses.log` is empty
+
+A dispatch miss means `call_by_address(addr)` found no generated function for
+that address. **The game silently skips that entire subroutine.** This causes
+resets, rendering glitches, broken gameplay — and produces NO error message.
+
+**Do not debug ANYTHING else while dispatch misses exist.**
+
+---
+
 ## The Loop
 
 ```

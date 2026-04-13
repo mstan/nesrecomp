@@ -54,6 +54,16 @@ static bool queue_pop(WorkItem *out) {
     return true;
 }
 
+/* Resolve the correct bank index for an address given the current bank context.
+ * For GxROM (full 32KB switch): $C000+ → paired upper bank (current | 1).
+ * For traditional mappers: $C000+ → fixed (last) bank. */
+static int resolve_bank_for_addr(const NESRom *rom, int current_bank, uint16_t addr) {
+    if (addr < 0xC000) return current_bank;
+    if (rom_mapper_full_32k_switch(rom))
+        return current_bank | 1;  /* upper 16KB of the 32KB window */
+    return rom->prg_banks - 1;    /* traditional fixed bank */
+}
+
 static int function_list_find_index(const FunctionList *list, uint16_t addr, int bank) {
     for (int i = 0; i < list->count; i++) {
         if (list->entries[i].addr == addr && list->entries[i].bank == bank)
@@ -245,7 +255,7 @@ void scan_function_boundaries(const NESRom *rom, uint16_t start_addr,
 
         out_addrs[(*out_count)++] = pc;
 
-        int read_bank = (pc >= 0xC000) ? (rom->prg_banks - 1) : bank;
+        int read_bank = resolve_bank_for_addr(rom, bank, pc);
         uint8_t op = rom_read(rom, read_bank, pc);
         const OpcodeEntry *e = &g_opcode_table[op];
         int sz = (e->size > 0) ? e->size : 1;
@@ -339,7 +349,7 @@ static int function_entry_priority(const FunctionEntry *entry) {
 }
 
 static bool can_demote_control_stub(const NESRom *rom, const FunctionEntry *entry) {
-    int read_bank = (entry->addr >= 0xC000) ? (rom->prg_banks - 1) : entry->bank;
+    int read_bank = resolve_bank_for_addr(rom, entry->bank, entry->addr);
     uint8_t op0 = rom_read(rom, read_bank, entry->addr);
     if (entry->size <= 1) {
         return op0 == 0x60 || op0 == 0x40;
@@ -467,8 +477,8 @@ static int classify_secondary_entries(const NESRom *rom, FunctionList *list,
 
         for (int bi = 0; bi < boundary_count; bi++) {
             uint16_t boundary = boundaries[bi];
-            if (entry->addr < 0xC000 && boundary >= 0xC000) continue;
-            int boundary_bank = (boundary >= 0xC000) ? fixed_bank : entry->bank;
+            if (entry->addr < 0xC000 && boundary >= 0xC000 && !rom_mapper_full_32k_switch(rom)) continue;
+            int boundary_bank = resolve_bank_for_addr(rom, entry->bank, boundary);
             if (boundary_bank < 0 || boundary_bank >= bank_count) continue;
             size_t key = (size_t)boundary_bank * 65536u + boundary;
             if (out_coverage[key] < 0) out_coverage[key] = idx;
@@ -560,7 +570,7 @@ static int walk_function(const NESRom *rom, FunctionList *list,
 
         /* Determine which bank to read from (instruction decoding always
          * uses the function's original bank, not effective_bank) */
-        int read_bank = (pc >= 0xC000) ? fixed_bank : switchable_bank;
+        int read_bank = resolve_bank_for_addr(rom, switchable_bank, pc);
         if (pc < 0x8000) break; /* Not ROM */
 
         uint8_t opcode = rom_read(rom, read_bank, pc);
@@ -702,7 +712,7 @@ static int walk_function(const NESRom *rom, FunctionList *list,
                 } else if (tgt < start_addr && tgt >= 0x8000) {
                     /* Backward branch before this function's start: that code
                      * is only reachable via this branch, register as new function. */
-                    int tbank = (tgt >= 0xC000) ? fixed_bank : switchable_bank;
+                    int tbank = resolve_bank_for_addr(rom, switchable_bank, tgt);
                     add_function_propagated(list, tgt, tbank, walk_source_flags);
                 }
                 break;
@@ -753,13 +763,13 @@ static int walk_function(const NESRom *rom, FunctionList *list,
                     }
                 }
                 if (tramp) {
-                    add_function_propagated(list, tramp->addr, fixed_bank, walk_source_flags);
+                    add_function_propagated(list, tramp->addr, resolve_bank_for_addr(rom, switchable_bank, tramp->addr), walk_source_flags);
                     uint8_t disp_bank = rom_read(rom, read_bank, pc + 3);
                     uint8_t disp_lo   = rom_read(rom, read_bank, pc + 4);
                     uint8_t disp_hi   = rom_read(rom, read_bank, pc + 5);
                     uint16_t disp_addr = (disp_lo | ((uint16_t)disp_hi << 8)) + tramp->addr_adjust;
                     if (disp_addr >= 0x8000) {
-                        int tbank = (disp_addr >= 0xC000) ? fixed_bank : (int)disp_bank;
+                        int tbank = (disp_addr >= 0xC000) ? resolve_bank_for_addr(rom, switchable_bank, disp_addr) : (int)disp_bank;
                         add_function_propagated(list, disp_addr, tbank, walk_source_flags);
                     }
                     pc += 3 + tramp->inline_bytes;
@@ -788,7 +798,8 @@ static int walk_function(const NESRom *rom, FunctionList *list,
                         uint8_t thi = rom_read(rom, read_bank, tpc + 1);
                         uint16_t dest = (uint16_t)tlo | ((uint16_t)thi << 8);
                         if (dest >= 0xC000) {
-                            add_function_propagated(list, dest, fixed_bank, walk_source_flags);
+                            int tbank = resolve_bank_for_addr(rom, effective_bank, dest);
+                            add_function_propagated(list, dest, tbank, walk_source_flags);
                         } else if (dest >= 0x8000) {
                             if (effective_bank != fixed_bank) {
                                 add_function_propagated(list, dest, effective_bank, walk_source_flags);
@@ -830,14 +841,16 @@ static int walk_function(const NESRom *rom, FunctionList *list,
                     if (target == cfg->inline_pointers[ti].addr) { ipp = &cfg->inline_pointers[ti]; break; }
                 }
                 if (ipp) {
-                    add_function_propagated(list, ipp->addr, fixed_bank, walk_source_flags);
+                    add_function_propagated(list, ipp->addr, resolve_bank_for_addr(rom, switchable_bank, ipp->addr), walk_source_flags);
                     pc += 5; continue;
                 }
             }
 
             if (target >= 0xC000) {
-                /* Fixed bank target — always knowable */
-                add_function_propagated(list, target, fixed_bank, walk_source_flags);
+                /* Upper bank target — fixed for traditional mappers,
+                 * paired upper bank for GxROM */
+                int tbank = resolve_bank_for_addr(rom, effective_bank, target);
+                add_function_propagated(list, target, tbank, walk_source_flags);
             } else if (target >= 0x8000) {
                 if (effective_bank != fixed_bank) {
                     /* Bank known via walk context or bank-switch detection */
@@ -878,7 +891,8 @@ static int walk_function(const NESRom *rom, FunctionList *list,
             uint8_t hi = rom_read(rom, read_bank, pc + 2);
             uint16_t target = lo | ((uint16_t)hi << 8);
             if (target >= 0xC000) {
-                add_function_propagated(list, target, fixed_bank, walk_source_flags);
+                int tbank = resolve_bank_for_addr(rom, effective_bank, target);
+                add_function_propagated(list, target, tbank, walk_source_flags);
             } else if (target >= 0x8000) {
                 if (effective_bank != fixed_bank) {
                     add_function_propagated(list, target, effective_bank, walk_source_flags);
@@ -985,6 +999,26 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
     add_function(out, rom->nmi_vector,   VEC_BANK(rom->nmi_vector));
     add_function(out, rom->irq_vector,   VEC_BANK(rom->irq_vector));
 #undef VEC_BANK
+
+    /* For mappers with fully-switchable 32KB banks (GxROM), each window may
+     * have different NMI/IRQ vectors.  Seed all unique per-window vectors so
+     * the function finder discovers the handlers for every bank. */
+    if (rom->num_windows > 0) {
+        for (int w = 0; w < rom->num_windows; w++) {
+            uint16_t nmi = rom->window_nmi[w];
+            uint16_t irq = rom->window_irq[w];
+            /* Lower 16KB bank of this window */
+            int lower_bank = w * 2;
+            /* Upper 16KB bank (for $C000+ vectors) */
+            int upper_bank = w * 2 + 1;
+            int nmi_bank = (nmi >= 0xC000) ? upper_bank : lower_bank;
+            int irq_bank = (irq >= 0xC000) ? upper_bank : lower_bank;
+            printf("[FuncFinder] GxROM window %d: NMI=$%04X (bank %d), IRQ=$%04X (bank %d)\n",
+                   w, nmi, nmi_bank, irq, irq_bank);
+            add_function(out, nmi, nmi_bank);
+            add_function(out, irq, irq_bank);
+        }
+    }
 
     /* BFS */
     WorkItem item;

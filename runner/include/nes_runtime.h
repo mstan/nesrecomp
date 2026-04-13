@@ -44,6 +44,12 @@ uint16_t nes_read16zp(uint8_t zp_addr);  /* Zero-page 16-bit (wraps at $FF) */
 /* Called for JMP (indirect) — dispatch to the correct recompiled function */
 int call_by_address(uint16_t addr);  /* returns 1 on hit, 0 on miss */
 
+/* ---- Trampoline for tail-call elimination ----
+ * Generated branch code sets this instead of calling call_by_address() + return
+ * for cross-function branches. call_by_address() loops while this is nonzero,
+ * converting recursive tail calls into iteration (no C stack growth). */
+extern uint16_t g_trampoline_target;
+
 /* Logging for dispatch misses */
 void nes_log_dispatch_miss(uint16_t addr);
 void nes_log_inline_miss(uint16_t dispatch_pc, uint8_t a_val);

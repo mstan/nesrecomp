@@ -166,8 +166,23 @@ static LONG WINAPI vectored_handler(EXCEPTION_POINTERS *ep) {
         printf("[VEH] Access violation: %s of %p\n",
                ep->ExceptionRecord->ExceptionInformation[0] ? "WRITE" : "READ",
                (void *)ep->ExceptionRecord->ExceptionInformation[1]);
-    if (code == EXCEPTION_STACK_OVERFLOW)
+    if (code == EXCEPTION_STACK_OVERFLOW) {
         printf("[VEH] STACK OVERFLOW detected\n");
+#ifdef RECOMP_STACK_TRACKING
+        {
+            extern const char *g_recomp_stack[];
+            extern int g_recomp_stack_top;
+            extern uint64_t g_frame_count;
+            printf("[VEH] frame=%llu recomp_stack_top=%d\n",
+                   (unsigned long long)g_frame_count, g_recomp_stack_top);
+            int start = g_recomp_stack_top - 1;
+            int end = start - 40;
+            if (end < 0) end = 0;
+            for (int i = start; i >= end; i--)
+                printf("[VEH]   [%d] %s\n", i, g_recomp_stack[i] ? g_recomp_stack[i] : "?");
+        }
+#endif
+    }
     fflush(stdout);
     return EXCEPTION_CONTINUE_SEARCH;
 }

@@ -14,6 +14,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <stdarg.h>
 
 #include <SDL.h>
 #include "nes_runtime.h"
@@ -468,11 +469,28 @@ static void smoke_write_results(void) {
     if (s_smoke_output && f != stdout) fclose(f);
 }
 
+/* ---- Zapper debug file trace ---- */
+static FILE *s_ztrace = NULL;
+static void ztrace(const char *fmt, ...) {
+    if (!s_ztrace) {
+        s_ztrace = fopen("zapper_debug.log", "w");
+        if (!s_ztrace) return;
+    }
+    va_list ap; va_start(ap, fmt);
+    vfprintf(s_ztrace, fmt, ap);
+    va_end(ap);
+    fflush(s_ztrace);
+}
+
 /* ---- VBlank callback (called from ppu_read_reg when $2002 bit7 fires) ---- */
 void nes_vblank_callback(void) {
     static uint64_t s_cb_count = 0;
     if (s_cb_count == 0) { /* debug_log_open(); */ }
     s_cb_count++;
+    /* Trace first 3 VBlank callbacks */
+    if (s_cb_count <= 3)
+        ztrace("[VBLANK] cb#%llu frame=%llu\n",
+            (unsigned long long)s_cb_count, (unsigned long long)g_frame_count);
     if (s_debug && (s_cb_count <= 100 || s_cb_count % 60 == 0))
         printf("[VBlank] callback #%llu frame=%llu\n",
                (unsigned long long)s_cb_count, (unsigned long long)g_frame_count);
@@ -503,7 +521,35 @@ void nes_vblank_callback(void) {
         int mx, my;
         Uint32 buttons = SDL_GetMouseState(&mx, &my);
         zapper_mouse_to_nes(mx, my);
+        int prev = g_zapper_trigger;
         g_zapper_trigger = (buttons & SDL_BUTTON_LMASK) ? 1 : 0;
+        if (g_zapper_trigger && !prev) {
+            ztrace("[ZAPPER] TRIGGER ON frame=%llu aim=(%d,%d) buttons=0x%X\n",
+                (unsigned long long)g_frame_count, g_zapper_x, g_zapper_y, buttons);
+            ztrace("  $C5=%02X $24=%02X $4F=%02X $CD=%02X $E3=%02X $E4=%02X\n",
+                g_ram[0xC5], g_ram[0x24], g_ram[0x4F], g_ram[0xCD],
+                g_ram[0xE3], g_ram[0xE4]);
+            ztrace("  guards: $8B=%02X $53=%02X $4E=%02X $0B=%02X $84=%02X $C9=%02X $D2=%02X\n",
+                g_ram[0x8B], g_ram[0x53], g_ram[0x4E], g_ram[0x0B],
+                g_ram[0x84], g_ram[0xC9], g_ram[0xD2]);
+            ztrace("  ppumask=%02X ppustatus=%02X spr0_act=%d\n",
+                g_ppumask, g_ppustatus, g_spr0_split_active);
+        }
+        if (!g_zapper_trigger && prev) {
+            ztrace("[ZAPPER] TRIGGER OFF frame=%llu\n", (unsigned long long)g_frame_count);
+            ztrace("  $C5=%02X $24=%02X $CD=%02X $E3=%02X $E4=%02X\n",
+                g_ram[0xC5], g_ram[0x24], g_ram[0xCD], g_ram[0xE3], g_ram[0xE4]);
+            ztrace("  guards: $8B=%02X $53=%02X $4E=%02X $0B=%02X $84=%02X $C9=%02X\n",
+                g_ram[0x8B], g_ram[0x53], g_ram[0x4E], g_ram[0x0B],
+                g_ram[0x84], g_ram[0xC9]);
+        }
+    } else {
+        static int s_skip_logged = 0;
+        if (!s_skip_logged) {
+            ztrace("[ZAPPER] Poll SKIPPED: enabled=%d mouse=%d window=%p\n",
+                g_zapper_enabled, keybinds_zapper_mouse(), (void*)s_window);
+            s_skip_logged = 1;
+        }
     }
 
     /* Update controllers from keyboard state via configurable keybinds */
@@ -527,6 +573,18 @@ void nes_vblank_callback(void) {
     }
 
 smoke_skip_input:
+
+    /* Monitor $C5 changes for detection debug */
+    {
+        static uint8_t s_prev_c5 = 0;
+        if (g_ram[0xC5] != s_prev_c5) {
+            ztrace("[C5] %02X -> %02X frame=%llu $24=%02X $C9=%02X $8B=%02X $53=%02X $4E=%02X $0B=%02X $84=%02X\n",
+                s_prev_c5, g_ram[0xC5], (unsigned long long)g_frame_count,
+                g_ram[0x24], g_ram[0xC9], g_ram[0x8B], g_ram[0x53],
+                g_ram[0x4E], g_ram[0x0B], g_ram[0x84]);
+            s_prev_c5 = g_ram[0xC5];
+        }
+    }
 
     /* Per-frame script execution */
     if (!s_smoke_frames)

@@ -9,6 +9,7 @@
 #include "game_extras.h"
 #include "override_chr.h"
 #include <stdio.h>
+#include <stdarg.h>
 #include <string.h>
 #include <stdlib.h>
 #include <time.h>
@@ -16,6 +17,7 @@
 CPU6502State g_cpu;
 uint8_t      g_ram[0x0800];
 int          g_bail_active;  /* set by stack_bail_func, checked at JSR call sites */
+uint16_t     g_trampoline_target;  /* tail-call trampoline: set by cross-function branches */
 uint8_t      g_sram[0x2000]; /* $6000-$7FFF battery-backed SRAM (8KB) */
 uint8_t      g_chr_ram[0x2000];
 int          g_chr_is_rom = 0;
@@ -74,6 +76,19 @@ int     g_zapper_enabled = 0;       /* 1 if Zapper connected on port 2 */
 int     g_zapper_x = 0;             /* aim X (0-255) */
 int     g_zapper_y = 0;             /* aim Y (0-239) */
 int     g_zapper_trigger = 0;       /* 1 if trigger pulled */
+
+/* ---- Zapper debug trace ---- */
+static int   s_zapper_trace_count = 0;
+static int   s_zapper_prev_trigger = 0;
+#define ZAPPER_TRACE_MAX 300
+static void zapper_trace(const char *fmt, ...) {
+    if (s_zapper_trace_count >= ZAPPER_TRACE_MAX) return;
+    va_list ap; va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+    fflush(stderr);
+    s_zapper_trace_count++;
+}
 static const uint32_t *s_zapper_framebuf = NULL; /* last rendered frame for light detection */
 static zapper_render_fn s_zapper_render = NULL;  /* on-demand render callback */
 static uint8_t s_zapper_last_ppumask = 0;        /* PPUMASK at last Zapper render */
@@ -408,9 +423,33 @@ uint8_t nes_read(uint16_t addr) {
                  *   bit 3: light sensor (0=detected, 1=not detected)
                  *   bit 4: trigger (1=pulled, 0=not pulled)
                  * Verified against Nestopia (NstInpZapper.cpp line 174). */
+                /* Trace trigger edge */
+                if (g_zapper_trigger && !s_zapper_prev_trigger) {
+                    s_zapper_trace_count = 0; /* reset on new trigger press */
+                    zapper_trace("=== TRIGGER PRESSED frame=%llu aim=(%d,%d) ===\n",
+                        g_frame_count, g_zapper_x, g_zapper_y);
+                    zapper_trace("  RAM: $C5=%02X $24=%02X $26=%02X $4F=%02X $CD=%02X $84=%02X $0B=%02X\n",
+                        g_ram[0xC5], g_ram[0x24], g_ram[0x26], g_ram[0x4F],
+                        g_ram[0xCD], g_ram[0x84], g_ram[0x0B]);
+                    zapper_trace("  RAM: $E3=%02X $E4=%02X $D2=%02X $D3=%02X $D4=%02X\n",
+                        g_ram[0xE3], g_ram[0xE4], g_ram[0xD2], g_ram[0xD3], g_ram[0xD4]);
+                    zapper_trace("  spr0_active=%d spr0_ctr=%d ppumask=%02X ppustatus=%02X\n",
+                        g_spr0_split_active, g_spr0_reads_ctr, g_ppumask, g_ppustatus);
+                }
+                if (!g_zapper_trigger && s_zapper_prev_trigger) {
+                    zapper_trace("=== TRIGGER RELEASED frame=%llu ===\n", g_frame_count);
+                    zapper_trace("  RAM: $C5=%02X $CD=%02X $E3=%02X $E4=%02X\n",
+                        g_ram[0xC5], g_ram[0xCD], g_ram[0xE3], g_ram[0xE4]);
+                }
+                s_zapper_prev_trigger = g_zapper_trigger;
                 uint8_t val = 0x40;
-                if (!zapper_light_detected()) val |= 0x08;
+                int light = zapper_light_detected();
+                if (!light) val |= 0x08;
                 if (g_zapper_trigger) val |= 0x10;
+                if (g_ram[0xC5])
+                    zapper_trace("  $4017: val=%02X light=%d spr0_act=%d ppumask=%02X frame=%llu\n",
+                        val, light, g_spr0_split_active, g_ppumask,
+                        (unsigned long long)g_frame_count);
                 return val;
             }
             if (s_ctrl1_strobe) return 0x40 | (g_controller2_buttons >> 7);
@@ -683,19 +722,6 @@ uint8_t ppu_read_reg(uint16_t reg) {
             uint8_t s = g_ppustatus;
             g_ppustatus &= ~0x80;  /* clear VBlank flag (standard NES) */
             g_ppuaddr_latch = 0;  /* shared w toggle — clears for both $2005 and $2006 */
-            /* When Zapper trigger is active, force sprite-0 hit immediately.
-             * The Zapper detection loop ($B4B5 etc.) polls $2002 for spr0 hit
-             * while checking $4017 for light.  On real NES, spr0 fires at the
-             * sprite's scanline — deterministic and fast.  The normal 3-read
-             * counter simulation doesn't work here because nested VBlanks
-             * (which fire during the long detection loop) reset the counter.
-             * Forcing spr0 hit when trigger is active gives the detection loop
-             * the scanline marker it needs to proceed to light checking. */
-            if (g_zapper_trigger && g_zapper_enabled && !(s & 0x40)) {
-                g_ppustatus |= 0x40;
-                g_spr0_split_active = 1;
-                s |= 0x40;  /* return hit immediately */
-            }
             /* Simulate sprite-0 hit (bit6) for split-screen spin-waits.
              * On real NES, bit6 is set by hardware during active rendering and
              * cleared only at the pre-render scanline — never by reading $2002.
@@ -710,9 +736,15 @@ uint8_t ppu_read_reg(uint16_t reg) {
              * path in maybe_trigger_vblank. */
             {
                 if (s & 0x40) {
-                    /* Bit6 was set; consume it (clear) and reset counter */
+                    /* Bit6 was set; consume it (clear) and reset counter.
+                     * Set g_spr0_split_active HERE (on consume), not when
+                     * the counter fires.  This ensures the light-detection
+                     * gate opens on the same read that returns spr0=1 to
+                     * the game, preventing the Zapper anti-cheat path from
+                     * seeing light one iteration before spr0 is returned. */
                     g_ppustatus &= ~0x40;
                     g_spr0_reads_ctr = 0;
+                    g_spr0_split_active = 1;
                 } else {
                     if (++g_spr0_reads_ctr >= 3) {
                         /* Capture scroll/ppuctrl state as HUD (pre-split) values.
@@ -723,12 +755,15 @@ uint8_t ppu_read_reg(uint16_t reg) {
                         g_ppuscroll_x_hud   = g_ppuscroll_x;
                         g_ppuscroll_y_hud   = g_ppuscroll_y;
                         g_ppuctrl_hud       = g_ppuctrl & 0x38;
-                        g_spr0_split_active = 1;
                         g_ppustatus |= 0x40;
                         g_spr0_reads_ctr = 0;
                     }
                 }
             }
+            if (g_ram[0xC5])
+                zapper_trace("  $2002: ret=%02X spr0_act=%d ctr=%d ppumask=%02X frame=%llu\n",
+                    s, g_spr0_split_active, g_spr0_reads_ctr, g_ppumask,
+                    (unsigned long long)g_frame_count);
             return s;
         }
         case 0x2004: return g_ppu_oam[g_oamaddr];
