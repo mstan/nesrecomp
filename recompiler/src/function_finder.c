@@ -55,10 +55,17 @@ static bool queue_pop(WorkItem *out) {
 }
 
 /* Resolve the correct bank index for an address given the current bank context.
- * For GxROM (full 32KB switch): $C000+ → paired upper bank (current | 1).
+ * For GxROM (full 32KB switch): both halves of the 32KB window are paired:
+ *   $8000-$BFFF → even bank (current & ~1)
+ *   $C000-$FFFF → odd bank  (current | 1)
  * For traditional mappers: $C000+ → fixed (last) bank. */
 static int resolve_bank_for_addr(const NESRom *rom, int current_bank, uint16_t addr) {
-    if (addr < 0xC000) return current_bank;
+    if (addr < 0x8000) return current_bank;
+    if (addr < 0xC000) {
+        if (rom_mapper_full_32k_switch(rom))
+            return current_bank & ~1;  /* lower 16KB of the 32KB window */
+        return current_bank;
+    }
     if (rom_mapper_full_32k_switch(rom))
         return current_bank | 1;  /* upper 16KB of the 32KB window */
     return rom->prg_banks - 1;    /* traditional fixed bank */
@@ -853,8 +860,10 @@ static int walk_function(const NESRom *rom, FunctionList *list,
                 add_function_propagated(list, target, tbank, walk_source_flags);
             } else if (target >= 0x8000) {
                 if (effective_bank != fixed_bank) {
-                    /* Bank known via walk context or bank-switch detection */
-                    add_function_propagated(list, target, effective_bank, walk_source_flags);
+                    /* Bank known via walk context or bank-switch detection.
+                     * For GxROM: pair to the correct 16KB half. */
+                    int tbank = resolve_bank_for_addr(rom, effective_bank, target);
+                    add_function_propagated(list, target, tbank, walk_source_flags);
                     if (effective_bank != switchable_bank)
                         s_regprop_targeted_adds++;
                     /* MMC3: cross-8KB boundary — also add the remapped target.
@@ -895,7 +904,8 @@ static int walk_function(const NESRom *rom, FunctionList *list,
                 add_function_propagated(list, target, tbank, walk_source_flags);
             } else if (target >= 0x8000) {
                 if (effective_bank != fixed_bank) {
-                    add_function_propagated(list, target, effective_bank, walk_source_flags);
+                    int tbank = resolve_bank_for_addr(rom, effective_bank, target);
+                    add_function_propagated(list, target, tbank, walk_source_flags);
                     if (effective_bank != switchable_bank)
                         s_regprop_targeted_adds++;
                     /* MMC3 cross-8KB mirror (same as JSR path above) */
