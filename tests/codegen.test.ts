@@ -184,6 +184,73 @@ describe("code generation", () => {
     expect(result.fullC).toContain("call_by_address(0xC150)");
   });
 
+  it("MMC3: cross-bank JSR to $8000 region resolved via R6 switch", () => {
+    // 4-bank MMC3 ROM (banks 0-3; bank 3 is fixed).
+    // RESET in fixed bank selects R6=4 (= 16KB bank 2), mode 0, then JSRs
+    // into $8000 — target should be discovered at bank 2.
+    const rom = new RomBuilder({ mapper: 4, prgBanks: 4 })
+      .bank(3) // fixed bank
+      .org(0xc000) // RESET
+      // Select R6 (bank_select byte 0 → reg 6, mode 0)
+      .lda(0x06).sta(0x8000)
+      // Write R6 = 4 (8KB bank 4 = 16KB bank 2)
+      .lda(0x04).sta(0x8001)
+      // Select R7 (bank_select byte 7 → reg 7)
+      .lda(0x07).sta(0x8000)
+      // Write R7 = 6 (8KB bank 6 = 16KB bank 3 — but clamp doesn't matter here)
+      .lda(0x06).sta(0x8001)
+      // Now JSR into $8100 — should resolve to bank 2 (R6)
+      .jsr(0x8100)
+      .rts()
+      .bank(2) // target bank
+      .org(0x8100)
+      .lda(0x99)
+      .rts()
+      .vectors(0xc000, 0xc000, 0xc000)
+      .writeTemp("mmc3_jsr_8000.nes");
+
+    const result = recompile(rom);
+    // func_8100_b2 should be emitted (bank 2 is the walk-detected R6).
+    expect(result.fullC).toContain("func_8100_b2");
+  });
+
+  it("MMC3: cross-bank JSR to $C000 region in mode 1 resolved via R6", () => {
+    // 4-bank MMC3 ROM. In mode 1 the $C000-$DFFF region is R6 (switchable),
+    // which is the bug class that caused MM3's $DBE1 miss. Test that when a
+    // function in the fixed bank switches to mode 1 with R6=4 (bank 2) and
+    // then JSRs into $C100, the target is discovered at bank 2.
+    const rom = new RomBuilder({ mapper: 4, prgBanks: 4 })
+      .bank(3) // fixed bank
+      .org(0xc000) // RESET
+      // Select R6 with mode=1 (bit 6 set): $46 = reg 6 + mode 1
+      .lda(0x46).sta(0x8000)
+      .lda(0x04).sta(0x8001) // R6 = 4 (16KB bank 2)
+      // JSR into $C100 — in mode 1 that's R6 = bank 2
+      .jsr(0xc100)
+      .rts()
+      .bank(2) // target bank — body at $C100 because $C000-$DFFF is R6 in mode 1
+      .org(0x8100) // NB: test-ROM source offset is still relative to the bank's
+                   // base. Active bank 2's "natural" address space is $8000-$BFFF;
+                   // we place the body at offset 0x100 so it lines up with $C100
+                   // when R6 maps this bank into the $C000 slot at runtime.
+      .lda(0x77)
+      .rts()
+      .vectors(0xc000, 0xc000, 0xc000)
+      .writeTemp("mmc3_jsr_c000_mode1.nes");
+
+    const result = recompile(rom);
+    // Target address is $C100. In mode 1 with R6=2 the resolver adds $C100
+    // at bank 2. The finder log proves discovery even if the codegen later
+    // filters/remaps the entry (codegen handling of mode-1 $C000+ addresses
+    // from switchable banks is orthogonal to this spike).
+    //
+    // Without the cross-bank fix, the finder would not mention $C100 at
+    // bank 2 at all.
+    expect(result.output).toMatch(/\$C100 bank=2/);
+    // At least one bank switch should have been detected during the walk.
+    expect(result.output).toMatch(/Bank switches detected: [1-9]/);
+  });
+
   it("emits bare RTI for non-NMI functions (no over-firing)", () => {
     // A non-NMI function that happens to do STA $01NN,X writes should NOT
     // be treated as RTI-hijack — guard is that func_base == rom->nmi_vector.

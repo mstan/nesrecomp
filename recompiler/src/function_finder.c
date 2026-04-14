@@ -531,6 +531,36 @@ static int s_regprop_targeted_adds = 0;
  *
  * Register propagation: tracks known_a/x/y constant values to detect bank
  * switches and provide precise bank context for target resolution. */
+
+/* MMC3 cross-bank target resolver. Returns the 16KB bank index where
+ * `target` lives at walk time given the tracked R6/R7/mode state, or
+ * -1 if unresolvable (state unknown or target outside ROM).
+ *
+ * The mapping assumes MMC3 layout (mapper 4):
+ *   mode 0: $8000=R6,      $A000=R7, $C000=fixed-2, $E000=fixed-1
+ *   mode 1: $8000=fixed-2, $A000=R7, $C000=R6,      $E000=fixed-1
+ *
+ * For 16KB banks, fixed-2 and fixed-1 are both slices of the last 16KB
+ * bank (`fixed_bank`), so we return that for all fixed regions. */
+static int mmc3_resolve_bank(uint16_t target, int walk_r6, int walk_r7,
+                             int walk_mode, int fixed_bank) {
+    if (target >= 0xE000) return fixed_bank;
+    if (target >= 0xC000) {
+        if (walk_mode == 1 && walk_r6 != -1) return walk_r6;
+        if (walk_mode != -1) return fixed_bank;  /* mode 0: $C000 is fixed */
+        return -1;                                /* unknown */
+    }
+    if (target >= 0xA000) {
+        return walk_r7;  /* R7 in both modes */
+    }
+    if (target >= 0x8000) {
+        if (walk_mode == 1) return fixed_bank;    /* $8000 is fixed */
+        if (walk_mode == 0 && walk_r6 != -1) return walk_r6;
+        return -1;
+    }
+    return -1;
+}
+
 static int walk_function(const NESRom *rom, FunctionList *list,
                          uint16_t start_addr, int switchable_bank,
                          const GameConfig *cfg, uint8_t walk_source_flags) {
@@ -548,6 +578,23 @@ static int walk_function(const NESRom *rom, FunctionList *list,
     /* Effective switchable bank — starts as the function's bank context,
      * updated when a bank-switch call is detected with known A register. */
     int effective_bank = switchable_bank;
+
+    /* ── MMC3 cross-bank tracking ──────────────────────────────────────
+     * Track R6/R7/mode state during walk by detecting direct writes to
+     * the MMC3 bank-select ($8000) and bank-data ($8001) registers.
+     * MMC3 uses 8KB banks internally (register values); we store here
+     * in 16KB units (÷2) matching the recompiler's bank convention.
+     *
+     * Region mapping:
+     *   mode 0: $8000=R6, $A000=R7, $C000=fixed(N-2), $E000=fixed(N-1)
+     *   mode 1: $8000=fixed(N-2), $A000=R7, $C000=R6,  $E000=fixed(N-1)
+     *
+     * Used by mmc3_resolve_bank() below to resolve JSR/JMP targets
+     * accurately across the banking boundaries the walk crosses. */
+    int walk_r6 = -1;            /* 16KB bank mapped at R6 slot */
+    int walk_r7 = -1;            /* 16KB bank mapped at R7 slot */
+    int walk_mode = -1;          /* 0 or 1, -1 = unknown */
+    int pending_mmc3_select = -1; /* last byte written to $8000 */
 
     for (int i = 0; i < MAX_INSNS_PER_FUNC; i++) {
         /* Remove this address from pending now that we're visiting it */
@@ -682,6 +729,46 @@ static int walk_function(const NESRom *rom, FunctionList *list,
 
                 /* ── Everything else: no register effect ── */
                 default: break;
+            }
+        }
+
+        /* ── MMC3 direct bank-switch detection ──────────────────────────
+         * Detect `STA $8000` / `STA $8001` pairs to track what banks get
+         * mapped to R6/R7 slots and which PRG mode is active. The resolver
+         * below (mmc3_resolve_bank) uses this to resolve JSR/JMP targets
+         * in switchable regions to their correct banks.
+         *
+         * Pattern: LDA #imm; STA $8000 selects register + mode.
+         *          LDA #bank; STA $8001 writes the bank to that register.
+         *
+         * Only fires for mapper 4 (MMC3). known_a carries the immediate
+         * thanks to the existing register propagation above. */
+        if (rom->mapper == 4 &&
+            entry->mnemonic == MN_STA && entry->addr_mode == AM_ABS) {
+            uint8_t sta_lo = rom_read(rom, read_bank, pc + 1);
+            uint8_t sta_hi = rom_read(rom, read_bank, pc + 2);
+            uint16_t sta_addr = sta_lo | ((uint16_t)sta_hi << 8);
+            if (sta_addr == 0x8000) {
+                if (known_a != -1) {
+                    pending_mmc3_select = known_a;
+                    walk_mode = (known_a >> 6) & 1;
+                }
+            } else if (sta_addr == 0x8001) {
+                if (known_a != -1 && pending_mmc3_select != -1) {
+                    int reg = pending_mmc3_select & 0x07;
+                    int eight_kb_bank = known_a % (rom->prg_banks * 2);
+                    int sixteen_kb_bank = eight_kb_bank / 2;
+                    /* Clamp to valid 16KB bank range */
+                    if (sixteen_kb_bank >= rom->prg_banks - 1)
+                        sixteen_kb_bank = rom->prg_banks - 2;
+                    if (reg == 6) {
+                        if (sixteen_kb_bank != walk_r6) s_bank_switches_detected++;
+                        walk_r6 = sixteen_kb_bank;
+                    } else if (reg == 7) {
+                        if (sixteen_kb_bank != walk_r7) s_bank_switches_detected++;
+                        walk_r7 = sixteen_kb_bank;
+                    }
+                }
             }
         }
 
@@ -917,7 +1004,24 @@ static int walk_function(const NESRom *rom, FunctionList *list,
             if (target >= 0xC000) {
                 /* Fixed bank target — always knowable */
                 add_function_propagated(list, target, fixed_bank, walk_source_flags);
+                /* MMC3 cross-bank: in mode 1, $C000-$DFFF is R6 (switchable).
+                 * If we've tracked a bank switch during this walk, also add
+                 * the target at the resolved R6 bank. */
+                {
+                    int cb_bank = mmc3_resolve_bank(target, walk_r6, walk_r7,
+                                                   walk_mode, fixed_bank);
+                    if (cb_bank != -1 && cb_bank != fixed_bank &&
+                        !function_list_contains(list, target, cb_bank)) {
+                        add_function_propagated(list, target, cb_bank, walk_source_flags);
+                        s_regprop_targeted_adds++;
+                    }
+                }
             } else if (target >= 0x8000) {
+                /* MMC3 cross-bank resolution: if we've detected an R6/R7/mode
+                 * update during this walk, prefer that — more precise than the
+                 * coarser effective_bank. */
+                int cb_bank = mmc3_resolve_bank(target, walk_r6, walk_r7,
+                                                walk_mode, fixed_bank);
                 if (effective_bank != fixed_bank) {
                     /* Bank known via walk context or bank-switch detection */
                     add_function_propagated(list, target, effective_bank, walk_source_flags);
@@ -934,12 +1038,25 @@ static int walk_function(const NESRom *rom, FunctionList *list,
                     else if (rom->mapper == 4 && target >= 0xA000 && target < 0xC000 &&
                              pc >= 0x8000 && pc < 0xA000)
                         add_function_propagated(list, target - 0x2000, effective_bank, walk_source_flags);
+                } else if (cb_bank != -1) {
+                    /* Direct MMC3 detection resolved the target bank — use it
+                     * instead of the unknown-bank fan-out. */
+                    add_function_propagated(list, target, cb_bank, walk_source_flags);
+                    s_regprop_targeted_adds++;
                 } else {
                     /* Fixed bank calling switchable region: bank unknown statically.
                      * Add for ALL switchable banks so each gets a correct body.
                      * At runtime call_by_address() selects via g_current_bank. */
                     for (int _b = 0; _b < fixed_bank; _b++)
                         add_function_uncertain_bank(list, target, _b);
+                }
+                /* Even when effective_bank was known, augment with cb_bank if
+                 * it's different — direct detection may supersede propagation. */
+                if (effective_bank != fixed_bank && cb_bank != -1 &&
+                    cb_bank != effective_bank &&
+                    !function_list_contains(list, target, cb_bank)) {
+                    add_function_propagated(list, target, cb_bank, walk_source_flags);
+                    s_regprop_targeted_adds++;
                 }
             } else {
                 /* Target in RAM — try SRAM-to-ROM translation */
@@ -958,7 +1075,19 @@ static int walk_function(const NESRom *rom, FunctionList *list,
             uint16_t target = lo | ((uint16_t)hi << 8);
             if (target >= 0xC000) {
                 add_function_propagated(list, target, fixed_bank, walk_source_flags);
+                /* MMC3 mode-1 cross-bank: $C000-$DFFF can be R6. */
+                {
+                    int cb_bank = mmc3_resolve_bank(target, walk_r6, walk_r7,
+                                                   walk_mode, fixed_bank);
+                    if (cb_bank != -1 && cb_bank != fixed_bank &&
+                        !function_list_contains(list, target, cb_bank)) {
+                        add_function_propagated(list, target, cb_bank, walk_source_flags);
+                        s_regprop_targeted_adds++;
+                    }
+                }
             } else if (target >= 0x8000) {
+                int cb_bank = mmc3_resolve_bank(target, walk_r6, walk_r7,
+                                                walk_mode, fixed_bank);
                 if (effective_bank != fixed_bank) {
                     add_function_propagated(list, target, effective_bank, walk_source_flags);
                     if (effective_bank != switchable_bank)
@@ -970,9 +1099,18 @@ static int walk_function(const NESRom *rom, FunctionList *list,
                     else if (rom->mapper == 4 && target >= 0xA000 && target < 0xC000 &&
                              pc >= 0x8000 && pc < 0xA000)
                         add_function_propagated(list, target - 0x2000, effective_bank, walk_source_flags);
+                } else if (cb_bank != -1) {
+                    add_function_propagated(list, target, cb_bank, walk_source_flags);
+                    s_regprop_targeted_adds++;
                 } else {
                     for (int _b = 0; _b < fixed_bank; _b++)
                         add_function_uncertain_bank(list, target, _b);
+                }
+                if (effective_bank != fixed_bank && cb_bank != -1 &&
+                    cb_bank != effective_bank &&
+                    !function_list_contains(list, target, cb_bank)) {
+                    add_function_propagated(list, target, cb_bank, walk_source_flags);
+                    s_regprop_targeted_adds++;
                 }
             } else {
                 /* Target in RAM — try SRAM-to-ROM translation */
