@@ -580,6 +580,31 @@ void nes_vblank_callback(void) {
 
         g_controller1_buttons = btn;
         g_controller2_buttons = keybinds_read_player(keys, 2);
+
+        /* DEBUG: activate $14 trace when START is held */
+        {
+            extern int s_14_trace_active;
+            extern int s_14_trace_read_count;
+            extern uint8_t s_14_trace_bits[];
+            static int s_14_trace_logged = 0;
+            if ((btn & 0x10) && s_14_trace_logged < 5) {
+                s_14_trace_active = 1;
+                s_14_trace_read_count = 0;
+                printf("[T14] START held f=%llu ctrl1=%02X $14=%02X $15=%02X\n",
+                    (unsigned long long)g_frame_count, btn, g_ram[0x14], g_ram[0x15]);
+                fflush(stdout);
+                s_14_trace_logged++;
+            } else if (!(btn & 0x10) && s_14_trace_active) {
+                /* Dump final state when START released */
+                printf("[T14] END f=%llu $14=%02X reads=%d bits=",
+                    (unsigned long long)g_frame_count, g_ram[0x14], s_14_trace_read_count);
+                for (int i = 0; i < s_14_trace_read_count && i < 16; i++)
+                    printf("%d", s_14_trace_bits[i]);
+                printf("\n");
+                fflush(stdout);
+                s_14_trace_active = 0;
+            }
+        }
     }
 
 smoke_skip_input:
@@ -655,6 +680,15 @@ smoke_skip_input:
          * game_run_nmi which decides whether to execute func_NMI. */
         int nmi_will_run = (g_ppuctrl & 0x80) != 0;
         uint8_t s_pre_nmi = g_cpu.S;
+        /* Save all CPU registers across NMI.  On real 6502, the NMI
+         * handler's PHP/PHA/.../PLA/PLP sequence always restores A/X/Y
+         * and flags.  But the recompiled NMI handler may bail early
+         * (stack mismatch), skipping the PLA/PLP epilogue, which
+         * leaves the interrupted game code resuming with corrupted
+         * registers (e.g. sprite tile corruption on the title screen). */
+        uint8_t a_pre = g_cpu.A, x_pre = g_cpu.X, y_pre = g_cpu.Y;
+        uint8_t n_pre = g_cpu.N, v_pre = g_cpu.V, d_pre = g_cpu.D;
+        uint8_t i_pre = g_cpu.I, z_pre = g_cpu.Z, c_pre = g_cpu.C;
         if (nmi_will_run) {
             uint8_t p_save = (uint8_t)((g_cpu.N<<7)|(g_cpu.V<<6)|(1<<5)|
                                        (g_cpu.D<<3)|(g_cpu.I<<2)|(g_cpu.Z<<1)|g_cpu.C);
@@ -667,19 +701,28 @@ smoke_skip_input:
         game_run_nmi();
         if (nmi_will_run) {
             runtime_set_vblank_firing(0);
+            /* Enforce full register restoration — recompiled NMI
+             * handler may have bailed, skipping PLA/PLP. */
             g_cpu.S = s_pre_nmi;
+            g_cpu.A = a_pre; g_cpu.X = x_pre; g_cpu.Y = y_pre;
+            g_cpu.N = n_pre; g_cpu.V = v_pre; g_cpu.D = d_pre;
+            g_cpu.I = i_pre; g_cpu.Z = z_pre; g_cpu.C = c_pre;
             debug_server_check_s();
         }
+        (void)a_pre; (void)x_pre; (void)y_pre;
+        (void)n_pre; (void)v_pre; (void)d_pre;
+        (void)i_pre; (void)z_pre; (void)c_pre;
     }
 
-    game_post_nmi(g_frame_count);
-
     /* Nested VBlanks (depth > 1) exist only to resolve spin-waits ($1A).
-     * They must NOT render, present, or advance frame count — doing so
-     * re-enters ppu_render_frame which fires scanline IRQs that corrupt
-     * game state ($FD scroll, PPUCTRL nametable bits). */
+     * They must NOT run post-NMI, render, present, or advance frame count.
+     * On real NES, NMI never re-enters — running PostNMI (sound engine,
+     * etc.) during a nested NMI causes side effects like shadow OAM
+     * corruption from sprite management code in the PostNMI chain. */
     if (runtime_get_vblank_depth() > 1)
         return;
+
+    game_post_nmi(g_frame_count);
 
     /* Record frame state to ring buffer for TCP timeseries queries */
     debug_server_record_frame();

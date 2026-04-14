@@ -14,6 +14,22 @@ extern void save_png(const char *path, int w, int h, const void *rgb, int stride
 
 /* Debug toggle — when set, suppress MMC3 IRQ firing during rendering. */
 int g_disable_render_irq = 0;
+extern uint16_t g_ppuaddr;  /* PPU address register (runtime.c) */
+
+/* Render-IRQ diagnostic: track last IRQ fire during rendering */
+int      g_render_irq_fired    = 0;   /* 1 if IRQ fired during last render */
+int      g_render_irq_scanline = -1;  /* scanline where IRQ fired */
+uint8_t  g_render_irq_ppuctrl_before = 0;
+uint8_t  g_render_irq_ppuctrl_after  = 0;
+uint8_t  g_render_irq_scrollx_after  = 0;
+uint8_t  g_render_irq_scrolly_after  = 0;
+/* What the renderer actually uses for scanline after IRQ */
+uint8_t  g_render_post_irq_ppuctrl_row = 0;
+int      g_render_post_irq_chr_base = 0;
+int      g_render_post_irq_origin_y = 0;
+int      g_render_post_irq_phys_nt = -1;
+int      g_render_post_irq_use_hud = -1;
+int      g_render_post_irq_split_y = -1;
 
 /* NES system palette — 64 colors as ARGB8888 */
 const uint32_t g_nes_palette[64] = {
@@ -181,6 +197,8 @@ uint8_t  g_ppu_render_last_chr00 = 0;  /* g_chr_ram[0x1000] (BG ptn $00 row 0) *
 #endif
 
 void ppu_render_frame(uint32_t *framebuf) {
+    g_render_irq_fired = 0;
+    g_render_irq_scanline = -1;
 #if RECOMP_RENDER_DIAG
     g_ppu_render_calls++;
     g_ppu_render_last_mask  = g_ppumask;
@@ -292,10 +310,25 @@ void ppu_render_frame(uint32_t *framebuf) {
                 /* Push PCH, PCL, P — same convention as NMI so RTI can pop them */
                 uint8_t p_irq = (uint8_t)((g_cpu.N<<7)|(g_cpu.V<<6)|(1<<5)|
                                            (g_cpu.D<<3)|(g_cpu.I<<2)|(g_cpu.Z<<1)|g_cpu.C);
+                g_render_irq_ppuctrl_before = g_ppuctrl;
                 g_ram[0x100+g_cpu.S] = 0x00;    g_cpu.S--;  /* PCH */
                 g_ram[0x100+g_cpu.S] = 0x00;    g_cpu.S--;  /* PCL */
                 g_ram[0x100+g_cpu.S] = p_irq;   g_cpu.S--;  /* P   */
+                { uint16_t v_before = g_ppuaddr;
                 func_IRQ();
+                /* Mid-frame $2006 writes set the PPU v register directly.
+                 * The renderer must derive scroll from v (not t/$2005) so
+                 * that the IRQ handler's scroll change takes effect.
+                 * Only sync if the IRQ handler actually wrote $2006
+                 * (changed g_ppuaddr), not if it only wrote $2005. */
+                if (g_ppuaddr != v_before)
+                    runtime_sync_scroll_from_v();
+                }
+                g_render_irq_fired    = 1;
+                g_render_irq_scanline = sy;
+                g_render_irq_ppuctrl_after  = g_ppuctrl;
+                g_render_irq_scrollx_after  = g_ppuscroll_x;
+                g_render_irq_scrolly_after  = g_ppuscroll_y;
             }
 
             /* Choose scroll source for this scanline.
@@ -308,6 +341,15 @@ void ppu_render_frame(uint32_t *framebuf) {
 
             /* BG pattern table: PPUCTRL bit 4 selects $0000 or $1000 */
             int chr_base = (ppuctrl_row & 0x10) ? 0x1000 : 0x0000;
+
+            /* Capture post-IRQ rendering state on the scanline right after IRQ */
+            if (g_render_irq_fired && sy == g_render_irq_scanline + 1) {
+                g_render_post_irq_ppuctrl_row = ppuctrl_row;
+                g_render_post_irq_chr_base = chr_base;
+                g_render_post_irq_use_hud = use_hud;
+                g_render_post_irq_split_y = split_y;
+                g_render_post_irq_origin_y = scroll_y + ((ppuctrl_row & 0x02) ? 240 : 0);
+            }
 
             /* Scroll origin in combined 512×480 nametable space.
              * PPUCTRL bits 0-1 select the base nametable (add 256 or 240 to scroll). */
@@ -356,6 +398,11 @@ void ppu_render_frame(uint32_t *framebuf) {
                 tile_row = nt_y % 8;
                 nt_row   = (tile_y >= 30) ? 1 : 0;
                 local_ty = tile_y % 30;
+            }
+
+            /* Capture nt_row for post-IRQ diagnostic */
+            if (g_render_irq_fired && sy == g_render_irq_scanline + 1) {
+                g_render_post_irq_phys_nt = nt_row; /* store nt_row; phys_nt computed per-pixel */
             }
 
             for (int sx = -g_widescreen_left; sx < 256 + g_widescreen_right; sx++) {

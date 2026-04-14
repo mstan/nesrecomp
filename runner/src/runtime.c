@@ -471,6 +471,11 @@ void runtime_reset_vblank_depth(void) {
     s_vblank_pending = 0;
 }
 
+/* DEBUG: $14 lifecycle trace — active only when START is held */
+int s_14_trace_active = 0;
+int s_14_trace_read_count = 0;
+uint8_t s_14_trace_bits[16];
+
 uint8_t nes_read(uint16_t addr) {
     bus_tick();
     if (addr <= 0x1FFF) return g_ram[addr & 0x07FF];
@@ -481,6 +486,9 @@ uint8_t nes_read(uint16_t addr) {
             if (s_ctrl1_strobe) return 0x40 | (g_controller1_buttons >> 7);
             uint8_t bit = (s_ctrl1_shift & 0x80) ? 1 : 0;
             s_ctrl1_shift <<= 1;
+            if (s_14_trace_active && s_14_trace_read_count < 16) {
+                s_14_trace_bits[s_14_trace_read_count++] = bit;
+            }
             return 0x40 | bit;
         }
         if (addr == 0x4017) {
@@ -564,6 +572,13 @@ void nes_write(uint16_t addr, uint8_t val) {
             g_write_bp_callback(a, g_ram[a], val);
             if (g_write_bp_block) return;  /* callback set block flag → skip write */
         }
+        /* DEBUG: trace all writes to $14/$15 when START trace active */
+        if (s_14_trace_active && (a == 0x14 || a == 0x15)) {
+            printf("[T14] W $%02X: %02X -> %02X f=%llu S=%02X depth=%d\n",
+                a, g_ram[a], val, (unsigned long long)g_frame_count,
+                g_cpu.S, s_vblank_depth);
+            fflush(stdout);
+        }
         /* Debug: trace GoBankInit dispatch pointer */
         if (a == 0x0B && val >= 0xC0 && g_frame_count >= 120 && g_frame_count <= 130) {
             printf("[JMP_IND] $000B=%02X (lo=$0A=%02X) → target=$%02X%02X frame=%llu A=%02X Y=%02X\n",
@@ -628,6 +643,12 @@ void nes_write(uint16_t addr, uint8_t val) {
             s_ctrl1_strobe = false;
             s_ctrl1_shift  = g_controller1_buttons; /* latch on falling edge */
             s_ctrl2_shift  = g_controller2_buttons;
+            if (s_14_trace_active) {
+                printf("[T14] LATCH f=%llu ctrl1=%02X shift=%02X\n",
+                    (unsigned long long)g_frame_count, g_controller1_buttons, s_ctrl1_shift);
+                fflush(stdout);
+                s_14_trace_read_count = 0;
+            }
         }
         return;
     }

@@ -190,11 +190,19 @@ void coroutine_yield(void)
      * changes still happen (they modify g_ram and g_cpu registers), but
      * the final S value presented to the coroutine matches what it
      * expects for its bail checks. */
+    uint8_t s_before = g_cpu.S;
     SwitchToFiber(s_scheduler_fiber);
     wal_log("RESUMED from scheduler", "(coroutine continues)", s_current_channel, 0);
     /* When we get here, the scheduler has resumed us via coroutine_resume.
-     * The generated code after coroutine_yield() does `return;` which
-     * returns to the coroutine code that called func_FF21. */
+     * The scheduler's resume path (TXS/PLA/PLA/RTS) should have set g_cpu.S
+     * to S_before_yield + 4 (undo the PHAs and JSR that preceded yield).
+     * Log if it doesn't match expectations. */
+    if (g_cpu.S != (uint8_t)(s_before + 4)) {
+        printf("[coroutine] YIELD S MISMATCH: before=$%02X after=$%02X expected=$%02X f=%llu\n",
+               s_before, g_cpu.S, (uint8_t)(s_before + 4),
+               (unsigned long long)g_frame_count);
+        fflush(stdout);
+    }
 }
 
 void coroutine_resume(int channel)
