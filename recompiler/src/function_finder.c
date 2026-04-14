@@ -711,6 +711,85 @@ static int walk_function(const NESRom *rom, FunctionList *list,
         }
 
         if (entry->mnemonic == MN_RTS || entry->mnemonic == MN_RTI) {
+            /* RTI-hijack target discovery: NMI handlers that overwrite
+             * their hardware-pushed return PC on the stack before RTI
+             * cause control to resume at a different address. The codegen
+             * pattern-matches this at MN_RTI and emits call_by_address();
+             * we mirror the detection here during BFS so the target gets
+             * discovered as a function even when it's unreachable via
+             * JSR/JMP/branches (purely reached via the hijack).
+             *
+             * Pattern (backward from RTI, within the NMI handler):
+             *   Two STA $01NN,X (opcode 9D) writes to adjacent stack-page
+             *   slots, each fed by a preceding LDA #imm (A9). Higher slot
+             *   holds PCH, lower holds PCL. Target = (PCH << 8) | PCL;
+             *   must be >= $C000 (fixed bank).
+             *
+             * Gated by start_addr == rom->nmi_vector to avoid over-firing. */
+            if (entry->mnemonic == MN_RTI && start_addr == rom->nmi_vector) {
+                uint16_t sta1_pc = 0, sta2_pc = 0;
+                uint8_t off1 = 0, off2 = 0;
+                int sta1_ok = 0, sta2_ok = 0;
+                for (int back1 = 1; back1 <= 16; back1++) {
+                    if ((int)pc - back1 - 2 < (int)start_addr) break;
+                    uint16_t p1 = (uint16_t)(pc - back1);
+                    if (rom_read(rom, read_bank, p1) == 0x9D /* STA abs,X */ &&
+                        rom_read(rom, read_bank, (uint16_t)(p1 + 2)) == 0x01) {
+                        sta1_pc = p1;
+                        off1 = rom_read(rom, read_bank, (uint16_t)(p1 + 1));
+                        sta1_ok = 1;
+                        break;
+                    }
+                }
+                if (sta1_ok) {
+                    for (int back2 = 1; back2 <= 12; back2++) {
+                        if ((int)sta1_pc - back2 - 2 < (int)start_addr) break;
+                        uint16_t p2 = (uint16_t)(sta1_pc - back2);
+                        if (rom_read(rom, read_bank, p2) == 0x9D &&
+                            rom_read(rom, read_bank, (uint16_t)(p2 + 2)) == 0x01) {
+                            uint8_t o2 = rom_read(rom, read_bank, (uint16_t)(p2 + 1));
+                            if ((o2 == (uint8_t)(off1 + 1)) || ((uint8_t)(o2 + 1) == off1)) {
+                                sta2_pc = p2;
+                                off2 = o2;
+                                sta2_ok = 1;
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (sta2_ok) {
+                    uint16_t pc_hi_sta = (off1 > off2) ? sta1_pc : sta2_pc;
+                    uint16_t pc_lo_sta = (off1 < off2) ? sta1_pc : sta2_pc;
+                    int pch_ok = 0, pcl_ok = 0;
+                    uint8_t pch_val = 0, pcl_val = 0;
+                    for (int lb = 1; lb <= 8; lb++) {
+                        if ((int)pc_hi_sta - lb - 1 < (int)start_addr) break;
+                        uint16_t pl = (uint16_t)(pc_hi_sta - lb);
+                        if (rom_read(rom, read_bank, pl) == 0xA9) {
+                            pch_val = rom_read(rom, read_bank, (uint16_t)(pl + 1));
+                            pch_ok = 1;
+                            break;
+                        }
+                    }
+                    for (int lb = 1; lb <= 8; lb++) {
+                        if ((int)pc_lo_sta - lb - 1 < (int)start_addr) break;
+                        uint16_t pl = (uint16_t)(pc_lo_sta - lb);
+                        if (rom_read(rom, read_bank, pl) == 0xA9) {
+                            pcl_val = rom_read(rom, read_bank, (uint16_t)(pl + 1));
+                            pcl_ok = 1;
+                            break;
+                        }
+                    }
+                    if (pch_ok && pcl_ok) {
+                        uint16_t tgt = ((uint16_t)pch_val << 8) | pcl_val;
+                        if (tgt >= 0xC000 && !function_list_contains(list, tgt, fixed_bank)) {
+                            add_function_propagated(list, tgt, fixed_bank, walk_source_flags);
+                            printf("[FuncFinder] RTI-hijack target $%04X discovered from NMI $%04X\n",
+                                   tgt, start_addr);
+                        }
+                    }
+                }
+            }
             if (pending_count == 0) break;
             pc += entry->size;
             continue;

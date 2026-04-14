@@ -155,6 +155,35 @@ describe("code generation", () => {
     expect(nmiBody).toContain("call_by_address(0xC150)");
   });
 
+  it("function finder seeds RTI-hijack target when otherwise unreachable", () => {
+    // Same shape as the RTI-hijack test, but the trampoline target at $C150
+    // is NOT reachable via JSR/JMP/branch from anywhere else in the ROM.
+    // The function finder must discover it via RTI-hijack pattern matching
+    // during BFS, or it will never make it into the dispatch table.
+    const rom = new RomBuilder()
+      .org(0xc000) // RESET: does nothing (no JSR/JMP to $C150)
+      .rts()
+      .org(0xc080) // NMI handler with hijack
+      .emit([0xba])              // TSX
+      .lda(0xc1)
+      .emit([0x9d, 0x02, 0x01])  // STA $0102,X (PCH)
+      .lda(0x50)
+      .emit([0x9d, 0x01, 0x01])  // STA $0101,X (PCL)
+      .rti()
+      .org(0xc150) // the hijacked target — NOT reached via JSR/JMP
+      .lda(0x99)
+      .rts()
+      .vectors(0xc080, 0xc000, 0xc000)
+      .writeTemp("rti_hijack_unreachable.nes");
+
+    const result = recompile(rom);
+    // $C150 must be discovered and dispatched, even though nothing else
+    // references it in the ROM.
+    expect(result.dispatchEntries).toContain("C150");
+    // And the codegen emission for the NMI handler should still reference it.
+    expect(result.fullC).toContain("call_by_address(0xC150)");
+  });
+
   it("emits bare RTI for non-NMI functions (no over-firing)", () => {
     // A non-NMI function that happens to do STA $01NN,X writes should NOT
     // be treated as RTI-hijack — guard is that func_base == rom->nmi_vector.
