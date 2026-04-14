@@ -1363,7 +1363,103 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
             rts_done:
             fprintf(f, "\n#ifdef RECOMP_STACK_TRACKING\n    recomp_stack_pop();\n#endif\n    return;\n");
             break;
-        case MN_RTI: fprintf(f, "/* RTI */ g_cpu.S++; { uint8_t p=g_ram[0x100+g_cpu.S]; g_cpu.N=(p>>7)&1; g_cpu.V=(p>>6)&1; g_cpu.D=(p>>3)&1; g_cpu.I=(p>>2)&1; g_cpu.Z=(p>>1)&1; g_cpu.C=p&1; } g_cpu.S++; g_cpu.S++; /* pop PCL, PCH */\n#ifdef RECOMP_STACK_TRACKING\n    recomp_stack_pop();\n#endif\n    return;\n"); break;
+        case MN_RTI: {
+            /* RTI-hijack detection: NMI handlers that overwrite their own
+             * hardware-pushed return PC on the stack before executing RTI,
+             * causing control to resume at a different address than the
+             * interrupted code. Common idiom for post-NMI trampolines
+             * (e.g. MM3's $C000 hijacks to $C121 to run the sound engine).
+             *
+             * On real hardware RTI pops the modified stack; in the recomp,
+             * func_NMI() returns without following the hijack. We detect
+             * the pattern and emit an explicit call_by_address() before
+             * the return.
+             *
+             * Pattern (scanning backward from RTI, within the NMI handler):
+             *   Two `STA $01NN,X` (opcode 9D) writes to adjacent stack-page
+             *   slots, each fed by a preceding `LDA #imm` (A9). The higher
+             *   slot holds PCH, the lower holds PCL. Target = (PCH << 8) |
+             *   PCL, must be >= $C000 (fixed bank).
+             *
+             * Gated by func_base == rom->nmi_vector to avoid over-firing on
+             * non-NMI functions that manipulate the stack for other reasons.
+             */
+            int hijack_found = 0;
+            uint16_t hijack_target = 0;
+            if (func_base == rom->nmi_vector) {
+                /* Scan backward from RTI for first STA $01NN,X */
+                uint16_t sta1_pc = 0, sta2_pc = 0;
+                uint8_t off1 = 0, off2 = 0;
+                int sta1_ok = 0, sta2_ok = 0;
+                for (int back1 = 1; back1 <= 16; back1++) {
+                    if ((int)pc - back1 - 2 < (int)func_base) break;
+                    uint16_t p1 = (uint16_t)(pc - back1);
+                    if (rom_read(rom, bank, p1) == 0x9D /* STA abs,X */ &&
+                        rom_read(rom, bank, (uint16_t)(p1 + 2)) == 0x01 /* high byte = $01 */) {
+                        sta1_pc = p1;
+                        off1 = rom_read(rom, bank, (uint16_t)(p1 + 1));
+                        sta1_ok = 1;
+                        break;
+                    }
+                }
+                if (sta1_ok) {
+                    for (int back2 = 1; back2 <= 12; back2++) {
+                        if ((int)sta1_pc - back2 - 2 < (int)func_base) break;
+                        uint16_t p2 = (uint16_t)(sta1_pc - back2);
+                        if (rom_read(rom, bank, p2) == 0x9D &&
+                            rom_read(rom, bank, (uint16_t)(p2 + 2)) == 0x01) {
+                            uint8_t o2 = rom_read(rom, bank, (uint16_t)(p2 + 1));
+                            if ((o2 == (uint8_t)(off1 + 1)) || ((uint8_t)(o2 + 1) == off1)) {
+                                sta2_pc = p2;
+                                off2 = o2;
+                                sta2_ok = 1;
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (sta2_ok) {
+                    /* Higher offset holds PCH, lower offset holds PCL */
+                    uint16_t pc_hi_sta = (off1 > off2) ? sta1_pc : sta2_pc;
+                    uint16_t pc_lo_sta = (off1 < off2) ? sta1_pc : sta2_pc;
+                    int pch_ok = 0, pcl_ok = 0;
+                    uint8_t pch_val = 0, pcl_val = 0;
+                    for (int lb = 1; lb <= 8; lb++) {
+                        if ((int)pc_hi_sta - lb - 1 < (int)func_base) break;
+                        uint16_t pl = (uint16_t)(pc_hi_sta - lb);
+                        if (rom_read(rom, bank, pl) == 0xA9 /* LDA #imm */) {
+                            pch_val = rom_read(rom, bank, (uint16_t)(pl + 1));
+                            pch_ok = 1;
+                            break;
+                        }
+                    }
+                    for (int lb = 1; lb <= 8; lb++) {
+                        if ((int)pc_lo_sta - lb - 1 < (int)func_base) break;
+                        uint16_t pl = (uint16_t)(pc_lo_sta - lb);
+                        if (rom_read(rom, bank, pl) == 0xA9) {
+                            pcl_val = rom_read(rom, bank, (uint16_t)(pl + 1));
+                            pcl_ok = 1;
+                            break;
+                        }
+                    }
+                    if (pch_ok && pcl_ok) {
+                        uint16_t tgt = ((uint16_t)pch_val << 8) | pcl_val;
+                        /* Fixed bank only — switchable-bank targets may be
+                         * unsafe to invoke statically (bank may have changed). */
+                        if (tgt >= 0xC000) {
+                            hijack_found = 1;
+                            hijack_target = tgt;
+                        }
+                    }
+                }
+            }
+            if (hijack_found) {
+                fprintf(f, "/* RTI-hijack → $%04X */ g_cpu.S++; { uint8_t p=g_ram[0x100+g_cpu.S]; g_cpu.N=(p>>7)&1; g_cpu.V=(p>>6)&1; g_cpu.D=(p>>3)&1; g_cpu.I=(p>>2)&1; g_cpu.Z=(p>>1)&1; g_cpu.C=p&1; } g_cpu.S++; g_cpu.S++; /* pop PCL, PCH */ call_by_address(0x%04X);\n#ifdef RECOMP_STACK_TRACKING\n    recomp_stack_pop();\n#endif\n    return;\n", hijack_target, hijack_target);
+            } else {
+                fprintf(f, "/* RTI */ g_cpu.S++; { uint8_t p=g_ram[0x100+g_cpu.S]; g_cpu.N=(p>>7)&1; g_cpu.V=(p>>6)&1; g_cpu.D=(p>>3)&1; g_cpu.I=(p>>2)&1; g_cpu.Z=(p>>1)&1; g_cpu.C=p&1; } g_cpu.S++; g_cpu.S++; /* pop PCL, PCH */\n#ifdef RECOMP_STACK_TRACKING\n    recomp_stack_pop();\n#endif\n    return;\n");
+            }
+            break;
+        }
 
         /* Flags */
         case MN_CLC: fprintf(f, "g_cpu.C = 0;\n"); break;

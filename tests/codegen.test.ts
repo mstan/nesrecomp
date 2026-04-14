@@ -120,6 +120,96 @@ describe("code generation", () => {
     expect(result.fullC).toContain("0x0200");
   });
 
+  it("detects RTI-hijack in NMI handler and emits call to hijacked target", () => {
+    // Minimal NMI handler that overwrites its hardware-pushed return PC
+    // with a trampoline target, then RTIs.  Mirrors the shape of MM3's
+    // $C000 PostNMI trampoline idiom.
+    //
+    // At NMI entry: stack top = [P, PCL, PCH] (hardware push).
+    // TSX; STA $0102,X overwrites PCH slot, STA $0101,X overwrites PCL.
+    // RTI then pops modified PC → control resumes at $C150.
+    const rom = new RomBuilder()
+      .org(0xc000) // RESET: do nothing
+      .rts()
+      .org(0xc080) // NMI handler
+      .emit([0xba])              // TSX
+      .lda(0xc1)                 // LDA #$C1 (PCH)
+      .emit([0x9d, 0x02, 0x01])  // STA $0102,X
+      .lda(0x50)                 // LDA #$50 (PCL)
+      .emit([0x9d, 0x01, 0x01])  // STA $0101,X
+      .rti()
+      .org(0xc150) // the hijacked trampoline target
+      .lda(0x99)
+      .rts()
+      .vectors(0xc080, 0xc000, 0xc000)
+      .writeTemp("rti_hijack.nes");
+
+    const result = recompile(rom);
+    // The NMI handler's emitted body should contain a call to the hijack target.
+    // The actual instructions live in func_C080_body (the outer func_C080 is a
+    // dispatcher shim that just calls _body).
+    const nmiMatch = result.fullC.match(/func_C080_body\([^)]*\)\s*\{[\s\S]*?\n\}/);
+    expect(nmiMatch, "func_C080_body definition should be present").not.toBeNull();
+    const nmiBody = nmiMatch![0];
+    expect(nmiBody).toContain("RTI-hijack");
+    expect(nmiBody).toContain("call_by_address(0xC150)");
+  });
+
+  it("function finder seeds RTI-hijack target when otherwise unreachable", () => {
+    // Same shape as the RTI-hijack test, but the trampoline target at $C150
+    // is NOT reachable via JSR/JMP/branch from anywhere else in the ROM.
+    // The function finder must discover it via RTI-hijack pattern matching
+    // during BFS, or it will never make it into the dispatch table.
+    const rom = new RomBuilder()
+      .org(0xc000) // RESET: does nothing (no JSR/JMP to $C150)
+      .rts()
+      .org(0xc080) // NMI handler with hijack
+      .emit([0xba])              // TSX
+      .lda(0xc1)
+      .emit([0x9d, 0x02, 0x01])  // STA $0102,X (PCH)
+      .lda(0x50)
+      .emit([0x9d, 0x01, 0x01])  // STA $0101,X (PCL)
+      .rti()
+      .org(0xc150) // the hijacked target — NOT reached via JSR/JMP
+      .lda(0x99)
+      .rts()
+      .vectors(0xc080, 0xc000, 0xc000)
+      .writeTemp("rti_hijack_unreachable.nes");
+
+    const result = recompile(rom);
+    // $C150 must be discovered and dispatched, even though nothing else
+    // references it in the ROM.
+    expect(result.dispatchEntries).toContain("C150");
+    // And the codegen emission for the NMI handler should still reference it.
+    expect(result.fullC).toContain("call_by_address(0xC150)");
+  });
+
+  it("emits bare RTI for non-NMI functions (no over-firing)", () => {
+    // A non-NMI function that happens to do STA $01NN,X writes should NOT
+    // be treated as RTI-hijack — guard is that func_base == rom->nmi_vector.
+    // Here NMI = RESET = $C000 (doesn't contain STA,X writes), and the
+    // IRQ handler at $C080 contains the writes + RTI but is not NMI.
+    const rom = new RomBuilder()
+      .org(0xc000) // RESET/NMI: plain NMI with RTI, no hijack
+      .rti()
+      .org(0xc080) // IRQ handler: has the shape of a hijack but is not NMI
+      .emit([0xba])              // TSX
+      .lda(0xc1)
+      .emit([0x9d, 0x02, 0x01])  // STA $0102,X
+      .lda(0x50)
+      .emit([0x9d, 0x01, 0x01])  // STA $0101,X
+      .rti()
+      .vectors(0xc000, 0xc000, 0xc080) // NMI=$C000, IRQ=$C080
+      .writeTemp("rti_no_hijack.nes");
+
+    const result = recompile(rom);
+    // No function anywhere in the generated output should have the hijack
+    // marker or a call to the would-be trampoline target — the detector
+    // only fires for functions whose entry address equals the NMI vector.
+    expect(result.fullC).not.toContain("RTI-hijack");
+    expect(result.fullC).not.toContain("call_by_address(0xC150)");
+  });
+
   it("generates dispatch table entries for all discovered functions", () => {
     const rom = new RomBuilder()
       .org(0xc000)
