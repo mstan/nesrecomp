@@ -256,6 +256,36 @@ static int  s_vblank_depth = 0;   /* NMI nesting depth (0 = not in NMI) */
                                    * the NMI handler (column loader).  Allow
                                    * re-entrancy so the wait loop can exit. */
 static uint32_t s_ops_count = 0;
+/* Debug cadence counters. Accumulate across a wall-clock frame; the verify
+ * layer pops them after native NMI completes. */
+static uint32_t s_dbg_nmi_fires = 0;
+static uint32_t s_dbg_cycles_ticked = 0;
+static uint32_t s_dbg_instrs_ticked = 0;
+static uint32_t s_dbg_forced_cap_hits = 0;
+static uint32_t s_dbg_max_depth_skips = 0;
+static uint32_t s_dbg_pending_no_ppu = 0;
+uint32_t runtime_pop_nmi_fires(void) {
+    uint32_t v = s_dbg_nmi_fires; s_dbg_nmi_fires = 0; return v;
+}
+uint32_t runtime_pop_cycle_budget_used(void) {
+    uint32_t v = s_dbg_cycles_ticked; s_dbg_cycles_ticked = 0; return v;
+}
+uint32_t runtime_pop_instrs_ticked(void) {
+    uint32_t v = s_dbg_instrs_ticked; s_dbg_instrs_ticked = 0; return v;
+}
+uint32_t runtime_pop_forced_caps(void) {
+    uint32_t a = s_dbg_forced_cap_hits;
+    uint32_t b = s_dbg_max_depth_skips;
+    uint32_t c = s_dbg_pending_no_ppu;
+    s_dbg_forced_cap_hits = 0;
+    s_dbg_max_depth_skips = 0;
+    s_dbg_pending_no_ppu  = 0;
+    /* Encode: low16=forced_caps, mid8=max_depth_skips, high8=no_ppu */
+    if (a > 0xFFFF) a = 0xFFFF;
+    if (b > 0xFF)   b = 0xFF;
+    if (c > 0xFF)   c = 0xFF;
+    return (c << 24) | (b << 16) | a;
+}
 
 /* Cycle budget per frame.  Real NES: 29780.666 CPU cycles between NMIs
  * (341*262/3 for NTSC).  Generated code passes each instruction's cycle
@@ -276,9 +306,14 @@ void maybe_trigger_vblank(int cycles) {
     debug_server_check_s();
 
     /* Count cycles — always, even during NMI handler execution. */
-    s_ops_count += (cycles > 0) ? (uint32_t)cycles : 1;
+    {
+        uint32_t _c = (cycles > 0) ? (uint32_t)cycles : 1;
+        s_ops_count       += _c;
+        s_dbg_cycles_ticked += _c;
+        s_dbg_instrs_ticked++;
+    }
     if (s_ops_count < OPS_PER_FRAME) return;
-    if (s_vblank_depth >= MAX_VBLANK_DEPTH) return;
+    if (s_vblank_depth >= MAX_VBLANK_DEPTH) { s_dbg_max_depth_skips++; return; }
 
     /* Frame budget exhausted.
      *
@@ -313,9 +348,19 @@ void maybe_trigger_vblank(int cycles) {
         g_ppuscroll_x_hud = 0;
         g_ppuscroll_y_hud = 0;
         g_ppuctrl_hud     = g_ppuctrl & 0x38;
-        if (g_ppuctrl & 0x80) {
-            nes_vblank_callback();
-        }
+        /* Always invoke the frame-boundary callback, even when NMI is
+         * disabled ($2000 bit7=0).  The callback itself gates game_run_nmi
+         * on NMI-enable (main_runner.c); but it also drives wall-clock
+         * frame cadence: g_frame_count tick, SDL event poll, and in
+         * verify mode the oracle's retro_run.  Gating here caused a silent
+         * budget-consumption bug: when NMI was disabled (e.g. during a
+         * PPU-off mode transition), s_ops_count kept resetting without
+         * the callback running, so main-loop code advanced multiple
+         * frame-budgets' worth of game state between two visible frames.
+         * In --verify mode this manifested as native's mode machine
+         * racing 3 frames ahead of the oracle at mode-transition points. */
+        s_dbg_nmi_fires++;
+        nes_vblank_callback();
         /* Restore spr0 counter for outer code's detection loop */
         g_spr0_reads_ctr    = saved_ctr0;
         g_spr0_split_active = saved_act0;
@@ -324,6 +369,26 @@ void maybe_trigger_vblank(int cycles) {
     } else {
         /* Deferred fire — wait for backward branch (loop boundary) */
         s_vblank_pending = 1;
+        /* Safety cap: if a backward-branch checkpoint never arrives and
+         * the cycle budget has blown past 1.5× the frame budget, force
+         * the pending NMI to fire here. Without this cap, a sufficiently
+         * long linear code path (e.g. a multi-bank JSR chain through
+         * inline-dispatch trampolines on GxROM) can accumulate 4–5
+         * budgets' worth of real-world game-state progression inside a
+         * single perceived frame, causing state machines to advance
+         * several logical steps per wall-clock frame.
+         *
+         * The original deferral's motivation — avoiding mid-operation
+         * NMI that corrupts bank-dependent reads — is preserved for
+         * typical workloads (DH-style code with frequent back-edges,
+         * never exceeds 1× budget). This cap only fires on the
+         * pathological unbounded case, where the alternative is worse:
+         * today's behavior has no upper bound at all. */
+        if (s_ops_count > (OPS_PER_FRAME + OPS_PER_FRAME / 2)) {
+            s_dbg_forced_cap_hits++;
+            if (!(g_ppuctrl & 0x80)) s_dbg_pending_no_ppu++;
+            maybe_fire_pending_vblank();
+        }
     }
 }
 
@@ -361,6 +426,7 @@ void maybe_fire_pending_vblank(void) {
     g_ppuctrl_hud     = g_ppuctrl & 0x38;
 
     if (g_ppuctrl & 0x80) {
+        s_dbg_nmi_fires++;
         nes_vblank_callback();
     } else if (s_vblank_depth > 1) {
         g_ram[0x1A] = 1;
@@ -426,6 +492,17 @@ uint8_t nes_read(uint16_t addr) {
                 /* Trace trigger edge */
                 if (g_zapper_trigger && !s_zapper_prev_trigger) {
                     s_zapper_trace_count = 0; /* reset on new trigger press */
+                    /* Reset spr0 gate for the new detection cycle.
+                     * The split-screen spr0 wait sets g_spr0_split_active=1
+                     * earlier in the frame.  If this persists into the Zapper
+                     * detection Phase 1 loop, the light-detection gate is
+                     * already open and the game sees light before spr0 fires
+                     * in the detection context — triggering the anti-cheat
+                     * "aimed at lamp" rejection.  Clearing spr0_active on
+                     * trigger press ensures Phase 1 starts fresh: the counter
+                     * must accumulate again before the gate opens. */
+                    g_spr0_split_active = 0;
+                    g_spr0_reads_ctr = 0;
                     zapper_trace("=== TRIGGER PRESSED frame=%llu aim=(%d,%d) ===\n",
                         g_frame_count, g_zapper_x, g_zapper_y);
                     zapper_trace("  RAM: $C5=%02X $24=%02X $26=%02X $4F=%02X $CD=%02X $84=%02X $0B=%02X\n",
@@ -768,11 +845,12 @@ uint8_t ppu_read_reg(uint16_t reg) {
                     g_spr0_split_active = 1;
                 } else {
                     if (++g_spr0_reads_ctr >= 3) {
-                        /* Capture scroll/ppuctrl state as HUD (pre-split) values.
-                         * Mask ppuctrl to only rendering-relevant bits: 0-1 (NT),
-                         * 3 (spr pattern), 4 (BG pattern), 5 (spr size).
-                         * Bit 2 (VRAM inc) and bit 7 (NMI enable) don't affect
-                         * rendering and may have transient values from PPU uploads. */
+                        /* Simulate sprite-0 hit: set bit6 in ppustatus.
+                         * Capture scroll/ppuctrl state as HUD (pre-split)
+                         * values.  Bit6 is set but spr0_active is NOT set
+                         * yet — it will be set on the NEXT read that sees
+                         * bit6=1, ensuring the game and the Zapper gate
+                         * are synchronized. */
                         g_ppuscroll_x_hud   = g_ppuscroll_x;
                         g_ppuscroll_y_hud   = g_ppuscroll_y;
                         g_ppuctrl_hud       = g_ppuctrl & 0x38;

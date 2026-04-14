@@ -637,50 +637,38 @@ smoke_skip_input:
     game_on_frame(g_frame_count);
 
 
-    if (g_ppuctrl & 0x80) {
-        /* Check if this is a NESTED NMI (already inside game_run_nmi).
-         * On real NES, NMI can nest — but the nested NMI runs a full frame
-         * later, when game state is consistent.  In the recompiler, nested
-         * NMI fires mid-VRAM-transfer when game state is inconsistent,
-         * causing the NMI handler's column loader to compute wrong PPU
-         * addresses (e.g. ppuaddr=$FFC0 → writes to palette instead of NT).
-         *
-         * Fix: for nested NMIs, just set $1A=1 to resolve the spin-wait
-         * that triggered the nesting.  Skip the full NMI handler to avoid
-         * VRAM transfers with corrupted state. */
-        if (runtime_get_vblank_depth() > 1) {
-            g_ram[0x1A] = 1;  /* signal the $1A spin-wait to exit */
-            g_ram[0x20] = 1;  /* signal VBlank to the game — needed for
-                               * detection loops (e.g. Duck Hunt Zapper at
-                               * $D1CD/$D222) that poll $20 as a timeout.
-                               * On real NES these loops run in the main loop
-                               * (not inside NMI), so VBlank fires normally.
-                               * In the recomp they run inside the NMI handler
-                               * so the nested VBlank must set this flag. */
-        } else {
-            /* Normal (non-nested) NMI: push stack frame and run handler.
-             * Real 6502 pushes 3 bytes: PCH, PCL, P (status flags).
-             * PCH/PCL are placeholders — recompiled code never uses the
-             * return address from RTI, but the NMI handler does stack-relative
-             * reads at $106,X and $107,X that DEPEND on all 3 bytes being
-             * present. */
+    /* Frame boundary: always call game_run_nmi so per-frame work (oracle
+     * sync in --verify, frame counter advancement, etc.) runs every
+     * wall-clock frame regardless of NMI-enable.  game_run_nmi is
+     * responsible for gating the game's actual NMI handler on
+     * (g_ppuctrl & 0x80) and the nested-depth check internally. */
+    if ((g_ppuctrl & 0x80) && runtime_get_vblank_depth() > 1) {
+        /* Nested NMI with NMI enabled: skip the handler (would corrupt
+         * mid-VRAM transfer state), but still set $1A/$20 to resolve any
+         * spin-wait. Do NOT run game_run_nmi here — nested NMIs should
+         * not advance oracle/frame cadence. */
+        g_ram[0x1A] = 1;
+        g_ram[0x20] = 1;
+    } else {
+        /* Top-level frame boundary (or NMI-disabled frame): push stack
+         * frame only if NMI is actually going to run, then delegate to
+         * game_run_nmi which decides whether to execute func_NMI. */
+        int nmi_will_run = (g_ppuctrl & 0x80) != 0;
+        uint8_t s_pre_nmi = g_cpu.S;
+        if (nmi_will_run) {
             uint8_t p_save = (uint8_t)((g_cpu.N<<7)|(g_cpu.V<<6)|(1<<5)|
                                        (g_cpu.D<<3)|(g_cpu.I<<2)|(g_cpu.Z<<1)|g_cpu.C);
-            uint8_t s_pre_nmi = g_cpu.S;   /* Save S before NMI */
             g_ram[0x100+g_cpu.S] = 0x00;   g_cpu.S--;   /* PCH placeholder */
             g_ram[0x100+g_cpu.S] = 0x00;   g_cpu.S--;   /* PCL placeholder */
             g_ram[0x100+g_cpu.S] = p_save; g_cpu.S--;   /* P (status flags) */
-            debug_server_check_s(); /* Track runner's NMI push */
+            debug_server_check_s();
             runtime_set_vblank_firing(1);
-            game_run_nmi();
+        }
+        game_run_nmi();
+        if (nmi_will_run) {
             runtime_set_vblank_firing(0);
-            /* On real 6502, RTI always restores S to pre-NMI value.
-             * The recompiled NMI handler may return early (e.g., due to
-             * universal bail detection triggering on internal JSRs).
-             * Enforce S restoration to prevent NMI-induced stack drift. */
             g_cpu.S = s_pre_nmi;
-
-            debug_server_check_s(); /* Track after NMI handler */
+            debug_server_check_s();
         }
     }
 
