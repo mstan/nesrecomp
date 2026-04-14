@@ -63,7 +63,7 @@ static void emit_header(FILE *f) {
         "    g_cpu.N=((_r>>7)&1); g_cpu.Z=((_r&0xFF)==0)?1:0; \\\n"
         "    g_cpu.V=(~((a)^(b))&((a)^_r)&0x80)?1:0; } while(0)\n"
         "#define FLAG_NZC_SUB(r,a,b) do { int16_t _r=(r); g_cpu.C=(_r>=0)?1:0; \\\n"
-        "    g_cpu.N=((_r>>7)&1); g_cpu.Z=((_r&0xFF)==0)?1:0; \\\n"
+        "    g_cpu.N=((_r&0xFF)>>7); g_cpu.Z=((_r&0xFF)==0)?1:0; \\\n"
         "    g_cpu.V=(((a)^(b))&((a)^_r)&0x80)?1:0; } while(0)\n\n"
     );
 }
@@ -1101,7 +1101,7 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
              * change S mid-call.  Bail propagation is only reliable for
              * direct function calls where we know the target's behavior. */
             if (did_push_jsr) {
-                fprintf(f, "if (g_cpu.S != _cbs) {\n#ifdef RECOMP_STACK_TRACKING\n    recomp_stack_pop();\n#endif\n    return; } }\n");
+                fprintf(f, "if (g_cpu.S != _cbs) {\n#ifdef RECOMP_STACK_TRACKING\n    bail_trace(0x%04X, _cbs);\n    recomp_stack_pop();\n#endif\n    return; } }\n", pc);
             }
             break;
         }
@@ -1239,11 +1239,39 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                          * coroutine entry, loop back when it yields. */
                         fprintf(f, "{ uint16_t _jt = nes_read16zp(0x%02X); maybe_trigger_vblank(2); coroutine_start(g_ram[0x91], _jt); goto label_%04X; }\n",
                                 (uint8_t)abs16, sched_reset_addr);
+                    } else if (pc >= 6 &&
+                               rom_read(rom, bank, pc - 6) == 0xA9 &&
+                               rom_read(rom, bank, pc - 4) == 0x48 &&
+                               rom_read(rom, bank, pc - 3) == 0xA9 &&
+                               rom_read(rom, bank, pc - 1) == 0x48) {
+                        /* 2-PHA indirect JSR: LDA #hi/PHA/LDA #lo/PHA/JMP (zp).
+                         * The pushed return address is (hi:lo)+1.  The callee's
+                         * RTS consumes the 2 pushed bytes, so after call_by_address
+                         * returns, S is restored and we fall through to the
+                         * continuation address. */
+                        uint8_t cont_hi = rom_read(rom, bank, pc - 5);
+                        uint8_t cont_lo = rom_read(rom, bank, pc - 2);
+                        uint16_t cont = (((uint16_t)cont_hi << 8) | cont_lo) + 1;
+                        fprintf(f, "{ uint16_t _jt = nes_read16zp(0x%02X); maybe_trigger_vblank(2); call_by_address(_jt); } goto label_%04X;\n",
+                                (uint8_t)abs16, cont);
                     } else {
                         fprintf(f, "{ uint16_t _jt = nes_read16zp(0x%02X); maybe_trigger_vblank(2); call_by_address(_jt); return; }\n", (uint8_t)abs16);
                     }
                 } else {
-                    fprintf(f, "{ uint16_t _jt = nes_read16(0x%04X); maybe_trigger_vblank(2); call_by_address(_jt); return; }\n", abs16);
+                    /* Non-ZP indirect: check for 2-PHA pattern too. */
+                    if (pc >= 6 &&
+                        rom_read(rom, bank, pc - 6) == 0xA9 &&
+                        rom_read(rom, bank, pc - 4) == 0x48 &&
+                        rom_read(rom, bank, pc - 3) == 0xA9 &&
+                        rom_read(rom, bank, pc - 1) == 0x48) {
+                        uint8_t cont_hi = rom_read(rom, bank, pc - 5);
+                        uint8_t cont_lo = rom_read(rom, bank, pc - 2);
+                        uint16_t cont = (((uint16_t)cont_hi << 8) | cont_lo) + 1;
+                        fprintf(f, "{ uint16_t _jt = nes_read16(0x%04X); maybe_trigger_vblank(2); call_by_address(_jt); } goto label_%04X;\n",
+                                abs16, cont);
+                    } else {
+                        fprintf(f, "{ uint16_t _jt = nes_read16(0x%04X); maybe_trigger_vblank(2); call_by_address(_jt); return; }\n", abs16);
+                    }
                 }
             }
             break;
@@ -1952,6 +1980,15 @@ static void emit_dispatch(FILE *f, const EmittedWrapper *wrappers, int wrapper_c
     if (rom->mapper == 4) {
         fprintf(f,
             "    extern int g_mmc3_r6_odd, g_mmc3_r7_even;\n"
+            "    extern int g_mmc3_bank_a000;\n"
+            "    /* For $A000-$BFFF addresses, the active bank is R7/2 (g_mmc3_bank_a000),\n"
+            "     * not R6/2 (g_current_bank).  Capture before remapping changes addr. */\n"
+            "    int _bank = (addr >= 0xA000 && addr < 0xC000) ? g_mmc3_bank_a000 : g_current_bank;\n"
+            "    /* When R6 is odd, code from the $8000 range gets remapped to $A000 offset.\n"
+            "     * Calls from that code to $A000+ targets may need R6's bank, not R7's.\n"
+            "     * Enable fallback: try g_mmc3_bank_a000 first, retry with g_current_bank. */\n"
+            "    int _a000_r6_fallback = (g_mmc3_r6_odd && addr >= 0xA000 && addr < 0xC000\n"
+            "                             && g_current_bank != g_mmc3_bank_a000);\n"
             "    if (g_mmc3_r6_odd && addr >= 0x8000 && addr < 0xA000)\n"
             "        addr += 0x2000; /* 8KB bank odd: $8000 range -> $A000 offset */\n"
             "    else if (g_mmc3_r7_even && addr >= 0xA000 && addr < 0xC000)\n"
@@ -1960,6 +1997,7 @@ static void emit_dispatch(FILE *f, const EmittedWrapper *wrappers, int wrapper_c
     }
 
     fprintf(f,
+        "_dispatch_retry:\n"
         "    switch (addr) {\n"
     );
 
@@ -1995,8 +2033,13 @@ static void emit_dispatch(FILE *f, const EmittedWrapper *wrappers, int wrapper_c
                 fprintf(f, "            func_%04X_b%d(); break;\n", addr, bk);
             }
         } else {
-            /* Multiple bank variants: dispatch by current bank */
-            fprintf(f, "            switch (g_current_bank) {\n");
+            /* Multiple bank variants: dispatch by current bank.
+             * For MMC3, use _bank which selects g_mmc3_bank_a000 for
+             * $A000-$BFFF addresses and g_current_bank for $8000-$9FFF. */
+            if (rom->mapper == 4)
+                fprintf(f, "            switch (_bank) {\n");
+            else
+                fprintf(f, "            switch (g_current_bank) {\n");
 
             /* Check if bank 15 (fixed) is already a variant. If not, and if the
              * fixed-bank equivalent (addr + $4000) exists, add a bank-15 alias.
@@ -2028,8 +2071,12 @@ static void emit_dispatch(FILE *f, const EmittedWrapper *wrappers, int wrapper_c
                     fprintf(f, "                case %d: func_%04X_b%d(); break;\n",
                             bk, addr, bk);
             }
-            if (!has_default)
-                fprintf(f, "                default: nes_log_dispatch_miss(addr); return 0;\n");
+            if (!has_default) {
+                if (rom->mapper == 4)
+                    fprintf(f, "                default: if (_a000_r6_fallback) { _bank = g_current_bank; _a000_r6_fallback = 0; goto _dispatch_retry; } nes_log_dispatch_miss(addr); return 0;\n");
+                else
+                    fprintf(f, "                default: nes_log_dispatch_miss(addr); return 0;\n");
+            }
             fprintf(f, "            }\n");
             fprintf(f, "            break;\n");
         }

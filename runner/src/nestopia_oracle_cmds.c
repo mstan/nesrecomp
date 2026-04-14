@@ -144,6 +144,17 @@ static void handle_read_emu_ppu(int id, const char *json) {
         id, addr, len, hex);
 }
 
+static void handle_emu_cpu_regs(int id, const char *json) {
+    (void)json;
+    NestopiaCpuRegs r;
+    nestopia_bridge_get_cpu_regs(&r);
+    debug_server_send_fmt(
+        "{\"id\":%d,\"ok\":true,"
+        "\"a\":\"0x%02X\",\"x\":\"0x%02X\",\"y\":\"0x%02X\","
+        "\"sp\":\"0x%02X\",\"p\":\"0x%02X\",\"pc\":\"0x%04X\"}",
+        id, r.a, r.x, r.y, r.sp, r.p, r.pc);
+}
+
 static void handle_read_emu_oam(int id, const char *json) {
     (void)json;
     static uint8_t emu_oam[0x100];
@@ -164,6 +175,7 @@ int nestopia_oracle_handle_cmd(const char *cmd, int id, const char *json) {
     if (strcmp(cmd, "framebuf_diff") == 0)  { handle_framebuf_diff(id, json);  return 1; }
     if (strcmp(cmd, "read_emu_ppu") == 0)   { handle_read_emu_ppu(id, json);   return 1; }
     if (strcmp(cmd, "read_emu_oam") == 0)   { handle_read_emu_oam(id, json);   return 1; }
+    if (strcmp(cmd, "emu_cpu_regs") == 0)   { handle_emu_cpu_regs(id, json);   return 1; }
     return 0;
 }
 
