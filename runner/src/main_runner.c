@@ -56,6 +56,10 @@ int g_widescreen_right = 0;
 
 static uint32_t           s_framebuf[512 * 240];  /* sized for max 512px width */
 
+/* Published to game code hooks (extras.c) so game_run_nmi can simulate
+ * proper RTI S restoration between func_C000 and the PostNMI trampoline. */
+uint8_t g_nmi_s_pre = 0;
+
 /* On-demand render for Zapper light detection.  Called when a detection
  * sequence changes PPUMASK (e.g. enabling sprites for the flash phase)
  * and the framebuffer hasn't been re-rendered yet.  Renders the current
@@ -614,6 +618,8 @@ smoke_skip_input:
             uint8_t p_save = (uint8_t)((g_cpu.N<<7)|(g_cpu.V<<6)|(1<<5)|
                                        (g_cpu.D<<3)|(g_cpu.I<<2)|(g_cpu.Z<<1)|g_cpu.C);
             uint8_t s_pre_nmi = g_cpu.S;   /* Save S before NMI */
+            extern uint8_t g_nmi_s_pre;    /* used by extras.c game_run_nmi */
+            g_nmi_s_pre = s_pre_nmi;
             /* Save all CPU registers.  On real 6502, the NMI handler's
              * PHP/PHA/.../PLA/PLP sequence always restores A/X/Y/flags.
              * But the recompiled NMI handler may bail early (stack mismatch),
