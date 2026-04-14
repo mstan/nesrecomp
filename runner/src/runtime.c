@@ -779,19 +779,58 @@ uint8_t  g_miss_last_stack_bytes[16];
 uint16_t g_miss_unique_addrs[MAX_MISS_UNIQUE];
 int      g_miss_unique_count = 0;
 
+MissRecord g_miss_ring[MAX_MISS_RING];
+int        g_miss_ring_head  = 0;
+int        g_miss_ring_count = 0;
+
 #ifdef RECOMP_STACK_TRACKING
 extern const char *g_recomp_stack[];
 extern int         g_recomp_stack_top;
 extern const char *g_last_recomp_func;
 #endif
 
+/* Classify the bytes at a miss target. See MissTargetClass in nes_runtime.h.
+ * Pure helper — safe to call from anywhere. */
+static uint8_t classify_miss_target(const uint8_t bytes[8]) {
+    int all_zero = 1;
+    for (int i = 0; i < 8; i++) if (bytes[i] != 0) { all_zero = 0; break; }
+    if (all_zero)       return MISS_TARGET_ZERO;
+    if (bytes[0] == 0x60) return MISS_TARGET_RTS_STUB;
+    return MISS_TARGET_CODE;
+}
+
 void nes_log_dispatch_miss(uint16_t addr) {
     /* Let the game handle unmapped addresses (e.g. SRAM code remapping) */
     if (game_dispatch_override(addr)) return;
     static uint32_t last = 0xFFFFFFFF;
     uint32_t key = ((uint32_t)g_current_bank << 16) | addr;
-    if (key != last) {
-        printf("[Dispatch] MISS: no func for $%04X bank=%d\n", addr, g_current_bank);
+    bool first_for_key = (key != last);
+
+    /* Capture target bytes + classification up front so we can print it
+     * inline with the first-sighting log line. */
+    uint8_t tbytes[8];
+    for (int i = 0; i < 8; i++)
+        tbytes[i] = mapper_peek_prg((uint16_t)(addr + i));
+    uint8_t tclass = classify_miss_target(tbytes);
+    const char *class_name =
+        (tclass == MISS_TARGET_ZERO)     ? "ZERO_FILLED" :
+        (tclass == MISS_TARGET_RTS_STUB) ? "RTS_STUB"    : "CODE";
+
+    /* Decode the hardware-pushed return on the 6502 stack.
+     * After JSR, the stack holds (PC+2) as (hi, lo) with PC-1 semantics —
+     * i.e. top-of-stack low byte at SP+1, high at SP+2. Reading them here
+     * gives the address of the byte AFTER the JSR that reached the
+     * dispatcher (the JSR itself is at call_site_pc - 3). */
+    uint8_t s_lo_idx = (uint8_t)(g_cpu.S + 1);
+    uint8_t s_hi_idx = (uint8_t)(g_cpu.S + 2);
+    uint16_t call_site_pc = (uint16_t)g_ram[0x100 + s_lo_idx] |
+                            ((uint16_t)g_ram[0x100 + s_hi_idx] << 8);
+
+    if (first_for_key) {
+        printf("[Dispatch] MISS: no func for $%04X bank=%d target=%s "
+               "A=%02X X=%02X Y=%02X call_site=$%04X\n",
+               addr, g_current_bank, class_name,
+               g_cpu.A, g_cpu.X, g_cpu.Y, call_site_pc);
         last = key;
     }
     g_miss_count_any++;
@@ -799,9 +838,11 @@ void nes_log_dispatch_miss(uint16_t addr) {
     g_miss_last_frame = g_frame_count;
     g_miss_last_bank  = g_current_bank;
     /* Capture caller context: top of recomp call stack + 6502 stack snapshot */
+    const char *c0 = "(none)";
+    const char *c1 = "(none)";
 #ifdef RECOMP_STACK_TRACKING
-    const char *c0 = (g_recomp_stack_top > 0) ? g_recomp_stack[g_recomp_stack_top - 1] : g_last_recomp_func;
-    const char *c1 = (g_recomp_stack_top > 1) ? g_recomp_stack[g_recomp_stack_top - 2] : "(none)";
+    c0 = (g_recomp_stack_top > 0) ? g_recomp_stack[g_recomp_stack_top - 1] : g_last_recomp_func;
+    c1 = (g_recomp_stack_top > 1) ? g_recomp_stack[g_recomp_stack_top - 2] : "(none)";
     strncpy(g_miss_last_caller, c0 ? c0 : "(none)", sizeof(g_miss_last_caller)-1);
     g_miss_last_caller[sizeof(g_miss_last_caller)-1] = '\0';
     strncpy(g_miss_last_stack2, c1 ? c1 : "(none)", sizeof(g_miss_last_stack2)-1);
@@ -809,10 +850,36 @@ void nes_log_dispatch_miss(uint16_t addr) {
 #endif
     g_miss_last_sp = g_cpu.S;
     /* Snapshot 16 bytes above SP (the most recent pushes) */
+    uint8_t stack_snap[16];
     for (int i = 0; i < 16; i++) {
         uint8_t s = (uint8_t)(g_cpu.S + 1 + i);
-        g_miss_last_stack_bytes[i] = g_ram[0x100 + s];
+        stack_snap[i] = g_ram[0x100 + s];
+        g_miss_last_stack_bytes[i] = stack_snap[i];
     }
+
+    /* Push a full record into the ring (newest at head-1, oldest wraps). */
+    {
+        MissRecord *r = &g_miss_ring[g_miss_ring_head];
+        r->addr         = addr;
+        r->bank         = g_current_bank;
+        r->frame        = g_frame_count;
+        r->cpu_a        = g_cpu.A;
+        r->cpu_x        = g_cpu.X;
+        r->cpu_y        = g_cpu.Y;
+        r->cpu_p        = g_cpu.P;
+        r->cpu_s        = g_cpu.S;
+        r->call_site_pc = call_site_pc;
+        for (int i = 0; i < 8;  i++) r->target_bytes[i] = tbytes[i];
+        r->target_class = tclass;
+        for (int i = 0; i < 16; i++) r->stack_bytes[i]  = stack_snap[i];
+        strncpy(r->caller,  c0 ? c0 : "(none)", sizeof(r->caller)-1);
+        r->caller[sizeof(r->caller)-1]   = '\0';
+        strncpy(r->caller2, c1 ? c1 : "(none)", sizeof(r->caller2)-1);
+        r->caller2[sizeof(r->caller2)-1] = '\0';
+        g_miss_ring_head = (g_miss_ring_head + 1) % MAX_MISS_RING;
+        if (g_miss_ring_count < MAX_MISS_RING) g_miss_ring_count++;
+    }
+
     /* Add to unique list if not already present; log new misses to file */
     int found = 0;
     for (int i = 0; i < g_miss_unique_count; i++)
@@ -824,11 +891,14 @@ void nes_log_dispatch_miss(uint16_t addr) {
         snprintf(miss_path, sizeof(miss_path), "%sdispatch_misses.log", g_exe_dir);
         FILE *mf = fopen(miss_path, "a");
         if (mf) {
-            fprintf(mf, "extra_func %d 0x%04X\n", g_current_bank, addr);
+            fprintf(mf, "extra_func %d 0x%04X  # target=%s A=%02X X=%02X Y=%02X call_site=$%04X\n",
+                    g_current_bank, addr, class_name,
+                    g_cpu.A, g_cpu.X, g_cpu.Y, call_site_pc);
             fclose(mf);
         }
-        fprintf(stderr, "[Dispatch] NEW miss logged: extra_func %d 0x%04X (frame %llu)\n",
-                g_current_bank, addr, (unsigned long long)g_frame_count);
+        printf("[Dispatch] NEW miss logged: extra_func %d 0x%04X (frame %llu) target=%s\n",
+               g_current_bank, addr, (unsigned long long)g_frame_count, class_name);
+        fflush(stdout);
     }
 }
 

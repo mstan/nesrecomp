@@ -181,6 +181,36 @@ extern uint64_t g_miss_last_frame;
 extern uint16_t g_miss_unique_addrs[MAX_MISS_UNIQUE];
 extern int      g_miss_unique_count;
 
+/* Target-byte classification for a miss address.
+ * Used to tell "dispatcher was called with garbage input" (ZERO / RTS_STUB)
+ * apart from "real function exists in ROM but finder missed it" (CODE). */
+typedef enum {
+    MISS_TARGET_ZERO     = 0,  /* 8 bytes at addr are all 0x00 — padding */
+    MISS_TARGET_RTS_STUB = 1,  /* first byte is 0x60 — 1-byte return stub */
+    MISS_TARGET_CODE     = 2   /* anything else — plausible code */
+} MissTargetClass;
+
+/* Per-miss snapshot — stored in a ring so a flood of distinct misses
+ * doesn't overwrite early ones before they can be inspected. */
+typedef struct {
+    uint16_t addr;
+    int      bank;
+    uint64_t frame;
+    uint8_t  cpu_a, cpu_x, cpu_y, cpu_p, cpu_s;
+    uint16_t call_site_pc;        /* decoded from hardware-pushed return on stack
+                                   * (= PC+2 of the 6502 JSR that reached here) */
+    uint8_t  target_bytes[8];     /* bytes at currently-mapped (addr..addr+7) */
+    uint8_t  target_class;        /* MissTargetClass */
+    char     caller[64];          /* top of recomp call stack at miss time */
+    char     caller2[64];         /* caller-1 */
+    uint8_t  stack_bytes[16];     /* 16 bytes above 6502 SP */
+} MissRecord;
+
+#define MAX_MISS_RING 16
+extern MissRecord g_miss_ring[MAX_MISS_RING];
+extern int        g_miss_ring_head;   /* next write position */
+extern int        g_miss_ring_count;  /* total stored, ≤ MAX_MISS_RING */
+
 /* ---- Exe directory (for writing logs next to the binary) ---- */
 extern char g_exe_dir[260];  /* set once at startup by launcher */
 

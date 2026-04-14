@@ -14,6 +14,11 @@ void mapper_write(uint16_t addr, uint8_t val);
 const uint8_t *mapper_get_switchable_bank(void);
 const uint8_t *mapper_get_fixed_bank(void);
 
+/* Peek a byte at a CPU address $8000-$FFFF from the currently mapped PRG
+ * window. Returns 0 for addresses < $8000 or when no ROM is loaded.
+ * Safe to call from any context; does not mutate mapper state. */
+uint8_t mapper_peek_prg(uint16_t addr);
+
 /*
  * Returns the current nametable mirroring mode:
  *   0 = one-screen lower bank

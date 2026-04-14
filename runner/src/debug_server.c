@@ -891,6 +891,48 @@ static void handle_dispatch_miss_info(int id, const char *json)
     unique_buf[pos++] = ']';
     unique_buf[pos] = '\0';
 
+    /* Build ring array — oldest-first for readability. Each entry carries
+     * full classification, CPU state, call-site, target-byte hexdump, and
+     * recomp caller names so a consumer can triage without a round-trip. */
+    char ring_buf[8192];
+    int  rp = 0;
+    ring_buf[rp++] = '[';
+    if (g_miss_ring_count > 0) {
+        int start = (g_miss_ring_head - g_miss_ring_count + MAX_MISS_RING) % MAX_MISS_RING;
+        for (int n = 0; n < g_miss_ring_count; n++) {
+            const MissRecord *r = &g_miss_ring[(start + n) % MAX_MISS_RING];
+            const char *cls =
+                (r->target_class == MISS_TARGET_ZERO)     ? "ZERO_FILLED" :
+                (r->target_class == MISS_TARGET_RTS_STUB) ? "RTS_STUB"    : "CODE";
+            char tbytes_hex[32];
+            for (int i = 0; i < 8; i++)
+                snprintf(tbytes_hex + i*3, 4, "%02X ", r->target_bytes[i]);
+            tbytes_hex[23] = '\0';
+            char sbytes_hex[64];
+            for (int i = 0; i < 16; i++)
+                snprintf(sbytes_hex + i*3, 4, "%02X ", r->stack_bytes[i]);
+            sbytes_hex[47] = '\0';
+            rp += snprintf(ring_buf + rp, sizeof(ring_buf) - rp,
+                "%s{\"addr\":\"$%04X\",\"bank\":%d,\"frame\":%llu,"
+                "\"target\":\"%s\",\"target_bytes\":\"%s\","
+                "\"A\":\"$%02X\",\"X\":\"$%02X\",\"Y\":\"$%02X\","
+                "\"P\":\"$%02X\",\"S\":\"$%02X\",\"call_site\":\"$%04X\","
+                "\"caller\":\"%s\",\"caller2\":\"%s\","
+                "\"stack_bytes\":\"%s\"}",
+                n ? "," : "",
+                r->addr, r->bank, (unsigned long long)r->frame,
+                cls, tbytes_hex,
+                r->cpu_a, r->cpu_x, r->cpu_y, r->cpu_p, r->cpu_s,
+                r->call_site_pc,
+                r->caller, r->caller2,
+                sbytes_hex);
+            /* Safety margin against ring_buf overflow: stop if <512 left */
+            if (rp > (int)sizeof(ring_buf) - 512) break;
+        }
+    }
+    ring_buf[rp++] = ']';
+    ring_buf[rp] = '\0';
+
     send_fmt("{\"id\":%d,\"ok\":true,"
              "\"total_misses\":%u,"
              "\"last_addr\":\"$%04X\","
@@ -900,7 +942,8 @@ static void handle_dispatch_miss_info(int id, const char *json)
              "\"last_stack2\":\"%s\","
              "\"last_sp\":\"$%02X\","
              "\"stack_bytes\":\"%s\","
-             "\"unique_misses\":%s}",
+             "\"unique_misses\":%s,"
+             "\"ring\":%s}",
              id,
              (unsigned)g_miss_count_any,
              g_miss_last_addr,
@@ -910,7 +953,8 @@ static void handle_dispatch_miss_info(int id, const char *json)
              g_miss_last_stack2,
              g_miss_last_sp,
              stack_hex,
-             unique_buf);
+             unique_buf,
+             ring_buf);
 }
 
 static void handle_quit(int id, const char *json)

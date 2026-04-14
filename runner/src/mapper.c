@@ -421,6 +421,15 @@ int mapper_get_mirroring(void) {
     return s_mirroring;
 }
 
+uint8_t mapper_peek_prg(uint16_t addr) {
+    if (addr < 0x8000) return 0;
+    const uint8_t *bank = (addr < 0xC000)
+        ? mapper_get_switchable_bank()
+        : mapper_get_fixed_bank();
+    if (!bank) return 0;
+    return bank[addr & 0x3FFF];
+}
+
 int mapper_get_type(void) {
     return s_mapper_type;
 }
