@@ -109,7 +109,7 @@ typedef struct {
 static Watchpoint s_watchpoints[MAX_WATCHPOINTS];
 
 /* ---- RAM Followers (write-level tracing with call stack) ---- */
-#define MAX_FOLLOWERS     8
+#define MAX_FOLLOWERS     32
 #define FOLLOW_LOG_CAP    8192  /* entries per follower */
 
 typedef struct {
@@ -667,6 +667,26 @@ static void handle_get_frame(int id, const char *json)
              r->last_func);
     send_line(buf);
     free(buf);
+}
+
+const NESFrameRecord *debug_server_get_frame_record(uint32_t frame)
+{
+    uint64_t oldest;
+    uint32_t idx;
+    const NESFrameRecord *r;
+
+    if (!s_frame_history) return NULL;
+
+    oldest = (s_history_count > FRAME_HISTORY_CAP)
+           ? s_history_count - FRAME_HISTORY_CAP : 0;
+    if ((uint64_t)frame < oldest || (uint64_t)frame >= s_history_count) {
+        return NULL;
+    }
+
+    idx = frame % FRAME_HISTORY_CAP;
+    r = &s_frame_history[idx];
+    if (r->frame_number != frame) return NULL;
+    return r;
 }
 
 static void handle_frame_range(int id, const char *json)
