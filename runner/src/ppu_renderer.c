@@ -622,6 +622,17 @@ render_sprites:
                 if (px < 8 && !(g_ppumask & 0x04)) continue;
                 /* Offset sprite X into widescreen framebuffer */
                 int fb_x = px + g_widescreen_left;
+                /* Sprite-0 hit: when sprite 0's opaque pixel overlaps opaque BG,
+                 * set $2002 bit 6. Hardware constraints:
+                 *   - Both BG and sprites must be enabled (PPUMASK bits 3,4).
+                 *   - No hit at x=255 (per NES spec).
+                 *   - Obeys BG/sprite leftmost-8 clip (the px<8 gate above already
+                 *     filters sprite side; BG clip is PPUMASK bit 1). */
+                if (s == 0 && px != 255 && (g_ppumask & 0x18) == 0x18) {
+                    int bg_clipped = (px < 8 && !(g_ppumask & 0x02));
+                    if (!bg_clipped && framebuf[py * g_render_width + fb_x] != bg)
+                        g_ppustatus |= 0x40;
+                }
                 /* Priority=1: sprite behind BG — only draw where BG is transparent */
                 if (priority && framebuf[py * g_render_width + fb_x] != bg) continue;
                 uint8_t nes_color = g_ppu_pal[(spr_pal * 4 + color_idx) & 0x1F] & 0x3F;

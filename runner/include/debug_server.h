@@ -134,6 +134,11 @@ int debug_server_get_input_override(void);
 void debug_server_set_verify_result(int passed, int diff_count,
                                     const FrameDiffEntry *diffs, int n_diffs);
 
+/* Return a historical frame record from the ring buffer, or NULL if the
+ * frame is not currently available. The returned pointer is owned by the
+ * debug server and is only valid until the ring slot is overwritten. */
+const NESFrameRecord *debug_server_get_frame_record(uint32_t frame);
+
 /* ---- Public send helpers (for game command handlers) ---- */
 
 /* Send a complete JSON line to the connected client. */

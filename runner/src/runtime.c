@@ -36,6 +36,10 @@ uint8_t g_ppuscroll_y_hud = 0;
 uint8_t g_ppuctrl_hud     = 0;
 int     g_spr0_split_active = 0;
 int     g_spr0_reads_ctr    = 0;  /* sprite-0 hit simulation read counter */
+int     g_spr0_sticky_mode  = 0;  /* if 1, bit6 doesn't clear on $2002 read; only at VBlank.
+                                   * Required for zapper games whose hit detection polls
+                                   * bit6 twice in the same frame (e.g. Gumshoe $C627+$C658).
+                                   * Leave 0 for split-screen games that need mid-frame clears. */
 static int     g_ppuaddr_latch = 0;
 /* NOTE: g_scroll_latch removed — real NES shares a single write toggle
  * ("w" register) between $2005 and $2006.  g_ppuaddr_latch is that toggle. */
@@ -845,8 +849,16 @@ uint8_t ppu_read_reg(uint16_t reg) {
              * path in maybe_trigger_vblank. */
             {
                 if (s & 0x40) {
-                    /* Bit6 was set; consume it (clear) and reset counter */
-                    g_ppustatus &= ~0x40;
+                    /* Bit6 was set; reset counter.
+                     * In default (pulse) mode, we also clear bit6 so the
+                     * counter can re-fire later in the same frame for
+                     * split-screen spin-waits that need repeated rising edges.
+                     * In sticky mode (g_spr0_sticky_mode=1, set by zapper
+                     * games), bit6 is latched until VBlank (hardware-accurate)
+                     * — required for games whose hit-detection polls bit6
+                     * twice in the same frame. */
+                    if (!g_spr0_sticky_mode)
+                        g_ppustatus &= ~0x40;
                     g_spr0_reads_ctr = 0;
                 } else {
                     if (++g_spr0_reads_ctr >= 3) {

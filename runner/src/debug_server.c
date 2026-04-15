@@ -579,6 +579,26 @@ static void handle_get_frame(int id, const char *json)
     free(buf);
 }
 
+const NESFrameRecord *debug_server_get_frame_record(uint32_t frame)
+{
+    uint64_t oldest;
+    uint32_t idx;
+    const NESFrameRecord *r;
+
+    if (!s_frame_history) return NULL;
+
+    oldest = (s_history_count > FRAME_HISTORY_CAP)
+           ? s_history_count - FRAME_HISTORY_CAP : 0;
+    if ((uint64_t)frame < oldest || (uint64_t)frame >= s_history_count) {
+        return NULL;
+    }
+
+    idx = frame % FRAME_HISTORY_CAP;
+    r = &s_frame_history[idx];
+    if (r->frame_number != frame) return NULL;
+    return r;
+}
+
 static void handle_frame_range(int id, const char *json)
 {
     int start = json_get_int(json, "start", -1);
