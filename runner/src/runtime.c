@@ -37,9 +37,14 @@ uint8_t g_ppuscroll_x_hud = 0;
 uint8_t g_ppuscroll_y_hud = 0;
 uint8_t g_ppuctrl_hud     = 0;
 int     g_spr0_split_active = 0;
-int     g_spr0_predict_disable = 0; /* default 0: use cycle-accurate sprite-0-hit predictor.
-                                     * Set to 1 to opt out and use the legacy 3-read pulse
-                                     * counter — kept for emergencies. No game should need it. */
+int     g_spr0_predict_disable = 1; /* default 1 (predictor OFF). The hardware-correct
+                                     * cycle predictor introduced regressions in normal
+                                     * gameplay polls of $2002 — bit 6 staying sticky
+                                     * until VBlank breaks games that expect it to
+                                     * oscillate via consume-on-read. Predictor code is
+                                     * kept; set this to 0 in extras.c to enable per-game
+                                     * once the regression class is solved (likely via
+                                     * gating prediction on shot-active state). */
 int     g_predicted_spr0_scanline = 240;  /* set per-frame by main_runner.c via predictor */
 int     g_spr0_reads_ctr_legacy = 0;  /* used only when predict_disable=1; non-static so savestate can persist */
 
@@ -861,24 +866,29 @@ uint8_t ppu_read_reg(uint16_t reg) {
              *
              * The legacy 3-read pulse counter is preserved behind
              * g_spr0_predict_disable for emergency opt-out only. */
-            if (!g_spr0_predict_disable) {
-                if (g_predicted_spr0_scanline < 240) {
-                    int now = scanline_from_cycles(s_ops_count);
-                    if (now >= g_predicted_spr0_scanline) {
-                        if (!(g_ppustatus & 0x40)) {
-                            /* First time crossing the predicted scanline this
-                             * frame: capture scroll/ppuctrl as HUD (pre-split)
-                             * values, exactly as the legacy pulse path did. */
-                            g_ppuscroll_x_hud = g_ppuscroll_x;
-                            g_ppuscroll_y_hud = g_ppuscroll_y;
-                            g_ppuctrl_hud     = g_ppuctrl & 0x38;
-                        }
-                        g_ppustatus |= 0x40;
-                        g_spr0_split_active = 1;
+            if (!g_spr0_predict_disable && g_predicted_spr0_scanline < 240) {
+                /* Cycle-accurate path: predictor says sprite 0 will hit at a
+                 * known scanline this frame. Fire bit 6 when CPU cycle
+                 * position crosses that scanline; bit 6 latches sticky until
+                 * VBlank (real-hardware behavior). */
+                int now = scanline_from_cycles(s_ops_count);
+                if (now >= g_predicted_spr0_scanline) {
+                    if (!(g_ppustatus & 0x40)) {
+                        g_ppuscroll_x_hud = g_ppuscroll_x;
+                        g_ppuscroll_y_hud = g_ppuscroll_y;
+                        g_ppuctrl_hud     = g_ppuctrl & 0x38;
                     }
+                    g_ppustatus |= 0x40;
+                    g_spr0_split_active = 1;
                 }
             } else {
-                /* Legacy 3-read pulse fallback (opt-out). */
+                /* Pulse-with-consume fallback: predictor said no hit possible
+                 * (rendering disabled, sprite 0 off-screen, or no overlap),
+                 * OR predict mode is disabled entirely. Bit 6 oscillates so
+                 * games polling $2002 for VBlank detection or split-screen
+                 * spin-waits don't see a permanent stuck-on flag. This is
+                 * the legacy heuristic — wrong vs hardware but lets games
+                 * make forward progress when our model can't help. */
                 if (g_ppustatus & 0x40) {
                     g_ppustatus &= ~0x40;
                     g_spr0_reads_ctr_legacy = 0;
