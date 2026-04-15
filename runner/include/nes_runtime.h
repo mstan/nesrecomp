@@ -123,8 +123,11 @@ extern uint8_t g_ppuscroll_x_hud;
 extern uint8_t g_ppuscroll_y_hud;
 extern uint8_t g_ppuctrl_hud;
 extern int     g_spr0_split_active;
-extern int     g_spr0_reads_ctr;
-extern int     g_spr0_sticky_mode;  /* 1 = bit6 latches until VBlank (zapper games); 0 = pulse model */
+extern int     g_spr0_reads_ctr_legacy; /* used only when g_spr0_predict_disable=1 */
+extern int     g_spr0_predict_disable;  /* 0 (default) = cycle-accurate sprite-0-hit predictor;
+                                         * 1 = legacy 3-read pulse fallback (emergency opt-out). */
+extern int     g_predicted_spr0_scanline; /* 0..240; sprite-0 hit scanline this frame, or 240 if none */
+int            ppu_predict_spr0_hit_scanline(void);  /* implemented in ppu_renderer.c */
 
 /* Widescreen rendering: games set these in game_on_init() to widen the
  * BG render pass.  Default 256/0/0 = standard 4:3 NES output.

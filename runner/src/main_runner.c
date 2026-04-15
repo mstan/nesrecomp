@@ -738,6 +738,13 @@ smoke_skip_input:
         }
     }
 
+    /* Predict sprite-0-hit scanline for this frame using the post-NMI OAM
+     * and PPU state. Used by ppu_read_reg($2002) to set bit 6 at the right
+     * CPU cycle position so games whose hit-detect spin-waits poll $2002
+     * mid-frame (Gumshoe-style zappers) see the bit flip when the beam
+     * would actually have reached sprite 0. */
+    g_predicted_spr0_scanline = ppu_predict_spr0_hit_scanline();
+
     /* Render PPU to framebuffer */
     ppu_render_frame(s_framebuf);
 

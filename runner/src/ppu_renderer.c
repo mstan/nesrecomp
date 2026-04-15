@@ -196,6 +196,119 @@ uint8_t  g_ppu_render_last_pal0 = 0;
 uint8_t  g_ppu_render_last_chr00 = 0;  /* g_chr_ram[0x1000] (BG ptn $00 row 0) */
 #endif
 
+/* Compute BG color index (0..3) at screen pixel (sx, sy), using the
+ * current scroll/PPUCTRL state.  Self-contained — does NOT track the
+ * mid-frame v-register state used by ppu_render_frame; intended for
+ * the sprite-0-hit predictor which only needs frame-start scroll.
+ *
+ * Returns 0 if the BG pixel is the universal background (transparent
+ * for sprite-0-hit purposes), else 1..3. */
+static int bg_color_idx_at(int sx, int sy) {
+    if (sx < 0 || sx >= 256 || sy < 0 || sy >= 240) return 0;
+    int chr_base = (g_ppuctrl & 0x10) ? 0x1000 : 0x0000;
+    int origin_x = g_ppuscroll_x + ((g_ppuctrl & 0x01) ? 256 : 0);
+    int origin_y = g_ppuscroll_y + ((g_ppuctrl & 0x02) ? 240 : 0);
+    int abs_x = origin_x + sx;
+    int abs_y = origin_y + sy;
+    int nt_x  = abs_x & 0x1FF;     /* 9-bit wrap (512px nametable space) */
+    int nt_y  = abs_y;
+    if (nt_y >= 480) nt_y -= 480;
+    int tile_x = nt_x / 8;
+    int tile_y = nt_y / 8;
+    int pixel_col = nt_x % 8;
+    int tile_row  = nt_y % 8;
+    int nt_col = (tile_x >= 32) ? 1 : 0;
+    int nt_row = (tile_y >= 30) ? 1 : 0;
+    int local_tx = tile_x % 32;
+    int local_ty = tile_y % 30;
+    int virt_nt = nt_row * 2 + nt_col;
+    int phys_nt;
+    switch (mapper_get_mirroring()) {
+        case 0:  phys_nt = 0;            break;
+        case 1:  phys_nt = 1;            break;
+        case 2:  phys_nt = virt_nt & 1;  break;
+        case 3:  phys_nt = virt_nt >> 1; break;
+        default: phys_nt = virt_nt & 1;  break;
+    }
+    int nt_off  = phys_nt * 0x400;
+    uint8_t tile_id = g_ppu_nt[(nt_off + local_ty * 32 + local_tx) & 0x0FFF];
+    int bit = 7 - pixel_col;
+    int chr_off = chr_base + tile_id * 16 + tile_row;
+    return ((g_chr_ram[chr_off]     >> bit) & 1)
+         | (((g_chr_ram[chr_off + 8] >> bit) & 1) << 1);
+}
+
+/* Predict the scanline at which sprite 0 first hits BG this frame, by
+ * scanning sprite 0's vertical span against the BG.  Returns 240 if no
+ * hit will occur (rendering disabled, sprite off-screen, no overlap).
+ *
+ * Mirrors the render-time hit detection in ppu_render_frame's sprite
+ * loop (PPUMASK gating, x=255 suppression, leftmost-8 clipping).
+ *
+ * Used by ppu_read_reg($2002) to set bit 6 at the right CPU cycle
+ * position, so games whose hit-detect spin-waits poll $2002 mid-frame
+ * (Gumshoe-style zappers) see the bit flip when the beam would have
+ * reached sprite 0 — not at end-of-frame. */
+int ppu_predict_spr0_hit_scanline(void) {
+    /* Both BG and sprite rendering must be enabled for sprite-0-hit. */
+    if ((g_ppumask & 0x18) != 0x18) return 240;
+
+    int spr_y    = g_ppu_oam[0];
+    if (spr_y >= 0xEF) return 240;     /* off-screen sentinel */
+
+    int spr_tile = g_ppu_oam[1];
+    int spr_attr = g_ppu_oam[2];
+    int spr_x    = g_ppu_oam[3];
+    int flip_h   = (spr_attr >> 6) & 1;
+    int flip_v   = (spr_attr >> 7) & 1;
+    int spr_tall = (g_ppuctrl & 0x20) != 0;
+    int spr_height = spr_tall ? 16 : 8;
+
+    int spr_chr_base = (g_ppuctrl & 0x08) ? 0x1000 : 0x0000;
+    int tile_chr_base, tile_base;
+    if (spr_tall) {
+        tile_chr_base = (spr_tile & 1) ? 0x1000 : 0x0000;
+        tile_base = spr_tile & 0xFE;
+    } else {
+        tile_chr_base = spr_chr_base;
+        tile_base = spr_tile;
+    }
+
+    int bg_clip_left   = !(g_ppumask & 0x02);  /* PPUMASK bit 1: 0 = clip BG x<8 */
+    int spr_clip_left  = !(g_ppumask & 0x04);  /* PPUMASK bit 2: 0 = clip sprites x<8 */
+
+    for (int row = 0; row < spr_height; row++) {
+        int draw_row = flip_v ? (spr_height - 1 - row) : row;
+        int py = spr_y + 1 + row;     /* OAM Y is offset by 1 */
+        if (py < 0 || py >= 240) continue;
+
+        int tile_row = draw_row;
+        int tile_num = tile_base;
+        if (spr_tall && tile_row >= 8) {
+            tile_num = tile_base + 1;
+            tile_row -= 8;
+        }
+
+        int chr_off = tile_chr_base + tile_num * 16 + tile_row;
+        uint8_t lo = g_chr_ram[chr_off];
+        uint8_t hi = g_chr_ram[chr_off + 8];
+
+        for (int bit = 7; bit >= 0; bit--) {
+            int chr_bit = flip_h ? (7 - bit) : bit;
+            int px = spr_x + (7 - bit);
+            if (px < 0 || px >= 256) continue;
+            if (px == 255) continue;          /* hardware suppresses hit at x=255 */
+            int spr_color = ((lo >> chr_bit) & 1) | (((hi >> chr_bit) & 1) << 1);
+            if (spr_color == 0) continue;     /* sprite pixel transparent */
+            if (px < 8 && spr_clip_left) continue;
+            if (px < 8 && bg_clip_left)  continue;
+            if (bg_color_idx_at(px, py) != 0)
+                return py;                    /* first scanline with overlap */
+        }
+    }
+    return 240;
+}
+
 void ppu_render_frame(uint32_t *framebuf) {
     g_render_irq_fired = 0;
     g_render_irq_scanline = -1;

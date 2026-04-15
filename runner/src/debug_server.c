@@ -833,7 +833,7 @@ static void handle_ppu_state(int id, const char *json)
              "\"post_irq_origin_y\":%d,\"post_irq_nt_row\":%d}",
              id, g_ppuctrl, g_ppumask, g_ppustatus,
              g_ppuscroll_x, g_ppuscroll_y,
-             g_spr0_split_active, g_spr0_reads_ctr,
+             g_spr0_split_active, g_spr0_reads_ctr_legacy,
              g_chr_is_rom,
              g_render_irq_fired, g_render_irq_scanline,
              g_render_irq_ppuctrl_before, g_render_irq_ppuctrl_after,
@@ -1033,8 +1033,8 @@ static void handle_restore_frame(int id, const char *json)
     g_ppuscroll_x_hud  = r->ppuscroll_x_hud;
     g_ppuscroll_y_hud  = r->ppuscroll_y_hud;
     g_ppuctrl_hud      = r->ppuctrl_hud;
-    g_spr0_split_active = r->spr0_split_active;
-    g_spr0_reads_ctr    = r->spr0_reads_ctr;
+    g_spr0_split_active     = r->spr0_split_active;
+    g_spr0_reads_ctr_legacy = r->spr0_reads_ctr;
 
     /* ---- Restore VBlank / timing state ---- */
     runtime_set_vblank_state(r->ops_count, r->vblank_depth);
@@ -2008,7 +2008,7 @@ void debug_server_record_frame(void)
     r->ppuscroll_y_hud = g_ppuscroll_y_hud;
     r->ppuctrl_hud     = g_ppuctrl_hud;
     r->spr0_split_active = g_spr0_split_active;
-    r->spr0_reads_ctr    = g_spr0_reads_ctr;
+    r->spr0_reads_ctr    = g_spr0_reads_ctr_legacy;
 
     /* ---- VBlank / timing state ---- */
     {

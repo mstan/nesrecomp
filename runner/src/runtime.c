@@ -37,11 +37,17 @@ uint8_t g_ppuscroll_x_hud = 0;
 uint8_t g_ppuscroll_y_hud = 0;
 uint8_t g_ppuctrl_hud     = 0;
 int     g_spr0_split_active = 0;
-int     g_spr0_reads_ctr    = 0;  /* sprite-0 hit simulation read counter */
-int     g_spr0_sticky_mode  = 0;  /* if 1, bit6 doesn't clear on $2002 read; only at VBlank.
-                                   * Required for zapper games whose hit detection polls
-                                   * bit6 twice in the same frame (e.g. Gumshoe $C627+$C658).
-                                   * Leave 0 for split-screen games that need mid-frame clears. */
+int     g_spr0_predict_disable = 0; /* default 0: use cycle-accurate sprite-0-hit predictor.
+                                     * Set to 1 to opt out and use the legacy 3-read pulse
+                                     * counter — kept for emergencies. No game should need it. */
+int     g_predicted_spr0_scanline = 240;  /* set per-frame by main_runner.c via predictor */
+int     g_spr0_reads_ctr_legacy = 0;  /* used only when predict_disable=1; non-static so savestate can persist */
+
+/* CPU-cycle-to-scanline conversion. PPU runs at 3x CPU; 341 dots per scanline.
+ * s_ops_count is the per-frame CPU cycle accumulator from maybe_trigger_vblank. */
+static inline int scanline_from_cycles(uint32_t cpu_cycles) {
+    return (int)((cpu_cycles * 3u) / 341u);
+}
 static int     g_ppuaddr_latch = 0;
 /* NOTE: g_scroll_latch removed — real NES shares a single write toggle
  * ("w" register) between $2005 and $2006.  g_ppuaddr_latch is that toggle. */
@@ -342,11 +348,13 @@ void maybe_trigger_vblank(int cycles) {
          * used by bank-switch dispatch (GxROM GoBankInit pattern). */
         s_vblank_depth++;
         g_ppustatus = (g_ppustatus & ~0x40) | 0x80;
-        /* Save spr0 counter — NMI handler PPU writes reset it */
-        int saved_ctr0 = g_spr0_reads_ctr;
+        /* Save legacy pulse counter and active flag — NMI handler PPU writes
+         * would otherwise reset them. The new predictor doesn't depend on a
+         * counter, but g_spr0_split_active is still the light-detection gate. */
+        int saved_ctr0 = g_spr0_reads_ctr_legacy;
         int saved_act0 = g_spr0_split_active;
         g_spr0_split_active = 0;
-        g_spr0_reads_ctr    = 0;
+        g_spr0_reads_ctr_legacy = 0;
         g_ppuscroll_x = 0;
         g_ppuscroll_y = 0;
         g_ppuscroll_x_hud = 0;
@@ -365,9 +373,9 @@ void maybe_trigger_vblank(int cycles) {
          * racing 3 frames ahead of the oracle at mode-transition points. */
         s_dbg_nmi_fires++;
         nes_vblank_callback();
-        /* Restore spr0 counter for outer code's detection loop */
-        g_spr0_reads_ctr    = saved_ctr0;
-        g_spr0_split_active = saved_act0;
+        /* Restore spr0 state for outer code's detection loop */
+        g_spr0_reads_ctr_legacy = saved_ctr0;
+        g_spr0_split_active     = saved_act0;
         s_vblank_depth--;
         s_ops_count = 0;
     } else {
@@ -405,24 +413,20 @@ void maybe_fire_pending_vblank(void) {
     s_ops_count = 0;
     s_vblank_depth++;
 
-    /* Standard VBlank start: set VBlank flag, reset sprite-0 state.
-     * PRESERVE spr0_reads_ctr if we're inside a nested NMI.  Zapper
-     * detection loops poll $2002+$4017 across many iterations — the
-     * pending VBlank fires at the loop back-edge (watchdog_check) and
-     * would reset the counter before it reaches 3, making sprite-0
-     * hit impossible during light detection. */
+    /* Standard VBlank start: set VBlank flag, clear sprite-0-hit flag. */
     g_ppustatus = (g_ppustatus & ~0x40) | 0x80;
 
-    /* Save spr0 counter across nested VBlanks.  Detection loops (Zapper
-     * $2002/$4017 polling) accumulate consecutive $2002 reads to trigger
-     * sprite-0 hit.  A nested NMI runs the handler which does PPU writes
-     * that reset g_spr0_reads_ctr.  Preserve the counter so the detection
-     * loop can still reach the 3-read threshold after the nested NMI. */
-    int saved_spr0_ctr    = g_spr0_reads_ctr;
+    /* Save sprite-0 state across nested VBlanks. The cycle predictor's
+     * frame-start sample (g_predicted_spr0_scanline) is set in
+     * nes_vblank_callback below; preserving the outer split_active flag
+     * ensures the outer detection loop's light-gate stays consistent
+     * across the nested fire. The legacy pulse counter is preserved too
+     * for the opt-out path (g_spr0_predict_disable=1). */
+    int saved_spr0_ctr    = g_spr0_reads_ctr_legacy;
     int saved_spr0_active = g_spr0_split_active;
 
     g_spr0_split_active = 0;
-    g_spr0_reads_ctr    = 0;
+    g_spr0_reads_ctr_legacy = 0;
     g_ppuscroll_x = 0;
     g_ppuscroll_y = 0;
     g_ppuscroll_x_hud = 0;
@@ -436,9 +440,9 @@ void maybe_fire_pending_vblank(void) {
         g_ram[0x1A] = 1;
     }
 
-    /* Restore spr0 counter for the outer loop's detection */
-    g_spr0_reads_ctr    = saved_spr0_ctr;
-    g_spr0_split_active = saved_spr0_active;
+    /* Restore sprite-0 state for the outer loop's detection */
+    g_spr0_reads_ctr_legacy = saved_spr0_ctr;
+    g_spr0_split_active     = saved_spr0_active;
 
     s_vblank_depth--;
 }
@@ -514,7 +518,7 @@ uint8_t nes_read(uint16_t addr) {
                      * trigger press ensures Phase 1 starts fresh: the counter
                      * must accumulate again before the gate opens. */
                     g_spr0_split_active = 0;
-                    g_spr0_reads_ctr = 0;
+                    g_spr0_reads_ctr_legacy = 0;
                     zapper_trace("=== TRIGGER PRESSED frame=%llu aim=(%d,%d) ===\n",
                         g_frame_count, g_zapper_x, g_zapper_y);
                     zapper_trace("  RAM: $C5=%02X $24=%02X $26=%02X $4F=%02X $CD=%02X $84=%02X $0B=%02X\n",
@@ -522,8 +526,8 @@ uint8_t nes_read(uint16_t addr) {
                         g_ram[0xCD], g_ram[0x84], g_ram[0x0B]);
                     zapper_trace("  RAM: $E3=%02X $E4=%02X $D2=%02X $D3=%02X $D4=%02X\n",
                         g_ram[0xE3], g_ram[0xE4], g_ram[0xD2], g_ram[0xD3], g_ram[0xD4]);
-                    zapper_trace("  spr0_active=%d spr0_ctr=%d ppumask=%02X ppustatus=%02X\n",
-                        g_spr0_split_active, g_spr0_reads_ctr, g_ppumask, g_ppustatus);
+                    zapper_trace("  spr0_active=%d pred_sl=%d ppumask=%02X ppustatus=%02X\n",
+                        g_spr0_split_active, g_predicted_spr0_scanline, g_ppumask, g_ppustatus);
                 }
                 if (!g_zapper_trigger && s_zapper_prev_trigger) {
                     zapper_trace("=== TRIGGER RELEASED frame=%llu ===\n", g_frame_count);
@@ -673,11 +677,12 @@ void ppu_write_reg(uint16_t reg, uint8_t val) {
     ppu_trace_write(reg, val);
     /* Any PPU write between $2002 reads means the read was a latch reset
      * (e.g., LDA $2002; STA $2006), not a sprite-0 spin-wait poll.
-     * Reset the counter so only consecutive $2002 reads trigger the hit.
+     * Reset the legacy pulse counter so only consecutive $2002 reads
+     * trigger the fallback hit (only relevant when predict_disable=1).
      * But DON'T reset during nested NMIs — the outer detection loop's
      * counter must survive the NMI handler's PPU register setup. */
     if (s_vblank_depth <= 1)
-        g_spr0_reads_ctr = 0;
+        g_spr0_reads_ctr_legacy = 0;
     switch (reg) {
         case 0x2000:
             g_ppuctrl = val;
@@ -842,53 +847,57 @@ void ppu_write_reg(uint16_t reg, uint8_t val) {
 uint8_t ppu_read_reg(uint16_t reg) {
     switch (reg) {
         case 0x2002: {
-            uint8_t s = g_ppustatus;
-            g_ppustatus &= ~0x80;  /* clear VBlank flag (standard NES) */
-            g_ppuaddr_latch = 0;  /* shared w toggle — clears for both $2005 and $2006 */
-            /* Simulate sprite-0 hit (bit6) for split-screen spin-waits.
-             * On real NES, bit6 is set by hardware during active rendering and
-             * cleared only at the pre-render scanline — never by reading $2002.
-             * Our simulation has no scanline timing, so we model it as "pulse on
-             * read": bit6 is set after 3 consecutive reads that see bit6=0, and
-             * cleared (consumed) when bit6=1 is read back.  This ensures:
-             *   - "wait for bit6=0" spin-wait exits in at most 2 reads
-             *   - "wait for bit6=1" spin-wait exits after the 3-read trigger
-             *   - Random $2002 reads during PPU uploads don't cause a spurious
-             *     permanent bit6=1 that would lock the first spin-wait forever
-             * Counter is reset at VBlank start via g_spr0_split_active reset
-             * path in maybe_trigger_vblank. */
-            {
-                if (s & 0x40) {
-                    /* Bit6 was set; mark spr0_active for light-gating, reset counter.
-                     * In default (pulse) mode, we also clear bit6 so the counter can
-                     * re-fire later in the same frame for split-screen spin-waits that
-                     * need repeated rising edges.
-                     * In sticky mode (g_spr0_sticky_mode=1, set by zapper games), bit6
-                     * is latched until VBlank (hardware-accurate) — required for games
-                     * whose hit-detection polls bit6 twice in the same frame. */
-                    if (!g_spr0_sticky_mode)
-                        g_ppustatus &= ~0x40;
-                    g_spr0_reads_ctr = 0;
-                    g_spr0_split_active = 1;
-                } else {
-                    if (++g_spr0_reads_ctr >= 3) {
-                        /* Simulate sprite-0 hit: set bit6 in ppustatus.
-                         * Capture scroll/ppuctrl state as HUD (pre-split)
-                         * values.  Bit6 is set but spr0_active is NOT set
-                         * yet — it will be set on the NEXT read that sees
-                         * bit6=1, ensuring the game and the Zapper gate
-                         * are synchronized. */
-                        g_ppuscroll_x_hud   = g_ppuscroll_x;
-                        g_ppuscroll_y_hud   = g_ppuscroll_y;
-                        g_ppuctrl_hud       = g_ppuctrl & 0x38;
+            /* Sprite-0-hit (bit 6) cycle prediction.
+             *
+             * Real hardware: bit 6 is set by the PPU during active rendering when
+             * sprite 0's opaque pixel overlaps an opaque BG pixel, and cleared
+             * only at the pre-render scanline. Reads of $2002 do NOT clear it.
+             *
+             * Our model: at frame start (nes_vblank_callback), the predictor
+             * scans sprite 0 vs BG to determine the scanline at which the hit
+             * would fire. Here we convert the CPU's per-frame cycle counter
+             * (s_ops_count) to the current scanline and compare. Bit 6 latches
+             * monotonically until VBlank clears it (matches real hardware).
+             *
+             * The legacy 3-read pulse counter is preserved behind
+             * g_spr0_predict_disable for emergency opt-out only. */
+            if (!g_spr0_predict_disable) {
+                if (g_predicted_spr0_scanline < 240) {
+                    int now = scanline_from_cycles(s_ops_count);
+                    if (now >= g_predicted_spr0_scanline) {
+                        if (!(g_ppustatus & 0x40)) {
+                            /* First time crossing the predicted scanline this
+                             * frame: capture scroll/ppuctrl as HUD (pre-split)
+                             * values, exactly as the legacy pulse path did. */
+                            g_ppuscroll_x_hud = g_ppuscroll_x;
+                            g_ppuscroll_y_hud = g_ppuscroll_y;
+                            g_ppuctrl_hud     = g_ppuctrl & 0x38;
+                        }
                         g_ppustatus |= 0x40;
-                        g_spr0_reads_ctr = 0;
+                        g_spr0_split_active = 1;
                     }
                 }
+            } else {
+                /* Legacy 3-read pulse fallback (opt-out). */
+                if (g_ppustatus & 0x40) {
+                    g_ppustatus &= ~0x40;
+                    g_spr0_reads_ctr_legacy = 0;
+                    g_spr0_split_active = 1;
+                } else if (++g_spr0_reads_ctr_legacy >= 3) {
+                    g_ppuscroll_x_hud = g_ppuscroll_x;
+                    g_ppuscroll_y_hud = g_ppuscroll_y;
+                    g_ppuctrl_hud     = g_ppuctrl & 0x38;
+                    g_ppustatus |= 0x40;
+                    g_spr0_reads_ctr_legacy = 0;
+                }
             }
+            uint8_t s = g_ppustatus;
+            g_ppustatus &= ~0x80;  /* clear VBlank flag on read (standard NES) */
+            g_ppuaddr_latch = 0;   /* shared w toggle — clears for both $2005 and $2006 */
             if (g_ram[0xC5])
-                zapper_trace("  $2002: ret=%02X spr0_act=%d ctr=%d ppumask=%02X frame=%llu\n",
-                    s, g_spr0_split_active, g_spr0_reads_ctr, g_ppumask,
+                zapper_trace("  $2002: ret=%02X spr0_act=%d pred_sl=%d cyc=%u ppumask=%02X frame=%llu\n",
+                    s, g_spr0_split_active, g_predicted_spr0_scanline,
+                    (unsigned)s_ops_count, g_ppumask,
                     (unsigned long long)g_frame_count);
             return s;
         }
