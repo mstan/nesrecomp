@@ -154,12 +154,10 @@ static int zapper_light_detected(void) {
             count++;
         }
     }
-    int result = (count > 0 && total_lum / count > 30) ? 1 : 0;
-    /* Sprite fallback: check PPU internal OAM for sprites at the aim point.
-     * Only when sprites are enabled in PPUMASK — during phases where sprites
-     * are disabled, the Zapper should not see them even if they exist in OAM. */
-    if (!result && (g_ppumask & 0x10))
-        result = zapper_oam_hit();
+    int result = (count > 0 && total_lum / count > 160) ? 1 : 0;
+    /* OAM bounding-box fallback removed: it caused false-positive hits
+     * because it didn't check actual tile-pixel brightness.  The on-demand
+     * s_zapper_render() above already keeps the framebuffer current. */
     return result;
 }
 
