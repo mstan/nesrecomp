@@ -104,6 +104,15 @@ static void zapper_trace(const char *fmt, ...) {
     fflush(stderr);
     s_zapper_trace_count++;
 }
+/* Per-read $4017 trace — captures every poll during trigger windows so click-1
+ * vs click-2 behavior can be diffed.  Opened lazily on first trigger press. */
+static FILE    *s_zap4017_csv = NULL;
+static uint64_t s_zap4017_logged = 0;
+#define ZAP4017_MAX_ROWS 20000
+static uint64_t s_zap4017_last_trigger_frame = 0;   /* last frame trigger was held */
+static uint32_t s_zap4017_frame_reads = 0;          /* reads this frame */
+static uint64_t s_zap4017_last_frame = (uint64_t)-1;
+
 static const uint32_t *s_zapper_framebuf = NULL; /* last rendered frame for light detection */
 static zapper_render_fn s_zapper_render = NULL;  /* on-demand render callback */
 static uint8_t s_zapper_last_ppumask = 0;        /* PPUMASK at last Zapper render */
@@ -196,12 +205,10 @@ static int zapper_light_detected(void) {
             count++;
         }
     }
-    int result = (count > 0 && total_lum / count > 30) ? 1 : 0;
-    /* Sprite fallback: check PPU internal OAM for sprites at the aim point.
-     * Only when sprites are enabled in PPUMASK — during phases where sprites
-     * are disabled, the Zapper should not see them even if they exist in OAM. */
-    if (!result && (g_ppumask & 0x10))
-        result = zapper_oam_hit();
+    int result = (count > 0 && total_lum / count > 160) ? 1 : 0;
+    /* OAM bounding-box fallback removed: it caused false-positive hits
+     * because it didn't check actual tile-pixel brightness.  The on-demand
+     * s_zapper_render() above already keeps the framebuffer current. */
     return result;
 }
 
@@ -548,6 +555,47 @@ uint8_t nes_read(uint16_t addr) {
                     zapper_trace("  $4017: val=%02X light=%d spr0_act=%d ppumask=%02X frame=%llu\n",
                         val, light, g_spr0_split_active, g_ppumask,
                         (unsigned long long)g_frame_count);
+
+                /* --- Per-read CSV trace (lazy open; keeps click 1 + click 2 for diffing) --- */
+                if (g_zapper_trigger) s_zap4017_last_trigger_frame = g_frame_count;
+                int in_window = g_zapper_trigger ||
+                                (g_frame_count - s_zap4017_last_trigger_frame) <= 90;
+                if (in_window && s_zap4017_logged < ZAP4017_MAX_ROWS) {
+                    if (!s_zap4017_csv) {
+                        s_zap4017_csv = fopen("C:/temp/zapper_4017_trace.csv", "w");
+                        if (s_zap4017_csv) {
+                            fprintf(s_zap4017_csv,
+                                "frame,read_idx,val,bit4_trig,bit3_dark,light,"
+                                "aim_x,aim_y,spr0_act,pred_sl,ppumask,ppustatus,"
+                                "C5,CD,E3,E4,D2,26\n");
+                        }
+                    }
+                    if (g_frame_count != s_zap4017_last_frame) {
+                        s_zap4017_frame_reads = 0;
+                        s_zap4017_last_frame  = g_frame_count;
+                    }
+                    if (s_zap4017_csv) {
+                        fprintf(s_zap4017_csv,
+                            "%llu,%u,%02X,%d,%d,%d,"
+                            "%d,%d,%d,%d,%02X,%02X,"
+                            "%02X,%02X,%02X,%02X,%02X,%02X\n",
+                            (unsigned long long)g_frame_count,
+                            s_zap4017_frame_reads,
+                            val,
+                            g_zapper_trigger ? 1 : 0,
+                            (val & 0x08) ? 1 : 0,
+                            light,
+                            g_zapper_x, g_zapper_y,
+                            g_spr0_split_active,
+                            g_predicted_spr0_scanline,
+                            g_ppumask, g_ppustatus,
+                            g_ram[0xC5], g_ram[0xCD], g_ram[0xE3], g_ram[0xE4],
+                            g_ram[0xD2], g_ram[0x26]);
+                        fflush(s_zap4017_csv);
+                        s_zap4017_logged++;
+                        s_zap4017_frame_reads++;
+                    }
+                }
                 return val;
             }
             if (s_ctrl1_strobe) return 0x40 | (g_controller2_buttons >> 7);
