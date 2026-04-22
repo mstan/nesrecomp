@@ -18,15 +18,8 @@ extern CPU6502State g_cpu;
 extern uint8_t      g_ram[0x0800];     /* 2KB work RAM */
 extern int          g_bail_active;     /* set by stack_bail_func return; checked at JSR sites */
 
-/* ---- Write breakpoints ---- */
-/* Set g_write_bp_addr to a RAM address (0-$07FF) to enable.
- * When nes_write hits that address, it calls the callback before writing.
- * Set to 0xFFFF to disable. */
-extern uint16_t g_write_bp_addr;
-extern uint8_t  g_write_bp_match_val; /* only break if val matches (0xFF = any) */
-extern int      g_write_bp_block;     /* set to 1 in callback to block the write */
-typedef void (*write_bp_callback_t)(uint16_t addr, uint8_t old_val, uint8_t new_val);
-extern write_bp_callback_t g_write_bp_callback;
+/* (Legacy write_bp_* and follower mechanisms removed — superseded by
+ *  Tier 2.5 rdb_watch_add in reverse_debug.c.  See REVERSE_DEBUGGER.md.) */
 extern uint8_t      g_sram[0x2000];    /* 8KB battery-backed SRAM ($6000-$7FFF) */
 extern uint8_t      g_chr_ram[0x2000]; /* 8KB CHR RAM/ROM */
 extern int          g_chr_is_rom;      /* 1 = CHR ROM (ignore $2007 writes to $0000-$1FFF) */

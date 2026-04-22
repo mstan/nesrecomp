@@ -601,7 +601,6 @@ smoke_skip_input:
             g_ram[0x100+g_cpu.S] = 0x00;   g_cpu.S--;   /* PCH placeholder */
             g_ram[0x100+g_cpu.S] = 0x00;   g_cpu.S--;   /* PCL placeholder */
             g_ram[0x100+g_cpu.S] = p_save; g_cpu.S--;   /* P (status flags) */
-            debug_server_check_s(); /* Track runner's NMI push */
             runtime_set_vblank_firing(1);
             game_run_nmi();
             runtime_set_vblank_firing(0);
@@ -612,7 +611,6 @@ smoke_skip_input:
             g_cpu.A = a_pre; g_cpu.X = x_pre; g_cpu.Y = y_pre;
             g_cpu.N = n_pre; g_cpu.V = v_pre; g_cpu.D = d_pre;
             g_cpu.I = i_pre; g_cpu.Z = z_pre; g_cpu.C = c_pre;
-            debug_server_check_s(); /* Track after NMI handler */
         }
     }
 
@@ -628,7 +626,6 @@ smoke_skip_input:
 
     /* Record frame state to ring buffer for TCP timeseries queries */
     debug_server_record_frame();
-    debug_server_check_watchpoints();
 
     /* Generate one frame of audio after NMI (APU registers now up-to-date).
      * Skip in turbo mode — queued audio would pile up faster than it drains. */

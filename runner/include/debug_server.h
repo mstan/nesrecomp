@@ -104,34 +104,14 @@ void debug_server_shutdown(void);
 /* Check if a TCP client is connected. */
 int debug_server_is_connected(void);
 
-/* ---- Watchpoint notifications (called from main loop) ---- */
-
-/* Check all watchpoints against current RAM values.
- * Sends JSON notification for any changes. */
-void debug_server_check_watchpoints(void);
-
-/* ---- RAM Followers (write-level tracing) ---- */
-
-/* Called from nes_write() when a followed address is written.
- * Records frame, old/new values, and call stack to a ring buffer.
- * Can optionally pause on a specific value (conditional breakpoint). */
-void debug_server_notify_write(uint16_t addr, uint8_t old_val, uint8_t new_val);
-
-/* ---- S-register change tracking ---- */
-
-/* Check if S register changed since last call. If watch_s is enabled and
- * S changed, records the change with call stack to a ring buffer.
- * Call from maybe_trigger_vblank() for per-instruction tracking. */
-void debug_server_check_s(void);
-
-/* Returns 1 if any follower is watching this address. Used by nes_write()
- * to avoid the overhead of notify_write when no followers are active. */
-int  debug_server_has_follower(uint16_t addr);
-
-/* Register a follower programmatically (e.g., from game_on_init).
- * break_on_val: -1 = no break, 0-255 = pause when this value is written.
- * Returns slot index on success, -1 if full. */
-int  debug_server_add_follower(uint16_t addr, int break_on_val);
+/* ---- Legacy watch/follower API removed ----
+ * Previously this header exposed poll-based watchpoints (`watch`/`unwatch`),
+ * write-level followers (`follow`/`unfollow`/`follow_history`), and
+ * S-register deltas (`watch_s`/`unwatch_s`/`watch_s_history`).  All three
+ * are superseded by the Tier 2.5 synchronous watch in
+ * runner/src/reverse_debug.c (`rdb_watch_add`, `rdb_watch_continue`).
+ * The Tier 2.5 watch fires inside RDB_STORE8 with full PC/func attribution
+ * and park semantics, subsuming every use case.  See REVERSE_DEBUGGER.md. */
 
 /* ---- Input override ---- */
 

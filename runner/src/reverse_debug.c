@@ -36,6 +36,7 @@ static uint64_t   s_block_counter    = 0;   /* global monotonic block index */
 
 /* ---- Tier 1 ring ---- */
 typedef struct {
+    uint64_t block_idx;   /* s_block_counter at the moment of the store */
     uint32_t frame;
     uint16_t addr;
     uint16_t pc_hint;
@@ -167,15 +168,22 @@ static void park_on_watch_hit(uint16_t addr, uint8_t val) {
 void rdb_store8(uint16_t pc_hint, uint16_t addr, uint8_t val) {
     nes_write(addr, val);
 
-    if (s_store_nranges && in_any_range(s_store_ranges, s_store_nranges, addr)) {
+    /* Two reasons to record: (a) addr is in a user-armed range for
+     * targeted inspection, or (b) anchors are armed AND addr is in
+     * WRAM ($0000-$07FF), so rdb_wram_at_block can replay stores
+     * forward from the nearest anchor. Each store records once. */
+    int record = s_store_nranges && in_any_range(s_store_ranges, s_store_nranges, addr);
+    if (!record && s_anchor_active && addr <= 0x07FF) record = 1;
+    if (record) {
         uint64_t idx = s_store_widx++ & (RDB_STORE_RING_SIZE - 1);
         RdbStoreEntry *e = &s_store_ring[idx];
-        e->frame   = (uint32_t)g_frame_count;
-        e->addr    = addr;
-        e->pc_hint = pc_hint;
-        e->func    = g_rdb_current_func;
-        e->val     = val;
-        e->_pad    = 0;
+        e->block_idx = s_block_counter;
+        e->frame     = (uint32_t)g_frame_count;
+        e->addr      = addr;
+        e->pc_hint   = pc_hint;
+        e->func      = g_rdb_current_func;
+        e->val       = val;
+        e->_pad      = 0;
         if (s_store_count < RDB_STORE_RING_SIZE) s_store_count++;
     }
 
@@ -356,8 +364,9 @@ static void cmd_rdb_dump(int id, const char *json) {
         uint64_t gidx = oldest + start + i;
         const RdbStoreEntry *e = &s_store_ring[gidx & (RDB_STORE_RING_SIZE - 1)];
         pos += snprintf(buf + pos, bufsz - pos,
-                        "%s{\"i\":%llu,\"frame\":%u,\"addr\":\"0x%04X\",\"val\":\"0x%02X\",\"pc\":\"0x%04X\",\"func\":\"0x%04X\"}",
+                        "%s{\"i\":%llu,\"block\":%llu,\"frame\":%u,\"addr\":\"0x%04X\",\"val\":\"0x%02X\",\"pc\":\"0x%04X\",\"func\":\"0x%04X\"}",
                         i ? "," : "", (unsigned long long)gidx,
+                        (unsigned long long)e->block_idx,
                         e->frame, e->addr, e->val, e->pc_hint, e->func);
     }
     pos += snprintf(buf + pos, bufsz - pos, "]");
@@ -559,22 +568,26 @@ static void cmd_rdb_anchor_status(int id, const char *json) {
         (unsigned long long)s_block_counter);
 }
 static void cmd_rdb_wram_at_block(int id, const char *json) {
-    uint32_t target = 0;
-    if (!json_u32(json, "block", &target)) {
+    uint64_t target = 0;
+    uint32_t tmp = 0;
+    if (!json_u32(json, "block", &tmp)) {
         debug_server_send_fmt("{\"id\":%d,\"ok\":false,\"error\":\"usage: rdb_wram_at_block block\"}", id);
         return;
     }
-    if ((uint64_t)target > s_block_counter) {
+    target = (uint64_t)tmp;
+    if (target > s_block_counter) {
         debug_server_send_fmt("{\"id\":%d,\"ok\":false,\"error\":\"block in the future\"}", id);
         return;
     }
+
+    /* Find nearest prior anchor (greatest block_idx <= target). */
     int best = -1;
     uint64_t best_idx = 0;
     for (int i = 0; i < s_anchor_count; i++) {
         int slot = (s_anchor_widx - 1 - i);
         while (slot < 0) slot += RDB_ANCHOR_COUNT;
         slot %= RDB_ANCHOR_COUNT;
-        if (s_anchors[slot].block_idx <= (uint64_t)target) {
+        if (s_anchors[slot].block_idx <= target) {
             if (best < 0 || s_anchors[slot].block_idx > best_idx) {
                 best = slot;
                 best_idx = s_anchors[slot].block_idx;
@@ -585,20 +598,51 @@ static void cmd_rdb_wram_at_block(int id, const char *json) {
         debug_server_send_fmt("{\"id\":%d,\"ok\":false,\"error\":\"no prior anchor covers this block\"}", id);
         return;
     }
+
+    /* Reconstruct: start from anchor snapshot, walk store ring forward
+     * replaying every entry whose block_idx is in (anchor_block, target]
+     * and whose addr is WRAM ($0000-$07FF). */
+    static uint8_t wram[0x0800];
+    memcpy(wram, s_anchors[best].wram, 0x0800);
+
+    uint64_t oldest = (s_store_count < RDB_STORE_RING_SIZE)
+                         ? 0 : (s_store_widx - RDB_STORE_RING_SIZE);
+    /* If oldest stored block_idx is already past anchor_block, the
+     * store ring has wrapped through the replay window — reconstruction
+     * would be incomplete. Detect this up-front. */
+    int store_ring_wrapped_past_anchor = 0;
+    if (s_store_count > 0) {
+        const RdbStoreEntry *first = &s_store_ring[oldest & (RDB_STORE_RING_SIZE - 1)];
+        if (first->block_idx > s_anchors[best].block_idx)
+            store_ring_wrapped_past_anchor = 1;
+    }
+
+    uint64_t replayed = 0;
+    for (uint64_t i = 0; i < s_store_count; i++) {
+        uint64_t gidx = oldest + i;
+        const RdbStoreEntry *e = &s_store_ring[gidx & (RDB_STORE_RING_SIZE - 1)];
+        if (e->block_idx <= s_anchors[best].block_idx) continue;
+        if (e->block_idx > target) break;   /* ring is chronological */
+        if (e->addr > 0x07FF) continue;
+        wram[e->addr] = e->val;
+        replayed++;
+    }
+
     static char hex[0x0800 * 2 + 16];
     static const char HX[] = "0123456789ABCDEF";
     for (int i = 0; i < 0x0800; i++) {
-        hex[i * 2]     = HX[(s_anchors[best].wram[i] >> 4) & 0xF];
-        hex[i * 2 + 1] = HX[s_anchors[best].wram[i] & 0xF];
+        hex[i * 2]     = HX[(wram[i] >> 4) & 0xF];
+        hex[i * 2 + 1] = HX[wram[i] & 0xF];
     }
     hex[0x0800 * 2] = '\0';
+
     debug_server_send_fmt(
         "{\"id\":%d,\"ok\":true,\"anchor_block\":%llu,\"anchor_frame\":%u,"
-        "\"target_block\":%u,\"note\":\"hex is 2KB WRAM at anchor; "
-        "stores between anchor and target must be replayed client-side via rdb_dump\","
+        "\"target_block\":%llu,\"replayed\":%llu,\"store_ring_wrapped\":%d,"
         "\"hex\":\"%s\"}",
         id, (unsigned long long)s_anchors[best].block_idx,
-        s_anchors[best].frame, target, hex);
+        s_anchors[best].frame, (unsigned long long)target,
+        (unsigned long long)replayed, store_ring_wrapped_past_anchor, hex);
 }
 
 /* ============================================================= */

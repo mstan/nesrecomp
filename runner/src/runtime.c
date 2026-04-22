@@ -243,8 +243,6 @@ static inline void bus_tick(void) {
 static int s_vblank_pending = 0;   /* VBlank waiting to fire at next safe point */
 
 void maybe_trigger_vblank(int cycles) {
-    /* S-register change tracking (per-instruction) */
-    debug_server_check_s();
 
     /* Count cycles — always, even during NMI handler execution. */
     s_ops_count += (cycles > 0) ? (uint32_t)cycles : 1;
@@ -374,28 +372,11 @@ uint8_t nes_read(uint16_t addr) {
     return 0xFF;
 }
 
-/* Write breakpoint state */
-uint16_t g_write_bp_addr = 0xFFFF;
-uint8_t  g_write_bp_match_val = 0xFF;
-int      g_write_bp_block = 0;
-write_bp_callback_t g_write_bp_callback = NULL;
-
 void nes_write(uint16_t addr, uint8_t val) {
     bus_tick();
 
     if (addr <= 0x1FFF) {
         uint16_t a = addr & 0x07FF;
-        if (a == g_write_bp_addr && g_write_bp_callback &&
-            (g_write_bp_match_val == 0xFF || val == g_write_bp_match_val)) {
-            g_write_bp_callback(a, g_ram[a], val);
-            if (g_write_bp_block) return;  /* callback set block flag → skip write */
-        }
-        /* Follower notification (write-level tracing via TCP) */
-        if (val != g_ram[a]) {
-            if (debug_server_has_follower(a)) {
-                debug_server_notify_write(a, g_ram[a], val);
-            }
-        }
         g_ram[a] = val; return;
     }
     if (addr >= 0x2000 && addr <= 0x3FFF) { ppu_write_reg(0x2000 + (addr & 7), val); return; }

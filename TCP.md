@@ -123,14 +123,67 @@ Source of truth: the `s_commands[]` table in
 |---------|---------|
 | `mapper_state` | Current PRG/CHR bank mapping, mapper registers. |
 
-### Watchpoints / Follows
+### Reverse debugger (rdb_*) — see `REVERSE_DEBUGGER.md`
+
+Enabled by regenerating with `NESRecomp.exe --reverse-debug` and building
+with `-DNESRECOMP_REVERSE_DEBUG=ON`. Implementation in
+`runner/src/reverse_debug.c`. Zero cost when off — generator emits plain
+`nes_write` and runtime omits the whole translation unit.
+
+**Tier 1 — synchronous bus-write ring** (1 M entries, range-filtered):
 | Command | Purpose |
 |---------|---------|
-| `watch` / `unwatch` | Trigger notification on RAM write to address (8 max). |
-| `follow` / `unfollow` | Track write events at address with call stack (8 max). |
-| `follow_history` | Get last N writes to an address. |
-| `watch_s` / `unwatch_s` | Track 6502 S-register changes. |
-| `watch_s_history` | Get S-register change history. |
+| `rdb_status` | Unified status of all rdb_* state. |
+| `rdb_range` `{lo,hi}` | Arm an address-range filter. Up to 8. |
+| `rdb_range_clear` | Drop all armed ranges. |
+| `rdb_reset` | Clear the store ring. |
+| `rdb_count` | Entries in the ring. |
+| `rdb_dump` `{start,max}` | Emit entries as JSON (`block`, `frame`, `addr`, `val`, `pc`, `func`). |
+
+**Tier 1.5 — call trace** (64 k entries):
+| Command | Purpose |
+|---------|---------|
+| `trace_calls` / `trace_calls_reset` | Arm / reset. |
+| `get_call_trace` `{from,to,max}` | Dump `(frame, func, caller)`. |
+
+**Tier 2 — block-level trace** (256 k entries, A/X/Y/P captured per block):
+| Command | Purpose |
+|---------|---------|
+| `trace_blocks` / `trace_blocks_reset` | Arm / reset. |
+| `trace_blocks_range` `{lo,hi}` | Restrict to a PC range (up to 8). |
+| `get_block_trace` `{from,to,max}` | Dump `(frame, pc, func, a, x, y, p)`. |
+
+**Tier 2.5 — block breakpoints + synchronous WRAM watchpoints**
+(supersedes legacy `watch`/`follow`/`watch_s`):
+| Command | Purpose |
+|---------|---------|
+| `rdb_break` `{pc}` / `rdb_break_clear` / `rdb_break_list` | Block-PC breakpoint table (16 slots). |
+| `rdb_break_continue` | Resume from any parked state. |
+| `rdb_step_block` | One-shot break on the next block entered. |
+| `rdb_watch_add` `{addr[,val]}` / `rdb_watch_clear` / `rdb_watch_list` | WRAM-write watchpoints (16 slots). `val` omitted = any. |
+| `rdb_watch_continue` | Resume from a watch hit. |
+| `rdb_parked` | Unified park report: `reason` (1=break, 2=watch, 3=step), `pc`, `func`, `watch_addr`, `watch_val`. |
+
+Parking calls `debug_server_poll` in a tight spin, so TCP stays live
+while the CPU is stopped — send `rdb_break_continue` / `rdb_watch_continue`
+to release. `rdb_parked` is safe to poll from outside the parked thread.
+
+**Tier 3 — native WRAM anchors + reconstruction**:
+| Command | Purpose |
+|---------|---------|
+| `rdb_anchor_on` `{interval}` | Snapshot 2 KB WRAM every `interval` blocks (default 4096, 64 slots). Also auto-records all $0000-$07FF stores into the Tier 1 ring. |
+| `rdb_anchor_off` | Stop snapshotting; existing anchors retained. |
+| `rdb_anchor_status` | Anchor count, interval, current block index. |
+| `rdb_wram_at_block` `{block}` | Reconstruct 2 KB WRAM at `block` by finding the nearest prior anchor and replaying store-ring entries forward. Reports `store_ring_wrapped` if the store ring has evicted pre-anchor entries (indicates incomplete replay). Returns `hex` = 4 KiB hex string for the 2 KB. |
+
+### Retired commands (use `rdb_*` instead)
+
+Removed in the Tiers-1-3 cleanup. If a script still calls these, migrate:
+| Retired | Replacement |
+|---------|-------------|
+| `watch` / `unwatch` | `rdb_watch_add` / `rdb_watch_clear` (same 16-slot limit, but **synchronous** — fires inside `RDB_STORE8`, not by polling). |
+| `follow` / `unfollow` / `follow_history` | `rdb_watch_add` + `rdb_dump` (full attribution: `pc`, `func`, `block`). |
+| `watch_s` / `unwatch_s` / `watch_s_history` | `trace_blocks` with PC filtering — S is one of many registers now captured per block. |
 
 ### Input
 | Command | Purpose |

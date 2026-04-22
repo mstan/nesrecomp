@@ -1,4 +1,5 @@
 build/
+build_recomp/
 generated/
 
 # ROM files — never commit game ROMs
