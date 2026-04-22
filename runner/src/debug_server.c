@@ -16,6 +16,7 @@
 #ifdef ENABLE_NESTOPIA_ORACLE
 #include "nestopia_oracle_cmds.h"
 #endif
+#include "reverse_debug.h"
 #include "nes_runtime.h"
 
 #include <stdio.h>
@@ -1841,6 +1842,12 @@ static void process_command(const char *line)
 #ifdef ENABLE_NESTOPIA_ORACLE
     /* Try generic Nestopia oracle commands */
     if (nestopia_oracle_handle_cmd(cmd, id, line))
+        return;
+#endif
+
+#if NESRECOMP_REVERSE_DEBUG
+    /* Reverse-debugger Tier 1+ commands (rdb_*) */
+    if (rdb_handle_cmd(cmd, id, line))
         return;
 #endif
 

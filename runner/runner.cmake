@@ -38,3 +38,16 @@ if(ENABLE_NESTOPIA_ORACLE)
     )
     include(${NESRECOMP_RUNNER_ROOT}/nestopia_cmake.cmake)
 endif()
+
+# ---- Optional reverse debugger (Tier 1+) ----
+# Games opt in by setting NESRECOMP_REVERSE_DEBUG=ON. Requires regenerating
+# the recompiled C with NESRecomp.exe --reverse-debug so the generator emits
+# RDB_STORE8 in place of direct nes_write calls. The game's CMakeLists
+# must also add target_compile_definitions(<game> PRIVATE NESRECOMP_REVERSE_DEBUG=1)
+# so both the runner translation units and the generated C see the flag.
+# See REVERSE_DEBUGGER.md §Build flag design.
+if(NESRECOMP_REVERSE_DEBUG)
+    list(APPEND NESRECOMP_RUNNER_SOURCES
+        ${NESRECOMP_RUNNER_ROOT}/src/reverse_debug.c
+    )
+endif()

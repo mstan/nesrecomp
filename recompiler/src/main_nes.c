@@ -348,6 +348,8 @@ static void print_usage(void) {
         "  --game <path>          Game-specific config (trampolines, dispatch tables, etc.)\n"
         "                         If omitted, auto-detects ./game.toml or uses defaults.\n"
         "  --proposal-out <path>  Write a proposed game.toml based on auto-discovery.\n"
+        "  --reverse-debug        Emit RDB_STORE8 / g_rdb_current_func for Tier-1\n"
+        "                         reverse-debugger builds. See REVERSE_DEBUGGER.md.\n"
         "  --help, -h             Show this help message.\n"
         "\n"
         "Output:\n"
@@ -381,6 +383,8 @@ int main(int argc, char *argv[]) {
             game_path = argv[++i];
         } else if (strcmp(argv[i], "--proposal-out") == 0 && i+1 < argc) {
             proposal_out = argv[++i];
+        } else if (strcmp(argv[i], "--reverse-debug") == 0) {
+            g_codegen_reverse_debug = true;
         } else if (!rom_path) {
             rom_path = argv[i];
         } else {
@@ -403,6 +407,8 @@ int main(int argc, char *argv[]) {
     }
 
     printf("[NESRecomp] Loading ROM: %s\n", rom_path);
+    if (g_codegen_reverse_debug)
+        printf("[NESRecomp] --reverse-debug: emitting Tier-1 RDB_STORE8 hooks\n");
 
     /* Parse ROM */
     NESRom rom = {0};
