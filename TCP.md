@@ -227,6 +227,23 @@ Removed in the Tiers-1-3 cleanup. If a script still calls these, migrate:
 | `call_stack` | Recompiled call stack (if `RECOMP_STACK_TRACKING` enabled). |
 | `dispatch_miss_info` | Dispatch table misses (if `ENABLE_DISPATCH_MISS_TRACKING`). |
 
+### Oracle Tier 4 — rewind / step / delta (requires ENABLE_NESTOPIA_ORACLE + `--emulated`)
+
+| Command | Purpose |
+|---------|---------|
+| `emu_step {frames}` | Run 1+ frames on the embedded Nestopia oracle (cap 600). Auto-captures WRAM for next `emu_wram_delta`. |
+| `emu_snapshot` | Serialize full oracle state (~5 KB, 16-slot FIFO ring). Returns monotonic `tag`. |
+| `emu_rewind_to {tag}` | Unserialize oracle back to the snapshot with that tag. |
+| `emu_rewind_list` | List live snapshots: slot, tag, frame, len. |
+| `emu_wram_delta` | `(addr, before, after)` for bytes that changed in the last `emu_step`. |
+
+The Nestopia oracle must be initialized — pass `--emulated` (or
+`--verify`) when launching the game. Without it, every `emu_*`
+command returns `unknown command`.
+
+Per-instruction oracle trace (`emu_insn_trace_*`) is deferred;
+see REVERSE_DEBUGGER.md §Tier 4b for rationale.
+
 ### Game-Specific Commands
 Game-specific commands dispatch via `game_handle_debug_cmd()` in each
 game's `extras.c`. See each game's TCP.md for its custom commands.

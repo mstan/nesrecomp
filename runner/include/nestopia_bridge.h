@@ -82,6 +82,22 @@ typedef struct {
 
 void nestopia_bridge_get_mapper_state(NestopiaMapperState *out);
 
+/* ---- Tier 4 (oracle-side reverse debugger) ---- */
+
+/* retro_serialize/unserialize wrappers for full-emulator rewind.
+ * *_size returns the serializer's current state size in bytes.
+ * serialize writes up to `cap` bytes into `out` and returns actual
+ * size (or 0 on failure). unserialize returns 1 on success, 0 on
+ * failure (size mismatch or libretro refusal). */
+size_t nestopia_bridge_serialize_size(void);
+size_t nestopia_bridge_serialize(void *out, size_t cap);
+int    nestopia_bridge_unserialize(const void *in, size_t len);
+
+/* Snapshot of 2 KB WRAM at the moment of the last `emu_step_frame` /
+ * `nestopia_bridge_run_frame`. Used by `emu_wram_delta`. */
+void   nestopia_bridge_capture_prev_wram(void);
+void   nestopia_bridge_get_prev_wram(uint8_t *out);  /* 2 KB */
+
 #ifdef __cplusplus
 }
 #endif

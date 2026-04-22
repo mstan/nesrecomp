@@ -143,6 +143,38 @@ int nestopia_bridge_init(const char *rom_path) {
     return 0;
 }
 
+/* Tier-4 WRAM-delta support: snapshot WRAM before the next retro_run so
+ * emu_wram_delta can report changed bytes. capture_prev_wram() is called
+ * by the Tier-4 cmd wrapper; keeping it here (next to ram accessors) so
+ * it has direct access to the retro_get_memory_data buffer. */
+static uint8_t s_prev_wram[0x800];
+
+void nestopia_bridge_capture_prev_wram(void) {
+    void *data = retro_get_memory_data(RETRO_MEMORY_SYSTEM_RAM);
+    size_t size = retro_get_memory_size(RETRO_MEMORY_SYSTEM_RAM);
+    if (data && size > 0) {
+        memcpy(s_prev_wram, data, size < 0x800 ? size : 0x800);
+    }
+}
+void nestopia_bridge_get_prev_wram(uint8_t *out) {
+    if (out) memcpy(out, s_prev_wram, 0x800);
+}
+
+size_t nestopia_bridge_serialize_size(void) {
+    if (!s_loaded) return 0;
+    return retro_serialize_size();
+}
+size_t nestopia_bridge_serialize(void *out, size_t cap) {
+    if (!s_loaded || !out) return 0;
+    size_t need = retro_serialize_size();
+    if (cap < need) return 0;
+    return retro_serialize(out, need) ? need : 0;
+}
+int nestopia_bridge_unserialize(const void *in, size_t len) {
+    if (!s_loaded || !in) return 0;
+    return retro_unserialize(in, len) ? 1 : 0;
+}
+
 void nestopia_bridge_run_frame(uint8_t buttons) {
     if (!s_loaded) return;
     s_input_state = buttons;

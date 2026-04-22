@@ -215,35 +215,65 @@ oracle, `rdb_wram_at_block <N-k>` for k=1..100 until the value
 still matches; re-walk the block trace from that point to find the
 first mismatch.
 
-### Tier 4 — per-instruction granularity
+### Tier 4 — oracle-side rewind, step, and delta (shipped)
 
-**What it does.** `code_generator --reverse-debug` emits
-`rdb_on_insn(0xPCu, mnem_id)` at the top of every 6502 instruction.
-The ring captures `(frame, block_idx, pc, mnem_id, a, x, y, s, p)`;
-1M entries ≈ 16 MB. Mnemonic is a small int (opcode table index);
-the table is published once via `rdb_insn_mnemonics`.
+**What it does.** The embedded Nestopia oracle becomes
+time-travel-aware via `retro_serialize` / `retro_unserialize`. From
+the debugger client you can:
 
-Per-instruction breakpoints live alongside block breakpoints:
-`s_rdb_insn_break_pcs[16]` and `rdb_step_insn` give instruction
-single-step. Useful for the rare bug where one block is wrong at
-one specific insn and the 2.5 block granularity isn't sharp enough.
+- Step the oracle one frame at a time (`emu_step`) without
+  advancing the native recomp, which lets you walk the oracle
+  forward in lockstep with `rdb_step_block` on the native side.
+- Take a full oracle snapshot (`emu_snapshot`) and rewind to it
+  later (`emu_rewind_to`). Snapshots are full libretro state —
+  CPU, PPU, APU, mapper, PRG/CHR, every cycle counter. 16-slot
+  FIFO ring, typically ~5 KB each.
+- Diff 2 KB WRAM between two adjacent steps (`emu_wram_delta`).
+  The diff is computed against a snapshot captured automatically
+  at the start of the last `emu_step`, so you always see changes
+  relative to the previous oracle state.
+
+**What it costs.** A snapshot is one `retro_serialize` call, a
+memcpy into the snapshot ring, and at most ~5 KB of RAM per slot.
+Rewind is a single `retro_unserialize`. None of this fires unless
+the corresponding `emu_*` command is sent.
 
 **TCP commands.**
 
-- `trace_insn` / `trace_insn_reset` — arm / reset.
-- `get_insn_trace [from] [to] [max]` — dump.
-- `rdb_insn_mnemonics` — published once; caller caches.
-- `rdb_insn_break <hex_pc>` / `rdb_insn_break_clear` /
-  `rdb_step_insn`
+- `emu_step [frames]` — step 1+ frames on the oracle (max 600,
+  i.e. ~10 s). Auto-captures WRAM for the next `emu_wram_delta`.
+- `emu_snapshot` — allocate a slot, serialize full oracle state.
+  Returns a monotonic `tag` the client holds onto.
+- `emu_rewind_to {tag}` — restore the snapshot with that tag.
+- `emu_rewind_list` — enumerate live snapshots (slot, tag, frame, len).
+- `emu_wram_delta` — list of (addr, before, after) for the last step.
 
-Oracle mirror: `emu_insn_trace_on/off/reset/count`,
-`emu_get_insn_trace` hooked into Nestopia's per-insn dispatch.
+**Litmus test.** Let the oracle run to frame 600. `emu_snapshot`,
+`emu_step 60`, `emu_snapshot`, compare the two via `emu_wram_delta`.
+`emu_rewind_to` the first tag, `emu_step 1`, confirm delta is ≤100
+bytes (one-frame change).
 
-The SNES project originally marked Tier 4 "deferred indefinitely"
-and later shipped it. We ship Tier 4 upfront here because NES
-instructions are fixed-width and single-addr-mode per opcode — the
-emit cost is a single inline call per insn, negligible next to
-Tier 2's block hook.
+### Tier 4b — per-instruction trace (deferred)
+
+**Why deferred.** Hooking every 6502 instruction in Nestopia
+requires patching the Nestopia core's CPU dispatch
+(`nestopia-core/source/core/NstCpu.cpp`). That patch is mechanical
+but invasive — every merge from upstream Nestopia rebases it. The
+snesrecomp project kept its snes9x pre-insn patch isolated in
+`snesrecomp/runner/snes9x_oracle.patch`; nesrecomp would do the
+same.
+
+The deferred commands are:
+
+- `emu_insn_trace_on / off / reset / count`
+- `emu_get_insn_trace [from] [to] [max]` — per-insn ring with
+  `(frame, pc, op, A, X, Y, S, P)`
+- `emu_nmi_count` — Nestopia's internal NMI tick counter
+
+These ship when a single-session debugging need actually requires
+cycle-level oracle attribution — the existing Tier-4 rewind +
+`emu_wram_delta` covers the `"recomp's output at frame N doesn't
+match the oracle's"` class of bugs without per-insn granularity.
 
 ## Build flag design
 
