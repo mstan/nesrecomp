@@ -56,12 +56,14 @@ the next regeneration and the fix will be silently lost.
 ---
 
 ## ████████████████████████████████████████████████████████
-## ██  RULE 2: CHECK PATTERNS.md BEFORE ANY GHIDRA WORK  ██
+## ██  RULE 2: CHECK GAME-SPECIFIC PATTERN DOCS FIRST    ██
 ## ████████████████████████████████████████████████████████
 
-Before implementing ANY function discovered via Ghidra tracing, read `PATTERNS.md`.
+Before implementing ANY function discovered via Ghidra tracing, check whether the game
+repo has a `PATTERNS.md` (e.g. `FaxanaduRecomp/PATTERNS.md`) documenting the dispatch
+idioms used by that ROM.
 
-If a function does ANY of these, stop and check PATTERNS.md:
+If a function does ANY of these, stop and read the game's PATTERNS.md before writing code:
 - PLA/PHA that touches the return address
 - RTS used as a computed goto (jump through stack-stored address)
 - Inline data bytes immediately following a JSR
@@ -183,11 +185,11 @@ GameRecomp.exe rom.nes --script C:/temp/session.txt > C:/temp/stdout.txt 2>&1
 ## Build Commands
 
 ```batch
-# Build recompiler (after code_generator.c changes)
-cmake --build F:/Projects/nesrecomp/build/recompiler --config Release
+# Build recompiler (run from the nesrecomp framework directory, after code_generator.c changes)
+cmake --build build/recompiler --config Release
 
-# Regenerate game code (run from game project directory)
-F:/Projects/nesrecomp/build/recompiler/Release/NESRecomp.exe <rom.nes>
+# Regenerate game code (run from the game project directory; adjust path to NESRecomp.exe)
+<path/to/nesrecomp>/build/recompiler/Release/NESRecomp.exe <rom.nes>
 
 # Build a game project (from game project directory)
 cmake -S . -B build -G "Visual Studio 17 2022" -A x64
@@ -209,8 +211,8 @@ cmake --build build --config Release
 | `runner/src/launcher.c` | ROM discovery, CRC32 verify, main() | Yes |
 | `runner/runner.cmake` | Source list for game project CMakeLists | Yes |
 | `runner/include/game_extras.h` | Per-game hook interface | Yes |
-| `PATTERNS.md` | 6502 dispatch idioms | Reference |
 | `EXTRACTION.md` | Bank extraction procedures | Reference |
+| Game-repo `PATTERNS.md` (if present) | Game-specific 6502 dispatch idioms | Reference |
 
 ---
 

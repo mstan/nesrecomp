@@ -46,7 +46,7 @@ size        = 0x4000  (16KB each)
 
 ### Extract all banks (run once to populate `banks/`)
 ```python
-d = open('F:/Projects/nesrecomp/baserom.nes', 'rb').read()
+d = open('baserom.nes', 'rb').read()
 import os; os.makedirs('banks', exist_ok=True)
 for i in range(16):
     open(f'banks/bank{i:02d}.bin', 'wb').write(d[0x10 + i*0x4000 : 0x10 + (i+1)*0x4000])
@@ -88,8 +88,8 @@ The two banks are one contiguous 32KB block. **Load them as a single file.**
 
 ### Extraction
 ```python
-d = open('F:/Projects/nesrecomp/Super Mario Bros. (World).nes', 'rb').read()
-open('F:/Projects/nesrecomp/smb_prg.bin', 'wb').write(d[0x10:0x8010])
+d = open('Super Mario Bros. (World).nes', 'rb').read()
+open('smb_prg.bin', 'wb').write(d[0x10:0x8010])
 # Produces 32768 bytes covering NES $8000–$FFFF
 ```
 
