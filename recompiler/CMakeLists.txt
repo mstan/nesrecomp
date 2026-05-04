@@ -13,6 +13,7 @@ add_executable(NESRecomp
     src/annotations.c
     src/symbol_table.c
     src/game_config.c
+    src/coverage.c
     src/toml.c
 )
 

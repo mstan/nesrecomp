@@ -13,6 +13,7 @@
 #include "code_generator.h"
 #include "annotations.h"
 #include "cpu6502_decoder.h"
+#include "coverage.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -2202,6 +2203,8 @@ bool codegen_emit(const NESRom *rom, const FunctionList *funcs,
          * emitted as independent functions. */
         if (entry_is_merge_range_secondary(rom, funcs, cfg, i)) continue;
 
+        coverage_record_emitted_function(funcs->entries[i].bank,
+                                         funcs->entries[i].addr);
         emit_function(f_full, rom, &funcs->entries[i], funcs, at, cfg);
     }
 

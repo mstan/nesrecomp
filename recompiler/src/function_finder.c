@@ -16,6 +16,7 @@
  */
 #include "function_finder.h"
 #include "cpu6502_decoder.h"
+#include "coverage.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -205,14 +206,23 @@ static bool is_data_region(const GameConfig *cfg, int bank, uint16_t addr) {
 static bool validate_code_target(const NESRom *rom, int bank,
                                  uint16_t addr, int min_valid) {
     uint8_t first = rom_read(rom, bank, addr);
-    if (g_opcode_table[first].mnemonic == MN_ILLEGAL) return false;
-    if (first == 0x00) return false;  /* BRK at function entry = suspicious */
+    if (g_opcode_table[first].mnemonic == MN_ILLEGAL) {
+        coverage_record_rejected_target_illegal(bank, addr);
+        return false;
+    }
+    if (first == 0x00) {
+        coverage_record_rejected_target_brk(bank, addr);
+        return false;  /* BRK at function entry = suspicious */
+    }
     if (first == 0x60) return true;   /* RTS = null handler */
     int count = 0;
     uint16_t pc = addr;
     for (int i = 0; i < min_valid; i++) {
         uint8_t op = rom_read(rom, bank, pc);
-        if (g_opcode_table[op].mnemonic == MN_ILLEGAL) return false;
+        if (g_opcode_table[op].mnemonic == MN_ILLEGAL) {
+            coverage_record_rejected_target_illegal(bank, addr);
+            return false;
+        }
         int sz = g_opcode_table[op].size;
         if (sz == 0) sz = 1;
         pc += sz;

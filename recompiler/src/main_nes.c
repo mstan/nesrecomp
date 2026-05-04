@@ -14,6 +14,7 @@
 #include "annotations.h"
 #include "symbol_table.h"
 #include "game_config.h"
+#include "coverage.h"
 
 static bool file_exists(const char *path) {
     FILE *f = fopen(path, "r");
@@ -479,6 +480,12 @@ int main(int argc, char *argv[]) {
             printf("[NESRecomp] Annotations: %d entries from %s\n", at.count, ann_path);
     }
 
+    /* Set up coverage collection: discovery hooks see g_active_coverage and
+     * deduplicate rejection sites by (bank, addr).  Cleared after the run. */
+    static Coverage cov;
+    coverage_init(&cov);
+    g_active_coverage = &cov;
+
     /* Find all functions via JSR/RTS graph walk */
     static FunctionList funcs = {0};
     function_finder_run(&rom, &funcs, &cfg);
@@ -567,6 +574,28 @@ int main(int argc, char *argv[]) {
     }
 
     printf("[NESRecomp] Done. Output:\n  %s\n  %s\n", out_full, out_dispatch);
+
+    /* Coverage report: histogram + BRK/JMP-bug walk over emitted functions,
+     * combined with discovery-time rejection sites already accumulated. */
+    coverage_collect_from_funcs(&rom, &funcs, &cfg, &cov);
+    char out_coverage[256];
+    snprintf(out_coverage, sizeof(out_coverage), "generated/%s_coverage.txt", output_prefix);
+    if (coverage_write_text_report(&cov, &rom, out_coverage)) {
+        printf("[NESRecomp] Coverage: %s  (%d functions analyzed, %llu reachable insns,\n"
+               "             %d BRK sites, %d JMP (\\$xxFF) sites,\n"
+               "             %d illegal-rejected, %d BRK-rejected discovery targets)\n",
+               out_coverage,
+               cov.analyzed_function_count,
+               (unsigned long long)cov.reachable_insn_total,
+               cov.brk_site_unique_count,
+               cov.jmp_indirect_xxff_site_unique_count,
+               cov.rejected_illegal_site_unique_count,
+               cov.rejected_brk_site_unique_count);
+    } else {
+        fprintf(stderr, "[NESRecomp] Warning: failed to write coverage report '%s'\n",
+                out_coverage);
+    }
+    g_active_coverage = NULL;
 
     rom_free(&rom);
     function_list_free(&funcs);
