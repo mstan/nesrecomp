@@ -208,8 +208,15 @@ DispatchMissPolicy g_dispatch_miss_policy = DISPATCH_MISS_LOG_RETURN;
 uint64_t           g_dispatch_miss_count = 0;
 uint64_t           g_inline_dispatch_miss_count = 0;
 
+BrkPolicy g_brk_policy = BRK_DIAG;
+uint64_t  g_brk_count  = 0;
+
 void nes_set_dispatch_miss_policy(DispatchMissPolicy policy) {
     g_dispatch_miss_policy = policy;
+}
+
+void nes_set_brk_policy(BrkPolicy policy) {
+    g_brk_policy = policy;
 }
 
 static void load_dispatch_miss_policy_from_env(void) {
@@ -221,6 +228,61 @@ static void load_dispatch_miss_policy_from_env(void) {
     else fprintf(stderr,
                  "[runtime] NESRECOMP_DISPATCH_MISS='%s' not recognized "
                  "(expected log-return|fatal|trap); using log-return\n", v);
+}
+
+static void load_brk_policy_from_env(void) {
+    const char *v = getenv("NESRECOMP_BRK");
+    if (!v || !*v) return;
+    if (strcmp(v, "diag")  == 0)  g_brk_policy = BRK_DIAG;
+    else if (strcmp(v, "fatal") == 0) g_brk_policy = BRK_FATAL;
+    else if (strcmp(v, "trap")  == 0) g_brk_policy = BRK_TRAP;
+    else fprintf(stderr,
+                 "[runtime] NESRECOMP_BRK='%s' not recognized "
+                 "(expected diag|fatal|trap); using diag\n", v);
+}
+
+/* Hook called by codegen at every reachable BRK ($00) site. Records the
+ * occurrence and applies the configured policy. The generated code emits
+ * `return;` immediately after the call so the enclosing function exits
+ * at BRK rather than silently flowing past it.
+ *
+ * Real BRK semantics (push PC+2, push P|B, dispatch via IRQ vector) are
+ * not implemented; instead BRK_FATAL or BRK_TRAP gives the developer a
+ * loud failure they can debug. */
+void nes_brk_executed(uint16_t pc) {
+    static uint32_t last = 0xFFFFFFFF;
+    uint32_t key = ((uint32_t)g_current_bank << 16) | pc;
+    bool first_for_key = (key != last);
+
+    g_brk_count++;
+    if (first_for_key) {
+        printf("[BRK] executed at $%04X bank=%d (frame %llu) — "
+               "BRK is silently skipped under DIAG; consider real "
+               "implementation if this site matters.\n",
+               pc, g_current_bank, (unsigned long long)g_frame_count);
+        fflush(stdout);
+        last = key;
+    }
+
+    switch (g_brk_policy) {
+        case BRK_DIAG:
+            return;
+        case BRK_FATAL:
+            fprintf(stderr,
+                    "[runtime] FATAL: BRK at $%04X (bank=%d, frame=%llu). "
+                    "Policy=fatal.\n",
+                    pc, g_current_bank, (unsigned long long)g_frame_count);
+            fflush(stderr);
+            fflush(stdout);
+            exit(1);
+        case BRK_TRAP: {
+            char buf[64];
+            snprintf(buf, sizeof(buf), "BRK at $%04X (bank=%d)",
+                     pc, g_current_bank);
+            debug_server_request_pause(buf);
+            return;
+        }
+    }
 }
 
 void runtime_init(void) {
@@ -236,6 +298,7 @@ void runtime_init(void) {
     apu_init();
     ppu_trace_init();
     load_dispatch_miss_policy_from_env();
+    load_brk_policy_from_env();
 }
 
 /* Deterministic VBlank simulation: fires NMI every N bus operations.

@@ -85,6 +85,38 @@ void nes_set_dispatch_miss_policy(DispatchMissPolicy policy);
  * minimal runner without the debug server (smoke harness) still links. */
 void debug_server_request_pause(const char *reason);
 
+/* ---- BRK policy ----
+ * Controls runtime behavior when the recompiler emits a BRK ($00) site.
+ *   DIAG    log first occurrence to stderr (loud but non-fatal); function
+ *           returns from the BRK site as if it were RTS. Default — better
+ *           than the legacy "silent skip" behavior because reachable BRK
+ *           is now visible.
+ *   FATAL   log + exit(1). For new ports where reaching BRK is a bug.
+ *   TRAP    log + raise debug-server pause flag. Inspect at the miss site
+ *           via TCP, then `continue` to resume. Same mechanism as
+ *           dispatch-miss trap.
+ *
+ * Real BRK semantics (push PC+2, push P with B set, set I, dispatch via
+ * IRQ vector) are not yet implemented — most licensed NES games never
+ * reach BRK in normal play, so DIAG/FATAL/TRAP are sufficient until a
+ * title proves otherwise. The runtime hook nes_brk_executed always
+ * returns to the caller; callers expect to return from the enclosing
+ * function immediately (codegen emits `return;` after the call).
+ *
+ * Selected via NESRECOMP_BRK=diag|fatal|trap env var, parsed once at
+ * runtime_init. Programmatic override via nes_set_brk_policy. */
+typedef enum {
+    BRK_DIAG  = 0,
+    BRK_FATAL = 1,
+    BRK_TRAP  = 2,
+} BrkPolicy;
+
+extern BrkPolicy g_brk_policy;
+extern uint64_t  g_brk_count;
+
+void nes_set_brk_policy(BrkPolicy policy);
+void nes_brk_executed(uint16_t pc);
+
 /* ---- Entry Points (defined in faxanadu_full.c) ---- */
 void func_RESET(void);
 void func_NMI(void);

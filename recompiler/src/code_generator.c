@@ -1444,7 +1444,18 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
         case MN_CLV: fprintf(f, "g_cpu.V = 0;\n"); break;
 
         case MN_NOP: fprintf(f, "/* NOP */\n"); break;
-        case MN_BRK: fprintf(f, "/* BRK — software interrupt, skip */\n"); break;
+        case MN_BRK:
+            /* BRK was previously emitted as a comment, leaving execution to
+             * fall through past the $00 byte. That's silent control-flow
+             * loss when the BRK is actually reachable. The runtime hook
+             * nes_brk_executed records the site and applies the configured
+             * BrkPolicy (DIAG/FATAL/TRAP); we then `return;` so the
+             * enclosing function exits at the BRK site rather than
+             * continuing past it. Real BRK semantics (push PC+2, push P|B,
+             * IRQ-vector dispatch) are not implemented yet — see
+             * nes_runtime.h. */
+            fprintf(f, "nes_brk_executed(0x%04X); return;\n", pc);
+            break;
 
         default:
             fprintf(f, "/* unhandled mnemonic %d */\n", e->mnemonic);
