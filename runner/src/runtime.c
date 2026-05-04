@@ -144,18 +144,6 @@ static int zapper_light_detected(void) {
      * shot is rejected. */
     if (!(g_ppumask & 0x18)) return 0;
 
-    /* Gate on sprite-0 hit.  On real NES, the CRT electron beam scans
-     * top-to-bottom.  The Zapper can only see light once the beam has
-     * passed the target area.  Games use sprite-0 hit as a scanline
-     * marker: the detection loop polls $2002 (spr0) and $4017 (light)
-     * simultaneously.  Before spr0 fires, the beam hasn't reached the
-     * detection zone, so the Zapper sees no light.
-     *
-     * Without this gate, zapper_light_detected() checks the full
-     * framebuffer and may report light BEFORE spr0 fires, triggering
-     * the anti-cheat path (light before spr0 = pointing at a lamp). */
-    if (!g_spr0_split_active) return 0;
-
     /* If PPUMASK changed since the framebuffer was last rendered, do an
      * on-demand render so it reflects the current PPU state (e.g. the
      * detection flash sprites that are now visible). */
@@ -415,6 +403,12 @@ void maybe_trigger_vblank(int cycles) {
         s_ops_count = 0;
         s_vblank_depth++;
         g_ppustatus = (g_ppustatus & ~0x40) | 0x80;
+        /* Zapper games only: save the legacy pulse counter across the NMI
+         * call so the outer detection loop's accumulator survives PPU
+         * writes inside the handler.  Non-zapper games clear unconditionally
+         * to keep scroll/sprite-0 splits aligned to master behaviour. */
+        int saved_ctr0 = g_spr0_reads_ctr_legacy;
+        int saved_act0 = g_spr0_split_active;
         g_spr0_split_active = 0;
         g_spr0_reads_ctr_legacy = 0;
         g_ppuscroll_x = 0;
@@ -428,6 +422,10 @@ void maybe_trigger_vblank(int cycles) {
         if (g_ppuctrl & 0x80) {
             s_dbg_nmi_fires++;
             nes_vblank_callback();
+        }
+        if (g_zapper_enabled) {
+            g_spr0_reads_ctr_legacy = saved_ctr0;
+            g_spr0_split_active     = saved_act0;
         }
         s_vblank_depth--;
     } else {
@@ -468,9 +466,13 @@ void maybe_fire_pending_vblank(void) {
     /* Standard VBlank start: set VBlank flag, clear sprite-0-hit flag. */
     g_ppustatus = (g_ppustatus & ~0x40) | 0x80;
 
-    /* Save sprite-0 state across nested VBlanks. The cycle predictor's
-     * frame-start sample (g_predicted_spr0_scanline) is set in
-     * nes_vblank_callback below. */
+    /* Zapper games only: preserve the legacy pulse counter across nested
+     * NMIs.  Detection loops accumulate consecutive $2002 reads to trigger
+     * the sprite-0 hit; nested NMI handlers do PPU writes that would
+     * otherwise reset it before the detection loop reaches threshold. */
+    int saved_spr0_ctr    = g_spr0_reads_ctr_legacy;
+    int saved_spr0_active = g_spr0_split_active;
+
     g_spr0_split_active = 0;
     g_spr0_reads_ctr_legacy = 0;
     g_ppuscroll_x = 0;
@@ -484,6 +486,11 @@ void maybe_fire_pending_vblank(void) {
         nes_vblank_callback();
     } else if (s_vblank_depth > 1) {
         g_ram[0x1A] = 1;
+    }
+
+    if (g_zapper_enabled) {
+        g_spr0_reads_ctr_legacy = saved_spr0_ctr;
+        g_spr0_split_active     = saved_spr0_active;
     }
 
     s_vblank_depth--;
@@ -558,7 +565,11 @@ uint8_t nes_read(uint16_t addr) {
                 }
                 uint8_t val = 0x40;
                 if (!zapper_light_detected()) val |= 0x08;
-                if (g_zapper_trigger) val |= 0x10;
+                /* NES Zapper: $4017 bit 4 is active-low while trigger is
+                 * held — set bit 4 only when trigger is RELEASED.
+                 * 50cd331 inverted this; empirically Duck Hunt works on
+                 * master (no flip), confirming master polarity is correct. */
+                if (!g_zapper_trigger) val |= 0x10;
                 return val;
             }
             if (s_ctrl1_strobe) return 0x40 | (g_controller2_buttons >> 7);
@@ -630,8 +641,12 @@ void ppu_write_reg(uint16_t reg, uint8_t val) {
     /* Any PPU write between $2002 reads means the read was a latch reset
      * (e.g., LDA $2002; STA $2006), not a sprite-0 spin-wait poll.
      * Reset the legacy pulse counter so only consecutive $2002 reads
-     * trigger the fallback hit (only relevant when predict_disable=1). */
-    g_spr0_reads_ctr_legacy = 0;
+     * trigger the fallback hit (only relevant when predict_disable=1).
+     * Zapper games suppress the reset during nested NMIs because the
+     * outer detection loop's accumulator must survive PPU register
+     * setup inside the handler. */
+    if (!(g_zapper_enabled && s_vblank_depth > 1))
+        g_spr0_reads_ctr_legacy = 0;
     switch (reg) {
         case 0x2000:
             g_ppuctrl = val;
