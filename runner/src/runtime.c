@@ -411,20 +411,10 @@ void maybe_trigger_vblank(int cycles) {
      * Deferring to backward branches ensures the code has reached a loop
      * boundary (like the $1A spin-wait) where state is consistent. */
     if (s_vblank_depth == 0) {
-        /* Immediate fire — safe at top level.
-         * Reset ops count AFTER the NMI handler returns, not before.
-         * On real NES, the NMI handler executes during VBlank; the main
-         * loop resumes with a full frame budget (29781 cycles).  If we
-         * reset before, NMI cycles count against the main loop budget,
-         * causing premature next-VBlank that can corrupt ZP pointers
-         * used by bank-switch dispatch (GxROM GoBankInit pattern). */
+        /* Immediate fire — safe at top level. */
+        s_ops_count = 0;
         s_vblank_depth++;
         g_ppustatus = (g_ppustatus & ~0x40) | 0x80;
-        /* Save legacy pulse counter and active flag — NMI handler PPU writes
-         * would otherwise reset them. The new predictor doesn't depend on a
-         * counter, but g_spr0_split_active is still the light-detection gate. */
-        int saved_ctr0 = g_spr0_reads_ctr_legacy;
-        int saved_act0 = g_spr0_split_active;
         g_spr0_split_active = 0;
         g_spr0_reads_ctr_legacy = 0;
         g_ppuscroll_x = 0;
@@ -433,28 +423,13 @@ void maybe_trigger_vblank(int cycles) {
         g_ppuscroll_y_hud = 0;
         g_ppuctrl_hud     = g_ppuctrl & 0x38;
         /* Fire the frame-boundary callback only when NMI is enabled.
-         *
-         * Earlier this site was unconditional (52f0ea5 — Gumshoe: "oracle
-         * cadence sync when NMI is disabled") to keep wall-clock frame
-         * cadence advancing through PPU-off init phases.  That regressed
-         * Metroid (hung early in NMI-disabled init) and Yoshi (stuck on
-         * a blank framebuffer): both spend their boot path with NMI off,
-         * and the unconditional callback ran NMI handlers / advanced
-         * frame counters before the game's setup was ready.
-         *
-         * For now, re-gate on NMI-enable to restore those games.  The
-         * --verify-mode cadence sync that motivated the unconditional
-         * fire is recoverable separately (e.g. via verify_mode-side
-         * polling rather than an unconditional callback fire here). */
+         * (Cadence/oracle sync for NMI-disabled init remains a separate
+         * concern — see notes on 52f0ea5.) */
         if (g_ppuctrl & 0x80) {
             s_dbg_nmi_fires++;
             nes_vblank_callback();
         }
-        /* Restore spr0 state for outer code's detection loop */
-        g_spr0_reads_ctr_legacy = saved_ctr0;
-        g_spr0_split_active     = saved_act0;
         s_vblank_depth--;
-        s_ops_count = 0;
     } else {
         /* Deferred fire — wait for backward branch (loop boundary) */
         s_vblank_pending = 1;
@@ -495,13 +470,7 @@ void maybe_fire_pending_vblank(void) {
 
     /* Save sprite-0 state across nested VBlanks. The cycle predictor's
      * frame-start sample (g_predicted_spr0_scanline) is set in
-     * nes_vblank_callback below; preserving the outer split_active flag
-     * ensures the outer detection loop's light-gate stays consistent
-     * across the nested fire. The legacy pulse counter is preserved too
-     * for the opt-out path (g_spr0_predict_disable=1). */
-    int saved_spr0_ctr    = g_spr0_reads_ctr_legacy;
-    int saved_spr0_active = g_spr0_split_active;
-
+     * nes_vblank_callback below. */
     g_spr0_split_active = 0;
     g_spr0_reads_ctr_legacy = 0;
     g_ppuscroll_x = 0;
@@ -516,10 +485,6 @@ void maybe_fire_pending_vblank(void) {
     } else if (s_vblank_depth > 1) {
         g_ram[0x1A] = 1;
     }
-
-    /* Restore sprite-0 state for the outer loop's detection */
-    g_spr0_reads_ctr_legacy = saved_spr0_ctr;
-    g_spr0_split_active     = saved_spr0_active;
 
     s_vblank_depth--;
 }
@@ -665,11 +630,8 @@ void ppu_write_reg(uint16_t reg, uint8_t val) {
     /* Any PPU write between $2002 reads means the read was a latch reset
      * (e.g., LDA $2002; STA $2006), not a sprite-0 spin-wait poll.
      * Reset the legacy pulse counter so only consecutive $2002 reads
-     * trigger the fallback hit (only relevant when predict_disable=1).
-     * But DON'T reset during nested NMIs — the outer detection loop's
-     * counter must survive the NMI handler's PPU register setup. */
-    if (s_vblank_depth <= 1)
-        g_spr0_reads_ctr_legacy = 0;
+     * trigger the fallback hit (only relevant when predict_disable=1). */
+    g_spr0_reads_ctr_legacy = 0;
     switch (reg) {
         case 0x2000:
             g_ppuctrl = val;
