@@ -1998,6 +1998,25 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
         cursor += consumed;
     }
 
+    /* Fallback trampolines: every label referenced by either a "case N: goto"
+     * alias dispatch OR an in-body branch must be emitted somewhere in the
+     * function body.  If the linear emit walk didn't visit a given valid_starts
+     * entry (e.g. an instruction reachable only via an alternate decode path
+     * the walk pruned, or pending-list races between pre-scan and emit), emit
+     * a fallback that hands off to call_by_address.  When the walk DID emit
+     * the label, the fallback is skipped to avoid a duplicate-label compile
+     * error. */
+    for (int vi = 0; vi < valid_count; vi++) {
+        uint16_t va = valid_starts[vi];
+        bool emitted = false;
+        for (int ei = 0; ei < emitted_count; ei++) {
+            if (emitted_addrs[ei] == va) { emitted = true; break; }
+        }
+        if (!emitted) {
+            fprintf(f, "label_%04X:; call_by_address(0x%04X); return;\n", va, va);
+        }
+    }
+
     fprintf(f, "}\n\n");
 
     /* For multi-entry functions, emit thin wrappers after the body */
