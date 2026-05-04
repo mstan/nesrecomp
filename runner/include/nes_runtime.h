@@ -166,6 +166,11 @@ int  runtime_get_vblank_depth(void);
 void runtime_reset_vblank_depth(void);
 void runtime_begin_post_nmi(void);
 void runtime_end_post_nmi(void);
+/* Debug cadence counters: per wall-clock frame accounting. */
+uint32_t runtime_pop_nmi_fires(void);
+uint32_t runtime_pop_cycle_budget_used(void);
+uint32_t runtime_pop_instrs_ticked(void);
+uint32_t runtime_pop_forced_caps(void);
 
 /* PPU registers */
 extern uint8_t g_ppuctrl;
