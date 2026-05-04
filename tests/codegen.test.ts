@@ -96,6 +96,42 @@ describe("function discovery", () => {
     expect(result.dispatchEntries).toContain("C000");
     expect(result.dispatchEntries).toContain("C010");
   });
+
+  it("JMP (\\$xxFF) page-wrap: static vector resolution uses same-page hi byte", () => {
+    // NMOS 6502 erratum: JMP ($DEFF) reads lo from $DEFF, hi from $DE00,
+    // NOT from $DF00. The function finder must apply the same wrap as the
+    // runtime helper (nes_read16_jmpbug), or the statically-resolved target
+    // will be different from the runtime target — code is generated for the
+    // wrong address and the dispatch table never sees the real target.
+    //
+    // Layout:
+    //   $C000  JMP ($DEFF)            — exercises the erratum
+    //   $DEFF  $50                    — lo byte of vector
+    //   $DE00  $E1                    — hi byte the wrap-correct fetch reads
+    //   $DF00  $00                    — hi byte the BUGGY (addr+1) fetch would read
+    //   $E150  RTS                    — the wrap-correct target body
+    //
+    // With the fix:  target = $E150, $E150 appears in dispatchEntries.
+    // Without the fix: target = $0050, < $8000, finder skips it, $E150 absent.
+    const rom = new RomBuilder()
+      .org(0xc000)
+      .jmpInd(0xdeff)
+      .poke(0xdeff, 0x50)
+      .poke(0xde00, 0xe1)
+      .poke(0xdf00, 0x00)
+      .org(0xe150)
+      .rts()
+      .vectors(0xc000, 0xc000, 0xc000)
+      .writeTemp("jmp_indirect_xxff_pagewrap.nes");
+
+    const result = recompile(rom);
+    // Static vector resolution must have used wrap-correct hi byte.
+    expect(result.dispatchEntries).toContain("E150");
+    // Codegen must use the bug-modeling helper, not plain nes_read16,
+    // so JMP ($DEFF) at runtime also reads the correct page.
+    expect(result.fullC).toContain("nes_read16_jmpbug(0xDEFF)");
+    expect(result.fullC).not.toContain("nes_read16(0xDEFF)");
+  });
 });
 
 describe("code generation", () => {

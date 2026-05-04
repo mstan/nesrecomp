@@ -33,6 +33,15 @@ void     nes_write(uint16_t addr, uint8_t val);
 uint16_t nes_read16(uint16_t addr);       /* Read 16-bit little-endian */
 uint16_t nes_read16zp(uint8_t zp_addr);  /* Zero-page 16-bit (wraps at $FF) */
 
+/* JMP (indirect) NMOS 6502 page-wrap erratum: when the indirect operand is
+ * $xxFF, the high byte is fetched from $xx00 (same page) instead of $(xx+1)00.
+ * This reproduces the bug exactly. Use ONLY for JMP (abs) — every other 16-bit
+ * read should keep using nes_read16. See NESdev errata.
+ *   addr      = vector pointer (the operand of JMP (abs))
+ *   returns   = (hi << 8) | lo where lo = nes_read(addr) and
+ *               hi = nes_read((addr & 0xFF00) | ((addr+1) & 0xFF)) */
+uint16_t nes_read16_jmpbug(uint16_t addr);
+
 /* ---- Dispatch ---- */
 /* Called for JMP (indirect) — dispatch to the correct recompiled function */
 int call_by_address(uint16_t addr);  /* returns 1 on hit, 0 on miss */

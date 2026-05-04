@@ -1136,14 +1136,18 @@ static int walk_function(const NESRom *rom, FunctionList *list,
 
         if (entry->mnemonic == MN_JMP && entry->addr_mode == AM_IND) {
             /* Indirect JMP: if the vector address is in ROM, read the target
-             * statically and add it as a function entry. */
+             * statically and add it as a function entry. Apply NMOS 6502
+             * page-wrap erratum for $xxFF vectors so the static resolution
+             * lands on the same target the runtime nes_read16_jmpbug will. */
             uint8_t lo_ptr = rom_read(rom, read_bank, pc + 1);
             uint8_t hi_ptr = rom_read(rom, read_bank, pc + 2);
             uint16_t vec_addr = lo_ptr | ((uint16_t)hi_ptr << 8);
             if (vec_addr >= 0x8000) {
                 int vec_bank = (vec_addr >= 0xC000) ? fixed_bank : effective_bank;
+                uint16_t vec_hi_addr = (vec_addr & 0xFF00) |
+                                       (uint16_t)((vec_addr + 1) & 0x00FF);
                 uint8_t tlo = rom_read(rom, vec_bank, vec_addr);
-                uint8_t thi = rom_read(rom, vec_bank, vec_addr + 1);
+                uint8_t thi = rom_read(rom, vec_bank, vec_hi_addr);
                 uint16_t target = tlo | ((uint16_t)thi << 8);
                 if (target >= 0x8000) {
                     int tbank = (target >= 0xC000) ? fixed_bank : effective_bank;

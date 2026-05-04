@@ -408,6 +408,15 @@ uint16_t nes_read16zp(uint8_t zp) {
     return (uint16_t)g_ram[zp] | ((uint16_t)g_ram[(uint8_t)(zp + 1)] << 8);
 }
 
+uint16_t nes_read16_jmpbug(uint16_t addr) {
+    /* NMOS 6502 JMP (abs) page-wrap erratum: high-byte fetch stays inside
+     * the same 256-byte page as the low-byte fetch. addr=$12FF reads
+     * lo from $12FF and hi from $1200 (NOT $1300). */
+    uint8_t lo = nes_read(addr);
+    uint8_t hi = nes_read((addr & 0xFF00) | (uint16_t)((addr + 1) & 0x00FF));
+    return (uint16_t)lo | ((uint16_t)hi << 8);
+}
+
 void ppu_write_reg(uint16_t reg, uint8_t val) {
     ppu_trace_write(reg, val);
     /* Any PPU write between $2002 reads means the read was a latch reset

@@ -1228,7 +1228,10 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                         fprintf(f, "{ uint16_t _jt = nes_read16zp(0x%02X); maybe_trigger_vblank(2); call_by_address(_jt); return; }\n", (uint8_t)abs16);
                     }
                 } else {
-                    /* Non-ZP indirect: check for 2-PHA pattern too. */
+                    /* Non-ZP indirect: NMOS 6502 page-wrap erratum applies via
+                     * nes_read16_jmpbug — fetches hi from same page as lo when
+                     * the indirect address ends in $FF. Mandatory for hardware
+                     * accuracy on JMP ($xxFF). */
                     if (pc >= 6 &&
                         rom_read(rom, bank, pc - 6) == 0xA9 &&
                         rom_read(rom, bank, pc - 4) == 0x48 &&
@@ -1237,10 +1240,10 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                         uint8_t cont_hi = rom_read(rom, bank, pc - 5);
                         uint8_t cont_lo = rom_read(rom, bank, pc - 2);
                         uint16_t cont = (((uint16_t)cont_hi << 8) | cont_lo) + 1;
-                        fprintf(f, "{ uint16_t _jt = nes_read16(0x%04X); maybe_trigger_vblank(2); call_by_address(_jt); } goto label_%04X;\n",
+                        fprintf(f, "{ uint16_t _jt = nes_read16_jmpbug(0x%04X); maybe_trigger_vblank(2); call_by_address(_jt); } goto label_%04X;\n",
                                 abs16, cont);
                     } else {
-                        fprintf(f, "{ uint16_t _jt = nes_read16(0x%04X); maybe_trigger_vblank(2); call_by_address(_jt); return; }\n", abs16);
+                        fprintf(f, "{ uint16_t _jt = nes_read16_jmpbug(0x%04X); maybe_trigger_vblank(2); call_by_address(_jt); return; }\n", abs16);
                     }
                 }
             }

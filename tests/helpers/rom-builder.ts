@@ -90,6 +90,31 @@ export class RomBuilder {
     return this.emit([0x4c, addr & 0xff, (addr >> 8) & 0xff]);
   }
 
+  /** JMP (indirect) — JMP ($nnnn). NMOS 6502 page-wrap erratum applies
+   *  when nnnn ends in $FF (high byte fetched from $nn00, not $(nn+1)00). */
+  jmpInd(addr: number): this {
+    return this.emit([0x6c, addr & 0xff, (addr >> 8) & 0xff]);
+  }
+
+  /** Write a single byte at a 6502 address without advancing the cursor.
+   *  Useful for placing static data (vectors, jump-table targets) outside
+   *  the natural emit flow. */
+  poke(addr: number, value: number): this {
+    const isFixed = this.activeBank === this.prgBanks.length - 1;
+    let off: number;
+    if (isFixed) {
+      if (addr < 0xc000 || addr > 0xffff)
+        throw new Error(`poke addr $${addr.toString(16)} out of fixed-bank range $C000-$FFFF`);
+      off = addr - 0xc000;
+    } else {
+      if (addr < 0x8000 || addr > 0xbfff)
+        throw new Error(`poke addr $${addr.toString(16)} out of switchable-bank range $8000-$BFFF`);
+      off = addr - 0x8000;
+    }
+    this.prg[off] = value & 0xff;
+    return this;
+  }
+
   /** RTS */
   rts(): this {
     return this.emit([0x60]);
