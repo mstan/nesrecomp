@@ -174,6 +174,31 @@ export class RomBuilder {
     return this.emit([0xea]);
   }
 
+  /** \$EB — unofficial SBC #imm (alias of \$E9). */
+  sbcAltImm(val: number): this {
+    return this.emit([0xeb, val & 0xff]);
+  }
+
+  /** \$1A — unofficial 1-byte NOP. */
+  nop1A(): this {
+    return this.emit([0x1a]);
+  }
+
+  /** \$04 — unofficial DOP zp (NOP with zp read). */
+  dopZp(zp: number): this {
+    return this.emit([0x04, zp & 0xff]);
+  }
+
+  /** \$0C — unofficial TOP abs (NOP with absolute read). */
+  topAbs(addr: number): this {
+    return this.emit([0x0c, addr & 0xff, (addr >> 8) & 0xff]);
+  }
+
+  /** \$8F — unofficial SAX abs (M = A & X). */
+  saxAbs(addr: number): this {
+    return this.emit([0x8f, addr & 0xff, (addr >> 8) & 0xff]);
+  }
+
   /** Write a 16-bit LE value at cursor (for dispatch tables) */
   word(val: number): this {
     return this.emit([val & 0xff, (val >> 8) & 0xff]);

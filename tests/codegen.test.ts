@@ -97,6 +97,75 @@ describe("function discovery", () => {
     expect(result.dispatchEntries).toContain("C010");
   });
 
+  it("Tier-1 unofficial: \\$EB SBC #imm alias generates SBC code", () => {
+    // Function uses \$EB, which the audit identified as the SBC #imm
+    // alias. Codegen should emit the same SBC scaffold as \$E9.
+    const rom = new RomBuilder()
+      .org(0xc000)
+      .lda(0x10)
+      .sbcAltImm(0x05) // \$EB \$05
+      .rts()
+      .vectors(0xc000, 0xc000, 0xc000)
+      .writeTemp("tier1_sbc_alt.nes");
+
+    const result = recompile(rom);
+    expect(result.dispatchEntries).toContain("C000");
+    // Body must contain SBC subtraction (FLAG_NZC_SUB) — the same
+    // generator helper used for \$E9. Treating \$EB as ILLEGAL (skip)
+    // would not produce this text.
+    expect(result.fullC).toMatch(/m=0x05.*FLAG_NZC_SUB/);
+  });
+
+  it("Tier-1 unofficial: \\$1A 1-byte NOP doesn't break discovery and emits NOP", () => {
+    // Function with \$1A (unofficial NOP) followed by real code. Pre-Phase-3
+    // the function finder rejected any function whose first 7 instructions
+    // contained \$1A (validate_code_target's MN_ILLEGAL check); now it's
+    // MN_NOP and the function is accepted.
+    const rom = new RomBuilder()
+      .org(0xc000)
+      .emit([0x1a]) // \$1A — 1-byte unofficial NOP
+      .lda(0x42)
+      .rts()
+      .vectors(0xc000, 0xc000, 0xc000)
+      .writeTemp("tier1_nop1A.nes");
+
+    const result = recompile(rom);
+    expect(result.dispatchEntries).toContain("C000");
+    expect(result.fullC).toContain("/* NOP */");
+    expect(result.fullC).toContain("0x42");
+  });
+
+  it("Tier-1 unofficial: \\$0C TOP abs emits a discarded read for bus accuracy", () => {
+    const rom = new RomBuilder()
+      .org(0xc000)
+      .topAbs(0x2002) // TOP \$2002 — must perform the read so the
+                     //               PPUSTATUS latch reset semantic is preserved
+      .rts()
+      .vectors(0xc000, 0xc000, 0xc000)
+      .writeTemp("tier1_top_abs.nes");
+
+    const result = recompile(rom);
+    // The dummy read is emitted as (void)nes_read(0x2002) — without it,
+    // bus side effects on memory-mapped I/O would be lost.
+    expect(result.fullC).toMatch(/\(void\)nes_read\(0x2002\)/);
+  });
+
+  it("Tier-1 unofficial: SAX writes A & X to memory", () => {
+    const rom = new RomBuilder()
+      .org(0xc000)
+      .lda(0xF0)       // A = \$F0
+      .ldx(0x0F)       // X = \$0F
+      .saxAbs(0x0200)  // [\$0200] = A & X = \$00
+      .rts()
+      .vectors(0xc000, 0xc000, 0xc000)
+      .writeTemp("tier1_sax_abs.nes");
+
+    const result = recompile(rom);
+    expect(result.dispatchEntries).toContain("C000");
+    // SAX must compute A & X and store the result without touching flags.
+    expect(result.fullC).toMatch(/nes_write\(0x0200,\s*g_cpu\.A\s*&\s*g_cpu\.X\)/);
+  });
+
   it("JMP (\\$xxFF) page-wrap: static vector resolution uses same-page hi byte", () => {
     // NMOS 6502 erratum: JMP ($DEFF) reads lo from $DEFF, hi from $DE00,
     // NOT from $DF00. The function finder must apply the same wrap as the
