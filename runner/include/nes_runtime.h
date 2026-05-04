@@ -50,6 +50,41 @@ int call_by_address(uint16_t addr);  /* returns 1 on hit, 0 on miss */
 void nes_log_dispatch_miss(uint16_t addr);
 void nes_log_inline_miss(uint16_t dispatch_pc, uint8_t a_val);
 
+/* ---- Dispatch-miss policy ----
+ * Configures what happens after nes_log_dispatch_miss / nes_log_inline_miss
+ * has recorded the miss into the ring buffer and dispatch_misses.log.
+ *   LOG_RETURN  log + record + return (legacy default; control flow continues
+ *               from the generated `return 0` after the miss callsite).
+ *   FATAL       log + record + flush diagnostic to stderr + exit(1).
+ *               Loud failure mode for new ports — silent control-flow loss
+ *               cannot be missed.
+ *   TRAP        log + record + raise the debug-server pause flag, return.
+ *               The next debug_server_wait_if_paused will block in the TCP
+ *               loop until a `resume` command clears the pause.
+ *
+ * Selected at runtime_init() from the NESRECOMP_DISPATCH_MISS env var
+ * (`log-return` | `fatal` | `trap`). Default LOG_RETURN. Programmatic
+ * override via nes_set_dispatch_miss_policy. */
+typedef enum {
+    DISPATCH_MISS_LOG_RETURN = 0,
+    DISPATCH_MISS_FATAL      = 1,
+    DISPATCH_MISS_TRAP       = 2,
+} DispatchMissPolicy;
+
+extern DispatchMissPolicy g_dispatch_miss_policy;
+
+/* Per-category counters (monotonic, reset only on process start). */
+extern uint64_t g_dispatch_miss_count;        /* call_by_address misses */
+extern uint64_t g_inline_dispatch_miss_count; /* inline_dispatch defaults */
+
+void nes_set_dispatch_miss_policy(DispatchMissPolicy policy);
+
+/* Implemented by debug_server.c. Sets the pause flag so the next
+ * debug_server_wait_if_paused blocks in the TCP loop. Safe to call from
+ * any thread; the pause flag is volatile. Defined as a weak symbol so a
+ * minimal runner without the debug server (smoke harness) still links. */
+void debug_server_request_pause(const char *reason);
+
 /* ---- Entry Points (defined in faxanadu_full.c) ---- */
 void func_RESET(void);
 void func_NMI(void);

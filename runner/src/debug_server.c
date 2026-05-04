@@ -1850,6 +1850,20 @@ void debug_server_record_frame(void)
     }
 }
 
+/* Raise the pause flag from outside the TCP command loop (e.g. from
+ * dispatch-miss trap policy). Reason is best-effort recorded into the
+ * existing miss state for visibility; we don't have a dedicated trap-reason
+ * channel yet, so a printf line is the minimum to avoid silently halting. */
+void debug_server_request_pause(const char *reason)
+{
+    if (!s_paused) {
+        printf("[debug_server] TRAP: %s — pause set; resume via TCP `continue`\n",
+               reason ? reason : "(no reason)");
+        fflush(stdout);
+    }
+    s_paused = 1;
+}
+
 void debug_server_wait_if_paused(void)
 {
     while (s_paused) {

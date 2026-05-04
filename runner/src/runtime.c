@@ -201,6 +201,28 @@ static void ppu_trace_write(uint16_t reg, uint8_t val) {
     }
 }
 
+/* Dispatch-miss policy + counters. Runtime knobs read once at init from
+ * the environment, with programmatic override available via
+ * nes_set_dispatch_miss_policy. */
+DispatchMissPolicy g_dispatch_miss_policy = DISPATCH_MISS_LOG_RETURN;
+uint64_t           g_dispatch_miss_count = 0;
+uint64_t           g_inline_dispatch_miss_count = 0;
+
+void nes_set_dispatch_miss_policy(DispatchMissPolicy policy) {
+    g_dispatch_miss_policy = policy;
+}
+
+static void load_dispatch_miss_policy_from_env(void) {
+    const char *v = getenv("NESRECOMP_DISPATCH_MISS");
+    if (!v || !*v) return;
+    if (strcmp(v, "fatal") == 0)        g_dispatch_miss_policy = DISPATCH_MISS_FATAL;
+    else if (strcmp(v, "trap") == 0)    g_dispatch_miss_policy = DISPATCH_MISS_TRAP;
+    else if (strcmp(v, "log-return") == 0) g_dispatch_miss_policy = DISPATCH_MISS_LOG_RETURN;
+    else fprintf(stderr,
+                 "[runtime] NESRECOMP_DISPATCH_MISS='%s' not recognized "
+                 "(expected log-return|fatal|trap); using log-return\n", v);
+}
+
 void runtime_init(void) {
     memset(&g_cpu, 0, sizeof(g_cpu));
     memset(g_ram,     0, sizeof(g_ram));
@@ -213,6 +235,7 @@ void runtime_init(void) {
     g_cpu.I = 1;
     apu_init();
     ppu_trace_init();
+    load_dispatch_miss_policy_from_env();
 }
 
 /* Deterministic VBlank simulation: fires NMI every N bus operations.
@@ -734,6 +757,39 @@ extern int         g_recomp_stack_top;
 extern const char *g_last_recomp_func;
 #endif
 
+/* Apply the configured DispatchMissPolicy after a miss has been recorded.
+ *   kind        "dispatch" or "inline_dispatch" — appears in the diagnostic.
+ *   addr        the missed target (or dispatch PC for inline misses).
+ *   bank        active bank at miss time.
+ *   class_name  miss-target classification ("CODE", "ZERO_FILLED", etc.).
+ *   ctx         caller PC (dispatch) or A register (inline). For diagnostic.
+ * No-op for LOG_RETURN. exit(1) for FATAL. Pause flag for TRAP. */
+static void apply_dispatch_miss_policy(const char *kind, uint16_t addr,
+                                       int bank, const char *class_name,
+                                       uint16_t ctx) {
+    switch (g_dispatch_miss_policy) {
+        case DISPATCH_MISS_LOG_RETURN:
+            return;
+        case DISPATCH_MISS_FATAL:
+            fprintf(stderr,
+                    "[runtime] FATAL: %s miss at $%04X (bank=%d, class=%s, "
+                    "ctx=$%04X, frame=%llu). Policy=fatal.\n",
+                    kind, addr, bank, class_name, ctx,
+                    (unsigned long long)g_frame_count);
+            fflush(stderr);
+            fflush(stdout);
+            exit(1);
+        case DISPATCH_MISS_TRAP: {
+            char buf[128];
+            snprintf(buf, sizeof(buf),
+                     "%s miss at $%04X (bank=%d, class=%s, ctx=$%04X)",
+                     kind, addr, bank, class_name, ctx);
+            debug_server_request_pause(buf);
+            return;
+        }
+    }
+}
+
 /* Classify the bytes at a miss target. See MissTargetClass in nes_runtime.h.
  * Pure helper — safe to call from anywhere. */
 static uint8_t classify_miss_target(const uint8_t bytes[8]) {
@@ -845,6 +901,10 @@ void nes_log_dispatch_miss(uint16_t addr) {
                g_current_bank, addr, (unsigned long long)g_frame_count, class_name);
         fflush(stdout);
     }
+
+    g_dispatch_miss_count++;
+    apply_dispatch_miss_policy("dispatch", addr, g_current_bank,
+                               class_name, call_site_pc);
 }
 
 void nes_log_inline_miss(uint16_t dispatch_pc, uint8_t a_val) {
@@ -855,6 +915,9 @@ void nes_log_inline_miss(uint16_t dispatch_pc, uint8_t a_val) {
         last = key;
     }
     g_miss_count_any++;
+    g_inline_dispatch_miss_count++;
+    apply_dispatch_miss_policy("inline_dispatch", dispatch_pc, g_current_bank,
+                               "INLINE", a_val);
 }
 
 /* ---- PPU t register: derive scroll from t for rendering ---- */
