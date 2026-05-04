@@ -60,6 +60,27 @@ bool rom_parse(const char *path, NESRom *out) {
     out->reset_vector = fixed[0x3FFC] | ((uint16_t)fixed[0x3FFD] << 8);
     out->irq_vector   = fixed[0x3FFE] | ((uint16_t)fixed[0x3FFF] << 8);
 
+    /* For mappers with fully-switchable 32KB banks (e.g. GxROM/mapper 66),
+     * read per-window vectors.  Each 32KB window has its own upper 16KB bank
+     * with potentially different NMI/IRQ vectors. */
+    out->num_windows = 0;
+    if (rom_mapper_full_32k_switch(out)) {
+        int n_windows = out->prg_banks / 2;
+        if (n_windows > MAX_32K_WINDOWS) n_windows = MAX_32K_WINDOWS;
+        out->num_windows = n_windows;
+        for (int w = 0; w < n_windows; w++) {
+            int upper_bank = w * 2 + 1; /* upper 16KB of each 32KB window */
+            const uint8_t *bp = out->prg_data + (size_t)upper_bank * PRG_BANK_SIZE;
+            out->window_nmi[w] = bp[0x3FFA] | ((uint16_t)bp[0x3FFB] << 8);
+            out->window_irq[w] = bp[0x3FFE] | ((uint16_t)bp[0x3FFF] << 8);
+        }
+        printf("[ROM] GxROM: %d 32KB windows, per-window vectors:\n", n_windows);
+        for (int w = 0; w < n_windows; w++) {
+            printf("  Window %d (banks %d-%d): NMI=$%04X IRQ=$%04X\n",
+                   w, w*2, w*2+1, out->window_nmi[w], out->window_irq[w]);
+        }
+    }
+
     return true;
 }
 
@@ -74,10 +95,17 @@ const uint8_t *rom_bank_ptr(const NESRom *rom, int bank) {
 }
 
 uint8_t rom_read(const NESRom *rom, int switchable_bank, uint16_t addr) {
-    int fixed_bank = rom->prg_banks - 1;
     if (addr >= 0xC000) {
-        /* Fixed bank */
-        return rom->prg_data[(size_t)fixed_bank * PRG_BANK_SIZE + (addr - 0xC000)];
+        int bank;
+        if (rom_mapper_full_32k_switch(rom)) {
+            /* GxROM: $C000-$FFFF comes from the paired upper bank.
+             * switchable_bank is the lower 16KB index (even); upper = +1. */
+            bank = (switchable_bank | 1);
+            if (bank >= rom->prg_banks) bank = rom->prg_banks - 1;
+        } else {
+            bank = rom->prg_banks - 1; /* traditional fixed bank */
+        }
+        return rom->prg_data[(size_t)bank * PRG_BANK_SIZE + (addr - 0xC000)];
     } else if (addr >= 0x8000) {
         /* Switchable bank */
         if (switchable_bank < 0 || switchable_bank >= rom->prg_banks)

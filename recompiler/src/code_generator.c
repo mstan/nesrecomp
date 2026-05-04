@@ -502,6 +502,24 @@ static uint16_t resolve_jmp_thunk(const NESRom *rom, int fixed_bank, uint16_t ad
     return (uint16_t)(lo | ((uint16_t)hi << 8));
 }
 
+/* GxROM cross-half bank pairing.  On GxROM (mapper 66), the entire 32KB
+ * window ($8000-$FFFF) is switched as a unit.  The recompiler processes
+ * each 16KB half as a separate bank file:
+ *   even banks (0, 2, 4, 6) = lower half ($8000-$BFFF)
+ *   odd  banks (1, 3, 5, 7) = upper half ($C000-$FFFF)
+ * When code in one half calls a target in the other half, the call must
+ * reference the paired bank, not the source bank.  Without this, calls
+ * from upper-half code to lower-half targets would resolve to a wrapper
+ * generated from the wrong ROM bank's data. */
+static int gxrom_paired_bank(const NESRom *rom, int source_bank, uint16_t target_addr) {
+    if (!rom_mapper_full_32k_switch(rom)) return source_bank;
+    if (target_addr >= 0x8000 && target_addr < 0xC000)
+        return source_bank & ~1;  /* lower half → even bank */
+    if (target_addr >= 0xC000)
+        return source_bank | 1;   /* upper half → odd bank */
+    return source_bank;
+}
+
 /* Addresses of coroutine yield function entry points.
  * Multiple function entries can alias into the same body containing
  * the yield pattern (TSX; STX zp,Y; JMP scheduler).  JSRs to ANY of
@@ -546,17 +564,20 @@ typedef struct {
 /* Emit a call/dispatch to (addr, bank): tries body alias → wrapper → call_by_address
  * (unless force_dynamic). Format:
  *   [vblank;][ push_dummy;] (alias|wrapper|call_by_address);[ return;]\n
- * `bank` is the bank to use for alias/wrapper lookup AND for the _b%d suffix on
- * switchable-range targets. The fixed-bank/$C000+ rule strips the suffix. */
-static void emit_call_target(FILE *f, uint16_t addr, int bank, int fixed_bank,
-                             EmitCallOpts opts) {
+ * `bank` is the source bank.  For GxROM cross-half calls, we re-pair to the
+ * target's matching bank before alias/wrapper lookup so we resolve to the
+ * correct generated function. The fixed-bank/$C000+ rule strips the _b suffix. */
+static void emit_call_target(FILE *f, const NESRom *rom, uint16_t addr,
+                             int bank, int fixed_bank, EmitCallOpts opts) {
     if (opts.vblank_prefix) fprintf(f, "maybe_trigger_vblank(2); ");
+
+    int lookup_bank = gxrom_paired_bank(rom, bank, addr);
 
     if (!opts.force_dynamic) {
         uint16_t alias_owner = 0;
         int alias_bank = -1;
         int alias_entry = 0;
-        if (codegen_lookup_body_alias(addr, bank, &alias_owner, &alias_bank, &alias_entry)) {
+        if (codegen_lookup_body_alias(addr, lookup_bank, &alias_owner, &alias_bank, &alias_entry)) {
             char nm[32];
             format_func_name(nm, sizeof nm, alias_owner, alias_bank, fixed_bank);
             fprintf(f, "%s_body(%d);", nm, alias_entry);
@@ -564,10 +585,10 @@ static void emit_call_target(FILE *f, uint16_t addr, int bank, int fixed_bank,
             fprintf(f, "\n");
             return;
         }
-        if (codegen_has_emitted_wrapper(addr, bank)) {
+        if (codegen_has_emitted_wrapper(addr, lookup_bank)) {
             if (opts.push_dummy_static) fprintf(f, DUMMY_PUSH_PAIR);
             char nm[32];
-            format_func_name(nm, sizeof nm, addr, bank, fixed_bank);
+            format_func_name(nm, sizeof nm, addr, lookup_bank, fixed_bank);
             fprintf(f, "%s();", nm);
             if (opts.tail_return) fprintf(f, " return;");
             fprintf(f, "\n");
@@ -968,17 +989,17 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                         EmitCallOpts o = { .tail_return = true };
                         fprintf(f, "  case %d: ", ei);
                         if (dest >= 0xC000) {
-                            emit_call_target(f, dest, fixed_bank, fixed_bank, o);
+                            emit_call_target(f, rom, dest, fixed_bank, fixed_bank, o);
                         } else if (dest >= 0x8000) {
                             if (dispatch_bank >= 0) {
                                 /* Bank known from register propagation, validated */
-                                emit_call_target(f, dest, dispatch_bank, fixed_bank, o);
+                                emit_call_target(f, rom, dest, dispatch_bank, fixed_bank, o);
                             } else if (bank != fixed_bank) {
-                                emit_call_target(f, dest, bank, fixed_bank, o);
+                                emit_call_target(f, rom, dest, bank, fixed_bank, o);
                             } else {
                                 /* Fixed bank, no bank-switch or missing targets: runtime */
                                 o.force_dynamic = true;
-                                emit_call_target(f, dest, bank, fixed_bank, o);
+                                emit_call_target(f, rom, dest, bank, fixed_bank, o);
                             }
                         } else {
                             /* Check if SRAM-mapped address */
@@ -986,10 +1007,10 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                             uint16_t rom_addr = codegen_sram_translate(cfg, dest, &sram_bank);
                             if (rom_addr) {
                                 int target_bank = (rom_addr >= 0xC000) ? fixed_bank : sram_bank;
-                                emit_call_target(f, rom_addr, target_bank, fixed_bank, o);
+                                emit_call_target(f, rom, rom_addr, target_bank, fixed_bank, o);
                             } else {
                                 o.force_dynamic = true;
-                                emit_call_target(f, dest, bank, fixed_bank, o);
+                                emit_call_target(f, rom, dest, bank, fixed_bank, o);
                             }
                         }
                         tpc += 2;
@@ -1064,12 +1085,13 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                             else
                                 fprintf(f, "call_by_address(0x%04X);\n", abs16);
                         } else {
-                            if (codegen_lookup_body_alias(abs16, bank,
+                            int tb = gxrom_paired_bank(rom, bank, abs16);
+                            if (codegen_lookup_body_alias(abs16, tb,
                                                           &alias_owner, &alias_bank, &alias_entry))
                                 fprintf(f, "func_%04X_b%d_body(%d);\n",
                                         alias_owner, alias_bank, alias_entry);
                             else
-                                fprintf(f, "func_%04X_b%d();\n", abs16, bank);
+                                fprintf(f, "func_%04X_b%d();\n", abs16, tb);
                         }
                     }
                     return 5;
@@ -1078,7 +1100,7 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
             {
                 EmitCallOpts jsr_opts = { .jsr_pop_fallback = cfg->push_all_jsr };
                 if (abs16 >= 0xC000) {
-                    emit_call_target(f, abs16, fixed_bank, fixed_bank, jsr_opts);
+                    emit_call_target(f, rom, abs16, fixed_bank, fixed_bank, jsr_opts);
                 } else if (abs16 >= 0x8000) {
                     /* MMC3 (mapper 4): 8KB banks at $8000-$9FFF and $A000-$BFFF
                      * are switched independently.  A JSR from one 8KB half to
@@ -1095,11 +1117,11 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                          * call_by_address. */
                         jsr_opts.force_dynamic = true;
                     }
-                    emit_call_target(f, abs16, bank, fixed_bank, jsr_opts);
+                    emit_call_target(f, rom, abs16, bank, fixed_bank, jsr_opts);
                 } else {
                     /* JSR to non-ROM address (RAM/PPU): dispatch at runtime */
                     jsr_opts.force_dynamic = true;
-                    emit_call_target(f, abs16, bank, fixed_bank, jsr_opts);
+                    emit_call_target(f, rom, abs16, bank, fixed_bank, jsr_opts);
                 }
             }
             /* Universal bail propagation: if S changed after the call
@@ -1177,7 +1199,7 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                             .push_dummy_static = need_jmp_push,
                             .tail_return = true,
                         };
-                        emit_call_target(f, abs16, fixed_bank, fixed_bank, o);
+                        emit_call_target(f, rom, abs16, fixed_bank, fixed_bank, o);
                     }
                 } else if (abs16 >= 0x8000) {
                     /* Check if target is a merge partner (use goto, not function call) */
@@ -1203,7 +1225,7 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                             .push_dummy_dynamic = need_jmp_push,
                             .tail_return = true,
                         };
-                        emit_call_target(f, abs16, bank, fixed_bank, o);
+                        emit_call_target(f, rom, abs16, bank, fixed_bank, o);
                     } else if (abs16 == func_base && pc == func_base) {
                         /* JMP $self at function start: true idle spin. */
                         fprintf(f, "while(1) { maybe_trigger_vblank(2); }\n");
@@ -1218,7 +1240,7 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                             .push_dummy_static = need_jmp_push,
                             .tail_return = true,
                         };
-                        emit_call_target(f, abs16, bank, fixed_bank, o);
+                        emit_call_target(f, rom, abs16, bank, fixed_bank, o);
                     }
                 } else {
                     /* JMP to non-ROM address: dispatch at runtime */
@@ -1227,7 +1249,7 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                         .vblank_prefix = true,
                         .tail_return = true,
                     };
-                    emit_call_target(f, abs16, bank, fixed_bank, o);
+                    emit_call_target(f, rom, abs16, bank, fixed_bank, o);
                 }
             } else {
                 /* JMP (ind) — dispatch */
