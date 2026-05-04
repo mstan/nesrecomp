@@ -13,7 +13,12 @@ typedef enum {
     MN_ROR, MN_RTI, MN_RTS, MN_SBC, MN_SEC, MN_SED, MN_SEI, MN_STA,
     MN_STX, MN_STY, MN_TAX, MN_TAY, MN_TSX, MN_TXA, MN_TXS, MN_TYA,
     MN_LAX,     /* Undocumented: LDA+LDX combined (A=X=mem) */
-    MN_ILLEGAL  /* Invalid/undocumented opcode */
+    MN_NOP_READ,/* Undocumented: DOP/TOP — NOP that performs an operand read.
+                 * Bus-accurate: the read can have side effects on memory-
+                 * mapped I/O (e.g. $2002 status latch). For ordinary RAM/ROM
+                 * reads the result is discarded. */
+    MN_SAX,     /* Undocumented: M = A & X (write only — flags untouched) */
+    MN_ILLEGAL  /* Invalid/undocumented opcode (still emits as sized skip) */
 } OpMnemonic;
 
 typedef enum {

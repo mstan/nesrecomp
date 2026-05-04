@@ -1444,6 +1444,25 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
         case MN_CLV: fprintf(f, "g_cpu.V = 0;\n"); break;
 
         case MN_NOP: fprintf(f, "/* NOP */\n"); break;
+        case MN_NOP_READ:
+            /* DOP/TOP — unofficial NOP that performs a single operand read.
+             * The result is discarded but the read side-effect (e.g. on
+             * \$2002 PPUSTATUS clearing the latch) must occur for bus-
+             * accurate behavior. AM_IMM operands have no read; the size
+             * field already accounts for the immediate byte. */
+            if (e->addr_mode == AM_IMM) {
+                fprintf(f, "/* NOP* (unofficial NOP, immediate operand discarded) */\n");
+            } else {
+                fprintf(f, "(void)nes_read(%s); /* NOP* (unofficial DOP/TOP read, result discarded) */\n",
+                        operand_addr_expr(e->addr_mode, op1, op2));
+            }
+            break;
+        case MN_SAX:
+            /* SAX — unofficial: M = A & X. No flags affected, no register
+             * changes. Stable across NMOS variants per NESdev. */
+            fprintf(f, "nes_write(%s, g_cpu.A & g_cpu.X); /* SAX */\n",
+                    operand_addr_expr(e->addr_mode, op1, op2));
+            break;
         case MN_BRK:
             /* BRK was previously emitted as a comment, leaving execution to
              * fall through past the $00 byte. That's silent control-flow

@@ -155,9 +155,9 @@ const char *coverage_insn_kind_name(CovInsnKind k) {
         case CIK_OFFICIAL:        return "OFFICIAL";
         case CIK_OFFICIAL_BRK:    return "BRK (official)";
         case CIK_UNOFFICIAL_LAX:  return "LAX (unofficial, implemented)";
-        case CIK_UNOFFICIAL_NOP:  return "NOP/DOP/TOP (unofficial, sized-skip)";
-        case CIK_UNOFFICIAL_SBC:  return "SBC #imm alias \\$EB (unofficial, sized-skip)";
-        case CIK_UNOFFICIAL_SAX:  return "SAX (unofficial, sized-skip)";
+        case CIK_UNOFFICIAL_NOP:  return "NOP/DOP/TOP (unofficial, implemented)";
+        case CIK_UNOFFICIAL_SBC:  return "SBC #imm alias \\$EB (unofficial, implemented)";
+        case CIK_UNOFFICIAL_SAX:  return "SAX (unofficial, implemented)";
         case CIK_UNOFFICIAL_DCP:  return "DCP (unofficial, sized-skip)";
         case CIK_UNOFFICIAL_ISC:  return "ISC (unofficial, sized-skip)";
         case CIK_UNOFFICIAL_SLO:  return "SLO (unofficial, sized-skip)";
