@@ -980,6 +980,17 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                             vpc += 2;
                         }
                     }
+                    /* Inline dispatch replaces the trampoline (PLA×2, table
+                     * lookup, register save/restore, JMP indirect) with a
+                     * compile-time switch.  The trampoline has two side effects
+                     * visible to game code:
+                     *   STX $27 / STY $28 — saves caller's X and Y
+                     *   ~57 CPU cycles consumed by the trampoline body
+                     * Without these, cycle counting drifts (~57 cycles/dispatch)
+                     * causing VBlank timing divergence, and $27/$28 retain stale
+                     * values that corrupt downstream BIT/LDA reads. */
+                    fprintf(f, "nes_write(0x27, g_cpu.X); nes_write(0x28, g_cpu.Y); /* trampoline side effects */\n");
+                    fprintf(f, "maybe_trigger_vblank(57); /* trampoline body cycles */\n");
                     fprintf(f, "switch(g_cpu.A) {\n");
                     tpc = pc + 3;
                     for (int ei = 0; ei < entry_count; ei++) {
