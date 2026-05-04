@@ -432,19 +432,24 @@ void maybe_trigger_vblank(int cycles) {
         g_ppuscroll_x_hud = 0;
         g_ppuscroll_y_hud = 0;
         g_ppuctrl_hud     = g_ppuctrl & 0x38;
-        /* Always invoke the frame-boundary callback, even when NMI is
-         * disabled ($2000 bit7=0).  The callback itself gates game_run_nmi
-         * on NMI-enable (main_runner.c); but it also drives wall-clock
-         * frame cadence: g_frame_count tick, SDL event poll, and in
-         * verify mode the oracle's retro_run.  Gating here caused a silent
-         * budget-consumption bug: when NMI was disabled (e.g. during a
-         * PPU-off mode transition), s_ops_count kept resetting without
-         * the callback running, so main-loop code advanced multiple
-         * frame-budgets' worth of game state between two visible frames.
-         * In --verify mode this manifested as native's mode machine
-         * racing 3 frames ahead of the oracle at mode-transition points. */
-        s_dbg_nmi_fires++;
-        nes_vblank_callback();
+        /* Fire the frame-boundary callback only when NMI is enabled.
+         *
+         * Earlier this site was unconditional (52f0ea5 — Gumshoe: "oracle
+         * cadence sync when NMI is disabled") to keep wall-clock frame
+         * cadence advancing through PPU-off init phases.  That regressed
+         * Metroid (hung early in NMI-disabled init) and Yoshi (stuck on
+         * a blank framebuffer): both spend their boot path with NMI off,
+         * and the unconditional callback ran NMI handlers / advanced
+         * frame counters before the game's setup was ready.
+         *
+         * For now, re-gate on NMI-enable to restore those games.  The
+         * --verify-mode cadence sync that motivated the unconditional
+         * fire is recoverable separately (e.g. via verify_mode-side
+         * polling rather than an unconditional callback fire here). */
+        if (g_ppuctrl & 0x80) {
+            s_dbg_nmi_fires++;
+            nes_vblank_callback();
+        }
         /* Restore spr0 state for outer code's detection loop */
         g_spr0_reads_ctr_legacy = saved_ctr0;
         g_spr0_split_active     = saved_act0;
