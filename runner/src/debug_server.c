@@ -1850,6 +1850,22 @@ void debug_server_record_frame(void)
     }
 }
 
+/* Public read-only accessor for the frame ring buffer. Returns NULL if the
+ * frame is out of range or has been evicted by wrap-around. */
+const NESFrameRecord *debug_server_get_frame_record(uint64_t frame)
+{
+    if (!s_frame_history) return NULL;
+    uint64_t oldest = (s_history_count > FRAME_HISTORY_CAP)
+                    ? s_history_count - FRAME_HISTORY_CAP : 0;
+    if (frame < oldest || frame >= s_history_count) return NULL;
+    uint32_t idx = (uint32_t)(frame % FRAME_HISTORY_CAP);
+    const NESFrameRecord *r = &s_frame_history[idx];
+    /* Sanity: the slot's frame_number should match what the caller asked for.
+     * If not, the record was evicted between the range check and the read. */
+    if ((uint64_t)r->frame_number != frame) return NULL;
+    return r;
+}
+
 /* Raise the pause flag from outside the TCP command loop (e.g. from
  * dispatch-miss trap policy). Reason is best-effort recorded into the
  * existing miss state for visibility; we don't have a dedicated trap-reason

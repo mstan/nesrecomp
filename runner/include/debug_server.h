@@ -141,3 +141,10 @@ void debug_server_send_line(const char *json);
 
 /* Send a formatted JSON line (printf-style) to the connected client. */
 void debug_server_send_fmt(const char *fmt, ...);
+
+/* Read-only access to a frame record from the ring buffer.
+ * Returns the record for absolute frame number `frame`, or NULL if the
+ * frame is out of range or has been evicted. The pointer remains valid
+ * until the ring buffer wraps around to the same slot — caller should
+ * copy any data it needs before progressing many frames. */
+const NESFrameRecord *debug_server_get_frame_record(uint64_t frame);
