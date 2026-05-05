@@ -464,7 +464,21 @@ static int is_valid_dispatch_target(const GameConfig *cfg, uint16_t addr,
                                      int dispatch_bank, int fixed_bank,
                                      const NESRom *rom) {
     if (addr >= 0x8000) {
-        int check_bank = (addr >= 0xC000) ? fixed_bank : dispatch_bank;
+        /* For GxROM and similar full-32KB-switch mappers, $C000+ targets
+         * live in the paired upper bank of the current window — not in
+         * fixed_bank.  Mirrors gxrom_paired_bank() used by emit_call_target
+         * and emit_dispatch.  Without this, dispatch tables get truncated
+         * the moment they reference a $C000+ target whose discovered
+         * function lives in (dispatch_bank | 1) instead of fixed_bank. */
+        int check_bank;
+        if (addr >= 0xC000) {
+            if (rom && rom_mapper_full_32k_switch(rom) && dispatch_bank >= 0)
+                check_bank = dispatch_bank | 1;
+            else
+                check_bank = fixed_bank;
+        } else {
+            check_bank = dispatch_bank;
+        }
         /* Reject targets where the first byte is BRK ($00) — indicates
          * zero-fill or unused ROM, not a valid function entry. */
         if (rom && check_bank >= 0 && rom_read(rom, check_bank, addr) == 0x00)
