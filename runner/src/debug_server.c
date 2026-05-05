@@ -1526,51 +1526,82 @@ static void handle_scroll_trace(int id, const char *json)
 typedef void (*CmdHandler)(int id, const char *json);
 typedef struct {
     const char *name;
+    const char *summary;       /* one-line description for `help` */
     CmdHandler  handler;
 } CmdEntry;
 
+static void handle_help(int id, const char *json);
+
 static const CmdEntry s_commands[] = {
-    { "ping",              handle_ping },
-    { "frame",             handle_frame },
-    { "get_registers",     handle_get_registers },
-    { "read_ram",          handle_read_ram },
-    { "dump_ram",          handle_dump_ram },
-    { "write_ram",         handle_write_ram },
-    { "read_ppu",          handle_read_ppu },
-    { "mapper_state",      handle_mapper_state },
-    { "read_frame_ram",    handle_read_frame_ram },
-    { "restore_frame",     handle_restore_frame },
-    { "set_input",         handle_set_input },
-    { "press",             handle_press },
-    { "clear_input",       handle_clear_input },
-    { "pause",             handle_pause },
-    { "continue",          handle_continue },
-    { "step",              handle_step },
-    { "run_to_frame",      handle_run_to_frame },
-    { "history",           handle_history },
-    { "get_frame",         handle_get_frame },
-    { "frame_range",       handle_frame_range },
-    { "frame_timeseries",  handle_frame_timeseries },
-    { "first_failure",     handle_first_failure },
-    { "ppu_state",         handle_ppu_state },
-    { "watchdog_status",   handle_watchdog_status },
+    { "ping",              "no-op connectivity check; returns ok",                                       handle_ping },
+    { "help",              "list all built-in commands with one-line summaries",                          handle_help },
+    { "frame",             "current frame number, bank, and run mode",                                    handle_frame },
+    { "get_registers",     "current 6502 register state (A/X/Y/S/P + flags + bank + frame)",              handle_get_registers },
+    { "read_ram",          "read N bytes from $0000-$07FF starting at addr",                              handle_read_ram },
+    { "dump_ram",          "dump full 2KB work RAM as hex",                                               handle_dump_ram },
+    { "write_ram",         "write a byte to RAM (debug poke)",                                            handle_write_ram },
+    { "read_ppu",          "read N bytes from PPU address space (NT/palette/OAM)",                        handle_read_ppu },
+    { "mapper_state",      "current bank, mapper type, mirror mode, MMC3 register snapshot",              handle_mapper_state },
+    { "read_frame_ram",    "read RAM/SRAM/CHR/NT/PAL from a specific historical frame in the ring",       handle_read_frame_ram },
+    { "restore_frame",     "rewind: restore RAM+PPU+CPU from a historical frame snapshot",                handle_restore_frame },
+    { "set_input",         "set controller buttons for a specific frame",                                 handle_set_input },
+    { "press",             "press a button for one frame (transient input)",                              handle_press },
+    { "clear_input",       "clear all input overrides",                                                   handle_clear_input },
+    { "pause",             "pause execution",                                                             handle_pause },
+    { "continue",          "resume after pause",                                                          handle_continue },
+    { "step",              "step one frame while paused",                                                 handle_step },
+    { "run_to_frame",      "resume and pause at a specific frame number",                                 handle_run_to_frame },
+    { "history",           "ring-buffer span: oldest, newest, capacity",                                  handle_history },
+    { "get_frame",         "get a single historical frame record (CPU+PPU+mapper+input)",                 handle_get_frame },
+    { "frame_range",       "get a contiguous span of historical frame records",                           handle_frame_range },
+    { "frame_timeseries",  "extract a timeseries of one field across a range of frames",                  handle_frame_timeseries },
+    { "first_failure",     "verify mode: first frame where native diverged from oracle",                  handle_first_failure },
+    { "ppu_state",         "PPU registers + sprite-0 split state + render-IRQ diagnostics",               handle_ppu_state },
+    { "watchdog_status",   "watchdog backward-branch counter and last firing reason",                     handle_watchdog_status },
 #ifdef RECOMP_STACK_TRACKING
-    { "call_stack",        handle_call_stack },
+    { "call_stack",        "current recompile-stack (function-name shadow stack); main loops never pop", handle_call_stack },
 #endif
-    { "dispatch_miss_info", handle_dispatch_miss_info },
-    { "quit",              handle_quit },
-    { "screenshot",        handle_screenshot },
-    { "scroll_trace",      handle_scroll_trace },
-    { "frame_diff",        handle_frame_diff },
-    { "read_nametable",    handle_read_nametable },
-    { "read_oam",          handle_read_oam },
-    { "read_palette",      handle_read_palette },
-    { "memory_diff",       handle_memory_diff },
-    { "read_chr",          handle_read_chr },
-    { "scroll_info",       handle_scroll_info },
-    { "dump_nametables",   handle_dump_nametables },
-    { NULL, NULL }
+    { "dispatch_miss_info", "FIRST CHECK FOR STUCK GAMES: count + ring of call_by_address misses",       handle_dispatch_miss_info },
+    { "quit",              "shut down the runner",                                                        handle_quit },
+    { "screenshot",        "save the current framebuffer to a file",                                      handle_screenshot },
+    { "scroll_trace",      "last 64 writes to $2005 (PPU scroll)",                                        handle_scroll_trace },
+    { "frame_diff",        "diff one frame's verify-mode divergences against the oracle",                 handle_frame_diff },
+    { "read_nametable",    "read tiles from a specific nametable",                                        handle_read_nametable },
+    { "read_oam",          "decoded OAM (64 sprites: x/y/tile/attr/visible)",                             handle_read_oam },
+    { "read_palette",      "current 32-byte palette (universal + 4 BG + 4 SPR groups)",                   handle_read_palette },
+    { "memory_diff",       "diff CURRENT g_ram/nt/pal/oam vs a historical frame; region=ram|nt|pal|oam|all", handle_memory_diff },
+    { "read_chr",          "read CHR ROM/RAM bytes",                                                      handle_read_chr },
+    { "scroll_info",       "decoded Loopy v/t scroll registers + fine-X",                                 handle_scroll_info },
+    { "dump_nametables",   "dump all 4 nametables as hex with mirroring resolved",                        handle_dump_nametables },
+    { NULL, NULL, NULL }
 };
+
+static void handle_help(int id, const char *json)
+{
+    (void)json;
+    /* Single JSON payload listing every built-in command + subsystem prefixes.
+     * Discoverability matters: undocumented commands have repeatedly cost
+     * hours of wrong-direction work when devs grep generated/*.c instead
+     * of querying the server. */
+    char *buf = (char *)malloc(16384);
+    if (!buf) { send_err(id, "alloc failed"); return; }
+    int pos = snprintf(buf, 16384,
+        "{\"id\":%d,\"ok\":true,\"commands\":[", id);
+    for (int i = 0; s_commands[i].name; i++) {
+        pos += snprintf(buf + pos, 16384 - pos,
+            "%s{\"name\":\"%s\",\"summary\":\"%s\"}",
+            i ? "," : "",
+            s_commands[i].name,
+            s_commands[i].summary ? s_commands[i].summary : "");
+    }
+    pos += snprintf(buf + pos, 16384 - pos,
+        "],\"subsystems\":["
+        "{\"prefix\":\"rdb_\",\"note\":\"reverse-debugger (Tier 1+): rdb_break_*, rdb_step_*, rdb_watch_add/clear/list/continue, rdb_anchor_on/off/status, rdb_parked. See REVERSE_DEBUGGER.md.\"},"
+        "{\"prefix\":\"game-specific\",\"note\":\"per-game extras may register additional commands via game_handle_debug_cmd(). Send the bare command name to see if it responds.\"}"
+        "]}");
+    send_line(buf);
+    free(buf);
+}
 
 static void process_command(const char *line)
 {
@@ -1611,7 +1642,7 @@ static void process_command(const char *line)
         }
     }
 
-    send_err(id, "unknown command");
+    send_err(id, "unknown command (try 'help' for the full command list)");
 }
 
 /* ---- Public API ---- */
