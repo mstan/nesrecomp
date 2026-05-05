@@ -16,6 +16,8 @@ A static 6502 recompiler framework for NES games. Translates NES ROM machine cod
 | Faxanadu | MMC1 (1) | Fully playable, text override showcase | [FaxanaduRecomp](https://github.com/mstan/FaxanaduRecomp) |
 | Yoshi | MMC1 (1) | Believed fully playable | [YoshiNESRecomp](https://github.com/mstan/YoshiNESRecomp) |
 | Yoshi's Cookie | MMC3 (4) | Believed 100% playable | [YoshisCookieRecomp](https://github.com/mstan/YoshisCookieRecomp) |
+| Mega Man 3 | MMC3 (4) | Work in progress — title/menu/early stages playable | [Megaman3NESRecomp](https://github.com/mstan/Megaman3NESRecomp) |
+| Gumshoe | GxROM (66) | Playable end-to-end (mouse-as-Zapper, one HUD cosmetic bug) | [GumshoeNESRecomp](https://github.com/mstan/GumshoeNESRecomp) |
 
 ### Mapper Support
 
@@ -25,12 +27,12 @@ A static 6502 recompiler framework for NES games. Translates NES ROM machine cod
 | 1 | MMC1 / SxROM | Yes | Zelda, Metroid, Dr. Mario, Faxanadu, Yoshi |
 | 2 | UxROM | Not yet | — |
 | 3 | CNROM | Not yet | — |
-| 4 | MMC3 / TxROM | Yes | Yoshi's Cookie |
+| 4 | MMC3 / TxROM | Yes | Yoshi's Cookie, Mega Man 3 |
 | 7 | AxROM | Not yet | — |
 | 9 | MMC2 / PxROM | Not yet | — |
 | 66 | GxROM | Yes | Gumshoe |
 
-Mappers 0, 1, and 4 cover roughly 75% of the licensed NES library.
+Mappers 0, 1, 4, and 66 cover roughly 78% of the licensed NES library.
 
 ### Text Override System
 
@@ -54,7 +56,7 @@ ROM hacking. See `override_text.h` in FaxanaduRecomp for the full API.
 NES ROM (.nes)
     |
     v
-NESRecomp.exe + game.cfg
+NESRecomp.exe + game.toml
     |
     v
 generated/<game>_full.c      (recompiled 6502 -> C)
@@ -75,26 +77,38 @@ Game executable (linked with runner library + SDL2)
 | `runner/src/main_runner.c` | SDL2 window, NMI loop, frame timing |
 | `runner/src/debug_server.c` | TCP debug server with ring buffer |
 
-### Configuration Formats
+### Configuration Format
 
-Games can use either `.cfg` (legacy text) or `.toml` (recommended) for recompiler configuration. Format is auto-detected by file extension. See Dr. Mario's `game.toml` for an example of the TOML format.
+Game configuration is **TOML** (`game.toml`). The legacy plain-text `.cfg` format
+has been removed — passing a `.cfg` path now prints a migration message and
+exits. All in-tree game projects already use `game.toml`; see Dr. Mario's
+`game.toml` or Faxanadu's for working examples.
 
 ### Configurable Controls
 
 A `keybinds.ini` file is auto-generated next to the game executable on first run. Both player 1 and player 2 keyboard bindings are configurable. Edit the INI file and restart the game to apply changes.
 
-### game.cfg / game.toml Directives
+### game.toml Directives
 
-| Directive | Description |
-|-----------|-------------|
-| `bank_switch <addr>` | MMC1/mapper bank-switch routine address |
-| `inline_dispatch <addr>` | Indexed dispatch via inline address table after JSR |
-| `sram_map <sram> <rom> <bank> <size>` | SRAM-to-ROM code mapping |
-| `extra_func <bank> <addr>` | Force-create a function at this address |
-| `extra_label <bank> <addr>` | Secondary entry point within an existing function |
-| `inline_pointer <addr> <zp_lo> <zp_hi> [call]` | JSR reads 2 inline bytes into zero page; `call` = also call the function |
-| `nop_jsr <addr>` | Skip this JSR entirely (for stack-manipulation routines incompatible with recompilation) |
-| `data_region <bank> <start> <end>` | Exclude byte range from pointer scanner (known data, not code) |
+The full schema lives in `recompiler/src/game_config.c`; the most commonly used
+sections are summarized below.
+
+| Section | Purpose |
+|---------|---------|
+| `[game]` | Output prefix, symbol file path, and recompiler flags (`push_all_jsr`, `disable_ptr_scan`, ...) |
+| `[mapper] bank_switch = [...]` | Addresses of MMC1/mapper bank-switch routines |
+| `[[inline_dispatch]] addr` | Indexed dispatch via inline address table after JSR |
+| `[[inline_pointer]] addr, zp = [lo, hi], call` | JSR reads 2 inline bytes into zero page; `call` also invokes the resulting target |
+| `[[extra_func]] bank, addr` | Force-create a function entry at this address |
+| `[[extra_label]] bank, addr` | Secondary entry point within an existing function |
+| `[[sram_map]] sram_start, rom_start, bank, size` | SRAM-to-ROM code mapping |
+| `[[nop_jsr]] addr` | Skip this JSR entirely (stack-manipulation routines incompatible with recompilation) |
+| `[[data_region]] bank, start, end` | Exclude byte range from pointer scanner (known data, not code) |
+| `[functions] fixed = [...], bankN = [...]` | Bulk `extra_func` lists keyed by bank |
+
+Numeric values may be given in hex (`0xC000`) or decimal. Address-only directives
+are TOML arrays of tables; per-bank lists under `[functions]` accept plain
+integer arrays.
 
 ### Function Discovery: Table-Run Scanner
 
@@ -128,33 +142,29 @@ This distinction is critical when importing complete disassembly function lists.
 
 ### Undocumented 6502 Opcodes
 
-The NMOS 6502 has 256 possible opcodes but only 151 are officially documented. The remaining 105 have deterministic behavior on the physical chip because the internal decode logic combines signals from multiple "official" instruction paths. Some are genuinely useful:
+The NMOS 6502 has 256 possible opcodes but only 151 are officially documented. The remaining 105 have deterministic behavior on the physical chip because the internal decode logic combines signals from multiple "official" instruction paths. NESRecomp's decoder (`cpu6502_decoder.c`) recognizes every undocumented opcode with the correct size and cycle count; the code generator emits real semantics for the ones that NES games actually use, and treats the rest as sized NOPs (the instruction stream stays byte-aligned, but side effects are lost).
+
+**Emitted with full semantics:**
 
 | Opcode | Name | Behavior |
 |--------|------|----------|
-| LAX | Load A+X | `LDA addr; LDX addr` in one instruction |
-| SAX | Store A&X | `STA addr` with value `A AND X` |
-| DCP | Decrement+Compare | `DEC addr; CMP addr` |
-| ISC | Increment+Subtract | `INC addr; SBC addr` |
-| SLO | Shift-left+OR | `ASL addr; ORA addr` |
-| RLA | Rotate-left+AND | `ROL addr; AND addr` |
-| SRE | Shift-right+XOR | `LSR addr; EOR addr` |
-| RRA | Rotate-right+Add | `ROR addr; ADC addr` |
-| ANC | AND+set-carry | `AND #imm` with carry = bit 7 |
-| ALR | AND+shift-right | `AND #imm; LSR A` |
-| ARR | AND+rotate-right | `AND #imm; ROR A` (with special flag behavior) |
-| AXS | A&X minus imm | `X = (A & X) - imm` |
-| DOP/TOP | Double/Triple NOP | 2-byte or 3-byte NOPs (skip operand bytes) |
+| LAX | Load A+X | `A = X = mem`, sets N/Z. Used by *Elite*, *Super Cars*, etc. |
+| SAX | Store A&X | `mem = A & X`. No flags, no register changes. |
+| DOP / TOP (NOP*) | 2-/3-byte NOP-with-read | Performs the operand read (so `$2002` PPUSTATUS latch clears correctly) and discards the result. Immediate variants skip the operand byte without a read. |
 
-A handful of NES games use these intentionally for speed or code density. Examples include *Elite* (LAX), *Super Cars* (LAX/SAX), and some unlicensed titles.
+**Recognized but currently emitted as sized NOPs (skipped, side effects lost):**
 
-**Current status in NESRecomp:** The decoder (`cpu6502_decoder.c`) recognizes all undocumented opcodes with correct instruction sizes and cycle counts, but the code generator treats them as sized NOPs — it skips the correct number of bytes without emitting any operation. This means:
+DCP, ISC, SLO, RLA, SRE, RRA, ANC, ALR, ARR, AXS, KIL, plus the rarely-seen
+SHX/SHY/SHA/TAS/LAS family. A game that depends on, for example, `DCP zp` to
+decrement-and-compare in one step will misbehave. None of the games currently
+in this project rely on these — when one does, fill in the missing emit logic
+in `code_generator.c` alongside LAX/SAX (the decoder already provides the
+addressing mode and operand size).
 
-- **Instruction stream stays aligned**: the decoder advances by the right number of bytes, so subsequent instructions decode correctly.
-- **Side effects are lost**: the actual read-modify-write behavior is not emitted. Games relying on LAX to load two registers, or DCP to decrement-and-compare, will behave incorrectly.
-- **Dispatch safety**: the dispatch table (`emit_dispatch`) skips bank variants where >50% of the first 8 instructions are illegal opcodes. This prevents data tables (which frequently contain byte values in the illegal opcode range) from being misidentified as code and executed, which could corrupt RAM.
-
-**If a game uses undocumented opcodes**: implement their semantics in `code_generator.c` alongside the existing official opcodes. The decoder already provides the correct addressing mode and operand size — only the emit logic is missing.
+**Dispatch safety:** the function finder rejects candidate function entry
+points whose first byte decodes as `MN_ILLEGAL`, so byte values in the illegal
+range that appear inside data tables don't get misidentified as code and
+executed.
 
 ## Building
 
@@ -166,7 +176,7 @@ cmake -S . -B build -G "Visual Studio 17 2022" -A x64
 cmake --build build --config Release
 
 # Recompile a game ROM
-build/Release/NESRecomp.exe <rom.nes> --game <path/to/game.cfg>
+build/Release/NESRecomp.exe <rom.nes> --game <path/to/game.toml>
 ```
 
 ## Adding a New Game
@@ -174,7 +184,7 @@ build/Release/NESRecomp.exe <rom.nes> --game <path/to/game.cfg>
 See [CLAUDE.md](CLAUDE.md) for detailed instructions. In short:
 
 1. Copy [FaxanaduRecomp](https://github.com/mstan/FaxanaduRecomp) as a boilerplate
-2. Create `game.cfg` with mapper, bank switch, and dispatch configuration
+2. Create `game.toml` with mapper, bank switch, and dispatch configuration
 3. Create `extras.c` implementing the `game_extras.h` hook interface
-4. Run `NESRecomp.exe <rom.nes> --game game.cfg` to generate C code
+4. Run `NESRecomp.exe <rom.nes> --game game.toml` to generate C code
 5. Build with CMake, linking against the runner library and SDL2
