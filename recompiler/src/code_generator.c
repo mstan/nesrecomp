@@ -1244,14 +1244,32 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                         /* JMP to own entry or merge partner: loop-back via goto. */
                         fprintf(f, "maybe_trigger_vblank(2);\n    goto label_%04X;\n", abs16);
                     } else {
-                        /* push_jmp check for same-bank JMP */
-                        bool need_jmp_push = push_jmp_matches(cfg, pc, abs16);
-                        EmitCallOpts o = {
-                            .vblank_prefix = true,
-                            .push_dummy_static = need_jmp_push,
-                            .tail_return = true,
-                        };
-                        emit_call_target(f, rom, abs16, bank, fixed_bank, o);
+                        /* Prefer in-body goto when the target address has already
+                         * been emitted as a label in THIS function's body.  This
+                         * handles the case where function_finder over-aliased a
+                         * mid-body re-entry point (e.g. $8030 inside Gumshoe's
+                         * $8000 main loop) as a separate function: a wrapper
+                         * func_NNNN_b%d() exists, but the in-body label_NNNN
+                         * also exists.  Without this check, JMP NNNN would
+                         * tail-call the wrapper, which then tail-calls back into
+                         * the outer function, growing the C stack indefinitely
+                         * (Gumshoe bank-6 main loop overflowed at depth 510). */
+                        bool label_in_body = false;
+                        for (int ei = 0; ei < emitted_count; ei++) {
+                            if (emitted_addrs[ei] == abs16) { label_in_body = true; break; }
+                        }
+                        if (label_in_body) {
+                            fprintf(f, "maybe_trigger_vblank(2);\n    goto label_%04X;\n", abs16);
+                        } else {
+                            /* push_jmp check for same-bank JMP */
+                            bool need_jmp_push = push_jmp_matches(cfg, pc, abs16);
+                            EmitCallOpts o = {
+                                .vblank_prefix = true,
+                                .push_dummy_static = need_jmp_push,
+                                .tail_return = true,
+                            };
+                            emit_call_target(f, rom, abs16, bank, fixed_bank, o);
+                        }
                     }
                 } else {
                     /* JMP to non-ROM address: dispatch at runtime */
@@ -2000,12 +2018,21 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
 
     /* Fallback trampolines: every label referenced by either a "case N: goto"
      * alias dispatch OR an in-body branch must be emitted somewhere in the
-     * function body.  If the linear emit walk didn't visit a given valid_starts
-     * entry (e.g. an instruction reachable only via an alternate decode path
-     * the walk pruned, or pending-list races between pre-scan and emit), emit
-     * a fallback that hands off to call_by_address.  When the walk DID emit
-     * the label, the fallback is skipped to avoid a duplicate-label compile
-     * error. */
+     * function body.  When the linear emit walk didn't visit a given
+     * valid_starts entry, the goto target would otherwise be undefined.
+     *
+     * The fallback emits a plain return so the function exits cleanly if
+     * the goto ever fires.  Earlier this site dispatched via call_by_address
+     * to support the missing label as a true entry point — but that turned
+     * the fallback into a re-entry into the same function family (e.g.
+     * Gumshoe's bank-0 main loop fell through to label_F3BF and label_8087
+     * fallback trampolines, each call_by_address recursing back into the
+     * caller; the chain overflowed at depth 510).  call_by_address is wrong
+     * here: if the goto was reached, the in-body branch logic has already
+     * decided control should resume at this address inside this function;
+     * dispatching to the standalone wrapper for the same address re-enters
+     * the world from scratch and grows the C stack indefinitely.  Plain
+     * return drops the (possibly-misanalysed) branch and unwinds normally. */
     for (int vi = 0; vi < valid_count; vi++) {
         uint16_t va = valid_starts[vi];
         bool emitted = false;
@@ -2013,7 +2040,7 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
             if (emitted_addrs[ei] == va) { emitted = true; break; }
         }
         if (!emitted) {
-            fprintf(f, "label_%04X:; call_by_address(0x%04X); return;\n", va, va);
+            fprintf(f, "label_%04X:; return;\n", va);
         }
     }
 
