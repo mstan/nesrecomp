@@ -28,7 +28,7 @@ A static 6502 recompiler framework for NES games. Translates NES ROM machine cod
 | 4 | MMC3 / TxROM | Yes | Yoshi's Cookie |
 | 7 | AxROM | Not yet | — |
 | 9 | MMC2 / PxROM | Not yet | — |
-| 66 | GxROM | Not yet | — |
+| 66 | GxROM | Yes | Gumshoe |
 
 Mappers 0, 1, and 4 cover roughly 75% of the licensed NES library.
 
