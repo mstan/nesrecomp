@@ -1125,7 +1125,21 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
             {
                 EmitCallOpts jsr_opts = { .jsr_pop_fallback = cfg->push_all_jsr };
                 if (abs16 >= 0xC000) {
-                    emit_call_target(f, rom, abs16, fixed_bank, fixed_bank, jsr_opts);
+                    /* GxROM (full 32K switch) pairs both halves of the 32KB
+                     * window together; $C000+ is the source's source_bank|1,
+                     * NOT a fixed bank.  Traditional mappers (UxROM/MMC1/MMC3)
+                     * route $C000+ through the fixed bank regardless of source.
+                     * Pass the right source so emit_call_target's
+                     * gxrom_paired_bank() resolves the correct lookup_bank.
+                     * (Mirrors the call_by_address pairing fix in 49f9fe3.) */
+                    int call_src;
+                    if (rom_mapper_full_32k_switch(rom)) {
+                        call_src = bank;
+                        if (sram_sourced) jsr_opts.force_dynamic = true;
+                    } else {
+                        call_src = fixed_bank;
+                    }
+                    emit_call_target(f, rom, abs16, call_src, fixed_bank, jsr_opts);
                 } else if (abs16 >= 0x8000) {
                     /* MMC3 (mapper 4): 8KB banks at $8000-$9FFF and $A000-$BFFF
                      * are switched independently.  A JSR from one 8KB half to
