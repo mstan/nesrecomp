@@ -2327,8 +2327,35 @@ bool codegen_emit(const NESRom *rom, const FunctionList *funcs,
            "    g_ram[0x100 + g_cpu.S] = 0x00; g_cpu.S--; /* PCH (sentinel) */\n"
            "    g_ram[0x100 + g_cpu.S] = 0x00; g_cpu.S--; /* PCL (sentinel) */\n"
            "    g_ram[0x100 + g_cpu.S] = _nmi_p; g_cpu.S--; /* P */\n"
-           "    g_rti_target = 0;\n"
-           "    func_%04X%s();\n"
+           "    g_rti_target = 0;\n");
+    if (rom->num_windows > 0) {
+        /* GxROM (and other full-32KB-switch mappers): the NMI vector at\n"
+         * $FFFA depends on which 32KB window is currently mapped.  Dispatch\n"
+         * through call_by_address so the runtime picks the right per-window\n"
+         * NMI handler from g_current_bank.  Without this the recompiler\n"
+         * picks one window's NMI vector at codegen time and uses it for\n"
+         * every NMI fire — wrong for any game that boots from a window\n"
+         * other than the one whose vector got picked (Gumshoe boots into\n"
+         * window 0 with NMI=$8031 but the recompiler defaulted to window\n"
+         * 3's $8047, skipping OAM DMA and register saves on every NMI). */
+        fprintf(f_full,
+            "    /* GxROM: dispatch by current bank — vector lives in upper half */\n"
+            "    extern int g_current_bank;\n"
+            "    static const uint16_t s_nmi_vectors[%d] = {",
+            rom->num_windows);
+        for (int w = 0; w < rom->num_windows; w++) {
+            fprintf(f_full, "%s 0x%04X", w ? "," : "", rom->window_nmi[w]);
+        }
+        fprintf(f_full, " };\n");
+        fprintf(f_full,
+            "    int _w = (g_current_bank >> 1);\n"
+            "    if (_w < 0) _w = 0; else if (_w >= %d) _w = %d;\n"
+            "    call_by_address(s_nmi_vectors[_w]);\n",
+            rom->num_windows, rom->num_windows - 1);
+    } else {
+        fprintf(f_full, "    func_%04X%s();\n", rom->nmi_vector, nmi_sfx);
+    }
+    fprintf(f_full,
            "    if (g_rti_target != 0) {\n"
            "        /* Post-NMI code runs outside NMI context on real hardware\n"
            "         * (RTI re-enables interrupts, NMI is edge-triggered).\n"
@@ -2339,7 +2366,7 @@ bool codegen_emit(const NESRom *rom, const FunctionList *funcs,
            "        call_by_address(g_rti_target);\n"
            "        runtime_end_post_nmi();\n"
            "    }\n"
-           "}\n", rom->nmi_vector, nmi_sfx);
+           "}\n");
     fprintf(f_full, "void func_IRQ(void)   { func_%04X%s(); }\n", rom->irq_vector,   irq_sfx);
 
     fclose(f_full);
