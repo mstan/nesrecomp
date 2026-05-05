@@ -2102,6 +2102,17 @@ static void emit_dispatch(FILE *f, const EmittedWrapper *wrappers, int wrapper_c
             "    else if (g_mmc3_r7_even && addr >= 0xA000 && addr < 0xC000)\n"
             "        addr -= 0x2000; /* 8KB bank even: $A000 range -> $8000 offset */\n"
         );
+    } else if (rom->mapper == 66) {
+        fprintf(f,
+            "    /* GxROM (mapper 66): the entire 32KB window ($8000-$FFFF) is a unit.\n"
+            "     * The recompiler emits two bank files per window — even=lower 16KB,\n"
+            "     * odd=upper 16KB.  At runtime g_current_bank tracks the lower-half\n"
+            "     * (even) index.  For dispatches into $C000+ we have to look up the\n"
+            "     * paired upper bank (g_current_bank | 1), not the current value, or\n"
+            "     * the inner switch's default fires forever.  Mirrors the compile-time\n"
+            "     * gxrom_paired_bank() logic in code_generator's emit_call_target. */\n"
+            "    int _bank = (addr >= 0xC000) ? (g_current_bank | 1) : g_current_bank;\n"
+        );
     }
 
     fprintf(f,
@@ -2140,8 +2151,9 @@ static void emit_dispatch(FILE *f, const EmittedWrapper *wrappers, int wrapper_c
         } else {
             /* Multiple bank variants: dispatch by current bank.
              * For MMC3, use _bank which selects g_mmc3_bank_a000 for
-             * $A000-$BFFF addresses and g_current_bank for $8000-$9FFF. */
-            if (rom->mapper == 4)
+             * $A000-$BFFF addresses and g_current_bank for $8000-$9FFF.
+             * For GxROM, use _bank which pairs $C000+ to (current | 1). */
+            if (rom->mapper == 4 || rom->mapper == 66)
                 fprintf(f, "            switch (_bank) {\n");
             else
                 fprintf(f, "            switch (g_current_bank) {\n");
