@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/nesrecomp-logo.png" alt="NESRecomp" width="640">
+</p>
+
 # NESRecomp
 
 A static 6502 recompiler framework for NES games. Translates NES ROM machine code to C, which is then compiled to native x64 for direct execution on modern PCs.
