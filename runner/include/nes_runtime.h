@@ -137,7 +137,8 @@ void ppu_render_oam_debug(uint32_t *buf);
 
 /* ---- Mapper Interface ---- */
 void mapper_write(uint16_t addr, uint8_t val);
-void mapper_init(const uint8_t *prg_data, int prg_banks);
+void mapper_init(const uint8_t *prg_data, int prg_banks,
+                 int mapper_type, int initial_mirroring);
 
 /* ---- Runtime Init ---- */
 void runtime_init(void);
