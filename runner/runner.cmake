@@ -23,6 +23,7 @@ set(NESRECOMP_RUNNER_SOURCES
     ${NESRECOMP_RUNNER_ROOT}/src/debug_server.c
     ${NESRECOMP_RUNNER_ROOT}/src/coroutine.c
     ${NESRECOMP_RUNNER_ROOT}/src/keybinds.c
+    ${NESRECOMP_RUNNER_ROOT}/src/controller.c
     ${NESRECOMP_RUNNER_ROOT}/src/override_chr.c
     ${NESRECOMP_RUNNER_ROOT}/src/chr_codec.c
 )
