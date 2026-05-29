@@ -954,12 +954,21 @@ void nesrecomp_runner_run(int argc, char *argv[]) {
         exit(1);
     }
 
+    /* Crisp nearest-neighbor scaling (no blur) for the pixel art. */
+    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");
+
     s_renderer = SDL_CreateRenderer(s_window, -1,
         SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
     if (!s_renderer) {
         fprintf(stderr, "SDL_CreateRenderer: %s\n", SDL_GetError());
         exit(1);
     }
+
+    /* Preserve the NES aspect ratio (letterbox instead of stretch) and keep
+     * scaling to whole-pixel multiples so every NES pixel stays the same size.
+     * Applies to both windowed-resize and fullscreen. */
+    SDL_RenderSetLogicalSize(s_renderer, g_render_width, 240);
+    SDL_RenderSetIntegerScale(s_renderer, SDL_TRUE);
 
     s_texture = SDL_CreateTexture(s_renderer,
         SDL_PIXELFORMAT_ARGB8888,
