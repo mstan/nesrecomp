@@ -252,6 +252,10 @@ uint8_t runtime_get_ppudata_buf(void);
 void    runtime_set_ppudata_buf(uint8_t val);
 uint16_t runtime_get_ppuaddr(void);
 void     runtime_set_ppuaddr(uint16_t addr);
+uint16_t runtime_get_ppu_t(void);
+int      runtime_scroll_from_t_valid(void);
+void     runtime_get_latch_state(uint8_t *ppuaddr_latch, uint8_t *scroll_latch);
+void     runtime_set_latch_state(uint8_t ppuaddr_latch, uint8_t scroll_latch);
 extern uint8_t g_oamaddr;
 
 /* ---- Dispatch miss monitor ---- */
