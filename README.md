@@ -138,6 +138,18 @@ analog = true    ; left analog stick also drives the d-pad
 Valid button names: `a b x y back start guide leftshoulder rightshoulder
 leftstick rightstick dpup dpdown dpleft dpright` (use `none` to unbind).
 
+### Display
+
+| Hotkey | Action |
+|--------|--------|
+| `F5`   | Toggle turbo (fast-forward) |
+| `F6` / `F7` | Save / load state |
+| `F11` or `Alt+Enter` | Toggle fullscreen (borderless desktop) |
+
+The picture preserves the NES aspect ratio with integer (whole-pixel) scaling
+and nearest-neighbor filtering, so it letterboxes rather than stretching and
+stays crisp at any window or screen size.
+
 ### game.toml Directives
 
 The full schema lives in `recompiler/src/game_config.c`; the most commonly used
