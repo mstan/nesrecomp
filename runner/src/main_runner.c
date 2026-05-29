@@ -25,6 +25,7 @@
 #include "game_extras.h"
 #include "debug_server.h"
 #include "keybinds.h"
+#include "controller.h"
 #include "crc32.h"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
@@ -483,6 +484,7 @@ void nes_vblank_callback(void) {
     /* Handle SDL events */
     SDL_Event ev;
     while (SDL_PollEvent(&ev)) {
+        controller_handle_event(&ev);  /* gamepad hotplug */
         if (ev.type == SDL_QUIT) exit(0);
         if (ev.type == SDL_WINDOWEVENT &&
             ev.window.event == SDL_WINDOWEVENT_CLOSE) exit(0);
@@ -509,9 +511,10 @@ void nes_vblank_callback(void) {
     /* Update controllers from keyboard state via configurable keybinds */
     {
         const uint8_t *keys = SDL_GetKeyboardState(NULL);
-        uint8_t btn = keybinds_read_player(keys, 1);
+        /* Keyboard and gamepad are OR'd so either (or both) drives the NES. */
+        uint8_t btn = keybinds_read_player(keys, 1) | controller_read_player(1);
 
-        /* Recording: capture keyboard state before script override */
+        /* Recording: capture combined input before script override */
         record_tick(g_frame_count, btn, g_turbo);
 
         /* Script override: if a script is loaded, use its button state */
@@ -523,7 +526,7 @@ void nes_vblank_callback(void) {
         if (tcp_btn >= 0) btn = (uint8_t)tcp_btn;
 
         g_controller1_buttons = btn;
-        g_controller2_buttons = keybinds_read_player(keys, 2);
+        g_controller2_buttons = keybinds_read_player(keys, 2) | controller_read_player(2);
     }
 
 smoke_skip_input:
@@ -900,10 +903,13 @@ void nesrecomp_runner_run(int argc, char *argv[]) {
         exit(0);
     }
 
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMECONTROLLER) < 0) {
         fprintf(stderr, "SDL_Init: %s\n", SDL_GetError());
         exit(1);
     }
+
+    /* Gamepad support (Xbox/PS/Switch/generic via SDL's mapping DB). */
+    controller_init();
 
     /* Open audio device — use SDL_QueueAudio (callback=NULL) to push samples
      * from the game thread without needing a separate audio thread. */
