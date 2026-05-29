@@ -4,25 +4,9 @@
 
 # NESRecomp
 
-A static 6502 recompiler framework for NES games. Translates NES ROM machine code to C, which is then compiled to native machine code for direct execution on modern PCs.
+A static 6502 recompiler framework for NES games. Translates NES ROM machine code to C, which is then compiled to native x64 for direct execution on modern PCs.
 
 **This is NOT an emulator.** Each 6502 instruction is translated to equivalent C code at build time. JSR becomes a direct C function call, branches become gotos, and the NES hardware (PPU, APU, mapper) is simulated by the runner library.
-
-## Platform Support
-
-| Platform | Status |
-|----------|--------|
-| Windows (x64, MSVC) | Primary / mature |
-| macOS (Apple Silicon + Intel) | **Experimental — newly added** |
-| Other UNIX (Linux) | Likely works via the same POSIX path; less tested |
-
-macOS support is recent and should be considered experimental. The toolchain
-(recompiler + runner) builds cleanly with Apple Clang and games run natively —
-The Legend of Zelda, for example, plays well. Individual titles may show minor
-behavioral quirks that don't appear on Windows (Super Mario Bros. has some known
-timing/demo differences); please file an issue if you hit one. The macOS/POSIX
-port was contributed by [**Nat Budin (@nbudin)**](https://github.com/nbudin) in
-[#10](https://github.com/mstan/nesrecomp/pull/10) — thank you! 🙏
 
 ## Game Projects
 
@@ -188,10 +172,7 @@ executed.
 
 ## Building
 
-CMake 3.20+ is required. The recompiler itself is pure C11 with no external
-dependencies; game runners additionally need SDL2.
-
-### Windows (Visual Studio 2022)
+Requires Visual Studio 2022 and CMake 3.20+.
 
 ```bash
 # Build the recompiler
@@ -202,32 +183,6 @@ cmake --build build --config Release
 build/Release/NESRecomp.exe <rom.nes> --game <path/to/game.toml>
 ```
 
-### macOS / Linux
-
-```bash
-# Install prerequisites (macOS / Homebrew shown; use your distro's packages on Linux)
-brew install cmake sdl2 ninja
-
-# Build the recompiler
-cmake -S recompiler -B build/recompiler -G Ninja -DCMAKE_BUILD_TYPE=Release
-cmake --build build/recompiler
-
-# Recompile a game ROM (note: no .exe suffix)
-build/recompiler/NESRecomp <rom.nes> --game <path/to/game.toml>
-```
-
-Game projects build the same way on macOS/Linux — from the game directory, run
-its `setup.sh` to fetch the pinned nesrecomp, then:
-
-```bash
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
-      -DENABLE_NESTOPIA_ORACLE=OFF -DCMAKE_PREFIX_PATH="$(brew --prefix)"
-cmake --build build
-```
-
-(`ENABLE_NESTOPIA_ORACLE` is a developer verify-mode feature and is off here for
-a plain playable build.)
-
 ## Adding a New Game
 
 See [CLAUDE.md](CLAUDE.md) for detailed instructions. In short:
@@ -237,10 +192,3 @@ See [CLAUDE.md](CLAUDE.md) for detailed instructions. In short:
 3. Create `extras.c` implementing the `game_extras.h` hook interface
 4. Run `NESRecomp.exe <rom.nes> --game game.toml` to generate C code
 5. Build with CMake, linking against the runner library and SDL2
-
-## Acknowledgements
-
-- [**Nat Budin (@nbudin)**](https://github.com/nbudin) — macOS / POSIX build
-  support ([#10](https://github.com/mstan/nesrecomp/pull/10)): POSIX `ucontext`
-  coroutine backend, cross-platform directory creation, and the compiler-flag
-  groundwork that made native macOS builds possible.

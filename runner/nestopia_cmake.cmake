@@ -55,6 +55,4 @@ target_compile_definitions(nestopia_core PRIVATE _CRT_SECURE_NO_WARNINGS NST_NO_
 
 if(MSVC)
     target_compile_options(nestopia_core PRIVATE /W2 /WX- /EHsc /wd4244 /wd4267 /wd4018 /wd4996 /wd4305)
-else()
-    target_compile_options(nestopia_core PRIVATE -Wno-narrowing -Wno-c++11-narrowing)
 endif()

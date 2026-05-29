@@ -6,13 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#ifdef _WIN32
-#  include <direct.h>
-#  define make_dir(p) _mkdir(p)
-#else
-#  include <sys/stat.h>
-#  define make_dir(p) mkdir((p), 0755)
-#endif
+#include <direct.h>
 #include "rom_parser.h"
 #include "cpu6502_decoder.h"
 #include "function_finder.h"
@@ -34,7 +28,7 @@ static void delete_if_exists(const char *path) {
 }
 
 static void ensure_output_dir_exists(void) {
-    if (make_dir("generated") == 0) {
+    if (_mkdir("generated") == 0) {
         printf("[NESRecomp] Created output directory: generated\n");
     }
 }
