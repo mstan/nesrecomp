@@ -2098,6 +2098,15 @@ static void emit_dispatch(FILE *f, const EmittedWrapper *wrappers, int wrapper_c
         "/* AUTO-GENERATED dispatch table. DO NOT EDIT. */\n"
         "#include \"nes_runtime.h\"\n"
         "extern int g_current_bank;\n\n"
+    );
+
+    /* Forward-declare every dispatch target. The switch below calls these
+     * func_* wrappers, which are defined in the _full.c translation unit.
+     * Without these declarations the dispatch TU relies on implicit function
+     * declarations, which MSVC tolerates but clang/gcc reject under C99+. */
+    emit_forward_decls(f, wrappers, wrapper_count, rom);
+
+    fprintf(f,
         "int call_by_address(uint16_t addr) {\n"
     );
 
