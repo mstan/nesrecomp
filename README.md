@@ -106,7 +106,37 @@ exits. All in-tree game projects already use `game.toml`; see Dr. Mario's
 
 ### Configurable Controls
 
-A `keybinds.ini` file is auto-generated next to the game executable on first run. Both player 1 and player 2 keyboard bindings are configurable. Edit the INI file and restart the game to apply changes.
+A `keybinds.ini` file is auto-generated next to the game executable on first run. Both player 1 and player 2 bindings are configurable for **keyboard and gamepad**. Edit the INI file and restart the game to apply changes.
+
+**Keyboard** — `[player1]` / `[player2]` sections map each NES button to an SDL key name.
+
+**Gamepad** — game controllers are supported cross-platform via SDL's
+`SDL_GameController` API (Xbox, PlayStation/DualSense, Switch Pro, and generic
+pads; on Windows this uses XInput under the hood). The first connected pad is
+NES port 1, the second is port 2, and hotplug is handled — plug in or unplug at
+any time. Keyboard and gamepad input are merged, so both work simultaneously and
+no configuration is required to start playing.
+
+`[gamepad1]` / `[gamepad2]` sections make the mapping fully editable. Each NES
+button takes a comma-separated list of SDL controller button names (so multiple
+physical buttons can drive one NES button). Defaults:
+
+```ini
+[gamepad1]
+a = a,b          ; both right-hand face buttons act as NES A
+b = x,y          ; both left-hand face buttons act as NES B
+select = back
+start = start
+up = dpup
+down = dpdown
+left = dpleft
+right = dpright
+deadzone = 16000 ; left-stick threshold (0-32767)
+analog = true    ; left analog stick also drives the d-pad
+```
+
+Valid button names: `a b x y back start guide leftshoulder rightshoulder
+leftstick rightstick dpup dpdown dpleft dpright` (use `none` to unbind).
 
 ### game.toml Directives
 
