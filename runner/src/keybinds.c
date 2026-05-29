@@ -38,6 +38,37 @@ static KeyBinds s_binds = {
         .mouse_enabled = 0,
         .crosshair = 0,
     },
+    /* Default gamepad mapping is deliberately forgiving: the two right-hand
+     * face buttons both act as A, the two left-hand both act as B, and the
+     * left analog stick mirrors the d-pad. All of it is remappable below. */
+    .pad1 = {
+        .btn_mask = {
+            [0] = (1u << SDL_CONTROLLER_BUTTON_A) | (1u << SDL_CONTROLLER_BUTTON_B), /* A */
+            [1] = (1u << SDL_CONTROLLER_BUTTON_X) | (1u << SDL_CONTROLLER_BUTTON_Y), /* B */
+            [2] = (1u << SDL_CONTROLLER_BUTTON_BACK),                                /* Select */
+            [3] = (1u << SDL_CONTROLLER_BUTTON_START),                               /* Start */
+            [4] = (1u << SDL_CONTROLLER_BUTTON_DPAD_UP),
+            [5] = (1u << SDL_CONTROLLER_BUTTON_DPAD_DOWN),
+            [6] = (1u << SDL_CONTROLLER_BUTTON_DPAD_LEFT),
+            [7] = (1u << SDL_CONTROLLER_BUTTON_DPAD_RIGHT),
+        },
+        .deadzone = 16000,
+        .analog_dpad = 1,
+    },
+    .pad2 = {
+        .btn_mask = {
+            [0] = (1u << SDL_CONTROLLER_BUTTON_A) | (1u << SDL_CONTROLLER_BUTTON_B),
+            [1] = (1u << SDL_CONTROLLER_BUTTON_X) | (1u << SDL_CONTROLLER_BUTTON_Y),
+            [2] = (1u << SDL_CONTROLLER_BUTTON_BACK),
+            [3] = (1u << SDL_CONTROLLER_BUTTON_START),
+            [4] = (1u << SDL_CONTROLLER_BUTTON_DPAD_UP),
+            [5] = (1u << SDL_CONTROLLER_BUTTON_DPAD_DOWN),
+            [6] = (1u << SDL_CONTROLLER_BUTTON_DPAD_LEFT),
+            [7] = (1u << SDL_CONTROLLER_BUTTON_DPAD_RIGHT),
+        },
+        .deadzone = 16000,
+        .analog_dpad = 1,
+    },
 };
 
 /* ── Button name mapping ──────────────────────────────────────────────────── */
@@ -89,6 +120,37 @@ static const char *scancode_to_name(SDL_Scancode sc) {
     return "Unknown";
 }
 
+/* ── Gamepad button name <-> mask helpers ─────────────────────────────────── */
+
+/* Parse a comma/space-separated list of SDL controller button names
+ * (e.g. "a, b") into a bitmask of (1u << SDL_CONTROLLER_BUTTON_*). */
+static uint32_t names_to_mask(const char *val) {
+    char buf[160];
+    strncpy(buf, val, sizeof(buf) - 1);
+    buf[sizeof(buf) - 1] = '\0';
+    for (char *c = buf; *c; c++) *c = (char)tolower((unsigned char)*c);
+    uint32_t mask = 0;
+    for (char *tok = strtok(buf, ", \t"); tok; tok = strtok(NULL, ", \t")) {
+        SDL_GameControllerButton b = SDL_GameControllerGetButtonFromString(tok);
+        if (b != SDL_CONTROLLER_BUTTON_INVALID && b < 32)
+            mask |= (1u << b);
+    }
+    return mask;
+}
+
+/* Render a button mask back to a "a,b" style name list. */
+static void mask_to_names(uint32_t mask, char *out, size_t n) {
+    out[0] = '\0';
+    for (int bit = 0; bit < SDL_CONTROLLER_BUTTON_MAX && bit < 32; bit++) {
+        if (!(mask & (1u << bit))) continue;
+        const char *nm = SDL_GameControllerGetStringForButton((SDL_GameControllerButton)bit);
+        if (!nm) continue;
+        if (out[0]) strncat(out, ",", n - strlen(out) - 1);
+        strncat(out, nm, n - strlen(out) - 1);
+    }
+    if (!out[0]) strncpy(out, "none", n - 1);
+}
+
 /* ── File I/O ─────────────────────────────────────────────────────────────── */
 
 static char s_ini_path[512] = {0};
@@ -121,6 +183,19 @@ static void write_player(FILE *f, const char *section, const PlayerBinds *pb) {
     fprintf(f, "\n");
 }
 
+static void write_pad(FILE *f, const char *section, const GamepadBinds *gb) {
+    fprintf(f, "[%s]\n", section);
+    char names[160];
+    for (const ButtonDef *bd = s_buttons; bd->name; bd++) {
+        int idx = (int)(bd - s_buttons);  /* NES button index 0..7 */
+        mask_to_names(gb->btn_mask[idx], names, sizeof(names));
+        fprintf(f, "%s = %s\n", bd->name, names);
+    }
+    fprintf(f, "deadzone = %d\n", gb->deadzone);
+    fprintf(f, "analog = %s\n", gb->analog_dpad ? "true" : "false");
+    fprintf(f, "\n");
+}
+
 static void write_defaults(const char *path) {
     FILE *f = fopen(path, "w");
     if (!f) return;
@@ -136,6 +211,14 @@ static void write_defaults(const char *path) {
     fprintf(f, "mouse = false\n");
     fprintf(f, "# Set crosshair = true to show a crosshair at the aim point.\n");
     fprintf(f, "crosshair = false\n\n");
+    fprintf(f, "# Gamepad bindings (SDL game-controller button names).\n");
+    fprintf(f, "# Values may list multiple buttons separated by commas, e.g. \"a, b\".\n");
+    fprintf(f, "# Valid names: a b x y back start guide leftshoulder rightshoulder\n");
+    fprintf(f, "#   leftstick rightstick dpup dpdown dpleft dpright (use \"none\" to unbind).\n");
+    fprintf(f, "# deadzone: left-stick threshold 0-32767.  analog: stick also moves the d-pad.\n");
+    fprintf(f, "# Names are positional (a=bottom, b=right, x=left, y=top on an Xbox pad).\n\n");
+    write_pad(f, "gamepad1", &s_binds.pad1);
+    write_pad(f, "gamepad2", &s_binds.pad2);
     fclose(f);
     printf("[Keybinds] Generated %s\n", path);
 }
@@ -145,6 +228,7 @@ static void load_ini(const char *path) {
     if (!f) return;
 
     PlayerBinds *current = NULL;
+    GamepadBinds *cur_pad = NULL;
     int in_zapper = 0;
     char line[256];
     while (fgets(line, sizeof(line), f)) {
@@ -158,9 +242,12 @@ static void load_ini(const char *path) {
             char *section = line + 1;
             in_zapper = 0;
             current = NULL;
+            cur_pad = NULL;
             if (strcmp(section, "player1") == 0) current = &s_binds.p1;
             else if (strcmp(section, "player2") == 0) current = &s_binds.p2;
             else if (strcmp(section, "zapper") == 0) in_zapper = 1;
+            else if (strcmp(section, "gamepad1") == 0) cur_pad = &s_binds.pad1;
+            else if (strcmp(section, "gamepad2") == 0) cur_pad = &s_binds.pad2;
             continue;
         }
 
@@ -182,6 +269,26 @@ static void load_ini(const char *path) {
                 s_binds.zapper.mouse_enabled = bval;
             else if (strcmp(key, "crosshair") == 0)
                 s_binds.zapper.crosshair = bval;
+            continue;
+        }
+
+        if (cur_pad) {
+            if (strcmp(key, "deadzone") == 0) {
+                cur_pad->deadzone = atoi(val);
+            } else if (strcmp(key, "analog") == 0) {
+                char vb[16]; size_t i = 0;
+                for (char *c = val; *c && i < sizeof(vb) - 1; c++) vb[i++] = (char)tolower((unsigned char)*c);
+                vb[i] = '\0';
+                cur_pad->analog_dpad =
+                    (strcmp(vb, "true") == 0 || strcmp(vb, "1") == 0 || strcmp(vb, "yes") == 0);
+            } else {
+                for (const ButtonDef *bd = s_buttons; bd->name; bd++) {
+                    if (strcmp(key, bd->name) == 0) {
+                        cur_pad->btn_mask[(int)(bd - s_buttons)] = names_to_mask(val);
+                        break;
+                    }
+                }
+            }
             continue;
         }
 
@@ -235,6 +342,10 @@ uint8_t keybinds_read_player(const uint8_t *keys, int player) {
     if (keys[pb->left])   btn |= 0x02;
     if (keys[pb->right])  btn |= 0x01;
     return btn;
+}
+
+const GamepadBinds *keybinds_get_pad(int player) {
+    return (player == 1) ? &s_binds.pad1 : &s_binds.pad2;
 }
 
 int keybinds_zapper_mouse(void) {

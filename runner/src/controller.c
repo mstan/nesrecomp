@@ -7,10 +7,10 @@
  * both drive the NES d-pad.
  */
 #include "controller.h"
+#include "keybinds.h"
 #include <stdio.h>
 
-#define MAX_PADS       2       /* NES has two controller ports */
-#define STICK_DEADZONE 16000   /* ~half of the 32767 axis range */
+#define MAX_PADS 2  /* NES has two controller ports */
 
 static SDL_GameController *s_pads[MAX_PADS];     /* index = player slot (0,1) */
 static SDL_JoystickID      s_pad_ids[MAX_PADS];  /* instance id per slot */
@@ -30,6 +30,10 @@ static int first_free_slot(void) {
 
 static void open_device(int device_index) {
     if (!SDL_IsGameController(device_index)) return;  /* not a mapped gamepad */
+    /* Dedupe: SDL reports already-connected pads both via init enumeration and
+     * via a CONTROLLERDEVICEADDED event, so the same device can arrive twice. */
+    SDL_JoystickID id = SDL_JoystickGetDeviceInstanceID(device_index);
+    if (id >= 0 && slot_for_instance(id) >= 0) return;
     int slot = first_free_slot();
     if (slot < 0) return;                              /* both ports in use */
     SDL_GameController *gc = SDL_GameControllerOpen(device_index);
@@ -79,27 +83,32 @@ uint8_t controller_read_player(int player) {
     int slot = player - 1;
     if (slot < 0 || slot >= MAX_PADS || !s_pads[slot]) return 0;
     SDL_GameController *gc = s_pads[slot];
+    const GamepadBinds *gb = keybinds_get_pad(player);
+
+    /* NES button bit per btn_mask index (matches keybinds_read_player order). */
+    static const uint8_t nes_bit[8] = { 0x80, 0x40, 0x20, 0x10, 0x08, 0x04, 0x02, 0x01 };
     uint8_t b = 0;
+    for (int i = 0; i < 8; i++) {
+        uint32_t mask = gb->btn_mask[i];
+        for (int bit = 0; mask && bit < SDL_CONTROLLER_BUTTON_MAX && bit < 32; bit++) {
+            if ((mask & (1u << bit)) &&
+                SDL_GameControllerGetButton(gc, (SDL_GameControllerButton)bit)) {
+                b |= nes_bit[i];
+                break;
+            }
+        }
+    }
 
-#define BTN(x) SDL_GameControllerGetButton(gc, (x))
-    /* Right two face buttons -> A, left two -> B (layout-agnostic, forgiving). */
-    if (BTN(SDL_CONTROLLER_BUTTON_A) || BTN(SDL_CONTROLLER_BUTTON_B)) b |= 0x80;
-    if (BTN(SDL_CONTROLLER_BUTTON_X) || BTN(SDL_CONTROLLER_BUTTON_Y)) b |= 0x40;
-    if (BTN(SDL_CONTROLLER_BUTTON_BACK))       b |= 0x20;  /* Select */
-    if (BTN(SDL_CONTROLLER_BUTTON_START))      b |= 0x10;  /* Start  */
-    if (BTN(SDL_CONTROLLER_BUTTON_DPAD_UP))    b |= 0x08;
-    if (BTN(SDL_CONTROLLER_BUTTON_DPAD_DOWN))  b |= 0x04;
-    if (BTN(SDL_CONTROLLER_BUTTON_DPAD_LEFT))  b |= 0x02;
-    if (BTN(SDL_CONTROLLER_BUTTON_DPAD_RIGHT)) b |= 0x01;
-#undef BTN
-
-    /* Left analog stick also drives the d-pad. */
-    int ax = SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_LEFTX);
-    int ay = SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_LEFTY);
-    if (ax < -STICK_DEADZONE) b |= 0x02;  /* left  */
-    if (ax >  STICK_DEADZONE) b |= 0x01;  /* right */
-    if (ay < -STICK_DEADZONE) b |= 0x08;  /* up    */
-    if (ay >  STICK_DEADZONE) b |= 0x04;  /* down  */
+    /* Left analog stick also drives the d-pad (configurable). */
+    if (gb->analog_dpad) {
+        int dz = gb->deadzone;
+        int ax = SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_LEFTX);
+        int ay = SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_LEFTY);
+        if (ax < -dz) b |= 0x02;  /* left  */
+        if (ax >  dz) b |= 0x01;  /* right */
+        if (ay < -dz) b |= 0x08;  /* up    */
+        if (ay >  dz) b |= 0x04;  /* down  */
+    }
 
     return b;
 }
