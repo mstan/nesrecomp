@@ -498,6 +498,13 @@ void nes_vblank_callback(void) {
             savestate_load("C:/temp/quicksave.sav");
             record_sync_frame(g_frame_count); /* g_frame_count now = restored value */
         }
+        /* Toggle borderless-desktop fullscreen: F11 or Alt+Enter. */
+        if (ev.type == SDL_KEYDOWN && s_window &&
+            (ev.key.keysym.sym == SDLK_F11 ||
+             (ev.key.keysym.sym == SDLK_RETURN && (ev.key.keysym.mod & KMOD_ALT)))) {
+            Uint32 is_fs = SDL_GetWindowFlags(s_window) & SDL_WINDOW_FULLSCREEN_DESKTOP;
+            SDL_SetWindowFullscreen(s_window, is_fs ? 0 : SDL_WINDOW_FULLSCREEN_DESKTOP);
+        }
     }
 
     /* Zapper mouse input: poll absolute mouse position each frame */
