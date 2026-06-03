@@ -40,6 +40,12 @@ static const uint16_t NOISE_PERIOD[16] = {
     4, 8, 16, 32, 64, 96, 128, 160, 202, 254, 380, 508, 762, 1016, 2034, 4068
 };
 
+/* NTSC DMC period table — CPU cycles per output-bit clock */
+static const uint16_t DMC_RATE[16] = {
+    428, 380, 340, 320, 286, 254, 226, 214,
+    190, 160, 142, 128, 106,  84,  72,  54
+};
+
 /* ---- Channel state ---- */
 
 typedef struct {
@@ -99,10 +105,28 @@ typedef struct {
     bool     enabled;
 } Noise;
 
-/* DMC: simplified — only the direct-load output level ($4011). */
+/* DMC: DPCM sample playback ($4010/$4012/$4013) + direct load ($4011). */
 typedef struct {
-    uint8_t  output;      /* 7-bit */
-    bool     enabled;
+    /* Config (from $4010/$4012/$4013) */
+    bool     loop;
+    bool     irq_en;
+    uint8_t  rate_idx;
+    uint16_t start_addr;   /* $4012: $C000 + (val<<6)  */
+    uint16_t start_len;    /* $4013: (val<<4) + 1      */
+
+    /* Memory reader / sample fetch */
+    uint16_t cur_addr;
+    uint16_t bytes_left;
+    uint8_t  sample_buf;
+    bool     buf_empty;
+
+    /* Output unit */
+    uint8_t  shift;        /* 8-bit shift register   */
+    uint8_t  bits_left;    /* bits remaining in cycle */
+    bool     silence;
+    uint8_t  output;       /* 7-bit DAC level, 0-127  */
+    float    timer_acc;    /* fractional CPU-cycle accumulator */
+    bool     enabled;      /* $4015 bit 4             */
 } DMC;
 
 static Pulse    s_p1, s_p2;
@@ -186,6 +210,45 @@ static void clock_noise(void) {
     s_noise.lfsr = (s_noise.lfsr >> 1) | (uint16_t)(fb << 14);
 }
 
+/* ---- DMC DPCM sample playback ---- */
+
+/* Side-effect-free PRG/SRAM read (implemented in runtime.c). */
+extern uint8_t apu_dmc_read(uint16_t addr);
+
+/* Fetch the next sample byte from memory into the sample buffer. */
+static void dmc_refill(void) {
+    if (!s_dmc.buf_empty || s_dmc.bytes_left == 0) return;
+    s_dmc.sample_buf = apu_dmc_read(s_dmc.cur_addr);
+    s_dmc.buf_empty  = false;
+    /* Address wraps from $FFFF back to $8000. */
+    s_dmc.cur_addr   = (uint16_t)((s_dmc.cur_addr + 1) | 0x8000);
+    if (--s_dmc.bytes_left == 0 && s_dmc.loop) {
+        s_dmc.cur_addr   = s_dmc.start_addr;
+        s_dmc.bytes_left = s_dmc.start_len;
+    }
+}
+
+/* Clock the DMC output unit once (one bit). */
+static void dmc_clock(void) {
+    if (s_dmc.bits_left == 0) {
+        s_dmc.bits_left = 8;
+        if (s_dmc.buf_empty) {
+            s_dmc.silence = true;
+        } else {
+            s_dmc.silence   = false;
+            s_dmc.shift     = s_dmc.sample_buf;
+            s_dmc.buf_empty = true;
+            dmc_refill();
+        }
+    }
+    if (!s_dmc.silence) {
+        if (s_dmc.shift & 1) { if (s_dmc.output <= 125) s_dmc.output += 2; }
+        else                 { if (s_dmc.output >=   2) s_dmc.output -= 2; }
+    }
+    s_dmc.shift >>= 1;
+    s_dmc.bits_left--;
+}
+
 /* ---- Channel outputs (0-15 each) ---- */
 static uint8_t pulse_out(const Pulse *p) {
     if (!p->enabled || p->length == 0 || p->timer < 8) return 0;
@@ -236,9 +299,11 @@ void apu_init(void) {
     memset(&s_tri,   0, sizeof(s_tri));
     memset(&s_noise, 0, sizeof(s_noise));
     memset(&s_dmc,   0, sizeof(s_dmc));
-    s_p1.which   = 1;
-    s_p2.which   = 2;
-    s_noise.lfsr = 1;  /* LFSR must not be all zeros */
+    s_p1.which     = 1;
+    s_p2.which     = 2;
+    s_noise.lfsr   = 1;  /* LFSR must not be all zeros */
+    s_dmc.buf_empty = true;
+    s_dmc.silence   = true;
     s_fc_mode    = false;
     s_fc_irq_inh = false;
 }
@@ -302,15 +367,18 @@ void apu_write(uint16_t addr, uint8_t val) {
 
     /* ---- DMC ($4010-$4013) ---- */
     case 0x4010:
-        /* Rate/IRQ — not emulated beyond silencing */
-        s_dmc.enabled = (val >> 4) & 1;
+        s_dmc.irq_en   = (val >> 7) & 1;
+        s_dmc.loop     = (val >> 6) & 1;
+        s_dmc.rate_idx =  val & 0x0F;
         break;
     case 0x4011:
-        s_dmc.output = val & 0x7F;
+        s_dmc.output = val & 0x7F;   /* direct DAC load */
         break;
     case 0x4012:
+        s_dmc.start_addr = (uint16_t)(0xC000 + ((uint16_t)val << 6));
+        break;
     case 0x4013:
-        /* Sample address/length — ROM DMA not implemented */
+        s_dmc.start_len  = (uint16_t)(((uint16_t)val << 4) + 1);
         break;
 
     /* ---- Status ($4015) ---- */
@@ -324,6 +392,16 @@ void apu_write(uint16_t addr, uint8_t val) {
         if (!s_p2.enabled)    s_p2.length    = 0;
         if (!s_tri.enabled)   s_tri.length   = 0;
         if (!s_noise.enabled) s_noise.length = 0;
+        /* DMC: clearing bit 4 stops playback; setting it (re)starts the
+         * sample only when none is currently playing. */
+        if (!s_dmc.enabled) {
+            s_dmc.bytes_left = 0;
+        } else if (s_dmc.bytes_left == 0) {
+            s_dmc.cur_addr   = s_dmc.start_addr;
+            s_dmc.bytes_left = s_dmc.start_len;
+            s_dmc.buf_empty  = true;
+            dmc_refill();
+        }
         break;
 
     /* ---- Frame counter ($4017) ---- */
@@ -345,7 +423,7 @@ uint8_t apu_read_status(void) {
     if (s_p2.length    > 0) s |= 0x02;
     if (s_tri.length   > 0) s |= 0x04;
     if (s_noise.length > 0) s |= 0x08;
-    if (s_dmc.enabled)      s |= 0x10;
+    if (s_dmc.bytes_left > 0) s |= 0x10;   /* DMC active = sample bytes remain */
     return s;
 }
 
@@ -408,6 +486,16 @@ void apu_generate(int16_t *buf, int n_samples) {
             while (s_noise.timer_acc >= period) {
                 s_noise.timer_acc -= period;
                 clock_noise();
+            }
+        }
+
+        /* DMC: clock the output unit at the selected rate. */
+        {
+            s_dmc.timer_acc += cpu_per_sample;
+            float period = (float)DMC_RATE[s_dmc.rate_idx];
+            while (s_dmc.timer_acc >= period) {
+                s_dmc.timer_acc -= period;
+                dmc_clock();
             }
         }
 

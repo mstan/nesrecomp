@@ -591,6 +591,22 @@ uint8_t nes_read(uint16_t addr) {
     return 0xFF;
 }
 
+/* Side-effect-free PRG/SRAM read used by the APU DMC unit to DMA-fetch DPCM
+ * sample bytes. Mirrors nes_read's $6000-$FFFF banking but skips bus_tick()
+ * and the $2000-$401F I/O regions, which the DMC never reads from. */
+uint8_t apu_dmc_read(uint16_t addr) {
+    if (addr >= 0xC000) {
+        const uint8_t *bank = mapper_get_fixed_bank();
+        return bank ? bank[addr - 0xC000] : 0xFF;
+    }
+    if (addr >= 0x8000) {
+        const uint8_t *bank = mapper_get_switchable_bank();
+        return bank ? bank[addr - 0x8000] : 0xFF;
+    }
+    if (addr >= 0x6000) return g_sram[addr - 0x6000];
+    return 0xFF;
+}
+
 void nes_write(uint16_t addr, uint8_t val) {
     bus_tick();
 
