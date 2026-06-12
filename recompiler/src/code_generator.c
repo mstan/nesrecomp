@@ -533,6 +533,338 @@ static uint16_t resolve_jmp_thunk(const NESRom *rom, int fixed_bank, uint16_t ad
     return (uint16_t)(lo | ((uint16_t)hi << 8));
 }
 
+/* ---------------------------------------------------------------------------
+ * inline_dispatch trampoline side-effect derivation.
+ *
+ * Inline dispatch replaces a `JSR <trampoline>` + inline address table with
+ * a compile-time switch, but the trampoline body's side effects remain
+ * visible to game code: RAM stores (e.g. SMB's JumpEngine at $8E04 writes
+ * the pulled return address to $04/$05 and the dispatch target to $06/$07),
+ * final register/flag state (JumpEngine exits with Y=2*A+2 and A=target hi),
+ * and consumed CPU cycles.
+ *
+ * These effects differ per game — hardcoding one game's pattern corrupts
+ * another's state (Gumshoe's dispatcher does STX $27/STY $28; those same
+ * addresses are SMB's Block_State[1]/Misc_State[0]).  So derive them by
+ * symbolically executing the trampoline's straight-line body at codegen
+ * time.  Execution is concrete: A is the switch-case selector, the pulled
+ * return address is the static JSR site + 2, and table reads come from ROM.
+ * X/Y pass through as runtime values unless overwritten.  Any construct
+ * outside this model (branches, RMW memory ops, I/O stores, values that
+ * can't be represented) fails the derivation and no side effects are
+ * emitted, with a codegen warning.
+ * ------------------------------------------------------------------------ */
+
+#define TRAMP_MAX_STORES 16
+
+typedef struct {
+    enum { TV_CONST, TV_XIN, TV_YIN, TV_UNKNOWN } kind;
+    uint8_t k;                      /* value when kind == TV_CONST */
+} TrampVal;
+
+typedef struct { uint16_t addr; TrampVal val; } TrampStore;
+
+typedef struct {
+    TrampStore stores[TRAMP_MAX_STORES];
+    int      store_count;
+    TrampVal a, x, y;               /* final register state */
+    int      flag_c, flag_v;        /* -1 = unchanged by body, else 0/1 */
+    int      nz_set;                /* 1 if the body produced final N/Z */
+    TrampVal nz;                    /* value the final N/Z derive from */
+    int      cycles;                /* exact cycles incl. page-cross penalties */
+} TrampEffects;
+
+static TrampVal tramp_const(uint8_t k) {
+    TrampVal v; v.kind = TV_CONST; v.k = k; return v;
+}
+
+static void tramp_store_put(TrampEffects *fx, uint16_t addr, TrampVal val, int *ok) {
+    for (int i = 0; i < fx->store_count; i++)
+        if (fx->stores[i].addr == addr) { fx->stores[i].val = val; return; }
+    if (fx->store_count >= TRAMP_MAX_STORES) { *ok = 0; return; }
+    fx->stores[fx->store_count].addr = addr;
+    fx->stores[fx->store_count].val  = val;
+    fx->store_count++;
+}
+
+static int tramp_mem_lookup(const TrampEffects *fx, uint16_t addr, TrampVal *out) {
+    for (int i = 0; i < fx->store_count; i++)
+        if (fx->stores[i].addr == addr) { *out = fx->stores[i].val; return 1; }
+    return 0;
+}
+
+/* Resolve a load's value.  Returns 0 if the addressing can't be resolved
+ * concretely.  Reads of RAM the body hasn't written are TV_UNKNOWN (fine
+ * until something needs the actual value).  Adds page-cross penalties. */
+static int tramp_load(const NESRom *rom, int bank, const TrampEffects *fx,
+                      AddrMode am, uint8_t op1, uint8_t op2,
+                      TrampVal *out, int *cycles) {
+    uint16_t ea;
+    switch (am) {
+    case AM_IMM: *out = tramp_const(op1); return 1;
+    case AM_ZP:  ea = op1; break;
+    case AM_ABS: ea = (uint16_t)(op1 | ((uint16_t)op2 << 8)); break;
+    case AM_ZPX:
+        if (fx->x.kind != TV_CONST) return 0;
+        ea = (uint8_t)(op1 + fx->x.k); break;
+    case AM_ZPY:
+        if (fx->y.kind != TV_CONST) return 0;
+        ea = (uint8_t)(op1 + fx->y.k); break;
+    case AM_ABSX: {
+        if (fx->x.kind != TV_CONST) return 0;
+        uint16_t base = (uint16_t)(op1 | ((uint16_t)op2 << 8));
+        ea = (uint16_t)(base + fx->x.k);
+        if ((base & 0xFF00) != (ea & 0xFF00)) (*cycles)++;
+        break; }
+    case AM_ABSY: {
+        if (fx->y.kind != TV_CONST) return 0;
+        uint16_t base = (uint16_t)(op1 | ((uint16_t)op2 << 8));
+        ea = (uint16_t)(base + fx->y.k);
+        if ((base & 0xFF00) != (ea & 0xFF00)) (*cycles)++;
+        break; }
+    case AM_INDY: {
+        TrampVal lo, hi;
+        if (!tramp_mem_lookup(fx, op1, &lo) ||
+            !tramp_mem_lookup(fx, (uint8_t)(op1 + 1), &hi)) return 0;
+        if (lo.kind != TV_CONST || hi.kind != TV_CONST ||
+            fx->y.kind != TV_CONST) return 0;
+        uint16_t base = (uint16_t)(lo.k | ((uint16_t)hi.k << 8));
+        ea = (uint16_t)(base + fx->y.k);
+        if ((base & 0xFF00) != (ea & 0xFF00)) (*cycles)++;
+        break; }
+    default: return 0;  /* (zp,X) etc. — unsupported */
+    }
+    if (tramp_mem_lookup(fx, ea, out)) return 1;
+    if (ea >= 0x8000) { *out = tramp_const(rom_read(rom, bank, ea)); return 1; }
+    out->kind = TV_UNKNOWN; out->k = 0;
+    return 1;
+}
+
+/* Resolve a store's effective address (must be concrete plain RAM). */
+static int tramp_store_ea(const TrampEffects *fx, AddrMode am,
+                          uint8_t op1, uint8_t op2, uint16_t *ea) {
+    switch (am) {
+    case AM_ZP:  *ea = op1; return 1;
+    case AM_ABS: *ea = (uint16_t)(op1 | ((uint16_t)op2 << 8)); return 1;
+    case AM_ZPX:
+        if (fx->x.kind != TV_CONST) return 0;
+        *ea = (uint8_t)(op1 + fx->x.k); return 1;
+    case AM_ZPY:
+        if (fx->y.kind != TV_CONST) return 0;
+        *ea = (uint8_t)(op1 + fx->y.k); return 1;
+    case AM_ABSX:
+        if (fx->x.kind != TV_CONST) return 0;
+        *ea = (uint16_t)((op1 | ((uint16_t)op2 << 8)) + fx->x.k); return 1;
+    case AM_ABSY:
+        if (fx->y.kind != TV_CONST) return 0;
+        *ea = (uint16_t)((op1 | ((uint16_t)op2 << 8)) + fx->y.k); return 1;
+    case AM_INDY: {
+        TrampVal lo, hi;
+        if (!tramp_mem_lookup(fx, op1, &lo) ||
+            !tramp_mem_lookup(fx, (uint8_t)(op1 + 1), &hi)) return 0;
+        if (lo.kind != TV_CONST || hi.kind != TV_CONST ||
+            fx->y.kind != TV_CONST) return 0;
+        *ea = (uint16_t)((lo.k | ((uint16_t)hi.k << 8)) + fx->y.k); return 1; }
+    default: return 0;
+    }
+}
+
+/* Symbolically execute the trampoline body for one dispatch case.
+ * Returns 1 and fills fx on success; 0 if the body leaves the model
+ * (fail_pc/fail_op report where). */
+static int derive_trampoline_effects(const NESRom *rom, int bank,
+                                     uint16_t tramp_addr, uint16_t jsr_pc,
+                                     uint8_t selector, TrampEffects *fx,
+                                     uint16_t *fail_pc, uint8_t *fail_op) {
+    memset(fx, 0, sizeof(*fx));
+    fx->a = tramp_const(selector);
+    fx->x.kind = TV_XIN;
+    fx->y.kind = TV_YIN;
+    fx->flag_c = -1;
+    fx->flag_v = -1;
+
+    /* 6502 stack as the trampoline sees it: the JSR pushed (jsr_pc + 2)
+     * hi then lo, so the return-address low byte is on top.  PHA/PLA in
+     * the body share this model. */
+    TrampVal stk[8];
+    int sp = 0;
+    uint16_t ret = (uint16_t)(jsr_pc + 2);
+    stk[sp++] = tramp_const((uint8_t)(ret >> 8));
+    stk[sp++] = tramp_const((uint8_t)(ret & 0xFF));
+
+    uint16_t pc = tramp_addr;
+    for (int steps = 0; steps < 64; steps++) {
+        uint8_t op  = rom_read(rom, bank, pc);
+        uint8_t op1 = rom_read(rom, bank, (uint16_t)(pc + 1));
+        uint8_t op2 = rom_read(rom, bank, (uint16_t)(pc + 2));
+        const OpcodeEntry *e = &g_opcode_table[op];
+        *fail_pc = pc;
+        *fail_op = op;
+        fx->cycles += e->cycles;
+        int ok = 1;
+        switch (e->mnemonic) {
+        case MN_JMP:
+            if (e->addr_mode == AM_IND) goto done;   /* the dispatch jump */
+            if (e->addr_mode == AM_ABS) { pc = (uint16_t)(op1 | ((uint16_t)op2 << 8)); continue; }
+            return 0;
+        case MN_RTS:
+            goto done;                               /* RTS-style dispatch */
+        case MN_ASL: case MN_LSR: case MN_ROL: case MN_ROR: {
+            if (e->addr_mode != AM_ACC || fx->a.kind != TV_CONST) { ok = 0; break; }
+            int oldc = fx->flag_c;
+            if (e->mnemonic == MN_ASL) {
+                fx->flag_c = (fx->a.k >> 7) & 1;
+                fx->a.k = (uint8_t)(fx->a.k << 1);
+            } else if (e->mnemonic == MN_LSR) {
+                fx->flag_c = fx->a.k & 1;
+                fx->a.k >>= 1;
+            } else if (e->mnemonic == MN_ROL) {
+                if (oldc < 0) { ok = 0; break; }
+                fx->flag_c = (fx->a.k >> 7) & 1;
+                fx->a.k = (uint8_t)((fx->a.k << 1) | oldc);
+            } else { /* ROR */
+                if (oldc < 0) { ok = 0; break; }
+                fx->flag_c = fx->a.k & 1;
+                fx->a.k = (uint8_t)((fx->a.k >> 1) | (oldc << 7));
+            }
+            fx->nz = fx->a; fx->nz_set = 1;
+            break; }
+        case MN_TAY: fx->y = fx->a; fx->nz = fx->a; fx->nz_set = 1; break;
+        case MN_TAX: fx->x = fx->a; fx->nz = fx->a; fx->nz_set = 1; break;
+        case MN_TYA: fx->a = fx->y; fx->nz = fx->y; fx->nz_set = 1; break;
+        case MN_TXA: fx->a = fx->x; fx->nz = fx->x; fx->nz_set = 1; break;
+        case MN_INY: case MN_DEY:
+            if (fx->y.kind != TV_CONST) { ok = 0; break; }
+            fx->y.k = (uint8_t)(fx->y.k + (e->mnemonic == MN_INY ? 1 : -1));
+            fx->nz = fx->y; fx->nz_set = 1;
+            break;
+        case MN_INX: case MN_DEX:
+            if (fx->x.kind != TV_CONST) { ok = 0; break; }
+            fx->x.k = (uint8_t)(fx->x.k + (e->mnemonic == MN_INX ? 1 : -1));
+            fx->nz = fx->x; fx->nz_set = 1;
+            break;
+        case MN_PLA:
+            if (sp <= 0) { ok = 0; break; }
+            fx->a = stk[--sp];
+            fx->nz = fx->a; fx->nz_set = 1;
+            break;
+        case MN_PHA:
+            if (sp >= (int)(sizeof(stk) / sizeof(stk[0]))) { ok = 0; break; }
+            stk[sp++] = fx->a;
+            break;
+        case MN_LDA: case MN_LDX: case MN_LDY: {
+            TrampVal v;
+            if (!tramp_load(rom, bank, fx, e->addr_mode, op1, op2, &v, &fx->cycles)) { ok = 0; break; }
+            if (e->mnemonic == MN_LDA) fx->a = v;
+            else if (e->mnemonic == MN_LDX) fx->x = v;
+            else fx->y = v;
+            fx->nz = v; fx->nz_set = 1;
+            break; }
+        case MN_STA: case MN_STX: case MN_STY: {
+            uint16_t ea;
+            if (!tramp_store_ea(fx, e->addr_mode, op1, op2, &ea)) { ok = 0; break; }
+            TrampVal v = (e->mnemonic == MN_STA) ? fx->a :
+                         (e->mnemonic == MN_STX) ? fx->x : fx->y;
+            if (v.kind == TV_UNKNOWN) { ok = 0; break; }
+            if (ea >= 0x2000) { ok = 0; break; }  /* I/O — not modelable */
+            tramp_store_put(fx, ea, v, &ok);
+            break; }
+        case MN_AND: case MN_ORA: case MN_EOR: {
+            TrampVal v;
+            if (fx->a.kind != TV_CONST ||
+                !tramp_load(rom, bank, fx, e->addr_mode, op1, op2, &v, &fx->cycles) ||
+                v.kind != TV_CONST) { ok = 0; break; }
+            if (e->mnemonic == MN_AND) fx->a.k &= v.k;
+            else if (e->mnemonic == MN_ORA) fx->a.k |= v.k;
+            else fx->a.k ^= v.k;
+            fx->nz = fx->a; fx->nz_set = 1;
+            break; }
+        case MN_ADC: case MN_SBC: {
+            TrampVal v;
+            if (fx->a.kind != TV_CONST || fx->flag_c < 0 ||
+                !tramp_load(rom, bank, fx, e->addr_mode, op1, op2, &v, &fx->cycles) ||
+                v.kind != TV_CONST) { ok = 0; break; }
+            uint8_t m = (e->mnemonic == MN_SBC) ? (uint8_t)~v.k : v.k;
+            int sum = fx->a.k + m + fx->flag_c;
+            fx->flag_c = sum > 0xFF;
+            fx->flag_v = (~(fx->a.k ^ m) & (fx->a.k ^ sum) & 0x80) != 0;
+            fx->a.k = (uint8_t)sum;
+            fx->nz = fx->a; fx->nz_set = 1;
+            break; }
+        case MN_CMP: case MN_CPX: case MN_CPY: {
+            TrampVal r = (e->mnemonic == MN_CMP) ? fx->a :
+                         (e->mnemonic == MN_CPX) ? fx->x : fx->y;
+            TrampVal v;
+            if (r.kind != TV_CONST ||
+                !tramp_load(rom, bank, fx, e->addr_mode, op1, op2, &v, &fx->cycles) ||
+                v.kind != TV_CONST) { ok = 0; break; }
+            fx->flag_c = r.k >= v.k;
+            fx->nz = tramp_const((uint8_t)(r.k - v.k)); fx->nz_set = 1;
+            break; }
+        case MN_CLC: fx->flag_c = 0; break;
+        case MN_SEC: fx->flag_c = 1; break;
+        case MN_CLV: fx->flag_v = 0; break;
+        case MN_NOP: case MN_NOP_READ:
+        case MN_CLD: case MN_SED: case MN_CLI: case MN_SEI:
+            break;  /* no modeled state */
+        default:
+            ok = 0;
+            break;
+        }
+        if (!ok) return 0;
+        pc = (uint16_t)(pc + e->size);
+    }
+    return 0;  /* never reached a dispatch jump within the step cap */
+
+done:
+    /* Final N/Z referencing a passthrough register only works if that
+     * register still holds its entry value at emission time. */
+    if (fx->nz_set) {
+        if (fx->nz.kind == TV_UNKNOWN) return 0;
+        if (fx->nz.kind == TV_XIN && fx->x.kind != TV_XIN) return 0;
+        if (fx->nz.kind == TV_YIN && fx->y.kind != TV_YIN) return 0;
+    }
+    /* A mutual X<->Y swap can't be expressed as sequential assignments. */
+    if (fx->x.kind == TV_YIN && fx->y.kind == TV_XIN) return 0;
+    return 1;
+}
+
+/* Emit the derived side effects ahead of a dispatch case's call.
+ * Stores first (they may reference entry X/Y), then registers, then
+ * flags, then the body's cycle count. */
+static void emit_trampoline_effects(FILE *f, const TrampEffects *fx, uint8_t selector) {
+    for (int i = 0; i < fx->store_count; i++) {
+        const TrampStore *s = &fx->stores[i];
+        if (s->val.kind == TV_CONST)
+            fprintf(f, "nes_write(0x%04X, 0x%02X); ", s->addr, s->val.k);
+        else if (s->val.kind == TV_XIN)
+            fprintf(f, "nes_write(0x%04X, g_cpu.X); ", s->addr);
+        else if (s->val.kind == TV_YIN)
+            fprintf(f, "nes_write(0x%04X, g_cpu.Y); ", s->addr);
+    }
+    if (!(fx->a.kind == TV_CONST && fx->a.k == selector)) {
+        if (fx->a.kind == TV_CONST)    fprintf(f, "g_cpu.A = 0x%02X; ", fx->a.k);
+        else if (fx->a.kind == TV_XIN) fprintf(f, "g_cpu.A = g_cpu.X; ");
+        else if (fx->a.kind == TV_YIN) fprintf(f, "g_cpu.A = g_cpu.Y; ");
+    }
+    if (fx->x.kind == TV_CONST) fprintf(f, "g_cpu.X = 0x%02X; ", fx->x.k);
+    else if (fx->x.kind == TV_YIN) fprintf(f, "g_cpu.X = g_cpu.Y; ");
+    if (fx->y.kind == TV_CONST) fprintf(f, "g_cpu.Y = 0x%02X; ", fx->y.k);
+    else if (fx->y.kind == TV_XIN) fprintf(f, "g_cpu.Y = g_cpu.X; ");
+    if (fx->flag_c >= 0) fprintf(f, "g_cpu.C = %d; ", fx->flag_c);
+    if (fx->flag_v >= 0) fprintf(f, "g_cpu.V = %d; ", fx->flag_v);
+    if (fx->nz_set) {
+        if (fx->nz.kind == TV_CONST)
+            fprintf(f, "g_cpu.Z = %d; g_cpu.N = %d; ",
+                    fx->nz.k == 0, (fx->nz.k >> 7) & 1);
+        else if (fx->nz.kind == TV_XIN)
+            fprintf(f, "FLAG_NZ(g_cpu.X); ");
+        else if (fx->nz.kind == TV_YIN)
+            fprintf(f, "FLAG_NZ(g_cpu.Y); ");
+    }
+    fprintf(f, "maybe_trigger_vblank(%d); ", fx->cycles);
+}
+
 /* GxROM cross-half bank pairing.  On GxROM (mapper 66), the entire 32KB
  * window ($8000-$FFFF) is switched as a unit.  The recompiler processes
  * each 16KB half as a separate bank file:
@@ -1020,17 +1352,41 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                             vpc += 2;
                         }
                     }
-                    /* Inline dispatch replaces the trampoline (PLA×2, table
-                     * lookup, register save/restore, JMP indirect) with a
-                     * compile-time switch.  The trampoline has two side effects
-                     * visible to game code:
-                     *   STX $27 / STY $28 — saves caller's X and Y
-                     *   ~57 CPU cycles consumed by the trampoline body
-                     * Without these, cycle counting drifts (~57 cycles/dispatch)
-                     * causing VBlank timing divergence, and $27/$28 retain stale
-                     * values that corrupt downstream BIT/LDA reads. */
-                    fprintf(f, "nes_write(0x27, g_cpu.X); nes_write(0x28, g_cpu.Y); /* trampoline side effects */\n");
-                    fprintf(f, "maybe_trigger_vblank(57); /* trampoline body cycles */\n");
+                    /* Inline dispatch replaces the trampoline (stack pulls,
+                     * table lookup, JMP indirect) with a compile-time switch,
+                     * but the trampoline body's side effects stay visible to
+                     * game code: RAM stores, final register/flag state, and
+                     * consumed cycles.  Derive them by symbolically executing
+                     * the body — concrete per dispatch case — instead of
+                     * hardcoding any one game's pattern (SMB's JumpEngine
+                     * writes $04-$07; a previously hardcoded STX $27/STY $28,
+                     * correct only for Gumshoe, corrupted SMB's
+                     * Block_State[1]/Misc_State[0] at those addresses). */
+                    /* Bank for reading the trampoline BODY.  rom_read routes
+                     * $C000+ to the fixed bank by address, so this only
+                     * matters for a trampoline in the switchable window
+                     * reached from fixed-bank code: prefer the propagated
+                     * dispatch bank; on carts with a single switchable bank
+                     * candidate (e.g. NROM-256) that bank is always mapped. */
+                    int tramp_bank = bank;
+                    if (resolved_idsp < 0xC000 && bank == fixed_bank) {
+                        if (dispatch_bank >= 0)
+                            tramp_bank = dispatch_bank;
+                        else if (!rom_mapper_full_32k_switch(rom) && rom->prg_banks <= 2)
+                            tramp_bank = 0;
+                    }
+                    int tramp_ok;
+                    {
+                        TrampEffects tprobe;
+                        uint16_t tfail_pc = 0; uint8_t tfail_op = 0;
+                        tramp_ok = derive_trampoline_effects(rom, tramp_bank, resolved_idsp, pc, 0,
+                                                             &tprobe, &tfail_pc, &tfail_op);
+                        if (!tramp_ok)
+                            fprintf(stderr, "[CodeGen] inline_dispatch $%04X (JSR at $%04X): "
+                                    "cannot derive trampoline side effects "
+                                    "(op $%02X at $%04X) — emitting none\n",
+                                    idsp->addr, pc, tfail_op, tfail_pc);
+                    }
                     fprintf(f, "switch(g_cpu.A) {\n");
                     tpc = pc + 3;
                     for (int ei = 0; ei < entry_count; ei++) {
@@ -1039,6 +1395,13 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                         uint16_t dest = (uint16_t)lo | ((uint16_t)hi << 8);
                         EmitCallOpts o = { .tail_return = true };
                         fprintf(f, "  case %d: ", ei);
+                        if (tramp_ok) {
+                            TrampEffects tfx;
+                            uint16_t tfail_pc = 0; uint8_t tfail_op = 0;
+                            if (derive_trampoline_effects(rom, tramp_bank, resolved_idsp, pc, (uint8_t)ei,
+                                                          &tfx, &tfail_pc, &tfail_op))
+                                emit_trampoline_effects(f, &tfx, (uint8_t)ei);
+                        }
                         if (dest >= 0xC000) {
                             emit_call_target(f, rom, dest, fixed_bank, fixed_bank, o);
                         } else if (dest >= 0x8000) {
