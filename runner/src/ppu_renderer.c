@@ -333,9 +333,28 @@ void ppu_render_frame(uint32_t *framebuf) {
         return;
     }
 
+    /* Effective widescreen margins this frame: clamp the per-frame values
+     * to the configured framebuffer margins; -1 = follow configured.
+     * With margins configured 0 (default) both resolve to 0 and every
+     * widescreen branch below reduces exactly to the vanilla path. */
+    int ws_eff_l = g_ws_eff_left, ws_eff_r = g_ws_eff_right;
+    if (ws_eff_l < 0 || ws_eff_l > g_widescreen_left)  ws_eff_l = g_widescreen_left;
+    if (ws_eff_r < 0 || ws_eff_r > g_widescreen_right) ws_eff_r = g_widescreen_right;
+
     /* Universal background color */
     uint32_t bg = g_nes_palette[g_ppu_pal[0] & 0x3F];
-    for (int i = 0; i < g_render_width * 240; i++) framebuf[i] = bg;
+    if (g_widescreen_left || g_widescreen_right) {
+        /* Pillarbox: pixels outside the effective span render black. */
+        for (int i = 0; i < g_render_width * 240; i++) framebuf[i] = 0xFF000000u;
+        int span_x0 = g_widescreen_left - ws_eff_l;
+        int span_w  = 256 + ws_eff_l + ws_eff_r;
+        for (int sy = 0; sy < 240; sy++) {
+            uint32_t *row = framebuf + (size_t)sy * g_render_width + span_x0;
+            for (int i = 0; i < span_w; i++) row[i] = bg;
+        }
+    } else {
+        for (int i = 0; i < g_render_width * 240; i++) framebuf[i] = bg;
+    }
 
     /* Only render if BG rendering is enabled ($2001 bit 3) */
     if (!(g_ppumask & 0x08)) goto render_sprites;
@@ -518,7 +537,7 @@ void ppu_render_frame(uint32_t *framebuf) {
                 g_render_post_irq_phys_nt = nt_row; /* store nt_row; phys_nt computed per-pixel */
             }
 
-            for (int sx = -g_widescreen_left; sx < 256 + g_widescreen_right; sx++) {
+            for (int sx = -ws_eff_l; sx < 256 + ws_eff_r; sx++) {
                 int nt_x      = (origin_x + sx) & 0x1FF;  /* 9-bit wrap (512px nametable) */
                 int tile_x    = nt_x / 8;
                 int pixel_col = nt_x % 8;
@@ -688,7 +707,11 @@ render_sprites:
         uint8_t spr_y    = g_ppu_oam[s * 4 + 0];
         uint8_t spr_tile = g_ppu_oam[s * 4 + 1];
         uint8_t spr_attr = g_ppu_oam[s * 4 + 2];
-        uint8_t spr_x    = g_ppu_oam[s * 4 + 3];
+        /* Sidecar-enabled games render from the unwrapped 16-bit X (which
+         * equals the OAM byte for sprites on the vanilla screen); everyone
+         * else uses the vanilla 8-bit OAM X. */
+        int spr_x = g_ws_oam_sidecar ? (int)g_oam_x16[s]
+                                     : (int)g_ppu_oam[s * 4 + 3];
 
         if (spr_y >= 0xEF) continue; /* off-screen */
 
@@ -728,7 +751,9 @@ render_sprites:
                 /* flip_h mirrors which CHR bit we read; screen position is always (7-bit) */
                 int chr_bit = flip_h ? (7 - bit) : bit;
                 int px = spr_x + (7 - bit);
-                if (px < 0 || px >= 256) continue;
+                /* Clip to the effective viewport (vanilla [0,256) when the
+                 * margins are 0). */
+                if (px < -ws_eff_l || px >= 256 + ws_eff_r) continue;
                 int color_idx = ((lo >> chr_bit) & 1) | (((hi >> chr_bit) & 1) << 1);
                 if (color_idx == 0) continue; /* transparent */
                 /* PPUMASK bit 2: clip leftmost 8 sprite pixels */
@@ -741,7 +766,7 @@ render_sprites:
                  *   - No hit at x=255 (per NES spec).
                  *   - Obeys BG/sprite leftmost-8 clip (the px<8 gate above already
                  *     filters sprite side; BG clip is PPUMASK bit 1). */
-                if (s == 0 && px != 255 && (g_ppumask & 0x18) == 0x18) {
+                if (s == 0 && px >= 0 && px < 255 && (g_ppumask & 0x18) == 0x18) {
                     int bg_clipped = (px < 8 && !(g_ppumask & 0x02));
                     if (!bg_clipped && framebuf[py * g_render_width + fb_x] != bg)
                         g_ppustatus |= 0x40;

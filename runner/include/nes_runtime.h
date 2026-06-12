@@ -30,6 +30,15 @@ extern uint8_t      g_ppu_nt[0x1000];  /* Nametable RAM $2000-$2FFF */
 /* ---- Memory Interface ---- */
 uint8_t  nes_read(uint16_t addr);
 void     nes_write(uint16_t addr, uint8_t val);
+
+/* Hooked read emitted by the recompiler for game.toml [[ram_read_hook]]
+ * addresses (absolute and, with `indexed = true`, absolute-indexed reads).
+ * Game policy in extras.c dispatches on (pc, addr) and returns either the
+ * real value or a virtualized one; the default hook returns val unchanged. */
+uint8_t game_ram_read_hook(uint16_t pc, uint16_t addr, uint8_t val);
+static inline uint8_t nes_read_hooked(uint16_t pc, uint16_t addr) {
+    return game_ram_read_hook(pc, addr, nes_read(addr));
+}
 uint16_t nes_read16(uint16_t addr);       /* Read 16-bit little-endian */
 uint16_t nes_read16zp(uint8_t zp_addr);  /* Zero-page 16-bit (wraps at $FF) */
 
@@ -202,6 +211,49 @@ int            ppu_predict_spr0_hit_scanline(void);  /* implemented in ppu_rende
 extern int g_render_width;
 extern int g_widescreen_left;
 extern int g_widescreen_right;
+
+/* Per-frame effective margins for presentation gating (e.g. pillarbox on
+ * title/menu/demo screens).  g_widescreen_left/right define the fixed
+ * framebuffer geometry; the effective values bound what is actually drawn
+ * this frame.  Pixels between the effective and configured margins render
+ * black.  Games set these per frame (game_on_frame / game_post_nmi); the
+ * renderer clamps them to the configured margins.  -1 (default) = follow
+ * the configured margins, so games that never touch them are unaffected. */
+extern int g_ws_eff_left;
+extern int g_ws_eff_right;
+
+/* ---- Widescreen sprite-X sidecar (runner capability; inert by default) ----
+ *
+ * NES OAM X is a single byte, so a game's own 8-bit math wraps any sprite
+ * whose screen X leaves [0,255] — in a widened viewport such a sprite would
+ * teleport to the opposite edge.  The sidecar keeps a parallel signed 16-bit
+ * screen X per OAM slot that the renderer consumes instead of the raw byte.
+ *
+ * Population model: every store in generated code funnels through
+ * nes_write(), so writes to the shadow-OAM page are observed centrally.
+ * Game policy publishes a "current draw object" context — the true 16-bit
+ * screen X and the 8-bit relative X the game itself just computed (e.g. from
+ * a ram_read_hook inside its relative-position routine).  Each subsequent
+ * shadow-OAM X write re-derives the unwrapped X as
+ *     true_rel + (int8)(written_byte - rel8)
+ * which is exact for any per-sprite layout offset in [-128,127] and reduces
+ * to the written byte when the object is fully on the vanilla screen.
+ * Writes with no valid context (or implausible offsets) record the plain
+ * byte, i.e. vanilla placement.
+ *
+ * The shadow sidecar is copied to g_oam_x16[] at OAM DMA ($4014) so it
+ * stays paired with the OAM snapshot the renderer sees.  $2004 writes
+ * update g_oam_x16 directly with the plain byte.
+ *
+ * With g_ws_oam_sidecar == 0 (default) nothing is recorded and the renderer
+ * uses the vanilla 8-bit OAM X — behavior is byte-identical.  None of this
+ * state is part of the savestate snapshot; it repopulates at the next DMA. */
+extern int     g_ws_oam_sidecar;     /* master enable; games set in game_on_init() */
+extern int16_t g_oam_x16[64];        /* render-side sidecar, paired with g_ppu_oam */
+extern int16_t g_ws_shadow_x16[64];  /* shadow-OAM-side sidecar ($0200 page) */
+extern int16_t g_ws_obj_true_rel;    /* context: true 16-bit screen X of current object */
+extern uint8_t g_ws_obj_rel8;        /* context: the 8-bit rel X the game computed */
+extern uint8_t g_ws_obj_ctx_valid;   /* context valid flag (game policy sets/clears) */
 
 /* Frame counter incremented each VBlank */
 extern uint64_t g_frame_count;

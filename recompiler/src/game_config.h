@@ -99,11 +99,19 @@ typedef struct {
  * absolute addressing, wrap the value through game_ram_read_hook(pc, addr, val).
  * This lets game-specific extras.c adjust the returned value per-call-site.
  *
- * Usage in game.toml:  ram_read_hook <hex_addr>
- * Example (SMB):      ram_read_hook 071D
+ * With `indexed = true`, absolute-indexed reads (LDA $nnnn,X / $nnnn,Y)
+ * whose BASE address matches are hooked too; the hook receives the
+ * runtime-computed effective address, so policy can dispatch on it.
+ * Read-modify-write instructions (INC/DEC/shifts) are never hooked —
+ * virtualizing their read would corrupt the writeback.
+ *
+ * Usage in game.toml:  [[ram_read_hook]]
+ *                      addr = 0x071D
+ *                      indexed = true   # optional, default false
  */
 typedef struct {
     uint16_t addr;
+    int      indexed;
 } RamReadHook;
 
 /*

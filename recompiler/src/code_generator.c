@@ -143,6 +143,23 @@ static bool is_ram_read_hooked(const GameConfig *cfg, uint16_t addr) {
     return false;
 }
 
+/* Should this memory read route through game_ram_read_hook?
+ * AM_ABS matches the exact address; absolute-indexed modes match when the
+ * BASE address has a hook entry marked `indexed` (the hook receives the
+ * runtime-computed effective address via nes_read_hooked, so game policy
+ * dispatches on it).  Other addressing modes never match, and RMW
+ * instructions never call this — virtualizing their read would corrupt
+ * the writeback. */
+static bool read_is_hooked(const GameConfig *cfg, AddrMode am, uint16_t abs16) {
+    if (am == AM_ABS) return is_ram_read_hooked(cfg, abs16);
+    if (am == AM_ABSX || am == AM_ABSY) {
+        for (int i = 0; i < cfg->ram_read_hook_count; i++)
+            if (cfg->ram_read_hooks[i].addr == abs16 && cfg->ram_read_hooks[i].indexed)
+                return true;
+    }
+    return false;
+}
+
 /* Check if an address is a registered function entry point */
 static bool is_func_entry(const FunctionList *funcs, uint16_t addr) {
     for (int i = 0; i < funcs->count; i++) {
@@ -624,9 +641,9 @@ static void emit_load(FILE *f, char reg, AddrMode am, uint8_t op1, uint8_t op2,
                       uint16_t pc, uint16_t abs16, const GameConfig *cfg) {
     if (am == AM_IMM)
         fprintf(f, "g_cpu.%c = 0x%02X; FLAG_NZ(g_cpu.%c);\n", reg, op1, reg);
-    else if (am == AM_ABS && is_ram_read_hooked(cfg, abs16))
-        fprintf(f, "g_cpu.%c = game_ram_read_hook(0x%04X, 0x%04X, nes_read(0x%04X)); FLAG_NZ(g_cpu.%c);\n",
-                reg, pc, abs16, abs16, reg);
+    else if (read_is_hooked(cfg, am, abs16))
+        fprintf(f, "g_cpu.%c = nes_read_hooked(0x%04X, %s); FLAG_NZ(g_cpu.%c);\n",
+                reg, pc, operand_addr_expr(am, op1, op2), reg);
     else
         fprintf(f, "g_cpu.%c = nes_read(%s); FLAG_NZ(g_cpu.%c);\n",
                 reg, operand_addr_expr(am, op1, op2), reg);
@@ -650,18 +667,22 @@ static void emit_compare(FILE *f, char reg, AddrMode am, uint8_t op1, uint8_t op
     if (am == AM_IMM)
         fprintf(f, "{ int r=g_cpu.%c-0x%02X; g_cpu.C=(g_cpu.%c>=0x%02X)?1:0; FLAG_NZ(r&0xFF); }\n",
                 reg, op1, reg, op1);
-    else if (am == AM_ABS && is_ram_read_hooked(cfg, abs16))
-        fprintf(f, "{ uint8_t m=game_ram_read_hook(0x%04X, 0x%04X, nes_read(0x%04X)); int r=g_cpu.%c-m; g_cpu.C=(g_cpu.%c>=m)?1:0; FLAG_NZ(r&0xFF); }\n",
-                pc, abs16, abs16, reg, reg);
+    else if (read_is_hooked(cfg, am, abs16))
+        fprintf(f, "{ uint8_t m=nes_read_hooked(0x%04X, %s); int r=g_cpu.%c-m; g_cpu.C=(g_cpu.%c>=m)?1:0; FLAG_NZ(r&0xFF); }\n",
+                pc, operand_addr_expr(am, op1, op2), reg, reg);
     else
         fprintf(f, "{ uint8_t m=nes_read(%s); int r=g_cpu.%c-m; g_cpu.C=(g_cpu.%c>=m)?1:0; FLAG_NZ(r&0xFF); }\n",
                 operand_addr_expr(am, op1, op2), reg, reg);
 }
 
 /* AND/ORA/EOR: A op= immediate or memory. `op` is "&"/"|"/"^". */
-static void emit_logical(FILE *f, const char *op, AddrMode am, uint8_t op1, uint8_t op2) {
+static void emit_logical(FILE *f, const char *op, AddrMode am, uint8_t op1, uint8_t op2,
+                         uint16_t pc, uint16_t abs16, const GameConfig *cfg) {
     if (am == AM_IMM)
         fprintf(f, "g_cpu.A %s= 0x%02X; FLAG_NZ(g_cpu.A);\n", op, op1);
+    else if (read_is_hooked(cfg, am, abs16))
+        fprintf(f, "g_cpu.A %s= nes_read_hooked(0x%04X, %s); FLAG_NZ(g_cpu.A);\n",
+                op, pc, operand_addr_expr(am, op1, op2));
     else
         fprintf(f, "g_cpu.A %s= nes_read(%s); FLAG_NZ(g_cpu.A);\n",
                 op, operand_addr_expr(am, op1, op2));
@@ -762,28 +783,29 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
 
         /* ALU */
         case MN_ADC: {
-            const char *src = (e->addr_mode==AM_IMM)
-                ? "0x%02X" : "nes_read(%s)";
             if (e->addr_mode == AM_IMM)
                 fprintf(f, "{ uint16_t r = g_cpu.A + 0x%02X + g_cpu.C; FLAG_NZC_ADD(r,g_cpu.A,0x%02X); g_cpu.A=r&0xFF; }\n", op1, op1);
+            else if (read_is_hooked(cfg, e->addr_mode, abs16))
+                fprintf(f, "{ uint8_t m=nes_read_hooked(0x%04X, %s); uint16_t r=g_cpu.A+m+g_cpu.C; FLAG_NZC_ADD(r,g_cpu.A,m); g_cpu.A=r&0xFF; }\n",
+                        pc, operand_addr_expr(e->addr_mode, op1, op2));
             else
                 fprintf(f, "{ uint8_t m=nes_read(%s); uint16_t r=g_cpu.A+m+g_cpu.C; FLAG_NZC_ADD(r,g_cpu.A,m); g_cpu.A=r&0xFF; }\n",
                         operand_addr_expr(e->addr_mode, op1, op2));
-            (void)src;
             break;
         }
         case MN_SBC:
             if (e->addr_mode == AM_IMM)
                 fprintf(f, "{ uint8_t m=0x%02X; int16_t r=g_cpu.A-m-(1-g_cpu.C); FLAG_NZC_SUB(r,g_cpu.A,m); g_cpu.A=r&0xFF; }\n", op1);
-            else if (e->addr_mode == AM_ABS && is_ram_read_hooked(cfg, abs16))
-                fprintf(f, "{ uint8_t m=game_ram_read_hook(0x%04X, 0x%04X, nes_read(0x%04X)); int16_t r=g_cpu.A-m-(1-g_cpu.C); FLAG_NZC_SUB(r,g_cpu.A,m); g_cpu.A=r&0xFF; }\n", pc, abs16, abs16);
+            else if (read_is_hooked(cfg, e->addr_mode, abs16))
+                fprintf(f, "{ uint8_t m=nes_read_hooked(0x%04X, %s); int16_t r=g_cpu.A-m-(1-g_cpu.C); FLAG_NZC_SUB(r,g_cpu.A,m); g_cpu.A=r&0xFF; }\n",
+                        pc, operand_addr_expr(e->addr_mode, op1, op2));
             else
                 fprintf(f, "{ uint8_t m=nes_read(%s); int16_t r=g_cpu.A-m-(1-g_cpu.C); FLAG_NZC_SUB(r,g_cpu.A,m); g_cpu.A=r&0xFF; }\n",
                         operand_addr_expr(e->addr_mode, op1, op2));
             break;
-        case MN_AND: emit_logical(f, "&", e->addr_mode, op1, op2); break;
-        case MN_ORA: emit_logical(f, "|", e->addr_mode, op1, op2); break;
-        case MN_EOR: emit_logical(f, "^", e->addr_mode, op1, op2); break;
+        case MN_AND: emit_logical(f, "&", e->addr_mode, op1, op2, pc, abs16, cfg); break;
+        case MN_ORA: emit_logical(f, "|", e->addr_mode, op1, op2, pc, abs16, cfg); break;
+        case MN_EOR: emit_logical(f, "^", e->addr_mode, op1, op2, pc, abs16, cfg); break;
 
         /* Shifts */
         case MN_ASL:
@@ -830,8 +852,12 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
         case MN_CPX: emit_compare(f, 'X', e->addr_mode, op1, op2, pc, abs16, cfg); break;
         case MN_CPY: emit_compare(f, 'Y', e->addr_mode, op1, op2, pc, abs16, cfg); break;
         case MN_BIT:
-            fprintf(f, "{ uint8_t m=nes_read(%s); g_cpu.Z=(g_cpu.A&m)?0:1; g_cpu.N=(m>>7)&1; g_cpu.V=(m>>6)&1; }\n",
-                    operand_addr_expr(e->addr_mode, op1, op2));
+            if (read_is_hooked(cfg, e->addr_mode, abs16))
+                fprintf(f, "{ uint8_t m=nes_read_hooked(0x%04X, %s); g_cpu.Z=(g_cpu.A&m)?0:1; g_cpu.N=(m>>7)&1; g_cpu.V=(m>>6)&1; }\n",
+                        pc, operand_addr_expr(e->addr_mode, op1, op2));
+            else
+                fprintf(f, "{ uint8_t m=nes_read(%s); g_cpu.Z=(g_cpu.A&m)?0:1; g_cpu.N=(m>>7)&1; g_cpu.V=(m>>6)&1; }\n",
+                        operand_addr_expr(e->addr_mode, op1, op2));
             break;
 
         /* Branches — detect cross-function targets:

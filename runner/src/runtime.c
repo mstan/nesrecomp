@@ -607,17 +607,51 @@ uint8_t apu_dmc_read(uint16_t addr) {
     return 0xFF;
 }
 
+/* Widescreen sidecar: a shadow-OAM X byte was written while a draw-object
+ * context may be active.  Re-derive the unwrapped 16-bit screen X from the
+ * context; without a valid context (or with an implausible layout offset)
+ * record the plain byte = vanilla placement.  See nes_runtime.h. */
+static void ws_sidecar_track(uint16_t a, uint8_t val) {
+    int slot = (a - 0x200) >> 2;
+    int16_t wide = val;
+    if (g_ws_obj_ctx_valid) {
+        /* Layout offsets relative to the object's rel X.  SMB-class layouts
+         * span at most ~5 tiles; reject anything outside a generous window
+         * so unrelated writes (HUD/static sprites under a stale context)
+         * fall back to vanilla placement. */
+        int delta = (int8_t)(uint8_t)(val - g_ws_obj_rel8);
+        if (delta >= -24 && delta <= 56) {
+            int w = (int)g_ws_obj_true_rel + delta;
+            if (w >= -256 && w < 512) wide = (int16_t)w;
+        }
+    }
+    g_ws_shadow_x16[slot] = wide;
+}
+
 void nes_write(uint16_t addr, uint8_t val) {
     bus_tick();
 
     if (addr <= 0x1FFF) {
         uint16_t a = addr & 0x07FF;
+        if (g_ws_oam_sidecar && (a & 0x0700) == 0x0200 && (a & 3) == 3)
+            ws_sidecar_track(a, val);
         g_ram[a] = val; return;
     }
     if (addr >= 0x2000 && addr <= 0x3FFF) { ppu_write_reg(0x2000 + (addr & 7), val); return; }
     if (addr == 0x4014) {
         uint16_t src = (uint16_t)val << 8;
         for (int i = 0; i < 256; i++) g_ppu_oam[i] = nes_read(src + i);
+        if (g_ws_oam_sidecar) {
+            /* Keep the render-side sidecar paired with the OAM snapshot.
+             * DMA from the tracked shadow page adopts the shadow sidecar;
+             * any other source falls back to the plain X bytes. */
+            if (val < 0x20 && (src & 0x0700) == 0x0200) {
+                memcpy(g_oam_x16, g_ws_shadow_x16, sizeof(g_oam_x16));
+            } else {
+                for (int i = 0; i < 64; i++)
+                    g_oam_x16[i] = g_ppu_oam[i * 4 + 3];
+            }
+        }
         return;
     }
     if (addr == 0x4016) {
@@ -671,7 +705,12 @@ void ppu_write_reg(uint16_t reg, uint8_t val) {
             break;
         case 0x2001: g_ppumask = val; break;
         case 0x2003: g_oamaddr = val; break;
-        case 0x2004: g_ppu_oam[g_oamaddr++] = val; break;
+        case 0x2004:
+            /* Direct OAM writes carry no draw context: plain X in the sidecar. */
+            if (g_ws_oam_sidecar && (g_oamaddr & 3) == 3)
+                g_oam_x16[g_oamaddr >> 2] = val;
+            g_ppu_oam[g_oamaddr++] = val;
+            break;
         case 0x2005: {
             ScrollTraceEntry *se = &s_scroll_trace[s_scroll_trace_idx];
             se->frame = g_frame_count;

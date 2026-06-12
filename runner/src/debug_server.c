@@ -1200,13 +1200,14 @@ static void handle_read_oam(int id, const char *json)
             "{\"i\":%d,\"x\":%d,\"y\":%d,\"tile\":\"0x%02X\","
             "\"attr\":\"0x%02X\",\"palette\":%d,"
             "\"priority\":%d,\"flip_h\":%d,\"flip_v\":%d,"
-            "\"visible\":%d}",
+            "\"visible\":%d,\"x16\":%d}",
             i, x, y, tile, attr,
             attr & 0x03,             /* palette */
             (attr >> 5) & 1,         /* priority: 0=front, 1=behind bg */
             (attr >> 6) & 1,         /* horizontal flip */
             (attr >> 7) & 1,         /* vertical flip */
-            (y < 0xEF) ? 1 : 0);    /* visible if Y < 239 */
+            (y < 0xEF) ? 1 : 0,      /* visible if Y < 239 */
+            g_ws_oam_sidecar ? (int)g_oam_x16[i] : (int)x); /* widescreen sidecar X */
     }
 
     pos += snprintf(buf + pos, 32768 - pos, "]}");
@@ -1846,6 +1847,11 @@ void debug_server_record_frame(void)
     memcpy(r->ppu_nt,   g_ppu_nt,  0x1000);
     memcpy(r->ppu_pal,  g_ppu_pal, 0x20);
     memcpy(r->oam,      g_ppu_oam, 0x100);
+    if (g_ws_oam_sidecar) {
+        memcpy(r->oam_x16, g_oam_x16, sizeof(r->oam_x16));
+    } else {
+        for (int i = 0; i < 64; i++) r->oam_x16[i] = g_ppu_oam[i * 4 + 3];
+    }
 
     /* Game-specific data (filled by game hook) */
     memset(r->game_data, 0, sizeof(r->game_data));

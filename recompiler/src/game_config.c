@@ -170,7 +170,12 @@ static bool game_config_load_toml(GameConfig *cfg, const char *path) {
     toml_array_t *rrh = toml_array_in(root, "ram_read_hook");
     if (rrh) for (int i = 0; i < toml_array_nelem(rrh) && cfg->ram_read_hook_count < GAME_CFG_MAX_RAM_READ_HOOKS; i++) {
         toml_table_t *t = toml_table_at(rrh, i);
-        if (t) cfg->ram_read_hooks[cfg->ram_read_hook_count++].addr = toml_hex(t, "addr");
+        if (t) {
+            RamReadHook *h = &cfg->ram_read_hooks[cfg->ram_read_hook_count++];
+            h->addr = toml_hex(t, "addr");
+            toml_datum_t ix = toml_bool_in(t, "indexed");
+            h->indexed = (ix.ok && ix.u.b) ? 1 : 0;
+        }
     }
 
     /* [[extra_label]] */

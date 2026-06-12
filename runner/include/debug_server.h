@@ -70,6 +70,8 @@ typedef struct {
     uint8_t  ppu_nt[0x1000];        /* 4KB nametable RAM */
     uint8_t  ppu_pal[0x20];         /* 32-byte palette */
     uint8_t  oam[0x100];            /* 256-byte OAM (sprite RAM) */
+    int16_t  oam_x16[64];           /* widescreen sidecar X per OAM slot
+                                     * (== oam[i*4+3] when sidecar inactive) */
 
     /* Legacy note: ram_zp is now ram_full (first 256 bytes = zero page) */
 

@@ -55,6 +55,19 @@ int g_render_width    = 256;
 int g_widescreen_left = 0;
 int g_widescreen_right = 0;
 
+/* Per-frame effective margins; -1 = follow the configured margins. */
+int g_ws_eff_left  = -1;
+int g_ws_eff_right = -1;
+
+/* Widescreen sprite-X sidecar — inert until a game sets g_ws_oam_sidecar.
+ * See nes_runtime.h for the population model. */
+int     g_ws_oam_sidecar   = 0;
+int16_t g_oam_x16[64];
+int16_t g_ws_shadow_x16[64];
+int16_t g_ws_obj_true_rel  = 0;
+uint8_t g_ws_obj_rel8      = 0;
+uint8_t g_ws_obj_ctx_valid = 0;
+
 static uint32_t           s_framebuf[512 * 240];  /* sized for max 512px width */
 
 /* On-demand render for Zapper light detection.  Called when a detection
