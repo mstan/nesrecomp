@@ -212,9 +212,9 @@ static void write_defaults(const char *path) {
     fprintf(f, "[zapper]\n");
     fprintf(f, "# Mouse as the Zapper light gun (default on for Zapper games):\n");
     fprintf(f, "# left click = trigger, mouse position = aim.  Set false to disable.\n");
-    fprintf(f, "mouse = true\n");
+    fprintf(f, "mouse = %s\n", s_binds.zapper.mouse_enabled ? "true" : "false");
     fprintf(f, "# Show a crosshair at the aim point (and hide the OS cursor).\n");
-    fprintf(f, "crosshair = true\n\n");
+    fprintf(f, "crosshair = %s\n\n", s_binds.zapper.crosshair ? "true" : "false");
     fprintf(f, "# Gamepad bindings (SDL game-controller button names).\n");
     fprintf(f, "# Values may list multiple buttons separated by commas, e.g. \"a, b\".\n");
     fprintf(f, "# Valid names: a b x y back start guide leftshoulder rightshoulder\n");
