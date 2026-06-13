@@ -10,6 +10,7 @@
  * Pulse timers clock every 2 CPU cycles; triangle every 1 CPU cycle.
  */
 #include "apu.h"
+#include "apu_shadow.h"
 #include <string.h>
 #include <stdbool.h>
 
@@ -270,19 +271,31 @@ static uint8_t noise_out(const Noise *n) {
     return n->const_vol ? n->vol : n->env_vol;
 }
 
-/* ---- NES mixer (linear approximation) ---- */
-static int16_t mix_sample(void) {
-    float p1  = (float)pulse_out(&s_p1);
-    float p2  = (float)pulse_out(&s_p2);
-    float tri = (float)triangle_out(&s_tri);
-    float nse = (float)noise_out(&s_noise);
-    float dmc = (float)s_dmc.output;
+/* ---- NES mixer (linear approximation) ----
+ * This is the CANON, authoritative mixer. It also captures the per-channel
+ * levels it used into *lv (when non-NULL) so the verified-enhancement audio
+ * shadow (apu_shadow.c) can re-render the SAME state in float through the
+ * hardware's nonlinear DAC curve and diff itself against this stream. The
+ * canon int16 returned here is unchanged and remains the verify oracle. */
+static int16_t mix_sample(ApuChannelLevels *lv) {
+    uint8_t l_p1  = pulse_out(&s_p1);
+    uint8_t l_p2  = pulse_out(&s_p2);
+    uint8_t l_tri = triangle_out(&s_tri);
+    uint8_t l_nse = noise_out(&s_noise);
+    uint8_t l_dmc = s_dmc.output;
+    if (lv) {
+        lv->pulse1   = l_p1;
+        lv->pulse2   = l_p2;
+        lv->triangle = l_tri;
+        lv->noise    = l_nse;
+        lv->dmc      = l_dmc;
+    }
 
     /* Linear approximation coefficients from NESDev wiki */
-    float out = 0.00752f * (p1 + p2)
-              + 0.00851f * tri
-              + 0.00494f * nse
-              + 0.00335f * dmc;
+    float out = 0.00752f * ((float)l_p1 + (float)l_p2)
+              + 0.00851f * (float)l_tri
+              + 0.00494f * (float)l_nse
+              + 0.00335f * (float)l_dmc;
 
     /* Scale to int16 range with ~2x amplification for comfortable volume */
     out *= 2.0f * 32767.0f;
@@ -306,6 +319,9 @@ void apu_init(void) {
     s_dmc.silence   = true;
     s_fc_mode    = false;
     s_fc_irq_inh = false;
+
+    /* Arm the (default-OFF) verified-enhancement audio shadow. */
+    apu_shadow_init();
 }
 
 void apu_write(uint16_t addr, uint8_t val) {
@@ -499,6 +515,14 @@ void apu_generate(int16_t *buf, int n_samples) {
             }
         }
 
-        buf[i] = mix_sample();
+        /* Canon mix (authoritative). When the audio shadow is OFF (default),
+         * apu_shadow_sample returns this verbatim => byte-identical output. */
+        if (apu_shadow_enabled()) {
+            ApuChannelLevels lv;
+            int16_t canon = mix_sample(&lv);
+            buf[i] = apu_shadow_sample(canon, &lv);
+        } else {
+            buf[i] = mix_sample(NULL);
+        }
     }
 }

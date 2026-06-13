@@ -27,6 +27,7 @@
 #include "keybinds.h"
 #include "controller.h"
 #include "crc32.h"
+#include "color_lut.h"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
@@ -69,6 +70,9 @@ uint8_t g_ws_obj_rel8      = 0;
 uint8_t g_ws_obj_ctx_valid = 0;
 
 static uint32_t           s_framebuf[512 * 240];  /* sized for max 512px width */
+/* Present-time color-LUT scratch (palette swap applied to a COPY only when an
+ * alternate palette is opted in via NESRECOMP_PALETTE; default Raw = unused). */
+static uint32_t           s_present_buf[512 * 240];
 
 /* On-demand render for Zapper light detection.  Called when a detection
  * sequence changes PPUMASK (e.g. enabling sprites for the flash phase)
@@ -760,7 +764,14 @@ smoke_skip_input:
      * In turbo mode, only present every 16th frame to avoid vsync blocking
      * on every SDL_RenderPresent call (~6ms each on a 165Hz monitor). */
     if (!g_turbo || (g_frame_count & 15) == 0) {
-        SDL_UpdateTexture(s_texture, NULL, s_framebuf, g_render_width * 4);
+        /* Present-time palette swap (opt-in, default Raw = passthrough). Raw
+         * presents the raw framebuffer untouched => byte-identical to canon. */
+        const uint32_t *present = s_framebuf;
+        if (!color_lut_is_passthrough()) {
+            color_lut_apply(s_framebuf, s_present_buf, g_render_width, 240);
+            present = s_present_buf;
+        }
+        SDL_UpdateTexture(s_texture, NULL, present, g_render_width * 4);
         SDL_RenderClear(s_renderer);
         SDL_RenderCopy(s_renderer, s_texture, NULL, NULL);
         SDL_RenderPresent(s_renderer);
@@ -994,6 +1005,10 @@ void nesrecomp_runner_run(int argc, char *argv[]) {
     SDL_RenderSetLogicalSize(s_renderer, g_render_width, 240);
 
     memset(s_framebuf, 0, sizeof(s_framebuf));
+
+    /* Present-time palette LUT: default Raw (passthrough, byte-identical);
+     * opt in via NESRECOMP_PALETTE={raw,2c02,fbx}. */
+    color_lut_init_from_env();
 
     /* Hide OS cursor when the Zapper crosshair replaces it */
     if (g_zapper_enabled && keybinds_zapper_mouse() && keybinds_zapper_crosshair())
