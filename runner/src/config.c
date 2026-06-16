@@ -16,7 +16,8 @@
 /* Defaults: P1 keyboard, P2 gamepad; 3x window; nearest, integer-scaled. */
 NesConfig g_nes_config = {
     /*window_scale*/ 3, /*fullscreen*/ 0, /*integer_scale*/ 1, /*linear_filter*/ 0,
-    /*enable_audio*/ 1, /*volume*/ 100,
+    /*renderer*/ 0, /*widescreen*/ 0,
+    /*volume*/ 100,
     /*player_src*/ { 1, 2 }, /*deadzone*/ { 30, 30 },
     /*skip_launcher*/ 0,
 };
@@ -24,7 +25,8 @@ NesConfig g_nes_config = {
 void config_set_defaults(NesConfig *c) {
     NesConfig d = {
         3, 0, 1, 0,
-        1, 100,
+        0, 0,
+        100,
         { 1, 2 }, { 30, 30 },
         0,
     };
@@ -73,7 +75,8 @@ void config_load(const char *path) {
         else if (!strcmp(key, "Fullscreen"))    g_nes_config.fullscreen    = val ? 1 : 0;
         else if (!strcmp(key, "IntegerScale"))  g_nes_config.integer_scale = val ? 1 : 0;
         else if (!strcmp(key, "LinearFilter"))  g_nes_config.linear_filter = val ? 1 : 0;
-        else if (!strcmp(key, "EnableAudio"))   g_nes_config.enable_audio  = val ? 1 : 0;
+        else if (!strcmp(key, "Renderer"))      g_nes_config.renderer      = clampi(val, 0, 1);
+        else if (!strcmp(key, "Widescreen"))    g_nes_config.widescreen    = val ? 1 : 0;
         else if (!strcmp(key, "Volume"))        g_nes_config.volume        = clampi(val, 0, 100);
         else if (!strcmp(key, "Player1Source")) g_nes_config.player_src[0] = clampi(val, 0, 2);
         else if (!strcmp(key, "Player2Source")) g_nes_config.player_src[1] = clampi(val, 0, 2);
@@ -94,8 +97,9 @@ void config_save(const char *path) {
     fprintf(f, "Fullscreen = %d\n",    c->fullscreen);
     fprintf(f, "IntegerScale = %d\n",  c->integer_scale);
     fprintf(f, "LinearFilter = %d\n",  c->linear_filter);
+    fprintf(f, "Renderer = %d\n",      c->renderer);
+    fprintf(f, "Widescreen = %d\n",    c->widescreen);
     fprintf(f, "[Audio]\n");
-    fprintf(f, "EnableAudio = %d\n",   c->enable_audio);
     fprintf(f, "Volume = %d\n",        c->volume);
     fprintf(f, "[Input]\n");
     fprintf(f, "Player1Source = %d\n", c->player_src[0]);

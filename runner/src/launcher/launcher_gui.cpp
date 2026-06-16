@@ -27,6 +27,11 @@
 extern "C" {
 #include "crc32.h"
 #include "save_ram.h"
+// stb_image (read) implementation is already compiled by the runner (chr_codec.c);
+// we only need the decls to decode PNG cartridge art. C linkage to match it.
+unsigned char* stbi_load_from_memory(const unsigned char* buffer, int len,
+                                     int* x, int* y, int* channels_in_file, int desired);
+void stbi_image_free(void* retval_from_stbi_load);
 }
 
 #ifdef _WIN32
@@ -83,6 +88,89 @@ std::vector<uint8_t> read_file(const std::string& path) {
     return data;
 }
 
+// ----------------------------------------------------------------------------
+// Master game DB (gamedb.json): CRC32 -> canonical name + region. Lets the
+// launcher show the real title for a recognised ROM and fall back to the file
+// name for anything unknown (rom hacks, variants).
+// ----------------------------------------------------------------------------
+
+struct DbEntry { uint32_t crc; Rml::String name; Rml::String region; };
+std::vector<DbEntry> g_gamedb;
+
+// Extract the string value of "key":"..." searching forward from `pos`; advances
+// `pos` past it. Minimal scanner for our controlled gamedb.json (fields per record
+// appear in order crc/name/region). Returns "" when not found.
+std::string json_str_after(const std::string& s, size_t& pos, const char* key) {
+    std::string pat = std::string("\"") + key + "\"";
+    size_t k = s.find(pat, pos);
+    if (k == std::string::npos) return "";
+    size_t colon = s.find(':', k + pat.size());
+    if (colon == std::string::npos) return "";
+    size_t q1 = s.find('"', colon + 1);
+    if (q1 == std::string::npos) return "";
+    size_t q2 = s.find('"', q1 + 1);
+    if (q2 == std::string::npos) return "";
+    pos = q2 + 1;
+    return s.substr(q1 + 1, q2 - q1 - 1);
+}
+
+void load_gamedb(const fs::path& assets) {
+    g_gamedb.clear();
+    std::vector<uint8_t> raw = read_file((assets / "gamedb.json").string());
+    if (raw.empty()) return;
+    std::string text(reinterpret_cast<const char*>(raw.data()), raw.size());
+    size_t pos = 0;
+    for (;;) {
+        std::string crc = json_str_after(text, pos, "crc");
+        if (crc.empty()) break;
+        std::string name = json_str_after(text, pos, "name");
+        std::string region = json_str_after(text, pos, "region");
+        DbEntry e;
+        e.crc = (uint32_t)std::strtoul(crc.c_str(), nullptr, 16);
+        e.name = name.c_str();
+        e.region = region.c_str();
+        g_gamedb.push_back(e);
+    }
+}
+
+const DbEntry* db_lookup(uint32_t crc) {
+    for (const DbEntry& e : g_gamedb) if (e.crc == crc) return &e;
+    return nullptr;
+}
+
+// RenderInterface_GL3 only decodes uncompressed TGA; override LoadTexture to
+// decode PNG via stb_image so the dashboard can show cartridge art. RmlUi
+// textures are premultiplied-alpha RGBA. (Pattern from the PSX launcher.)
+class LauncherRenderInterface : public RenderInterface_GL3 {
+public:
+    Rml::TextureHandle LoadTexture(Rml::Vector2i& dims, const Rml::String& source) override {
+        Rml::FileInterface* fi = Rml::GetFileInterface();
+        Rml::FileHandle fh = fi ? fi->Open(source) : Rml::FileHandle(0);
+        if (!fh) return RenderInterface_GL3::LoadTexture(dims, source);
+        fi->Seek(fh, 0, SEEK_END);
+        const size_t sz = (size_t)fi->Tell(fh);
+        fi->Seek(fh, 0, SEEK_SET);
+        std::vector<unsigned char> buf(sz);
+        fi->Read(buf.data(), sz, fh);
+        fi->Close(fh);
+
+        int w = 0, h = 0, comp = 0;
+        unsigned char* px = stbi_load_from_memory(buf.data(), (int)sz, &w, &h, &comp, 4);
+        if (!px) return RenderInterface_GL3::LoadTexture(dims, source);  // maybe a TGA
+        const size_t n = (size_t)w * (size_t)h;
+        for (size_t i = 0; i < n; i++) {  // straight -> premultiplied alpha
+            const unsigned a = px[i * 4 + 3];
+            px[i * 4 + 0] = (unsigned char)(px[i * 4 + 0] * a / 255);
+            px[i * 4 + 1] = (unsigned char)(px[i * 4 + 1] * a / 255);
+            px[i * 4 + 2] = (unsigned char)(px[i * 4 + 2] * a / 255);
+        }
+        dims.x = w; dims.y = h;
+        Rml::TextureHandle th = GenerateTexture({px, n * 4}, dims);
+        stbi_image_free(px);
+        return th;
+    }
+};
+
 // Human board name for an iNES mapper number (common NES boards). Not exhaustive;
 // a game can override with GameInfo::mapper_board.
 const char* mapper_name(int m) {
@@ -136,6 +224,8 @@ struct Model {
     Rml::String game_name, game_region;
 
     bool rom_loaded = false;
+    bool has_cartridge = false;   // a cartridge.png is bundled beside launcher.rml
+    Rml::String rom_title;        // DB-matched game name, else the file name
     Rml::String rom_file, rom_size, rom_mapper, rom_prg, rom_chr, rom_crc;
     bool crc_known = false;     // game advertises an expected CRC (badge applies)
     bool crc_match = false;
@@ -150,24 +240,21 @@ struct Model {
 
     // SAVES
     bool uses_sram = false;
-    bool save_found = false;
     Rml::String save_file = "(none)", save_size = "0 KB";
 
     bool skip_launcher = false;
     bool show_skip_modal = false;
 
     // settings
-    Rml::String scale_label, fullscreen_label;
-    bool integer_scale = true, filter = false, audio_enabled = true;
+    Rml::String scale_label, renderer_label;
+    bool integer_scale = true, filter = false;
     int  volume = 100;
+    bool widescreen = false, widescreen_supported = false;
 
-    // controller config
+    // controller config (deadzone only; device is chosen on the dashboard)
     int cfg_player = 0;
-    Rml::String cfg_player_label = "1", cfg_src_label = "Keyboard";
+    Rml::String cfg_player_label = "1";
     int cfg_deadzone = 30;
-
-    // input test (live, per player)
-    Rml::String p1_test = "—", p2_test = "—";
 
     bool status_ready = false;
 };
@@ -203,27 +290,14 @@ InputSource value_to_src(const Rml::String& v) {
     return InputSource::None;
 }
 
-std::string src_label(InputSource s, int player, const std::vector<std::string>& pads) {
-    switch (s) {
-        case InputSource::None:     return "None";
-        case InputSource::Keyboard: return "Keyboard";
-        case InputSource::Gamepad:
-            if (player >= 0 && player < (int)pads.size() && !pads[player].empty())
-                return pads[player];
-            return player == 0 ? "Gamepad 1 (not connected)"
-                               : "Gamepad 2 (not connected)";
-    }
-    return "None";
-}
-
 void refresh_settings_labels(Model& m, const NesLauncherSettings& s) {
     char b[32];
     std::snprintf(b, sizeof(b), "%dx", s.window_scale < 1 ? 1 : s.window_scale);
     m.scale_label = b;
-    m.fullscreen_label = s.fullscreen ? "Borderless" : "Off";
+    m.renderer_label = s.renderer == 1 ? "Software" : "Accelerated";
+    m.widescreen = s.widescreen;
     m.integer_scale = s.integer_scale;
     m.filter = s.linear_filter;
-    m.audio_enabled = s.enable_audio;
     m.volume = s.volume;
     m.p1_enabled = s.player_src[0] != InputSource::None;
     m.p2_enabled = s.player_src[1] != InputSource::None;
@@ -260,6 +334,16 @@ void load_rom_info(Model& m, const GameInfo& g, const std::string& path) {
 
     char buf[64];
     m.rom_file = basename_of(path);
+    // Title: canonical name from the master DB (by CRC), else the file name (so a
+    // rom hack / unknown ROM still shows something sensible).
+    const DbEntry* dbe = db_lookup(crc);
+    if (dbe) {
+        m.rom_title = dbe->name;
+        if (!dbe->region.empty()) m.game_region = dbe->region;
+    } else {
+        m.rom_title = m.rom_file;
+        m.game_region = g.region ? g.region : "";
+    }
     m.rom_size = human_size((long)data.size());
     if (g.mapper_board && *g.mapper_board) {
         m.rom_mapper = g.mapper_board;
@@ -284,18 +368,12 @@ void load_rom_info(Model& m, const GameInfo& g, const std::string& path) {
 // same saves/<basename>.srm the runtime uses).
 void refresh_save_info(Model& m) {
     if (!m.uses_sram) {
-        m.save_found = false; m.save_file = "(none)"; m.save_size = "0 KB";
+        m.save_file = "(none)"; m.save_size = "0 KB";
         return;
     }
     const char* p = save_ram_path();
     m.save_file = (p && *p) ? basename_of(p) : "(none)";
-    if (save_ram_exists()) {
-        m.save_found = true;
-        m.save_size = human_size(save_ram_size());
-    } else {
-        m.save_found = false;
-        m.save_size = "0 KB";
-    }
+    m.save_size = save_ram_exists() ? human_size(save_ram_size()) : Rml::String("0 KB");
 }
 
 bool load_fonts(const fs::path& assets) {
@@ -312,44 +390,6 @@ bool load_fonts(const fs::path& assets) {
     Rml::LoadFontFace("C:/Windows/Fonts/seguisym.ttf", /*fallback_face=*/true);
 #endif
     return any;
-}
-
-// ---- Input Test: build a live "held buttons" string for one player ----
-// Indicative mapping (keyboard arrows + Z/X/Enter/RShift; standard SDL gamepad
-// face/dpad/start). Confirms input reaches the app; not the game's exact binds.
-Rml::String input_readout(InputSource src, int player,
-                          const Uint8* keys,
-                          const std::vector<SDL_GameController*>& pads) {
-    Rml::String out;
-    auto add = [&](const char* lbl) { if (!out.empty()) out += "  "; out += lbl; };
-
-    if (src == InputSource::Keyboard) {
-        if (keys[SDL_SCANCODE_UP])    add("Up");
-        if (keys[SDL_SCANCODE_DOWN])  add("Down");
-        if (keys[SDL_SCANCODE_LEFT])  add("Left");
-        if (keys[SDL_SCANCODE_RIGHT]) add("Right");
-        if (keys[SDL_SCANCODE_X])     add("A");
-        if (keys[SDL_SCANCODE_Z])     add("B");
-        if (keys[SDL_SCANCODE_RSHIFT])add("Select");
-        if (keys[SDL_SCANCODE_RETURN])add("Start");
-    } else if (src == InputSource::Gamepad &&
-               player >= 0 && player < (int)pads.size() && pads[player]) {
-        SDL_GameController* gc = pads[player];
-        auto B = [&](SDL_GameControllerButton b) {
-            return SDL_GameControllerGetButton(gc, b) != 0;
-        };
-        if (B(SDL_CONTROLLER_BUTTON_DPAD_UP))    add("Up");
-        if (B(SDL_CONTROLLER_BUTTON_DPAD_DOWN))  add("Down");
-        if (B(SDL_CONTROLLER_BUTTON_DPAD_LEFT))  add("Left");
-        if (B(SDL_CONTROLLER_BUTTON_DPAD_RIGHT)) add("Right");
-        if (B(SDL_CONTROLLER_BUTTON_A))          add("A");
-        if (B(SDL_CONTROLLER_BUTTON_B))          add("B");
-        if (B(SDL_CONTROLLER_BUTTON_BACK))       add("Select");
-        if (B(SDL_CONTROLLER_BUTTON_START))      add("Start");
-    } else {
-        return "(no device)";
-    }
-    return out.empty() ? Rml::String("—") : out;
 }
 
 } // namespace
@@ -373,7 +413,7 @@ Result run(SDL_Window* window, void* /*gl_context*/,
 
     SystemInterface_SDL system_interface;
     system_interface.SetWindow(window);
-    RenderInterface_GL3 render_interface;
+    LauncherRenderInterface render_interface;
 
     Rml::SetSystemInterface(&system_interface);
     Rml::SetRenderInterface(&render_interface);
@@ -386,10 +426,11 @@ Result run(SDL_Window* window, void* /*gl_context*/,
     const fs::path assets = assets_dir ? fs::path(assets_dir) : fs::current_path();
     if (!load_fonts(assets))
         std::fprintf(stderr, "launcher: warning — no font face loaded; text will not render\n");
+    load_gamedb(assets);
 
     int win_w = 0, win_h = 0;
     SDL_GL_GetDrawableSize(window, &win_w, &win_h);
-    if (win_w <= 0 || win_h <= 0) { win_w = 1180; win_h = 760; }
+    if (win_w <= 0 || win_h <= 0) { win_w = 1024; win_h = 768; }
     render_interface.SetViewport(win_w, win_h);
 
     Rml::Context* context = Rml::CreateContext("launcher", Rml::Vector2i(win_w, win_h));
@@ -405,6 +446,8 @@ Result run(SDL_Window* window, void* /*gl_context*/,
     m.game_name = game.name ? game.name : "NES Game";
     m.game_region = game.region ? game.region : "";
     m.uses_sram = game.uses_sram;
+    m.widescreen_supported = game.widescreen_supported;
+    m.has_cartridge = fs::exists(assets / "cartridge.png");
 
     SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER);
     m.pad_names = enumerate_pads();
@@ -451,6 +494,8 @@ Result run(SDL_Window* window, void* /*gl_context*/,
     c.Bind("game_name", &m.game_name);
     c.Bind("game_region", &m.game_region);
     c.Bind("rom_loaded", &m.rom_loaded);
+    c.Bind("has_cartridge", &m.has_cartridge);
+    c.Bind("rom_title", &m.rom_title);
     c.Bind("rom_file", &m.rom_file);
     c.Bind("rom_size", &m.rom_size);
     c.Bind("rom_mapper", &m.rom_mapper);
@@ -468,23 +513,19 @@ Result run(SDL_Window* window, void* /*gl_context*/,
     c.Bind("p1_enabled", &m.p1_enabled);
     c.Bind("p2_enabled", &m.p2_enabled);
     c.Bind("uses_sram", &m.uses_sram);
-    c.Bind("save_found", &m.save_found);
     c.Bind("save_file", &m.save_file);
     c.Bind("save_size", &m.save_size);
     c.Bind("skip_launcher", &m.skip_launcher);
     c.Bind("show_skip_modal", &m.show_skip_modal);
     c.Bind("scale_label", &m.scale_label);
-    c.Bind("fullscreen_label", &m.fullscreen_label);
+    c.Bind("renderer_label", &m.renderer_label);
+    c.Bind("widescreen", &m.widescreen);
+    c.Bind("widescreen_supported", &m.widescreen_supported);
     c.Bind("integer_scale", &m.integer_scale);
     c.Bind("filter", &m.filter);
-    c.Bind("audio_enabled", &m.audio_enabled);
     c.Bind("volume", &m.volume);
     c.Bind("cfg_player_label", &m.cfg_player_label);
-    c.Bind("cfg_src_label", &m.cfg_src_label);
     c.Bind("cfg_deadzone", &m.cfg_deadzone);
-    c.Bind("p1_test", &m.p1_test);
-    c.Bind("p2_test", &m.p2_test);
-    c.Bind("status_ready", &m.status_ready);
 
     Rml::DataModelHandle handle = c.GetModelHandle();
     Result result = Result::Quit;
@@ -498,13 +539,9 @@ Result run(SDL_Window* window, void* /*gl_context*/,
     c.BindEventCallback("show_settings", [&](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
         m.view = "settings"; dirty_all();
     });
-    c.BindEventCallback("show_input_test", [&](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
-        m.view = "input_test"; dirty_all();
-    });
     auto open_cfg = [&](int p) {
         m.cfg_player = p;
         m.cfg_player_label = p == 0 ? "1" : "2";
-        m.cfg_src_label = src_label(io.player_src[p], p, m.pad_names);
         m.cfg_deadzone = io.deadzone[p];
         m.view = "controller"; dirty_all();
     };
@@ -557,17 +594,17 @@ Result run(SDL_Window* window, void* /*gl_context*/,
     c.BindEventCallback("cycle_scale", [&](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
         io.window_scale = io.window_scale >= 6 ? 1 : io.window_scale + 1; refresh_settings_labels(m, io); dirty_all();
     });
-    c.BindEventCallback("cycle_fullscreen", [&](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
-        io.fullscreen = io.fullscreen ? 0 : 1; refresh_settings_labels(m, io); dirty_all();
+    c.BindEventCallback("cycle_renderer", [&](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
+        io.renderer = io.renderer ? 0 : 1; refresh_settings_labels(m, io); dirty_all();
     });
     c.BindEventCallback("toggle_integer_scale", [&](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
         io.integer_scale = !io.integer_scale; m.integer_scale = io.integer_scale; dirty_all();
     });
+    c.BindEventCallback("toggle_widescreen", [&](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
+        io.widescreen = !io.widescreen; m.widescreen = io.widescreen; dirty_all();
+    });
     c.BindEventCallback("toggle_filter", [&](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
         io.linear_filter = !io.linear_filter; m.filter = io.linear_filter; dirty_all();
-    });
-    c.BindEventCallback("toggle_audio", [&](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
-        io.enable_audio = !io.enable_audio; m.audio_enabled = io.enable_audio; dirty_all();
     });
     c.BindEventCallback("vol_up", [&](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
         io.volume = io.volume >= 100 ? 100 : io.volume + 5; m.volume = io.volume; dirty_all();
@@ -577,16 +614,6 @@ Result run(SDL_Window* window, void* /*gl_context*/,
     });
 
     // ---- controller config ----
-    c.BindEventCallback("cfg_cycle_src", [&](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
-        int p = m.cfg_player;
-        bool has_pad = p < (int)m.pad_names.size();
-        int v = (int)io.player_src[p];
-        do { v = (v + 1) % 3; }
-        while (v == (int)InputSource::Gamepad && !has_pad);
-        io.player_src[p] = (InputSource)v;
-        m.cfg_src_label = src_label(io.player_src[p], p, m.pad_names);
-        refresh_settings_labels(m, io); dirty_all();
-    });
     c.BindEventCallback("cfg_dz_up", [&](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
         int p = m.cfg_player; io.deadzone[p] = io.deadzone[p] >= 100 ? 100 : io.deadzone[p] + 5;
         m.cfg_deadzone = io.deadzone[p]; dirty_all();
@@ -706,15 +733,6 @@ Result run(SDL_Window* window, void* /*gl_context*/,
             }
         }
 
-        // Live input-test readout (only while that view is open).
-        if (m.view == "input_test") {
-            const Uint8* keys = SDL_GetKeyboardState(nullptr);
-            m.p1_test = input_readout(io.player_src[0], 0, keys, open_pads);
-            m.p2_test = input_readout(io.player_src[1], 1, keys, open_pads);
-            handle.DirtyVariable("p1_test");
-            handle.DirtyVariable("p2_test");
-        }
-
         context->Update();
 
         render_interface.Clear();
@@ -762,7 +780,7 @@ extern "C" int nes_launcher_run_window(const char* window_title,
 
     SDL_Window* win = SDL_CreateWindow(
         window_title ? window_title : "NES Launcher",
-        SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1180, 760,
+        SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1024, 768,  // 4:3
         SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
     if (!win) {
         std::fprintf(stderr, "launcher: window creation failed: %s\n", SDL_GetError());
@@ -782,7 +800,8 @@ extern "C" int nes_launcher_run_window(const char* window_title,
     s.fullscreen    = io->fullscreen;
     s.integer_scale = io->integer_scale != 0;
     s.linear_filter = io->linear_filter != 0;
-    s.enable_audio  = io->enable_audio != 0;
+    s.renderer      = io->renderer;
+    s.widescreen    = io->widescreen != 0;
     s.volume        = io->volume;
     s.player_src[0] = (InputSource)io->player_src[0];
     s.player_src[1] = (InputSource)io->player_src[1];
@@ -798,6 +817,7 @@ extern "C" int nes_launcher_run_window(const char* window_title,
     g.mapper_board     = game->mapper_board;
     g.uses_sram        = game->uses_sram != 0;
     g.save_basename    = game->save_basename;
+    g.widescreen_supported = game->widescreen_supported != 0;
 
     Result r = run(win, ctx, s, g, assets_dir, initial_rom,
                    out_rom_path, out_rom_path_len);
@@ -806,7 +826,8 @@ extern "C" int nes_launcher_run_window(const char* window_title,
     io->fullscreen    = s.fullscreen;
     io->integer_scale = s.integer_scale;
     io->linear_filter = s.linear_filter;
-    io->enable_audio  = s.enable_audio;
+    io->renderer      = s.renderer;
+    io->widescreen    = s.widescreen;
     io->volume        = s.volume;
     io->player_src[0] = (int)s.player_src[0];
     io->player_src[1] = (int)s.player_src[1];

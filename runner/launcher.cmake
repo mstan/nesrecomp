@@ -43,11 +43,21 @@ function(nesrecomp_add_launcher TARGET)
         RMLUI_NO_THIRDPARTY_CONTAINERS
     )
 
-    # Stage the launcher assets (launcher.rml + fonts) next to the exe so the GUI
-    # can load them at runtime.
+    # Stage the launcher assets (launcher.rml + fonts + the default cartridge) next
+    # to the exe so the GUI can load them at runtime.
     add_custom_command(TARGET ${TARGET} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
             "${NESRECOMP_LAUNCHER_ROOT}/src/launcher/assets"
             "$<TARGET_FILE_DIR:${TARGET}>/launcher"
         COMMENT "Staging launcher assets -> launcher/")
+
+    # Optional per-game cartridge art: drop a cartridge.png in the game repo root to
+    # override the generic default. Copied after the shared assets so it wins.
+    if(EXISTS "${CMAKE_SOURCE_DIR}/cartridge.png")
+        add_custom_command(TARGET ${TARGET} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${CMAKE_SOURCE_DIR}/cartridge.png"
+                "$<TARGET_FILE_DIR:${TARGET}>/launcher/cartridge.png"
+            COMMENT "Staging per-game cartridge.png override")
+    endif()
 endfunction()

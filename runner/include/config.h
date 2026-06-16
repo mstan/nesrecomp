@@ -13,9 +13,10 @@ typedef struct {
     int fullscreen;       /* 0 windowed, 1 borderless-desktop */
     int integer_scale;    /* snap to whole-pixel multiples; default 1 */
     int linear_filter;    /* bilinear (1) vs nearest (0); default 0 */
+    int renderer;         /* game output: 0 accelerated, 1 software; default 0 */
+    int widescreen;       /* experimental 16:9 (per-game; SMB); default 0 */
 
-    /* Audio */
-    int enable_audio;     /* default 1 */
+    /* Audio (always on) */
     int volume;           /* 0..100; default 100 */
 
     /* Input (2 players): 0 none, 1 keyboard, 2 gamepad */

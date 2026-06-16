@@ -41,9 +41,10 @@ struct NesLauncherSettings {
     int  fullscreen    = 0;       // 0 windowed, 1 borderless-desktop
     bool integer_scale = true;    // snap to whole-pixel multiples
     bool linear_filter = false;   // bilinear vs nearest
+    int  renderer      = 0;       // game output: 0 accelerated, 1 software
+    bool widescreen    = false;   // experimental 16:9 (per-game)
 
     // --- Audio ---
-    bool enable_audio  = true;
     int  volume        = 100;     // 0..100 (game maps to its own scale)
 
     // --- Controllers (2 players) ---
@@ -76,6 +77,10 @@ struct GameInfo {
     // save_ram backend uses, so the launcher and runtime agree on one file.
     bool        uses_sram        = false;
     const char* save_basename    = nullptr;  // e.g. "zelda"
+
+    // Whether this game has an experimental widescreen path (gates the Settings
+    // → Widescreen toggle). Set per-game (e.g. SMB); default hidden.
+    bool        widescreen_supported = false;
 };
 
 // Run the launcher loop to completion. `gl_context` is an SDL_GLContext (void*)

@@ -21,7 +21,8 @@ typedef struct NesLauncherCSettings {
     int  fullscreen;        // 0 windowed, 1 borderless-desktop
     int  integer_scale;     // bool
     int  linear_filter;     // bool
-    int  enable_audio;      // bool
+    int  renderer;          // game output: 0 accelerated, 1 software
+    int  widescreen;        // experimental 16:9 (only meaningful if supported)
     int  volume;            // 0..100
     int  player_src[2];     // 0 none, 1 keyboard, 2 gamepad
     int  deadzone[2];       // 0..100
@@ -36,6 +37,7 @@ typedef struct NesLauncherCGameInfo {
     const char* mapper_board;   // optional "NROM-256" override; NULL => derive
     int         uses_sram;      // show SAVES panel
     const char* save_basename;  // saves/<save_basename>.srm
+    int         widescreen_supported;  // show the experimental Widescreen toggle
 } NesLauncherCGameInfo;
 
 // Returns: 0 = LAUNCH (boot out_rom_path with the edited *io),

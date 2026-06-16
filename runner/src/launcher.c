@@ -281,7 +281,8 @@ int main(int argc, char *argv[]) {
             ls.fullscreen    = g_nes_config.fullscreen;
             ls.integer_scale = g_nes_config.integer_scale;
             ls.linear_filter = g_nes_config.linear_filter;
-            ls.enable_audio  = g_nes_config.enable_audio;
+            ls.renderer      = g_nes_config.renderer;
+            ls.widescreen    = g_nes_config.widescreen;
             ls.volume        = g_nes_config.volume;
             ls.player_src[0] = g_nes_config.player_src[0];
             ls.player_src[1] = g_nes_config.player_src[1];
@@ -298,6 +299,11 @@ int main(int argc, char *argv[]) {
             gi.mapper_board     = NULL;   /* launcher derives from the iNES mapper */
             gi.uses_sram        = 0;      /* battery bit auto-detected from the ROM */
             gi.save_basename    = game_get_name();
+#ifdef NESRECOMP_GAME_WIDESCREEN
+            gi.widescreen_supported = 1;  /* per-game opt-in (e.g. SMB) */
+#else
+            gi.widescreen_supported = 0;
+#endif
 
             char win_title[96];
             snprintf(win_title, sizeof(win_title), "%s - NES Launcher",
@@ -310,7 +316,8 @@ int main(int argc, char *argv[]) {
                 g_nes_config.fullscreen    = ls.fullscreen;
                 g_nes_config.integer_scale = ls.integer_scale;
                 g_nes_config.linear_filter = ls.linear_filter;
-                g_nes_config.enable_audio  = ls.enable_audio;
+                g_nes_config.renderer      = ls.renderer;
+                g_nes_config.widescreen    = ls.widescreen;
                 g_nes_config.volume        = ls.volume;
                 g_nes_config.player_src[0] = ls.player_src[0];
                 g_nes_config.player_src[1] = ls.player_src[1];

@@ -656,7 +656,7 @@ smoke_skip_input:
 
     /* Generate one frame of audio after NMI (APU registers now up-to-date).
      * Skip in turbo mode — queued audio would pile up faster than it drains. */
-    if (s_audio_dev && g_nes_config.enable_audio && !g_turbo && !s_smoke_frames) {
+    if (s_audio_dev && !g_turbo && !s_smoke_frames) {
         /* Don't over-buffer: skip if more than 6 frames already queued */
         if (SDL_GetQueuedAudioSize(s_audio_dev) < AUDIO_SAMPLES_PER_FRAME * sizeof(int16_t) * 6) {
             apu_generate(s_audio_frame, AUDIO_SAMPLES_PER_FRAME);
@@ -1004,8 +1004,9 @@ void nesrecomp_runner_run(int argc, char *argv[]) {
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY,
                 g_nes_config.linear_filter ? "linear" : "nearest");
 
-    s_renderer = SDL_CreateRenderer(s_window, -1,
-        SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+    Uint32 render_flags = SDL_RENDERER_PRESENTVSYNC |
+        (g_nes_config.renderer == 1 ? SDL_RENDERER_SOFTWARE : SDL_RENDERER_ACCELERATED);
+    s_renderer = SDL_CreateRenderer(s_window, -1, render_flags);
     if (!s_renderer) {
         fprintf(stderr, "SDL_CreateRenderer: %s\n", SDL_GetError());
         exit(1);

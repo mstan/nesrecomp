@@ -10,6 +10,8 @@ body { font-family: LatoLatin; color: #e6e9ef; background-color: #0c0c0e; font-s
 /* ---- title bar ---- */
 .titlebar { display: flex; flex-direction: row; align-items: center; margin-bottom: 14dp;
 	border-bottom: 2dp #c62828; padding-bottom: 12dp; }
+.brand-mark { width: 30dp; height: 22dp; margin-right: 12dp; flex: 0 0 30dp;
+	background-color: #c62828; border: 2dp #8a1414; border-radius: 3dp; }
 .brand-name { font-size: 20dp; font-weight: bold; color: #ffffff; }
 .brand-sep { color: #3a3a3e; margin: 0dp 10dp; }
 .brand-sub { color: #8b8b92; font-size: 15dp; flex: 1 1 auto; }
@@ -20,10 +22,18 @@ body { font-family: LatoLatin; color: #e6e9ef; background-color: #0c0c0e; font-s
 .eyebrow { display: block; color: #c62828; font-size: 12dp; font-weight: bold; margin-bottom: 12dp; }
 
 .cols { display: flex; flex-direction: row; align-items: stretch; }
-.col-left { flex: 1 1 auto; margin-right: 14dp; display: block; }
-.col-right { flex: 0 0 420dp; display: block; }
+.col-half { flex: 1 1 0; display: block; }
+.col-half.first { margin-right: 14dp; }
 
 /* ---- ROM panel ---- */
+.rom-head { display: flex; flex-direction: row; align-items: flex-start; }
+.cart { width: 168dp; height: 186dp; flex: 0 0 168dp; margin-right: 20dp; }
+.rom-info { flex: 1 1 auto; display: block; }
+/* player controller art + controls */
+.pad-row { display: flex; flex-direction: row; align-items: center; }
+.pad { width: 150dp; height: 71dp; flex: 0 0 150dp; margin-right: 14dp; }
+.pad-ctl { flex: 1 1 auto; display: block; }
+.device-lbl { display: block; color: #8b8b92; font-size: 11dp; margin-bottom: 5dp; }
 .game-title { display: block; font-size: 26dp; font-weight: bold; color: #ffffff; }
 .game-region { display: block; color: #9aa0aa; font-size: 16dp; margin-bottom: 10dp; }
 .rom-loaded { display: block; color: #3fb950; font-size: 14dp; margin-bottom: 10dp; }
@@ -69,6 +79,7 @@ button:hover { background-color: #26262c; border-color: #c62828; }
 /* ---- settings rows ---- */
 .set-row { display: flex; flex-direction: row; align-items: center; height: 36dp; margin-bottom: 6dp; }
 .set-lbl { width: 220dp; flex: 0 0 220dp; color: #adb0b7; }
+.set-lbl .tag { background-color: #4a3a16; color: #f0b429; border-radius: 4dp; padding: 1dp 6dp; font-size: 10dp; font-weight: bold; margin-left: 8dp; }
 .toggle { width: 150dp; text-align: center; }
 .value { color: #ffffff; font-weight: bold; }
 .switch { width: 44dp; height: 24dp; border-radius: 12dp; background-color: #2e2e34; display: block;
@@ -77,11 +88,6 @@ button:hover { background-color: #26262c; border-color: #c62828; }
 .knob { display: block; width: 18dp; height: 18dp; border-radius: 9dp; background-color: #e6e9ef; margin: 3dp 0dp 0dp 3dp; }
 .switch.on .knob { margin-left: 23dp; }
 
-/* ---- input test ---- */
-.test-row { display: flex; flex-direction: row; align-items: center; margin-bottom: 12dp; }
-.test-lbl { width: 110dp; flex: 0 0 110dp; color: #c62828; font-weight: bold; }
-.test-val { flex: 1 1 auto; color: #ffffff; font-size: 18dp; font-weight: bold;
-	background-color: #17171b; border: 1dp #2e2e34; border-radius: 7dp; padding: 8dp 12dp; }
 
 /* ---- footer ---- */
 .footer { display: flex; flex-direction: row; align-items: center; margin-top: 4dp;
@@ -120,6 +126,7 @@ button:focus { border-color: #e23b3b; background-color: #26262c; }
 <div id="frame">
 
 	<div class="titlebar">
+		<div class="brand-mark"></div>
 		<span class="brand-name">{{game_name}}</span>
 		<span class="brand-sep">|</span>
 		<span class="brand-sub">NES Launcher</span>
@@ -127,66 +134,87 @@ button:focus { border-color: #e23b3b; background-color: #26262c; }
 
 	<!-- ================= DASHBOARD ================= -->
 	<div data-if="view == 'dashboard'">
-	<div class="cols">
 
-		<!-- LEFT: LOADED ROM -->
-		<div class="col-left">
-			<div class="panel">
-				<div class="eyebrow">LOADED ROM</div>
-				<span class="game-title">{{rom_file}}</span>
-				<span class="game-region">{{game_region}}</span>
-				<span class="rom-loaded" data-if="rom_loaded">&#10003; ROM loaded</span>
-				<span class="rom-loaded bad" data-if="rom_loaded == false">No ROM loaded</span>
-				<div class="kv"><span class="k">Mapper</span><span class="v">{{rom_mapper}}</span></div>
-				<div class="kv"><span class="k">PRG ROM</span><span class="v">{{rom_prg}}</span></div>
-				<div class="kv"><span class="k">CHR ROM</span><span class="v">{{rom_chr}}</span></div>
-				<div class="kv"><span class="k">CRC32</span><span class="v">{{rom_crc}}<span class="badge" data-if="crc_match">VERIFIED</span><span class="badge bad" data-if="crc_known &amp;&amp; crc_match == false">MISMATCH</span></span></div>
-				<div class="btn-row"><button data-event-click="change_rom">Change ROM</button></div>
-			</div>
-		</div>
-
-		<!-- RIGHT: CONTROLLERS / SAVES -->
-		<div class="col-right">
-			<div class="panel">
-				<div class="eyebrow">CONTROLLERS</div>
-				<div class="ctrl-row">
-					<div class="ctrl-mid">
-						<span class="plabel">PLAYER 1</span>
-						<select class="ddsel" id="p1src"></select>
-						<div class="ctrl-status"><span class="dot" data-class-off="p1_enabled == false"></span><span class="txt">{{p1_status}}</span></div>
+		<!-- LOADED ROM (full width) -->
+		<div class="panel">
+			<div class="eyebrow">LOADED ROM</div>
+			<div class="rom-head">
+				<img class="cart" src="cartridge.png" data-if="has_cartridge"/>
+				<div class="rom-info">
+					<span class="game-title">{{rom_title}}</span>
+					<span class="game-region">{{game_region}}</span>
+					<span class="rom-loaded" data-if="rom_loaded">&#10003; ROM loaded &#8212; ready to launch</span>
+					<span class="rom-loaded bad" data-if="rom_loaded == false">No ROM loaded</span>
+					<div class="cols">
+						<div class="col-half first">
+							<div class="kv"><span class="k">File</span><span class="v">{{rom_file}}</span></div>
+							<div class="kv"><span class="k">Mapper</span><span class="v">{{rom_mapper}}</span></div>
+							<div class="kv"><span class="k">PRG ROM</span><span class="v">{{rom_prg}}</span></div>
+						</div>
+						<div class="col-half">
+							<div class="kv"><span class="k">CHR ROM</span><span class="v">{{rom_chr}}</span></div>
+							<div class="kv"><span class="k">CRC32</span><span class="v">{{rom_crc}}<span class="badge" data-if="crc_match">VERIFIED</span><span class="badge bad" data-if="crc_known &amp;&amp; crc_match == false">MISMATCH</span></span></div>
+						</div>
 					</div>
-					<button data-event-click="config_p1">Configure</button>
-				</div>
-				<div class="ctrl-row">
-					<div class="ctrl-mid">
-						<span class="plabel">PLAYER 2</span>
-						<select class="ddsel" id="p2src"></select>
-						<div class="ctrl-status"><span class="dot" data-class-off="p2_enabled == false"></span><span class="txt">{{p2_status}}</span></div>
-					</div>
-					<button data-event-click="config_p2">Configure</button>
-				</div>
-			</div>
-
-			<div class="panel">
-				<div class="eyebrow">SAVE RAM (SRAM)</div>
-				<div data-if="uses_sram">
-					<span class="name">SRAM Save</span>
-					<div class="kv"><span class="k">File</span><span class="v">{{save_file}}</span></div>
-					<div class="kv"><span class="k">Size</span><span class="v">{{save_size}}</span></div>
-					<div class="ctrl-status"><span class="found" data-if="save_found">&#10003; Found</span><span class="found no" data-if="save_found == false">None yet</span></div>
-					<div class="btn-row">
-						<button data-event-click="save_import">Import Save</button>
-						<button class="btn-danger" data-event-click="save_clear">Clear Save</button>
-					</div>
-				</div>
-				<div data-if="uses_sram == false">
-					<span class="name">No SRAM</span>
-					<span class="help">This game does not use SRAM. Save options are hidden.</span>
+					<div class="btn-row"><button data-event-click="change_rom">Change ROM</button></div>
 				</div>
 			</div>
 		</div>
 
-	</div>
+		<!-- PLAYER 1 / PLAYER 2 side by side -->
+		<div class="cols">
+			<div class="col-half first">
+				<div class="panel">
+					<div class="eyebrow">PLAYER 1</div>
+					<div class="pad-row">
+						<img class="pad" src="controller.png"/>
+						<div class="pad-ctl">
+							<span class="device-lbl">DEVICE</span>
+							<select class="ddsel" id="p1src"></select>
+							<div class="btn-row"><button data-event-click="config_p1">Configure</button></div>
+						</div>
+					</div>
+					<div class="ctrl-status"><span class="dot" data-class-off="p1_enabled == false"></span><span class="txt">{{p1_status}}</span></div>
+				</div>
+			</div>
+			<div class="col-half">
+				<div class="panel">
+					<div class="eyebrow">PLAYER 2</div>
+					<div class="pad-row">
+						<img class="pad" src="controller.png"/>
+						<div class="pad-ctl">
+							<span class="device-lbl">DEVICE</span>
+							<select class="ddsel" id="p2src"></select>
+							<div class="btn-row"><button data-event-click="config_p2">Configure</button></div>
+						</div>
+					</div>
+					<div class="ctrl-status"><span class="dot" data-class-off="p2_enabled == false"></span><span class="txt">{{p2_status}}</span></div>
+				</div>
+			</div>
+		</div>
+
+		<!-- SAVE RAM (full width) -->
+		<div class="panel">
+			<div class="eyebrow">SAVE RAM (SRAM)</div>
+			<div data-if="uses_sram">
+				<div class="cols">
+					<div class="col-half first">
+						<div class="kv"><span class="k">File</span><span class="v">{{save_file}}</span></div>
+						<div class="kv"><span class="k">Size</span><span class="v">{{save_size}}</span></div>
+					</div>
+					<div class="col-half">
+						<div class="btn-row">
+							<button data-event-click="save_import">Import Save</button>
+							<button class="btn-danger" data-event-click="save_clear">Clear Save</button>
+						</div>
+					</div>
+				</div>
+			</div>
+			<div data-if="uses_sram == false">
+				<span class="help">This game does not use SRAM. Save options are hidden.</span>
+			</div>
+		</div>
+
 	</div>
 
 	<!-- ================= SETTINGS ================= -->
@@ -194,13 +222,17 @@ button:focus { border-color: #e23b3b; background-color: #26262c; }
 		<div class="panel">
 			<div class="eyebrow">DISPLAY</div>
 			<div class="set-row"><span class="set-lbl">Window scale</span><button class="toggle" data-event-click="cycle_scale"><span class="value">{{scale_label}}</span></button></div>
-			<div class="set-row"><span class="set-lbl">Fullscreen</span><button class="toggle" data-event-click="cycle_fullscreen"><span class="value">{{fullscreen_label}}</span></button></div>
+			<div class="set-row"><span class="set-lbl">Renderer</span><button class="toggle" data-event-click="cycle_renderer"><span class="value">{{renderer_label}}</span></button></div>
 			<div class="set-row"><span class="set-lbl">Integer scaling</span><span class="switch" data-class-on="integer_scale" data-event-click="toggle_integer_scale"><span class="knob"></span></span></div>
 			<div class="set-row"><span class="set-lbl">Linear filtering</span><span class="switch" data-class-on="filter" data-event-click="toggle_filter"><span class="knob"></span></span></div>
 		</div>
+		<div class="panel" data-if="widescreen_supported">
+			<div class="eyebrow">WIDESCREEN</div>
+			<div class="set-row"><span class="set-lbl">16:9 widescreen<span class="tag">EXPERIMENTAL</span></span><span class="switch" data-class-on="widescreen" data-event-click="toggle_widescreen"><span class="knob"></span></span></div>
+			<span class="help">Renders wider than the NES's native 256px. Experimental &#8212; some games show artifacts at the screen edges.</span>
+		</div>
 		<div class="panel">
 			<div class="eyebrow">AUDIO</div>
-			<div class="set-row"><span class="set-lbl">Audio enabled</span><span class="switch" data-class-on="audio_enabled" data-event-click="toggle_audio"><span class="knob"></span></span></div>
 			<div class="set-row"><span class="set-lbl">Volume</span><button data-event-click="vol_down">&#8722;</button><span class="value" style="margin: 0dp 12dp;">{{volume}}%</span><button data-event-click="vol_up">+</button></div>
 		</div>
 	</div>
@@ -209,19 +241,8 @@ button:focus { border-color: #e23b3b; background-color: #26262c; }
 	<div data-if="view == 'controller'">
 		<div class="panel">
 			<div class="eyebrow">CONTROLLER &#8212; PLAYER {{cfg_player_label}}</div>
-			<div class="set-row"><span class="set-lbl">Input source</span><button class="toggle" data-event-click="cfg_cycle_src"><span class="value">{{cfg_src_label}}</span></button></div>
 			<div class="set-row"><span class="set-lbl">Stick / d-pad deadzone</span><button data-event-click="cfg_dz_down">&#8722;</button><span class="value" style="margin: 0dp 12dp;">{{cfg_deadzone}}%</span><button data-event-click="cfg_dz_up">+</button></div>
-			<span class="help">Keyboard rebinding writes keybinds.ini. Deadzone applies to SDL gamepad sticks mapped to the d-pad.</span>
-		</div>
-	</div>
-
-	<!-- ================= INPUT TEST ================= -->
-	<div data-if="view == 'input_test'">
-		<div class="panel">
-			<div class="eyebrow">INPUT TEST</div>
-			<div class="test-row"><span class="test-lbl">PLAYER 1</span><span class="test-val">{{p1_test}}</span></div>
-			<div class="test-row"><span class="test-lbl">PLAYER 2</span><span class="test-val">{{p2_test}}</span></div>
-			<span class="help">Press buttons on the assigned device. Keyboard: arrows + Z (B) / X (A) / RShift (Select) / Enter (Start). Gamepad uses the standard SDL face/d-pad mapping.</span>
+			<span class="help">Device is selected on the dashboard. Deadzone applies to SDL gamepad sticks mapped to the d-pad; keyboard rebinding writes keybinds.ini.</span>
 		</div>
 	</div>
 
@@ -236,10 +257,7 @@ button:focus { border-color: #e23b3b; background-color: #26262c; }
 		<div class="foot-mid">
 			<button class="backbtn" data-if="view != 'dashboard'" data-event-click="show_dashboard">&#8249; Back</button>
 			<button data-if="view == 'dashboard'" data-event-click="show_settings">Settings</button>
-			<button data-if="view == 'dashboard'" data-event-click="show_input_test">Input Test</button>
 		</div>
-		<span class="status-ok" data-if="status_ready">&#10003; ROM Ready</span>
-		<span class="status-no" data-if="status_ready == false">No ROM</span>
 		<button id="play" data-event-click="play">&#9654; PLAY</button>
 	</div>
 
