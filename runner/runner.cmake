@@ -18,6 +18,8 @@ set(NESRECOMP_RUNNER_SOURCES
     ${NESRECOMP_RUNNER_ROOT}/src/logger.c
     ${NESRECOMP_RUNNER_ROOT}/src/input_script.c
     ${NESRECOMP_RUNNER_ROOT}/src/savestate.c
+    ${NESRECOMP_RUNNER_ROOT}/src/save_ram.c
+    ${NESRECOMP_RUNNER_ROOT}/src/config.c
     ${NESRECOMP_RUNNER_ROOT}/src/launcher.c
     ${NESRECOMP_RUNNER_ROOT}/src/crc32.c
     ${NESRECOMP_RUNNER_ROOT}/src/coroutine.c

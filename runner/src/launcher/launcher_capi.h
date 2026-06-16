@@ -1,0 +1,55 @@
+// launcher_capi.h — C-callable entry point for the RmlUi launcher.
+//
+// launcher.c (C) can't speak the C++ nes_launcher::run() API directly, so this
+// shim wraps it: it creates its own SDL/GL window, runs the launcher, maps a
+// plain-C settings struct in/out, and tears the window down — leaving launcher.c
+// to seed/read the struct and pick up the chosen ROM path.
+
+#ifndef NESRECOMP_LAUNCHER_CAPI_H
+#define NESRECOMP_LAUNCHER_CAPI_H
+
+#include <stddef.h>
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// Mirrors nes_launcher::NesLauncherSettings as plain C (bools as int).
+typedef struct NesLauncherCSettings {
+    int  window_scale;      // 1..N
+    int  fullscreen;        // 0 windowed, 1 borderless-desktop
+    int  integer_scale;     // bool
+    int  linear_filter;     // bool
+    int  enable_audio;      // bool
+    int  volume;            // 0..100
+    int  player_src[2];     // 0 none, 1 keyboard, 2 gamepad
+    int  deadzone[2];       // 0..100
+    int  skip_launcher;     // bool: boot straight to the game next time
+} NesLauncherCSettings;
+
+typedef struct NesLauncherCGameInfo {
+    const char* name;
+    const char* region;
+    uint32_t    expected_crc;
+    int         has_expected_crc;
+    const char* mapper_board;   // optional "NROM-256" override; NULL => derive
+    int         uses_sram;      // show SAVES panel
+    const char* save_basename;  // saves/<save_basename>.srm
+} NesLauncherCGameInfo;
+
+// Returns: 0 = LAUNCH (boot out_rom_path with the edited *io),
+//          1 = QUIT (caller should exit),
+//          2 = UNAVAILABLE (assets/GL failed — caller boots as if skipped).
+int nes_launcher_run_window(const char* window_title,
+                            NesLauncherCSettings* io,
+                            const NesLauncherCGameInfo* game,
+                            const char* assets_dir,
+                            const char* initial_rom,
+                            char* out_rom_path, size_t out_rom_path_len);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif // NESRECOMP_LAUNCHER_CAPI_H

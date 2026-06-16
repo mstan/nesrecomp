@@ -28,6 +28,8 @@
 #include "controller.h"
 #include "crc32.h"
 #include "color_lut.h"
+#include "save_ram.h"
+#include "config.h"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
@@ -535,8 +537,11 @@ void nes_vblank_callback(void) {
     /* Update controllers from keyboard state via configurable keybinds */
     {
         const uint8_t *keys = SDL_GetKeyboardState(NULL);
-        /* Keyboard and gamepad are OR'd so either (or both) drives the NES. */
-        uint8_t btn = keybinds_read_player(keys, 1) | controller_read_player(1);
+        /* Per-player input source from the launcher: 1 keyboard, 2 gamepad, 0
+         * none. Each player reads only its selected device. */
+        int s1 = g_nes_config.player_src[0], s2 = g_nes_config.player_src[1];
+        uint8_t btn = (uint8_t)((s1 == 1 ? keybinds_read_player(keys, 1) : 0) |
+                                (s1 == 2 ? controller_read_player(1)      : 0));
 
         /* Recording: capture combined input before script override */
         record_tick(g_frame_count, btn, g_turbo);
@@ -550,7 +555,8 @@ void nes_vblank_callback(void) {
         if (tcp_btn >= 0) btn = (uint8_t)tcp_btn;
 
         g_controller1_buttons = btn;
-        g_controller2_buttons = keybinds_read_player(keys, 2) | controller_read_player(2);
+        g_controller2_buttons = (uint8_t)((s2 == 1 ? keybinds_read_player(keys, 2) : 0) |
+                                          (s2 == 2 ? controller_read_player(2)      : 0));
     }
 
 smoke_skip_input:
@@ -584,6 +590,7 @@ smoke_skip_input:
      * rendering off, which would loop forever. */
     log_on_change("NMI_enable", (g_ppuctrl >> 7) & 1);
     game_on_frame(g_frame_count);
+    save_ram_tick();   /* dirty-checked SRAM flush (~1 Hz); no-op when inactive */
 
 
     /* Frame boundary: always call game_run_nmi so per-frame work (oracle
@@ -649,10 +656,17 @@ smoke_skip_input:
 
     /* Generate one frame of audio after NMI (APU registers now up-to-date).
      * Skip in turbo mode — queued audio would pile up faster than it drains. */
-    if (s_audio_dev && !g_turbo && !s_smoke_frames) {
+    if (s_audio_dev && g_nes_config.enable_audio && !g_turbo && !s_smoke_frames) {
         /* Don't over-buffer: skip if more than 6 frames already queued */
         if (SDL_GetQueuedAudioSize(s_audio_dev) < AUDIO_SAMPLES_PER_FRAME * sizeof(int16_t) * 6) {
             apu_generate(s_audio_frame, AUDIO_SAMPLES_PER_FRAME);
+            /* Apply the launcher volume (0..100) as a linear scale. */
+            int vol = g_nes_config.volume;
+            if (vol < 100) {
+                if (vol < 0) vol = 0;
+                for (int i = 0; i < AUDIO_SAMPLES_PER_FRAME; i++)
+                    s_audio_frame[i] = (int16_t)((int)s_audio_frame[i] * vol / 100);
+            }
             SDL_QueueAudio(s_audio_dev, s_audio_frame, AUDIO_SAMPLES_PER_FRAME * sizeof(int16_t));
         }
     }
@@ -805,6 +819,7 @@ void runner_present_framebuf(const uint32_t *argb_buf) {
 static uint8_t *s_prg_data = NULL;
 static int      s_prg_banks = 0;
 static uint8_t *s_chr_rom_full = NULL; /* Full CHR ROM for bank switching */
+static int      s_rom_has_battery = 0; /* iNES header[6] bit1 — battery-backed SRAM */
 
 static bool load_rom(const char *path) {
     FILE *f = fopen(path, "rb");
@@ -823,6 +838,7 @@ static bool load_rom(const char *path) {
     int mapper    = ((header[6] >> 4) & 0x0F) | (header[7] & 0xF0);
     int mirroring = (header[6] & 0x01);  /* 0=horizontal, 1=vertical */
     int has_trainer = (header[6] & 0x04) ? 1 : 0;
+    s_rom_has_battery = (header[6] & 0x02) ? 1 : 0;
 
     printf("[Runner] ROM: %d PRG banks x 16KB, %d CHR banks x 8KB, Mapper %d\n",
            s_prg_banks, chr_banks, mapper);
@@ -914,6 +930,11 @@ void nesrecomp_runner_run(int argc, char *argv[]) {
     keybinds_init(argv[0]);
     game_on_init();
 
+    /* SRAM persistence (saves/<title>.srm <-> g_sram). Auto-enabled for battery
+     * games via the iNES bit; synthetic-SRAM games opt in from game_on_init()
+     * (which ran just above) via save_ram_request_enable(). NONE backend = no-op. */
+    save_ram_init(game_get_name(), s_rom_has_battery);
+
     if (g_zapper_enabled) {
         runtime_set_zapper_render_callback(zapper_on_demand_render);
         if (keybinds_zapper_mouse())
@@ -966,11 +987,12 @@ void nesrecomp_runner_run(int argc, char *argv[]) {
     {
         char window_title[64];
         snprintf(window_title, sizeof(window_title), "NESRecomp - %s", game_get_name());
-        Uint32 win_flags = SDL_WINDOW_SHOWN;
-        win_flags |= SDL_WINDOW_RESIZABLE;
+        Uint32 win_flags = SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE;
+        if (g_nes_config.fullscreen) win_flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
+        int scale = g_nes_config.window_scale < 1 ? 1 : g_nes_config.window_scale;
         s_window = SDL_CreateWindow(window_title,
             SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-            g_render_width * 3, 720,
+            g_render_width * scale, 240 * scale,
             win_flags);
     }
     if (!s_window) {
@@ -978,8 +1000,9 @@ void nesrecomp_runner_run(int argc, char *argv[]) {
         exit(1);
     }
 
-    /* Crisp nearest-neighbor scaling (no blur) for the pixel art. */
-    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");
+    /* Pixel-art scaling: nearest (crisp) by default, linear if the user opted in. */
+    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY,
+                g_nes_config.linear_filter ? "linear" : "nearest");
 
     s_renderer = SDL_CreateRenderer(s_window, -1,
         SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
@@ -992,7 +1015,7 @@ void nesrecomp_runner_run(int argc, char *argv[]) {
      * scaling to whole-pixel multiples so every NES pixel stays the same size.
      * Applies to both windowed-resize and fullscreen. */
     SDL_RenderSetLogicalSize(s_renderer, g_render_width, 240);
-    SDL_RenderSetIntegerScale(s_renderer, SDL_TRUE);
+    SDL_RenderSetIntegerScale(s_renderer, g_nes_config.integer_scale ? SDL_TRUE : SDL_FALSE);
 
     s_texture = SDL_CreateTexture(s_renderer,
         SDL_PIXELFORMAT_ARGB8888,

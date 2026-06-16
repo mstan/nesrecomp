@@ -25,6 +25,10 @@
 #include "game_extras.h"
 #include "crc32.h"
 #include "nes_runtime.h"
+#include "config.h"
+#ifdef NESRECOMP_LAUNCHER
+#include "launcher/launcher_capi.h"
+#endif
 
 /* Declared in main_runner.c */
 void nesrecomp_runner_run(int argc, char **argv);
@@ -253,6 +257,75 @@ int main(int argc, char *argv[]) {
     static char rom_path[512];
     uint32_t expected_crc = game_get_expected_crc32();
 
+    /* Settings live in config.ini next to the exe (created with defaults if
+     * absent). The GUI launcher edits them; the runner honors them. */
+    config_load(config_path());
+
+    int gui_resolved = 0;
+#ifdef NESRECOMP_LAUNCHER
+    {
+        int have_positional = (argc >= 2 && argv[1][0] != '-');
+        int force_launcher  = (argc >= 2 && strcmp(argv[1], "--launcher") == 0);
+        int no_gui_env      = getenv("NESRECOMP_NO_LAUNCHER") != NULL;
+        /* Show the GUI unless a ROM was given on the command line, the user asked
+         * to skip it (and didn't pass --launcher to force it), or it's disabled. */
+        int want_gui = !have_positional && !no_gui_env &&
+                       (!g_nes_config.skip_launcher || force_launcher);
+        if (want_gui) {
+            char init_rom[512]; init_rom[0] = '\0';
+            rom_cfg_read(init_rom, sizeof(init_rom));
+
+            NesLauncherCSettings ls;
+            memset(&ls, 0, sizeof(ls));
+            ls.window_scale  = g_nes_config.window_scale;
+            ls.fullscreen    = g_nes_config.fullscreen;
+            ls.integer_scale = g_nes_config.integer_scale;
+            ls.linear_filter = g_nes_config.linear_filter;
+            ls.enable_audio  = g_nes_config.enable_audio;
+            ls.volume        = g_nes_config.volume;
+            ls.player_src[0] = g_nes_config.player_src[0];
+            ls.player_src[1] = g_nes_config.player_src[1];
+            ls.deadzone[0]   = g_nes_config.deadzone[0];
+            ls.deadzone[1]   = g_nes_config.deadzone[1];
+            ls.skip_launcher = g_nes_config.skip_launcher;
+
+            NesLauncherCGameInfo gi;
+            memset(&gi, 0, sizeof(gi));
+            gi.name             = game_get_name();
+            gi.region           = "NTSC-U (USA)";
+            gi.expected_crc     = expected_crc;
+            gi.has_expected_crc = expected_crc != 0;
+            gi.mapper_board     = NULL;   /* launcher derives from the iNES mapper */
+            gi.uses_sram        = 0;      /* battery bit auto-detected from the ROM */
+            gi.save_basename    = game_get_name();
+
+            char win_title[96];
+            snprintf(win_title, sizeof(win_title), "%s - NES Launcher",
+                     gi.name ? gi.name : "NES");
+            int act = nes_launcher_run_window(win_title, &ls, &gi, "launcher",
+                                              init_rom, rom_path, sizeof(rom_path));
+            if (act == 1) return 0;   /* user closed the launcher */
+            if (act == 0) {
+                g_nes_config.window_scale  = ls.window_scale;
+                g_nes_config.fullscreen    = ls.fullscreen;
+                g_nes_config.integer_scale = ls.integer_scale;
+                g_nes_config.linear_filter = ls.linear_filter;
+                g_nes_config.enable_audio  = ls.enable_audio;
+                g_nes_config.volume        = ls.volume;
+                g_nes_config.player_src[0] = ls.player_src[0];
+                g_nes_config.player_src[1] = ls.player_src[1];
+                g_nes_config.deadzone[0]   = ls.deadzone[0];
+                g_nes_config.deadzone[1]   = ls.deadzone[1];
+                g_nes_config.skip_launcher = ls.skip_launcher;
+                config_save(config_path());
+                if (rom_path[0]) { rom_cfg_write(rom_path); gui_resolved = 1; }
+            }
+            /* act == 2 (unavailable) -> fall through to the console resolver */
+        }
+    }
+#endif
+
+    if (!gui_resolved)
     if (argc >= 2 && argv[1][0] != '-') {
         /* Backwards-compatible: ROM path given on command line */
         strncpy(rom_path, argv[1], sizeof(rom_path) - 1);
