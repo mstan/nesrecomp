@@ -81,6 +81,13 @@ struct GameInfo {
     // Whether this game has an experimental widescreen path (gates the Settings
     // → Widescreen toggle). Set per-game (e.g. SMB); default hidden.
     bool        widescreen_supported = false;
+
+    // Optional game-specific "password / mantra" save (e.g. Faxanadu). When
+    // password_save_path is set, the SAVES panel shows the password text
+    // (read-only + edit/confirm) rather than the binary SRAM file. The file is a
+    // single line of text. Independent of uses_sram.
+    const char* password_save_path  = nullptr;
+    const char* password_save_label = nullptr;  // e.g. "Password"
 };
 
 // Run the launcher loop to completion. `gl_context` is an SDL_GLContext (void*)

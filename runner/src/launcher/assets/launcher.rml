@@ -119,6 +119,16 @@ button:focus { border-color: #e23b3b; background-color: #26262c; }
 .modal-btns button { margin-left: 10dp; }
 .modal-confirm { background-color: #c62828; border-color: #e23b3b; color: #ffffff; font-weight: bold; }
 .modal-confirm:hover { background-color: #e23b3b; }
+
+/* password / mantra save — no monospace face is loaded (only Lato + Segoe), so a
+   font-family override here would render the bound text as nothing; inherit the
+   default face and use letter-spacing for legibility instead. */
+.pwval { color: #e8e8ea; letter-spacing: 1dp; }
+.pwinput { width: 260dp; background-color: #0e0e10; border: 1dp #2e2e34; border-radius: 6dp;
+	padding: 6dp 8dp; color: #ffffff; font-size: 14dp; letter-spacing: 1dp; }
+.pwinput:focus { border-color: #e23b3b; }
+.modal-save { background-color: #2e7d32; border-color: #43a047; color: #ffffff; font-weight: bold; }
+.modal-save:hover { background-color: #43a047; }
 </style>
 </head>
 
@@ -193,9 +203,12 @@ button:focus { border-color: #e23b3b; background-color: #26262c; }
 			</div>
 		</div>
 
-		<!-- SAVE RAM (full width) -->
+		<!-- SAVE (full width) -->
 		<div class="panel">
-			<div class="eyebrow">SAVE RAM (SRAM)</div>
+			<div class="eyebrow" data-if="has_password_save == false">SAVE RAM (SRAM)</div>
+			<div class="eyebrow" data-if="has_password_save">SAVE &#8212; {{password_label}}</div>
+
+			<!-- battery-backed SRAM games -->
 			<div data-if="uses_sram">
 				<div class="cols">
 					<div class="col-half first">
@@ -210,8 +223,36 @@ button:focus { border-color: #e23b3b; background-color: #26262c; }
 					</div>
 				</div>
 			</div>
+
 			<div data-if="uses_sram == false">
-				<span class="help">This game does not use SRAM. Save options are hidden.</span>
+				<!-- password / mantra save (e.g. Faxanadu) -->
+				<div data-if="has_password_save">
+					<div class="cols">
+						<div class="col-half first">
+							<div class="kv" data-if="password_editing == false">
+								<span class="k">{{password_label}}</span>
+								<span class="v pwval">{{password_value}}</span>
+							</div>
+							<input type="text" class="pwinput" data-if="password_editing"
+							       data-value="password_input" maxlength="24"/>
+						</div>
+						<div class="col-half">
+							<div class="btn-row" data-if="password_editing == false">
+								<button data-event-click="password_edit">&#9998; Edit</button>
+							</div>
+							<div class="btn-row" data-if="password_editing">
+								<button class="modal-save" data-event-click="password_request_save">Save&#8230;</button>
+								<button data-event-click="password_edit_cancel">Cancel</button>
+							</div>
+						</div>
+					</div>
+					<span class="help">This game saves with a {{password_label}} (auto-filled when you choose Continue). Edit to restore an earlier {{password_label}} or paste your own &#8212; changes must be confirmed before they take effect.</span>
+				</div>
+
+				<!-- neither battery SRAM nor a password save -->
+				<div data-if="has_password_save == false">
+					<span class="help">This game does not use SRAM. Save options are hidden.</span>
+				</div>
 			</div>
 		</div>
 
@@ -269,6 +310,20 @@ button:focus { border-color: #e23b3b; background-color: #26262c; }
 			<div class="modal-btns">
 				<button data-event-click="skip_modal_cancel">Cancel</button>
 				<button class="modal-confirm" data-event-click="skip_modal_confirm">Skip on Boot</button>
+			</div>
+		</div>
+	</div>
+
+	<!-- ================= PASSWORD-SAVE CONFIRM MODAL ================= -->
+	<div class="modal-backdrop" data-if="show_password_confirm">
+		<div class="modal-box">
+			<span class="modal-title">Update {{password_label}}?</span>
+			<span class="modal-text">Replace the saved {{password_label}} with:</span>
+			<span class="modal-text pwval">&#8220;{{password_input}}&#8221;</span>
+			<span class="modal-text">It will be auto-filled the next time you choose Continue. Make sure it&#8217;s correct &#8212; an invalid {{password_label}} won&#8217;t load.</span>
+			<div class="modal-btns">
+				<button data-event-click="password_confirm_cancel">Cancel</button>
+				<button class="modal-save" data-event-click="password_confirm_ok">Update {{password_label}}</button>
 			</div>
 		</div>
 	</div>

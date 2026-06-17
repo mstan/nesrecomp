@@ -38,6 +38,15 @@ typedef struct NesLauncherCGameInfo {
     int         uses_sram;      // show SAVES panel
     const char* save_basename;  // saves/<save_basename>.srm
     int         widescreen_supported;  // show the experimental Widescreen toggle
+
+    // Optional game-specific "password / mantra" save (e.g. Faxanadu, which saves
+    // via a password rather than battery SRAM). When password_save_path is non-NULL
+    // the SAVES panel shows the password text (read-only, editable behind an edit
+    // icon + a confirm step) instead of the binary SRAM file UI. The file is a
+    // single line of text; the launcher reads it to display and rewrites it on
+    // confirm. Independent of uses_sram.
+    const char* password_save_path;   // abs path to the 1-line password file
+    const char* password_save_label;  // panel label, e.g. "Password" / "Mantra"
 } NesLauncherCGameInfo;
 
 // Returns: 0 = LAUNCH (boot out_rom_path with the edited *io),

@@ -304,6 +304,20 @@ int main(int argc, char *argv[]) {
 #else
             gi.widescreen_supported = 0;
 #endif
+#ifdef NESRECOMP_GAME_PASSWORD_SAVE
+            /* Per-game password/mantra save (e.g. Faxanadu): the SAVES panel shows
+             * the password text instead of binary SRAM. The file lives next to the
+             * exe (same one the runtime auto-prefill reads/writes). */
+            static char s_pw_save_path[600];
+            snprintf(s_pw_save_path, sizeof(s_pw_save_path), "%s%s",
+                     g_exe_dir, NESRECOMP_GAME_PASSWORD_SAVE);
+            gi.password_save_path  = s_pw_save_path;
+#  ifdef NESRECOMP_GAME_PASSWORD_SAVE_LABEL
+            gi.password_save_label = NESRECOMP_GAME_PASSWORD_SAVE_LABEL;
+#  else
+            gi.password_save_label = "Password";
+#  endif
+#endif
 
             char win_title[96];
             snprintf(win_title, sizeof(win_title), "%s - NES Launcher",

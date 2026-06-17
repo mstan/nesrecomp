@@ -242,6 +242,19 @@ struct Model {
     bool uses_sram = false;
     Rml::String save_file = "(none)", save_size = "0 KB";
 
+    // Game-specific "password / mantra" save (e.g. Faxanadu). Shown instead of the
+    // binary SRAM UI when the game provides a password_save_path. Read-only display
+    // (password_value); the edit icon flips password_editing on and binds an input
+    // to password_input; pressing Save raises show_password_confirm, and confirming
+    // writes the file. password_path is the file the launcher reads/rewrites.
+    bool has_password_save = false;
+    Rml::String password_label = "Password";
+    Rml::String password_value = "(none)";   // current saved password (read-only)
+    bool password_editing = false;
+    Rml::String password_input;              // edit buffer (two-way bound to <input>)
+    bool show_password_confirm = false;
+    std::string password_path;               // file backing the password (not bound)
+
     bool skip_launcher = false;
     bool show_skip_modal = false;
 
@@ -376,6 +389,36 @@ void refresh_save_info(Model& m) {
     m.save_size = save_ram_exists() ? human_size(save_ram_size()) : Rml::String("0 KB");
 }
 
+// Read the first line of a single-line text save, trimming CR/LF and surrounding
+// whitespace. Returns "" if the file is missing/empty.
+std::string read_password_file(const std::string& path) {
+    if (path.empty()) return "";
+    std::vector<uint8_t> d = read_file(path);
+    std::string s;
+    for (uint8_t c : d) { if (c == '\n' || c == '\r') break; s.push_back((char)c); }
+    size_t a = s.find_first_not_of(" \t");
+    size_t b = s.find_last_not_of(" \t");
+    return (a == std::string::npos) ? std::string() : s.substr(a, b - a + 1);
+}
+
+// Rewrite the single-line text save (value + trailing newline, matching the
+// runtime's mantra_save_write format). Returns false if the file can't be opened.
+bool write_password_file(const std::string& path, const std::string& value) {
+    if (path.empty()) return false;
+    FILE* f = std::fopen(path.c_str(), "w");
+    if (!f) return false;
+    std::fprintf(f, "%s\n", value.c_str());
+    std::fclose(f);
+    return true;
+}
+
+// Load the current password into the model (read-only display value).
+void refresh_password_info(Model& m) {
+    if (!m.has_password_save) return;
+    std::string v = read_password_file(m.password_path);
+    m.password_value = v.empty() ? Rml::String("(none)") : Rml::String(v.c_str());
+}
+
 bool load_fonts(const fs::path& assets) {
     bool any = false;
     const char* faces[] = { "fonts/LatoLatin-Regular.ttf", "fonts/LatoLatin-Bold.ttf" };
@@ -449,6 +492,15 @@ Result run(SDL_Window* window, void* /*gl_context*/,
     m.widescreen_supported = game.widescreen_supported;
     m.has_cartridge = fs::exists(assets / "cartridge.png");
 
+    // Game-specific password/mantra save (e.g. Faxanadu). When the game supplies a
+    // path, the SAVES panel shows the password text instead of the binary SRAM UI.
+    m.has_password_save = (game.password_save_path && *game.password_save_path);
+    if (m.has_password_save) {
+        m.password_path = game.password_save_path;
+        if (game.password_save_label && *game.password_save_label)
+            m.password_label = game.password_save_label;
+    }
+
     SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER);
     m.pad_names = enumerate_pads();
     std::vector<SDL_GameController*> open_pads;
@@ -475,6 +527,7 @@ Result run(SDL_Window* window, void* /*gl_context*/,
     std::string rom_path = initial_rom ? initial_rom : "";
     load_rom_info(m, game, rom_path);
     refresh_save_info(m);
+    refresh_password_info(m);
     m.skip_launcher = io.skip_launcher;
 
     Rml::DataModelConstructor c = context->CreateDataModel("launcher");
@@ -515,6 +568,12 @@ Result run(SDL_Window* window, void* /*gl_context*/,
     c.Bind("uses_sram", &m.uses_sram);
     c.Bind("save_file", &m.save_file);
     c.Bind("save_size", &m.save_size);
+    c.Bind("has_password_save", &m.has_password_save);
+    c.Bind("password_label", &m.password_label);
+    c.Bind("password_value", &m.password_value);
+    c.Bind("password_editing", &m.password_editing);
+    c.Bind("password_input", &m.password_input);
+    c.Bind("show_password_confirm", &m.show_password_confirm);
     c.Bind("skip_launcher", &m.skip_launcher);
     c.Bind("show_skip_modal", &m.show_skip_modal);
     c.Bind("scale_label", &m.scale_label);
@@ -574,6 +633,41 @@ Result run(SDL_Window* window, void* /*gl_context*/,
         if (!m.uses_sram) return;
         save_ram_clear();
         refresh_save_info(m);
+        dirty_all();
+    });
+
+    // ---- password / mantra save (game-specific; e.g. Faxanadu) ----
+    // Read-only by default; the edit icon enters edit mode seeded from the current
+    // value, and saving always routes through a confirmation modal — the file is
+    // never rewritten without the user confirming.
+    c.BindEventCallback("password_edit", [&](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
+        if (!m.has_password_save) return;
+        m.password_input = (m.password_value == "(none)") ? Rml::String("") : m.password_value;
+        m.password_editing = true;
+        dirty_all();
+    });
+    c.BindEventCallback("password_edit_cancel", [&](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
+        m.password_editing = false;
+        dirty_all();
+    });
+    c.BindEventCallback("password_request_save", [&](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
+        if (!m.has_password_save) return;
+        m.show_password_confirm = true;     // confirm before it takes effect
+        dirty_all();
+    });
+    c.BindEventCallback("password_confirm_ok", [&](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
+        std::string v = m.password_input.c_str();
+        size_t a = v.find_first_not_of(" \t");
+        size_t b = v.find_last_not_of(" \t");
+        v = (a == std::string::npos) ? std::string() : v.substr(a, b - a + 1);
+        write_password_file(m.password_path, v);
+        refresh_password_info(m);
+        m.password_editing = false;
+        m.show_password_confirm = false;
+        dirty_all();
+    });
+    c.BindEventCallback("password_confirm_cancel", [&](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
+        m.show_password_confirm = false;
         dirty_all();
     });
 
@@ -818,6 +912,8 @@ extern "C" int nes_launcher_run_window(const char* window_title,
     g.uses_sram        = game->uses_sram != 0;
     g.save_basename    = game->save_basename;
     g.widescreen_supported = game->widescreen_supported != 0;
+    g.password_save_path   = game->password_save_path;
+    g.password_save_label  = game->password_save_label;
 
     Result r = run(win, ctx, s, g, assets_dir, initial_rom,
                    out_rom_path, out_rom_path_len);
