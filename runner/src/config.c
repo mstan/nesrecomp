@@ -11,7 +11,42 @@
 #ifdef _WIN32
 #  define WIN32_LEAN_AND_MEAN
 #  include <windows.h>
+#elif defined(__APPLE__)
+#  include <mach-o/dyld.h>
+#  include <unistd.h>
+#else
+#  include <unistd.h>
 #endif
+
+void nesrecomp_exe_dir(char *out, size_t max_len) {
+    char exe[1024];
+    int got = 0;
+#if defined(_WIN32)
+    DWORD n = GetModuleFileNameA(NULL, exe, (DWORD)sizeof(exe));
+    got = (n > 0 && n < sizeof(exe));
+#elif defined(__APPLE__)
+    uint32_t size = (uint32_t)sizeof(exe);
+    got = (_NSGetExecutablePath(exe, &size) == 0);
+#else /* Linux and other Unix */
+    /* Inside an AppImage /proc/self/exe is the read-only mount, not where
+     * the user's .AppImage + config.ini live; $APPIMAGE is the .AppImage. */
+    const char *appimg = getenv("APPIMAGE");
+    if (appimg && appimg[0] && strlen(appimg) < sizeof(exe)) {
+        strcpy(exe, appimg);
+        got = 1;
+    } else {
+        ssize_t r = readlink("/proc/self/exe", exe, sizeof(exe) - 1);
+        if (r > 0) { exe[r] = '\0'; got = 1; }
+    }
+#endif
+    if (got) {
+        char *sep = strrchr(exe, '/');
+        char *bsep = strrchr(exe, '\\');
+        if (bsep && (!sep || bsep > sep)) sep = bsep;
+        if (sep) { sep[1] = '\0'; snprintf(out, max_len, "%s", exe); return; }
+    }
+    snprintf(out, max_len, "./");
+}
 
 /* Defaults: P1 keyboard, P2 gamepad; 3x window; nearest, integer-scaled. */
 NesConfig g_nes_config = {
@@ -35,16 +70,11 @@ void config_set_defaults(NesConfig *c) {
 
 const char *config_path(void) {
     static char path[1024];
-#ifdef _WIN32
-    char exe[MAX_PATH];
-    DWORD n = GetModuleFileNameA(NULL, exe, MAX_PATH);
-    if (n > 0 && n < MAX_PATH) {
-        char *sep = strrchr(exe, '\\');
-        if (!sep) sep = strrchr(exe, '/');
-        if (sep) { *(sep + 1) = '\0'; snprintf(path, sizeof(path), "%sconfig.ini", exe); return path; }
-    }
-#endif
-    snprintf(path, sizeof(path), "config.ini");
+    char dir[1024];
+    /* config.ini lives next to the exe (next to the .AppImage on Linux) —
+     * one location, no directory walk-up, no alternate-name search. */
+    nesrecomp_exe_dir(dir, sizeof(dir));
+    snprintf(path, sizeof(path), "%sconfig.ini", dir);
     return path;
 }
 

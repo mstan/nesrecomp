@@ -7,6 +7,8 @@
  */
 #pragma once
 
+#include <stddef.h>  /* size_t */
+
 typedef struct {
     /* Display */
     int window_scale;     /* 1..N integer scale (native 256x240); default 3 */
@@ -31,6 +33,14 @@ extern NesConfig g_nes_config;
 
 /* Reset *c to built-in defaults. */
 void config_set_defaults(NesConfig *c);
+
+/* Directory containing the running executable, WITH trailing separator,
+ * into `out`. On an AppImage, /proc/self/exe points into the read-only
+ * squashfs mount, so $APPIMAGE (the .AppImage's path, exported by the
+ * AppImage runtime) is preferred on Linux — config.ini / rom.cfg / saves
+ * then anchor next to the .AppImage, as they do next to the .exe on
+ * Windows. Falls back to "./" when the path can't be determined. */
+void nesrecomp_exe_dir(char *out, size_t max_len);
 
 /* Absolute <exe_dir>/config.ini path (static buffer). */
 const char *config_path(void);

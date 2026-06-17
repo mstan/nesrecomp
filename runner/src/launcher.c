@@ -37,19 +37,12 @@ char g_exe_dir[260] = ".";
 
 /* ---- rom.cfg helpers ---- */
 
-/* Build path: <exe_dir>/rom.cfg */
+/* Build path: <exe_dir>/rom.cfg (next to the .AppImage on Linux). One
+ * location only — no walk-up, matching config.ini resolution. */
 static void get_rom_cfg_path(char *out, int max_len) {
-#ifdef _WIN32
-    char exe_path[MAX_PATH];
-    GetModuleFileNameA(NULL, exe_path, MAX_PATH);
-    /* strip filename, keep trailing backslash */
-    char *last_sep = strrchr(exe_path, '\\');
-    if (last_sep) *(last_sep + 1) = '\0';
-    snprintf(out, max_len, "%srom.cfg", exe_path);
-#else
-    /* Fallback: current directory */
-    snprintf(out, max_len, "rom.cfg");
-#endif
+    char dir[1024];
+    nesrecomp_exe_dir(dir, sizeof(dir));
+    snprintf(out, max_len, "%srom.cfg", dir);
 }
 
 static void rom_cfg_read(char *path_out, int max_len) {
@@ -76,6 +69,27 @@ static void rom_cfg_write(const char *rom_path) {
 
 /* ---- File picker ---- */
 
+#ifndef _WIN32
+/* Run one shell-wrapped native chooser, read the selected path from its
+ * stdout. Each command is gated on `command -v <tool>` so an absent tool
+ * prints nothing and we fall through; a real selection prints one path and
+ * exits 0. Returns 1 and fills `out` only on a real selection. */
+static int run_picker_cmd(const char *cmd, char *out, int max_len) {
+    FILE *p = popen(cmd, "r");
+    if (!p) return 0;
+    char buf[1024];
+    buf[0] = '\0';
+    char *got = fgets(buf, sizeof(buf), p);
+    int rc = pclose(p);
+    if (!got) return 0;
+    size_t n = strlen(buf);
+    while (n > 0 && (buf[n-1] == '\n' || buf[n-1] == '\r')) buf[--n] = '\0';
+    if (rc != 0 || n == 0 || (int)n >= max_len) return 0;
+    memcpy(out, buf, n + 1);
+    return 1;
+}
+#endif
+
 /* Returns 1 on success (path written to out), 0 on cancel. */
 static int pick_rom_file(char *out, int max_len) {
 #ifdef _WIN32
@@ -91,8 +105,32 @@ static int pick_rom_file(char *out, int max_len) {
     ofn.Flags       = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY;
     return GetOpenFileNameA(&ofn) ? 1 : 0;
 #else
-    fprintf(stderr, "[Launcher] No ROM specified and no file picker available on this platform.\n");
-    fprintf(stderr, "Usage: %s <rom.nes>\n", "NESRecompGame");
+    /* Native graphical chooser, in preference order; each gated on
+     * `command -v` so an absent tool falls through. rom.cfg and a
+     * positional ROM arg remain fallbacks when none exist. No new
+     * link-time deps — all via popen. */
+    out[0] = '\0';
+    static const char *const pickers[] = {
+        "command -v zenity >/dev/null 2>&1 && "
+        "zenity --file-selection --title='Select NES ROM' "
+        "--file-filter='NES ROMs (.nes) | *.nes *.NES' "
+        "--file-filter='All files | *' 2>/dev/null",
+        "command -v kdialog >/dev/null 2>&1 && "
+        "kdialog --getopenfilename \"${HOME:-/}\" "
+        "'*.nes *.NES|NES ROMs' 2>/dev/null",
+        "command -v qarma >/dev/null 2>&1 && "
+        "qarma --file-selection --title='Select NES ROM' 2>/dev/null",
+        "command -v osascript >/dev/null 2>&1 && "
+        "osascript -e 'POSIX path of (choose file with prompt \"Select NES ROM\")' "
+        "2>/dev/null",
+    };
+    for (size_t i = 0; i < sizeof(pickers) / sizeof(pickers[0]); i++)
+        if (run_picker_cmd(pickers[i], out, max_len))
+            return 1;
+    fprintf(stderr,
+            "[Launcher] No ROM specified and no graphical file chooser found "
+            "(install zenity or kdialog).\nUsage: pass the ROM path as the first "
+            "argument.\n");
     return 0;
 #endif
 }
@@ -247,12 +285,9 @@ int main(int argc, char *argv[]) {
     atexit(atexit_handler);
 #endif
 
-    /* Set g_exe_dir to the directory containing the executable */
-#ifdef _WIN32
-    GetModuleFileNameA(NULL, g_exe_dir, sizeof(g_exe_dir));
-    char *sep = strrchr(g_exe_dir, '\\');
-    if (sep) *(sep + 1) = '\0';
-#endif
+    /* Set g_exe_dir to the directory containing the executable (the folder
+     * holding the .AppImage on Linux, via $APPIMAGE). */
+    nesrecomp_exe_dir(g_exe_dir, sizeof(g_exe_dir));
 
     static char rom_path[512];
     uint32_t expected_crc = game_get_expected_crc32();
