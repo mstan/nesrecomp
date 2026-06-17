@@ -1,0 +1,25 @@
+# nesref ships only its own source (frontend.cpp, libretro.h, build.bat, README).
+# Everything below is supplied locally by the developer and is deliberately NOT
+# committed — chiefly to keep separately-licensed binaries out of this repo
+# (libretro cores carry their own, sometimes non-commercial, licenses; SDL2
+# binaries ship under zlib).
+
+# SDL2 runtime DLL (copied next to the exe from runner/external/SDL2 by build.bat)
+SDL2*.dll
+SDL2-*/
+
+# libretro NES core binaries — supply at runtime as argv[1].
+# (e.g. nestopia_libretro.dll, fceumm_libretro.dll)
+cores/
+*_libretro.dll
+*_libretro.dll.zip
+
+# build + run artifacts
+nesref.exe
+*.obj
+*.exe
+nes_state*.bin
+nes_trace.jsonl
+*.wav
+*_out.txt
+*_err.txt
