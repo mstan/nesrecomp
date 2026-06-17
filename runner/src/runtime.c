@@ -913,6 +913,22 @@ uint8_t ppu_read_reg(uint16_t reg) {
                     g_ppuctrl_hud     = g_ppuctrl & 0x38;
                     g_ppustatus |= 0x40;
                     g_spr0_reads_ctr_legacy = 0;
+                    /* Activate the HUD split here, not only in the consume
+                     * branch above.  A sprite-0 split spin-wait that exits on
+                     * the SET edge (e.g. Faxanadu's NMI routine $C9D6:
+                     *   STA $2000/$2005 (HUD scroll) ; BIT $2002/BVC (wait hit)
+                     *   ; STA $2000/$2005 (game scroll))
+                     * reads $2002 exactly until bit 6 pulses on, then never
+                     * re-reads — so it captures the HUD scroll here but never
+                     * reaches the consume branch, leaving g_spr0_split_active=0
+                     * and the renderer skipping the split (HUD region falls
+                     * through to the game base nametable).  Gate on a genuine
+                     * predicted sprite-0 hit at the CURRENT (HUD-region) PPU
+                     * state so this never false-triggers on games that merely
+                     * busy-poll $2002 for VBlank (sprite 0 off-screen / no BG
+                     * overlap -> predictor returns 240). */
+                    if (ppu_predict_spr0_hit_scanline() < 240)
+                        g_spr0_split_active = 1;
                 }
             }
             uint8_t s = g_ppustatus;
