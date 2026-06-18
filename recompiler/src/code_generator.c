@@ -2489,6 +2489,13 @@ static void emit_dispatch(FILE *f, const EmittedWrapper *wrappers, int wrapper_c
         "extern int g_current_bank;\n\n"
     );
 
+    /* push_all_jsr build flag, read by the interpreter fallback: its
+     * stack-boundary contract requires the 6502 RAM stack to mirror the C
+     * call stack, which only holds when every JSR pushes (push_all_jsr). */
+    fprintf(f,
+        "/* Interpreter-fallback precondition flag (see runner/src/interp.c). */\n"
+        "int g_recomp_push_all_jsr = %d;\n\n", cfg->push_all_jsr ? 1 : 0);
+
     /* Forward-declare every dispatch target. The switch below calls these
      * func_* wrappers, which are defined in the _full.c translation unit.
      * Without these declarations the dispatch TU relies on implicit function
@@ -2508,7 +2515,7 @@ static void emit_dispatch(FILE *f, const EmittedWrapper *wrappers, int wrapper_c
     /* Reject sub-$8000 addresses — these are never valid code targets on NES.
      * They come from data-as-code false positives in the function finder. */
     fprintf(f,
-        "    if (addr < 0x8000) { nes_log_dispatch_miss(addr); return 0; }\n"
+        "    if (addr < 0x8000) { return nes_interp_dispatch(addr); }\n"
     );
 
     if (rom->mapper == 4) {
@@ -2617,9 +2624,9 @@ static void emit_dispatch(FILE *f, const EmittedWrapper *wrappers, int wrapper_c
             }
             if (!has_default) {
                 if (rom->mapper == 4)
-                    fprintf(f, "                default: if (_a000_r6_fallback) { _bank = g_current_bank; _a000_r6_fallback = 0; goto _dispatch_retry; } nes_log_dispatch_miss(addr); return 0;\n");
+                    fprintf(f, "                default: if (_a000_r6_fallback) { _bank = g_current_bank; _a000_r6_fallback = 0; goto _dispatch_retry; } return nes_interp_dispatch(addr);\n");
                 else
-                    fprintf(f, "                default: nes_log_dispatch_miss(addr); return 0;\n");
+                    fprintf(f, "                default: return nes_interp_dispatch(addr);\n");
             }
             fprintf(f, "            }\n");
             fprintf(f, "            break;\n");
@@ -2629,8 +2636,7 @@ static void emit_dispatch(FILE *f, const EmittedWrapper *wrappers, int wrapper_c
     /* Extra_label secondary entries — add dispatch cases for their ROM addresses */
     fprintf(f,
         "        default:\n"
-        "            nes_log_dispatch_miss(addr);\n"
-        "            return 0;\n"
+        "            return nes_interp_dispatch(addr);\n"
         "    }\n"
         "    return 1;\n"
         "}\n"

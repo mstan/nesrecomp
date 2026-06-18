@@ -1039,6 +1039,11 @@ MissRecord g_miss_ring[MAX_MISS_RING];
 int        g_miss_ring_head  = 0;
 int        g_miss_ring_count = 0;
 
+/* Most-recently-recorded miss classification/context, stashed by
+ * nes_record_dispatch_miss for nes_dispatch_miss_apply_policy. */
+static char     s_last_miss_class[16] = "CODE";
+static uint16_t s_last_miss_ctx       = 0;
+
 #ifdef RECOMP_STACK_TRACKING
 extern const char *g_recomp_stack[];
 extern int         g_recomp_stack_top;
@@ -1088,9 +1093,11 @@ static uint8_t classify_miss_target(const uint8_t bytes[8]) {
     return MISS_TARGET_CODE;
 }
 
-void nes_log_dispatch_miss(uint16_t addr) {
-    /* Let the game handle unmapped addresses (e.g. SRAM code remapping) */
-    if (game_dispatch_override(addr)) return;
+/* Record a dispatch miss into the ring + dispatch_misses.log + counters, and
+ * stash its classification/context for the policy step. Does NOT consult the
+ * per-game override and does NOT apply the miss policy — callers compose those
+ * (nes_log_dispatch_miss below; nes_interp_dispatch in interp.c). */
+void nes_record_dispatch_miss(uint16_t addr) {
     static uint32_t last = 0xFFFFFFFF;
     uint32_t key = ((uint32_t)g_current_bank << 16) | addr;
     bool first_for_key = (key != last);
@@ -1114,6 +1121,11 @@ void nes_log_dispatch_miss(uint16_t addr) {
     uint8_t s_hi_idx = (uint8_t)(g_cpu.S + 2);
     uint16_t call_site_pc = (uint16_t)g_ram[0x100 + s_lo_idx] |
                             ((uint16_t)g_ram[0x100 + s_hi_idx] << 8);
+
+    /* Stash for nes_dispatch_miss_apply_policy (interp fallback decline path). */
+    strncpy(s_last_miss_class, class_name, sizeof(s_last_miss_class) - 1);
+    s_last_miss_class[sizeof(s_last_miss_class) - 1] = '\0';
+    s_last_miss_ctx = call_site_pc;
 
     if (first_for_key) {
         printf("[Dispatch] MISS: no func for $%04X bank=%d target=%s "
@@ -1191,8 +1203,23 @@ void nes_log_dispatch_miss(uint16_t addr) {
     }
 
     g_dispatch_miss_count++;
+}
+
+/* Apply the configured miss policy (LOG_RETURN / FATAL / TRAP) using the most
+ * recently recorded miss's classification/context. Split from recording so the
+ * interpreter fallback can record-and-interpret without applying FATAL/TRAP,
+ * yet still apply the policy on the paths where it declines to interpret. */
+void nes_dispatch_miss_apply_policy(uint16_t addr) {
     apply_dispatch_miss_policy("dispatch", addr, g_current_bank,
-                               class_name, call_site_pc);
+                               s_last_miss_class, s_last_miss_ctx);
+}
+
+/* Legacy combined entry: override + record + policy. Retained for builds
+ * without the interpreter fallback and for any direct callers. */
+void nes_log_dispatch_miss(uint16_t addr) {
+    if (game_dispatch_override(addr)) return;
+    nes_record_dispatch_miss(addr);
+    nes_dispatch_miss_apply_policy(addr);
 }
 
 void nes_log_inline_miss(uint16_t dispatch_pc, uint8_t a_val) {

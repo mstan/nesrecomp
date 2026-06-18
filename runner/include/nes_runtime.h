@@ -59,6 +59,22 @@ int call_by_address(uint16_t addr);  /* returns 1 on hit, 0 on miss */
 void nes_log_dispatch_miss(uint16_t addr);
 void nes_log_inline_miss(uint16_t dispatch_pc, uint8_t a_val);
 
+/* Split halves of nes_log_dispatch_miss (see runtime.c). The interpreter
+ * fallback records the miss, interprets, and only applies the policy if it
+ * declines. */
+void nes_record_dispatch_miss(uint16_t addr);
+void nes_dispatch_miss_apply_policy(uint16_t addr);
+
+/* Interpreter fallback entry, invoked from the generated call_by_address miss
+ * paths. Returns 1 if the miss was interpreted (game continues), else 0 (the
+ * miss policy has been applied; caller behaves as the legacy `return 0`).
+ * Implemented in interp.c. */
+int nes_interp_dispatch(uint16_t addr);
+
+/* Defined by the generated dispatch TU: 1 if the game was recompiled with
+ * push_all_jsr (the interpreter's stack-boundary contract requires it). */
+extern int g_recomp_push_all_jsr;
+
 /* ---- Dispatch-miss policy ----
  * Configures what happens after nes_log_dispatch_miss / nes_log_inline_miss
  * has recorded the miss into the ring buffer and dispatch_misses.log.
