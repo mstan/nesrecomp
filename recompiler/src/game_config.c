@@ -109,6 +109,14 @@ static bool game_config_load_toml(GameConfig *cfg, const char *path) {
         const char *breg = toml_string_or(t, "bank_reg", "X");
         cfg->trampolines[idx].bank_reg    = (breg[0] == 'A' || breg[0] == 'a') ? 'A' : 'X';
         cfg->trampolines[idx].bank_save_addr = toml_hex_or(t, "bank_save_addr", 0x100);
+        /* kind: "simple" (default) or "mmc3_region" */
+        const char *kind = toml_string_or(t, "kind", "simple");
+        cfg->trampolines[idx].kind = (kind[0] == 'm' || kind[0] == 'M')
+                                     ? TRAMP_MMC3_REGION : TRAMP_SIMPLE;
+        cfg->trampolines[idx].bs_fn_8000    = toml_hex(t, "bs_fn_8000");
+        cfg->trampolines[idx].bs_fn_a000    = toml_hex(t, "bs_fn_a000");
+        cfg->trampolines[idx].bank_save_8000 = toml_hex(t, "bank_save_8000");
+        cfg->trampolines[idx].bank_save_a000 = toml_hex(t, "bank_save_a000");
     }
 
     /* [[known_table]] */

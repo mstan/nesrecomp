@@ -72,6 +72,25 @@ static int resolve_bank_for_addr(const NESRom *rom, int current_bank, uint16_t a
     return rom->prg_banks - 1;    /* traditional fixed bank */
 }
 
+/* MMC3 8KB-window trampoline (kind=TRAMP_MMC3_REGION) helpers — kept in sync
+ * with the identically-named statics in code_generator.c.  region classifies a
+ * target hi byte ('8'=R6 $8000, 'A'=R7 $A000, 'F'=no switch); the converter
+ * maps a window-relative target + raw 8KB bank to the 16KB (addr,bank). */
+static char mmc3_tramp_region(uint8_t hi) {
+    if (hi >= 0x80 && hi < 0xA0) return '8';
+    if (hi >= 0xA0 && hi < 0xC0) return 'A';
+    return 'F';
+}
+static void mmc3_region_target(uint16_t target, uint8_t raw_bank, char region,
+                               uint16_t *out_addr, int *out_bank16) {
+    *out_bank16 = raw_bank >> 1;
+    int odd = raw_bank & 1;
+    if (region == '8')
+        *out_addr = odd ? (uint16_t)(target + 0x2000) : target;
+    else /* 'A' */
+        *out_addr = odd ? target : (uint16_t)(target - 0x2000);
+}
+
 static int function_list_find_index(const FunctionList *list, uint16_t addr, int bank) {
     for (int i = 0; i < list->count; i++) {
         if (list->entries[i].addr == addr && list->entries[i].bank == bank)
@@ -947,6 +966,32 @@ static int walk_function(const NESRom *rom, FunctionList *list,
                 }
                 if (tramp) {
                     add_function_propagated(list, tramp->addr, resolve_bank_for_addr(rom, switchable_bank, tramp->addr), walk_source_flags);
+                    if (tramp->kind == TRAMP_MMC3_REGION) {
+                        /* Inline order [lo, hi, bank]; hi byte selects the 8KB
+                         * window.  Register the target under the 16KB (addr,bank)
+                         * the runtime dispatch resolves to, plus the region
+                         * bank-switch helpers so they get bodies generated. */
+                        uint8_t t_lo   = rom_read(rom, read_bank, pc + 3);
+                        uint8_t t_hi   = rom_read(rom, read_bank, pc + 4);
+                        uint8_t t_bank = rom_read(rom, read_bank, pc + 5);
+                        uint16_t target = (uint16_t)((t_lo | ((uint16_t)t_hi << 8)) + tramp->addr_adjust);
+                        char region = mmc3_tramp_region(t_hi);
+                        if (region == 'F') {
+                            if (target >= 0xC000)
+                                add_function_propagated(list, target, resolve_bank_for_addr(rom, switchable_bank, target), walk_source_flags);
+                            /* hi < $80 → RAM target: nothing static to register */
+                        } else {
+                            uint16_t emit_addr; int emit_bank;
+                            mmc3_region_target(target, t_bank, region, &emit_addr, &emit_bank);
+                            add_function_propagated(list, emit_addr, emit_bank, walk_source_flags);
+                        }
+                        if (tramp->bs_fn_8000)
+                            add_function_propagated(list, tramp->bs_fn_8000, resolve_bank_for_addr(rom, switchable_bank, tramp->bs_fn_8000), walk_source_flags);
+                        if (tramp->bs_fn_a000)
+                            add_function_propagated(list, tramp->bs_fn_a000, resolve_bank_for_addr(rom, switchable_bank, tramp->bs_fn_a000), walk_source_flags);
+                        pc += 3 + tramp->inline_bytes;
+                        continue;
+                    }
                     uint8_t disp_bank = rom_read(rom, read_bank, pc + 3);
                     uint8_t disp_lo   = rom_read(rom, read_bank, pc + 4);
                     uint8_t disp_hi   = rom_read(rom, read_bank, pc + 5);

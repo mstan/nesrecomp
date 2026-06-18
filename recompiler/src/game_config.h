@@ -30,7 +30,19 @@
  * routine. The bytes immediately after the JSR are inline data (not code).
  * inline_bytes: how many bytes after the JSR to consume as data (typ. 3).
  * bs_fn_addr:   the recompiled bank-switch function to call (e.g. 0xCC1A).
+ *
+ * kind selects the dispatch shape:
+ *   TRAMP_SIMPLE (0): inline order [bank, lo, hi]; a single bank-switch fn
+ *     (bs_fn_addr) switches one 16KB window, target called, window restored.
+ *     This is the Faxanadu $F859 / MMC1 shape.
+ *   TRAMP_MMC3_REGION (1): inline order [lo, hi, bank]; the target's hi byte
+ *     selects an MMC3 8KB window — $80-$9F → R6 ($8000, bs_fn_8000/bank_save_8000),
+ *     $A0-$BF → R7 ($A000, bs_fn_a000/bank_save_a000), else no switch (fixed/RAM).
+ *     The raw 8KB bank is converted to the recompiler's 16KB (addr,bank) at the
+ *     call site.  This is the Kirby $D805 shape.  bank is always passed in A.
  */
+enum { TRAMP_SIMPLE = 0, TRAMP_MMC3_REGION = 1 };
+
 typedef struct {
     uint16_t addr;          /* JSR target address (the trampoline entry) */
     int      inline_bytes;  /* extra data bytes following the JSR opcode  */
@@ -38,6 +50,11 @@ typedef struct {
     int      addr_adjust;   /* added to inline addr (1=RTS convention, 0=JMP indirect) */
     char     bank_reg;      /* register holding bank number: 'A' or 'X' (default 'X') */
     uint16_t bank_save_addr;/* address to read current bank from before switch */
+    int      kind;          /* TRAMP_SIMPLE (default) or TRAMP_MMC3_REGION */
+    uint16_t bs_fn_8000;    /* MMC3 R6 ($8000) switch fn (kind=MMC3_REGION) */
+    uint16_t bs_fn_a000;    /* MMC3 R7 ($A000) switch fn (kind=MMC3_REGION) */
+    uint16_t bank_save_8000;/* saved-bank addr for R6 region (e.g. $0048)   */
+    uint16_t bank_save_a000;/* saved-bank addr for R7 region (e.g. $0049)   */
 } TrampolineEntry;
 
 /*
