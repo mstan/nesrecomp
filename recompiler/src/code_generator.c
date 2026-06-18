@@ -1274,13 +1274,21 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                     uint8_t t_bank = rom_read(rom, bank, pc + 5);
                     uint16_t target = (uint16_t)((t_lo | ((uint16_t)t_hi << 8)) + tramp->addr_adjust);
                     char region = mmc3_tramp_region(t_hi);
+                    /* Each callee here ends in RTS.  Under push_all_jsr that RTS
+                     * unconditionally pops a 2-byte return address (g_cpu.S += 2),
+                     * so — exactly like a normal JSR site — we must push a dummy
+                     * return before every direct call or S drifts up by 2 per call
+                     * (corrupting the stack pointer; S wraps $FF -> $01). */
+                    const char *pr = cfg->push_all_jsr
+                        ? "g_ram[0x100+g_cpu.S]=0; g_cpu.S--; g_ram[0x100+g_cpu.S]=0; g_cpu.S--; "
+                        : "";
                     if (region == 'F') {
                         fprintf(f, "/* trampoline $%04X (mmc3 no-switch): target=$%04X */\n",
                                 tramp->addr, target);
                         if (target >= 0xC000)
-                            fprintf(f, "func_%04X();\n", target);
+                            fprintf(f, "%sfunc_%04X();\n", pr, target);
                         else
-                            fprintf(f, "call_by_address(0x%04X);\n", target);
+                            fprintf(f, "%scall_by_address(0x%04X);\n", pr, target);
                     } else {
                         uint16_t emit_addr; int emit_bank;
                         mmc3_region_target(target, t_bank, region, &emit_addr, &emit_bank);
@@ -1292,10 +1300,10 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                                 tramp->addr, region, target, t_bank, nm);
                         fprintf(f, "{ uint8_t _sa=g_cpu.A,_sx=g_cpu.X,_sy=g_cpu.Y;\n");
                         fprintf(f, "  uint8_t _sbank=g_ram[0x%04X];\n", save);
-                        fprintf(f, "  g_cpu.A=0x%02X; func_%04X();\n", t_bank, bs_fn);
+                        fprintf(f, "  g_cpu.A=0x%02X; %sfunc_%04X();\n", t_bank, pr, bs_fn);
                         fprintf(f, "  g_cpu.A=_sa; g_cpu.X=_sx; g_cpu.Y=_sy;\n");
-                        fprintf(f, "  %s();\n", nm);
-                        fprintf(f, "  g_cpu.A=_sbank; func_%04X(); }\n", bs_fn);
+                        fprintf(f, "  %s%s();\n", pr, nm);
+                        fprintf(f, "  g_cpu.A=_sbank; %sfunc_%04X(); }\n", pr, bs_fn);
                     }
                     return 3 + tramp->inline_bytes;
                 }
@@ -1312,20 +1320,25 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                         fprintf(f, "  uint8_t _sbank=nes_read(0x%04X);\n", tramp->bank_save_addr);
                     else
                         fprintf(f, "  uint8_t _sbank=g_ram[0x%04X];\n", tramp->bank_save_addr);
-                    fprintf(f, "  g_cpu.%s=0x%02X; func_%04X();\n", breg, disp_bank, tramp->bs_fn_addr);
+                    /* push_all_jsr: each callee's RTS pops a 2-byte return, so
+                     * push a dummy before every direct call (see MMC3_REGION). */
+                    const char *pr = cfg->push_all_jsr
+                        ? "g_ram[0x100+g_cpu.S]=0; g_cpu.S--; g_ram[0x100+g_cpu.S]=0; g_cpu.S--; "
+                        : "";
+                    fprintf(f, "  g_cpu.%s=0x%02X; %sfunc_%04X();\n", breg, disp_bank, pr, tramp->bs_fn_addr);
                     fprintf(f, "  g_cpu.A=_sa; g_cpu.X=_sx; g_cpu.Y=_sy;\n");
                     /* Dispatch directly to the statically-known bank+addr target.
                      * Using call_by_address() would race with NMI (which can change
                      * g_current_bank between the bank switch and the dispatch). */
                     if (disp_addr >= 0xC000) {
-                        fprintf(f, "  func_%04X();\n", disp_addr);
+                        fprintf(f, "  %sfunc_%04X();\n", pr, disp_addr);
                     } else if (disp_addr >= 0x8000) {
-                        fprintf(f, "  func_%04X_b%d();\n", disp_addr, disp_bank);
+                        fprintf(f, "  %sfunc_%04X_b%d();\n", pr, disp_addr, disp_bank);
                     } else {
-                        fprintf(f, "  call_by_address(0x%04X);\n", disp_addr);
+                        fprintf(f, "  %scall_by_address(0x%04X);\n", pr, disp_addr);
                     }
                     fprintf(f, "  _sa=g_cpu.A;\n");
-                    fprintf(f, "  g_cpu.%s=_sbank; func_%04X();\n", breg, tramp->bs_fn_addr);
+                    fprintf(f, "  g_cpu.%s=_sbank; %sfunc_%04X();\n", breg, pr, tramp->bs_fn_addr);
                     fprintf(f, "  g_cpu.A=_sa; }\n");
                     return 3 + tramp->inline_bytes;
                 }
