@@ -54,6 +54,10 @@ uint16_t nes_read16_jmpbug(uint16_t addr);
 /* ---- Dispatch ---- */
 /* Called for JMP (indirect) — dispatch to the correct recompiled function */
 int call_by_address(uint16_t addr);  /* returns 1 on hit, 0 on miss */
+/* Cross-8KB dispatch with a caller-bank fallback: if the runtime bank-register
+ * lookup misses (stale g_current_bank), retry the dispatch keyed on the caller's
+ * statically-known bank.  caller_bank < 0 disables the fallback (== call_by_address). */
+int call_by_address_cb(uint16_t addr, int caller_bank);
 
 /* Logging for dispatch misses */
 void nes_log_dispatch_miss(uint16_t addr);

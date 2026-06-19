@@ -948,6 +948,8 @@ typedef struct {
     bool push_dummy_dynamic;     /* push 0,0 before call_by_address (when no static target) */
     bool tail_return;            /* append " return;" */
     bool jsr_pop_fallback;       /* dynamic call uses "if (!call_by_address(..)) g_cpu.S += 2;" */
+    bool use_caller_bank;        /* dynamic call passes a caller-bank hint (cross-8KB) */
+    int  caller_bank;            /* the hint: caller's bank, used when use_caller_bank */
 } EmitCallOpts;
 
 /* Emit a call/dispatch to (addr, bank): tries body alias → wrapper → call_by_address
@@ -986,7 +988,16 @@ static void emit_call_target(FILE *f, const NESRom *rom, uint16_t addr,
     }
 
     if (opts.push_dummy_dynamic) fprintf(f, DUMMY_PUSH_PAIR);
-    if (opts.jsr_pop_fallback)
+    /* Cross-8KB dispatch carries a caller-bank hint: when the runtime bank
+     * register lookup misses (stale g_current_bank), the dispatch retries with
+     * the caller's statically-known bank — cross-8KB calls are intra-16KB-bank,
+     * so the caller's bank is the correct fallback. */
+    if (opts.use_caller_bank) {
+        if (opts.jsr_pop_fallback)
+            fprintf(f, "if (!call_by_address_cb(0x%04X, %d)) g_cpu.S += 2;", addr, opts.caller_bank);
+        else
+            fprintf(f, "call_by_address_cb(0x%04X, %d);", addr, opts.caller_bank);
+    } else if (opts.jsr_pop_fallback)
         fprintf(f, "if (!call_by_address(0x%04X)) g_cpu.S += 2;", addr);
     else
         fprintf(f, "call_by_address(0x%04X);", addr);
@@ -1612,28 +1623,42 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                     int cross_8kb = (rom->mapper == 4 &&
                                      pc >= 0x8000 && pc < 0xC000 &&
                                      (pc < 0xA000) != (abs16 < 0xA000));
-                    /* A cross-8KB call within the SAME 16KB bank targets that
-                     * bank's other half — the same physical ROM bank file, which
-                     * the recompiler analyzed as a unit.  When a function exists
-                     * there, the target IS known at compile time: bind it
-                     * statically to func_<addr>_b<bank> (identical to how same-
-                     * window intra-bank calls already bind).  Forcing dynamic
-                     * dispatch instead routes the call through g_current_bank
-                     * (R6), which native code does not keep in sync with the
-                     * caller's bank — mis-resolving the same-bank target (e.g.
-                     * bank17 $A2B9 `JSR $8B35` landing on R6=0).  Only fall back
-                     * to runtime dispatch when no same-bank function exists. */
-                    uint16_t _ao; int _ab, _ae;
-                    int same_bank_target =
-                        codegen_has_emitted_wrapper(abs16, bank) ||
-                        codegen_lookup_body_alias(abs16, bank, &_ao, &_ab, &_ae);
-                    if (bank == fixed_bank || sram_sourced ||
-                        (cross_8kb && !same_bank_target)) {
-                        /* Cross-bank call from fixed bank, OR call from SRAM-sourced
-                         * function, OR MMC3 cross-8KB call with no known same-bank
-                         * target: bank is determined at runtime by the mapper, so
-                         * dispatch via call_by_address. */
+                    /* A cross-8KB call crosses the $8000/$A000 window boundary, so
+                     * its target lives in whichever window the mapper points the
+                     * OTHER 8KB slot at — and that is a RUNTIME fact, not a static
+                     * one.  The recompiler models a 16KB bank as low-half@$8000 +
+                     * high-half@$A000, but MMC3 can map the SAME physical 8KB bank
+                     * into EITHER window (R6 odd puts a bank's high half at $8000;
+                     * R7 even puts a bank's low half at $A000).  The identical
+                     * generated function therefore executes at $8000 in one frame
+                     * and $A000 in another, and its internal `JSR $80xx` resolves to
+                     * a DIFFERENT physical target each time.  No static binding can
+                     * be right for both mappings, so a cross-8KB call MUST dispatch
+                     * dynamically: call_by_address applies the R6/R7 odd/even remap
+                     * and selects the correct func_<addr>_b<bank> at runtime.
+                     *   (An earlier same_bank_target guard bound these statically to
+                     *   func_<abs16>_<bank>.  That mis-fired when the caller's half
+                     *   was mapped at $8000 by an odd R6: e.g. bank14 high-half code
+                     *   at model $A148 does `JSR $80CC`; with R6=29 the $8000 window
+                     *   IS bank14's high half, so $80CC means high-half $A0CC, but
+                     *   the static bind went to func_80CC_b14 — a data-as-code stub
+                     *   whose body BRKs at $80D5.  Dynamic dispatch resolves it to
+                     *   func_A0CC_b14 correctly.  This matches the MN_JMP cross-8KB
+                     *   path, which has always forced dynamic.) */
+                    if (bank == fixed_bank || sram_sourced || cross_8kb) {
+                        /* Cross-bank call from fixed bank, call from SRAM-sourced
+                         * function, or MMC3 cross-8KB call: the target bank is
+                         * determined at runtime by the mapper, so dispatch via
+                         * call_by_address. */
                         jsr_opts.force_dynamic = true;
+                        if (cross_8kb) {
+                            /* Pass the caller's bank as the dispatch fallback (see
+                             * emit_call_target): if g_current_bank is stale at the
+                             * call, the target still resolves to the caller's own
+                             * 16KB bank. */
+                            jsr_opts.use_caller_bank = true;
+                            jsr_opts.caller_bank = bank;
+                        }
                     }
                     emit_call_target(f, rom, abs16, bank, fixed_bank, jsr_opts);
                 } else {
@@ -1742,6 +1767,10 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                             .vblank_prefix = true,
                             .push_dummy_dynamic = need_jmp_push,
                             .tail_return = true,
+                            /* Cross-8KB JMP carries the caller-bank hint too (same
+                             * runtime-mapping ambiguity as the JSR path). */
+                            .use_caller_bank = jmp_cross_8kb,
+                            .caller_bank = bank,
                         };
                         emit_call_target(f, rom, abs16, bank, fixed_bank, o);
                     } else if (abs16 == func_base && pc == func_base) {
@@ -2593,7 +2622,7 @@ static void emit_dispatch(FILE *f, const EmittedWrapper *wrappers, int wrapper_c
     emit_forward_decls(f, wrappers, wrapper_count, rom);
 
     fprintf(f,
-        "int call_by_address(uint16_t addr) {\n"
+        "int call_by_address_cb(uint16_t addr, int _caller_bank) {\n"
     );
 
     /* MMC3 (mapper 4): 8KB address remapping for dispatch.
@@ -2713,8 +2742,12 @@ static void emit_dispatch(FILE *f, const EmittedWrapper *wrappers, int wrapper_c
                     fprintf(f, "                case %d: %s(); break;\n", bk, nm);
             }
             if (!has_default) {
+                /* Inner-switch miss: the address has variants but none for the
+                 * active runtime bank.  Try the MMC3 R6-odd alias first, then the
+                 * caller-bank fallback (cross-8KB calls whose g_current_bank was
+                 * stale resolve to the caller's own 16KB bank), then interp. */
                 if (rom->mapper == 4)
-                    fprintf(f, "                default: if (_a000_r6_fallback) { _bank = g_current_bank; _a000_r6_fallback = 0; goto _dispatch_retry; } return nes_interp_dispatch(addr);\n");
+                    fprintf(f, "                default: if (_a000_r6_fallback) { _bank = g_current_bank; _a000_r6_fallback = 0; goto _dispatch_retry; } if (_caller_bank >= 0 && _caller_bank != _bank) { _bank = _caller_bank; _caller_bank = -1; goto _dispatch_retry; } return nes_interp_dispatch(addr);\n");
                 else
                     fprintf(f, "                default: return nes_interp_dispatch(addr);\n");
             }
@@ -2729,7 +2762,9 @@ static void emit_dispatch(FILE *f, const EmittedWrapper *wrappers, int wrapper_c
         "            return nes_interp_dispatch(addr);\n"
         "    }\n"
         "    return 1;\n"
-        "}\n"
+        "}\n\n"
+        "/* Legacy entry: no caller-bank hint (JMP-indirect, interp, debug server). */\n"
+        "int call_by_address(uint16_t addr) { return call_by_address_cb(addr, -1); }\n"
     );
 }
 
