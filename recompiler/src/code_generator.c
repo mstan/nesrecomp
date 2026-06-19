@@ -1608,17 +1608,31 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                 } else if (abs16 >= 0x8000) {
                     /* MMC3 (mapper 4): 8KB banks at $8000-$9FFF and $A000-$BFFF
                      * are switched independently.  A JSR from one 8KB half to
-                     * the other within the same 16KB bank must use runtime
-                     * dispatch because the target 8KB bank is unknown at
-                     * compile time. */
+                     * the other crosses the 8KB-window boundary. */
                     int cross_8kb = (rom->mapper == 4 &&
                                      pc >= 0x8000 && pc < 0xC000 &&
                                      (pc < 0xA000) != (abs16 < 0xA000));
-                    if (bank == fixed_bank || sram_sourced || cross_8kb) {
+                    /* A cross-8KB call within the SAME 16KB bank targets that
+                     * bank's other half — the same physical ROM bank file, which
+                     * the recompiler analyzed as a unit.  When a function exists
+                     * there, the target IS known at compile time: bind it
+                     * statically to func_<addr>_b<bank> (identical to how same-
+                     * window intra-bank calls already bind).  Forcing dynamic
+                     * dispatch instead routes the call through g_current_bank
+                     * (R6), which native code does not keep in sync with the
+                     * caller's bank — mis-resolving the same-bank target (e.g.
+                     * bank17 $A2B9 `JSR $8B35` landing on R6=0).  Only fall back
+                     * to runtime dispatch when no same-bank function exists. */
+                    uint16_t _ao; int _ab, _ae;
+                    int same_bank_target =
+                        codegen_has_emitted_wrapper(abs16, bank) ||
+                        codegen_lookup_body_alias(abs16, bank, &_ao, &_ab, &_ae);
+                    if (bank == fixed_bank || sram_sourced ||
+                        (cross_8kb && !same_bank_target)) {
                         /* Cross-bank call from fixed bank, OR call from SRAM-sourced
-                         * function, OR MMC3 cross-8KB-boundary call: bank is
-                         * determined at runtime by the mapper, so dispatch via
-                         * call_by_address. */
+                         * function, OR MMC3 cross-8KB call with no known same-bank
+                         * target: bank is determined at runtime by the mapper, so
+                         * dispatch via call_by_address. */
                         jsr_opts.force_dynamic = true;
                     }
                     emit_call_target(f, rom, abs16, bank, fixed_bank, jsr_opts);
