@@ -492,6 +492,12 @@ int mapper_get_type(void) {
     return s_mapper_type;
 }
 
+/* 1 if the game has no CHR ROM (uses CHR RAM written via $2007); 0 otherwise.
+ * Selects the HD-pack tile-match mode (content vs CHR-ROM index). */
+int mapper_is_chr_ram(void) {
+    return s_chr_rom_banks == 0;
+}
+
 void mapper_get_a000_debug(int *count, uint8_t *last_val, uint64_t *last_frame) {
     if (count) *count = s_a000_write_count;
     if (last_val) *last_val = s_a000_last_val;

@@ -27,6 +27,14 @@ typedef struct {
 
     /* Launcher behaviour */
     int skip_launcher;    /* boot straight to the game; default 0 */
+
+    /* HD texture packs (Mesen HD Pack format; opt-in, default off). When
+     * enabled with a pack folder in hdpack_dir, the runner loads the pack's
+     * hires.txt and renders matched tiles at the pack's scale. Persisted to
+     * config.ini [Display]; the launcher exports NESRECOMP_HDPACK so the
+     * runtime honors it on every boot path. Mirrors the SNES MSU-1 wiring. */
+    int  hdpack_enabled;   /* 0 off, 1 on; default 0 */
+    char hdpack_dir[512];  /* folder containing hires.txt + PNG sheets */
 } NesConfig;
 
 extern NesConfig g_nes_config;

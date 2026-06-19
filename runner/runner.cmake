@@ -27,6 +27,7 @@ set(NESRECOMP_RUNNER_SOURCES
     ${NESRECOMP_RUNNER_ROOT}/src/controller.c
     ${NESRECOMP_RUNNER_ROOT}/src/override_chr.c
     ${NESRECOMP_RUNNER_ROOT}/src/chr_codec.c
+    ${NESRECOMP_RUNNER_ROOT}/src/hdpack.c
     # Verified-enhancement shadow QoL layer (default OFF; byte-identical when
     # off). See runner/src/{audio_shadow,apu_shadow,color_lut}.{c,h} and
     # docs/SHADOW_ENHANCEMENTS.md.

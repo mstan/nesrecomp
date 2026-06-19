@@ -55,6 +55,7 @@ NesConfig g_nes_config = {
     /*volume*/ 100,
     /*player_src*/ { 1, 2 }, /*deadzone*/ { 30, 30 },
     /*skip_launcher*/ 0,
+    /*hdpack_enabled*/ 0, /*hdpack_dir*/ "",
 };
 
 void config_set_defaults(NesConfig *c) {
@@ -64,6 +65,7 @@ void config_set_defaults(NesConfig *c) {
         100,
         { 1, 2 }, { 30, 30 },
         0,
+        0, "",
     };
     if (c) *c = d;
 }
@@ -100,7 +102,8 @@ void config_load(const char *path) {
         if (!eq) continue;
         *eq = '\0';
         char *key = trim(s);
-        int   val = atoi(trim(eq + 1));
+        char *valstr = trim(eq + 1);
+        int   val = atoi(valstr);
         if      (!strcmp(key, "WindowScale"))   g_nes_config.window_scale  = clampi(val, 1, 8);
         else if (!strcmp(key, "Fullscreen"))    g_nes_config.fullscreen    = val ? 1 : 0;
         else if (!strcmp(key, "IntegerScale"))  g_nes_config.integer_scale = val ? 1 : 0;
@@ -113,6 +116,9 @@ void config_load(const char *path) {
         else if (!strcmp(key, "Player1Deadzone")) g_nes_config.deadzone[0] = clampi(val, 0, 100);
         else if (!strcmp(key, "Player2Deadzone")) g_nes_config.deadzone[1] = clampi(val, 0, 100);
         else if (!strcmp(key, "SkipLauncher"))  g_nes_config.skip_launcher = val ? 1 : 0;
+        else if (!strcmp(key, "HdPackEnabled")) g_nes_config.hdpack_enabled = val ? 1 : 0;
+        else if (!strcmp(key, "HdPackDir"))
+            snprintf(g_nes_config.hdpack_dir, sizeof(g_nes_config.hdpack_dir), "%s", valstr);
     }
     fclose(f);
 }
@@ -129,6 +135,8 @@ void config_save(const char *path) {
     fprintf(f, "LinearFilter = %d\n",  c->linear_filter);
     fprintf(f, "Renderer = %d\n",      c->renderer);
     fprintf(f, "Widescreen = %d\n",    c->widescreen);
+    fprintf(f, "HdPackEnabled = %d\n", c->hdpack_enabled);
+    fprintf(f, "HdPackDir = %s\n",     c->hdpack_dir);
     fprintf(f, "[Audio]\n");
     fprintf(f, "Volume = %d\n",        c->volume);
     fprintf(f, "[Input]\n");

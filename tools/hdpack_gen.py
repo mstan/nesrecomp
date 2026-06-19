@@ -1,0 +1,141 @@
+#!/usr/bin/env python3
+"""
+hdpack_gen.py — generate a synthetic Mesen HD Pack from a CHR-ROM game's own
+tiles, for deterministic end-to-end testing of the runner's HD pack support.
+
+Every CHR-ROM tile is replaced by its `scale`x upscaled self, recolored to a
+vivid candy palette (index 0 -> transparent so the original backdrop shows
+through) with a 1px green tile-grid border. Every replacement uses
+`defaultTile=Y`, so it matches regardless of the runtime palette.
+
+This makes HD replacement unmistakable on screen: if matching/rendering work,
+the whole frame turns candy-colored with a crisp green grid at `scale`x detail;
+if they don't, it stays vanilla. CHR-RAM games have no static CHR in the ROM and
+are not supported by this generator (use a real pack instead).
+
+For CHR-RAM games (no CHR in the ROM), pass --chr-ram with a raw 8KB CHR
+snapshot dumped at runtime (NESRECOMP_CHR_DUMP=<path> + a screenshot). The pack
+is then content-keyed (Mesen's 16-byte CHR-RAM match) instead of index-keyed.
+
+Usage:
+  python hdpack_gen.py <rom.nes>     <out_dir> [--scale N]     # CHR-ROM (index)
+  python hdpack_gen.py <chr8k.bin>   <out_dir> --chr-ram [--scale N]  # CHR-RAM (content)
+"""
+import sys, os, struct, zlib, argparse, math
+
+# index -> RGBA; index 0 is transparent so the native backdrop shows through.
+PAL = {
+    0: (0,   0,   0,   0),
+    1: (220, 40,  160, 255),
+    2: (40,  200, 220, 255),
+    3: (250, 240, 80,  255),
+}
+BORDER = (0, 255, 0, 255)
+
+
+def write_png(path, w, h, rgba):
+    """Minimal RGBA PNG writer (filter 0, no deps)."""
+    def chunk(typ, data):
+        body = typ + data
+        return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body) & 0xffffffff)
+    sig = b"\x89PNG\r\n\x1a\n"
+    ihdr = struct.pack(">IIBBBBB", w, h, 8, 6, 0, 0, 0)  # 8bpc, color type 6 (RGBA)
+    stride = w * 4
+    raw = bytearray()
+    for y in range(h):
+        raw.append(0)                       # filter type 0 (None)
+        raw += rgba[y * stride:(y + 1) * stride]
+    idat = zlib.compress(bytes(raw), 9)
+    with open(path, "wb") as f:
+        f.write(sig)
+        f.write(chunk(b"IHDR", ihdr))
+        f.write(chunk(b"IDAT", idat))
+        f.write(chunk(b"IEND", b""))
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("rom", help="iNES ROM, or raw 8KB CHR dump with --chr-ram")
+    ap.add_argument("out_dir")
+    ap.add_argument("--scale", type=int, default=4)
+    ap.add_argument("--chr-ram", action="store_true",
+                    help="input is a raw CHR snapshot; emit a content-keyed pack")
+    args = ap.parse_args()
+
+    with open(args.rom, "rb") as f:
+        data = f.read()
+
+    # Collect the source tiles + the <tile> tileData token for each entry.
+    # CHR-ROM: token = hex tile index (positional). CHR-RAM: token = 32 hex
+    # chars of the tile content (deduped, since matching is by content).
+    tiles, tokens = [], []
+    if args.chr_ram:
+        if len(data) % 16 != 0:
+            sys.exit("CHR dump size must be a multiple of 16")
+        seen = set()
+        for i in range(len(data) // 16):
+            td = data[i*16:i*16+16]
+            key = bytes(td)
+            if key in seen:
+                continue
+            seen.add(key)
+            tiles.append(td)
+            tokens.append("".join("%02X" % b for b in td))
+    else:
+        if data[:4] != b"NES\x1a":
+            sys.exit("not an iNES ROM (use --chr-ram for a raw CHR dump)")
+        prg = data[4] * 16384
+        chr_size = data[5] * 8192
+        if chr_size == 0:
+            sys.exit("ROM uses CHR-RAM — dump CHR at runtime and pass --chr-ram")
+        chr = data[16 + prg:16 + prg + chr_size]
+        for i in range(chr_size // 16):
+            tiles.append(chr[i*16:i*16+16])
+            tokens.append("%X" % i)
+
+    num = len(tiles)
+    scale = max(1, args.scale)
+    W = 8 * scale
+    cols = 16
+    rows = math.ceil(num / cols)
+    sw, sh = cols * W, rows * W
+    rgba = bytearray(sw * sh * 4)  # zero-init -> transparent
+
+    def put(px, py, rgb):
+        o = (py * sw + px) * 4
+        rgba[o], rgba[o+1], rgba[o+2], rgba[o+3] = rgb
+
+    for i, tile in enumerate(tiles):
+        tx, ty = (i % cols) * W, (i // cols) * W
+        for r in range(8):
+            lo, hi = tile[r], tile[r + 8]
+            for c in range(8):
+                idx = ((lo >> (7 - c)) & 1) | (((hi >> (7 - c)) & 1) << 1)
+                col = PAL[idx]
+                for dy in range(scale):
+                    for dx in range(scale):
+                        put(tx + c * scale + dx, ty + r * scale + dy, col)
+        for k in range(W):                  # 1px green top + left grid border
+            put(tx + k, ty, BORDER)
+            put(tx, ty + k, BORDER)
+
+    os.makedirs(args.out_dir, exist_ok=True)
+    write_png(os.path.join(args.out_dir, "tiles.png"), sw, sh, rgba)
+
+    with open(os.path.join(args.out_dir, "hires.txt"), "w", newline="\n") as f:
+        f.write("#synthetic HD pack generated by hdpack_gen.py (%s)\n"
+                % ("CHR-RAM content" if args.chr_ram else "CHR-ROM index"))
+        f.write("<ver>103\n")
+        f.write("<scale>%d\n" % scale)
+        f.write("<img>tiles.png\n")
+        for i, tok in enumerate(tokens):
+            x, y = (i % cols) * W, (i // cols) * W
+            f.write("<tile>0,%s,FFFFFFFF,%d,%d,1,Y\n" % (tok, x, y))
+
+    print("wrote %s: %d tiles, sheet %dx%d, scale %dx (%s)" %
+          (args.out_dir, num, sw, sh, scale,
+           "content-keyed" if args.chr_ram else "index-keyed"))
+
+
+if __name__ == "__main__":
+    main()

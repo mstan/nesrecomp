@@ -30,6 +30,7 @@
 #include "color_lut.h"
 #include "save_ram.h"
 #include "config.h"
+#include "hdpack.h"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
@@ -52,6 +53,11 @@ static int         s_smoke_hash_count = 0;
 static SDL_Window        *s_window    = NULL;
 static SDL_Renderer      *s_renderer  = NULL;
 static SDL_Texture       *s_texture   = NULL;
+/* HD texture pack output: when a pack is active the native render still runs at
+ * g_render_width x 240, then hdpack_upscale() builds this HD frame (scale x). */
+static SDL_Texture       *s_hd_texture = NULL;
+static uint32_t          *s_hd_buf     = NULL;
+static int                s_hd_scale   = 1;
 /* Widescreen globals — default to standard 4:3 NES output.
  * Games override these in game_on_init() before the first frame. */
 int g_render_width    = 256;
@@ -733,16 +739,42 @@ smoke_skip_input:
     {
         char shot_path[256];
         if (script_wants_screenshot(shot_path, sizeof(shot_path))) {
-            static uint8_t rgb[512 * 240 * 3];  /* max width */
-            int npx = g_render_width * 240;
-            for (int i = 0; i < npx; i++) {
-                uint32_t px = s_framebuf[i];
-                rgb[i*3+0] = (px >> 16) & 0xFF;
-                rgb[i*3+1] = (px >>  8) & 0xFF;
-                rgb[i*3+2] = (px      ) & 0xFF;
+            if (s_hd_buf && hdpack_active()) {
+                /* Capture the HD output so screenshots match what is displayed. */
+                int hw = g_render_width * s_hd_scale, hh = 240 * s_hd_scale;
+                hdpack_upscale(s_framebuf, g_render_width, s_hd_buf);
+                uint8_t *rgb = (uint8_t *)malloc((size_t)hw * hh * 3);
+                if (rgb) {
+                    for (int i = 0; i < hw * hh; i++) {
+                        uint32_t px = s_hd_buf[i];
+                        rgb[i*3+0] = (px >> 16) & 0xFF;
+                        rgb[i*3+1] = (px >>  8) & 0xFF;
+                        rgb[i*3+2] = (px      ) & 0xFF;
+                    }
+                    stbi_write_png(shot_path, hw, hh, 3, rgb, hw * 3);
+                    free(rgb);
+                    printf("[Shot] %s (HD %dx%d)\n", shot_path, hw, hh);
+                }
+            } else {
+                static uint8_t rgb[512 * 240 * 3];  /* max native width */
+                int npx = g_render_width * 240;
+                for (int i = 0; i < npx; i++) {
+                    uint32_t px = s_framebuf[i];
+                    rgb[i*3+0] = (px >> 16) & 0xFF;
+                    rgb[i*3+1] = (px >>  8) & 0xFF;
+                    rgb[i*3+2] = (px      ) & 0xFF;
+                }
+                stbi_write_png(shot_path, g_render_width, 240, 3, rgb, g_render_width*3);
+                printf("[Shot] %s\n", shot_path);
             }
-            stbi_write_png(shot_path, g_render_width, 240, 3, rgb, g_render_width*3);
-            printf("[Shot] %s\n", shot_path);
+            /* Optional 8KB CHR snapshot dump (authoring HD packs for CHR-RAM
+             * games — the active pattern tables aren't in the ROM). */
+            const char *chrdump = getenv("NESRECOMP_CHR_DUMP");
+            if (chrdump && chrdump[0]) {
+                FILE *cf = fopen(chrdump, "wb");
+                if (cf) { fwrite(g_chr_ram, 1, 0x2000, cf); fclose(cf);
+                          printf("[ChrDump] %s (8KB)\n", chrdump); }
+            }
         }
     }
 
@@ -785,9 +817,17 @@ smoke_skip_input:
             color_lut_apply(s_framebuf, s_present_buf, g_render_width, 240);
             present = s_present_buf;
         }
-        SDL_UpdateTexture(s_texture, NULL, present, g_render_width * 4);
         SDL_RenderClear(s_renderer);
-        SDL_RenderCopy(s_renderer, s_texture, NULL, NULL);
+        if (s_hd_texture && hdpack_active()) {
+            /* HD pack active: upscale the native frame + per-pixel side channel
+             * into the HD buffer, present the HD texture. */
+            hdpack_upscale(present, g_render_width, s_hd_buf);
+            SDL_UpdateTexture(s_hd_texture, NULL, s_hd_buf, g_render_width * s_hd_scale * 4);
+            SDL_RenderCopy(s_renderer, s_hd_texture, NULL, NULL);
+        } else {
+            SDL_UpdateTexture(s_texture, NULL, present, g_render_width * 4);
+            SDL_RenderCopy(s_renderer, s_texture, NULL, NULL);
+        }
         SDL_RenderPresent(s_renderer);
     }
 
@@ -1027,6 +1067,45 @@ void nesrecomp_runner_run(int argc, char *argv[]) {
         exit(1);
     }
     SDL_RenderSetLogicalSize(s_renderer, g_render_width, 240);
+
+    /* HD texture pack (Mesen HD Pack): opt-in via the NESRECOMP_HDPACK env var
+     * or config.ini [Display] HdPackEnabled/HdPackDir. When a pack loads, present
+     * an HD-resolution texture and set the renderer logical size to match so the
+     * upscaled art shows at full detail. Mirrors the SNES MSU-1 opt-in wiring. */
+    if (hdpack_load_from_config(mapper_is_chr_ram(), g_render_width) == 0) {
+        s_hd_scale = hdpack_scale();
+        int hw = g_render_width * s_hd_scale, hh = 240 * s_hd_scale;
+        s_hd_buf = (uint32_t *)malloc((size_t)hw * hh * sizeof(uint32_t));
+        s_hd_texture = SDL_CreateTexture(s_renderer, SDL_PIXELFORMAT_ARGB8888,
+                                         SDL_TEXTUREACCESS_STREAMING, hw, hh);
+        if (s_hd_buf && s_hd_texture) {
+            SDL_RenderSetLogicalSize(s_renderer, hw, hh);
+            /* The HD logical size is larger than the native window, so integer
+             * scaling would round to 0 and draw nothing. Use fractional fit and
+             * size the window to the HD frame (capped to ~90% of the desktop). */
+            SDL_RenderSetIntegerScale(s_renderer, SDL_FALSE);
+            if (!g_nes_config.fullscreen) {
+                int ww = hw, wh = hh;
+                SDL_DisplayMode dm;
+                if (SDL_GetCurrentDisplayMode(0, &dm) == 0) {
+                    double sc = 1.0;
+                    int maxw = (int)(dm.w * 0.9), maxh = (int)(dm.h * 0.9);
+                    if (ww > maxw) sc = (double)maxw / ww;
+                    if (wh * sc > maxh) sc = (double)maxh / wh;
+                    ww = (int)(ww * sc); wh = (int)(wh * sc);
+                }
+                SDL_SetWindowSize(s_window, ww, wh);
+                SDL_SetWindowPosition(s_window, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
+            }
+            printf("[HDPack] HD output enabled: %dx%d (%dx)\n", hw, hh, s_hd_scale);
+        } else {
+            fprintf(stderr, "[HDPack] HD texture/buffer alloc failed; using native output\n");
+            free(s_hd_buf); s_hd_buf = NULL;
+            if (s_hd_texture) { SDL_DestroyTexture(s_hd_texture); s_hd_texture = NULL; }
+            hdpack_unload();
+            s_hd_scale = 1;
+        }
+    }
 
     memset(s_framebuf, 0, sizeof(s_framebuf));
 

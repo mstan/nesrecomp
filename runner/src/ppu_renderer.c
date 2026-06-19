@@ -6,6 +6,7 @@
  */
 #include "nes_runtime.h"
 #include "mapper.h"
+#include "hdpack.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -333,6 +334,14 @@ void ppu_render_frame(uint32_t *framebuf) {
         return;
     }
 
+    /* HD texture pack: per-pixel record of the visible tile, consumed by the
+     * upscaler after this pass. Cleared here (not on the disabled-render early
+     * return above) so kept frames keep a side channel matching the framebuffer.
+     * g_hp stays NULL — and all recording below is skipped — when no pack is
+     * active, so the native render path is unchanged. */
+    HdPixel *g_hp = NULL;
+    if (hdpack_recording()) { hdpack_frame_begin(); g_hp = hdpack_pixels(); }
+
     /* Effective widescreen margins this frame: clamp the per-frame values
      * to the configured framebuffer margins; -1 = follow configured.
      * With margins configured 0 (default) both resolve to 0 and every
@@ -569,10 +578,26 @@ void ppu_render_frame(uint32_t *framebuf) {
                                 (((g_chr_ram[chr_off + 8] >> bit) & 1) << 1);
                 int fb_x = sx + g_widescreen_left;
                 /* PPUMASK bit 1: clip leftmost 8 BG pixels to background color */
-                if (sx >= 0 && sx < 8 && !(g_ppumask & 0x02))
+                if (sx >= 0 && sx < 8 && !(g_ppumask & 0x02)) {
                     framebuf[sy * g_render_width + fb_x] = bg;
-                else
-                    framebuf[sy * g_render_width + fb_x] = bg_color(pal_base, color_idx);
+                } else {
+                    uint32_t bgc = bg_color(pal_base, color_idx);
+                    framebuf[sy * g_render_width + fb_x] = bgc;
+                    if (g_hp && fb_x >= 0 && fb_x < g_render_width) {
+                        HdPixel *hp = &g_hp[sy * g_render_width + fb_x];
+                        hp->bg_has   = 1;
+                        hp->bg_index = (int32_t)((chr_base >> 4) + tile_id);
+                        hp->bg_t16   = &g_chr_ram[chr_base + tile_id * 16];
+                        hp->bg_p0 = g_ppu_pal[0] & 0x3F;
+                        hp->bg_p1 = g_ppu_pal[(pal_base * 4 + 1) & 0x1F] & 0x3F;
+                        hp->bg_p2 = g_ppu_pal[(pal_base * 4 + 2) & 0x1F] & 0x3F;
+                        hp->bg_p3 = g_ppu_pal[(pal_base * 4 + 3) & 0x1F] & 0x3F;
+                        hp->bg_ox = (uint8_t)pixel_col;
+                        hp->bg_oy = (uint8_t)tile_row;
+                        hp->bg_argb  = bgc;   /* original BG color (fallback) */
+                        hp->backdrop = bg;    /* transparent HD BG -> backdrop */
+                    }
+                }
             }
 
             /* Canonical-mode per-scanline advance (only when active). */
@@ -774,7 +799,22 @@ render_sprites:
                 /* Priority=1: sprite behind BG — only draw where BG is transparent */
                 if (priority && framebuf[py * g_render_width + fb_x] != bg) continue;
                 uint8_t nes_color = g_ppu_pal[(spr_pal * 4 + color_idx) & 0x1F] & 0x3F;
-                framebuf[py * g_render_width + fb_x] = g_nes_palette[nes_color];
+                uint32_t spc = g_nes_palette[nes_color];
+                framebuf[py * g_render_width + fb_x] = spc;
+                if (g_hp && fb_x >= 0 && fb_x < g_render_width) {
+                    HdPixel *hp = &g_hp[py * g_render_width + fb_x];
+                    hp->sp_has   = 1;
+                    hp->sp_index = (int32_t)((tile_chr_base >> 4) + tile_num);
+                    hp->sp_t16   = &g_chr_ram[tile_chr_base + tile_num * 16];
+                    hp->sp_p1 = g_ppu_pal[(spr_pal * 4 + 1) & 0x1F] & 0x3F;
+                    hp->sp_p2 = g_ppu_pal[(spr_pal * 4 + 2) & 0x1F] & 0x3F;
+                    hp->sp_p3 = g_ppu_pal[(spr_pal * 4 + 3) & 0x1F] & 0x3F;
+                    hp->sp_ox = (uint8_t)(7 - bit);   /* screen column within tile */
+                    hp->sp_oy = (uint8_t)(row & 7);   /* screen row within displayed cell */
+                    hp->sp_hm = (uint8_t)flip_h;
+                    hp->sp_vm = (uint8_t)flip_v;
+                    hp->sp_argb = spc;                /* original sprite color (fallback) */
+                }
             }
         }
     }

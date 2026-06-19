@@ -28,6 +28,8 @@ uint8_t mapper_peek_prg(uint16_t addr);
  */
 int mapper_get_mirroring(void);
 int mapper_get_type(void);
+/* 1 if the game uses CHR RAM (no CHR ROM); selects the HD-pack tile-match mode. */
+int mapper_is_chr_ram(void);
 
 /* Force-set the switchable PRG bank (used by VBlank save/restore to undo
  * bank switches made by the NMI handler). */
