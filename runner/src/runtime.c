@@ -748,20 +748,6 @@ void ppu_write_reg(uint16_t reg, uint8_t val) {
             break;
         }
         case 0x2006:
-            /* === $2006 WRITE TRAP: frames 192-196 === */
-            {
-                static int ppu2006_trap_count = 0;
-                if (ppu2006_trap_count < 30 && g_frame_count >= 192 && g_frame_count <= 196) {
-                    extern int g_current_bank;
-                    fprintf(stderr, "[PPU2006] f=%llu val=$%02X ppuaddr=$%04X latch=%d vblank=%d bank=%d ram1D=$%02X ram1C=$%02X ram1B=$%02X\n",
-                            (unsigned long long)g_frame_count, val, g_ppuaddr, g_ppuaddr_latch,
-                            s_vblank_depth, g_current_bank,
-                            g_ram[0x1D], g_ram[0x1C], g_ram[0x1B]);
-                    fflush(stderr);
-                    ppu2006_trap_count++;
-                }
-            }
-            /* === END $2006 WRITE TRAP === */
             if (!g_ppuaddr_latch) {
                 /* First write (w=0): val[5:0] → t[13:8], clear t bit 14 */
                 s_ppu_t = (s_ppu_t & 0x00FF) | ((uint16_t)(val & 0x3F) << 8);
@@ -786,17 +772,6 @@ void ppu_write_reg(uint16_t reg, uint8_t val) {
                 uint8_t idx = a & 0x1F;
                 if (idx == 0x10 || idx == 0x14 || idx == 0x18 || idx == 0x1C)
                     idx &= 0x0F;
-                if (idx == 0 && val == 0xBA && g_ppu_pal[0] != 0xBA) {
-                    fprintf(stderr, "\n!!! PAL[0] = $BA at frame %llu, ppuaddr=$%04X, val=$%02X, S=$%02X, ctrl=$%02X !!!\n",
-                            (unsigned long long)g_frame_count, g_ppuaddr, val, g_cpu.S, g_ppuctrl);
-#ifdef RECOMP_STACK_TRACKING
-                    extern const char *g_recomp_stack[];
-                    extern int g_recomp_stack_top;
-                    for (int i = g_recomp_stack_top - 1; i >= 0 && i >= g_recomp_stack_top - 12; i--)
-                        fprintf(stderr, "  [%d] %s\n", i, g_recomp_stack[i] ? g_recomp_stack[i] : "?");
-#endif
-                    fflush(stderr);
-                }
                 g_ppu_pal[idx] = val;
             } else if (a >= 0x2000) {
                 /* Apply mirroring to nametable writes so they land in the
@@ -813,58 +788,6 @@ void ppu_write_reg(uint16_t reg, uint8_t val) {
                 g_ppu_nt[pnt * 0x400 + (a & 0x3FF)] = val;
             }
             else if (!g_chr_is_rom) {
-                /* === CHR WRITE TRAP: frames 190-210 === */
-                {
-                    static int chr_trap_fired = 0;
-                    if (!chr_trap_fired && g_frame_count >= 190 && g_frame_count <= 210) {
-                        chr_trap_fired = 1;
-                        extern int g_current_bank;
-                        fprintf(stderr, "\n=== CHR WRITE TRAP ===\n");
-                        fprintf(stderr, "frame=%llu ppuaddr=$%04X mapped_a=$%04X val=$%02X\n",
-                                (unsigned long long)g_frame_count, g_ppuaddr, a, val);
-                        fprintf(stderr, "ctrl=$%02X latch=%d vblank_depth=%d\n",
-                                g_ppuctrl, g_ppuaddr_latch, s_vblank_depth);
-                        fprintf(stderr, "bank=%d\n", g_current_bank);
-                        /* ZP $00-$0F */
-                        fprintf(stderr, "ZP $00-$0F:");
-                        for (int zi = 0; zi < 16; zi++)
-                            fprintf(stderr, " %02X", g_ram[zi]);
-                        fprintf(stderr, "\n");
-                        /* Key ZP locations */
-                        fprintf(stderr, "$1A=%02X $1B=%02X $1C=%02X $1D=%02X $1E=%02X $5A=%02X\n",
-                                g_ram[0x1A], g_ram[0x1B], g_ram[0x1C],
-                                g_ram[0x1D], g_ram[0x1E], g_ram[0x5A]);
-                        /* Pointer at ($00/$01) and first 16 bytes it points to */
-                        {
-                            uint16_t ptr = g_ram[0x00] | ((uint16_t)g_ram[0x01] << 8);
-                            fprintf(stderr, "($00/$01) ptr=$%04X, data:", ptr);
-                            for (int di = 0; di < 16; di++) {
-                                uint16_t daddr = ptr + di;
-                                uint8_t dval = 0;
-                                if (daddr < 0x0800)
-                                    dval = g_ram[daddr];
-                                else if (daddr >= 0x6000 && daddr < 0x8000)
-                                    dval = g_sram[daddr - 0x6000];
-                                else
-                                    dval = 0xFF; /* unmapped for this dump */
-                                fprintf(stderr, " %02X", dval);
-                            }
-                            fprintf(stderr, "\n");
-                        }
-#ifdef RECOMP_STACK_TRACKING
-                        {
-                            extern const char *g_recomp_stack[];
-                            extern int g_recomp_stack_top;
-                            fprintf(stderr, "Recomp stack (top=%d):\n", g_recomp_stack_top);
-                            for (int si = g_recomp_stack_top - 1; si >= 0 && si >= g_recomp_stack_top - 20; si--)
-                                fprintf(stderr, "  [%d] %s\n", si, g_recomp_stack[si] ? g_recomp_stack[si] : "?");
-                        }
-#endif
-                        fprintf(stderr, "=== END CHR WRITE TRAP ===\n\n");
-                        fflush(stderr);
-                    }
-                }
-                /* === END CHR WRITE TRAP === */
                 if (chr_override_active())
                     chr_override_on_chr_write(a, val);
                 g_chr_ram[a] = val; /* CHR RAM only — CHR ROM is read-only */
