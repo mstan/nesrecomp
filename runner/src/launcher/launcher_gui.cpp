@@ -39,6 +39,8 @@ void stbi_image_free(void* retval_from_stbi_load);
 #  include <windows.h>
 #  include <commdlg.h>
 #  include <shellapi.h>
+#  include <objbase.h>
+#  include <shlobj.h>
 #endif
 
 namespace fs = std::filesystem;
@@ -207,9 +209,50 @@ bool pick_file(const char* title, const char* filter, char* out, size_t max_len)
               | OFN_NOCHANGEDIR;
     return GetOpenFileNameA(&ofn) != 0;
 }
+// Pick a directory (for choosing an HD-pack folder). SHBrowseForFolder's new
+// dialog style needs a COM apartment; SDL usually OleInitialize()s already, but
+// init defensively and only uninit if we actually initialised it here.
+bool pick_folder(const char* title, char* out, size_t max_len) {
+    out[0] = '\0';
+    HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    bool did_init = SUCCEEDED(hr);   // S_OK (we initialised) or S_FALSE (already)
+    BROWSEINFOA bi;
+    std::memset(&bi, 0, sizeof(bi));
+    bi.lpszTitle = title;
+    bi.ulFlags   = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE;
+    LPITEMIDLIST pidl = SHBrowseForFolderA(&bi);
+    bool ok = false;
+    if (pidl) {
+        char path[MAX_PATH] = {0};
+        if (SHGetPathFromIDListA(pidl, path)) {
+            std::snprintf(out, max_len, "%s", path);
+            ok = true;
+        }
+        CoTaskMemFree(pidl);
+    }
+    if (did_init) CoUninitialize();
+    return ok;
+}
+// Directory containing the running executable (the default HD-pack root lives at
+// <exe_dir>/hdpack, matching hdpack_load_from_config's resolution).
+std::string exe_dir() {
+    char buf[MAX_PATH];
+    DWORD n = GetModuleFileNameA(nullptr, buf, (DWORD)sizeof(buf));
+    std::string s(buf, n ? (size_t)n : 0);
+    size_t slash = s.find_last_of("/\\");
+    return slash == std::string::npos ? std::string(".") : s.substr(0, slash);
+}
 #else
 bool pick_file(const char*, const char*, char* out, size_t) { out[0] = '\0'; return false; }
+bool pick_folder(const char*, char* out, size_t) { out[0] = '\0'; return false; }
+std::string exe_dir() { return "."; }
 #endif
+
+// Resolve the pack folder shown/validated in the UI: a custom dir if the user
+// picked one, otherwise the default <exe_dir>/hdpack.
+std::string resolve_hdpack_dir(const NesLauncherSettings& s) {
+    return s.hdpack_dir[0] ? std::string(s.hdpack_dir) : (exe_dir() + "/hdpack");
+}
 
 // One entry in a controller-source dropdown: a stable token + display label.
 struct SrcOption { Rml::String value; Rml::String label; };
@@ -263,6 +306,13 @@ struct Model {
     bool integer_scale = true, filter = false;
     int  volume = 100;
     bool widescreen = false, widescreen_supported = false;
+
+    // HD texture pack
+    bool hdpack_enabled = false;
+    bool hdpack_valid = false;                 // resolved folder has a hires.txt
+    bool hdpack_custom = false;                // a custom folder is set (vs default)
+    Rml::String hdpack_name = "hdpack/ (default)";  // folder shown in the UI
+    Rml::String hdpack_status = "Place a pack in the default hdpack/ folder, or choose one.";
 
     // controller config (deadzone only; device is chosen on the dashboard)
     int cfg_player = 0;
@@ -318,6 +368,25 @@ void refresh_settings_labels(Model& m, const NesLauncherSettings& s) {
     m.p2_src_value = src_to_value(s.player_src[1]);
     m.p1_status = m.p1_enabled ? "Enabled" : "Disabled";
     m.p2_status = m.p2_enabled ? "Enabled" : "Disabled";
+}
+
+// Reflect the HD-pack settings into the model: enabled flag, folder basename,
+// and a status line that validates the folder actually contains a hires.txt.
+void refresh_hdpack(Model& m, const NesLauncherSettings& s) {
+    m.hdpack_enabled = s.hdpack_enabled;
+    bool custom = s.hdpack_dir[0] != '\0';
+    std::string dir = resolve_hdpack_dir(s);
+    bool ok = !dir.empty() && fs::exists(fs::path(dir) / "hires.txt");
+    m.hdpack_custom = custom;
+    m.hdpack_valid = ok;
+    m.hdpack_name = custom ? Rml::String(dir.c_str())
+                           : Rml::String("hdpack/ (default)");
+    if (ok)
+        m.hdpack_status = "\xE2\x9C\x93 hires.txt found \xE2\x80\x94 pack ready.";
+    else if (custom)
+        m.hdpack_status = "No hires.txt in this folder \xE2\x80\x94 not a valid HD pack.";
+    else
+        m.hdpack_status = "No pack in the default hdpack/ folder yet \xE2\x80\x94 drop one in, or choose a folder.";
 }
 
 // Compute and display ROM verification info for `path` (iNES header parse).
@@ -523,6 +592,7 @@ Result run(SDL_Window* window, void* /*gl_context*/,
         save_ram_ui_bind(game.save_basename);
 
     refresh_settings_labels(m, io);
+    refresh_hdpack(m, io);
 
     std::string rom_path = initial_rom ? initial_rom : "";
     load_rom_info(m, game, rom_path);
@@ -583,6 +653,11 @@ Result run(SDL_Window* window, void* /*gl_context*/,
     c.Bind("integer_scale", &m.integer_scale);
     c.Bind("filter", &m.filter);
     c.Bind("volume", &m.volume);
+    c.Bind("hdpack_enabled", &m.hdpack_enabled);
+    c.Bind("hdpack_valid", &m.hdpack_valid);
+    c.Bind("hdpack_custom", &m.hdpack_custom);
+    c.Bind("hdpack_name", &m.hdpack_name);
+    c.Bind("hdpack_status", &m.hdpack_status);
     c.Bind("cfg_player_label", &m.cfg_player_label);
     c.Bind("cfg_deadzone", &m.cfg_deadzone);
 
@@ -705,6 +780,24 @@ Result run(SDL_Window* window, void* /*gl_context*/,
     });
     c.BindEventCallback("vol_down", [&](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
         io.volume = io.volume <= 0 ? 0 : io.volume - 5; m.volume = io.volume; dirty_all();
+    });
+
+    // ---- HD texture pack ----
+    c.BindEventCallback("toggle_hdpack", [&](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
+        io.hdpack_enabled = !io.hdpack_enabled; refresh_hdpack(m, io); dirty_all();
+    });
+    c.BindEventCallback("choose_hdpack", [&](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
+        char buf[512];
+        if (pick_folder("Select HD Texture Pack Folder", buf, sizeof(buf))) {
+            std::snprintf(io.hdpack_dir, sizeof(io.hdpack_dir), "%s", buf);
+            io.hdpack_enabled = true;          // picking a pack implies enabling it
+            refresh_hdpack(m, io);
+            dirty_all();
+        }
+    });
+    c.BindEventCallback("clear_hdpack", [&](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
+        io.hdpack_dir[0] = '\0';   // back to the default <exe>/hdpack (stays enabled)
+        refresh_hdpack(m, io); dirty_all();
     });
 
     // ---- controller config ----
@@ -902,6 +995,8 @@ extern "C" int nes_launcher_run_window(const char* window_title,
     s.deadzone[0]   = io->deadzone[0];
     s.deadzone[1]   = io->deadzone[1];
     s.skip_launcher = io->skip_launcher != 0;
+    s.hdpack_enabled = io->hdpack_enabled != 0;
+    std::snprintf(s.hdpack_dir, sizeof(s.hdpack_dir), "%s", io->hdpack_dir);
 
     GameInfo g;
     g.name             = game->name;
@@ -930,6 +1025,8 @@ extern "C" int nes_launcher_run_window(const char* window_title,
     io->deadzone[0]   = s.deadzone[0];
     io->deadzone[1]   = s.deadzone[1];
     io->skip_launcher = s.skip_launcher;
+    io->hdpack_enabled = s.hdpack_enabled;
+    std::snprintf(io->hdpack_dir, sizeof(io->hdpack_dir), "%s", s.hdpack_dir);
 
     SDL_GL_DeleteContext(ctx);
     SDL_DestroyWindow(win);

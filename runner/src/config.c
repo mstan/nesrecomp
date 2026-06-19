@@ -55,7 +55,7 @@ NesConfig g_nes_config = {
     /*volume*/ 100,
     /*player_src*/ { 1, 2 }, /*deadzone*/ { 30, 30 },
     /*skip_launcher*/ 0,
-    /*hdpack_enabled*/ 0, /*hdpack_dir*/ "",
+    /*hdpack_enabled*/ 1, /*hdpack_dir*/ "",  /* on by default; loads <exe>/hdpack if present */
 };
 
 void config_set_defaults(NesConfig *c) {
@@ -65,7 +65,7 @@ void config_set_defaults(NesConfig *c) {
         100,
         { 1, 2 }, { 30, 30 },
         0,
-        0, "",
+        1, "",
     };
     if (c) *c = d;
 }

@@ -273,6 +273,20 @@ button:focus { border-color: #e23b3b; background-color: #26262c; }
 			<span class="help">Renders wider than the NES's native 256px. Experimental &#8212; some games show artifacts at the screen edges.</span>
 		</div>
 		<div class="panel">
+			<div class="eyebrow">HD TEXTURE PACK</div>
+			<div class="set-row"><span class="set-lbl">Enable HD pack<span class="tag">EXPERIMENTAL</span></span><span class="switch" data-class-on="hdpack_enabled" data-event-click="toggle_hdpack"><span class="knob"></span></span></div>
+			<div class="set-row">
+				<span class="set-lbl">Pack folder</span>
+				<button data-event-click="choose_hdpack">Choose Folder&#8230;</button>
+				<span class="value" style="margin: 0dp 12dp; flex: 1 1 auto; white-space: nowrap; overflow: hidden;">{{hdpack_name}}</span>
+				<button class="btn-danger" data-if="hdpack_custom" data-event-click="clear_hdpack">Use Default</button>
+			</div>
+			<span class="help" style="color: #3fb950;" data-if="hdpack_valid">{{hdpack_status}}</span>
+			<span class="help" style="color: #f0883e;" data-if="hdpack_enabled &amp;&amp; hdpack_valid == false">{{hdpack_status}}</span>
+			<span class="help" data-if="hdpack_enabled == false">Drop-in Mesen HD packs: a folder with hires.txt + PNG sheets. Off = native pixels.</span>
+			<span class="help">Experimental &#8212; condition/background rendering is new; some packs may show minor tile artifacts.</span>
+		</div>
+		<div class="panel">
 			<div class="eyebrow">AUDIO</div>
 			<div class="set-row"><span class="set-lbl">Volume</span><button data-event-click="vol_down">&#8722;</button><span class="value" style="margin: 0dp 12dp;">{{volume}}%</span><button data-event-click="vol_up">+</button></div>
 		</div>

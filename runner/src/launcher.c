@@ -324,6 +324,8 @@ int main(int argc, char *argv[]) {
             ls.deadzone[0]   = g_nes_config.deadzone[0];
             ls.deadzone[1]   = g_nes_config.deadzone[1];
             ls.skip_launcher = g_nes_config.skip_launcher;
+            ls.hdpack_enabled = g_nes_config.hdpack_enabled;
+            snprintf(ls.hdpack_dir, sizeof(ls.hdpack_dir), "%s", g_nes_config.hdpack_dir);
 
             NesLauncherCGameInfo gi;
             memset(&gi, 0, sizeof(gi));
@@ -373,6 +375,8 @@ int main(int argc, char *argv[]) {
                 g_nes_config.deadzone[0]   = ls.deadzone[0];
                 g_nes_config.deadzone[1]   = ls.deadzone[1];
                 g_nes_config.skip_launcher = ls.skip_launcher;
+                g_nes_config.hdpack_enabled = ls.hdpack_enabled;
+                snprintf(g_nes_config.hdpack_dir, sizeof(g_nes_config.hdpack_dir), "%s", ls.hdpack_dir);
                 config_save(config_path());
                 if (rom_path[0]) { rom_cfg_write(rom_path); gui_resolved = 1; }
             }

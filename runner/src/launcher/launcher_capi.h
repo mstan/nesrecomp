@@ -27,6 +27,8 @@ typedef struct NesLauncherCSettings {
     int  player_src[2];     // 0 none, 1 keyboard, 2 gamepad
     int  deadzone[2];       // 0..100
     int  skip_launcher;     // bool: boot straight to the game next time
+    int  hdpack_enabled;    // bool: load a Mesen HD texture pack
+    char hdpack_dir[512];   // folder containing the pack's hires.txt
 } NesLauncherCSettings;
 
 typedef struct NesLauncherCGameInfo {

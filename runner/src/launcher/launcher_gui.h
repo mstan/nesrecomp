@@ -47,6 +47,10 @@ struct NesLauncherSettings {
     // --- Audio ---
     int  volume        = 100;     // 0..100 (game maps to its own scale)
 
+    // --- HD texture pack (Mesen-format) ---
+    bool hdpack_enabled = false;  // load an HD pack at boot
+    char hdpack_dir[512] = {0};   // folder containing the pack's hires.txt
+
     // --- Controllers (2 players) ---
     InputSource player_src[2] = { InputSource::Keyboard, InputSource::Gamepad };
     int  deadzone[2]   = { 30, 30 };   // 0..100 percent of stick range
