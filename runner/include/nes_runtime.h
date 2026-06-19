@@ -200,6 +200,7 @@ extern int     g_spr0_reads_ctr_legacy; /* used only when g_spr0_predict_disable
 extern int     g_spr0_predict_disable;  /* 0 (default) = cycle-accurate sprite-0-hit predictor;
                                          * 1 = legacy 3-read pulse fallback (emergency opt-out). */
 extern int     g_predicted_spr0_scanline; /* 0..240; sprite-0 hit scanline this frame, or 240 if none */
+extern int     g_spr0_split_write_scanline; /* scanline of post-hit playfield-scroll write, or -1 */
 int            ppu_predict_spr0_hit_scanline(void);  /* implemented in ppu_renderer.c */
 
 /* Widescreen rendering: games set these in game_on_init() to widen the

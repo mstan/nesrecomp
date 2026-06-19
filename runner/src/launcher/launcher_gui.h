@@ -86,6 +86,11 @@ struct GameInfo {
     // → Widescreen toggle). Set per-game (e.g. SMB); default hidden.
     bool        widescreen_supported = false;
 
+    // Whether HD texture packs are offered for this build (gates the entire
+    // Settings → HD Texture Pack panel). Default true; a stock build that must
+    // not load packs (e.g. unpatched Zelda) sets this false.
+    bool        hdpack_supported = true;
+
     // Optional game-specific "password / mantra" save (e.g. Faxanadu). When
     // password_save_path is set, the SAVES panel shows the password text
     // (read-only + edit/confirm) rather than the binary SRAM file. The file is a

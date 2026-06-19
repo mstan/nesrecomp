@@ -272,7 +272,7 @@ button:focus { border-color: #e23b3b; background-color: #26262c; }
 			<div class="set-row"><span class="set-lbl">16:9 widescreen<span class="tag">EXPERIMENTAL</span></span><span class="switch" data-class-on="widescreen" data-event-click="toggle_widescreen"><span class="knob"></span></span></div>
 			<span class="help">Renders wider than the NES's native 256px. Experimental &#8212; some games show artifacts at the screen edges.</span>
 		</div>
-		<div class="panel">
+		<div class="panel" data-if="hdpack_supported">
 			<div class="eyebrow">HD TEXTURE PACK</div>
 			<div class="set-row"><span class="set-lbl">Enable HD pack<span class="tag">EXPERIMENTAL</span></span><span class="switch" data-class-on="hdpack_enabled" data-event-click="toggle_hdpack"><span class="knob"></span></span></div>
 			<div class="set-row">

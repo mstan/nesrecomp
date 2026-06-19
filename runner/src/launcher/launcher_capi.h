@@ -40,6 +40,8 @@ typedef struct NesLauncherCGameInfo {
     int         uses_sram;      // show SAVES panel
     const char* save_basename;  // saves/<save_basename>.srm
     int         widescreen_supported;  // show the experimental Widescreen toggle
+    int         hdpack_supported;      // show the HD-pack panel (1=default; 0 hides it,
+                                       // e.g. a stock build that must not load packs)
 
     // Optional game-specific "password / mantra" save (e.g. Faxanadu, which saves
     // via a password rather than battery SRAM). When password_save_path is non-NULL

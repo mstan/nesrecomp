@@ -44,6 +44,19 @@ typedef struct {
     uint8_t  ppuscroll_x_hud, ppuscroll_y_hud, ppuctrl_hud;
     int      spr0_split_active;
     int      spr0_reads_ctr;
+    /* Split-scanline diagnostics (HUD/playfield boundary). spr0_oam_y is this
+     * frame's OAM[0].Y (the authoritative input to the renderer's split_y);
+     * render_split_y/render_use_hud are the values the renderer actually used
+     * on the previous frame's render (captured 1 frame before this frame's
+     * render runs — see main_runner.c ordering of record_frame vs ppu_render). */
+    uint8_t  spr0_oam_y;
+    int16_t  render_split_y;
+    int8_t   render_use_hud;
+    int16_t  spr0_hit_scanline;   /* g_predicted_spr0_scanline: the actual HW
+                                   * sprite-0 hit scanline (accounts for 8x16,
+                                   * flip, CHR pattern) — the correct split. */
+    int16_t  spr0_split_write_sl; /* g_spr0_split_write_scanline: scanline of the
+                                   * post-hit playfield-scroll write (true split). */
 
     /* ---- VBlank / timing state ---- */
     uint32_t ops_count;             /* cycle budget consumed this frame */

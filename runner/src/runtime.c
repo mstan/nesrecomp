@@ -45,6 +45,12 @@ int     g_spr0_predict_disable = 1; /* default 1 (predictor OFF). The hardware-c
                                      * gating prediction on shot-active state). */
 int     g_predicted_spr0_scanline = 240;  /* set per-frame by main_runner.c via predictor */
 int     g_spr0_reads_ctr_legacy = 0;  /* used only when predict_disable=1; non-static so savestate can persist */
+/* Scanline at which the game wrote the FIRST playfield scroll ($2005) AFTER
+ * the sprite-0 hit captured the HUD scroll. This is the true HUD/playfield
+ * boundary (the hit only synchronizes; the game writes the new scroll on a
+ * timed delay so it lands at the HUD bottom). -1 = no post-hit scroll write
+ * this frame. Diagnostics for the HUD-tear-during-transition bug. */
+int     g_spr0_split_write_scanline = -1;
 
 /* CPU-cycle-to-scanline conversion. PPU runs at 3x CPU; 341 dots per scanline.
  * s_ops_count is the per-frame CPU cycle accumulator from maybe_trigger_vblank. */
@@ -411,6 +417,7 @@ void maybe_trigger_vblank(int cycles) {
         int saved_act0 = g_spr0_split_active;
         g_spr0_split_active = 0;
         g_spr0_reads_ctr_legacy = 0;
+        g_spr0_split_write_scanline = -1;
         g_ppuscroll_x = 0;
         g_ppuscroll_y = 0;
         g_ppuscroll_x_hud = 0;
@@ -732,6 +739,11 @@ void ppu_write_reg(uint16_t reg, uint8_t val) {
                 g_ppuscroll_y = val;
                 s_scroll_2005_complete = 1;
             }
+            /* If the HUD scroll was already captured at the sprite-0 hit this
+             * frame, this $2005 write is the post-hit playfield scroll — record
+             * the scanline it lands on (the true HUD/playfield split). */
+            if (g_spr0_split_active && g_spr0_split_write_scanline < 0)
+                g_spr0_split_write_scanline = scanline_from_cycles(s_ops_count);
             g_ppuaddr_latch ^= 1;
             break;
         }

@@ -757,6 +757,13 @@ int hdpack_load(const char *dir, int is_chr_ram_game, int native_w) {
 }
 
 int hdpack_load_from_config(int is_chr_ram_game, int native_w) {
+#ifdef NESRECOMP_GAME_NO_HDPACK
+    /* This build opts out of HD packs entirely (e.g. stock/unpatched Zelda):
+     * never load one, even if a config.ini HdPackEnabled=1 or the NESRECOMP_HDPACK
+     * env var is set. The launcher also hides the HD-pack panel for this build. */
+    (void)is_chr_ram_game; (void)native_w;
+    return -1;
+#else
     /* 1. NESRECOMP_HDPACK is an explicit override — always wins. */
     const char *env = getenv("NESRECOMP_HDPACK");
     if (env && env[0]) return hdpack_load(env, is_chr_ram_game, native_w);
@@ -786,6 +793,7 @@ int hdpack_load_from_config(int is_chr_ram_game, int native_w) {
     if (!pf) return -1;
     fclose(pf);
     return hdpack_load(dir, is_chr_ram_game, native_w);
+#endif /* NESRECOMP_GAME_NO_HDPACK */
 }
 
 /* ── HD rendering (mirrors HdNesPack::DrawTile sampling) ───────────────────── */

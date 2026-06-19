@@ -408,7 +408,15 @@ void ppu_render_frame(uint32_t *framebuf) {
          * games that poll $2002 for VBlank detection (e.g. Yoshi's Cookie). */
         int split_y;
         if (g_spr0_split_active) {
-            split_y = (spr0_y + 15) & ~7;  /* tile-aligned */
+            /* Split lands just below sprite-0 (the HUD/playfield boundary),
+             * tile-aligned. Use the ACTUAL sprite height: the old (spr0_y + 15)
+             * hardcoded an 8px sprite (8 + 7), placing the split a tile row too
+             * high for games with an 8x16 sprite-0. Zelda: OAM[0].Y=39, 8x16 ->
+             * bottom at 55 -> split 56; the old 48 sheared the bottom HUD rows
+             * (hearts) right along with the playfield during a screen scroll.
+             * 8x8 games are unchanged: (y + 8 + 7) == (y + 15). */
+            int spr_height = (g_ppuctrl & 0x20) ? 16 : 8;
+            split_y = (spr0_y + spr_height + 7) & ~7;  /* tile-aligned sprite-0 bottom */
             if (split_y > 240) split_y = 240;
             s_last_valid_split_y = split_y;
             s_split_holdoff      = 6;       /* maintain for up to 6 frames */

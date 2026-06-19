@@ -308,6 +308,7 @@ struct Model {
     bool widescreen = false, widescreen_supported = false;
 
     // HD texture pack
+    bool hdpack_supported = true;              // gates the whole HD-pack panel
     bool hdpack_enabled = false;
     bool hdpack_valid = false;                 // resolved folder has a hires.txt
     bool hdpack_custom = false;                // a custom folder is set (vs default)
@@ -559,6 +560,7 @@ Result run(SDL_Window* window, void* /*gl_context*/,
     m.game_region = game.region ? game.region : "";
     m.uses_sram = game.uses_sram;
     m.widescreen_supported = game.widescreen_supported;
+    m.hdpack_supported = game.hdpack_supported;
     m.has_cartridge = fs::exists(assets / "cartridge.png");
 
     // Game-specific password/mantra save (e.g. Faxanadu). When the game supplies a
@@ -650,6 +652,7 @@ Result run(SDL_Window* window, void* /*gl_context*/,
     c.Bind("renderer_label", &m.renderer_label);
     c.Bind("widescreen", &m.widescreen);
     c.Bind("widescreen_supported", &m.widescreen_supported);
+    c.Bind("hdpack_supported", &m.hdpack_supported);
     c.Bind("integer_scale", &m.integer_scale);
     c.Bind("filter", &m.filter);
     c.Bind("volume", &m.volume);
@@ -1007,6 +1010,7 @@ extern "C" int nes_launcher_run_window(const char* window_title,
     g.uses_sram        = game->uses_sram != 0;
     g.save_basename    = game->save_basename;
     g.widescreen_supported = game->widescreen_supported != 0;
+    g.hdpack_supported     = game->hdpack_supported != 0;
     g.password_save_path   = game->password_save_path;
     g.password_save_label  = game->password_save_label;
 

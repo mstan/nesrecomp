@@ -341,6 +341,14 @@ int main(int argc, char *argv[]) {
 #else
             gi.widescreen_supported = 0;
 #endif
+            /* HD texture packs are supported by default for every game; a build
+             * opts OUT with NESRECOMP_GAME_NO_HDPACK (e.g. a stock/unpatched
+             * Zelda build that must not offer or load remaster packs). */
+#ifdef NESRECOMP_GAME_NO_HDPACK
+            gi.hdpack_supported = 0;
+#else
+            gi.hdpack_supported = 1;
+#endif
 #ifdef NESRECOMP_GAME_PASSWORD_SAVE
             /* Per-game password/mantra save (e.g. Faxanadu): the SAVES panel shows
              * the password text instead of binary SRAM. The file lives next to the

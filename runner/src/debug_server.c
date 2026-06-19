@@ -536,7 +536,9 @@ static void handle_get_frame(int id, const char *json)
                       "\"ppuaddr\":\"0x%04X\",\"addr_latch\":%d,\"scroll_latch\":%d,"
                       "\"data_buf\":\"0x%02X\","
                       "\"hud_sx\":%d,\"hud_sy\":%d,\"hud_ctrl\":\"0x%02X\","
-                      "\"spr0_active\":%d,\"spr0_reads\":%d},"
+                      "\"spr0_active\":%d,\"spr0_reads\":%d,"
+                      "\"spr0_oam_y\":%d,\"split_y\":%d,\"use_hud\":%d,"
+                      "\"spr0_hit\":%d,\"split_write_sl\":%d},"
              "\"timing\":{\"ops_count\":%u,\"vblank_depth\":%d},"
              "\"bank\":%d,"
              "\"mapper\":{\"type\":%d,\"shift_reg\":%d,\"shift_count\":%d,"
@@ -559,6 +561,8 @@ static void handle_get_frame(int id, const char *json)
              r->ppudata_buf,
              r->ppuscroll_x_hud, r->ppuscroll_y_hud, r->ppuctrl_hud,
              r->spr0_split_active, r->spr0_reads_ctr,
+             r->spr0_oam_y, r->render_split_y, r->render_use_hud,
+             r->spr0_hit_scanline, r->spr0_split_write_sl,
              r->ops_count, r->vblank_depth,
              r->current_bank,
              r->mapper.mapper_type, r->mapper.shift_reg, r->mapper.shift_count,
@@ -673,10 +677,12 @@ static void handle_frame_timeseries(int id, const char *json)
         pos += snprintf(buf + pos, 320,
             "{\"f\":%u,\"v\":%d,\"a\":%d,\"x\":%d,\"y\":%d,"
             "\"ctrl\":%d,\"mask\":%d,\"sx\":%d,\"sy\":%d,"
+            "\"soy\":%d,\"ss\":%d,\"sply\":%d,\"hx\":%d,"
             "\"bk\":%d,\"btn\":%d,\"gd\":\"%s\"}",
             r->frame_number, r->verify_pass,
             r->cpu_a, r->cpu_x, r->cpu_y,
             r->ppuctrl, r->ppumask, r->ppuscroll_x, r->ppuscroll_y,
+            r->spr0_oam_y, r->spr0_split_active, r->render_split_y, r->ppuscroll_x_hud,
             r->current_bank, r->controller1_buttons,
             gd_hex);
     }
@@ -1822,6 +1828,13 @@ void debug_server_record_frame(void)
     r->ppuctrl_hud     = g_ppuctrl_hud;
     r->spr0_split_active = g_spr0_split_active;
     r->spr0_reads_ctr    = g_spr0_reads_ctr_legacy;
+    /* Split-scanline diagnostics: OAM[0].Y is this frame's split input;
+     * g_render_post_irq_split_y/use_hud are last frame's render outputs. */
+    r->spr0_oam_y        = g_ppu_oam[0];
+    r->render_split_y    = (int16_t)g_render_post_irq_split_y;
+    r->render_use_hud    = (int8_t)g_render_post_irq_use_hud;
+    r->spr0_hit_scanline = (int16_t)g_predicted_spr0_scanline;
+    r->spr0_split_write_sl = (int16_t)g_spr0_split_write_scanline;
 
     /* ---- VBlank / timing state ---- */
     {
