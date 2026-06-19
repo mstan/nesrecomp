@@ -141,6 +141,7 @@ static bool game_config_load_toml(GameConfig *cfg, const char *path) {
         cfg->known_split_tables[idx].hi_start = toml_hex(t, "hi_addr");
         cfg->known_split_tables[idx].count    = toml_int_or(t, "count", 0);
         cfg->known_split_tables[idx].stride   = toml_int_or(t, "stride", 1);
+        cfg->known_split_tables[idx].adjust   = toml_int_or(t, "adjust", 1);
     }
 
     /* [[inline_dispatch]] */

@@ -70,7 +70,9 @@ typedef struct {
 
 /*
  * Split dispatch table: lo-bytes and hi-bytes in separate arrays.
- * target = (hi[i] << 8 | lo[i]) + 1.
+ * target = (hi[i] << 8 | lo[i]) + adjust.
+ *   adjust=1 (default): RTS-computed-goto tables store (target-1).
+ *   adjust=0: JMP-indirect tables store the exact target address.
  * stride=1: packed; stride=2: interleaved pairs.
  */
 typedef struct {
@@ -79,6 +81,7 @@ typedef struct {
     uint16_t hi_start;
     int      count;
     int      stride;
+    int      adjust;
 } KnownSplitTable;
 
 /*

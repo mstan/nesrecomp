@@ -1699,7 +1699,7 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
         for (int si = 0; si < cfg->known_split_tables[t].count; si++) {
             uint8_t lo = rom_read(rom, kb, cfg->known_split_tables[t].lo_start + si * st);
             uint8_t hi = rom_read(rom, kb, cfg->known_split_tables[t].hi_start + si * st);
-            uint16_t target = (lo | ((uint16_t)hi << 8)) + 1;
+            uint16_t target = (lo | ((uint16_t)hi << 8)) + cfg->known_split_tables[t].adjust;
             if (target >= 0x8000 && target <= 0xBFFD) {
                 if (!function_list_contains(out, target, kb))
                     add_function_with_source(out, target, kb, FUNCTION_SOURCE_KNOWN_TABLE);
