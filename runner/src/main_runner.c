@@ -35,6 +35,22 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
+/* Always-on audio observability (round-2). Env-gated: zero effect unless
+ * RECOMP_AUDIO_DEBUG=<dir> is set. See recomp_audio_debug.h. */
+#define RECOMP_AUDIO_DEBUG_IMPL
+#include "recomp_audio_debug.h"
+
+/* Shared clock-domain bridge (round-2): a real SDL audio callback pulls from a
+ * persistent band-limited resampler + fill controller, decoupling the steady host
+ * consumer from the bursty video-paced producer. This is the NES crackle fix:
+ * measurement showed the old SDL_QueueAudio push model let the queue hit 0 (SDL
+ * fills underruns with silence -> crackle). */
+#define RECOMP_AUDIO_DRC_IMPL
+#include "recomp_audio_drc.h"
+static rab_bridge   s_bridge;
+static int          s_bridge_ready = 0;
+static SDL_mutex   *s_audio_mtx    = NULL;
+
 /* ---- Script / record / savestate paths (set from CLI) ---- */
 static const char *s_script_path    = NULL;
 static const char *s_record_path    = NULL;
@@ -342,6 +358,23 @@ static void watch_render_frame(void) {
 static SDL_AudioDeviceID  s_audio_dev = 0;
 #define AUDIO_SAMPLES_PER_FRAME 735
 static int16_t            s_audio_frame[AUDIO_SAMPLES_PER_FRAME];
+
+/* SDL audio callback (round-2): runs on the audio thread at the device's steady
+ * cadence and pulls mono samples from the bridge. This is the consumer that the
+ * old push model lacked; it never stalls on video-frame jitter. */
+static void nes_audio_cb(void *ud, Uint8 *stream, int len) {
+    (void)ud;
+    int frames = len / (int)sizeof(int16_t);   /* mono S16 */
+    if (s_bridge_ready) {
+        SDL_LockMutex(s_audio_mtx);
+        rab_pull(&s_bridge, (int16_t *)stream, frames);
+        SDL_UnlockMutex(s_audio_mtx);
+        recomp_audio_debug_push_i16("t3_bridge_out", (int16_t *)stream,
+                                    frames, s_bridge.cfg.host_rate, 1);
+    } else {
+        SDL_memset(stream, 0, (size_t)len);
+    }
+}
 
 /* ---- Screenshot ---- */
 /* Non-static wrapper so ppu_renderer.c can save PNGs */
@@ -663,17 +696,64 @@ smoke_skip_input:
     /* Generate one frame of audio after NMI (APU registers now up-to-date).
      * Skip in turbo mode — queued audio would pile up faster than it drains. */
     if (s_audio_dev && !g_turbo && !s_smoke_frames) {
-        /* Don't over-buffer: skip if more than 6 frames already queued */
-        if (SDL_GetQueuedAudioSize(s_audio_dev) < AUDIO_SAMPLES_PER_FRAME * sizeof(int16_t) * 6) {
+        static int s_synth_mode = -2;            /* -2 = not yet queried */
+        static uint64_t s_synth_pos = 0;
+        if (s_synth_mode == -2) s_synth_mode = recomp_audio_synth_mode();
+        if (s_synth_mode != RAD_SYNTH_OFF)
+            recomp_audio_synth_fill(s_synth_mode, s_audio_frame,
+                                    AUDIO_SAMPLES_PER_FRAME, 1, 44100.0, &s_synth_pos);
+        else
             apu_generate(s_audio_frame, AUDIO_SAMPLES_PER_FRAME);
-            /* Apply the launcher volume (0..100) as a linear scale. */
-            int vol = g_nes_config.volume;
-            if (vol < 100) {
-                if (vol < 0) vol = 0;
-                for (int i = 0; i < AUDIO_SAMPLES_PER_FRAME; i++)
-                    s_audio_frame[i] = (int16_t)((int)s_audio_frame[i] * vol / 100);
+
+        /* T1: raw emulator-rate PCM, before volume. */
+        recomp_audio_debug_push_i16("t1_apu", s_audio_frame,
+                                    AUDIO_SAMPLES_PER_FRAME, 44100.0, 1);
+
+        /* Apply the launcher volume (0..100) as a linear scale. */
+        int vol = g_nes_config.volume;
+        if (vol < 100) {
+            if (vol < 0) vol = 0;
+            for (int i = 0; i < AUDIO_SAMPLES_PER_FRAME; i++)
+                s_audio_frame[i] = (int16_t)((int)s_audio_frame[i] * vol / 100);
+        }
+        /* T2: what the bridge receives. */
+        recomp_audio_debug_push_i16("t2_bridge_in", s_audio_frame,
+                                    AUDIO_SAMPLES_PER_FRAME, 44100.0, 1);
+
+        if (s_bridge_ready) {
+            SDL_LockMutex(s_audio_mtx);
+            rab_push(&s_bridge, s_audio_frame, AUDIO_SAMPLES_PER_FRAME);
+            double fill = rab_fill_ms(&s_bridge);
+            rab_stats st; rab_get_stats(&s_bridge, &st);
+            SDL_UnlockMutex(s_audio_mtx);
+            recomp_audio_debug_eventf("bfill", "fill_ms=%.1f under=%llu over=%llu",
+                                      fill, (unsigned long long)st.underrun_events,
+                                      (unsigned long long)st.overflow_drops);
+        } else {
+            /* legacy fallback (bridge failed to init): old push path */
+            SDL_QueueAudio(s_audio_dev, s_audio_frame,
+                           AUDIO_SAMPLES_PER_FRAME * sizeof(int16_t));
+        }
+    }
+
+    /* Headless capture helper: RECOMP_AUDIO_DEBUG_DUMP_SECS=N dumps the rings and
+     * exits after N seconds of audio frames (for data collection, not ear tests). */
+    if (recomp_audio_debug_enabled()) {
+        static int s_dump_frames = -2;   /* -2 = unqueried, -1 = disabled */
+        static uint64_t s_audio_frames_seen = 0;
+        if (s_dump_frames == -2) {
+            const char *e = getenv("RECOMP_AUDIO_DEBUG_DUMP_SECS");
+            s_dump_frames = (e && *e) ? (int)(atof(e) * 60.0) : -1;
+        }
+        if (s_dump_frames > 0) {
+            s_audio_frames_seen++;
+            if ((int)s_audio_frames_seen >= s_dump_frames) {
+                recomp_audio_debug_dump(0.0, NULL);
+                printf("[audio-debug] dumped after %llu frames; exiting\n",
+                       (unsigned long long)s_audio_frames_seen);
+                fflush(stdout);
+                exit(0);
             }
-            SDL_QueueAudio(s_audio_dev, s_audio_frame, AUDIO_SAMPLES_PER_FRAME * sizeof(int16_t));
         }
     }
 
@@ -1012,15 +1092,35 @@ void nesrecomp_runner_run(int argc, char *argv[]) {
         want.format   = AUDIO_S16SYS;
         want.channels = 1;
         want.samples  = 512;
-        want.callback = NULL;
+        want.callback = nes_audio_cb;   /* round-2: pull from the bridge */
         SDL_AudioSpec got;
-        s_audio_dev = SDL_OpenAudioDevice(NULL, 0, &want, &got, 0);
+        s_audio_dev = SDL_OpenAudioDevice(NULL, 0, &want, &got,
+                                          SDL_AUDIO_ALLOW_FREQUENCY_CHANGE);
         if (s_audio_dev == 0) {
             fprintf(stderr, "[APU] SDL_OpenAudioDevice: %s (continuing without audio)\n",
                     SDL_GetError());
         } else {
+            s_audio_mtx = SDL_CreateMutex();
+            rab_config rc; rab_config_defaults(&rc);
+            rc.channels    = 1;
+            rc.source_rate = 44100.0;
+            rc.host_rate   = (double)got.freq;
+            /* Tuned to the measured video-paced burst swing (~100 ms): a deep ring
+             * with a high target absorbs producer droughts so the device never
+             * starves. Latency cost ~90 ms is inaudible for these games. */
+            rc.target_ms   = 60.0;
+            rc.ring_ms     = 250.0;
+            /* Allow up to +/-1.5% ratio correction so the controller can track a
+             * real producer/consumer clock mismatch and hold the fill at target
+             * instead of drifting toward underrun/overflow. Only the steady-state
+             * offset is continuous; for matched clocks it sits near 0. */
+            rc.max_correction = 0.015;
+            s_bridge_ready = (rab_init(&s_bridge, &rc) == 0);
             SDL_PauseAudioDevice(s_audio_dev, 0); /* start playback */
-            printf("[APU] Audio device opened: %d Hz, %d ch\n", got.freq, got.channels);
+            printf("[APU] Audio device opened: %d Hz, %d ch  (bridge=%s, target=%.0fms)\n",
+                   got.freq, got.channels, s_bridge_ready ? "on" : "FAILED", rc.target_ms);
+            if (recomp_audio_debug_init())
+                printf("[audio-debug] capture ON (synth=%d)\n", recomp_audio_synth_mode());
         }
     }
 
