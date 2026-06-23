@@ -147,3 +147,69 @@ KirbysAdventureRecomp.exe "<rom>" --smoke 120 --smoke-interval 30 *> smoke.log
 
 After committing `recompiler/src`, bump `KirbysAdventureNESRecomp/nesrecomp.pin`
 `sha` to the new worktree HEAD or the CMake pin check fails the build.
+
+---
+
+## Session 2026-06-22 — single-variant dispatch ignored the live bank
+
+### Summary
+
+The `$853E`/`$A4BD`/`$A860` "frontier" from the previous session was a symptom of
+a deeper recompiler bug, not a dropped bank switch. A boot-script call-pointer
+handler dispatched via `JMP ($6038)` runs in whatever bank R7 maps at `$A000`,
+but `emit_dispatch` emitted an **unconditional** call for any CPU address
+discovered in only one bank — ignoring the live bank. So a handler pointer hit
+under a different live bank **silently ran the wrong bank's routine**, and the
+wrong-bank execution recorded no dispatch miss (the `a000_r6`/caller-bank
+fallbacks rescued it to a wrong-bank variant).
+
+Concretely: `$A295` was discovered only in bank17, so `call_by_address($A295)`
+always ran `func_A295_b17` even though the boot script dispatched it with
+`$A000`=bank30. bank17's `$A295` is a different routine; it flowed into
+`$A2B9 JSR $8B35` and limped along via the caller-bank fallback (the single
+"load-bearing" fallback fire the prior session chased).
+
+### Fix (committed: `recompiler/src/code_generator.c`, `emit_dispatch`)
+
+For MMC3 (mapper 4) single-variant switchable-region (`$8000-$BFFF`,
+non-fixed-bank) addresses, emit the same `switch (_bank)` guard the
+multi-variant path uses, so a live-bank mismatch falls through to the
+interpreter (which reads the live bank correctly) and is **recorded as a miss**
+instead of silently running the wrong bank. Gated to mapper 4 — non-MMC3 output
+is byte-identical (verified: MM3 regen + `dispatch.c` compile clean).
+
+Effect on Kirby cold boot: the caller-bank fallback stops firing (no longer
+load-bearing); boot still reaches `frames_run: 120`; the previously-**hidden**
+wrong-bank dispatches `$A295` and `$A82F` surface as misses.
+
+### Handler seeding (`KirbysAdventureNESRecomp/game.toml`, on-disk only)
+
+The guard surfaced the full set of boot-script call-pointer handlers. All five
+dispatch under live `$A000`=bank30 (R7/2=30 — the `0/14/26` banks noted last
+session were the misleading R6/2 field):
+
+```toml
+[functions]
+fixed  = [ 0xDA29 ]
+bank30 = [ 0xA38D, 0xA27C, 0xA7D1, 0xA295, 0xA4BD, 0xA82F, 0xA860, 0xA3F8 ]
+```
+
+Result: `dispatch_miss_count: 0` (was 188), all handlers native, boot `120`.
+The Kirby intro sequence renders correctly.
+
+### New frontier (next session)
+
+- `BRK $853E bank=14 (frame 26)` — unchanged; the boot still unwinds here
+  (this is why the title-screen transition closes). Separate from the dispatch
+  bug fixed above. Next: Ghidra `$853E` in bank14.
+
+### Methodology notes
+
+- **Battery `.srm` poisons the baseline.** Kirby's boot branches on WRAM
+  (`$6600`); a stale `saves/kirbys_adventure.srm` (written at the early-unwind
+  exit) feeds garbage back in and changes the boot path. Delete it before every
+  run for a deterministic cold boot.
+- The caller-bank/`a000_r6` fallbacks should eventually become logged tripwires
+  or be removed once discovery is complete; they mask wrong-bank execution.
+  The complete follow-up is table-driven / miss-ring-manifest discovery of all
+  script call-pointer handlers rather than per-handler `game.toml` seeds.
