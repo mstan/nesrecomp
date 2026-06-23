@@ -2699,7 +2699,25 @@ static void emit_dispatch(FILE *f, const EmittedWrapper *wrappers, int wrapper_c
         if (nv == 1) {
             char nm[32];
             format_func_name(nm, sizeof nm, addr, variants[0], fixed_bank);
-            fprintf(f, "            %s(); break;\n", nm);
+            /* MMC3: a single-variant switchable-region ($8000-$BFFF) address must
+             * STILL verify the live bank.  An indirectly-dispatched address (e.g. a
+             * boot-script handler pointer reached via JMP ($6038)) can be hit under
+             * a DIFFERENT live bank, where that CPU address holds a different
+             * routine.  An unconditional call silently runs the wrong bank's code
+             * (Kirby: $A295 dispatched with live $A000=bank30 was running bank17's
+             * $A295, which limped on via the caller-bank fallback).  Guard on _bank;
+             * on a live-bank mismatch fall through to interp, which reads the live
+             * bank correctly.  Gated to mapper 4 so non-MMC3 output is unchanged. */
+            if (rom->mapper == 4 && addr >= 0x8000 && addr < 0xC000 &&
+                variants[0] != fixed_bank) {
+                fprintf(f, "            switch (_bank) {\n");
+                fprintf(f, "                case %d: %s(); break;\n", variants[0], nm);
+                fprintf(f, "                default: if (_a000_r6_fallback) { _bank = g_current_bank; _a000_r6_fallback = 0; goto _dispatch_retry; } if (_caller_bank >= 0 && _caller_bank != _bank) { _bank = _caller_bank; _caller_bank = -1; goto _dispatch_retry; } return nes_interp_dispatch(addr);\n");
+                fprintf(f, "            }\n");
+                fprintf(f, "            break;\n");
+            } else {
+                fprintf(f, "            %s(); break;\n", nm);
+            }
         } else {
             /* Multiple bank variants: dispatch by current bank.
              * For MMC3, use _bank which selects g_mmc3_bank_a000 for
