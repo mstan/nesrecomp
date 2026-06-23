@@ -48,6 +48,16 @@ typedef struct {
     double deadband_ms;     /* +/- band around target with no correction (1.0)  */
     double em_low_ms;       /* below this = underrun emergency (default 12)     */
     double em_high_ms;      /* above this = overflow emergency (default 105)    */
+    /* --- Phase-1 stall concealment (brief transition/startup producer stalls) --- */
+    double preroll_ms;      /* initial prime cushion; 0 => prime at target_ms.      *
+                             * A boot pre-roll hides the cold-start hitch for free   *
+                             * (latency before gameplay is irrelevant); the servo    *
+                             * drains the excess down to target over time.           */
+    int    stretch_enable;  /* 1 = conceal underruns by pitch-preserving loop of the *
+                             * most recent audio instead of fading to silence (1)    */
+    double stretch_min_ms;  /* min loop period / correlation search floor (5)        */
+    double stretch_max_ms;  /* max loop period / correlation search ceil  (25)       */
+    double stretch_xfade_ms;/* loop-wrap crossfade length (4)                        */
 } rab_config;
 
 typedef struct {
@@ -55,6 +65,8 @@ typedef struct {
     uint64_t pulled_frames;
     uint64_t underrun_events;   /* times the ring ran dry mid-pull            */
     uint64_t overflow_drops;    /* source frames dropped on ring overflow     */
+    uint64_t stretch_frames;    /* output frames synthesized by stall conceal */
+    uint64_t stretch_events;    /* distinct stall episodes concealed          */
     double   last_fill_ms;
     double   last_correction;   /* applied ratio correction (signed)          */
 } rab_stats;
@@ -77,8 +89,15 @@ typedef struct rab_bridge {
 
     /* fade / emergency */
     double gain;            /* 0..1 smooth gate for startup/underrun           */
-    int    primed;          /* set once fill first reaches target              */
+    int    primed;          /* set once fill first reaches prime_ms            */
+    double prime_ms;        /* fill needed to prime (preroll_ms or target_ms)  */
     float  last_out[2];     /* last emitted sample per channel (for holds)     */
+
+    /* stall concealment (pitch-preserving loop of recent audio on starvation) */
+    int    concealing;      /* currently looping to conceal a producer stall   */
+    double loop_start;      /* source-frame index: start of the looped region  */
+    double loop_len;        /* looped region length in source frames           */
+    double loop_pos;        /* fractional read cursor within the looped region */
 
     rab_stats stats;
 } rab_bridge;
@@ -146,6 +165,11 @@ void rab_config_defaults(rab_config *c) {
     c->deadband_ms    = 1.0;
     c->em_low_ms      = 12.0;
     c->em_high_ms     = 105.0;
+    c->preroll_ms       = 0.0;    /* 0 => prime at target_ms (no extra boot cushion) */
+    c->stretch_enable   = 1;
+    c->stretch_min_ms   = 5.0;
+    c->stretch_max_ms   = 25.0;
+    c->stretch_xfade_ms = 4.0;
 }
 
 int rab_init(rab_bridge *b, const rab_config *cfg) {
@@ -192,6 +216,7 @@ int rab_init(rab_bridge *b, const rab_config *cfg) {
 
     double cap_ms = cfg->ring_ms;
     if (cap_ms < cfg->target_ms + 40.0) cap_ms = cfg->target_ms + 40.0;
+    if (cap_ms < cfg->preroll_ms + 40.0) cap_ms = cfg->preroll_ms + 40.0; /* hold the boot pre-roll */
     b->cap = (int64_t)(cfg->source_rate * cap_ms / 1000.0) + cfg->taps + 2;
     b->ring = (float *)calloc((size_t)b->cap * cfg->channels, sizeof(float));
     if (!b->ring) { free(b->coeffs); b->coeffs = NULL; return 7; }
@@ -206,6 +231,9 @@ int rab_init(rab_bridge *b, const rab_config *cfg) {
     b->corr     = 0.0;
     b->gain     = 0.0;
     b->primed   = 0;
+    b->prime_ms = (cfg->preroll_ms > cfg->target_ms) ? cfg->preroll_ms : cfg->target_ms;
+    b->concealing = 0;
+    b->loop_start = b->loop_len = b->loop_pos = 0.0;
     return 0;
 }
 
@@ -246,7 +274,7 @@ static void rab__update_controller(rab_bridge *b) {
     double fill_ms = rab_fill_ms(b);
     b->stats.last_fill_ms = fill_ms;
 
-    if (!b->primed && fill_ms >= c->target_ms) b->primed = 1;
+    if (!b->primed && fill_ms >= b->prime_ms) b->primed = 1;
 
     /* one control update per pull; low-pass the normalized error. Use the pull
      * block duration as dt (approx via host_rate is unnecessary here -- we fold
@@ -277,45 +305,132 @@ static void rab__update_controller(rab_bridge *b) {
     b->stats.last_correction = b->corr;
 }
 
+/* Evaluate the polyphase resampler at an absolute fractional source position.
+ * Caller guarantees [floor(pos)-half+1 .. floor(pos)+half] are live ring frames. */
+static void rab__sample_at(const rab_bridge *b, double pos, float *s) {
+    int ch = b->cfg.channels;
+    int64_t i  = (int64_t)floor(pos);
+    double  fr = pos - (double)i;
+    int phase = (int)(fr * b->cfg.phases);
+    if (phase >= b->cfg.phases) phase = b->cfg.phases - 1;
+    if (phase < 0) phase = 0;
+    const float *cz = b->coeffs + (size_t)phase * b->cfg.taps;
+    float s0 = 0.0f, s1 = 0.0f;
+    for (int k = 0; k < b->cfg.taps; ++k) {
+        int64_t m = i - b->half + 1 + k;
+        if (m < 0) m = 0;
+        const float *sl = b->ring + (m % b->cap) * ch;
+        s0 += cz[k] * sl[0];
+        if (ch == 2) s1 += cz[k] * sl[1];
+    }
+    s[0] = s0; s[1] = (ch == 2) ? s1 : 0.0f;
+}
+
+/* Choose a loop length (source frames) ending at end_i whose period best matches
+ * the signal one period earlier (normalized cross-correlation on ch0), so the
+ * loop wrap is pitch-continuous instead of buzzy. */
+static double rab__find_loop_len(const rab_bridge *b, int64_t end_i) {
+    int ch = b->cfg.channels;
+    double sr = b->cfg.source_rate;
+    int Lmin = (int)(b->cfg.stretch_min_ms * sr / 1000.0); if (Lmin < 1) Lmin = 1;
+    int Lmax = (int)(b->cfg.stretch_max_ms * sr / 1000.0); if (Lmax < Lmin) Lmax = Lmin;
+    int W = Lmin; if (W < 1) W = 1;
+    int64_t oldest = (int64_t)b->in_count - b->cap + b->half + 2;
+    if (oldest < (int64_t)b->half) oldest = (int64_t)b->half;
+    while (Lmax > Lmin && (end_i - Lmax - W) < oldest) Lmax--;
+    if ((end_i - Lmax - W) < oldest) return (double)Lmin;
+    double best = -1e30; int bestL = Lmin;
+    for (int L = Lmin; L <= Lmax; ++L) {
+        double num = 0.0, d1 = 0.0, d2 = 0.0;
+        for (int k = 0; k < W; ++k) {
+            float a = b->ring[((end_i - k)     % b->cap) * ch];
+            float c = b->ring[((end_i - L - k) % b->cap) * ch];
+            num += (double)a * c; d1 += (double)a * a; d2 += (double)c * c;
+        }
+        double r = num / (sqrt(d1 * d2) + 1e-9);
+        if (r > best) { best = r; bestL = L; }
+    }
+    return (double)bestL;
+}
+
 void rab_pull(rab_bridge *b, int16_t *out, int frames) {
     int ch = b->cfg.channels;
     rab__update_controller(b);
 
     double gstep = 1.0 / (b->cfg.host_rate * 0.003); /* ~3ms fade in/out */
     double step  = b->cur_step;
+    double xf    = b->cfg.stretch_xfade_ms * b->cfg.source_rate / 1000.0;
+    if (xf < 1.0) xf = 1.0;
 
     for (int f = 0; f < frames; ++f) {
         int64_t i   = (int64_t)floor(b->out_pos);
-        double  fr  = b->out_pos - (double)i;
         int64_t newest_needed = i + b->half;
         int     have = b->primed && (newest_needed < (int64_t)b->in_count)
                        && ((i - b->half + 1) >= 0);
 
         float s[2] = {0.0f, 0.0f};
+        int   delivering = 0;
+
         if (have) {
+            /* live forward play; caught up to real audio, so leave conceal mode */
+            b->concealing = 0;
+            double fr = b->out_pos - (double)i;
             int phase = (int)(fr * b->cfg.phases);
             if (phase >= b->cfg.phases) phase = b->cfg.phases - 1;
             const float *cz = b->coeffs + (size_t)phase * b->cfg.taps;
             for (int k = 0; k < b->cfg.taps; ++k) {
                 int64_t m = i - b->half + 1 + k;
                 const float *sl = b->ring + (m % b->cap) * ch;
-                float w = cz[k];
-                s[0] += w * sl[0];
-                if (ch == 2) s[1] += w * sl[1];
+                s[0] += cz[k] * sl[0];
+                if (ch == 2) s[1] += cz[k] * sl[1];
             }
-            b->last_out[0] = s[0];
-            if (ch == 2) b->last_out[1] = s[1];
-            b->out_pos += step;             /* advance only when we consumed */
+            b->out_pos += step;             /* advance only when we consumed live */
+            delivering = 1;
+        } else if (b->primed && b->cfg.stretch_enable
+                   && (int64_t)b->in_count > (int64_t)(2 * b->half + 4)) {
+            /* Producer stalled: conceal by looping the most recent audio,
+             * pitch-aligned, instead of fading to silence. out_pos is held at the
+             * stall edge so live play resumes seamlessly once the producer
+             * recovers (the concealed time becomes latency the servo drains). */
+            if (!b->concealing) {
+                int64_t end_i = (int64_t)b->in_count - b->half - 1;
+                if (end_i < (int64_t)b->half + 2) end_i = (int64_t)b->half + 2;
+                b->loop_len   = rab__find_loop_len(b, end_i);
+                b->loop_start = (double)end_i - b->loop_len;
+                if (b->loop_start < (double)b->half) b->loop_start = (double)b->half;
+                b->loop_pos   = b->loop_start;
+                b->concealing = 1;
+                b->stats.stretch_events++;
+            }
+            double loop_end = b->loop_start + b->loop_len;
+            rab__sample_at(b, b->loop_pos, s);
+            double into_xf = b->loop_pos - (loop_end - xf);
+            if (into_xf > 0.0 && b->loop_len > xf) {   /* pitch-continuous wrap */
+                float sw[2];
+                rab__sample_at(b, b->loop_pos - b->loop_len, sw);
+                double w = into_xf / xf; if (w > 1.0) w = 1.0;
+                s[0] = (float)((1.0 - w) * s[0] + w * sw[0]);
+                if (ch == 2) s[1] = (float)((1.0 - w) * s[1] + w * sw[1]);
+            }
+            b->loop_pos += step;
+            if (b->loop_pos >= loop_end) b->loop_pos -= b->loop_len;
+            b->stats.stretch_frames++;
+            delivering = 1;
         } else {
-            /* underrun / not yet primed: hold last sample, let gain fade it out */
+            /* not primed, or no history to loop: hold last sample, fade to silence */
             s[0] = b->last_out[0];
             if (ch == 2) s[1] = b->last_out[1];
             if (b->primed && newest_needed >= (int64_t)b->in_count)
                 b->stats.underrun_events++;
         }
 
-        /* smooth gate: fade toward 1 when delivering real audio, toward 0 else */
-        double target_gain = have ? 1.0 : 0.0;
+        if (delivering) {
+            b->last_out[0] = s[0];
+            if (ch == 2) b->last_out[1] = s[1];
+        }
+
+        /* smooth gate: fade toward 1 when delivering audio, toward 0 else */
+        double target_gain = delivering ? 1.0 : 0.0;
         if (b->gain < target_gain) {
             b->gain += gstep; if (b->gain > target_gain) b->gain = target_gain;
         } else if (b->gain > target_gain) {

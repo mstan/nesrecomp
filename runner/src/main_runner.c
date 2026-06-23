@@ -726,9 +726,12 @@ smoke_skip_input:
             double fill = rab_fill_ms(&s_bridge);
             rab_stats st; rab_get_stats(&s_bridge, &st);
             SDL_UnlockMutex(s_audio_mtx);
-            recomp_audio_debug_eventf("bfill", "fill_ms=%.1f under=%llu over=%llu",
+            recomp_audio_debug_eventf("bfill",
+                                      "fill_ms=%.1f under=%llu over=%llu stretch_f=%llu stretch_e=%llu",
                                       fill, (unsigned long long)st.underrun_events,
-                                      (unsigned long long)st.overflow_drops);
+                                      (unsigned long long)st.overflow_drops,
+                                      (unsigned long long)st.stretch_frames,
+                                      (unsigned long long)st.stretch_events);
         } else {
             /* legacy fallback (bridge failed to init): old push path */
             SDL_QueueAudio(s_audio_dev, s_audio_frame,
@@ -1115,6 +1118,12 @@ void nesrecomp_runner_run(int argc, char *argv[]) {
              * instead of drifting toward underrun/overflow. Only the steady-state
              * offset is continuous; for matched clocks it sits near 0. */
             rc.max_correction = 0.015;
+            /* Phase-1 boot pre-roll: prime the ring to ~200 ms before playback so
+             * the cold-start hitch (JIT warm-up / first audio bursts) is concealed.
+             * The added latency is irrelevant pre-gameplay; the servo drains the
+             * excess down to target_ms over time. Underrun time-stretch concealment
+             * (stretch_enable) is on by default via rab_config_defaults. */
+            rc.preroll_ms = 200.0;
             s_bridge_ready = (rab_init(&s_bridge, &rc) == 0);
             SDL_PauseAudioDevice(s_audio_dev, 0); /* start playback */
             printf("[APU] Audio device opened: %d Hz, %d ch  (bridge=%s, target=%.0fms)\n",
