@@ -277,7 +277,7 @@ static uint8_t noise_out(const Noise *n) {
  * shadow (apu_shadow.c) can re-render the SAME state in float through the
  * hardware's nonlinear DAC curve and diff itself against this stream. The
  * canon int16 returned here is unchanged and remains the verify oracle. */
-static int16_t mix_sample(ApuChannelLevels *lv) {
+static float mix_sample_f(ApuChannelLevels *lv) {
     uint8_t l_p1  = pulse_out(&s_p1);
     uint8_t l_p2  = pulse_out(&s_p2);
     uint8_t l_tri = triangle_out(&s_tri);
@@ -291,14 +291,27 @@ static int16_t mix_sample(ApuChannelLevels *lv) {
         lv->dmc      = l_dmc;
     }
 
-    /* Linear approximation coefficients from NESDev wiki */
-    float out = 0.00752f * ((float)l_p1 + (float)l_p2)
-              + 0.00851f * (float)l_tri
-              + 0.00494f * (float)l_nse
-              + 0.00335f * (float)l_dmc;
+    /* Hardware nonlinear DAC (NESDev "accurate" APU mixer). Root-caused by the
+     * accuracy slice: the APU register-write inputs are bit-identical to the Mesen2
+     * oracle, so the audible difference was entirely the mixer — the prior linear
+     * approximation over-weighted low/mid channels and ran ~14x hot. The two NES
+     * DAC groups (pulse pair; triangle+noise+dmc) each saturate nonlinearly:
+     *   pulse = 95.88 / (8128/(p1+p2) + 100)
+     *   tnd   = 159.79 / (1/(tri/8227 + noise/12241 + dmc/22638) + 100)   */
+    float pulse = 0.0f;
+    unsigned psum = (unsigned)l_p1 + (unsigned)l_p2;
+    if (psum != 0u) pulse = 95.88f / (8128.0f / (float)psum + 100.0f);
+    float tnd_acc = (float)l_tri / 8227.0f + (float)l_nse / 12241.0f + (float)l_dmc / 22638.0f;
+    float tnd = (tnd_acc != 0.0f) ? 159.79f / (1.0f / tnd_acc + 100.0f) : 0.0f;
 
-    /* Scale to int16 range with ~2x amplification for comfortable volume */
-    out *= 2.0f * 32767.0f;
+    /* (pulse+tnd) spans ~[0,1] with the all-channels-max ceiling at ~1.0, so map
+     * full-scale 1:1 to int16 — no extra gain (the prior linear path's 2x is what
+     * made it run hot and clip). Returned pre-clamp so the oversampler can average. */
+    return (pulse + tnd) * 32767.0f;
+}
+
+static int16_t mix_sample(ApuChannelLevels *lv) {
+    float out = mix_sample_f(lv);
     if (out >  32767.0f) out =  32767.0f;
     if (out < -32767.0f) out = -32767.0f;
     return (int16_t)out;
@@ -454,75 +467,60 @@ void apu_generate(int16_t *buf, int n_samples) {
     };
     int qf_idx = 0;
 
-    const float cpu_per_sample = CPU_FREQ / (float)SAMPLE_RATE;
+    /* Band-limited synthesis by oversample + box-decimate. The naive approach
+     * (step the channels ~40 cpu cycles, point-sample the level once per output
+     * sample) aliases the square/triangle edges — measured as a ~0.18 timbre-band
+     * gap vs Mesen, which integrates the mix at the full CPU clock via blip_buf.
+     * Here we step the channels at a fraction of a CPU cycle (OS substeps per
+     * output sample) and AVERAGE the full nonlinear mix over the sample = exact
+     * area sampling of the DAC output. Total cpu cycles per output sample is
+     * unchanged, so all timing is preserved; only the anti-aliasing improves. */
+    enum { APU_OVERSAMPLE = 32 };
+    const float cpu_per_substep = (CPU_FREQ / (float)SAMPLE_RATE) / (float)APU_OVERSAMPLE;
+    const int   shadow_on = apu_shadow_enabled();
 
     for (int i = 0; i < n_samples; i++) {
 
-        /* Frame counter ticks */
+        /* Frame counter ticks (sample granularity). */
         if (qf_idx < 4 && i == qf[qf_idx]) {
             quarter_frame();
             if (qf_idx == 1 || qf_idx == 3) half_frame();
             qf_idx++;
         }
 
-        /* Pulse 1: timer clocks every 2 CPU cycles */
-        {
-            s_p1.timer_acc += cpu_per_sample;
-            float period = (float)((s_p1.timer + 1) * 2);
-            while (s_p1.timer_acc >= period) {
-                s_p1.timer_acc -= period;
-                s_p1.seq = (s_p1.seq + 1) & 7;
-            }
+        float acc = 0.0f;
+        ApuChannelLevels lv_last;
+        for (int os = 0; os < APU_OVERSAMPLE; os++) {
+            /* Pulse 1: timer clocks every 2 CPU cycles */
+            s_p1.timer_acc += cpu_per_substep;
+            { float period = (float)((s_p1.timer + 1) * 2);
+              while (s_p1.timer_acc >= period) { s_p1.timer_acc -= period; s_p1.seq = (s_p1.seq + 1) & 7; } }
+            /* Pulse 2 */
+            s_p2.timer_acc += cpu_per_substep;
+            { float period = (float)((s_p2.timer + 1) * 2);
+              while (s_p2.timer_acc >= period) { s_p2.timer_acc -= period; s_p2.seq = (s_p2.seq + 1) & 7; } }
+            /* Triangle: timer clocks every CPU cycle */
+            s_tri.timer_acc += cpu_per_substep;
+            { float period = (float)(s_tri.timer + 1);
+              while (s_tri.timer_acc >= period) { s_tri.timer_acc -= period; s_tri.seq = (s_tri.seq + 1) & 31; } }
+            /* Noise */
+            s_noise.timer_acc += cpu_per_substep;
+            { float period = (float)NOISE_PERIOD[s_noise.period_idx];
+              while (s_noise.timer_acc >= period) { s_noise.timer_acc -= period; clock_noise(); } }
+            /* DMC output unit */
+            s_dmc.timer_acc += cpu_per_substep;
+            { float period = (float)DMC_RATE[s_dmc.rate_idx];
+              while (s_dmc.timer_acc >= period) { s_dmc.timer_acc -= period; dmc_clock(); } }
+
+            acc += mix_sample_f(shadow_on ? &lv_last : NULL);
         }
 
-        /* Pulse 2 */
-        {
-            s_p2.timer_acc += cpu_per_sample;
-            float period = (float)((s_p2.timer + 1) * 2);
-            while (s_p2.timer_acc >= period) {
-                s_p2.timer_acc -= period;
-                s_p2.seq = (s_p2.seq + 1) & 7;
-            }
-        }
+        float avg = acc * (1.0f / (float)APU_OVERSAMPLE);
+        if (avg >  32767.0f) avg =  32767.0f;
+        if (avg < -32767.0f) avg = -32767.0f;
+        int16_t canon = (int16_t)avg;
 
-        /* Triangle: timer clocks every CPU cycle */
-        {
-            s_tri.timer_acc += cpu_per_sample;
-            float period = (float)(s_tri.timer + 1);
-            while (s_tri.timer_acc >= period) {
-                s_tri.timer_acc -= period;
-                s_tri.seq = (s_tri.seq + 1) & 31;
-            }
-        }
-
-        /* Noise */
-        {
-            s_noise.timer_acc += cpu_per_sample;
-            float period = (float)NOISE_PERIOD[s_noise.period_idx];
-            while (s_noise.timer_acc >= period) {
-                s_noise.timer_acc -= period;
-                clock_noise();
-            }
-        }
-
-        /* DMC: clock the output unit at the selected rate. */
-        {
-            s_dmc.timer_acc += cpu_per_sample;
-            float period = (float)DMC_RATE[s_dmc.rate_idx];
-            while (s_dmc.timer_acc >= period) {
-                s_dmc.timer_acc -= period;
-                dmc_clock();
-            }
-        }
-
-        /* Canon mix (authoritative). When the audio shadow is OFF (default),
-         * apu_shadow_sample returns this verbatim => byte-identical output. */
-        if (apu_shadow_enabled()) {
-            ApuChannelLevels lv;
-            int16_t canon = mix_sample(&lv);
-            buf[i] = apu_shadow_sample(canon, &lv);
-        } else {
-            buf[i] = mix_sample(NULL);
-        }
+        /* When the audio shadow is OFF (default), output the band-limited canon. */
+        buf[i] = shadow_on ? apu_shadow_sample(canon, &lv_last) : canon;
     }
 }

@@ -693,6 +693,9 @@ smoke_skip_input:
     /* Record frame state to ring buffer for TCP timeseries queries */
     debug_server_record_frame();
 
+    /* Per-frame WRAM delta trace for the nesref state-divergence diff (env-gated). */
+    { extern void nes_wram_trace_frame(void); nes_wram_trace_frame(); }
+
     /* Generate one frame of audio after NMI (APU registers now up-to-date).
      * Skip in turbo mode — queued audio would pile up faster than it drains. */
     if (s_audio_dev && !g_turbo && !s_smoke_frames) {

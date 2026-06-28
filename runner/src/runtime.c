@@ -13,6 +13,49 @@
 #include <stdlib.h>
 #include <time.h>
 
+/* ---- APU register-write trace ring (always-on, env-gated) -------------------
+ * NESRECOMP_APU_TRACE=<path>  ->  capture every $4000-$401F APU register write as
+ * (cpu_cycle, addr, val) into a bounded ring, dumped to CSV at exit. Used to diff
+ * the recomp's APU-input stream bit-exactly against the Mesen2 oracle's. Pays
+ * nothing (one branch) unless the env var is set. Cycle stamp is the monotonic
+ * CPU-cycle estimate g_frame_count*OPS_PER_FRAME + s_ops_count, computed at the
+ * call site so inter-write deltas line up with Mesen's cpu.cycleCount. */
+#define APU_TRACE_CAP (1u << 20)   /* 1,048,576 entries */
+typedef struct { uint64_t cyc; uint16_t addr; uint8_t val; } ApuTraceEnt;
+static ApuTraceEnt *s_apu_trace = NULL;
+static uint64_t     s_apu_trace_n = 0;     /* total pushed (monotonic) */
+static const char  *s_apu_trace_path = NULL;
+static int          s_apu_trace_state = -1; /* -1 unqueried, 0 off, 1 on */
+
+static void apu_trace_dump(void) {
+    if (s_apu_trace_state != 1 || !s_apu_trace || !s_apu_trace_path) return;
+    FILE *f = fopen(s_apu_trace_path, "w");
+    if (!f) return;
+    fprintf(f, "cycle,addr,val\n");
+    uint64_t total = s_apu_trace_n;
+    uint64_t first = (total > APU_TRACE_CAP) ? (total - APU_TRACE_CAP) : 0;
+    for (uint64_t k = first; k < total; ++k) {
+        ApuTraceEnt *e = &s_apu_trace[k % APU_TRACE_CAP];
+        fprintf(f, "%llu,%u,%u\n", (unsigned long long)e->cyc, (unsigned)e->addr, (unsigned)e->val);
+    }
+    fclose(f);
+}
+
+static void apu_trace_push(uint64_t cyc, uint16_t addr, uint8_t val) {
+    if (s_apu_trace_state < 0) {
+        const char *e = getenv("NESRECOMP_APU_TRACE");
+        if (e && *e) {
+            s_apu_trace = (ApuTraceEnt *)malloc(sizeof(ApuTraceEnt) * APU_TRACE_CAP);
+            if (s_apu_trace) { s_apu_trace_path = e; s_apu_trace_state = 1; atexit(apu_trace_dump); }
+            else             { s_apu_trace_state = 0; }
+        } else { s_apu_trace_state = 0; }
+    }
+    if (s_apu_trace_state != 1) return;
+    ApuTraceEnt *slot = &s_apu_trace[s_apu_trace_n % APU_TRACE_CAP];
+    slot->cyc = cyc; slot->addr = addr; slot->val = val;
+    s_apu_trace_n++;
+}
+
 CPU6502State g_cpu;
 uint8_t      g_ram[0x0800];
 int          g_bail_active;  /* set by stack_bail_func, checked at JSR call sites */
@@ -379,6 +422,43 @@ static inline void bus_tick(void) {
 
 static int s_vblank_pending = 0;   /* VBlank waiting to fire at next safe point */
 
+/* ---- Per-frame WRAM delta trace (snesref-style, env-gated, observability only) ----
+ * NESRECOMP_WRAM_TRACE=<path>  ->  once per frame, snapshot $0000-$07FF and emit changed
+ * bytes as JSONL  {"f":<frame>,"adr":"0x<addr>","old":"0x<v>","val":"0x<v>"} ; frame 0
+ * emits the full baseline. Offline first-divergence diff vs the Mesen "nesref" trace.
+ * Pure snapshot+compare — does not touch emulation state or timing. */
+static FILE   *s_wram_trace_f = NULL;
+static int     s_wram_trace_state = -1;   /* -1 unqueried, 0 off, 1 on */
+static uint8_t s_wram_prev[0x800];
+
+void nes_wram_trace_frame(void) {
+    if (s_wram_trace_state < 0) {
+        const char *e = getenv("NESRECOMP_WRAM_TRACE");
+        s_wram_trace_f = (e && *e) ? fopen(e, "w") : NULL;
+        s_wram_trace_state = s_wram_trace_f ? 1 : 0;
+        if (s_wram_trace_state == 1) {
+            for (int a = 0; a < 0x800; a++) {
+                fprintf(s_wram_trace_f,
+                        "{\"f\":%llu,\"adr\":\"0x%04x\",\"old\":\"0x%02x\",\"val\":\"0x%02x\"}\n",
+                        (unsigned long long)g_frame_count, a, 0, g_ram[a]);
+                s_wram_prev[a] = g_ram[a];
+            }
+            fflush(s_wram_trace_f);
+            return;
+        }
+    }
+    if (s_wram_trace_state != 1) return;
+    for (int a = 0; a < 0x800; a++) {
+        if (g_ram[a] != s_wram_prev[a]) {
+            fprintf(s_wram_trace_f,
+                    "{\"f\":%llu,\"adr\":\"0x%04x\",\"old\":\"0x%02x\",\"val\":\"0x%02x\"}\n",
+                    (unsigned long long)g_frame_count, a, s_wram_prev[a], g_ram[a]);
+            s_wram_prev[a] = g_ram[a];
+        }
+    }
+    fflush(s_wram_trace_f);
+}
+
 void maybe_trigger_vblank(int cycles) {
 
     /* Count cycles — always, even during NMI handler execution. */
@@ -671,7 +751,11 @@ void nes_write(uint16_t addr, uint8_t val) {
         }
         return;
     }
-    if (addr >= 0x4000 && addr <= 0x401F) { apu_write(addr, val); return; }
+    if (addr >= 0x4000 && addr <= 0x401F) {
+        apu_trace_push(g_frame_count * (uint64_t)OPS_PER_FRAME + s_ops_count, addr, val);
+        apu_write(addr, val);
+        return;
+    }
     if (addr >= 0x6000 && addr <= 0x7FFF) { g_sram[addr - 0x6000] = val; return; }
     if (addr >= 0x8000) { mapper_write(addr, val); return; }
 }
