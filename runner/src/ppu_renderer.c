@@ -310,6 +310,44 @@ int ppu_predict_spr0_hit_scanline(void) {
     return 240;
 }
 
+/* Service the MMC3 scanline IRQ for ONE PPU scanline: clock the counter and,
+ * if it fires (and IRQ rendering isn't suppressed), dispatch the game's IRQ
+ * handler — pushing P/PCL/PCH in NMI convention so RTI pops them, and syncing
+ * scroll from the PPU v register if the handler wrote $2006. The handler may
+ * swap CHR banks / scroll mid-frame. `reported_scanline` is recorded for the
+ * IRQ diagnostics (pass -1 for the pre-render line).
+ *
+ * Hardware clocks this counter via the A12 rising edge on the pre-render line
+ * (-1) AND each visible line (0-239) = 241 clocks/frame. Clocking only 0-239
+ * left the counter one clock behind, firing the IRQ ~1 scanline late vs the
+ * oracle (IRQ_SLICE_001: recomp scanline 0 vs Mesen pre-render -1). For
+ * non-MMC3 mappers mapper_clock_scanline() returns 0, so this is a no-op. */
+static void service_mmc3_scanline_irq(int reported_scanline) {
+    if (mapper_clock_scanline() && !g_disable_render_irq) {
+        /* Push PCH, PCL, P — same convention as NMI so RTI can pop them */
+        uint8_t p_irq = (uint8_t)((g_cpu.N<<7)|(g_cpu.V<<6)|(1<<5)|
+                                   (g_cpu.D<<3)|(g_cpu.I<<2)|(g_cpu.Z<<1)|g_cpu.C);
+        g_render_irq_ppuctrl_before = g_ppuctrl;
+        g_ram[0x100+g_cpu.S] = 0x00;    g_cpu.S--;  /* PCH */
+        g_ram[0x100+g_cpu.S] = 0x00;    g_cpu.S--;  /* PCL */
+        g_ram[0x100+g_cpu.S] = p_irq;   g_cpu.S--;  /* P   */
+        { uint16_t v_before = g_ppuaddr;
+        func_IRQ();
+        /* Mid-frame $2006 writes set the PPU v register directly.  The
+         * renderer must derive scroll from v (not t/$2005) so the IRQ
+         * handler's scroll change takes effect.  Only sync if the handler
+         * actually wrote $2006 (changed g_ppuaddr), not just $2005. */
+        if (g_ppuaddr != v_before)
+            runtime_sync_scroll_from_v();
+        }
+        g_render_irq_fired    = 1;
+        g_render_irq_scanline = reported_scanline;
+        g_render_irq_ppuctrl_after  = g_ppuctrl;
+        g_render_irq_scrollx_after  = g_ppuscroll_x;
+        g_render_irq_scrolly_after  = g_ppuscroll_y;
+    }
+}
+
 void ppu_render_frame(uint32_t *framebuf) {
     g_render_irq_fired = 0;
     g_render_irq_scanline = -1;
@@ -451,34 +489,17 @@ void ppu_render_frame(uint32_t *framebuf) {
          * NOT on sprite-0 HUD/game transitions where Y stays the same. */
         int abs_nt_y = -1;
 
+        /* Pre-render line (-1): the MMC3 A12 clock fires here too on hardware
+         * (the counter clocks scanlines -1..239 = 241/frame). Clock it BEFORE
+         * the visible lines so a top-of-frame IRQ lands on the pre-render line,
+         * matching the oracle (was ~1 scanline late — IRQ_SLICE_001). */
+        service_mmc3_scanline_irq(-1);
+
         for (int sy = 0; sy < 240; sy++) {
-            /* Clock MMC3 scanline counter.  When it fires, run the game's
-             * IRQ handler so it can swap CHR banks mid-frame (e.g. MM3
-             * status bar vs. playfield use different tile sets). */
-            if (mapper_clock_scanline() && !g_disable_render_irq) {
-                /* Push PCH, PCL, P — same convention as NMI so RTI can pop them */
-                uint8_t p_irq = (uint8_t)((g_cpu.N<<7)|(g_cpu.V<<6)|(1<<5)|
-                                           (g_cpu.D<<3)|(g_cpu.I<<2)|(g_cpu.Z<<1)|g_cpu.C);
-                g_render_irq_ppuctrl_before = g_ppuctrl;
-                g_ram[0x100+g_cpu.S] = 0x00;    g_cpu.S--;  /* PCH */
-                g_ram[0x100+g_cpu.S] = 0x00;    g_cpu.S--;  /* PCL */
-                g_ram[0x100+g_cpu.S] = p_irq;   g_cpu.S--;  /* P   */
-                { uint16_t v_before = g_ppuaddr;
-                func_IRQ();
-                /* Mid-frame $2006 writes set the PPU v register directly.
-                 * The renderer must derive scroll from v (not t/$2005) so
-                 * that the IRQ handler's scroll change takes effect.
-                 * Only sync if the IRQ handler actually wrote $2006
-                 * (changed g_ppuaddr), not if it only wrote $2005. */
-                if (g_ppuaddr != v_before)
-                    runtime_sync_scroll_from_v();
-                }
-                g_render_irq_fired    = 1;
-                g_render_irq_scanline = sy;
-                g_render_irq_ppuctrl_after  = g_ppuctrl;
-                g_render_irq_scrollx_after  = g_ppuscroll_x;
-                g_render_irq_scrolly_after  = g_ppuscroll_y;
-            }
+            /* Clock the MMC3 scanline counter for this visible line. When it
+             * fires, the handler may swap CHR banks / scroll mid-frame (e.g.
+             * MM3 status bar vs. playfield use different tile sets). */
+            service_mmc3_scanline_irq(sy);
 
             /* Choose scroll source for this scanline.
              * When split_y==240 (no sprite-0 split), use main game scroll for
