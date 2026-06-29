@@ -138,6 +138,11 @@ static DMC      s_dmc;
 
 static bool s_fc_mode;    /* 0=4-step  1=5-step */
 static bool s_fc_irq_inh;
+static bool s_fc_irq_flag; /* frame-counter interrupt flag ($4015 bit 6); set
+                            * each 4-step sequence unless inhibited, cleared by
+                            * a $4015 read or by setting the inhibit bit. */
+static int  s_fc_cycle_acc; /* CPU-cycle accumulator for the cycle-driven frame
+                             * sequencer (apu_clock_cycles); NMI-independent. */
 
 /* ---- Envelope ---- */
 static void tick_envelope(uint8_t *div, uint8_t *vol, bool *start,
@@ -343,6 +348,8 @@ void apu_init(void) {
     s_dmc.silence   = true;
     s_fc_mode    = false;
     s_fc_irq_inh = false;
+    s_fc_irq_flag = false;
+    s_fc_cycle_acc = 0;
 
     /* Arm the (default-OFF) verified-enhancement audio shadow. */
     apu_shadow_init();
@@ -450,6 +457,11 @@ void apu_write(uint16_t addr, uint8_t val) {
     case 0x4017:
         s_fc_mode    = (val >> 7) & 1;
         s_fc_irq_inh = (val >> 6) & 1;
+        /* Writing $4017 resets the frame sequencer phase (after a few cycles on
+         * hardware; modelled here as an immediate restart of the cycle clock). */
+        s_fc_cycle_acc = 0;
+        /* Setting the inhibit bit clears the frame interrupt flag (NESdev). */
+        if (s_fc_irq_inh) s_fc_irq_flag = false;
         /* 5-step mode immediately fires a half-frame clock */
         if (s_fc_mode) { quarter_frame(); half_frame(); }
         break;
@@ -466,11 +478,45 @@ uint8_t apu_read_status(void) {
     if (s_tri.length   > 0) s |= 0x04;
     if (s_noise.length > 0) s |= 0x08;
     if (s_dmc.bytes_left > 0) s |= 0x10;   /* DMC active = sample bytes remain */
+    if (s_fc_irq_flag)        s |= 0x40;   /* frame-counter interrupt flag ($4015 bit 6) */
     if (s_dmc.irq_flag)       s |= 0x80;   /* DMC interrupt flag (NESdev $4015 bit 7) */
-    /* NOTE: reading $4015 does NOT clear the DMC flag (it clears the frame-IRQ
-     * flag, bit 6, which this model does not track). Only $4015 write / $4010
-     * IRQ-disable clear the DMC flag. */
+    /* Reading $4015 clears the frame-counter interrupt flag (bit 6) but NOT the
+     * DMC flag (bit 7).  The DMC flag is cleared only by a $4015 write or by
+     * disabling DMC IRQ via $4010. */
+    s_fc_irq_flag = false;
     return s;
+}
+
+/* CPU-cycle-driven frame-counter IRQ.  The frame sequencer advances on CPU
+ * cycles, NOT on NMI frames: code that runs with NMI disabled (every blargg APU
+ * test, and any main-thread $4015 poll) must still see the frame IRQ assert.
+ * apu_generate is NMI/audio-gated and can't be the source.
+ *
+ * This is an independent cycle accumulator for the IRQ flag ONLY.  The
+ * envelope / length / sweep quarter+half clocks stay in apu_generate's audio
+ * path (they don't affect the IRQ flag), so audio output is byte-unchanged.
+ * 4-step mode asserts the frame IRQ once per 29830-cycle sequence (NTSC) unless
+ * inhibited; 5-step mode never sets it.  Level flag, held until acknowledged. */
+void apu_clock_cycles(int cpu_cycles) {
+    /* NTSC frame sequencer step offsets in CPU cycles. 4-step asserts the frame
+     * IRQ at step 4 (29829) and holds it across the sequence wrap (29830) until
+     * acknowledged; 5-step never asserts. Phase is anchored to the last $4017
+     * write (which zeroes s_fc_cycle_acc). Only the IRQ flag is driven here —
+     * envelope/length/sweep + all channel timers stay in apu_generate so the
+     * tuned audio path is byte-unchanged (Option A; NES_ACCURACY_BURNDOWN 5b). */
+    enum { STEP4_IRQ = 29829, SEQ4_LEN = 29830, SEQ5_LEN = 37282 };
+    s_fc_cycle_acc += cpu_cycles;
+    if (!s_fc_mode) {
+        if (!s_fc_irq_inh && s_fc_cycle_acc >= STEP4_IRQ) s_fc_irq_flag = true;
+        if (s_fc_cycle_acc >= SEQ4_LEN) s_fc_cycle_acc -= SEQ4_LEN;
+    } else {
+        if (s_fc_cycle_acc >= SEQ5_LEN) s_fc_cycle_acc -= SEQ5_LEN;
+    }
+}
+
+/* CPU IRQ line state contributed by the APU: DMC sample-end or frame counter. */
+bool apu_irq_asserted(void) {
+    return s_dmc.irq_flag || s_fc_irq_flag;
 }
 
 void apu_generate(int16_t *buf, int n_samples) {

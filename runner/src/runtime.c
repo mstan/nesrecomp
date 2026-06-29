@@ -431,6 +431,33 @@ static FILE   *s_wram_trace_f = NULL;
 static int     s_wram_trace_state = -1;   /* -1 unqueried, 0 off, 1 on */
 static uint8_t s_wram_prev[0x800];
 
+/* Cross-engine determinism hack (accuracy harness only): force fixed RAM bytes
+ * once per frame so RNG/seed state is identical between the recomp and the
+ * nesref oracle. Free-running engines desync because Random ($18) is seeded by
+ * FrameCounter ($15) and any boot-timing offset cascades into total state
+ * divergence. Freezing the RNG seed (e.g. NESRECOMP_FREEZE="0x18=0x00") makes
+ * the differential WRAM diff valid: both sides get identical RNG, so any
+ * remaining divergence is a real recompiler bug. Env-gated, OFF by default →
+ * zero behavior change in normal builds. nesref honors the same NESREF_FREEZE. */
+void nes_apply_freeze(void) {
+    static int st = -1;
+    static uint16_t addrs[16]; static uint8_t vals[16]; static int n = 0;
+    if (st < 0) {
+        st = 0;
+        const char *e = getenv("NESRECOMP_FREEZE");
+        if (e && *e) {
+            char buf[256]; strncpy(buf, e, sizeof buf - 1); buf[sizeof buf - 1] = 0;
+            for (char *t = strtok(buf, ","); t && n < 16; t = strtok(NULL, ",")) {
+                unsigned a, v;
+                if (sscanf(t, " 0x%x = 0x%x", &a, &v) == 2) { addrs[n]=(uint16_t)a; vals[n]=(uint8_t)v; n++; }
+            }
+            st = n ? 1 : 0;
+        }
+    }
+    if (st != 1) return;
+    for (int i = 0; i < n; i++) if (addrs[i] < 0x800) g_ram[addrs[i]] = vals[i];
+}
+
 void nes_wram_trace_frame(void) {
     if (s_wram_trace_state < 0) {
         const char *e = getenv("NESRECOMP_WRAM_TRACE");
@@ -459,7 +486,49 @@ void nes_wram_trace_frame(void) {
     fflush(s_wram_trace_f);
 }
 
+/* ---- General pending-IRQ delivery hook ----------------------------------
+ * The recompiler emits maybe_trigger_vblank() at every instruction boundary,
+ * so polling the IRQ line here samples it exactly where the real 6502 does —
+ * between instructions.  This is the single delivery point for the maskable
+ * IRQ sources that are NOT scanline-timed (the MMC3 scanline IRQ keeps its
+ * own dot-synced path in ppu_renderer.c — see service_mmc3_scanline_irq).
+ *
+ * Sources are LEVEL-triggered: the source stays asserted until the handler
+ * acknowledges it ($4015 read clears the frame flag; $4015 write / $4010
+ * IRQ-disable clears the DMC flag).  We re-poll every instruction, so a
+ * still-asserted line re-fires after RTI — matching hardware IRQ behaviour.
+ *
+ * Gates: I-flag clear (IRQ is maskable, unlike NMI); no re-entry; and only at
+ * top level (s_vblank_depth == 0) so an IRQ never preempts the batched NMI
+ * frame driver — sub-frame NMI/IRQ interleave is the deferred Axis 2 work. */
+static int s_in_irq = 0;
+static void maybe_deliver_irq(void) {
+    if (g_cpu.I)              return;   /* IRQ masked */
+    if (s_in_irq)             return;   /* no re-entry while a handler runs */
+    if (s_vblank_depth != 0)  return;   /* defer during the NMI frame driver */
+    if (!apu_irq_asserted())  return;   /* no source asserting the line */
+
+    /* Enter IRQ: push P (B clear, bit5 set), then PCL/PCH placeholders in the
+     * NMI convention — func_IRQ() is a direct call whose RTI pops these three
+     * bytes (the placeholder return address is never dereferenced).  Same push
+     * order as the MMC3 path in ppu_renderer.c. */
+    uint8_t p_irq = (uint8_t)((g_cpu.N<<7)|(g_cpu.V<<6)|(1<<5)|
+                               (g_cpu.D<<3)|(g_cpu.I<<2)|(g_cpu.Z<<1)|g_cpu.C);
+    g_ram[0x100+g_cpu.S] = 0x00;  g_cpu.S--;   /* PCH placeholder */
+    g_ram[0x100+g_cpu.S] = 0x00;  g_cpu.S--;   /* PCL placeholder */
+    g_ram[0x100+g_cpu.S] = p_irq; g_cpu.S--;   /* P (B=0)         */
+    g_cpu.I = 1;                                /* IRQ entry sets I */
+    s_in_irq = 1;
+    func_IRQ();                                 /* handler's RTI pops P/PCL/PCH */
+    s_in_irq = 0;
+}
+
 void maybe_trigger_vblank(int cycles) {
+
+    /* Drive the APU frame-counter IRQ on the CPU-cycle stream (NMI-independent),
+     * then poll for between-instruction maskable-IRQ delivery (DMC + frame). */
+    apu_clock_cycles(cycles > 0 ? cycles : 1);
+    maybe_deliver_irq();
 
     /* Count cycles — always, even during NMI handler execution. */
     {
@@ -615,7 +684,13 @@ void runtime_reset_vblank_depth(void) {
     s_vblank_pending = 0;
 }
 
-uint8_t nes_read(uint16_t addr) {
+/* Open bus: the CPU data bus retains the last value driven onto it (by any read
+ * or write). Reads of unmapped / write-only regions return this stale value,
+ * NOT a constant 0/0xFF. NESdev "Open bus behavior" / "PPU registers". The
+ * nes_read wrapper updates it after every read; nes_write updates it on writes. */
+static uint8_t s_open_bus = 0;
+
+static uint8_t nes_read_inner(uint16_t addr) {
     bus_tick();
     if (addr <= 0x1FFF) return g_ram[addr & 0x07FF];
     if (addr >= 0x2000 && addr <= 0x3FFF) return ppu_read_reg(0x2000 + (addr & 7));
@@ -664,7 +739,7 @@ uint8_t nes_read(uint16_t addr) {
             s_ctrl2_shift <<= 1;
             return 0x40 | bit;
         }
-        return 0;
+        return s_open_bus;   /* write-only APU regs ($4000-$4013,$4015w) read open bus */
     }
     if (addr >= 0x6000 && addr <= 0x7FFF) return g_sram[addr - 0x6000];
     if (addr >= 0x8000 && addr <= 0xBFFF) {
@@ -675,7 +750,15 @@ uint8_t nes_read(uint16_t addr) {
         const uint8_t *bank = mapper_get_fixed_bank();
         return bank ? bank[addr - 0xC000] : 0xFF;
     }
-    return 0xFF;
+    return s_open_bus;   /* unmapped $4020-$5FFF: open bus */
+}
+
+/* Open-bus tracking wrapper: every CPU read drives its result onto the data
+ * bus, so unmapped/write-only reads see the most recent value. */
+uint8_t nes_read(uint16_t addr) {
+    uint8_t v = nes_read_inner(addr);
+    s_open_bus = v;
+    return v;
 }
 
 /* Side-effect-free PRG/SRAM read used by the APU DMC unit to DMA-fetch DPCM
@@ -717,6 +800,7 @@ static void ws_sidecar_track(uint16_t a, uint8_t val) {
 
 void nes_write(uint16_t addr, uint8_t val) {
     bus_tick();
+    s_open_bus = val;   /* writes also drive the data bus (open-bus tracking) */
 
     if (addr <= 0x1FFF) {
         uint16_t a = addr & 0x07FF;

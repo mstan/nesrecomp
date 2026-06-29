@@ -1,0 +1,110 @@
+# Accuracy program — phased plan (Option B → Path-C oracle → dot-accurate PPU)
+
+> Created 2026-06-28. Bail-safe roadmap: **each phase ends with a git checkpoint
+> commit on `accuracy/nes-burndown` (the `_acc/nesrecomp` engine repo)** so we can
+> abandon a phase and revert cleanly. ROMs are NEVER committed. The harness dirs
+> (`_acc/{BlarggTest,LegendOfZeldaNESRecomp,Megaman3NESRecomp}`), `F:/Projects/nesref/`,
+> and `_acc/audio_slice/` are reproducible dev tooling OUTSIDE the engine repo.
+>
+> Why this order: the input/desync blocker is already SOLVED (RNG-seed freeze), so none
+> of these are input-gated — they're effort-gated engine work. Option B is the most
+> self-contained; Path-C is a prerequisite for cleanly validating the dot-PPU (it
+> provides in-process cycle + PPU-memory the libretro nesref can't); dot-PPU is the
+> biggest rewrite and goes last.
+
+## Phase 0 — Baseline checkpoint (do FIRST)
+
+The entire current session (IRQ delivery hook + cycle-driven frame IRQ, open-bus,
+RNG-freeze, nesref, cross-title harnesses, cycle/state/framebuf measurements, docs) is
+**uncommitted**. Commit it as the bail-out baseline BEFORE starting Phase 1.
+
+- Engine repo `_acc/nesrecomp`: `runtime.c`, `apu.c`, `apu.h`, `main_runner.c`,
+  `NES_ACCURACY_BURNDOWN.md`, `ACCURACY_PHASE_PLAN.md`, `IRQ_SLICE_002.md`(if moved in).
+- Commit message: the IRQ hook + open-bus + cross-title results. Branch only; do NOT
+  mirror to master / merge to main (end-of-stream step, owner's call).
+- Tooling outside the repo (nesref, harnesses, audio_slice scripts) — left untracked
+  (reproducible); optionally archive separately. ROMs excluded.
+
+## Phase 1 — Option B: sample-accurate APU  (most self-contained)
+
+**Goal.** Rewrite the APU timing core so `apu_clock_cycles()` is the single engine that
+advances the frame sequencer + ALL channel timers + DMC AND emits audio samples into a
+ring buffer at the output rate (band-limited integration per output sample). Replaces the
+per-frame batched `apu_generate(frame,735)`; intra-frame envelope/sweep/length/DMC land at
+their true sub-frame times.
+
+**Approach.**
+1. Move all channel timers + envelope/length/sweep + DMC reader onto the CPU-cycle stream
+   (extend the existing `apu_clock_cycles`, which already drives the frame IRQ).
+2. Generate audio incrementally: accumulate fractional output-sample position; emit one
+   band-limited sample (oversample + box/sinc decimate, preserving the tuned nonlinear DAC)
+   per `CPU_FREQ/SAMPLE_RATE` cycles into a ring; `main_runner` drains the ring to SDL.
+3. Remove the qf/half + channel clocking from `apu_generate` (now audio-render only, or
+   retire it).
+
+**Validation.** Re-run the audio suite vs the oracle: `apu_stream_diff.py` (reg-stream must
+stay bit-identical), `audio_drift_diff.py` (onset/timbre — must stay ≈ L1 0.083, no pitch/
+drift regression), `compare_*.json`. Cross-check SMB title music + a Zelda/MM3 segment.
+Also re-confirm the frame-IRQ (irq-002, recomp 599 vs 598) still holds.
+
+**Risk / bail.** Audio level/pitch/drift regression is the main risk. BAIL CRITERIA: if
+timbre L1 worsens > ~0.12 or onset match drops < ~0.9 and can't be recovered in-phase →
+`git reset --hard` to the Phase-0 checkpoint. **Checkpoint:** commit `apu.c`/`apu.h`/
+`main_runner.c` + an `AUDIO_SLICE_004.md` writeup once verified.
+
+## Phase 2 — Path-C: in-process source-core oracle (cycle + PPU-mem)
+
+**Goal.** An in-process reference core exposing guest CYCLES and PPU-internal memory
+(VRAM/OAM/palette) — what the libretro nesref can't. See `_acc/audio_slice/PATH_C_SOURCE_CORE_ORACLE.md`.
+
+**Two-pronged core strategy (research FIRST, then pick):**
+- **2a. Find a small accurate core.** Survey for a compact, embeddable NES core that is
+  cycle-accurate (or close) AND can expose per-instruction cycles + PPU memory cheaply.
+  Candidates to evaluate (accuracy + embeddability + license): tetanes, plastic, other
+  Rust/C cores; check vs the known-accurate set (Mesen/puNES/Nintendulator are too big).
+  If one qualifies → dual-build it in (mdref/clownmdemu pattern).
+- **2b. Augment a modifiable core ("construct it out").** If no small core is accurate
+  enough: take a MODIFIABLE base (Nestopia is already in-tree via `nestopia-core` +
+  `nestopia_bridge.cpp`, C++, hackable) and PATCH IN cycle accuracy by cross-referencing
+  the timing from a large accurate C++ reference (MesenCE `Core/NES` — `NesCpu` per-cycle
+  step, `NesPpu` dot timing, A12). Instrument: a per-instruction/per-cycle counter +
+  PPU-memory accessors. Validate the augmented timing against MesenCE incrementally.
+
+**Bridge.** Mirror `nestopia_bridge.cpp`: `init/run_frame/get_ram/get_vram/get_oam/
+get_palette/get_cycle`; populate a shared `FrameRecord` (mirror mdref `frame_snapshots.c`)
+for a unified `divergence_diff` (RAM + PPU-mem + cycle in one surface).
+
+**Validation.** The new bridge MUST agree with the libretro nesref on RAM (the 598=598-style
+cross-check) before trusting its cycle/PPU-mem. Then: cycle diff without the APU-anchor
+hack; PPU-memory (nametable/OAM/palette) byte diff vs the recomp (`g_ppu*`).
+
+**Risk / bail.** 2b's "construct accuracy out" could stall if the base core's timing is too
+far off to patch tractably. BAIL: if after a bounded research+spike the augmented core can't
+reach useful cycle agreement vs MesenCE → fall back to MesenCE-Lua for cycle/PPU-mem (status
+quo) and document. **Checkpoint:** commit the bridge + any engine-side `divergence_diff`
+hooks once it agrees with nesref on RAM.
+
+## Phase 3 — Dot-accurate PPU  (biggest; needs Phase 2 oracle to validate cleanly)
+
+**Goal.** Rewrite `ppu_renderer.c` from per-frame to per-dot/per-scanline cycle-accurate
+rendering: dot-precise sprite-0, sprite-overflow per cycle, mid-scanline writes, A12-per-fetch
+MMC3 IRQ (closes Axis-3 dot precision + Axis-5a dot-raster together).
+
+**Approach (incremental).** Per-scanline first (BG + sprites + sprite-0 at scanline
+granularity with mid-frame register latching), then per-dot for the A12/sprite-0 cases that
+need it. Keep the renderer behind a flag so the per-frame path remains until parity.
+
+**Validation.** Uses the Phase-2 oracle: per-scanline framebuffer + PPU-state diff at synced
+frames (RNG-freeze), dot-precise MMC3 IRQ vs `mesen_mm3_irq.lua` (scanline+dot+cycle). Must
+keep SMB/Zelda/MM3 structural framebuf at/above current (1.0/0.992/1.0).
+
+**Risk / bail.** Largest blast radius (every game renders through it). BAIL: gate behind a
+build flag; if parity regresses and can't recover → keep the per-frame renderer default,
+commit the dot path as opt-in/WIP. **Checkpoint:** commit per milestone (per-scanline parity,
+then dot-precise IRQ, then full dot).
+
+## Sequencing notes
+- One phase per work-stream; expect each to span one+ session. Resume via the checkpoint
+  commit + this doc.
+- Mirror-to-master / merge-to-main remains the deferred end-of-stream step (owner's call),
+  independent of these branch checkpoints.

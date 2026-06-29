@@ -693,8 +693,16 @@ smoke_skip_input:
     /* Record frame state to ring buffer for TCP timeseries queries */
     debug_server_record_frame();
 
+    /* Cross-engine RNG/seed freeze (env-gated, accuracy harness) — applied at
+     * the frame boundary so the nesref oracle and recomp share identical RNG. */
+    { extern void nes_apply_freeze(void); nes_apply_freeze(); }
+
     /* Per-frame WRAM delta trace for the nesref state-divergence diff (env-gated). */
     { extern void nes_wram_trace_frame(void); nes_wram_trace_frame(); }
+
+    /* (The APU frame-counter IRQ is driven on the CPU-cycle stream in
+     * maybe_trigger_vblank → apu_clock_cycles, not per-NMI here, so it also
+     * advances for NMI-disabled main-thread code such as the blargg APU tests.) */
 
     /* Generate one frame of audio after NMI (APU registers now up-to-date).
      * Skip in turbo mode — queued audio would pile up faster than it drains. */
