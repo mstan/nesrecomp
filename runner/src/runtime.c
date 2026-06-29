@@ -686,6 +686,14 @@ void runtime_reset_vblank_depth(void) {
  * nes_read wrapper updates it after every read; nes_write updates it on writes. */
 static uint8_t s_open_bus = 0;
 
+/* PPU I/O latch: the PPU's internal data-bus latch, refreshed by any PPU
+ * register write and by reads that drive the bus ($2004/$2007). $2002 reads
+ * return the PPU status in bits 7-5 and this latch (decay) in bits 4-0 — the
+ * only readable source for those bits. NESdev "PPU registers: ports / decay".
+ * Modeled as a non-decaying latch (decay timing is sub-frame and unobservable
+ * by game logic). */
+static uint8_t s_ppu_io_latch = 0;
+
 static uint8_t nes_read_inner(uint16_t addr) {
     bus_tick();
     if (addr <= 0x1FFF) return g_ram[addr & 0x07FF];
@@ -846,6 +854,7 @@ uint16_t nes_read16_jmpbug(uint16_t addr) {
 
 void ppu_write_reg(uint16_t reg, uint8_t val) {
     ppu_trace_write(reg, val);
+    s_ppu_io_latch = val;   /* any PPU register write refreshes the I/O latch */
     switch (reg) {
         case 0x2000:
             g_ppuctrl = val;
@@ -968,12 +977,14 @@ uint8_t ppu_read_reg(uint16_t reg) {
                     s_dot_spr0_spin = 0;
                 }
             }
-            uint8_t s = g_ppustatus;
+            /* Bits 7-5 = PPU status (vblank/sprite0/overflow); bits 4-0 = the
+             * PPU I/O latch (open-bus decay), the only readable source there. */
+            uint8_t s = (uint8_t)((g_ppustatus & 0xE0) | (s_ppu_io_latch & 0x1F));
             g_ppustatus &= ~0x80;  /* clear VBlank flag on read (standard NES) */
             g_ppuaddr_latch = 0;   /* shared w toggle — clears for both $2005 and $2006 */
             return s;
         }
-        case 0x2004: return g_ppu_oam[g_oamaddr];
+        case 0x2004: s_ppu_io_latch = g_ppu_oam[g_oamaddr]; return s_ppu_io_latch;
         case 0x2007: {
             /* NES PPU $2007 read: buffered for CHR/NT, immediate for palette.
              * The real NES returns the OLD buffer contents for non-palette reads,
@@ -998,7 +1009,8 @@ uint8_t ppu_read_reg(uint16_t reg) {
                 uint8_t idx = a & 0x1F;
                 if (idx == 0x10 || idx == 0x14 || idx == 0x18 || idx == 0x1C)
                     idx &= 0x0F;
-                return g_ppu_pal[idx];
+                s_ppu_io_latch = g_ppu_pal[idx];
+                return s_ppu_io_latch;
             }
             uint8_t ret = g_ppudata_buf;
             if (a >= 0x2000) {
@@ -1016,6 +1028,7 @@ uint8_t ppu_read_reg(uint16_t reg) {
             } else {
                 g_ppudata_buf = g_chr_ram[a];
             }
+            s_ppu_io_latch = ret;
             return ret;
         }
     }
