@@ -223,7 +223,7 @@ static bool is_data_region(const GameConfig *cfg, int bank, uint16_t addr) {
 static bool validate_code_target(const NESRom *rom, int bank,
                                  uint16_t addr, int min_valid) {
     uint8_t first = rom_read(rom, bank, addr);
-    if (g_opcode_table[first].mnemonic == MN_ILLEGAL) {
+    if (mn_finder_illegal(g_opcode_table[first].mnemonic)) {
         coverage_record_rejected_target_illegal(bank, addr);
         return false;
     }
@@ -236,7 +236,7 @@ static bool validate_code_target(const NESRom *rom, int bank,
     uint16_t pc = addr;
     for (int i = 0; i < min_valid; i++) {
         uint8_t op = rom_read(rom, bank, pc);
-        if (g_opcode_table[op].mnemonic == MN_ILLEGAL) {
+        if (mn_finder_illegal(g_opcode_table[op].mnemonic)) {
             coverage_record_rejected_target_illegal(bank, addr);
             return false;
         }
@@ -324,7 +324,7 @@ void scan_function_boundaries(const NESRom *rom, uint16_t start_addr,
             default: break;
         }
 
-        if (e->mnemonic == MN_ILLEGAL) {
+        if (mn_finder_illegal(e->mnemonic)) {
             pc += sz;
             continue;
         }
@@ -641,7 +641,7 @@ static int walk_function(const NESRom *rom, FunctionList *list,
         const OpcodeEntry *entry = &g_opcode_table[opcode];
         insn_count++;
 
-        if (entry->mnemonic == MN_ILLEGAL) {
+        if (mn_finder_illegal(entry->mnemonic)) {
             int sz = entry->size;
             pc += (sz > 0) ? sz : 1;
             continue;
@@ -1295,14 +1295,14 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
         if (candidate < 0xC000 || candidate > 0xFFFD) continue;
         if (is_data_region(cfg, fixed_bank, candidate)) continue;
         uint8_t first_byte = rom_read(rom, fixed_bank, candidate);
-        if (g_opcode_table[first_byte].mnemonic != MN_ILLEGAL &&
+        if (!mn_finder_illegal(g_opcode_table[first_byte].mnemonic) &&
             !function_list_contains(out, candidate, fixed_bank))
             add_function_with_source(out, candidate, fixed_bank, FUNCTION_SOURCE_PTR_SCAN);
         uint16_t candidate1 = candidate + 1;
         if (candidate1 >= 0xC000 && candidate1 <= 0xFFFD &&
             !function_list_contains(out, candidate1, fixed_bank)) {
             uint8_t fb1 = rom_read(rom, fixed_bank, candidate1);
-            if (g_opcode_table[fb1].mnemonic != MN_ILLEGAL)
+            if (!mn_finder_illegal(g_opcode_table[fb1].mnemonic))
                 add_function_with_source(out, candidate1, fixed_bank, FUNCTION_SOURCE_PTR_SCAN);
         }
     }

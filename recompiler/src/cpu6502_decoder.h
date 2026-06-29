@@ -18,8 +18,28 @@ typedef enum {
                  * mapped I/O (e.g. $2002 status latch). For ordinary RAM/ROM
                  * reads the result is discarded. */
     MN_SAX,     /* Undocumented: M = A & X (write only — flags untouched) */
+    /* Stable RMW + ALU combo unofficials (memory op, then accumulator op): */
+    MN_SLO,     /* ASL mem; ORA A */
+    MN_RLA,     /* ROL mem; AND A */
+    MN_SRE,     /* LSR mem; EOR A */
+    MN_RRA,     /* ROR mem; ADC A */
+    MN_DCP,     /* DEC mem; CMP A */
+    MN_ISC,     /* INC mem; SBC A */
+    /* Stable immediate combo unofficials: */
+    MN_ANC,     /* AND #imm; C = bit7 of result */
+    MN_ALR,     /* AND #imm; LSR A */
+    MN_ARR,     /* AND #imm; ROR A (C=bit6, V=bit6^bit5) */
+    MN_AXS,     /* X = (A & X) - imm; C set like CMP */
     MN_ILLEGAL  /* Invalid/undocumented opcode (still emits as sized skip) */
 } OpMnemonic;
+
+/* Function discovery / forward-scan heuristic: treat the implemented unofficial
+ * opcodes (MN_SLO..MN_AXS) the SAME as truly-illegal ones — i.e. "unlikely to be
+ * a real function start, sized-skip while tracing". Implementing these opcodes in
+ * codegen must NOT change which functions get discovered, so the finder lumps
+ * them with MN_ILLEGAL here while codegen still emits their real behavior.
+ * (Relies on the unofficials sitting between MN_SAX and MN_ILLEGAL in the enum.) */
+static inline int mn_finder_illegal(OpMnemonic mn) { return mn >= MN_SLO; }
 
 typedef enum {
     AM_IMP,     /* Implied         — no operand */

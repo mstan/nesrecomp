@@ -19,131 +19,131 @@ const OpcodeEntry g_opcode_table[256] = {
     /* 0x00 */ {MN_BRK,     AM_IMP,   1, 7},
     /* 0x01 */ {MN_ORA,     AM_INDX,  2, 6},
     /* 0x02 */ {MN_ILLEGAL, AM_IMP,   1, 2},      /* KIL */
-    /* 0x03 */ {MN_ILLEGAL, AM_INDX,  2, 8},      /* SLO (zp,X) */
+    /* 0x03 */ {MN_SLO    , AM_INDX,  2, 8},      /* SLO (zp,X) */
     /* 0x04 */ {MN_NOP_READ,AM_ZP,    2, 3},      /* DOP zp */
     /* 0x05 */ {MN_ORA,     AM_ZP,    2, 3},
     /* 0x06 */ {MN_ASL,     AM_ZP,    2, 5},
-    /* 0x07 */ {MN_ILLEGAL, AM_ZP,    2, 5},      /* SLO zp */
+    /* 0x07 */ {MN_SLO    , AM_ZP,    2, 5},      /* SLO zp */
     /* 0x08 */ {MN_PHP,     AM_IMP,   1, 3},
     /* 0x09 */ {MN_ORA,     AM_IMM,   2, 2},
     /* 0x0A */ {MN_ASL,     AM_ACC,   1, 2},
-    /* 0x0B */ {MN_ILLEGAL, AM_IMM,   2, 2},      /* AAC #imm */
+    /* 0x0B */ {MN_ANC    , AM_IMM,   2, 2},      /* AAC #imm */
     /* 0x0C */ {MN_NOP_READ,AM_ABS,   3, 4},      /* TOP abs */
     /* 0x0D */ {MN_ORA,     AM_ABS,   3, 4},
     /* 0x0E */ {MN_ASL,     AM_ABS,   3, 6},
-    /* 0x0F */ {MN_ILLEGAL, AM_ABS,   3, 6},      /* SLO abs */
+    /* 0x0F */ {MN_SLO    , AM_ABS,   3, 6},      /* SLO abs */
     /* 0x10 */ {MN_BPL,     AM_REL,   2, 2},
     /* 0x11 */ {MN_ORA,     AM_INDY,  2, 5},
     /* 0x12 */ {MN_ILLEGAL, AM_IMP,   1, 2},      /* KIL */
-    /* 0x13 */ {MN_ILLEGAL, AM_INDY,  2, 8},      /* SLO (zp),Y */
+    /* 0x13 */ {MN_SLO    , AM_INDY,  2, 8},      /* SLO (zp),Y */
     /* 0x14 */ {MN_NOP_READ,AM_ZPX,   2, 4},      /* DOP zp,X */
     /* 0x15 */ {MN_ORA,     AM_ZPX,   2, 4},
     /* 0x16 */ {MN_ASL,     AM_ZPX,   2, 6},
-    /* 0x17 */ {MN_ILLEGAL, AM_ZPX,   2, 6},      /* SLO zp,X */
+    /* 0x17 */ {MN_SLO    , AM_ZPX,   2, 6},      /* SLO zp,X */
     /* 0x18 */ {MN_CLC,     AM_IMP,   1, 2},
     /* 0x19 */ {MN_ORA,     AM_ABSY,  3, 4},
     /* 0x1A */ {MN_NOP,     AM_IMP,   1, 2},      /* NOP (1-byte unofficial) */
-    /* 0x1B */ {MN_ILLEGAL, AM_ABSY,  3, 7},      /* SLO abs,Y */
+    /* 0x1B */ {MN_SLO    , AM_ABSY,  3, 7},      /* SLO abs,Y */
     /* 0x1C */ {MN_NOP_READ,AM_ABSX,  3, 4},      /* TOP abs,X */
     /* 0x1D */ {MN_ORA,     AM_ABSX,  3, 4},
     /* 0x1E */ {MN_ASL,     AM_ABSX,  3, 7},
-    /* 0x1F */ {MN_ILLEGAL, AM_ABSX,  3, 7},      /* SLO abs,X */
+    /* 0x1F */ {MN_SLO    , AM_ABSX,  3, 7},      /* SLO abs,X */
     /* 0x20 */ {MN_JSR,     AM_ABS,   3, 6},
     /* 0x21 */ {MN_AND,     AM_INDX,  2, 6},
     /* 0x22 */ {MN_ILLEGAL, AM_IMP,   1, 2},      /* KIL */
-    /* 0x23 */ {MN_ILLEGAL, AM_INDX,  2, 8},      /* RLA (zp,X) */
+    /* 0x23 */ {MN_RLA    , AM_INDX,  2, 8},      /* RLA (zp,X) */
     /* 0x24 */ {MN_BIT,     AM_ZP,    2, 3},
     /* 0x25 */ {MN_AND,     AM_ZP,    2, 3},
     /* 0x26 */ {MN_ROL,     AM_ZP,    2, 5},
-    /* 0x27 */ {MN_ILLEGAL, AM_ZP,    2, 5},      /* RLA zp */
+    /* 0x27 */ {MN_RLA    , AM_ZP,    2, 5},      /* RLA zp */
     /* 0x28 */ {MN_PLP,     AM_IMP,   1, 4},
     /* 0x29 */ {MN_AND,     AM_IMM,   2, 2},
     /* 0x2A */ {MN_ROL,     AM_ACC,   1, 2},
-    /* 0x2B */ {MN_ILLEGAL, AM_IMM,   2, 2},      /* AAC #imm */
+    /* 0x2B */ {MN_ANC    , AM_IMM,   2, 2},      /* AAC #imm */
     /* 0x2C */ {MN_BIT,     AM_ABS,   3, 4},
     /* 0x2D */ {MN_AND,     AM_ABS,   3, 4},
     /* 0x2E */ {MN_ROL,     AM_ABS,   3, 6},
-    /* 0x2F */ {MN_ILLEGAL, AM_ABS,   3, 6},      /* RLA abs */
+    /* 0x2F */ {MN_RLA    , AM_ABS,   3, 6},      /* RLA abs */
     /* 0x30 */ {MN_BMI,     AM_REL,   2, 2},
     /* 0x31 */ {MN_AND,     AM_INDY,  2, 5},
     /* 0x32 */ {MN_ILLEGAL, AM_IMP,   1, 2},      /* KIL */
-    /* 0x33 */ {MN_ILLEGAL, AM_INDY,  2, 8},      /* RLA (zp),Y */
+    /* 0x33 */ {MN_RLA    , AM_INDY,  2, 8},      /* RLA (zp),Y */
     /* 0x34 */ {MN_NOP_READ,AM_ZPX,   2, 4},      /* DOP zp,X */
     /* 0x35 */ {MN_AND,     AM_ZPX,   2, 4},
     /* 0x36 */ {MN_ROL,     AM_ZPX,   2, 6},
-    /* 0x37 */ {MN_ILLEGAL, AM_ZPX,   2, 6},      /* RLA zp,X */
+    /* 0x37 */ {MN_RLA    , AM_ZPX,   2, 6},      /* RLA zp,X */
     /* 0x38 */ {MN_SEC,     AM_IMP,   1, 2},
     /* 0x39 */ {MN_AND,     AM_ABSY,  3, 4},
     /* 0x3A */ {MN_NOP,     AM_IMP,   1, 2},      /* NOP (1-byte unofficial) */
-    /* 0x3B */ {MN_ILLEGAL, AM_ABSY,  3, 7},      /* RLA abs,Y */
+    /* 0x3B */ {MN_RLA    , AM_ABSY,  3, 7},      /* RLA abs,Y */
     /* 0x3C */ {MN_NOP_READ,AM_ABSX,  3, 4},      /* TOP abs,X */
     /* 0x3D */ {MN_AND,     AM_ABSX,  3, 4},
     /* 0x3E */ {MN_ROL,     AM_ABSX,  3, 7},
-    /* 0x3F */ {MN_ILLEGAL, AM_ABSX,  3, 7},      /* RLA abs,X */
+    /* 0x3F */ {MN_RLA    , AM_ABSX,  3, 7},      /* RLA abs,X */
     /* 0x40 */ {MN_RTI,     AM_IMP,   1, 6},
     /* 0x41 */ {MN_EOR,     AM_INDX,  2, 6},
     /* 0x42 */ {MN_ILLEGAL, AM_IMP,   1, 2},      /* KIL */
-    /* 0x43 */ {MN_ILLEGAL, AM_INDX,  2, 8},      /* SRE (zp,X) */
+    /* 0x43 */ {MN_SRE    , AM_INDX,  2, 8},      /* SRE (zp,X) */
     /* 0x44 */ {MN_NOP_READ,AM_ZP,    2, 3},      /* DOP zp */
     /* 0x45 */ {MN_EOR,     AM_ZP,    2, 3},
     /* 0x46 */ {MN_LSR,     AM_ZP,    2, 5},
-    /* 0x47 */ {MN_ILLEGAL, AM_ZP,    2, 5},      /* SRE zp */
+    /* 0x47 */ {MN_SRE    , AM_ZP,    2, 5},      /* SRE zp */
     /* 0x48 */ {MN_PHA,     AM_IMP,   1, 3},
     /* 0x49 */ {MN_EOR,     AM_IMM,   2, 2},
     /* 0x4A */ {MN_LSR,     AM_ACC,   1, 2},
-    /* 0x4B */ {MN_ILLEGAL, AM_IMM,   2, 2},      /* ALR #imm */
+    /* 0x4B */ {MN_ALR    , AM_IMM,   2, 2},      /* ALR #imm */
     /* 0x4C */ {MN_JMP,     AM_ABS,   3, 3},
     /* 0x4D */ {MN_EOR,     AM_ABS,   3, 4},
     /* 0x4E */ {MN_LSR,     AM_ABS,   3, 6},
-    /* 0x4F */ {MN_ILLEGAL, AM_ABS,   3, 6},      /* SRE abs */
+    /* 0x4F */ {MN_SRE    , AM_ABS,   3, 6},      /* SRE abs */
     /* 0x50 */ {MN_BVC,     AM_REL,   2, 2},
     /* 0x51 */ {MN_EOR,     AM_INDY,  2, 5},
     /* 0x52 */ {MN_ILLEGAL, AM_IMP,   1, 2},      /* KIL */
-    /* 0x53 */ {MN_ILLEGAL, AM_INDY,  2, 8},      /* SRE (zp),Y */
+    /* 0x53 */ {MN_SRE    , AM_INDY,  2, 8},      /* SRE (zp),Y */
     /* 0x54 */ {MN_NOP_READ,AM_ZPX,   2, 4},      /* DOP zp,X */
     /* 0x55 */ {MN_EOR,     AM_ZPX,   2, 4},
     /* 0x56 */ {MN_LSR,     AM_ZPX,   2, 6},
-    /* 0x57 */ {MN_ILLEGAL, AM_ZPX,   2, 6},      /* SRE zp,X */
+    /* 0x57 */ {MN_SRE    , AM_ZPX,   2, 6},      /* SRE zp,X */
     /* 0x58 */ {MN_CLI,     AM_IMP,   1, 2},
     /* 0x59 */ {MN_EOR,     AM_ABSY,  3, 4},
     /* 0x5A */ {MN_NOP,     AM_IMP,   1, 2},      /* NOP (1-byte unofficial) */
-    /* 0x5B */ {MN_ILLEGAL, AM_ABSY,  3, 7},      /* SRE abs,Y */
+    /* 0x5B */ {MN_SRE    , AM_ABSY,  3, 7},      /* SRE abs,Y */
     /* 0x5C */ {MN_NOP_READ,AM_ABSX,  3, 4},      /* TOP abs,X */
     /* 0x5D */ {MN_EOR,     AM_ABSX,  3, 4},
     /* 0x5E */ {MN_LSR,     AM_ABSX,  3, 7},
-    /* 0x5F */ {MN_ILLEGAL, AM_ABSX,  3, 7},      /* SRE abs,X */
+    /* 0x5F */ {MN_SRE    , AM_ABSX,  3, 7},      /* SRE abs,X */
     /* 0x60 */ {MN_RTS,     AM_IMP,   1, 6},
     /* 0x61 */ {MN_ADC,     AM_INDX,  2, 6},
     /* 0x62 */ {MN_ILLEGAL, AM_IMP,   1, 2},      /* KIL */
-    /* 0x63 */ {MN_ILLEGAL, AM_INDX,  2, 8},      /* RRA (zp,X) */
+    /* 0x63 */ {MN_RRA    , AM_INDX,  2, 8},      /* RRA (zp,X) */
     /* 0x64 */ {MN_NOP_READ,AM_ZP,    2, 3},      /* DOP zp */
     /* 0x65 */ {MN_ADC,     AM_ZP,    2, 3},
     /* 0x66 */ {MN_ROR,     AM_ZP,    2, 5},
-    /* 0x67 */ {MN_ILLEGAL, AM_ZP,    2, 5},      /* RRA zp */
+    /* 0x67 */ {MN_RRA    , AM_ZP,    2, 5},      /* RRA zp */
     /* 0x68 */ {MN_PLA,     AM_IMP,   1, 4},
     /* 0x69 */ {MN_ADC,     AM_IMM,   2, 2},
     /* 0x6A */ {MN_ROR,     AM_ACC,   1, 2},
-    /* 0x6B */ {MN_ILLEGAL, AM_IMM,   2, 2},      /* ARR #imm */
+    /* 0x6B */ {MN_ARR    , AM_IMM,   2, 2},      /* ARR #imm */
     /* 0x6C */ {MN_JMP,     AM_IND,   3, 5},
     /* 0x6D */ {MN_ADC,     AM_ABS,   3, 4},
     /* 0x6E */ {MN_ROR,     AM_ABS,   3, 6},
-    /* 0x6F */ {MN_ILLEGAL, AM_ABS,   3, 6},      /* RRA abs */
+    /* 0x6F */ {MN_RRA    , AM_ABS,   3, 6},      /* RRA abs */
     /* 0x70 */ {MN_BVS,     AM_REL,   2, 2},
     /* 0x71 */ {MN_ADC,     AM_INDY,  2, 5},
     /* 0x72 */ {MN_ILLEGAL, AM_IMP,   1, 2},      /* KIL */
-    /* 0x73 */ {MN_ILLEGAL, AM_INDY,  2, 8},      /* RRA (zp),Y */
+    /* 0x73 */ {MN_RRA    , AM_INDY,  2, 8},      /* RRA (zp),Y */
     /* 0x74 */ {MN_NOP_READ,AM_ZPX,   2, 4},      /* DOP zp,X */
     /* 0x75 */ {MN_ADC,     AM_ZPX,   2, 4},
     /* 0x76 */ {MN_ROR,     AM_ZPX,   2, 6},
-    /* 0x77 */ {MN_ILLEGAL, AM_ZPX,   2, 6},      /* RRA zp,X */
+    /* 0x77 */ {MN_RRA    , AM_ZPX,   2, 6},      /* RRA zp,X */
     /* 0x78 */ {MN_SEI,     AM_IMP,   1, 2},
     /* 0x79 */ {MN_ADC,     AM_ABSY,  3, 4},
     /* 0x7A */ {MN_NOP,     AM_IMP,   1, 2},      /* NOP (1-byte unofficial) */
-    /* 0x7B */ {MN_ILLEGAL, AM_ABSY,  3, 7},      /* RRA abs,Y */
+    /* 0x7B */ {MN_RRA    , AM_ABSY,  3, 7},      /* RRA abs,Y */
     /* 0x7C */ {MN_NOP_READ,AM_ABSX,  3, 4},      /* TOP abs,X */
     /* 0x7D */ {MN_ADC,     AM_ABSX,  3, 4},
     /* 0x7E */ {MN_ROR,     AM_ABSX,  3, 7},
-    /* 0x7F */ {MN_ILLEGAL, AM_ABSX,  3, 7},      /* RRA abs,X */
+    /* 0x7F */ {MN_RRA    , AM_ABSX,  3, 7},      /* RRA abs,X */
     /* 0x80 */ {MN_NOP,     AM_IMM,   2, 2},      /* DOP #imm (consumes operand byte) */
     /* 0x81 */ {MN_STA,     AM_INDX,  2, 6},
     /* 0x82 */ {MN_NOP,     AM_IMM,   2, 2},      /* DOP #imm (consumes operand byte) */
@@ -211,43 +211,43 @@ const OpcodeEntry g_opcode_table[256] = {
     /* 0xC0 */ {MN_CPY,     AM_IMM,   2, 2},
     /* 0xC1 */ {MN_CMP,     AM_INDX,  2, 6},
     /* 0xC2 */ {MN_NOP,     AM_IMM,   2, 2},      /* DOP #imm (consumes operand byte) */
-    /* 0xC3 */ {MN_ILLEGAL, AM_INDX,  2, 8},      /* DCP (zp,X) */
+    /* 0xC3 */ {MN_DCP    , AM_INDX,  2, 8},      /* DCP (zp,X) */
     /* 0xC4 */ {MN_CPY,     AM_ZP,    2, 3},
     /* 0xC5 */ {MN_CMP,     AM_ZP,    2, 3},
     /* 0xC6 */ {MN_DEC,     AM_ZP,    2, 5},
-    /* 0xC7 */ {MN_ILLEGAL, AM_ZP,    2, 5},      /* DCP zp */
+    /* 0xC7 */ {MN_DCP    , AM_ZP,    2, 5},      /* DCP zp */
     /* 0xC8 */ {MN_INY,     AM_IMP,   1, 2},
     /* 0xC9 */ {MN_CMP,     AM_IMM,   2, 2},
     /* 0xCA */ {MN_DEX,     AM_IMP,   1, 2},
-    /* 0xCB */ {MN_ILLEGAL, AM_IMM,   2, 2},      /* AXS #imm */
+    /* 0xCB */ {MN_AXS    , AM_IMM,   2, 2},      /* AXS #imm */
     /* 0xCC */ {MN_CPY,     AM_ABS,   3, 4},
     /* 0xCD */ {MN_CMP,     AM_ABS,   3, 4},
     /* 0xCE */ {MN_DEC,     AM_ABS,   3, 6},
-    /* 0xCF */ {MN_ILLEGAL, AM_ABS,   3, 6},      /* DCP abs */
+    /* 0xCF */ {MN_DCP    , AM_ABS,   3, 6},      /* DCP abs */
     /* 0xD0 */ {MN_BNE,     AM_REL,   2, 2},
     /* 0xD1 */ {MN_CMP,     AM_INDY,  2, 5},
     /* 0xD2 */ {MN_ILLEGAL, AM_IMP,   1, 2},      /* KIL */
-    /* 0xD3 */ {MN_ILLEGAL, AM_INDY,  2, 8},      /* DCP (zp),Y */
+    /* 0xD3 */ {MN_DCP    , AM_INDY,  2, 8},      /* DCP (zp),Y */
     /* 0xD4 */ {MN_NOP_READ,AM_ZPX,   2, 4},      /* DOP zp,X */
     /* 0xD5 */ {MN_CMP,     AM_ZPX,   2, 4},
     /* 0xD6 */ {MN_DEC,     AM_ZPX,   2, 6},
-    /* 0xD7 */ {MN_ILLEGAL, AM_ZPX,   2, 6},      /* DCP zp,X */
+    /* 0xD7 */ {MN_DCP    , AM_ZPX,   2, 6},      /* DCP zp,X */
     /* 0xD8 */ {MN_CLD,     AM_IMP,   1, 2},
     /* 0xD9 */ {MN_CMP,     AM_ABSY,  3, 4},
     /* 0xDA */ {MN_NOP,     AM_IMP,   1, 2},      /* NOP (1-byte unofficial) */
-    /* 0xDB */ {MN_ILLEGAL, AM_ABSY,  3, 7},      /* DCP abs,Y */
+    /* 0xDB */ {MN_DCP    , AM_ABSY,  3, 7},      /* DCP abs,Y */
     /* 0xDC */ {MN_NOP_READ,AM_ABSX,  3, 4},      /* TOP abs,X */
     /* 0xDD */ {MN_CMP,     AM_ABSX,  3, 4},
     /* 0xDE */ {MN_DEC,     AM_ABSX,  3, 7},
-    /* 0xDF */ {MN_ILLEGAL, AM_ABSX,  3, 7},      /* DCP abs,X */
+    /* 0xDF */ {MN_DCP    , AM_ABSX,  3, 7},      /* DCP abs,X */
     /* 0xE0 */ {MN_CPX,     AM_IMM,   2, 2},
     /* 0xE1 */ {MN_SBC,     AM_INDX,  2, 6},
     /* 0xE2 */ {MN_NOP,     AM_IMM,   2, 2},      /* DOP #imm (consumes operand byte) */
-    /* 0xE3 */ {MN_ILLEGAL, AM_INDX,  2, 8},      /* ISC (zp,X) */
+    /* 0xE3 */ {MN_ISC    , AM_INDX,  2, 8},      /* ISC (zp,X) */
     /* 0xE4 */ {MN_CPX,     AM_ZP,    2, 3},
     /* 0xE5 */ {MN_SBC,     AM_ZP,    2, 3},
     /* 0xE6 */ {MN_INC,     AM_ZP,    2, 5},
-    /* 0xE7 */ {MN_ILLEGAL, AM_ZP,    2, 5},      /* ISC zp */
+    /* 0xE7 */ {MN_ISC    , AM_ZP,    2, 5},      /* ISC zp */
     /* 0xE8 */ {MN_INX,     AM_IMP,   1, 2},
     /* 0xE9 */ {MN_SBC,     AM_IMM,   2, 2},
     /* 0xEA */ {MN_NOP,     AM_IMP,   1, 2},
@@ -255,23 +255,23 @@ const OpcodeEntry g_opcode_table[256] = {
     /* 0xEC */ {MN_CPX,     AM_ABS,   3, 4},
     /* 0xED */ {MN_SBC,     AM_ABS,   3, 4},
     /* 0xEE */ {MN_INC,     AM_ABS,   3, 6},
-    /* 0xEF */ {MN_ILLEGAL, AM_ABS,   3, 6},      /* ISC abs */
+    /* 0xEF */ {MN_ISC    , AM_ABS,   3, 6},      /* ISC abs */
     /* 0xF0 */ {MN_BEQ,     AM_REL,   2, 2},
     /* 0xF1 */ {MN_SBC,     AM_INDY,  2, 5},
     /* 0xF2 */ {MN_ILLEGAL, AM_IMP,   1, 2},      /* KIL */
-    /* 0xF3 */ {MN_ILLEGAL, AM_INDY,  2, 8},      /* ISC (zp),Y */
+    /* 0xF3 */ {MN_ISC    , AM_INDY,  2, 8},      /* ISC (zp),Y */
     /* 0xF4 */ {MN_NOP_READ,AM_ZPX,   2, 4},      /* DOP zp,X */
     /* 0xF5 */ {MN_SBC,     AM_ZPX,   2, 4},
     /* 0xF6 */ {MN_INC,     AM_ZPX,   2, 6},
-    /* 0xF7 */ {MN_ILLEGAL, AM_ZPX,   2, 6},      /* ISC zp,X */
+    /* 0xF7 */ {MN_ISC    , AM_ZPX,   2, 6},      /* ISC zp,X */
     /* 0xF8 */ {MN_SED,     AM_IMP,   1, 2},
     /* 0xF9 */ {MN_SBC,     AM_ABSY,  3, 4},
     /* 0xFA */ {MN_NOP,     AM_IMP,   1, 2},      /* NOP (1-byte unofficial) */
-    /* 0xFB */ {MN_ILLEGAL, AM_ABSY,  3, 7},      /* ISC abs,Y */
+    /* 0xFB */ {MN_ISC    , AM_ABSY,  3, 7},      /* ISC abs,Y */
     /* 0xFC */ {MN_NOP_READ,AM_ABSX,  3, 4},      /* TOP abs,X */
     /* 0xFD */ {MN_SBC,     AM_ABSX,  3, 4},
     /* 0xFE */ {MN_INC,     AM_ABSX,  3, 7},
-    /* 0xFF */ {MN_ILLEGAL, AM_ABSX,  3, 7},      /* ISC abs,X */
+    /* 0xFF */ {MN_ISC    , AM_ABSX,  3, 7},      /* ISC abs,X */
 };
 
 const char *mnemonic_name(OpMnemonic mn) {
@@ -283,7 +283,9 @@ const char *mnemonic_name(OpMnemonic mn) {
         "LSR","NOP","ORA","PHA","PHP","PLA","PLP","ROL",
         "ROR","RTI","RTS","SBC","SEC","SED","SEI","STA",
         "STX","STY","TAX","TAY","TSX","TXA","TXS","TYA",
-        "LAX","NOP*","SAX","???"
+        "LAX","NOP*","SAX",
+        "SLO","RLA","SRE","RRA","DCP","ISC","ANC","ALR","ARR","AXS",
+        "???"
     };
     if (mn > MN_ILLEGAL) mn = MN_ILLEGAL;
     return names[mn];

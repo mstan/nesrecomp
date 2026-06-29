@@ -1179,6 +1179,44 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
         case MN_INY: fprintf(f, "g_cpu.Y = (g_cpu.Y+1)&0xFF; FLAG_NZ(g_cpu.Y);\n"); break;
         case MN_DEY: fprintf(f, "g_cpu.Y = (g_cpu.Y-1)&0xFF; FLAG_NZ(g_cpu.Y);\n"); break;
 
+        /* Stable unofficial RMW + ALU combos (memory op then accumulator op). */
+        case MN_SLO: /* ASL mem; ORA A */
+            fprintf(f, "{ uint16_t a=%s; uint8_t v=nes_read(a); g_cpu.C=(v>>7)&1; v=(v<<1)&0xFF; nes_write(a,v); g_cpu.A|=v; FLAG_NZ(g_cpu.A); }\n",
+                    operand_addr_expr(e->addr_mode, op1, op2));
+            break;
+        case MN_RLA: /* ROL mem; AND A */
+            fprintf(f, "{ uint16_t a=%s; uint8_t v=nes_read(a); uint8_t c=g_cpu.C; g_cpu.C=(v>>7)&1; v=((v<<1)|c)&0xFF; nes_write(a,v); g_cpu.A&=v; FLAG_NZ(g_cpu.A); }\n",
+                    operand_addr_expr(e->addr_mode, op1, op2));
+            break;
+        case MN_SRE: /* LSR mem; EOR A */
+            fprintf(f, "{ uint16_t a=%s; uint8_t v=nes_read(a); g_cpu.C=v&1; v>>=1; nes_write(a,v); g_cpu.A^=v; FLAG_NZ(g_cpu.A); }\n",
+                    operand_addr_expr(e->addr_mode, op1, op2));
+            break;
+        case MN_RRA: /* ROR mem; ADC A */
+            fprintf(f, "{ uint16_t a=%s; uint8_t v=nes_read(a); uint8_t c=g_cpu.C; g_cpu.C=v&1; v=((v>>1)|(c<<7))&0xFF; nes_write(a,v); uint16_t r=g_cpu.A+v+g_cpu.C; FLAG_NZC_ADD(r,g_cpu.A,v); g_cpu.A=r&0xFF; }\n",
+                    operand_addr_expr(e->addr_mode, op1, op2));
+            break;
+        case MN_DCP: /* DEC mem; CMP A */
+            fprintf(f, "{ uint16_t a=%s; uint8_t v=(nes_read(a)-1)&0xFF; nes_write(a,v); g_cpu.C=(g_cpu.A>=v)?1:0; FLAG_NZ((uint8_t)(g_cpu.A-v)); }\n",
+                    operand_addr_expr(e->addr_mode, op1, op2));
+            break;
+        case MN_ISC: /* INC mem; SBC A */
+            fprintf(f, "{ uint16_t a=%s; uint8_t v=(nes_read(a)+1)&0xFF; nes_write(a,v); int16_t r=g_cpu.A-v-(1-g_cpu.C); FLAG_NZC_SUB(r,g_cpu.A,v); g_cpu.A=r&0xFF; }\n",
+                    operand_addr_expr(e->addr_mode, op1, op2));
+            break;
+        case MN_ANC: /* AND #imm; C = bit7 of result */
+            fprintf(f, "g_cpu.A &= 0x%02X; FLAG_NZ(g_cpu.A); g_cpu.C=(g_cpu.A>>7)&1;\n", op1);
+            break;
+        case MN_ALR: /* AND #imm; LSR A */
+            fprintf(f, "g_cpu.A &= 0x%02X; g_cpu.C=g_cpu.A&1; g_cpu.A>>=1; FLAG_NZ(g_cpu.A);\n", op1);
+            break;
+        case MN_ARR: /* AND #imm; ROR A; C=bit6, V=bit6^bit5 */
+            fprintf(f, "{ g_cpu.A &= 0x%02X; uint8_t c=g_cpu.C; g_cpu.A=((g_cpu.A>>1)|(c<<7))&0xFF; FLAG_NZ(g_cpu.A); g_cpu.C=(g_cpu.A>>6)&1; g_cpu.V=(((g_cpu.A>>6)&1)^((g_cpu.A>>5)&1)); }\n", op1);
+            break;
+        case MN_AXS: /* X = (A & X) - imm; C set like CMP */
+            fprintf(f, "{ uint8_t t=(uint8_t)(g_cpu.A & g_cpu.X); g_cpu.C=(t>=0x%02X)?1:0; g_cpu.X=(t-0x%02X)&0xFF; FLAG_NZ(g_cpu.X); }\n", op1, op1);
+            break;
+
         /* Compare */
         case MN_CMP: emit_compare(f, 'A', e->addr_mode, op1, op2, pc, abs16, cfg); break;
         case MN_CPX: emit_compare(f, 'X', e->addr_mode, op1, op2, pc, abs16, cfg); break;
@@ -2149,7 +2187,7 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
                     if (!found) ps_pending[ps_pending_count++] = jmp_tgt;
                 }
             }
-            if (e2->mnemonic == MN_ILLEGAL) { scan += sz; continue; }
+            if (mn_finder_illegal(e2->mnemonic)) { scan += sz; continue; }
             /* 4-PHA dispatch RTS: continuation (scan+1) must be included in scan */
             if (e2->mnemonic == MN_RTS && scan >= 0x800D &&
                 rom_read(rom, bank, scan-1)  == 0x48 &&
