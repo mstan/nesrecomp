@@ -110,7 +110,23 @@ hooks once it agrees with nesref on RAM.
   wait; never fires during normal hits. NOT YET default (parity-gated). Remaining for later
   increments: per-dot precision (sub-scanline sprite-0/A12), scroll_y>=240 "negative-Y" canonical
   path, widescreen (currently falls back to per-frame), DMC DMA cycle-steal (rides this interleave).
-- **Phase 3 — further increments NOT STARTED** (per-dot precision; make default once at parity).
+- **Phase 3 — dot-PPU is now the DEFAULT renderer for all games (2026-06-29).** Per the
+  owner's directive ("the single unified CORRECT path"), `ppu_dot_init` defaults `g_dot_ppu_on=1`
+  (env `NESRECOMP_DOT_PPU=0` forces the legacy per-frame renderer for A/B + the width!=256
+  widescreen fallback). Breadth regression — all four games boot `[ppu_dot] ON (default)`,
+  0 dispatch misses, no hang: SMB 3000f / Zelda 2000f / MM3 1500f / Faxanadu 1500f. Faxanadu
+  (MMC1, screen-flip HUD) stood up on the `_acc` engine as the 4th game; its HUD renders
+  correctly via REAL per-scanline sprite-0 — the engine's per-frame predictor patch
+  (runtime.c:1113) is provably inert when the dot path is active.
+  **GOAL = retire the per-frame renderer entirely (make the dot-PPU the SOLE renderer).**
+  Remaining before `ppu_render_frame` + the sprite-0 heuristic system can be DELETED:
+  (1) widescreen support in the dot path (currently auto-falls-back to per-frame at width!=256
+  — the last hard dependency); (2) resolve/accept the attract-transition $2002 safety-net pulse;
+  then (3) delete `ppu_render_frame`, `ppu_predict_spr0_hit_scanline`, the legacy `$2002` pulse,
+  `g_spr0_predict_disable`, `g_spr0_split_active`, `g_ppuscroll_*_hud`, `split_y`/holdoff, and
+  unconditionalize the `$2002` dot-branch. Folded into FINAL AXES VALIDATION.
+- **Phase 3 — per-dot precision** (sub-scanline sprite-0/A12): deferred — gold-plating for the
+  current test set (they split at scanline granularity); breadth-gated.
 
 ## Phase 3 — Dot-accurate PPU  (biggest; needs Phase 2 oracle to validate cleanly)
 
