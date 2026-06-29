@@ -119,12 +119,25 @@ hooks once it agrees with nesref on RAM.
   correctly via REAL per-scanline sprite-0 — the engine's per-frame predictor patch
   (runtime.c:1113) is provably inert when the dot path is active.
   **GOAL = retire the per-frame renderer entirely (make the dot-PPU the SOLE renderer).**
-  Remaining before `ppu_render_frame` + the sprite-0 heuristic system can be DELETED:
-  (1) widescreen support in the dot path (currently auto-falls-back to per-frame at width!=256
-  — the last hard dependency); (2) resolve/accept the attract-transition $2002 safety-net pulse;
-  then (3) delete `ppu_render_frame`, `ppu_predict_spr0_hit_scanline`, the legacy `$2002` pulse,
-  `g_spr0_predict_disable`, `g_spr0_split_active`, `g_ppuscroll_*_hud`, `split_y`/holdoff, and
-  unconditionalize the `$2002` dot-branch. Folded into FINAL AXES VALIDATION.
+  - **(1) widescreen in the dot path — DONE (commit 217a8c2).** Ported pillarbox + margin BG +
+    OAM 16-bit X sidecar + fb_x offset into the per-scanline renderer; 512px back buffer;
+    main_runner only calls `ppu_render_frame` when `NESRECOMP_DOT_PPU=0`. Validated on SMB 16:9
+    (428px): pillarbox + gameplay both 1.0 structural vs per-frame; 3000f smoke 0 misses;
+    vanilla unchanged (SMB title byte-exact; Zelda/MM3/Faxanadu 0 misses). This was the LAST
+    hard dependency — the per-frame renderer is now dead weight reachable only via the
+    `NESRECOMP_DOT_PPU=0` A/B flag.
+  - **(2) DELETE the per-frame renderer + heuristics — queued for FINAL AXES VALIDATION** (task 8).
+    Fully scoped (reference-mapped): NO savestate impact, NO game-extras impact. Cut list:
+    `ppu_render_frame`, `service_mmc3_scanline_irq`, `bg_color`, `render_tile_row`,
+    `bg_color_idx_at`, `ppu_predict_spr0_hit_scanline`, the `g_render_irq_*`/`g_render_post_irq_*`
+    render diagnostics (ppu_renderer.c → keep only `g_nes_palette`, `g_disable_render_irq`,
+    `ppu_render_oam_debug`); the `$2002` predictor + legacy-pulse branches and the heuristic
+    globals `g_spr0_split_active`/`g_spr0_predict_disable`/`g_predicted_spr0_scanline`/
+    `g_spr0_reads_ctr_legacy`/`g_ppuscroll_*_hud`/`g_spr0_split_write_scanline` + their vblank
+    resets (runtime.c, main_runner.c); the matching fields/uses in debug_server.c; the decls in
+    nes_runtime.h/debug_server.h/game_extras.h; and drop the `NESRECOMP_DOT_PPU=0` fallback
+    (make the dot path unconditional). Keep `runtime_sync_scroll_from_v` (dot uses it).
+    Then full breadth re-regression.
 - **Phase 3 — per-dot precision** (sub-scanline sprite-0/A12): deferred — gold-plating for the
   current test set (they split at scanline granularity); breadth-gated.
 
