@@ -144,6 +144,19 @@ static bool s_fc_irq_flag; /* frame-counter interrupt flag ($4015 bit 6); set
 static int  s_fc_cycle_acc; /* CPU-cycle accumulator for the cycle-driven frame
                              * sequencer (apu_clock_cycles); NMI-independent. */
 
+/* Sample-accurate engine (Option B): output ring + per-sample integration state.
+ * Declared here (before apu_init) — defined/used by the engine below. */
+#define APU_RING_SIZE 8192               /* power of two; ~185 ms at 44.1 kHz */
+#define CYC_PER_SAMPLE ((float)CPU_FREQ / (float)SAMPLE_RATE)
+static int16_t s_ring[APU_RING_SIZE];
+static int     s_ring_head;              /* write index */
+static int     s_ring_tail;              /* read index  */
+static float   s_out_acc;                /* fractional CPU cycles toward next sample */
+static float   s_mix_acc;                /* running sum of the mix over this window  */
+static int     s_mix_n;
+static ApuChannelLevels s_lv_last;
+static int     s_shadow_cached = -1;
+
 /* ---- Envelope ---- */
 static void tick_envelope(uint8_t *div, uint8_t *vol, bool *start,
                            bool loop, uint8_t period) {
@@ -351,6 +364,10 @@ void apu_init(void) {
     s_fc_irq_flag = false;
     s_fc_cycle_acc = 0;
 
+    /* sample-accurate engine state (ring + integration accumulators) */
+    s_ring_head = s_ring_tail = 0;
+    s_out_acc = 0.0f; s_mix_acc = 0.0f; s_mix_n = 0; s_shadow_cached = -1;
+
     /* Arm the (default-OFF) verified-enhancement audio shadow. */
     apu_shadow_init();
 }
@@ -487,30 +504,88 @@ uint8_t apu_read_status(void) {
     return s;
 }
 
-/* CPU-cycle-driven frame-counter IRQ.  The frame sequencer advances on CPU
- * cycles, NOT on NMI frames: code that runs with NMI disabled (every blargg APU
- * test, and any main-thread $4015 poll) must still see the frame IRQ assert.
- * apu_generate is NMI/audio-gated and can't be the source.
- *
- * This is an independent cycle accumulator for the IRQ flag ONLY.  The
- * envelope / length / sweep quarter+half clocks stay in apu_generate's audio
- * path (they don't affect the IRQ flag), so audio output is byte-unchanged.
- * 4-step mode asserts the frame IRQ once per 29830-cycle sequence (NTSC) unless
- * inhibited; 5-step mode never sets it.  Level flag, held until acknowledged. */
-void apu_clock_cycles(int cpu_cycles) {
-    /* NTSC frame sequencer step offsets in CPU cycles. 4-step asserts the frame
-     * IRQ at step 4 (29829) and holds it across the sequence wrap (29830) until
-     * acknowledged; 5-step never asserts. Phase is anchored to the last $4017
-     * write (which zeroes s_fc_cycle_acc). Only the IRQ flag is driven here —
-     * envelope/length/sweep + all channel timers stay in apu_generate so the
-     * tuned audio path is byte-unchanged (Option A; NES_ACCURACY_BURNDOWN 5b). */
-    enum { STEP4_IRQ = 29829, SEQ4_LEN = 29830, SEQ5_LEN = 37282 };
-    s_fc_cycle_acc += cpu_cycles;
+/* ---- Sample-accurate APU engine (Option B) -------------------------------
+ * apu_clock_cycles() is THE APU engine, driven on the CPU-cycle stream (from
+ * maybe_trigger_vblank, per instruction). Per CPU cycle it advances the frame
+ * sequencer + all channel timers + DMC at their true offsets AND integrates the
+ * band-limited nonlinear-DAC mix into one output sample per CPU_FREQ/SAMPLE_RATE
+ * cycles, pushed to a ring buffer. apu_generate() now DRAINS that ring
+ * (main_runner unchanged). Intra-frame envelope/sweep/length/DMC therefore land
+ * at their real sub-frame times (vs the old per-frame batched apu_generate), and
+ * the frame + DMC IRQs are cycle-accurate and NMI-independent.
+ * (ring + integration state declared above apu_init.) */
+
+static void ring_push(int16_t s) {
+    int nh = (s_ring_head + 1) & (APU_RING_SIZE - 1);
+    if (nh == s_ring_tail)               /* full: drop oldest (smoke/turbo never drain) */
+        s_ring_tail = (s_ring_tail + 1) & (APU_RING_SIZE - 1);
+    s_ring[s_ring_head] = s;
+    s_ring_head = nh;
+}
+
+/* Advance all five channel timers by `dc` CPU cycles (the same stepping the old
+ * apu_generate oversample loop used, now driven per CPU cycle). */
+static void apu_step_channels(float dc) {
+    s_p1.timer_acc += dc;
+    { float period = (float)((s_p1.timer + 1) * 2);
+      while (s_p1.timer_acc >= period) { s_p1.timer_acc -= period; s_p1.seq = (s_p1.seq + 1) & 7; } }
+    s_p2.timer_acc += dc;
+    { float period = (float)((s_p2.timer + 1) * 2);
+      while (s_p2.timer_acc >= period) { s_p2.timer_acc -= period; s_p2.seq = (s_p2.seq + 1) & 7; } }
+    s_tri.timer_acc += dc;
+    { float period = (float)(s_tri.timer + 1);
+      while (s_tri.timer_acc >= period) { s_tri.timer_acc -= period; s_tri.seq = (s_tri.seq + 1) & 31; } }
+    s_noise.timer_acc += dc;
+    { float period = (float)NOISE_PERIOD[s_noise.period_idx];
+      while (s_noise.timer_acc >= period) { s_noise.timer_acc -= period; clock_noise(); } }
+    s_dmc.timer_acc += dc;
+    { float period = (float)DMC_RATE[s_dmc.rate_idx];
+      while (s_dmc.timer_acc >= period) { s_dmc.timer_acc -= period; dmc_clock(); } }
+}
+
+/* Cycle-accurate frame sequencer: fire quarter/half-frame clocks + the frame IRQ
+ * at their exact NTSC CPU-cycle offsets. 4-step: 7457/14913/22371/29829
+ * (qf; qf+hf; qf; qf+hf+IRQ), wrap 29830. 5-step: +37281 (qf+hf), wrap 37282, no
+ * IRQ. Phase anchored to the last $4017 write (which zeroes s_fc_cycle_acc). */
+static void advance_frame_seq(void) {
+    s_fc_cycle_acc++;
     if (!s_fc_mode) {
-        if (!s_fc_irq_inh && s_fc_cycle_acc >= STEP4_IRQ) s_fc_irq_flag = true;
-        if (s_fc_cycle_acc >= SEQ4_LEN) s_fc_cycle_acc -= SEQ4_LEN;
+        switch (s_fc_cycle_acc) {
+            case 7457:  quarter_frame(); break;
+            case 14913: quarter_frame(); half_frame(); break;
+            case 22371: quarter_frame(); break;
+            case 29829: quarter_frame(); half_frame();
+                        if (!s_fc_irq_inh) s_fc_irq_flag = true; break;
+        }
+        if (s_fc_cycle_acc >= 29830) s_fc_cycle_acc = 0;
     } else {
-        if (s_fc_cycle_acc >= SEQ5_LEN) s_fc_cycle_acc -= SEQ5_LEN;
+        switch (s_fc_cycle_acc) {
+            case 7457:  quarter_frame(); break;
+            case 14913: quarter_frame(); half_frame(); break;
+            case 22371: quarter_frame(); break;
+            case 37281: quarter_frame(); half_frame(); break;
+        }
+        if (s_fc_cycle_acc >= 37282) s_fc_cycle_acc = 0;
+    }
+}
+
+void apu_clock_cycles(int cpu_cycles) {
+    if (s_shadow_cached < 0) s_shadow_cached = apu_shadow_enabled();
+    for (int c = 0; c < cpu_cycles; c++) {
+        advance_frame_seq();
+        apu_step_channels(1.0f);
+        s_mix_acc += mix_sample_f(s_shadow_cached ? &s_lv_last : NULL);
+        s_mix_n++;
+        s_out_acc += 1.0f;
+        if (s_out_acc >= CYC_PER_SAMPLE) {
+            s_out_acc -= CYC_PER_SAMPLE;
+            float avg = (s_mix_n > 0) ? s_mix_acc / (float)s_mix_n : 0.0f;
+            if (avg >  32767.0f) avg =  32767.0f;
+            if (avg < -32767.0f) avg = -32767.0f;
+            int16_t canon = (int16_t)avg;
+            ring_push(s_shadow_cached ? apu_shadow_sample(canon, &s_lv_last) : canon);
+            s_mix_acc = 0.0f; s_mix_n = 0;
+        }
     }
 }
 
@@ -519,71 +594,17 @@ bool apu_irq_asserted(void) {
     return s_dmc.irq_flag || s_fc_irq_flag;
 }
 
+/* Drain n samples from the cycle-driven ring (filled by apu_clock_cycles).
+ * The APU is now run by the CPU-cycle stream, so this no longer synthesizes —
+ * it pulls finished samples. Underrun (ring empty on a slow/odd frame) holds the
+ * last sample; the DRC bridge's servo + stall-conceal absorb the slight jitter. */
 void apu_generate(int16_t *buf, int n_samples) {
-    /* Distribute 4 quarter-frame clocks evenly across the audio frame.
-     * Steps 2 and 4 also fire a half-frame clock (length + sweep). */
-    const int qf[4] = {
-        0,
-        n_samples / 4,
-        n_samples / 2,
-        3 * n_samples / 4
-    };
-    int qf_idx = 0;
-
-    /* Band-limited synthesis by oversample + box-decimate. The naive approach
-     * (step the channels ~40 cpu cycles, point-sample the level once per output
-     * sample) aliases the square/triangle edges — measured as a ~0.18 timbre-band
-     * gap vs Mesen, which integrates the mix at the full CPU clock via blip_buf.
-     * Here we step the channels at a fraction of a CPU cycle (OS substeps per
-     * output sample) and AVERAGE the full nonlinear mix over the sample = exact
-     * area sampling of the DAC output. Total cpu cycles per output sample is
-     * unchanged, so all timing is preserved; only the anti-aliasing improves. */
-    enum { APU_OVERSAMPLE = 32 };
-    const float cpu_per_substep = (CPU_FREQ / (float)SAMPLE_RATE) / (float)APU_OVERSAMPLE;
-    const int   shadow_on = apu_shadow_enabled();
-
+    int16_t last = 0;
     for (int i = 0; i < n_samples; i++) {
-
-        /* Frame counter ticks (sample granularity). */
-        if (qf_idx < 4 && i == qf[qf_idx]) {
-            quarter_frame();
-            if (qf_idx == 1 || qf_idx == 3) half_frame();
-            qf_idx++;
+        if (s_ring_tail != s_ring_head) {
+            last = s_ring[s_ring_tail];
+            s_ring_tail = (s_ring_tail + 1) & (APU_RING_SIZE - 1);
         }
-
-        float acc = 0.0f;
-        ApuChannelLevels lv_last;
-        for (int os = 0; os < APU_OVERSAMPLE; os++) {
-            /* Pulse 1: timer clocks every 2 CPU cycles */
-            s_p1.timer_acc += cpu_per_substep;
-            { float period = (float)((s_p1.timer + 1) * 2);
-              while (s_p1.timer_acc >= period) { s_p1.timer_acc -= period; s_p1.seq = (s_p1.seq + 1) & 7; } }
-            /* Pulse 2 */
-            s_p2.timer_acc += cpu_per_substep;
-            { float period = (float)((s_p2.timer + 1) * 2);
-              while (s_p2.timer_acc >= period) { s_p2.timer_acc -= period; s_p2.seq = (s_p2.seq + 1) & 7; } }
-            /* Triangle: timer clocks every CPU cycle */
-            s_tri.timer_acc += cpu_per_substep;
-            { float period = (float)(s_tri.timer + 1);
-              while (s_tri.timer_acc >= period) { s_tri.timer_acc -= period; s_tri.seq = (s_tri.seq + 1) & 31; } }
-            /* Noise */
-            s_noise.timer_acc += cpu_per_substep;
-            { float period = (float)NOISE_PERIOD[s_noise.period_idx];
-              while (s_noise.timer_acc >= period) { s_noise.timer_acc -= period; clock_noise(); } }
-            /* DMC output unit */
-            s_dmc.timer_acc += cpu_per_substep;
-            { float period = (float)DMC_RATE[s_dmc.rate_idx];
-              while (s_dmc.timer_acc >= period) { s_dmc.timer_acc -= period; dmc_clock(); } }
-
-            acc += mix_sample_f(shadow_on ? &lv_last : NULL);
-        }
-
-        float avg = acc * (1.0f / (float)APU_OVERSAMPLE);
-        if (avg >  32767.0f) avg =  32767.0f;
-        if (avg < -32767.0f) avg = -32767.0f;
-        int16_t canon = (int16_t)avg;
-
-        /* When the audio shadow is OFF (default), output the band-limited canon. */
-        buf[i] = shadow_on ? apu_shadow_sample(canon, &lv_last) : canon;
+        buf[i] = last;
     }
 }

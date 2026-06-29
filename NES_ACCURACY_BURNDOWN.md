@@ -424,7 +424,18 @@ advance. Two scoped responses:
     which are infeasible anyway (Axis 3, interrupted-PC). So full DMC cycle-driving is folded
     into Option B.
 
-- **Option B — full sample-accurate APU engine (DEFERRED; documented per request).**
+- **Option B — full sample-accurate APU engine (LANDED 2026-06-28).** `apu_clock_cycles`
+  is now THE APU engine: per CPU cycle it advances the frame sequencer (qf/half/IRQ at exact
+  NTSC offsets) + all channel timers + DMC AND integrates the band-limited nonlinear-DAC mix
+  into one output sample per `CPU_FREQ/SAMPLE_RATE` cycles → ring buffer; `apu_generate` now
+  DRAINS the ring (`main_runner` unchanged). Intra-frame envelope/sweep/length/DMC land at
+  their true sub-frame times; DMC + frame IRQ are fully cycle-driven. **Audio verified no-
+  regression** (SMB, same tool): new-vs-old self-diff timbre L1 **0.057** (onset 0.95); new-
+  vs-Mesen **0.28** < old-vs-Mesen **0.36** (both inflated by audio_drift_diff's aligned-
+  overlap — true full-segment ≈0.083 — but the new engine is slightly CLOSER to the oracle).
+  IRQ ROM still 599; SMB/Zelda/MM3 boot clean, 0 dispatch misses; SMB render 0.9996.
+  See `AUDIO_SLICE_004.md`. (Superseded the earlier "DEFERRED" note below.)
+- **Option B — (historical note, now LANDED above).**
   Rewrite `apu.c` so a single `apu_clock_cycles(cpu_cycles)` is the *entire* APU engine:
   it advances the frame sequencer + **all** channel timers (pulse ÷2, triangle ÷1, noise
   per `NOISE_PERIOD`, DMC per `DMC_RATE`) + envelope/length/sweep at their true CPU-cycle
@@ -542,7 +553,7 @@ makes both sides reproducible for the other axes' diffs.
 | 3 Interrupt/event | 3 STRONG | NMI corroborated; MMC3 IRQ ~1-scanline-late **FIXED**; **general pending-IRQ delivery hook LANDED** (APU-frame + DMC, instruction-granular, `maybe_deliver_irq`); cycle-driven IRQ source (Option A). blargg IRQ tests infeasible (no interrupted-PC) → validate via custom ROM. Sub-scanline dot precision still open | custom IRQ ROM vs Mesen2; dot-precise A12 (needs cycle-accurate PPU; deferred) |
 | 4 Memory/MMIO | 3 STRONG | MEASURED SMB 99% + **Zelda/MMC1 + MM3/MMC3 ZERO persistent game-logic divergence** (nesref diff; Zelda needs RNG-freeze, MM3 needs coroutine-ZP+stack mask); open-bus/PPU-mem unmodeled | extend nesref to PPU memory; open-bus |
 | 5a Video/PPU | 3 STRONG | structural framebuf vs nesref: **SMB 1.000, MM3/MMC3 1.000, Zelda/MMC1 0.992** (title anim-phase); dot-accurate raster still untested | dot-accurate raster; capture nesref shots at synced anim phase (polish) |
-| 5b Audio/APU | 3 STRONG | reg-stream BIT-IDENTICAL ✓; rhythm 0.99 ✓; timbre L1 0.083 ✓; frame-counter + DMC IRQ now **cycle-driven** (Option A); residual = mid-band tilt + DMC DMA steal unmodeled; sample-accurate engine = **Option B (deferred)** | Option B sample-accurate engine (own audio slice); DMC DMA stall; windowed-sinc decimator (polish) |
+| 5b Audio/APU | 3 STRONG | reg-stream BIT-IDENTICAL ✓; rhythm 0.99 ✓; timbre ✓; **Option B sample-accurate engine LANDED** (all timers+DMC+frame seq cycle-driven; audio no-regression, self-diff L1 0.057, vs-oracle 0.28<old 0.36); residual = mid-band tilt; DMC DMA cycle-steal still unmodeled | DMC DMA stall; windowed-sinc decimator (polish) |
 | 6 Recompiler fidelity | 3 STRONG | 0 dispatch misses: SMB + **Zelda/MMC1 (6000f) + MM3/MMC3 (4000f attract)**; MMC1/MMC3 banking validated. NEW boundary: MM3 coroutine-scheduler ZP ($90-$93) not bit-faithful (fiber-modeled, like stack page). 5 latent MM3 coroutine misses still gameplay-state-specific | reproduce + fix the 5 latent MM3 misses (Ghidra) |
 | 7 Determinism | 3 STRONG | non-turbo jitter; no harness | run-to-run ring-hash harness |
 
