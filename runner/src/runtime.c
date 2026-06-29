@@ -695,7 +695,10 @@ static uint8_t nes_read_inner(uint16_t addr) {
         if (addr == 0x4016) {
             if (s_ctrl1_strobe) return 0x40 | (g_controller1_buttons >> 7);
             uint8_t bit = (s_ctrl1_shift & 0x80) ? 1 : 0;
-            s_ctrl1_shift <<= 1;
+            /* Shift MSB-first; fill with 1s so reads past the 8 button bits
+             * return D0=1, as a standard NES controller does (the data line is
+             * driven high after the 8th clock). */
+            s_ctrl1_shift = (uint8_t)((s_ctrl1_shift << 1) | 1);
             return 0x40 | bit;
         }
         if (addr == 0x4017) {
@@ -715,7 +718,8 @@ static uint8_t nes_read_inner(uint16_t addr) {
             }
             if (s_ctrl1_strobe) return 0x40 | (g_controller2_buttons >> 7);
             uint8_t bit = (s_ctrl2_shift & 0x80) ? 1 : 0;
-            s_ctrl2_shift <<= 1;
+            /* Fill with 1s past the 8 button bits (standard controller). */
+            s_ctrl2_shift = (uint8_t)((s_ctrl2_shift << 1) | 1);
             return 0x40 | bit;
         }
         return s_open_bus;   /* write-only APU regs ($4000-$4013,$4015w) read open bus */
