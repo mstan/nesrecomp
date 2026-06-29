@@ -330,13 +330,26 @@ ring of `addr,val,PC,cycle`) diffed against Mesen2 `addMemoryCallback`. Port `mm
 
 ### AXIS 5a — Peripherals: Video / PPU
 
-**Status: 3 STRONG** (MEASURED slice ppu-001: pixel-perfect vs Mesen2).
+**Status: 3 STRONG** (MEASURED slice ppu-001: pixel-perfect vs Mesen2; dot-PPU per-scanline path now also oracle-validated).
 
 > **Measured (slice ppu-001, palette-independent structural framebuffer match):** static
 > frames **1.000** (clean bijection, all 5); scrolling **0.996-0.998** after a 2-3 px
 > de-shift (the residual is a 1-frame input-alignment harness artifact, not a render bug);
 > **HUD sprite-0 split = 1.000 even while scrolling**. PPU rendering is pixel-perfect; also
 > corroborates Axis 4 (MMIO/PPU-state). `_acc/audio_slice/PPU_SLICE_001.md`.
+>
+> **Phase 3 dot-PPU (per-scanline, increment 1) — DIRECT oracle-validated (2026-06-29).**
+> The cycle-driven per-scanline renderer behind `NESRECOMP_DOT_PPU` (commit 7f64707) was
+> measured DIRECTLY against the nesref/Mesen oracle (not just vs the per-frame path):
+> structural match **SMB 0.9996 · MM3 1.000** (incl. the MMC3-IRQ MEGA-MAN-III colour-band
+> logo) **· Zelda 0.998** (at the correct waterfall-anim phase — frame-swept best of 0.998
+> at oracle f298 vs 0.985 at f300, residual = continuous title animation + the dot path's
+> 1-frame present pipeline, NOT a render bug). So the dot path holds full structural parity
+> with the oracle on NROM/MMC1/MMC3. FINDING: per-scanline is SUFFICIENT for all three
+> testable targets — they split via sprite-0 / MMC3-IRQ at scanline granularity and do NOT
+> use mid-scanline scroll tricks, so per-DOT precision (shift-register fetch FSM, sub-scanline
+> sprite-0 dot, per-fetch A12) would add no MEASURABLE win here; it is a breadth question
+> (find a game that needs it) before it is worth the rewrite/regression risk.
 
 (Original posture, still the structural gap for non-SMB games:)
 
@@ -564,7 +577,7 @@ makes both sides reproducible for the other axes' diffs.
 | 2 Cycle/timing | 3 STRONG | cross-title cycle_compare drift: **SMB 0.51 / Zelda 0.41 / MM3 0.37 cyc/frame** — all dominated by frame-len 29781 vs 29780.5; model holds NROM/MMC1/MMC3 | alternating frame budget + monotonic `g_cpu_cycles` (deferred); dynamic penalties |
 | 3 Interrupt/event | 3 STRONG | NMI corroborated; MMC3 IRQ ~1-scanline-late **FIXED**; **general pending-IRQ delivery hook LANDED** (APU-frame + DMC, instruction-granular, `maybe_deliver_irq`); cycle-driven IRQ source (Option A). blargg IRQ tests infeasible (no interrupted-PC) → validate via custom ROM. Sub-scanline dot precision still open | custom IRQ ROM vs Mesen2; dot-precise A12 (needs cycle-accurate PPU; deferred) |
 | 4 Memory/MMIO | 3 STRONG | CPU-RAM zero game-logic divergence (SMB/Zelda/MM3); **PPU-mem MEASURED (SMB 99.84%: OAM+NT byte-exact, palette exact bar 4 folded mirror slots)** via external Mesen-Lua; open-bus partial | open-bus $2002 low-5; PPU-mem on Zelda/MM3 |
-| 5a Video/PPU | 3 STRONG | structural framebuf vs nesref: **SMB 1.000, MM3/MMC3 1.000, Zelda/MMC1 0.992** (title anim-phase); dot-accurate raster still untested | dot-accurate raster; capture nesref shots at synced anim phase (polish) |
+| 5a Video/PPU | 3 STRONG | structural framebuf vs nesref: **SMB 1.000, MM3/MMC3 1.000, Zelda/MMC1 0.992** (title anim-phase); **dot-PPU per-scanline path (NESRECOMP_DOT_PPU, commit 7f64707) DIRECT oracle-validated: SMB 0.9996 / MM3 1.0 / Zelda 0.998** | per-dot precision is gold-plating for current targets (they split at scanline granularity) → breadth-gated: find a game needing mid-scanline tricks first; else make dot-PPU default |
 | 5b Audio/APU | 3 STRONG | reg-stream BIT-IDENTICAL ✓; rhythm 0.99 ✓; timbre ✓; **Option B sample-accurate engine LANDED** (all timers+DMC+frame seq cycle-driven; audio no-regression, self-diff L1 0.057, vs-oracle 0.28<old 0.36); residual = mid-band tilt; DMC DMA cycle-steal still unmodeled | DMC DMA stall; windowed-sinc decimator (polish) |
 | 6 Recompiler fidelity | 3 STRONG | 0 dispatch misses: SMB + **Zelda/MMC1 (6000f) + MM3/MMC3 (4000f attract)**; MMC1/MMC3 banking validated. NEW boundary: MM3 coroutine-scheduler ZP ($90-$93) not bit-faithful (fiber-modeled, like stack page). 5 latent MM3 coroutine misses still gameplay-state-specific | reproduce + fix the 5 latent MM3 misses (Ghidra) |
 | 7 Determinism | 3 STRONG | non-turbo jitter; no harness | run-to-run ring-hash harness |
