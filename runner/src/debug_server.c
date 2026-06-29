@@ -52,19 +52,31 @@
 
 #include <SDL.h>  /* for SDL_PollEvent in pause loop */
 
-/* Render-IRQ diagnostic (defined in ppu_renderer.c) */
-extern int      g_render_irq_fired;
-extern int      g_render_irq_scanline;
-extern uint8_t  g_render_irq_ppuctrl_before;
-extern uint8_t  g_render_irq_ppuctrl_after;
-extern uint8_t  g_render_irq_scrollx_after;
-extern uint8_t  g_render_irq_scrolly_after;
-extern uint8_t  g_render_post_irq_ppuctrl_row;
-extern int      g_render_post_irq_chr_base;
-extern int      g_render_post_irq_origin_y;
-extern int      g_render_post_irq_phys_nt;
-extern int      g_render_post_irq_use_hud;
-extern int      g_render_post_irq_split_y;
+/* The per-frame renderer's render-IRQ diagnostics and sprite-0 split heuristic
+ * state were removed when the dot-PPU became the sole renderer. These debug-only
+ * stand-ins keep the frame-record fields and legacy commands below compiling;
+ * they read as 0/neutral (the dot-PPU owns sprite-0 via real per-scanline
+ * rendering, so these former-heuristic readouts no longer have meaning). */
+static int      g_render_irq_fired = 0;
+static int      g_render_irq_scanline = -1;
+static uint8_t  g_render_irq_ppuctrl_before = 0;
+static uint8_t  g_render_irq_ppuctrl_after = 0;
+static uint8_t  g_render_irq_scrollx_after = 0;
+static uint8_t  g_render_irq_scrolly_after = 0;
+static uint8_t  g_render_post_irq_ppuctrl_row = 0;
+static int      g_render_post_irq_chr_base = 0;
+static int      g_render_post_irq_origin_y = 0;
+static int      g_render_post_irq_phys_nt = -1;
+static int      g_render_post_irq_use_hud = -1;
+static int      g_render_post_irq_split_y = -1;
+/* Former sprite-0 split heuristic globals (removed from runtime.c). */
+static uint8_t  g_ppuscroll_x_hud = 0;
+static uint8_t  g_ppuscroll_y_hud = 0;
+static uint8_t  g_ppuctrl_hud = 0;
+static int      g_spr0_split_active = 0;
+static int      g_spr0_reads_ctr_legacy = 0;
+static int      g_predicted_spr0_scanline = 240;
+static int      g_spr0_split_write_scanline = -1;
 
 /* ---- Server state ---- */
 static sock_t s_listen  = SOCK_INVALID;

@@ -99,12 +99,13 @@ static uint32_t           s_framebuf[512 * 240];  /* sized for max 512px width *
  * alternate palette is opted in via NESRECOMP_PALETTE; default Raw = unused). */
 static uint32_t           s_present_buf[512 * 240];
 
-/* On-demand render for Zapper light detection.  Called when a detection
- * sequence changes PPUMASK (e.g. enabling sprites for the flash phase)
- * and the framebuffer hasn't been re-rendered yet.  Renders the current
- * PPU state into s_framebuf so the Zapper sees the correct brightness. */
+/* On-demand framebuffer hand-off for Zapper light detection.  Called when a
+ * detection sequence changes PPUMASK (e.g. enabling sprites for the flash
+ * phase).  The dot-PPU renders incrementally into s_framebuf, so there is no
+ * full-frame compositor to invoke on demand — the Zapper uses the most recent
+ * completed frame.  (Mid-frame PPUMASK-change detection precision is a known
+ * limitation; no Zapper game is in the current test set.) */
 static void zapper_on_demand_render(void) {
-    ppu_render_frame(s_framebuf);
     runtime_set_zapper_framebuf(s_framebuf);
 }
 
@@ -624,15 +625,12 @@ smoke_skip_input:
         log_on_change("$5E_state", g_ram[0x5E]);
         log_on_change("$66_ppuUpd", g_ram[0x66]);
     }
-    /* Clear sprite-0 hit (bit6) and sprite-overflow (bit5) at frame start.
-     * Real NES clears these at the pre-render scanline. The per-frame renderer
-     * approximates by clearing here (VBlank start). The dot-PPU clears them at
-     * the actual pre-render line instead (ppu_dot.c) — clearing at VBlank start
-     * breaks games whose NMI waits for the PREVIOUS frame's sprite-0 hit to
-     * clear (SMB's Sprite0Clr) before waiting for the new one. */
-    if (!g_dot_ppu_on)
-        g_ppustatus &= ~0x60;
-    /* Set VBlank flag unconditionally — game can poll $2002 to detect it. */
+    /* Sprite-0 hit (bit6) + sprite-overflow (bit5) are cleared at the actual
+     * pre-render line by the dot-PPU (ppu_dot.c), NOT here at VBlank start —
+     * clearing at VBlank start breaks games whose NMI waits for the PREVIOUS
+     * frame's sprite-0 hit to clear (SMB's Sprite0Clr) before waiting for the
+     * new one.
+     * Set VBlank flag unconditionally — game can poll $2002 to detect it. */
     g_ppustatus |= 0x80;
     /* Gate NMI on PPUCTRL bit7 (NMI enable). On real NES, the PPU only
      * generates an NMI at VBlank if bit7 of $2000 is set. The game clears
@@ -786,21 +784,10 @@ smoke_skip_input:
         }
     }
 
-    /* Predict sprite-0-hit scanline for this frame using the post-NMI OAM
-     * and PPU state. Used by ppu_read_reg($2002) to set bit 6 at the right
-     * CPU cycle position so games whose hit-detect spin-waits poll $2002
-     * mid-frame (Gumshoe-style zappers) see the bit flip when the beam
-     * would actually have reached sprite 0. */
-    g_predicted_spr0_scanline = ppu_predict_spr0_hit_scanline();
-
-    /* Render PPU to framebuffer.
-     * Dot-PPU mode (default): the frame was painted incrementally into the back
-     * buffer (during this budget's NMI + main loop) and published to s_framebuf
-     * by ppu_dot_frame_boundary at the next frame boundary — including
-     * widescreen — so the per-frame compositor is skipped. Only NESRECOMP_DOT_PPU=0
-     * uses ppu_render_frame now. */
-    if (!g_dot_ppu_on)
-        ppu_render_frame(s_framebuf);
+    /* The dot-PPU paints the frame incrementally into its back buffer during
+     * this budget's NMI + main loop and publishes it to s_framebuf at the next
+     * frame boundary (ppu_dot_frame_boundary) — including widescreen. There is
+     * no per-frame compositor to invoke here anymore. */
 
     /* Update Zapper light sensor framebuffer for next frame's $4017 reads */
     runtime_set_zapper_framebuf(s_framebuf);

@@ -19,6 +19,7 @@
 #include "nes_runtime.h"
 #include "ppu_dot.h"
 #include "mapper.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -271,16 +272,12 @@ static void dot_step_scanline(void) {
 
 void ppu_dot_init(uint32_t *framebuf) {
     s_fb = framebuf;
-    /* The dot-accurate per-scanline PPU is the DEFAULT renderer for all games —
-     * it is the single, hardware-faithful path (true per-scanline sprite-0,
-     * live scroll, dot-clock MMC3 IRQ), replacing the per-frame compositor and
-     * its sprite-0 split heuristics. NESRECOMP_DOT_PPU=0 forces the legacy
-     * per-frame renderer (kept for A/B and as the width!=256 widescreen fallback
-     * until the dot path gains widescreen support; see ppu_dot_advance). */
-    const char *e = getenv("NESRECOMP_DOT_PPU");
-    g_dot_ppu_on = (e && *e) ? (*e != '0') : 1;
-    printf("[ppu_dot] dot-accurate per-scanline PPU: %s\n",
-           g_dot_ppu_on ? "ON (default)" : "off (per-frame renderer)");
+    /* The dot-accurate per-scanline PPU is the SOLE renderer — the per-frame
+     * compositor and its sprite-0 split heuristics have been removed. This is
+     * the single, hardware-faithful path: true per-scanline sprite-0, live
+     * scroll, dot-clock MMC3 IRQ, widescreen. */
+    g_dot_ppu_on = 1;
+    printf("[ppu_dot] dot-accurate per-scanline PPU (sole renderer)\n");
 }
 
 void ppu_dot_advance(uint32_t ops) {

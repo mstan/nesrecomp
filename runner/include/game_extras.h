@@ -74,7 +74,7 @@ void game_run_nmi(void);
  */
 void game_run_main(void);
 
-/* Called after ppu_render_frame() — allows the game to render additional
+/* Called after the frame is rendered — allows the game to render additional
  * content into the framebuffer (e.g. widescreen margin sprites).
  * framebuf is g_render_width * 240 ARGB8888 pixels. */
 void game_post_render(uint32_t *framebuf);

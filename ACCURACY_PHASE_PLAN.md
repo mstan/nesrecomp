@@ -126,8 +126,13 @@ hooks once it agrees with nesref on RAM.
     vanilla unchanged (SMB title byte-exact; Zelda/MM3/Faxanadu 0 misses). This was the LAST
     hard dependency — the per-frame renderer is now dead weight reachable only via the
     `NESRECOMP_DOT_PPU=0` A/B flag.
-  - **(2) DELETE the per-frame renderer + heuristics — queued for FINAL AXES VALIDATION** (task 8).
-    Fully scoped (reference-mapped): NO savestate impact, NO game-extras impact. Cut list:
+  - **(2) DELETE the per-frame renderer + heuristics — DONE.** The dot-PPU is now the SOLE
+    renderer (980 lines removed; ppu_renderer.c 866→118). Full breadth re-regression clean:
+    SMB vanilla title byte-exact (1.0), SMB widescreen title+gameplay 1.0 structural vs the
+    saved per-frame reference, all four games 0 dispatch misses. The `$2002` sprite-0 path is
+    now just the dot renderer + its forward-progress safety net; `g_dot_ppu_on` is hardwired on.
+    (debug_server.c keeps neutral stand-ins for the former heuristic record fields — dev-tooling
+    only.) Cut list (for the record):
     `ppu_render_frame`, `service_mmc3_scanline_irq`, `bg_color`, `render_tile_row`,
     `bg_color_idx_at`, `ppu_predict_spr0_hit_scanline`, the `g_render_irq_*`/`g_render_post_irq_*`
     render diagnostics (ppu_renderer.c → keep only `g_nes_palette`, `g_disable_render_irq`,

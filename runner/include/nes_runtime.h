@@ -136,9 +136,7 @@ void func_IRQ(void);
 void ppu_write_reg(uint16_t reg, uint8_t val);
 uint8_t ppu_read_reg(uint16_t reg);
 
-/* Render one frame to the framebuffer */
-/* framebuf: 256*240 ARGB8888 pixels */
-void ppu_render_frame(uint32_t *framebuf);
+/* Frame rendering is the dot-PPU's job — see ppu_dot.h. */
 
 /* Render OAM debug view: 8x8 grid of 64 sprite slots at 4x scale.
  * buf must be 256*256 ARGB8888 pixels. */
@@ -188,20 +186,6 @@ extern uint8_t g_ppumask;
 extern uint8_t g_ppustatus;
 extern uint8_t g_ppuscroll_x;
 extern uint8_t g_ppuscroll_y;
-
-/* Split-screen: scroll/ppuctrl captured at sprite-0 hit (= HUD values).
- * g_spr0_split_active is 1 if a split occurred this frame. When active,
- * scanlines 0-15 use *_hud values; 16+ use g_ppuscroll_x/y + g_ppuctrl. */
-extern uint8_t g_ppuscroll_x_hud;
-extern uint8_t g_ppuscroll_y_hud;
-extern uint8_t g_ppuctrl_hud;
-extern int     g_spr0_split_active;
-extern int     g_spr0_reads_ctr_legacy; /* used only when g_spr0_predict_disable=1 */
-extern int     g_spr0_predict_disable;  /* 0 (default) = cycle-accurate sprite-0-hit predictor;
-                                         * 1 = legacy 3-read pulse fallback (emergency opt-out). */
-extern int     g_predicted_spr0_scanline; /* 0..240; sprite-0 hit scanline this frame, or 240 if none */
-extern int     g_spr0_split_write_scanline; /* scanline of post-hit playfield-scroll write, or -1 */
-int            ppu_predict_spr0_hit_scanline(void);  /* implemented in ppu_renderer.c */
 
 /* Widescreen rendering: games set these in game_on_init() to widen the
  * BG render pass.  Default 256/0/0 = standard 4:3 NES output.
