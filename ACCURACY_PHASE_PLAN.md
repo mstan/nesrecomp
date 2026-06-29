@@ -92,7 +92,25 @@ hooks once it agrees with nesref on RAM.
   nesNametableRam/nesPpuMemory). #3 cycle cross-title done; #4 PPU-mem done (SMB 99.84%), commit
   `da0459a`. See PATH_C_SOURCE_CORE_ORACLE.md (decided against), `runtime.c:nes_ppumem_trace_frame`,
   `_acc/audio_slice/mesen_ppumem.lua`.
-- **Phase 3 NOT STARTED** — deliberately deferred to a dedicated session (below).
+- **Phase 3 — Increment 1 DONE (per-scanline parity)** — cycle-driven per-scanline PPU
+  behind `NESRECOMP_DOT_PPU` (default OFF, byte-identical when off). New `runner/src/ppu_dot.c`
+  + `runner/include/ppu_dot.h`; hooks in `runtime.c` (per-instruction `ppu_dot_advance`, $2002
+  sprite-0 fallback) and `main_runner.c` (`ppu_dot_frame_boundary`, skip per-frame render).
+  Model: dot clock slaved to the frame driver's `s_ops_count` with a fixed VBlank phase offset
+  (cycle 0 = scanline 241; visible scanline 0 at +21 lines); free-runs through the NMI handler
+  (so the in-NMI sprite-0 split renders correctly); back-buffer + copy-at-boundary (no tearing);
+  sprite-0/overflow cleared at the pre-render line; MMC3 A12 IRQ fired per scanline from the dot
+  clock. VALIDATED vs the per-frame renderer (which is already oracle-validated): SMB title
+  byte-exact (1.0) + gameplay HUD sprite-0 split correct + 3000f 0 misses; Zelda title 0.9924
+  (animated-title baseline + 1-frame pipeline offset) + 2000f 0 misses; MM3 six attract frames
+  byte-exact (1.0) incl. the MMC3-IRQ MEGA-MAN-III colour-band logo + 1500f 0 misses.
+  Forward-progress safety net: a $2002 sprite-0 spin that polls > ~1 frame with no rendered hit
+  (heavy attract transitions where the recomp's NMI sets up VRAM later than the fixed phase
+  assumes) pulses bit6 — same role the per-frame path's pulse already serves for SMB's in-NMI
+  wait; never fires during normal hits. NOT YET default (parity-gated). Remaining for later
+  increments: per-dot precision (sub-scanline sprite-0/A12), scroll_y>=240 "negative-Y" canonical
+  path, widescreen (currently falls back to per-frame), DMC DMA cycle-steal (rides this interleave).
+- **Phase 3 — further increments NOT STARTED** (per-dot precision; make default once at parity).
 
 ## Phase 3 — Dot-accurate PPU  (biggest; needs Phase 2 oracle to validate cleanly)
 

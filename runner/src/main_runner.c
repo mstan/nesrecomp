@@ -31,6 +31,7 @@
 #include "save_ram.h"
 #include "config.h"
 #include "hdpack.h"
+#include "ppu_dot.h"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
@@ -532,6 +533,12 @@ void nes_vblank_callback(void) {
     static uint64_t s_cb_count = 0;
     if (s_cb_count == 0) { /* debug_log_open(); */ }
     s_cb_count++;
+
+    /* Dot-PPU: complete the just-finished frame and publish it to the
+     * presentation framebuffer, then arm the next frame's visible region.
+     * Runs before the NMI handler below (so PPU memory still reflects the
+     * finished frame) and before the present further down. No-op when off. */
+    ppu_dot_frame_boundary();
     if (s_debug && (s_cb_count <= 100 || s_cb_count % 60 == 0))
         printf("[VBlank] callback #%llu frame=%llu\n",
                (unsigned long long)s_cb_count, (unsigned long long)g_frame_count);
@@ -618,8 +625,13 @@ smoke_skip_input:
         log_on_change("$66_ppuUpd", g_ram[0x66]);
     }
     /* Clear sprite-0 hit (bit6) and sprite-overflow (bit5) at frame start.
-     * Real NES clears all three status bits at pre-render scanline. */
-    g_ppustatus &= ~0x60;
+     * Real NES clears these at the pre-render scanline. The per-frame renderer
+     * approximates by clearing here (VBlank start). The dot-PPU clears them at
+     * the actual pre-render line instead (ppu_dot.c) — clearing at VBlank start
+     * breaks games whose NMI waits for the PREVIOUS frame's sprite-0 hit to
+     * clear (SMB's Sprite0Clr) before waiting for the new one. */
+    if (!g_dot_ppu_on)
+        g_ppustatus &= ~0x60;
     /* Set VBlank flag unconditionally — game can poll $2002 to detect it. */
     g_ppustatus |= 0x80;
     /* Gate NMI on PPUCTRL bit7 (NMI enable). On real NES, the PPU only
@@ -781,8 +793,14 @@ smoke_skip_input:
      * would actually have reached sprite 0. */
     g_predicted_spr0_scanline = ppu_predict_spr0_hit_scanline();
 
-    /* Render PPU to framebuffer */
-    ppu_render_frame(s_framebuf);
+    /* Render PPU to framebuffer.
+     * Dot-PPU mode: the frame was painted incrementally into the back buffer
+     * (during this budget's NMI + main loop) and published to s_framebuf by
+     * ppu_dot_frame_boundary at the next frame boundary, so the per-frame
+     * compositor is skipped here. Widescreen still uses it (dot path falls
+     * back to the per-frame renderer at width != 256). */
+    if (!(g_dot_ppu_on && g_render_width == 256))
+        ppu_render_frame(s_framebuf);
 
     /* Update Zapper light sensor framebuffer for next frame's $4017 reads */
     runtime_set_zapper_framebuf(s_framebuf);
@@ -1081,6 +1099,10 @@ void nesrecomp_runner_run(int argc, char *argv[]) {
     if (s_loadstate_path) savestate_load(s_loadstate_path);
     if (s_record_path) { record_open(s_record_path); atexit(record_close); }
     if (s_script_path) script_load(s_script_path);
+
+    /* Dot-accurate PPU (opt-in, EXPERIMENTAL): reads NESRECOMP_DOT_PPU and
+     * registers the framebuffer. No-op (per-frame renderer) unless set. */
+    ppu_dot_init(s_framebuf);
 
     /* In smoke mode, skip all SDL initialization — run headless */
     if (s_smoke_frames) {

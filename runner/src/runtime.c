@@ -8,6 +8,7 @@
 #include "apu.h"
 #include "game_extras.h"
 #include "override_chr.h"
+#include "ppu_dot.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -582,6 +583,9 @@ void maybe_trigger_vblank(int cycles) {
         s_dbg_cycles_ticked += _c;
         s_dbg_instrs_ticked++;
     }
+    /* Dot-accurate PPU (opt-in): paint visible scanlines incrementally as the
+     * CPU sweeps the frame's cycle budget. No-op unless NESRECOMP_DOT_PPU set. */
+    if (g_dot_ppu_on) ppu_dot_advance(s_ops_count);
     if (s_ops_count < OPS_PER_FRAME) return;
     if (s_vblank_depth >= MAX_VBLANK_DEPTH) { s_dbg_max_depth_skips++; return; }
 
@@ -1028,7 +1032,38 @@ uint8_t ppu_read_reg(uint16_t reg) {
              *
              * The legacy 3-read pulse counter is preserved behind
              * g_spr0_predict_disable for emergency opt-out only. */
-            if (!g_spr0_predict_disable && g_predicted_spr0_scanline < 240) {
+            if (g_dot_ppu_on) {
+                /* Dot-accurate PPU owns sprite-0 hit (bit6): the per-scanline
+                 * renderer sets it when sprite 0 crosses an opaque BG pixel and
+                 * clears it at the pre-render line. Bypass the legacy predictor/
+                 * pulse heuristics so they cannot fight the hardware flag.
+                 *
+                 * Forward-progress safety net: if a sprite-0 spin-wait polls
+                 * $2002 for far longer than a frame without the renderer ever
+                 * producing a hit (a frame whose per-scanline state shows no
+                 * opaque sprite-0/BG overlap our model detects), pulse bit6 so
+                 * the game advances — same role as the per-frame fallback. It
+                 * cannot fire during normal hits (those set bit6 within one
+                 * frame, well under the threshold). */
+                /* Threshold > one full frame of tight-spin reads (~3700) so a
+                 * normal single-frame wait (renderer sets bit6 at the sprite-0
+                 * scanline, resetting this) never reaches it; only a genuine
+                 * no-hit frame accumulates past it. */
+                static uint32_t s_dot_spr0_spin = 0;
+                if (g_ppustatus & 0x40) {
+                    s_dot_spr0_spin = 0;
+                } else if (++s_dot_spr0_spin >= 6000) {
+                    if (getenv("NESRECOMP_DOT_DEBUG")) {
+                        fprintf(stderr, "[dot-spr0] stuck F=%llu mask=%02X ctrl=%02X "
+                                "scroll=%d,%d OAM0=Y%d T%02X A%02X X%d -> pulse bit6\n",
+                                (unsigned long long)g_frame_count, g_ppumask, g_ppuctrl,
+                                g_ppuscroll_x, g_ppuscroll_y, g_ppu_oam[0], g_ppu_oam[1],
+                                g_ppu_oam[2], g_ppu_oam[3]);
+                    }
+                    g_ppustatus |= 0x40;
+                    s_dot_spr0_spin = 0;
+                }
+            } else if (!g_spr0_predict_disable && g_predicted_spr0_scanline < 240) {
                 /* Cycle-accurate path: predictor says sprite 0 will hit at a
                  * known scanline this frame. Fire bit 6 when CPU cycle
                  * position crosses that scanline; bit 6 latches sticky until
