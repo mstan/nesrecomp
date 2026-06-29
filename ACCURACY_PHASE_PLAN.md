@@ -84,7 +84,31 @@ reach useful cycle agreement vs MesenCE → fall back to MesenCE-Lua for cycle/P
 quo) and document. **Checkpoint:** commit the bridge + any engine-side `divergence_diff`
 hooks once it agrees with nesref on RAM.
 
+## STATUS (2026-06-29)
+- **Phase 0 DONE** — baseline commit `a8e5141` (IRQ hook + cycle-driven frame IRQ + open-bus).
+- **Phase 1 DONE** — Option B sample-accurate APU, commit `6d3ea43` (audio no-regression, self-diff 0.057). See AUDIO_SLICE_004.md.
+- **Phase 2 DONE / RESCOPED** — path-C source-embed DROPPED. External MesenCE-Lua serves the two
+  things nesref can't: cycle (`cpu.cycleCount`) + PPU memory (`emu.read`+nesSpriteRam/nesPaletteRam/
+  nesNametableRam/nesPpuMemory). #3 cycle cross-title done; #4 PPU-mem done (SMB 99.84%), commit
+  `da0459a`. See PATH_C_SOURCE_CORE_ORACLE.md (decided against), `runtime.c:nes_ppumem_trace_frame`,
+  `_acc/audio_slice/mesen_ppumem.lua`.
+- **Phase 3 NOT STARTED** — deliberately deferred to a dedicated session (below).
+
 ## Phase 3 — Dot-accurate PPU  (biggest; needs Phase 2 oracle to validate cleanly)
+
+> **KEY FINDING (2026-06-29): dot-accuracy = a CYCLE-DRIVEN per-dot PPU (CPU/PPU interleave) —
+> the PPU analog of Phase 1's cycle-driven APU.** The current renderer composites the whole
+> frame AFTER the CPU runs the frame in bulk, so mid-frame writes / sprite-0 / A12 can't be
+> dot-exact. The fix: advance the PPU 3 dots per CPU cycle from `maybe_trigger_vblank` (like
+> `apu_clock_cycles`), rendering into the framebuffer as it goes. Unlike the APU (a clean
+> relocation of an existing per-substep loop), the PPU is FROM-SCRATCH: 8-cycle BG fetch +
+> shift registers, secondary-OAM sprite eval, sprite-0/overflow per cycle, palette/mirroring,
+> per-fetch CHR/A12 through every mapper. Build behind `NESRECOMP_DOT_PPU` (default OFF) and
+> bring to parity (SMB/MM3 structural 1.0, Zelda 0.99 + dot-IRQ vs mesen_mm3_irq.lua) BEFORE
+> it can be default — the per-frame renderer is pixel-perfect on current games, so the only
+> way this change can go is regress. Validate via the external Mesen-Lua PPU-mem/cycle taps
+> (Phase 2). "Phase 4" (DMC DMA cycle-steal) rides the same interleave (CPU stalls at fetch
+> cycles) and should follow once the PPU interleave exists.
 
 **Goal.** Rewrite `ppu_renderer.c` from per-frame to per-dot/per-scanline cycle-accurate
 rendering: dot-precise sprite-0, sprite-overflow per cycle, mid-scanline writes, A12-per-fetch
