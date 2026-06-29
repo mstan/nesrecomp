@@ -293,6 +293,18 @@ mismatch. SMB uses NMI only — GREEN on SMB is reachable before full IRQ slicin
 > So MMC3 banking + coroutine-kernel + game-logic RAM are CORRECT. Corroborates Axis 6 (0
 > dispatch misses / 4000 frames attract) + Axis 3 (MMC3 IRQ scanline −1, irq-001).
 
+> **PPU-MEMORY MEASURED — SMB via external Mesen-Lua (2026-06-29).** Path-C (in-process
+> source-core oracle) DROPPED: external MesenCE-Lua already exposes everything the libretro
+> nesref can't — cycle (`cpu.cycleCount`) AND PPU memory (`emu.read(a, emu.memType.X)`,
+> X∈{nesSpriteRam=53 OAM, nesPaletteRam=55, nesNametableRam=51, nesPpuMemory=9}). So we
+> "hobble through" Mesen externally; no embed. New recomp tap `NESRECOMP_PPUMEM_TRACE`
+> (`runtime.c:nes_ppumem_trace_frame`, synthetic image [OAM 256][palette 32][NT 2KB]) +
+> oracle `mesen_ppumem.lua`, diffed by the existing `wram_diff.py` with the RNG-seed freeze.
+> Result: **99.84% — OAM byte-exact, 2KB nametable byte-exact, palette exact except the 4
+> folded mirror slots $3F10/$3F14/$3F18/$3F1C** (recomp folds them to $3F00/04/08/0C — a
+> correct optimization, render is pixel-perfect). PPU memory is correct. Tools:
+> `mesen_memtype_probe.lua` (memType discovery), `PATH_C_SOURCE_CORE_ORACLE.md` (decided against).
+
 - `nes_read/write` (`runtime.c:540-648`): 2KB RAM mirrored ×4; PPU regs with side-effects
   — `$2002` clear-on-read latch (`:803-872`), `$2005`/`$2006` shared w-toggle + 15-bit
   t/v Loopy model (`:721-766`), `$2007` buffered read / immediate palette (`:767-799`,
@@ -551,7 +563,7 @@ makes both sides reproducible for the other axes' diffs.
 | 1 Instruction semantics | 3 STRONG | 96 unofficial opcodes as skips; `JMP($xxFF)`; `BRK` | Emit stable illegals + `nes_read16` page-wrap; prove unreachable per title via coverage |
 | 2 Cycle/timing | 3 STRONG | cross-title cycle_compare drift: **SMB 0.51 / Zelda 0.41 / MM3 0.37 cyc/frame** — all dominated by frame-len 29781 vs 29780.5; model holds NROM/MMC1/MMC3 | alternating frame budget + monotonic `g_cpu_cycles` (deferred); dynamic penalties |
 | 3 Interrupt/event | 3 STRONG | NMI corroborated; MMC3 IRQ ~1-scanline-late **FIXED**; **general pending-IRQ delivery hook LANDED** (APU-frame + DMC, instruction-granular, `maybe_deliver_irq`); cycle-driven IRQ source (Option A). blargg IRQ tests infeasible (no interrupted-PC) → validate via custom ROM. Sub-scanline dot precision still open | custom IRQ ROM vs Mesen2; dot-precise A12 (needs cycle-accurate PPU; deferred) |
-| 4 Memory/MMIO | 3 STRONG | MEASURED SMB 99% + **Zelda/MMC1 + MM3/MMC3 ZERO persistent game-logic divergence** (nesref diff; Zelda needs RNG-freeze, MM3 needs coroutine-ZP+stack mask); open-bus/PPU-mem unmodeled | extend nesref to PPU memory; open-bus |
+| 4 Memory/MMIO | 3 STRONG | CPU-RAM zero game-logic divergence (SMB/Zelda/MM3); **PPU-mem MEASURED (SMB 99.84%: OAM+NT byte-exact, palette exact bar 4 folded mirror slots)** via external Mesen-Lua; open-bus partial | open-bus $2002 low-5; PPU-mem on Zelda/MM3 |
 | 5a Video/PPU | 3 STRONG | structural framebuf vs nesref: **SMB 1.000, MM3/MMC3 1.000, Zelda/MMC1 0.992** (title anim-phase); dot-accurate raster still untested | dot-accurate raster; capture nesref shots at synced anim phase (polish) |
 | 5b Audio/APU | 3 STRONG | reg-stream BIT-IDENTICAL ✓; rhythm 0.99 ✓; timbre ✓; **Option B sample-accurate engine LANDED** (all timers+DMC+frame seq cycle-driven; audio no-regression, self-diff L1 0.057, vs-oracle 0.28<old 0.36); residual = mid-band tilt; DMC DMA cycle-steal still unmodeled | DMC DMA stall; windowed-sinc decimator (polish) |
 | 6 Recompiler fidelity | 3 STRONG | 0 dispatch misses: SMB + **Zelda/MMC1 (6000f) + MM3/MMC3 (4000f attract)**; MMC1/MMC3 banking validated. NEW boundary: MM3 coroutine-scheduler ZP ($90-$93) not bit-faithful (fiber-modeled, like stack page). 5 latent MM3 coroutine misses still gameplay-state-specific | reproduce + fix the 5 latent MM3 misses (Ghidra) |
@@ -562,7 +574,10 @@ makes both sides reproducible for the other axes' diffs.
 ## 5. Tooling to build (mirrors the PSX shelf)
 
 - [x] `cycle_compare.py` — delta-cycle via the bit-identical APU-write anchors (Axis 2). **DONE cycle-001 + CROSS-TITLE (SMB 0.51 / Zelda 0.41 / MM3 0.37 cyc/frame).** Oracle APU stream = `mesen_apu_capture.lua` (generic, cycle-stamped) — the one place cycle still needs MesenCE Lua (libretro has no cycle counter).
-- [ ] **Path C — in-process source-core oracle (DEFERRED):** would give in-process guest cycles + PPU-internal memory (VRAM/OAM/palette) with zero MesenCE-GUI/Lua dependency. Full plan + why-deferred + pickup steps: `_acc/audio_slice/PATH_C_SOURCE_CORE_ORACLE.md`.
+- [x] **Path C — in-process source-core oracle: DROPPED (not needed).** External MesenCE-Lua
+      already exposes cycle (`cpu.cycleCount`) + PPU memory (`emu.read`+`nesSpriteRam`/
+      `nesPaletteRam`/`nesNametableRam`/`nesPpuMemory`), so we hobble through Mesen externally —
+      no embed. PPU-mem diff DONE (SMB 99.84%). See `PATH_C_SOURCE_CORE_ORACLE.md` (decided against).
 - [ ] `nes_cycles.{c,h}` monotonic counter + alternating frame budget (the deferred frame-length fix).
 - [x] APU register-write ring (`NESRECOMP_APU_TRACE`, `runtime.c:674`) + `apu_stream_diff.py` (Axis 5b). **DONE slice 002.**
 - [x] `audio_drift_diff.py` — onset-train align + onset histogram + timbre band-energy. **DONE.**

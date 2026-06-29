@@ -700,6 +700,9 @@ smoke_skip_input:
     /* Per-frame WRAM delta trace for the nesref state-divergence diff (env-gated). */
     { extern void nes_wram_trace_frame(void); nes_wram_trace_frame(); }
 
+    /* Per-frame PPU-memory (OAM/palette/nametable) delta trace vs Mesen-Lua (env-gated). */
+    { extern void nes_ppumem_trace_frame(void); nes_ppumem_trace_frame(); }
+
     /* (The APU frame-counter IRQ is driven on the CPU-cycle stream in
      * maybe_trigger_vblank → apu_clock_cycles, not per-NMI here, so it also
      * advances for NMI-disabled main-thread code such as the blargg APU tests.) */

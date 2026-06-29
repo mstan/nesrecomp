@@ -486,6 +486,51 @@ void nes_wram_trace_frame(void) {
     fflush(s_wram_trace_f);
 }
 
+/* Per-frame PPU-memory delta trace (Axis 4/5a), env NESRECOMP_PPUMEM_TRACE=<path>.
+ * Same JSONL shape as the WRAM trace, over a synthetic PPU-memory image so the
+ * existing wram_diff.py works unchanged:
+ *   [0x000-0x0FF] OAM (g_ppu_oam)   [0x100-0x11F] palette (g_ppu_pal)
+ *   [0x200-0x9FF] nametable RAM 2KB (g_ppu_nt physical NTs 0/1)
+ * Oracle side = mesen_ppumem.lua (nesSpriteRam/nesPaletteRam/nesNametableRam).
+ * Pair with the RNG-seed freeze (NESRECOMP_FREEZE/NESREF_FREEZE) for a valid diff. */
+static FILE   *s_ppu_trace_f = NULL;
+static int     s_ppu_trace_state = -1;
+static uint8_t s_ppu_prev[0xA00];
+static void ppumem_image(uint8_t *img) {
+    for (int i = 0; i < 0x100; i++) img[0x000 + i] = g_ppu_oam[i];  /* OAM */
+    for (int i = 0; i < 0x020; i++) img[0x100 + i] = g_ppu_pal[i];  /* palette */
+    for (int i = 0; i < 0x800; i++) img[0x200 + i] = g_ppu_nt[i];   /* nametable (gap 0x120-0x1FF=0) */
+}
+void nes_ppumem_trace_frame(void) {
+    if (s_ppu_trace_state < 0) {
+        const char *e = getenv("NESRECOMP_PPUMEM_TRACE");
+        s_ppu_trace_f = (e && *e) ? fopen(e, "w") : NULL;
+        s_ppu_trace_state = s_ppu_trace_f ? 1 : 0;
+        if (s_ppu_trace_state == 1) {
+            uint8_t img[0xA00]; memset(img, 0, sizeof img); ppumem_image(img);
+            for (int a = 0; a < 0xA00; a++) {
+                fprintf(s_ppu_trace_f,
+                        "{\"f\":%llu,\"adr\":\"0x%04x\",\"old\":\"0x%02x\",\"val\":\"0x%02x\"}\n",
+                        (unsigned long long)g_frame_count, a, 0, img[a]);
+                s_ppu_prev[a] = img[a];
+            }
+            fflush(s_ppu_trace_f);
+            return;
+        }
+    }
+    if (s_ppu_trace_state != 1) return;
+    uint8_t img[0xA00]; memset(img, 0, sizeof img); ppumem_image(img);
+    for (int a = 0; a < 0xA00; a++) {
+        if (img[a] != s_ppu_prev[a]) {
+            fprintf(s_ppu_trace_f,
+                    "{\"f\":%llu,\"adr\":\"0x%04x\",\"old\":\"0x%02x\",\"val\":\"0x%02x\"}\n",
+                    (unsigned long long)g_frame_count, a, s_ppu_prev[a], img[a]);
+            s_ppu_prev[a] = img[a];
+        }
+    }
+    fflush(s_ppu_trace_f);
+}
+
 /* ---- General pending-IRQ delivery hook ----------------------------------
  * The recompiler emits maybe_trigger_vblank() at every instruction boundary,
  * so polling the IRQ line here samples it exactly where the real 6502 does —
