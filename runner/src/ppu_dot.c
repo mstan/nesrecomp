@@ -36,10 +36,10 @@ extern uint16_t       g_ppuaddr;
 #define DOTS_PER_LINE   341
 #define VISIBLE_LINES   240
 #define VBLANK_PRE      21
-#define DOT_W           256          /* dot path only runs at the vanilla width */
+#define DOT_MAXW        512          /* max framebuffer width (matches s_framebuf) */
 
-static uint32_t *s_fb        = NULL;            /* presentation framebuffer */
-static uint32_t  s_back[DOT_W * VISIBLE_LINES]; /* render target (double buffer) */
+static uint32_t *s_fb        = NULL;             /* presentation framebuffer */
+static uint32_t  s_back[DOT_MAXW * VISIBLE_LINES]; /* render target (double buffer) */
 static int       s_next_visible    = 0;         /* next visible scanline (0..240) */
 static int       s_prerender_done  = 0;         /* pre-render A12 clock done this frame */
 static int       s_busy            = 0;         /* reentry guard (IRQ handler re-enters) */
@@ -58,9 +58,10 @@ static inline uint32_t dot_bg_color(int pal_base, int color_idx) {
     return g_nes_palette[g_ppu_pal[(pal_base * 4 + color_idx) & 0x1F] & 0x3F];
 }
 
-/* Per-scanline background opacity, consumed by the sprite pass of the SAME
- * scanline for sprite-0 hit and behind-BG priority. 1 = opaque BG pixel. */
-static uint8_t s_bg_opaque[DOT_W];
+/* Per-scanline background opacity (indexed by framebuffer x), consumed by the
+ * sprite pass of the SAME scanline for sprite-0 hit and behind-BG priority.
+ * 1 = opaque BG pixel. Pillarbox margins stay 0 (transparent). */
+static uint8_t s_bg_opaque[DOT_MAXW];
 
 /* Fire the MMC3 scanline IRQ via the NMI push convention (PCH/PCL placeholders
  * + P), matching service_mmc3_scanline_irq / maybe_deliver_irq. The handler may
@@ -85,14 +86,38 @@ static void dot_clock_mmc3(void) {
 }
 
 /* Paint one visible scanline (0..239) into the back buffer from the current
- * live PPU state. Fills s_bg_opaque for the sprite pass. */
+ * live PPU state. Fills s_bg_opaque (indexed by framebuffer x) for the sprite
+ * pass. Handles widescreen: the vanilla screen occupies framebuffer columns
+ * [g_widescreen_left, g_widescreen_left+256); the effective margins
+ * (g_ws_eff_left/right, clamped) extend the view, and anything outside the
+ * active span is pillarboxed black. Mirrors ppu_render_frame's geometry. */
 static void dot_render_scanline(int sy) {
+    const int W = g_render_width;
     uint32_t bg = g_nes_palette[g_ppu_pal[0] & 0x3F];
-    uint32_t *row = s_back + (size_t)sy * DOT_W;
+    uint32_t *row = s_back + (size_t)sy * W;
 
-    /* Background ($2001 bit3). Disabled => universal color, no opaque pixels. */
+    /* Effective widescreen margins this scanline (-1 = follow configured). */
+    int ws_l = g_widescreen_left, ws_r = g_widescreen_right;
+    int ws_eff_l = g_ws_eff_left, ws_eff_r = g_ws_eff_right;
+    if (ws_eff_l < 0 || ws_eff_l > ws_l) ws_eff_l = ws_l;
+    if (ws_eff_r < 0 || ws_eff_r > ws_r) ws_eff_r = ws_r;
+    int wide = (ws_l || ws_r);
+
+    /* BG opacity for the whole row defaults transparent (pillarbox margins). */
+    for (int x = 0; x < W; x++) s_bg_opaque[x] = 0;
+
+    /* Pillarbox: black outside the active span, universal bg inside. (Vanilla
+     * builds skip this — the BG loop writes every pixel of the 256px row.) */
+    if (wide) {
+        for (int x = 0; x < W; x++) row[x] = 0xFF000000u;
+        int span_x0 = ws_l - ws_eff_l;
+        int span_w  = 256 + ws_eff_l + ws_eff_r;
+        for (int i = 0; i < span_w; i++) row[span_x0 + i] = bg;
+    }
+
+    /* Background ($2001 bit3). */
     if (!(g_ppumask & 0x08)) {
-        for (int x = 0; x < DOT_W; x++) { row[x] = bg; s_bg_opaque[x] = 0; }
+        if (!wide) for (int x = 0; x < 256; x++) row[x] = bg;
     } else {
         int chr_base  = (g_ppuctrl & 0x10) ? 0x1000 : 0x0000;
         int origin_x  = g_ppuscroll_x + ((g_ppuctrl & 0x01) ? 256 : 0);
@@ -112,7 +137,8 @@ static void dot_render_scanline(int sy) {
         int nt_row   = (tile_y >= 30) ? 1 : 0;
         int local_ty = tile_y % 30;
 
-        for (int sx = 0; sx < DOT_W; sx++) {
+        for (int sx = -ws_eff_l; sx < 256 + ws_eff_r; sx++) {
+            int fb_x     = sx + ws_l;             /* column in the (wide) framebuffer */
             int nt_x     = (origin_x + sx) & 0x1FF;
             int tile_x   = nt_x / 8;
             int px_col   = nt_x % 8;
@@ -140,13 +166,13 @@ static void dot_render_scanline(int sy) {
             int ci = ((g_chr_ram[chr_off] >> bit) & 1) |
                      (((g_chr_ram[chr_off + 8] >> bit) & 1) << 1);
 
-            /* PPUMASK bit1: clip leftmost 8 BG pixels (treated as transparent). */
-            if (sx < 8 && !(g_ppumask & 0x02)) {
-                row[sx] = bg;
-                s_bg_opaque[sx] = 0;
+            /* PPUMASK bit1: clip leftmost 8 BG pixels (vanilla columns 0..7). */
+            if (sx >= 0 && sx < 8 && !(g_ppumask & 0x02)) {
+                row[fb_x] = bg;
+                s_bg_opaque[fb_x] = 0;
             } else {
-                row[sx] = dot_bg_color(pal_base, ci);
-                s_bg_opaque[sx] = (ci != 0);
+                row[fb_x] = dot_bg_color(pal_base, ci);
+                s_bg_opaque[fb_x] = (ci != 0);
             }
         }
 
@@ -180,7 +206,10 @@ static void dot_render_scanline(int sy) {
 
         uint8_t spr_tile = g_ppu_oam[s * 4 + 1];
         uint8_t spr_attr = g_ppu_oam[s * 4 + 2];
-        int     spr_x    = g_ppu_oam[s * 4 + 3];
+        /* Widescreen: render from the unwrapped 16-bit X sidecar (it equals the
+         * OAM byte on the vanilla screen); vanilla uses the 8-bit OAM X. */
+        int     spr_x    = g_ws_oam_sidecar ? (int)g_oam_x16[s]
+                                            : (int)g_ppu_oam[s * 4 + 3];
         int flip_h   = (spr_attr >> 6) & 1;
         int flip_v   = (spr_attr >> 7) & 1;
         int priority = (spr_attr >> 5) & 1;  /* 1 = behind BG */
@@ -207,23 +236,25 @@ static void dot_render_scanline(int sy) {
         for (int bit = 7; bit >= 0; bit--) {
             int chr_bit = flip_h ? (7 - bit) : bit;
             int px = spr_x + (7 - bit);
-            if (px < 0 || px >= DOT_W) continue;
+            /* Clip to the effective viewport (vanilla [0,256) when margins 0). */
+            if (px < -ws_eff_l || px >= 256 + ws_eff_r) continue;
             int ci = ((lo >> chr_bit) & 1) | (((hi >> chr_bit) & 1) << 1);
             if (ci == 0) continue;                       /* transparent */
             if (px < 8 && !(g_ppumask & 0x04)) continue; /* leftmost-8 sprite clip */
 
+            int fb_x = px + ws_l;
             /* Sprite-0 hit: opaque sprite-0 pixel over opaque BG, x != 255,
              * both BG+sprites enabled, BG not clipped at this x. */
-            if (s == 0 && px < 255 && (g_ppumask & 0x18) == 0x18) {
+            if (s == 0 && px >= 0 && px < 255 && (g_ppumask & 0x18) == 0x18) {
                 int bg_clipped = (px < 8 && !(g_ppumask & 0x02));
-                if (!bg_clipped && s_bg_opaque[px])
+                if (!bg_clipped && s_bg_opaque[fb_x])
                     g_ppustatus |= 0x40;
             }
             /* Behind-BG priority: only draw over transparent BG. */
-            if (priority && s_bg_opaque[px]) continue;
+            if (priority && s_bg_opaque[fb_x]) continue;
 
             uint8_t nc = g_ppu_pal[(spr_pal * 4 + ci) & 0x1F] & 0x3F;
-            row[px] = g_nes_palette[nc];
+            row[fb_x] = g_nes_palette[nc];
         }
     }
 }
@@ -254,7 +285,7 @@ void ppu_dot_init(uint32_t *framebuf) {
 
 void ppu_dot_advance(uint32_t ops) {
     if (!g_dot_ppu_on || s_busy) return;
-    if (g_render_width != DOT_W) return;          /* widescreen -> per-frame path */
+    if (g_render_width > DOT_MAXW) return;         /* beyond buffer (shouldn't happen) */
     if (s_next_visible >= VISIBLE_LINES) return;
 
     /* Scanline offset from VBlank start (cycle 0). Visible scanline index = the
@@ -279,7 +310,7 @@ void ppu_dot_advance(uint32_t ops) {
 }
 
 void ppu_dot_frame_boundary(void) {
-    if (!g_dot_ppu_on || g_render_width != DOT_W) return;
+    if (!g_dot_ppu_on || g_render_width > DOT_MAXW) return;
 
     if (!s_busy) {
         s_busy = 1;
@@ -289,8 +320,8 @@ void ppu_dot_frame_boundary(void) {
         if (!s_prerender_done) { dot_clock_mmc3(); s_prerender_done = 1; }
         while (s_next_visible < VISIBLE_LINES) dot_step_scanline();
         s_busy = 0;
-        /* Publish the completed frame for presentation. */
-        memcpy(s_fb, s_back, sizeof(s_back));
+        /* Publish the completed frame for presentation (only the active width). */
+        memcpy(s_fb, s_back, (size_t)g_render_width * VISIBLE_LINES * sizeof(uint32_t));
     }
 
     /* Arm the next frame's visible region. */

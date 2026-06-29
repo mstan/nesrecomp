@@ -794,12 +794,12 @@ smoke_skip_input:
     g_predicted_spr0_scanline = ppu_predict_spr0_hit_scanline();
 
     /* Render PPU to framebuffer.
-     * Dot-PPU mode: the frame was painted incrementally into the back buffer
-     * (during this budget's NMI + main loop) and published to s_framebuf by
-     * ppu_dot_frame_boundary at the next frame boundary, so the per-frame
-     * compositor is skipped here. Widescreen still uses it (dot path falls
-     * back to the per-frame renderer at width != 256). */
-    if (!(g_dot_ppu_on && g_render_width == 256))
+     * Dot-PPU mode (default): the frame was painted incrementally into the back
+     * buffer (during this budget's NMI + main loop) and published to s_framebuf
+     * by ppu_dot_frame_boundary at the next frame boundary — including
+     * widescreen — so the per-frame compositor is skipped. Only NESRECOMP_DOT_PPU=0
+     * uses ppu_render_frame now. */
+    if (!g_dot_ppu_on)
         ppu_render_frame(s_framebuf);
 
     /* Update Zapper light sensor framebuffer for next frame's $4017 reads */
