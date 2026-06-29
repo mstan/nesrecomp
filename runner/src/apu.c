@@ -111,6 +111,7 @@ typedef struct {
     /* Config (from $4010/$4012/$4013) */
     bool     loop;
     bool     irq_en;
+    bool     irq_flag;     /* DMC interrupt flag; set on sample-end if irq_en (NESdev $4015 bit 7) */
     uint8_t  rate_idx;
     uint16_t start_addr;   /* $4012: $C000 + (val<<6)  */
     uint16_t start_len;    /* $4013: (val<<4) + 1      */
@@ -223,9 +224,19 @@ static void dmc_refill(void) {
     s_dmc.buf_empty  = false;
     /* Address wraps from $FFFF back to $8000. */
     s_dmc.cur_addr   = (uint16_t)((s_dmc.cur_addr + 1) | 0x8000);
-    if (--s_dmc.bytes_left == 0 && s_dmc.loop) {
-        s_dmc.cur_addr   = s_dmc.start_addr;
-        s_dmc.bytes_left = s_dmc.start_len;
+    if (--s_dmc.bytes_left == 0) {
+        if (s_dmc.loop) {
+            s_dmc.cur_addr   = s_dmc.start_addr;
+            s_dmc.bytes_left = s_dmc.start_len;
+        } else if (s_dmc.irq_en) {
+            /* Sample finished, no loop: assert the DMC interrupt flag (NESdev
+             * "APU DMC"). Observable via $4015 bit 7 — polling games work now.
+             * NOTE: actual IRQ-VECTOR delivery is not yet wired — the static
+             * recomp has no general pending-IRQ path (only the MMC3 scanline
+             * IRQ is delivered, via the renderer). Vector-driven DMC IRQ needs
+             * the pending-IRQ delivery hook (separate, deferred). */
+            s_dmc.irq_flag = true;
+        }
     }
 }
 
@@ -399,6 +410,7 @@ void apu_write(uint16_t addr, uint8_t val) {
         s_dmc.irq_en   = (val >> 7) & 1;
         s_dmc.loop     = (val >> 6) & 1;
         s_dmc.rate_idx =  val & 0x0F;
+        if (!s_dmc.irq_en) s_dmc.irq_flag = false;  /* clearing IRQ enable clears the flag */
         break;
     case 0x4011:
         s_dmc.output = val & 0x7F;   /* direct DAC load */
@@ -412,6 +424,7 @@ void apu_write(uint16_t addr, uint8_t val) {
 
     /* ---- Status ($4015) ---- */
     case 0x4015:
+        s_dmc.irq_flag = false;   /* writing $4015 clears the DMC interrupt flag (NESdev) */
         s_p1.enabled    = (val >> 0) & 1;
         s_p2.enabled    = (val >> 1) & 1;
         s_tri.enabled   = (val >> 2) & 1;
@@ -453,6 +466,10 @@ uint8_t apu_read_status(void) {
     if (s_tri.length   > 0) s |= 0x04;
     if (s_noise.length > 0) s |= 0x08;
     if (s_dmc.bytes_left > 0) s |= 0x10;   /* DMC active = sample bytes remain */
+    if (s_dmc.irq_flag)       s |= 0x80;   /* DMC interrupt flag (NESdev $4015 bit 7) */
+    /* NOTE: reading $4015 does NOT clear the DMC flag (it clears the frame-IRQ
+     * flag, bit 6, which this model does not track). Only $4015 write / $4010
+     * IRQ-disable clear the DMC flag. */
     return s;
 }
 
