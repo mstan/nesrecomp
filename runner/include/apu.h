@@ -20,6 +20,9 @@ void    apu_generate(int16_t *buf, int n_samples);
  * frame IRQ once per 29830-cycle sequence unless inhibited; cleared by a $4015
  * read or by setting the inhibit bit. */
 void    apu_clock_cycles(int cpu_cycles);
+/* Drain the accumulated DMC DMA cycle-steal (4 CPU cycles per sample-byte
+ * fetch), to be added to the CPU frame budget. Returns 0 when DMC is idle. */
+int     apu_take_dmc_stall(void);
 
 /* True while any APU interrupt source is asserting the CPU IRQ line:
  * the DMC sample-end flag ($4010 bit 7 path) or the frame-counter flag.

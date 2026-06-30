@@ -553,11 +553,20 @@ void maybe_trigger_vblank(int cycles) {
     /* Drive the APU frame-counter IRQ on the CPU-cycle stream (NMI-independent),
      * then poll for between-instruction maskable-IRQ delivery (DMC + frame). */
     apu_clock_cycles(cycles > 0 ? cycles : 1);
+    /* DMC DMA cycle-steal: each DMC sample-byte fetch halts the CPU ~4 cycles
+     * while the APU reads from memory. Those cycles still elapse (PPU/APU
+     * advance), so they count toward the frame budget as if the CPU executed
+     * them — modeling the CPU losing time to DMA (Axis 2). The APU is advanced
+     * through the stall too; the ~4-cycle window cannot trigger another fetch
+     * (the DMC byte period is >> 4), so this does not recurse. */
+    int dmc_stall = apu_take_dmc_stall();
+    if (dmc_stall) apu_clock_cycles(dmc_stall);
     maybe_deliver_irq();
 
-    /* Count cycles — always, even during NMI handler execution. */
+    /* Count cycles — always, even during NMI handler execution. Stolen DMC DMA
+     * cycles are counted here so the frame advances as on hardware. */
     {
-        uint32_t _c = (cycles > 0) ? (uint32_t)cycles : 1;
+        uint32_t _c = ((cycles > 0) ? (uint32_t)cycles : 1) + (uint32_t)dmc_stall;
         s_ops_count       += _c;
         s_dbg_cycles_ticked += _c;
         s_dbg_instrs_ticked++;

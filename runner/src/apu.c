@@ -136,6 +136,12 @@ static Triangle s_tri;
 static Noise    s_noise;
 static DMC      s_dmc;
 
+/* DMC DMA cycle-steal accumulator: each sample-byte fetch halts the CPU ~4
+ * cycles while the APU's DMA unit reads from CPU memory. Accumulated here and
+ * drained by apu_take_dmc_stall() into the CPU frame budget. */
+static int s_dmc_stall = 0;
+int apu_take_dmc_stall(void) { int s = s_dmc_stall; s_dmc_stall = 0; return s; }
+
 static bool s_fc_mode;    /* 0=4-step  1=5-step */
 static bool s_fc_irq_inh;
 static bool s_fc_irq_flag; /* frame-counter interrupt flag ($4015 bit 6); set
@@ -240,6 +246,7 @@ static void dmc_refill(void) {
     if (!s_dmc.buf_empty || s_dmc.bytes_left == 0) return;
     s_dmc.sample_buf = apu_dmc_read(s_dmc.cur_addr);
     s_dmc.buf_empty  = false;
+    s_dmc_stall += 4;   /* DMC DMA halts the CPU ~4 cycles for the sample fetch */
     /* Address wraps from $FFFF back to $8000. */
     s_dmc.cur_addr   = (uint16_t)((s_dmc.cur_addr + 1) | 0x8000);
     if (--s_dmc.bytes_left == 0) {
