@@ -35,8 +35,12 @@ static KeyBinds s_binds = {
         .right  = SDL_SCANCODE_D,
     },
     .zapper = {
-        .mouse_enabled = 0,
-        .crosshair = 0,
+        /* Default ON: a Zapper game (g_zapper_enabled) has no other input on a
+         * PC, so the mouse IS the light gun.  Every consumer is gated on
+         * g_zapper_enabled, so this is inert for non-Zapper games.  Users can
+         * still set mouse/crosshair = false in keybinds.ini to override. */
+        .mouse_enabled = 1,
+        .crosshair = 1,
     },
     /* Default gamepad mapping is deliberately forgiving: the two right-hand
      * face buttons both act as A, the two left-hand both act as B, and the
@@ -206,11 +210,11 @@ static void write_defaults(const char *path) {
     write_player(f, "player1", &s_binds.p1);
     write_player(f, "player2", &s_binds.p2);
     fprintf(f, "[zapper]\n");
-    fprintf(f, "# Set mouse = true to use the mouse as a Zapper light gun.\n");
-    fprintf(f, "# Left click = trigger, mouse position = aim point.\n");
-    fprintf(f, "mouse = false\n");
-    fprintf(f, "# Set crosshair = true to show a crosshair at the aim point.\n");
-    fprintf(f, "crosshair = false\n\n");
+    fprintf(f, "# Mouse as the Zapper light gun (default on for Zapper games):\n");
+    fprintf(f, "# left click = trigger, mouse position = aim.  Set false to disable.\n");
+    fprintf(f, "mouse = true\n");
+    fprintf(f, "# Show a crosshair at the aim point (and hide the OS cursor).\n");
+    fprintf(f, "crosshair = true\n\n");
     fprintf(f, "# Gamepad bindings (SDL game-controller button names).\n");
     fprintf(f, "# Values may list multiple buttons separated by commas, e.g. \"a, b\".\n");
     fprintf(f, "# Valid names: a b x y back start guide leftshoulder rightshoulder\n");
