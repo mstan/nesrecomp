@@ -50,4 +50,9 @@ void ppu_dot_advance(uint32_t ops);
  * visible region (cursor 0, scroll tracking reset). No-op when off. */
 void ppu_dot_frame_boundary(void);
 
+/* Render the full visible frame from the current PPU state into `buf`
+ * (g_render_width x 240), synchronously and without side effects — for the
+ * Zapper light probe, which needs a mid-frame display snapshot. */
+void ppu_dot_render_snapshot(uint32_t *buf);
+
 #endif /* PPU_DOT_H */

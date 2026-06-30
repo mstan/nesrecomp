@@ -99,10 +99,12 @@ static void dot_clock_mmc3(void) {
  * [g_widescreen_left, g_widescreen_left+256); the effective margins
  * (g_ws_eff_left/right, clamped) extend the view, and anything outside the
  * active span is pillarboxed black. Mirrors ppu_render_frame's geometry. */
-static void dot_render_scanline(int sy) {
+/* target = framebuffer to paint into; snapshot = 1 for an off-screen render that
+ * must not touch PPU status (sprite-0/overflow) — used by the Zapper light probe. */
+static void dot_render_scanline(int sy, uint32_t *target, int snapshot) {
     const int W = g_render_width;
     uint32_t bg = g_nes_palette[g_ppu_pal[0] & 0x3F];
-    uint32_t *row = s_back + (size_t)sy * W;
+    uint32_t *row = target + (size_t)sy * W;
 
     /* Effective widescreen margins this scanline (-1 = follow configured). */
     int ws_l = g_widescreen_left, ws_r = g_widescreen_right;
@@ -229,7 +231,7 @@ static void dot_render_scanline(int sy) {
         int sy0 = g_ppu_oam[s * 4 + 0];
         if (sy0 >= 0xEF) continue;
         int top = sy0 + 1;
-        if (sy >= top && sy < top + spr_height) { if (++on_line > 8) { g_ppustatus |= 0x20; break; } }
+        if (sy >= top && sy < top + spr_height) { if (++on_line > 8) { if (!snapshot) g_ppustatus |= 0x20; break; } }
     }
 
     for (int s = 63; s >= 0; s--) {
@@ -279,7 +281,7 @@ static void dot_render_scanline(int sy) {
             int fb_x = px + ws_l;
             /* Sprite-0 hit: opaque sprite-0 pixel over opaque BG, x != 255,
              * both BG+sprites enabled, BG not clipped at this x. */
-            if (s == 0 && px >= 0 && px < 255 && (g_ppumask & 0x18) == 0x18) {
+            if (!snapshot && s == 0 && px >= 0 && px < 255 && (g_ppumask & 0x18) == 0x18) {
                 int bg_clipped = (px < 8 && !(g_ppumask & 0x02));
                 if (!bg_clipped && s_bg_opaque[fb_x])
                     g_ppustatus |= 0x40;
@@ -297,8 +299,24 @@ static void dot_render_scanline(int sy) {
  * line's fetches on hardware, so the IRQ handler's writes apply to later lines). */
 static void dot_step_scanline(void) {
     dot_clock_mmc3();
-    dot_render_scanline(s_next_visible);
+    dot_render_scanline(s_next_visible, s_back, 0);
     s_next_visible++;
+}
+
+/* Synchronously render the full visible frame from the CURRENT PPU state into
+ * `buf` (g_render_width x 240), for the Zapper light probe — it needs the
+ * framebuffer to reflect a mid-frame display change (the target "flash") that
+ * the incremental path has not yet published. Snapshot mode: no PPU-status
+ * (sprite-0/overflow) side effects, no MMC3 IRQ, and the dot-PPU's in-progress
+ * vertical state is saved/restored so the live frame is undisturbed. */
+void ppu_dot_render_snapshot(uint32_t *buf) {
+    if (!buf || g_render_width > DOT_MAXW) return;
+    int v0=s_v_init, v1=s_use_canon, v2=s_v_coarse_y, v3=s_v_fine_y, v4=s_v_nt_row,
+        v5=s_abs_nt_y, v6=s_last_sy_y, v7=s_last_nt_yb;
+    s_v_init = 0; s_abs_nt_y = -1; s_last_sy_y = -1; s_last_nt_yb = -1;
+    for (int sy = 0; sy < VISIBLE_LINES; sy++) dot_render_scanline(sy, buf, 1);
+    s_v_init=v0; s_use_canon=v1; s_v_coarse_y=v2; s_v_fine_y=v3; s_v_nt_row=v4;
+    s_abs_nt_y=v5; s_last_sy_y=v6; s_last_nt_yb=v7;
 }
 
 /* ---- public API ---- */

@@ -99,13 +99,13 @@ static uint32_t           s_framebuf[512 * 240];  /* sized for max 512px width *
  * alternate palette is opted in via NESRECOMP_PALETTE; default Raw = unused). */
 static uint32_t           s_present_buf[512 * 240];
 
-/* On-demand framebuffer hand-off for Zapper light detection.  Called when a
- * detection sequence changes PPUMASK (e.g. enabling sprites for the flash
- * phase).  The dot-PPU renders incrementally into s_framebuf, so there is no
- * full-frame compositor to invoke on demand — the Zapper uses the most recent
- * completed frame.  (Mid-frame PPUMASK-change detection precision is a known
- * limitation; no Zapper game is in the current test set.) */
+/* On-demand render for Zapper light detection.  Called when a detection sequence
+ * changes PPUMASK (e.g. enabling sprites for the flash phase) — the Zapper must
+ * see the CURRENT mid-frame display, not the last published frame.  The dot-PPU
+ * renders incrementally and only publishes at the frame boundary, so snapshot
+ * the current PPU state into s_framebuf for the probe (no side effects). */
 static void zapper_on_demand_render(void) {
+    ppu_dot_render_snapshot(s_framebuf);
     runtime_set_zapper_framebuf(s_framebuf);
 }
 
