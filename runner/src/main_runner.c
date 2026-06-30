@@ -818,6 +818,30 @@ smoke_skip_input:
     /* Game-specific post-render (e.g. widescreen margin sprites) */
     game_post_render(s_framebuf);
 
+    /* Per-frame PNG dump (env-gated debug tap): NESRECOMP_FRAME_DUMP=<prefix>
+     * dumps every frame in [NESRECOMP_FRAME_DUMP_LO, _HI] as <prefix><NNNN>.png
+     * from the final framebuffer. Placed before the smoke early-return so it
+     * works headless too. Re-added on fix/gumshoe-yoshiscookie-artifacts. */
+    {
+        static int s_fd_state = -1;
+        static const char *s_fd_prefix = NULL;
+        static unsigned long long s_fd_lo = 0, s_fd_hi = ~0ULL;
+        if (s_fd_state < 0) {
+            s_fd_prefix = getenv("NESRECOMP_FRAME_DUMP");
+            s_fd_state = (s_fd_prefix && s_fd_prefix[0]) ? 1 : 0;
+            const char *lo = getenv("NESRECOMP_FRAME_DUMP_LO");
+            const char *hi = getenv("NESRECOMP_FRAME_DUMP_HI");
+            if (lo && lo[0]) s_fd_lo = strtoull(lo, NULL, 10);
+            if (hi && hi[0]) s_fd_hi = strtoull(hi, NULL, 10);
+        }
+        if (s_fd_state == 1 && g_frame_count >= s_fd_lo && g_frame_count <= s_fd_hi) {
+            char p[256];
+            snprintf(p, sizeof(p), "%s%04llu.png", s_fd_prefix,
+                     (unsigned long long)g_frame_count);
+            runner_screenshot(p);
+        }
+    }
+
     /* Smoke test: hash framebuffer at intervals and check exit */
     if (s_smoke_frames) {
         if (g_frame_count % s_smoke_interval == 0 &&
