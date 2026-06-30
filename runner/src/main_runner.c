@@ -99,14 +99,16 @@ static uint32_t           s_framebuf[512 * 240];  /* sized for max 512px width *
  * alternate palette is opted in via NESRECOMP_PALETTE; default Raw = unused). */
 static uint32_t           s_present_buf[512 * 240];
 
-/* On-demand render for Zapper light detection.  Called when a detection sequence
- * changes PPUMASK (e.g. enabling sprites for the flash phase) — the Zapper must
- * see the CURRENT mid-frame display, not the last published frame.  The dot-PPU
- * renders incrementally and only publishes at the frame boundary, so snapshot
- * the current PPU state into s_framebuf for the probe (no side effects). */
+/* On-demand render for Zapper light detection.  The Zapper photodiode must see
+ * the CURRENT mid-frame display, not the last published frame.  The dot-PPU
+ * renders incrementally and only publishes s_framebuf at the frame boundary, so
+ * the present buffer is always a frame stale.  Snapshot the current PPU state
+ * into a PRIVATE buffer (never s_framebuf — that would corrupt the displayed
+ * frame) and hand it to the runtime probe.  No PPU-status side effects. */
+static uint32_t           s_zapper_snapbuf[512 * 240];
 static void zapper_on_demand_render(void) {
-    ppu_dot_render_snapshot(s_framebuf);
-    runtime_set_zapper_framebuf(s_framebuf);
+    ppu_dot_render_snapshot(s_zapper_snapbuf);
+    runtime_set_zapper_snapshot(s_zapper_snapbuf);
 }
 
 /* ---- OAM debug window (--debug flag) ---- */
@@ -573,8 +575,11 @@ void nes_vblank_callback(void) {
         }
     }
 
-    /* Zapper mouse input: poll absolute mouse position each frame */
-    if (g_zapper_enabled && keybinds_zapper_mouse() && s_window) {
+    /* Zapper mouse input: poll absolute mouse position each frame. A script
+     * TRIGGER takes precedence — the mouse must not clobber a scripted aim/
+     * trigger (it would reset g_zapper_x/y/trigger every frame, defeating any
+     * headless deterministic Zapper test). */
+    if (g_zapper_enabled && keybinds_zapper_mouse() && s_window && !script_has_trigger_override()) {
         int mx, my;
         Uint32 buttons = SDL_GetMouseState(&mx, &my);
         zapper_mouse_to_nes(mx, my);

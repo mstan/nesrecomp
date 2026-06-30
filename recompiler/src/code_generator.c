@@ -2487,7 +2487,15 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
      * decided control should resume at this address inside this function;
      * dispatching to the standalone wrapper for the same address re-enters
      * the world from scratch and grows the C stack indefinitely.  Plain
-     * return drops the (possibly-misanalysed) branch and unwinds normally. */
+     * return drops the (possibly-misanalysed) branch and unwinds normally.
+     *
+     * NOTE: the deeper root cause (the title/menu wait-loop auto-advancing)
+     * is that function_finder splits one logical routine — E9B3/E9B6/E9B9/
+     * E950/EC9D — into separate functions, so the routine's BACKWARD branches
+     * (e.g. $E9D2 BEQ $E9B6, $E9E0 BEQ $E9B3) emit as call_by_address and the
+     * loop becomes C recursion.  Neither `return` (drops the loop) nor
+     * call_by_address (recurses) is correct; the fix is to keep intra-routine
+     * branch targets as in-body gotos (merge the mis-split functions). */
     for (int vi = 0; vi < valid_count; vi++) {
         uint16_t va = valid_starts[vi];
         bool emitted = false;

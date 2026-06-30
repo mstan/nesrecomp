@@ -118,15 +118,13 @@ int     g_zapper_enabled = 0;       /* 1 if Zapper connected on port 2 */
 int     g_zapper_x = 0;             /* aim X (0-255) */
 int     g_zapper_y = 0;             /* aim Y (0-239) */
 int     g_zapper_trigger = 0;       /* 1 if trigger pulled */
-static const uint32_t *s_zapper_framebuf = NULL; /* last rendered frame for light detection */
-static zapper_render_fn s_zapper_render = NULL;  /* on-demand render callback */
-static uint8_t s_zapper_last_ppumask = 0;        /* PPUMASK at last Zapper render */
+static const uint32_t *s_zapper_framebuf = NULL; /* PRESENT buffer (1-frame stale) */
+static const uint32_t *s_zapper_snap     = NULL; /* LIVE snapshot of current PPU state */
+static zapper_render_fn s_zapper_render = NULL;  /* on-demand live-snapshot callback */
 
-void runtime_set_zapper_framebuf(const uint32_t *fb) {
-    s_zapper_framebuf = fb;
-    s_zapper_last_ppumask = g_ppumask;  /* framebuffer now matches this PPUMASK */
-}
+void runtime_set_zapper_framebuf(const uint32_t *fb) { s_zapper_framebuf = fb; }
 void runtime_set_zapper_render_callback(zapper_render_fn fn) { s_zapper_render = fn; }
+void runtime_set_zapper_snapshot(const uint32_t *fb) { s_zapper_snap = fb; }
 
 /* Check PPU internal OAM for any visible sprite overlapping the Zapper aim
  * point.  Uses g_ppu_oam (set by OAM DMA / $4014) rather than shadow RAM
@@ -148,60 +146,101 @@ static int zapper_oam_hit(void) {
     return 0;
 }
 
-/* Check if the pixel at Zapper aim (x,y) is "bright" — simulates the
- * photodiode in the NES Zapper light gun.
- *
- * Key: detection sequences change PPUMASK mid-frame.  Duck Hunt's flow:
- *   Phase 1: PPUMASK rendering OFF (screen blank) → anti-cheat check.
- *            If Zapper sees light here → shot rejected (aimed at lamp).
- *   Phase 2: PPUMASK sprites ON, detection sprites in PPU OAM →
- *            If Zapper sees light → aimed at duck → HIT.
- *
- * The framebuffer from the last ppu_render_frame may not match the current
- * PPUMASK.  When PPUMASK has changed, we do an on-demand render so the
- * framebuffer reflects what the CRT would actually display. */
+/* Always-on (env-gated) tap for every $4017 light-sensor probe. Set
+ * NESRECOMP_ZAPPER_TRACE=<path> to append a CSV row per call:
+ *   frame,x,y,ppumask,render_width,stale_lum,live_lum,result
+ * stale_lum = luminance from the 1-frame-delayed present buffer (the old,
+ * broken source); live_lum = luminance from the current-state snapshot (the
+ * value the decision now uses). A divergence proves the staleness defect.
+ * This is a continuous tap, not an arm-then-capture probe. */
+static FILE *s_zapper_trace = NULL;
+static int   s_zapper_trace_init = 0;
+static void zapper_trace_record(int x, int y, uint8_t ppumask, int render_width,
+                                int stale_lum, int live_lum, int result) {
+    if (!s_zapper_trace_init) {
+        s_zapper_trace_init = 1;
+        const char *p = getenv("NESRECOMP_ZAPPER_TRACE");
+        if (p && *p) {
+            s_zapper_trace = fopen(p, "w");
+            if (s_zapper_trace)
+                fprintf(s_zapper_trace,
+                        "frame,x,y,ppumask,render_width,stale_lum,live_lum,result,trigger,val4017\n");
+        }
+    }
+    if (!s_zapper_trace) return;
+    /* Reconstruct the $4017 byte the game sees: bit3=0 light detected,
+     * bit4=0 trigger pulled (both active-low), bit6 always set. */
+    uint8_t val = 0x40;
+    if (!result) val |= 0x08;
+    if (!g_zapper_trigger) val |= 0x10;
+    fprintf(s_zapper_trace, "%llu,%d,%d,%02X,%d,%d,%d,%d,%d,%02X\n",
+            (unsigned long long)g_frame_count, x, y, ppumask,
+            render_width, stale_lum, live_lum, result, g_zapper_trigger, val);
+    fflush(s_zapper_trace);
+}
+
+/* Average luminance of the 3x3 neighbourhood around (x,y) in `fb`, or -1 if
+ * the buffer is NULL / aim is off-screen. fb is g_render_width wide. */
+static int zapper_sample_lum(const uint32_t *fb, int x, int y, int width) {
+    if (!fb || x < 0 || x >= 256 || y < 0 || y >= 240) return -1;
+    int total = 0, count = 0;
+    for (int dy = -4; dy <= 4; dy += 4) {
+        for (int dx = -4; dx <= 4; dx += 4) {
+            int px = x + dx, py = y + dy;
+            if (px < 0 || px >= 256 || py < 0 || py >= 240) continue;
+            uint32_t pixel = fb[py * width + px];
+            int r = (pixel >> 16) & 0xFF, g = (pixel >> 8) & 0xFF, b = pixel & 0xFF;
+            total += (r * 3 + g * 6 + b) / 10;
+            count++;
+        }
+    }
+    return (count > 0) ? total / count : -1;
+}
+
+/* Simulate the NES Zapper photodiode: is the pixel currently displayed at the
+ * aim point "bright"?  The dot-PPU publishes its framebuffer with a 1-frame
+ * pipeline delay, so the present buffer is always one frame behind the moment
+ * the game reads $4017.  We therefore render a LIVE snapshot of current PPU
+ * state (current OAM + nametables + scroll + palette + PPUMASK) and sample
+ * that — exactly what the CRT beam would show.  This restores the no-pipeline-
+ * delay behaviour the per-frame renderer had (known-good for Duck Hunt and
+ * Gumshoe) and is ungated: detection that does NOT toggle PPUMASK (Gumshoe)
+ * is sampled just the same as detection that does (Duck Hunt). */
 static int zapper_light_detected(void) {
+    extern int g_render_width;
+    int x = g_zapper_x, y = g_zapper_y;
+
     /* During early init (before enough frames render), report light detected.
      * This simulates the Zapper pointing at a lit TV screen at power-on,
      * which is how real NES hardware detects the Zapper on combo carts. */
-    if (!s_zapper_framebuf || g_frame_count < 2) return 1;
+    if (!s_zapper_framebuf || g_frame_count < 2) {
+        zapper_trace_record(x, y, g_ppumask, g_render_width, -1, -1, 1);
+        return 1;
+    }
 
     /* If PPU rendering is completely disabled (both sprites and BG off),
      * the screen outputs the universal background color — typically dark.
      * The Zapper sees no light.  This is critical for the anti-cheat phase:
      * the game blanks the screen, and if the Zapper still sees light the
      * shot is rejected. */
-    if (!(g_ppumask & 0x18)) return 0;
-
-    /* If PPUMASK changed since the framebuffer was last rendered, do an
-     * on-demand render so it reflects the current PPU state (e.g. the
-     * detection flash sprites that are now visible). */
-    if (s_zapper_render && (g_ppumask & 0x18) != (s_zapper_last_ppumask & 0x18)) {
-        s_zapper_render();
-        /* s_zapper_last_ppumask updated by runtime_set_zapper_framebuf */
+    if (!(g_ppumask & 0x18)) {
+        zapper_trace_record(x, y, g_ppumask, g_render_width, -2, -2, 0);
+        return 0;
     }
 
-    extern int g_render_width;
-    int x = g_zapper_x, y = g_zapper_y;
-    if (x < 0 || x >= 256 || y < 0 || y >= 240) return 0;
-    /* Sample a small area around the aim point for robustness */
-    int total_lum = 0, count = 0;
-    for (int dy = -4; dy <= 4; dy += 4) {
-        for (int dx = -4; dx <= 4; dx += 4) {
-            int px = x + dx, py = y + dy;
-            if (px < 0 || px >= 256 || py < 0 || py >= 240) continue;
-            uint32_t pixel = s_zapper_framebuf[py * g_render_width + px];
-            int r = (pixel >> 16) & 0xFF;
-            int g_val = (pixel >> 8) & 0xFF;
-            int b = pixel & 0xFF;
-            total_lum += (r * 3 + g_val * 6 + b) / 10;
-            count++;
-        }
-    }
-    int result = (count > 0 && total_lum / count > 160) ? 1 : 0;
+    /* Render a live snapshot of the CURRENT PPU state.  Ungated — the previous
+     * PPUMASK-change gate left non-toggling detection (Gumshoe) reading the
+     * stale present buffer, which is why its shots never registered. */
+    if (s_zapper_render) s_zapper_render();   /* fills s_zapper_snap */
+
+    const uint32_t *probe = s_zapper_snap ? s_zapper_snap : s_zapper_framebuf;
+    int live_lum  = zapper_sample_lum(probe, x, y, g_render_width);
+    int stale_lum = zapper_sample_lum(s_zapper_framebuf, x, y, g_render_width);
+    int result = (live_lum > 160) ? 1 : 0;
     /* OAM bounding-box fallback removed: it caused false-positive hits
-     * because it didn't check actual tile-pixel brightness.  The on-demand
-     * s_zapper_render() above already keeps the framebuffer current. */
+     * because it didn't check actual tile-pixel brightness.  The live
+     * snapshot above samples the real displayed pixels. */
+    zapper_trace_record(x, y, g_ppumask, g_render_width, stale_lum, live_lum, result);
     return result;
 }
 
