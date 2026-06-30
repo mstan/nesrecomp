@@ -108,8 +108,9 @@ hooks once it agrees with nesref on RAM.
   (heavy attract transitions where the recomp's NMI sets up VRAM later than the fixed phase
   assumes) pulses bit6 — same role the per-frame path's pulse already serves for SMB's in-NMI
   wait; never fires during normal hits. NOT YET default (parity-gated). Remaining for later
-  increments: per-dot precision (sub-scanline sprite-0/A12), scroll_y>=240 "negative-Y" canonical
-  path, widescreen (currently falls back to per-frame), DMC DMA cycle-steal (rides this interleave).
+  increments: per-dot precision (sub-scanline sprite-0/A12). [DONE since: scroll_y>=240
+  "negative-Y" canonical path (Yoshi's $F8 title — ported from ppu_render_frame's Option-A
+  hybrid, commit after cross-build); widescreen; DMC DMA cycle-steal.]
 - **Phase 3 — dot-PPU is now the DEFAULT renderer for all games (2026-06-29).** Per the
   owner's directive ("the single unified CORRECT path"), `ppu_dot_init` defaults `g_dot_ppu_on=1`
   (env `NESRECOMP_DOT_PPU=0` forces the legacy per-frame renderer for A/B + the width!=256

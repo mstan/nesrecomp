@@ -45,10 +45,17 @@ static int       s_next_visible    = 0;         /* next visible scanline (0..240
 static int       s_prerender_done  = 0;         /* pre-render A12 clock done this frame */
 static int       s_busy            = 0;         /* reentry guard (IRQ handler re-enters) */
 
-/* Incremental vertical-scroll state, ported from ppu_render_frame's default
- * (non-canonical) path: abs_nt_y models the PPU v-register's per-scanline Y
- * auto-increment so a mid-frame vertical scroll split does not double-count. */
-static int s_abs_nt_y   = -1;
+/* Vertical-scroll state, ported from ppu_render_frame's "Option A hybrid":
+ *  - scroll_y < 240 (normal): the linear abs_nt_y model (PPU v-register Y
+ *    auto-increment), so a mid-frame vertical split doesn't double-count.
+ *  - scroll_y >= 240 (the "negative-Y" trick, e.g. Yoshi's title at $F8): the
+ *    canonical coarse_y/fine_y/nt_row state machine honoring the NESdev wrap
+ *    rule (coarse_y==29 toggles the vertical NT bit; ==31 wraps within the same
+ *    NT). Re-derived on the first painted scanline or any Y-scroll-source change.*/
+static int s_v_init    = 0;     /* 0 until the first painted scanline this frame */
+static int s_use_canon = 0;     /* 1 when the canonical (scroll_y>=240) path is active */
+static int s_v_coarse_y = 0, s_v_fine_y = 0, s_v_nt_row = 0;  /* canonical state */
+static int s_abs_nt_y   = -1;   /* linear-path absolute nametable Y */
 static int s_last_sy_y  = -1;
 static int s_last_nt_yb = -1;
 
@@ -125,18 +132,34 @@ static void dot_render_scanline(int sy) {
         int cur_nt_yb = (g_ppuctrl & 0x02) ? 1 : 0;
         int mirroring = mapper_get_mirroring();
 
-        /* Vertical: reset abs_nt_y on the first painted scanline of the frame
-         * or whenever the Y scroll source changed mid-frame (split); otherwise
-         * it was auto-incremented after the previous scanline. */
-        if (s_abs_nt_y < 0 || g_ppuscroll_y != s_last_sy_y || cur_nt_yb != s_last_nt_yb)
-            s_abs_nt_y = g_ppuscroll_y + (cur_nt_yb ? 240 : 0);
+        /* Vertical scroll: re-derive on the first painted scanline of the frame
+         * or any Y-scroll-source change (mid-frame split). scroll_y >= 240 selects
+         * the canonical negative-Y state machine (e.g. Yoshi's title at $F8); else
+         * the linear abs_nt_y model. */
+        if (!s_v_init || g_ppuscroll_y != s_last_sy_y || cur_nt_yb != s_last_nt_yb) {
+            if (g_ppuscroll_y >= 240) {
+                s_use_canon  = 1;
+                s_v_coarse_y = (g_ppuscroll_y >> 3) & 0x1F;
+                s_v_fine_y   = g_ppuscroll_y & 0x07;
+                s_v_nt_row   = cur_nt_yb;
+            } else {
+                s_use_canon = 0;
+                s_abs_nt_y  = g_ppuscroll_y + (cur_nt_yb ? 240 : 0);
+            }
+            s_v_init = 1;
+        }
 
-        int nt_y = s_abs_nt_y;
-        if (nt_y >= 480) nt_y -= 480;
-        int tile_y   = nt_y / 8;
-        int tile_row = nt_y % 8;
-        int nt_row   = (tile_y >= 30) ? 1 : 0;
-        int local_ty = tile_y % 30;
+        int nt_row, local_ty, tile_row;
+        if (s_use_canon) {
+            nt_row = s_v_nt_row; local_ty = s_v_coarse_y; tile_row = s_v_fine_y;
+        } else {
+            int nt_y = s_abs_nt_y;
+            if (nt_y >= 480) nt_y -= 480;
+            int tile_y = nt_y / 8;
+            tile_row   = nt_y % 8;
+            nt_row     = (tile_y >= 30) ? 1 : 0;
+            local_ty   = tile_y % 30;
+        }
 
         for (int sx = -ws_eff_l; sx < 256 + ws_eff_r; sx++) {
             int fb_x     = sx + ws_l;             /* column in the (wide) framebuffer */
@@ -177,7 +200,17 @@ static void dot_render_scanline(int sy) {
             }
         }
 
-        s_abs_nt_y++;
+        /* Advance vertical state for the next scanline. */
+        if (s_use_canon) {
+            if (++s_v_fine_y == 8) {
+                s_v_fine_y = 0;
+                if (s_v_coarse_y == 29)      { s_v_coarse_y = 0; s_v_nt_row ^= 1; } /* NT toggle */
+                else if (s_v_coarse_y == 31) { s_v_coarse_y = 0; }                  /* same-NT wrap */
+                else                         { s_v_coarse_y = (s_v_coarse_y + 1) & 0x1F; }
+            }
+        } else {
+            s_abs_nt_y++;
+        }
         s_last_sy_y  = g_ppuscroll_y;
         s_last_nt_yb = cur_nt_yb;
     }
@@ -324,6 +357,7 @@ void ppu_dot_frame_boundary(void) {
     /* Arm the next frame's visible region. */
     s_next_visible   = 0;
     s_prerender_done = 0;
+    s_v_init         = 0;
     s_abs_nt_y       = -1;
     s_last_sy_y      = -1;
     s_last_nt_yb     = -1;
