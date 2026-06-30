@@ -765,11 +765,14 @@ static uint8_t nes_read_inner(uint16_t addr) {
                  * Verified against Nestopia (NstInpZapper.cpp line 174). */
                 uint8_t val = 0x40;
                 if (!zapper_light_detected()) val |= 0x08;
-                /* NES Zapper: $4017 bit 4 is active-low while trigger is
-                 * held — set bit 4 only when trigger is RELEASED.
-                 * 50cd331 inverted this; empirically Duck Hunt works on
-                 * master (no flip), confirming master polarity is correct. */
-                if (!g_zapper_trigger) val |= 0x10;
+                /* NES Zapper $4017 bit 4 = trigger, ACTIVE-HIGH: 1 while the
+                 * trigger is pulled, 0 at idle (matches Nestopia line 174 and
+                 * the Mesen oracle).  The prior `!g_zapper_trigger` inversion
+                 * reported a phantom press every idle frame, which made
+                 * Gumshoe's title input-poll ($98D2 reads $4017 & $10, INC $C5
+                 * on a press) clear the mode selector $24 and auto-advance the
+                 * title screen with no input.  See GUMSHOE_MENU_AUTOADVANCE.md. */
+                if (g_zapper_trigger) val |= 0x10;
                 return val;
             }
             if (s_ctrl1_strobe) return 0x40 | (g_controller2_buttons >> 7);
@@ -837,6 +840,46 @@ static void ws_sidecar_track(uint16_t a, uint8_t val) {
     g_ws_shadow_x16[slot] = wide;
 }
 
+/* ---- WRAM write-attribution tap (always-on, env-gated) ----------------------
+ * NESRECOMP_WRITE_WATCH="0x25,0x26,..."  (comma-separated zeropage/RAM addrs,
+ * up to 16) logs every write to a watched RAM address with the writer's emitted
+ * function name (g_last_recomp_func, requires RECOMP_STACK_TRACKING) and the
+ * live GxROM bank.  Output JSONL to NESRECOMP_WRITE_WATCH_FILE (else stderr).
+ * Pays one branch (s_ww_state) per RAM write when disabled. */
+static int      s_ww_state = -1;        /* -1 unqueried, 0 off, 1 on */
+static uint16_t s_ww_addrs[16];
+static int      s_ww_n = 0;
+static FILE    *s_ww_file = NULL;
+static void wram_write_watch(uint16_t a, uint8_t oldv, uint8_t val) {
+    if (s_ww_state < 0) {
+        const char *e = getenv("NESRECOMP_WRITE_WATCH");
+        if (e && *e) {
+            char buf[256]; strncpy(buf, e, sizeof buf - 1); buf[sizeof buf - 1] = 0;
+            for (char *t = strtok(buf, ","); t && s_ww_n < 16; t = strtok(NULL, ",")) {
+                unsigned x; if (sscanf(t, " 0x%x", &x) == 1 || sscanf(t, " %u", &x) == 1)
+                    s_ww_addrs[s_ww_n++] = (uint16_t)(x & 0x07FF);
+            }
+            const char *p = getenv("NESRECOMP_WRITE_WATCH_FILE");
+            s_ww_file = (p && *p) ? fopen(p, "w") : NULL;
+        }
+        s_ww_state = s_ww_n ? 1 : 0;
+    }
+    if (s_ww_state != 1) return;
+    for (int i = 0; i < s_ww_n; i++) {
+        if (s_ww_addrs[i] == a) {
+            extern int g_current_bank;
+            extern const char *g_last_recomp_func;
+            FILE *o = s_ww_file ? s_ww_file : stderr;
+            fprintf(o, "{\"f\":%llu,\"adr\":\"0x%04x\",\"old\":\"0x%02x\",\"val\":\"0x%02x\","
+                       "\"bank\":%d,\"func\":\"%s\"}\n",
+                    (unsigned long long)g_frame_count, a, oldv, val,
+                    g_current_bank, g_last_recomp_func ? g_last_recomp_func : "?");
+            fflush(o);
+            break;
+        }
+    }
+}
+
 void nes_write(uint16_t addr, uint8_t val) {
     bus_tick();
     s_open_bus = val;   /* writes also drive the data bus (open-bus tracking) */
@@ -845,6 +888,7 @@ void nes_write(uint16_t addr, uint8_t val) {
         uint16_t a = addr & 0x07FF;
         if (g_ws_oam_sidecar && (a & 0x0700) == 0x0200 && (a & 3) == 3)
             ws_sidecar_track(a, val);
+        if (s_ww_state != 0) wram_write_watch(a, g_ram[a], val);
         g_ram[a] = val; return;
     }
     if (addr >= 0x2000 && addr <= 0x3FFF) { ppu_write_reg(0x2000 + (addr & 7), val); return; }
