@@ -19,7 +19,6 @@
 #include "nes_runtime.h"
 #include "ppu_dot.h"
 #include "mapper.h"
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -323,12 +322,16 @@ void ppu_dot_render_snapshot(uint32_t *buf) {
 
 void ppu_dot_init(uint32_t *framebuf) {
     s_fb = framebuf;
-    /* The dot-accurate per-scanline PPU is the SOLE renderer — the per-frame
-     * compositor and its sprite-0 split heuristics have been removed. This is
-     * the single, hardware-faithful path: true per-scanline sprite-0, live
-     * scroll, dot-clock MMC3 IRQ, widescreen. */
-    g_dot_ppu_on = 1;
-    printf("[ppu_dot] dot-accurate per-scanline PPU (sole renderer)\n");
+    /* The per-frame renderer (ppu_renderer.c) is the DEFAULT — it delivers a
+     * coherent frame synchronously each VBlank, which is visually smooth. The
+     * cycle-driven per-scanline dot-PPU is a HIDDEN OPT-IN (NESRECOMP_DOT_PPU=1)
+     * for the per-scanline-accurate cases (mid-frame MMC3 IRQ splits, etc.); it
+     * is more hardware-faithful but its incremental publish exhibits scroll
+     * jitter on high-refresh displays, so it is not the default. */
+    const char *e = getenv("NESRECOMP_DOT_PPU");
+    g_dot_ppu_on = (e && *e) ? (*e != '0') : 0;   /* default OFF (per-frame renderer) */
+    printf("[ppu_dot] renderer: %s\n",
+           g_dot_ppu_on ? "dot-accurate per-scanline (opt-in)" : "per-frame (default)");
 }
 
 void ppu_dot_advance(uint32_t ops) {

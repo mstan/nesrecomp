@@ -75,11 +75,32 @@ uint8_t g_ppuscroll_x = 0;
 uint8_t g_ppuscroll_y = 0;
 uint16_t g_ppuaddr    = 0;
 
-/* (The per-frame renderer's sprite-0 split heuristic state — g_ppuscroll_*_hud,
- * g_spr0_split_active, g_spr0_predict_disable, g_predicted_spr0_scanline,
- * g_spr0_reads_ctr_legacy, g_spr0_split_write_scanline — was removed with the
- * per-frame renderer. The dot-PPU owns sprite-0 hit via real per-scanline
- * detection; see ppu_dot.c and the $2002 read below.) */
+uint8_t g_ppuscroll_x_hud = 0;
+uint8_t g_ppuscroll_y_hud = 0;
+uint8_t g_ppuctrl_hud     = 0;
+int     g_spr0_split_active = 0;
+int     g_spr0_predict_disable = 1; /* default 1 (predictor OFF). The hardware-correct
+                                     * cycle predictor introduced regressions in normal
+                                     * gameplay polls of $2002 — bit 6 staying sticky
+                                     * until VBlank breaks games that expect it to
+                                     * oscillate via consume-on-read. Predictor code is
+                                     * kept; set this to 0 in extras.c to enable per-game
+                                     * once the regression class is solved (likely via
+                                     * gating prediction on shot-active state). */
+int     g_predicted_spr0_scanline = 240;  /* set per-frame by main_runner.c via predictor */
+int     g_spr0_reads_ctr_legacy = 0;  /* used only when predict_disable=1; non-static so savestate can persist */
+/* Scanline at which the game wrote the FIRST playfield scroll ($2005) AFTER
+ * the sprite-0 hit captured the HUD scroll. This is the true HUD/playfield
+ * boundary (the hit only synchronizes; the game writes the new scroll on a
+ * timed delay so it lands at the HUD bottom). -1 = no post-hit scroll write
+ * this frame. Diagnostics for the HUD-tear-during-transition bug. */
+int     g_spr0_split_write_scanline = -1;
+
+/* CPU-cycle-to-scanline conversion. PPU runs at 3x CPU; 341 dots per scanline.
+ * s_ops_count is the per-frame CPU cycle accumulator from maybe_trigger_vblank. */
+static inline int scanline_from_cycles(uint32_t cpu_cycles) {
+    return (int)((cpu_cycles * 3u) / 341u);
+}
 static int     g_ppuaddr_latch = 0;
 /* NOTE: g_scroll_latch removed — real NES shares a single write toggle
  * ("w" register) between $2005 and $2006.  g_ppuaddr_latch is that toggle. */
@@ -634,15 +655,30 @@ void maybe_trigger_vblank(int cycles) {
         s_ops_count = 0;
         s_vblank_depth++;
         g_ppustatus = (g_ppustatus & ~0x40) | 0x80;
-        /* Reset scroll at VBlank; the NMI handler re-establishes it. */
+        /* Zapper games only: save the legacy pulse counter across the NMI
+         * call so the outer detection loop's accumulator survives PPU
+         * writes inside the handler.  Non-zapper games clear unconditionally
+         * to keep scroll/sprite-0 splits aligned to master behaviour. */
+        int saved_ctr0 = g_spr0_reads_ctr_legacy;
+        int saved_act0 = g_spr0_split_active;
+        g_spr0_split_active = 0;
+        g_spr0_reads_ctr_legacy = 0;
+        g_spr0_split_write_scanline = -1;
         g_ppuscroll_x = 0;
         g_ppuscroll_y = 0;
+        g_ppuscroll_x_hud = 0;
+        g_ppuscroll_y_hud = 0;
+        g_ppuctrl_hud     = g_ppuctrl & 0x38;
         /* Fire the frame-boundary callback only when NMI is enabled.
          * (Cadence/oracle sync for NMI-disabled init remains a separate
          * concern — see notes on 52f0ea5.) */
         if (g_ppuctrl & 0x80) {
             s_dbg_nmi_fires++;
             nes_vblank_callback();
+        }
+        if (g_zapper_enabled) {
+            g_spr0_reads_ctr_legacy = saved_ctr0;
+            g_spr0_split_active     = saved_act0;
         }
         s_vblank_depth--;
     } else {
@@ -683,14 +719,31 @@ void maybe_fire_pending_vblank(void) {
     /* Standard VBlank start: set VBlank flag, clear sprite-0-hit flag. */
     g_ppustatus = (g_ppustatus & ~0x40) | 0x80;
 
+    /* Zapper games only: preserve the legacy pulse counter across nested
+     * NMIs.  Detection loops accumulate consecutive $2002 reads to trigger
+     * the sprite-0 hit; nested NMI handlers do PPU writes that would
+     * otherwise reset it before the detection loop reaches threshold. */
+    int saved_spr0_ctr    = g_spr0_reads_ctr_legacy;
+    int saved_spr0_active = g_spr0_split_active;
+
+    g_spr0_split_active = 0;
+    g_spr0_reads_ctr_legacy = 0;
     g_ppuscroll_x = 0;
     g_ppuscroll_y = 0;
+    g_ppuscroll_x_hud = 0;
+    g_ppuscroll_y_hud = 0;
+    g_ppuctrl_hud     = g_ppuctrl & 0x38;
 
     if (g_ppuctrl & 0x80) {
         s_dbg_nmi_fires++;
         nes_vblank_callback();
     } else if (s_vblank_depth > 1) {
         g_ram[0x1A] = 1;
+    }
+
+    if (g_zapper_enabled) {
+        g_spr0_reads_ctr_legacy = saved_spr0_ctr;
+        g_spr0_split_active     = saved_spr0_active;
     }
 
     s_vblank_depth--;
@@ -763,6 +816,23 @@ static uint8_t nes_read_inner(uint16_t addr) {
                  *   bit 3: light sensor (0=detected, 1=not detected)
                  *   bit 4: trigger (1=pulled, 0=not pulled)
                  * Verified against Nestopia (NstInpZapper.cpp line 174). */
+                /* Reset spr0 gate on trigger edge for a fresh detection
+                 * cycle.  The split-screen spr0 wait sets g_spr0_split_active=1
+                 * earlier in the frame.  If this persists into the Zapper
+                 * detection Phase 1 loop, the light-detection gate is already
+                 * open and the game sees light before spr0 fires in the
+                 * detection context — triggering the anti-cheat "aimed at
+                 * lamp" rejection.  Clearing spr0_active on trigger press
+                 * ensures Phase 1 starts fresh: the counter must accumulate
+                 * again before the gate opens. */
+                {
+                    static uint8_t s_zapper_prev_trigger = 0;
+                    if (g_zapper_trigger && !s_zapper_prev_trigger) {
+                        g_spr0_split_active = 0;
+                        g_spr0_reads_ctr_legacy = 0;
+                    }
+                    s_zapper_prev_trigger = g_zapper_trigger;
+                }
                 uint8_t val = 0x40;
                 if (!zapper_light_detected()) val |= 0x08;
                 /* NES Zapper $4017 bit 4 = trigger, ACTIVE-HIGH: 1 while the
@@ -947,6 +1017,14 @@ uint16_t nes_read16_jmpbug(uint16_t addr) {
 void ppu_write_reg(uint16_t reg, uint8_t val) {
     ppu_trace_write(reg, val);
     s_ppu_io_latch = val;   /* any PPU register write refreshes the I/O latch */
+    /* Per-frame renderer (dot-PPU off): any PPU write between $2002 reads means
+     * the read was a latch reset (e.g. LDA $2002; STA $2006), not a sprite-0
+     * spin-wait poll. Reset the legacy pulse counter so only consecutive $2002
+     * reads trigger the fallback hit. Zapper games suppress the reset during
+     * nested NMIs (the outer detection loop's accumulator must survive PPU
+     * register setup inside the handler). No-op when the dot-PPU owns sprite-0. */
+    if (!g_dot_ppu_on && !(g_zapper_enabled && s_vblank_depth > 1))
+        g_spr0_reads_ctr_legacy = 0;
     switch (reg) {
         case 0x2000:
             g_ppuctrl = val;
@@ -982,6 +1060,11 @@ void ppu_write_reg(uint16_t reg, uint8_t val) {
                 g_ppuscroll_y = val;
                 s_scroll_2005_complete = 1;
             }
+            /* If the HUD scroll was already captured at the sprite-0 hit this
+             * frame, this $2005 write is the post-hit playfield scroll — record
+             * the scanline it lands on (the true HUD/playfield split). */
+            if (g_spr0_split_active && g_spr0_split_write_scanline < 0)
+                g_spr0_split_write_scanline = scanline_from_cycles(s_ops_count);
             g_ppuaddr_latch ^= 1;
             break;
         }
@@ -1039,21 +1122,37 @@ void ppu_write_reg(uint16_t reg, uint8_t val) {
 uint8_t ppu_read_reg(uint16_t reg) {
     switch (reg) {
         case 0x2002: {
-            /* Sprite-0 hit (bit 6) is owned by the dot-PPU: the per-scanline
-             * renderer sets it when sprite 0's opaque pixel crosses an opaque BG
-             * pixel and clears it at the pre-render line — hardware-faithful, no
-             * prediction. Reads of $2002 do NOT clear it.
+            /* Sprite-0-hit (bit 6) cycle prediction.
              *
-             * Forward-progress safety net: if a sprite-0 spin-wait polls $2002
-             * for far longer than one full frame of tight-spin reads (~3700)
-             * without the renderer ever producing a hit (a frame whose
-             * per-scanline state shows no opaque sprite-0/BG overlap our model
-             * detects — e.g. an attract transition where the NMI sets up VRAM
-             * later than the fixed dot-phase assumes), pulse bit6 so the game
-             * advances. It cannot fire during a normal single-frame wait (the
-             * renderer sets bit6 at the sprite-0 scanline, resetting the
-             * counter, well under the threshold). */
-            {
+             * Real hardware: bit 6 is set by the PPU during active rendering when
+             * sprite 0's opaque pixel overlaps an opaque BG pixel, and cleared
+             * only at the pre-render scanline. Reads of $2002 do NOT clear it.
+             *
+             * Our model: at frame start (nes_vblank_callback), the predictor
+             * scans sprite 0 vs BG to determine the scanline at which the hit
+             * would fire. Here we convert the CPU's per-frame cycle counter
+             * (s_ops_count) to the current scanline and compare. Bit 6 latches
+             * monotonically until VBlank clears it (matches real hardware).
+             *
+             * The legacy 3-read pulse counter is preserved behind
+             * g_spr0_predict_disable for emergency opt-out only. */
+            if (g_dot_ppu_on) {
+                /* Dot-accurate PPU owns sprite-0 hit (bit6): the per-scanline
+                 * renderer sets it when sprite 0 crosses an opaque BG pixel and
+                 * clears it at the pre-render line. Bypass the legacy predictor/
+                 * pulse heuristics so they cannot fight the hardware flag.
+                 *
+                 * Forward-progress safety net: if a sprite-0 spin-wait polls
+                 * $2002 for far longer than a frame without the renderer ever
+                 * producing a hit (a frame whose per-scanline state shows no
+                 * opaque sprite-0/BG overlap our model detects), pulse bit6 so
+                 * the game advances — same role as the per-frame fallback. It
+                 * cannot fire during normal hits (those set bit6 within one
+                 * frame, well under the threshold). */
+                /* Threshold > one full frame of tight-spin reads (~3700) so a
+                 * normal single-frame wait (renderer sets bit6 at the sprite-0
+                 * scanline, resetting this) never reaches it; only a genuine
+                 * no-hit frame accumulates past it. */
                 static uint32_t s_dot_spr0_spin = 0;
                 if (g_ppustatus & 0x40) {
                     s_dot_spr0_spin = 0;
@@ -1067,6 +1166,56 @@ uint8_t ppu_read_reg(uint16_t reg) {
                     }
                     g_ppustatus |= 0x40;
                     s_dot_spr0_spin = 0;
+                }
+            } else if (!g_spr0_predict_disable && g_predicted_spr0_scanline < 240) {
+                /* Cycle-accurate path: predictor says sprite 0 will hit at a
+                 * known scanline this frame. Fire bit 6 when CPU cycle
+                 * position crosses that scanline; bit 6 latches sticky until
+                 * VBlank (real-hardware behavior). */
+                int now = scanline_from_cycles(s_ops_count);
+                if (now >= g_predicted_spr0_scanline) {
+                    if (!(g_ppustatus & 0x40)) {
+                        g_ppuscroll_x_hud = g_ppuscroll_x;
+                        g_ppuscroll_y_hud = g_ppuscroll_y;
+                        g_ppuctrl_hud     = g_ppuctrl & 0x38;
+                    }
+                    g_ppustatus |= 0x40;
+                    g_spr0_split_active = 1;
+                }
+            } else {
+                /* Pulse-with-consume fallback: predictor said no hit possible
+                 * (rendering disabled, sprite 0 off-screen, or no overlap),
+                 * OR predict mode is disabled entirely. Bit 6 oscillates so
+                 * games polling $2002 for VBlank detection or split-screen
+                 * spin-waits don't see a permanent stuck-on flag. This is
+                 * the legacy heuristic — wrong vs hardware but lets games
+                 * make forward progress when our model can't help. */
+                if (g_ppustatus & 0x40) {
+                    g_ppustatus &= ~0x40;
+                    g_spr0_reads_ctr_legacy = 0;
+                    g_spr0_split_active = 1;
+                } else if (++g_spr0_reads_ctr_legacy >= 3) {
+                    g_ppuscroll_x_hud = g_ppuscroll_x;
+                    g_ppuscroll_y_hud = g_ppuscroll_y;
+                    g_ppuctrl_hud     = g_ppuctrl & 0x38;
+                    g_ppustatus |= 0x40;
+                    g_spr0_reads_ctr_legacy = 0;
+                    /* Activate the HUD split here, not only in the consume
+                     * branch above.  A sprite-0 split spin-wait that exits on
+                     * the SET edge (e.g. Faxanadu's NMI routine $C9D6:
+                     *   STA $2000/$2005 (HUD scroll) ; BIT $2002/BVC (wait hit)
+                     *   ; STA $2000/$2005 (game scroll))
+                     * reads $2002 exactly until bit 6 pulses on, then never
+                     * re-reads — so it captures the HUD scroll here but never
+                     * reaches the consume branch, leaving g_spr0_split_active=0
+                     * and the renderer skipping the split (HUD region falls
+                     * through to the game base nametable).  Gate on a genuine
+                     * predicted sprite-0 hit at the CURRENT (HUD-region) PPU
+                     * state so this never false-triggers on games that merely
+                     * busy-poll $2002 for VBlank (sprite 0 off-screen / no BG
+                     * overlap -> predictor returns 240). */
+                    if (ppu_predict_spr0_hit_scanline() < 240)
+                        g_spr0_split_active = 1;
                 }
             }
             /* Bits 7-5 = PPU status (vblank/sprite0/overflow); bits 4-0 = the
