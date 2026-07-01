@@ -376,13 +376,23 @@ def cmd_abppu(exe, rom, nesref_exe, core, frames):
         rc_path = os.path.join(d, "rc_ppu.jsonl")
         env = dict(os.environ); env["NESRECOMP_PPUMEM_TRACE"] = rc_path
         exe_abs = os.path.abspath(exe)
-        subprocess.run([exe_abs, os.path.abspath(rom), "--smoke", str(frames)],
-                       env=env, cwd=os.path.dirname(exe_abs),
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        # Capture the recomp boot banner to detect CHR-RAM: CHR-RAM (0 CHR banks)
+        # is serialized inline in Mesen's savestate, pushing the nametable region
+        # +0x2000 in the blob vs CHR-ROM games. Auto-set NESREF_PPU_NT_D so abppu
+        # is correct-by-default on both (no manual override).
+        p = subprocess.run([exe_abs, os.path.abspath(rom), "--smoke", str(frames)],
+                           env=env, cwd=os.path.dirname(exe_abs),
+                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        import re
+        m = re.search(r"(\d+)\s*CHR banks", p.stdout or "")
+        chr_ram = (m is not None and int(m.group(1)) == 0)
         nr_path = os.path.join(d, "nr_ppu.jsonl")
         env2 = dict(os.environ)
         env2["NESREF_FRAMES"] = str(frames); env2["NESREF_PPU_FILE"] = nr_path
         env2["NESREF_TRACE_FILE"] = os.path.join(d, "nr_ram.jsonl")
+        if chr_ram and "NESREF_PPU_NT_D" not in os.environ:
+            env2["NESREF_PPU_NT_D"] = "-0x2ab4"   # CHR-RAM NT offset
+            print("  (CHR-RAM detected -> NT offset +0x2000)")
         nr_abs = os.path.abspath(nesref_exe)
         subprocess.run([nr_abs, os.path.abspath(core), os.path.abspath(rom)],
                        env=env2, cwd=os.path.dirname(nr_abs),
