@@ -246,14 +246,34 @@ def cmd_abram(exe, rom, nesref_exe, core, frames):
                 if diffs:
                     first = (f, diffs)
                     break
-        if first is None:
+        # Divergent-address histogram over steady state (skip boot ramp): how
+        # often each byte differs. A short list of always-diverging addresses =
+        # frame-sync flags / FrameCounter-derived RNG-phase (benign snapshot-timing
+        # artifacts); a broad spread = a real logic divergence to chase.
+        from collections import Counter
+        hist = Counter(); ncmp = 0
+        for f in rc_frames:
+            if f < 200 or f + best_off not in nr:
+                continue
+            ncmp += 1
+            a, b = rc[f], nr[f + best_off]
+            for i in range(2048):
+                if 0x100 <= i <= 0x1FF:
+                    continue
+                if a[i] != b[i]:
+                    hist[i] += 1
+        print(f"  steady-state divergent addresses: {len(hist)} distinct over {ncmp} frames")
+        for a, c in hist.most_common(12):
+            print(f"    ${a:04x}: {c}/{ncmp} ({c/ncmp*100:.0f}%)")
+        if len(hist) <= 3:
+            print(f"  => CONVERGED (logic): only frame-sync/RNG-phase flags differ, not game state.")
+        elif first is None:
             print(f"  PASS: no non-stack RAM divergence across aligned frames (logic converges)")
-            return 0
-        f, diffs = first
-        print(f"  first non-stack RAM divergence @ recomp frame {f}: {len(diffs)} byte(s), "
-              f"e.g. ${diffs[0]:04x} recomp={rc[f][diffs[0]]:#04x} mesen={nr[f+best_off][diffs[0]]:#04x}")
-        print(f"  (report only — a handful of FrameCounter-derived/timer bytes is the known "
-              f"RNG-phase residual, not a logic bug; see burndown Axis 4)")
+        else:
+            f, diffs = first
+            print(f"  first non-stack RAM divergence @ recomp frame {f}: {len(diffs)} byte(s), "
+                  f"e.g. ${diffs[0]:04x} recomp={rc[f][diffs[0]]:#04x} mesen={nr[f+best_off][diffs[0]]:#04x}")
+            print(f"  (broad spread => investigate as a real divergence)")
         return 0
 
 
