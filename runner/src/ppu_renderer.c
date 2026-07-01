@@ -445,7 +445,23 @@ void ppu_render_frame(uint32_t *framebuf) {
          * The g_spr0_reads_ctr heuristic was removed — it false-triggers on
          * games that poll $2002 for VBlank detection (e.g. Yoshi's Cookie). */
         int split_y;
-        if (g_spr0_split_active) {
+        if (g_zapper_enabled) {
+            /* Light-gun (Zapper) games do NOT use a sprite-0 scroll split.
+             * Duck Hunt is a fixed screen; Gumshoe full-scrolls the playfield
+             * with a sprite-based HUD.  Their OAM slot 0 is a cycled gameplay
+             * sprite — slot 0 is round-robined every frame to spread the
+             * 8-sprites-per-scanline load — so its Y jumps frame-to-frame, and
+             * the Zapper's heavy $2002 polling drives the legacy sprite-0 pulse
+             * counter (ppu_read_reg $2002, runtime.c) to fire a SPURIOUS hit.
+             * The resulting split lands at whatever position the gameplay sprite
+             * happens to be and alternates every frame, dragging whole BG rows
+             * (e.g. Gumshoe's floating platforms + ground) between the stale HUD
+             * scroll and the live game scroll — the reported per-frame flicker.
+             * No Zapper game here does a genuine mid-frame scroll change, so
+             * render every scanline from the current scroll (no split). Verified
+             * live by the owner: Gumshoe renders correctly with the split off. */
+            split_y = 240;
+        } else if (g_spr0_split_active) {
             /* Split lands just below sprite-0 (the HUD/playfield boundary),
              * tile-aligned. Use the ACTUAL sprite height: the old (spr0_y + 15)
              * hardcoded an 8px sprite (8 + 7), placing the split a tile row too

@@ -99,20 +99,25 @@ static uint32_t           s_framebuf[512 * 240];  /* sized for max 512px width *
  * alternate palette is opted in via NESRECOMP_PALETTE; default Raw = unused). */
 static uint32_t           s_present_buf[512 * 240];
 
-/* On-demand render for Zapper light detection.  When the dot-PPU is active it
- * renders incrementally and only publishes s_framebuf at the frame boundary, so
- * the present buffer is a frame stale — snapshot the CURRENT PPU state into a
- * private buffer (no PPU-status side effects).  With the per-frame renderer
- * (default) we render the current state straight into s_framebuf. */
+/* On-demand render for Zapper light detection.  The game reads the light sensor
+ * mid-frame (during func_NMI / the main loop), so we render the CURRENT PPU state
+ * into a PRIVATE buffer and expose it as the zapper snapshot.
+ *
+ * Both renderer paths use the private buffer: the dot-PPU because it publishes
+ * s_framebuf only at the frame boundary (present buffer is a frame stale); the
+ * per-frame renderer because writing the live display buffer s_framebuf here
+ * painted a mid-frame snapshot into the presented/dumped frame — a phantom
+ * flicker that only appeared in captures (the frame-boundary render at
+ * main loop ~813 re-rendered s_framebuf, so live display was usually spared).
+ * Rendering into s_zapper_snapbuf keeps the two paths symmetric and leaves the
+ * display buffer untouched. */
 static uint32_t           s_zapper_snapbuf[512 * 240];
 static void zapper_on_demand_render(void) {
-    if (g_dot_ppu_on) {
+    if (g_dot_ppu_on)
         ppu_dot_render_snapshot(s_zapper_snapbuf);
-        runtime_set_zapper_snapshot(s_zapper_snapbuf);
-    } else {
-        ppu_render_frame(s_framebuf);
-        runtime_set_zapper_framebuf(s_framebuf);
-    }
+    else
+        ppu_render_frame(s_zapper_snapbuf);
+    runtime_set_zapper_snapshot(s_zapper_snapbuf);
 }
 
 /* ---- OAM debug window (--debug flag) ---- */
