@@ -422,6 +422,12 @@ static uint32_t s_ops_count = 0;
 /* Monotonic guest CPU-cycle counter (see nes_runtime.h). Advanced by the same
  * _c as s_ops_count, but never reset — the co-sim alignment ruler. */
 uint64_t g_nes_cycles = 0;
+/* g_nes_cycles sampled at the frame-boundary FIRE (before the NMI handler runs).
+ * The co-sim must measure frame length here, not at the post-handler tap: the
+ * handler's length varies frame-to-frame, so sampling after it injects that
+ * variance as spurious per-frame cycle "jitter". Fire-to-fire delta is the true,
+ * essentially-constant frame length. */
+uint64_t g_frame_boundary_cyc = 0;
 
 /* OAM DMA ($4014) cycle-steal accumulator. Writing $4014 halts the CPU 513/514
  * cycles while 256 bytes copy into OAM; those cycles elapse on hardware (PPU
@@ -466,6 +472,33 @@ uint32_t runtime_pop_forced_caps(void) {
  * (341*262/3 for NTSC).  Generated code passes each instruction's cycle
  * count to maybe_trigger_vblank(). */
 #define OPS_PER_FRAME 29781
+
+/* Rung 2 — dot-accurate frame length (env NESRECOMP_DOT_CLOCK, default OFF).
+ * The fixed 29781 threshold runs +0.5 cyc/frame fast vs the NTSC 29780.5 average
+ * (measured by the co-sim: recomp 29780.999 vs Mesen 29780.500). The true frame
+ * is 89342 PPU dots (=29780.667 cyc), or 89341 on odd frames with rendering on
+ * (the skipped pre-render dot). We track the exact dot debt and hand back an
+ * INTEGER per-frame CPU-cycle budget carrying the remainder thirds, so the mean
+ * frame length is the oracle's 29780.5 instead of 29781 — the frame boundary
+ * becomes a dot event, not a fixed cycle count. Gated + default-off until the
+ * co-sim certifies no game-logic regression; then it becomes the default. */
+#define FRAME_DOTS_EVEN 89342          /* 341 * 262 */
+static int      s_dotclock     = -1;   /* -1 unqueried, 0 legacy, 1 dot-accurate */
+static int      s_odd_frame    = 0;    /* toggles each frame (odd-frame dot skip) */
+static int      s_dot_debt     = 0;    /* leftover dots (0..2) carried across frames */
+static uint32_t s_frame_budget = OPS_PER_FRAME;  /* current frame's integer cycle target */
+
+/* Compute the NEXT frame's integer CPU-cycle budget from the exact dot count,
+ * carrying the sub-cycle remainder so the running mean is dot-accurate. */
+static uint32_t next_frame_budget(void) {
+    if (s_dotclock <= 0) return OPS_PER_FRAME;
+    int dots = FRAME_DOTS_EVEN - ((s_odd_frame && (g_ppumask & 0x18)) ? 1 : 0);
+    s_odd_frame ^= 1;
+    s_dot_debt += dots;
+    uint32_t cyc = (uint32_t)(s_dot_debt / 3);
+    s_dot_debt -= (int)(cyc * 3);
+    return cyc;
+}
 
 /* bus_tick: called by nes_read/nes_write to count bus operations.
  * Kept for backward compatibility but no longer critical for NMI timing
@@ -659,12 +692,13 @@ void nes_cosim_hash_frame(void) {
     s_cosim_chain = cosim_fnv(s_cosim_chain, subs, sizeof(subs));
 
     fprintf(s_cosim_f,
-        "{\"f\":%llu,\"clk\":%llu,\"chain\":\"%016llx\",\"sub\":{"
+        "{\"f\":%llu,\"clk\":%llu,\"bclk\":%llu,\"chain\":\"%016llx\",\"sub\":{"
         "\"cpu\":\"%016llx\",\"ram\":\"%016llx\",\"stack\":\"%016llx\","
         "\"ppu_mem\":\"%016llx\",\"ppu_regs\":\"%016llx\",\"apu\":\"%016llx\","
         "\"mapper\":\"%016llx\",\"chr\":\"%016llx\",\"sram\":\"%016llx\","
         "\"openbus\":\"%016llx\"}}\n",
         (unsigned long long)g_frame_count, (unsigned long long)g_nes_cycles,
+        (unsigned long long)g_frame_boundary_cyc,
         (unsigned long long)s_cosim_chain,
         (unsigned long long)h_cpu, (unsigned long long)h_ram, (unsigned long long)h_stack,
         (unsigned long long)h_ppumem, (unsigned long long)h_ppureg, (unsigned long long)h_apu,
@@ -757,6 +791,14 @@ static void maybe_deliver_irq(void) {
 
 void maybe_trigger_vblank(int cycles) {
 
+    /* Rung 2: one-time dot-clock init. next_frame_budget() returns OPS_PER_FRAME
+     * verbatim when the dot clock is off, so the legacy path is byte-unchanged. */
+    if (s_dotclock < 0) {
+        const char *e = getenv("NESRECOMP_DOT_CLOCK");
+        s_dotclock = (e && *e && *e != '0') ? 1 : 0;
+        s_frame_budget = next_frame_budget();
+    }
+
     /* Drive the APU frame-counter IRQ on the CPU-cycle stream (NMI-independent),
      * then poll for between-instruction maskable-IRQ delivery (DMC + frame). */
     apu_clock_cycles(cycles > 0 ? cycles : 1);
@@ -787,7 +829,7 @@ void maybe_trigger_vblank(int cycles) {
     /* Dot-accurate PPU (opt-in): paint visible scanlines incrementally as the
      * CPU sweeps the frame's cycle budget. No-op unless NESRECOMP_DOT_PPU set. */
     if (g_dot_ppu_on) ppu_dot_advance(s_ops_count);
-    if (s_ops_count < OPS_PER_FRAME) return;
+    if (s_ops_count < s_frame_budget) return;
     if (s_vblank_depth >= MAX_VBLANK_DEPTH) { s_dbg_max_depth_skips++; return; }
 
     /* Frame budget exhausted.
@@ -804,12 +846,14 @@ void maybe_trigger_vblank(int cycles) {
      * Deferring to backward branches ensures the code has reached a loop
      * boundary (like the $1A spin-wait) where state is consistent. */
     if (s_vblank_depth == 0) {
+        g_frame_boundary_cyc = g_nes_cycles;   /* true frame-length ruler (pre-handler) */
         /* Immediate fire — safe at top level. Carry the overshoot (the
          * triggering instruction pushed s_ops_count a few cycles past the
          * threshold) into the next frame instead of discarding it — removes an
-         * instruction-mix-dependent per-frame drift. Guaranteed >= OPS_PER_FRAME
+         * instruction-mix-dependent per-frame drift. Guaranteed >= s_frame_budget
          * here (we passed the check above), so the result is non-negative. */
-        s_ops_count -= OPS_PER_FRAME;
+        s_ops_count -= s_frame_budget;
+        s_frame_budget = next_frame_budget();  /* dot-accurate next-frame target */
         s_vblank_depth++;
         g_ppustatus = (g_ppustatus & ~0x40) | 0x80;
         /* Zapper games only: save the legacy pulse counter across the NMI
@@ -856,7 +900,7 @@ void maybe_trigger_vblank(int cycles) {
          * never exceeds 1× budget). This cap only fires on the
          * pathological unbounded case, where the alternative is worse:
          * today's behavior has no upper bound at all. */
-        if (s_ops_count > (OPS_PER_FRAME + OPS_PER_FRAME / 2)) {
+        if (s_ops_count > (s_frame_budget + s_frame_budget / 2)) {
             s_dbg_forced_cap_hits++;
             if (!(g_ppuctrl & 0x80)) s_dbg_pending_no_ppu++;
             maybe_fire_pending_vblank();
@@ -870,13 +914,15 @@ void maybe_trigger_vblank(int cycles) {
 void maybe_fire_pending_vblank(void) {
     if (!s_vblank_pending) return;
     s_vblank_pending = 0;
+    g_frame_boundary_cyc = g_nes_cycles;   /* true frame-length ruler (pre-handler) */
     /* Carry the overshoot like the immediate-fire path. This deferred path can
      * fire well past OPS_PER_FRAME (that is why the pending mechanism exists), so
      * a single subtraction leaves any residual budget for the next frame; the
      * carry is approximate here and is superseded by the Rung-2 dot-master clock,
      * which makes the frame boundary a true dot event rather than a threshold. */
-    if (s_ops_count >= OPS_PER_FRAME) s_ops_count -= OPS_PER_FRAME;
-    else                              s_ops_count = 0;
+    if (s_ops_count >= s_frame_budget) s_ops_count -= s_frame_budget;
+    else                               s_ops_count = 0;
+    s_frame_budget = next_frame_budget();  /* dot-accurate next-frame target */
     s_vblank_depth++;
 
     /* Standard VBlank start: set VBlank flag, clear sprite-0-hit flag. */

@@ -282,7 +282,10 @@ def cmd_abcycle(exe, rom, nesref_exe, core, frames):
                        env=env2, cwd=os.path.dirname(nr_abs),
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-        rc = {r["f"]: int(r["clk"]) for r in load(rc_path)}
+        # Use bclk (cycles sampled AT the frame-boundary fire, before the NMI
+        # handler) not clk (post-handler) -- clk carries the handler's frame-to-
+        # frame length variance as spurious jitter. Fall back to clk if absent.
+        rc = {r["f"]: int(r.get("bclk", r["clk"])) for r in load(rc_path)}
         nr = {}
         for line in open(cyc_path):
             line = line.strip()
@@ -314,10 +317,12 @@ def cmd_abcycle(exe, rom, nesref_exe, core, frames):
               f"min {nr_s['min']}, max {nr_s['max']}, n={nr_s['n']})")
         drift = rc_s['mean'] - nr_s['mean']
         print(f"  mean drift = {drift:+.3f} cyc/frame")
-        print(f"  READ: Mesen's frame length is essentially constant (std~0 = 29780.5). The recomp's")
-        print(f"        is JITTERY (std {rc_s['std']:.0f}) because its frame boundary is a cycle threshold")
-        print(f"        with deferred/nested NMI firing -- mean ~4 below hardware. This is the pre-existing")
-        print(f"        frame-driver cadence (NOT Rung 1); Rung 2 (dot-master clock) makes it a fixed 29780.5.")
+        if abs(drift) < 0.1:
+            print(f"  => CONVERGED: recomp frame length matches Mesen (dot-accurate budget on).")
+        else:
+            print(f"  => recomp frame length is constant {rc_s['mean']:.1f} (std {rc_s['std']:.0f}) vs Mesen "
+                  f"{nr_s['mean']:.1f}; drift {drift:+.2f} = the fixed OPS_PER_FRAME 29781 vs NTSC 29780.5.")
+            print(f"     Rung-2 dot-accurate frame budget (NESRECOMP_DOT_CLOCK) closes this to ~0.")
         return 0
 
 
