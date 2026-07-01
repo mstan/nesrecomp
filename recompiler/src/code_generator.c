@@ -1032,6 +1032,13 @@ static void emit_shift(FILE *f, const char *body_acc, const char *body_mem,
                 operand_addr_expr(am, op1, op2), body_mem);
 }
 
+/* Set true while emitting a function that uses the "PLA PLA RTS = return two
+ * levels up (abort caller)" JSR idiom (a contiguous 68 68 60). Read by the RTS
+ * emitter to undo the phantom stack-pointer rise the idiom would otherwise leave
+ * (see the detection + fix in emit_function / MN_RTS). File-static: emission is
+ * single-threaded and finishes one function before starting the next. */
+static bool s_abort_idiom_func = false;
+
 /* Emit C for one instruction. Returns bytes consumed.
  * sched_reset_addr: if non-zero, we're inside a coroutine scheduler function.
  * This is the address of the LDX #$FF; TXS stack-reset (scheduler loop entry).
@@ -1865,6 +1872,16 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                  * caller's JSR return from the 6502 stack. Don't double-pop. */
                 goto rts_done;
             }
+            if (s_abort_idiom_func) {
+                /* "PLA PLA RTS = return two levels up" idiom (see emit_function).
+                 * The discarded own return address does not exist in the
+                 * direct-call model, so the idiom's PLAs underflowed g_cpu.S.
+                 * Undo any small net rise (1..8 bytes) so S never wanders into
+                 * low RAM. Runtime S-compare: a no-op on the balanced
+                 * PHA..PLA..RTS shape (S == _entryS) and on the normal path of a
+                 * conditional guard (the PLAs were branched over). */
+                fprintf(f, "{ uint8_t _r=(uint8_t)(g_cpu.S - _entryS); if (_r>=1 && _r<=8) g_cpu.S = _entryS; }\n");
+            }
             if (cfg->push_all_jsr) {
                 fprintf(f, "g_cpu.S += 2; /* pop JSR return address */\n");
             }
@@ -2209,6 +2226,32 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
         }
     }
 
+    /* Detect the "PLA PLA RTS = return two levels up (abort caller)" JSR idiom:
+     * a contiguous 68 68 60 at a real instruction boundary. On real hardware the
+     * two PLAs discard THIS subroutine's own return address (pushed by the JSR
+     * that called it), so the following RTS returns to the caller's caller — a
+     * "if condition, abort my caller too" guard. The recompiler models JSR as a
+     * direct C call that does NOT push the return address onto g_cpu.S, so the two
+     * PLAs UNDERFLOW: S climbs and can wrap past $FF into the $0100 stack page,
+     * corrupting anything a game parks there (e.g. Yoshi's Cookie's VRAM update
+     * buffer -> stage-clear tile-overrun). The mirror idiom PHA-PHA-RTS
+     * (RTS-as-computed-JMP) is already handled at the RTS emitter; this is its
+     * unhandled twin. We flag the function here and, at each plain RTS, undo any
+     * net stack rise (see MN_RTS). push_all_jsr games keep the real return chain
+     * on the 6502 stack, so the idiom is already faithful there — skip them. */
+    s_abort_idiom_func = false;
+    if (!cfg->push_all_jsr) {
+        for (int v = 0; v < valid_count; v++) {
+            uint16_t s = valid_starts[v];
+            if (rom_read(rom, bank, s)     == 0x68 &&   /* PLA */
+                rom_read(rom, bank, s + 1) == 0x68 &&   /* PLA */
+                rom_read(rom, bank, s + 2) == 0x60) {   /* RTS */
+                s_abort_idiom_func = true;
+                break;
+            }
+        }
+    }
+
     /* Detect secondary entry points (extra_label and merge_func addresses inside this function).
      * Also add alias-only entry labels for omitted in-body function entries so direct
      * JMPs can target the owning body without requiring a standalone wrapper. */
@@ -2273,6 +2316,9 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
     const char *sym_name = g_symtab ? symbol_lookup(g_symtab, pc) : NULL;
     if (is_multi_entry) {
         emit_function_body_open(f, pc, bank, fixed_bank, sym_name);
+        /* Capture entry S before the entry-dispatch switch so it is initialized
+         * on every secondary-entry path (the switch's gotos must not skip it). */
+        if (s_abort_idiom_func) fprintf(f, "    uint8_t _entryS = g_cpu.S; (void)_entryS;\n");
         /* Entry dispatch — jump to secondary entry label */
         fprintf(f, "    switch (_entry) {\n");
         for (int si = 0; si < secondary_count; si++) {
@@ -2281,6 +2327,7 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
         fprintf(f, "    }\n");
     } else {
         emit_function_open(f, pc, bank, fixed_bank, sym_name);
+        if (s_abort_idiom_func) fprintf(f, "    uint8_t _entryS = g_cpu.S; (void)_entryS;\n");
     }
 
     /* Pending forward branch targets — branches that jump past a RTS/JMP.
