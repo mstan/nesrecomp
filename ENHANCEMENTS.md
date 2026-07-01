@@ -94,12 +94,39 @@ a one-time boot-time counter alignment (force recomp `$15` = oracle `$15` once,
 distinct from a per-frame freeze which would stop it advancing). Until then,
 Zelda's clean RAM/PPU verdict is deferred; its cycle/determinism axes are green.
 
-Two distinct free-run breakdowns now have worked examples: **MM3** (host-fiber
-scheduler, no bit-faithful state) and **Zelda** (FrameCounter-phase). Both prove
-the general point: free-run frame-alignment is exact only for
-deterministic-and-phase-locked attract (SMB, Faxanadu); everything else needs §1
-state/phase sync for a full RAM/PPU verdict, though the phase-independent cycle
-and determinism axes stay valid everywhere.
+### Worked example — Gumshoe (mapper 66 GxROM): NMI-off frame-count shift
+
+Measured 2026-07-01. Gumshoe (deterministic no-input attract demo) actually
+**CONVERGES** — but a naive whole-run diff hides it. The co-sim aligns the
+recomp's `g_frame_count` (which counts NMI *callbacks*) with the oracle's video
+frames. That is exact only while NMI stays on. Gumshoe's attract has ONE NMI-off
+transition (~frame 370, a ~4-video-frame scene change; GxROM inline-dispatch runs
+a long linear stretch with NMI disabled). During it the recomp emits ONE callback
+while Mesen advances ~4 video frames, so the **frame offset jumps +2 → +5
+mid-run**. `abcycle` shows it as a single 119123-cycle outlier (all other 898
+frames are 29780.5 ± 2.3 — clean); `abram`/`abppu` with a FIXED offset look
+broadly divergent because everything after frame 370 is misaligned. Segmenting
+proves it: PRE-370 at offset +2 = 99.72%, POST-370 at offset +5 = 99.10% — both
+clean. Dot clock is NOT implicated (off/on identical).
+
+**Fix (co-sim tooling enhancement):** make the offset PIECEWISE — detect the
+discontinuity (a cycle-delta outlier / NMI-off stretch) and re-derive the offset
+for the following segment; or, more fundamentally, align on the **fire count**
+(every `s_frame_budget` crossing = one video frame, NMI on or off) instead of
+`g_frame_count`. The latter needs the co-sim tap to emit a row on every budget
+fire, not only on NMI-on callbacks — then the recomp's frame clock equals the
+oracle's video-frame clock and the offset stays constant across NMI-off stretches.
+Until then, segment the run at NMI-off transitions (as above) for a clean verdict.
+
+Three distinct free-run breakdowns now have worked examples: **MM3** (host-fiber
+scheduler, no bit-faithful state), **Zelda** (FrameCounter-phase), and **Gumshoe**
+(NMI-off frame-count shift — the recomp underlying state is actually correct; only
+the alignment breaks). The general point: free-run *fixed-offset* frame-alignment
+is exact only for deterministic, phase-locked, NMI-always-on attract (SMB,
+Faxanadu); everything else needs §1 state/phase sync OR the piecewise/fire-count
+alignment fix for a full RAM/PPU verdict. The phase-independent cycle and
+determinism axes stay valid everywhere (Gumshoe's cycle is clean bar the one
+outlier).
 
 ### Recommendation
 
