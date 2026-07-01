@@ -363,8 +363,8 @@ def cmd_abppu(exe, rom, nesref_exe, core, frames):
                        env=env2, cwd=os.path.dirname(nr_abs),
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-        rc = reconstruct_image(rc_path, 0x120)
-        nr = reconstruct_image(nr_path, 0x120)
+        rc = reconstruct_image(rc_path, 0xA00)
+        nr = reconstruct_image(nr_path, 0xA00)
         if not rc or not nr:
             print(f"  FAIL: empty (recomp {len(rc)}, nesref {len(nr)})")
             return 1
@@ -396,17 +396,19 @@ def cmd_abppu(exe, rom, nesref_exe, core, frames):
                     ms += region_match(rc[f], b, 0, 0x100); n += 1
             if n and ms / n > best_m:
                 best_m, best_off = ms / n, off
-        # Report OAM and (mirror-normalized) palette agreement at the chosen offset.
-        oam_tot = pal_tot = 0.0; n = 0
+        # Report OAM, (mirror-normalized) palette, and nametable agreement.
+        oam_tot = pal_tot = nt_tot = 0.0; n = 0
         for f in rc_keys:
             b = asof(nr, nr_keys, f + best_off)
             if b is not None:
                 oam_tot += region_match(rc[f], b, 0x000, 0x100)
                 pal_tot += region_match(rc[f], b, 0x100, 0x120, skip=PAL_MIRROR)
+                nt_tot  += region_match(rc[f], b, 0x200, 0xA00)
                 n += 1
         print(f"  best boot offset = +{best_off}")
-        print(f"  OAM     match = {oam_tot/n*100:.2f}%   (256 bytes/frame, {n} frames)")
-        print(f"  palette match = {pal_tot/n*100:.2f}%   (27 non-mirror bytes/frame; $3F10/14/18/1C excluded)")
+        print(f"  OAM       match = {oam_tot/n*100:.2f}%   (256 bytes/frame, {n} frames)")
+        print(f"  palette   match = {pal_tot/n*100:.2f}%   (27 non-mirror bytes/frame; $3F10/14/18/1C excluded)")
+        print(f"  nametable match = {nt_tot/n*100:.2f}%   (2KB/frame)")
         if oam_tot/n > 0.90:
             print(f"  => offset VALIDATED: Mesen OAM extracted from the serialize blob agrees with the recomp.")
         else:
