@@ -9,6 +9,7 @@
 #include "hdpack.h"
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>  /* getenv (debug taps) */
 
 /* PNG save wrapper — implemented in main_runner.c */
 extern void save_png(const char *path, int w, int h, const void *rgb, int stride);
@@ -76,6 +77,42 @@ static void render_tile_row(uint32_t *framebuf,
         int color_idx = ((lo >> bit) & 1) | (((hi >> bit) & 1) << 1);
         framebuf[px_y * g_render_width + x] = bg_color(pal_base, color_idx);
     }
+}
+
+/* Scroll-free dump of the two physical nametables side-by-side (phys0 | phys1),
+ * each 256x240, into a 512x240 PNG.  Renders with the CURRENT CHR pattern base,
+ * attribute palettes, and palette RAM — no scroll/mirroring applied, so it shows
+ * exactly what tile data lives in each nametable.  Debug tool for localizing
+ * render-vs-state bugs (env-gated NESRECOMP_NT_DUMP in main_runner). */
+void ppu_dump_nametables(const char *path) {
+    static uint8_t rgb[512 * 240 * 3];
+    int chr_base = (g_ppuctrl & 0x10) ? 0x1000 : 0x0000;
+    for (int phys = 0; phys < 2; phys++) {
+        int nt_off = phys * 0x400;
+        int ox = phys * 256;
+        for (int ty = 0; ty < 30; ty++) {
+            for (int tx = 0; tx < 32; tx++) {
+                uint8_t tile_id = g_ppu_nt[(nt_off + ty * 32 + tx) & 0x0FFF];
+                uint8_t attr = g_ppu_nt[(nt_off + 0x3C0 + (ty / 4) * 8 + (tx / 4)) & 0x0FFF];
+                int sub_x = (tx / 2) & 1, sub_y = (ty / 2) & 1;
+                int pal_base = (attr >> ((sub_y * 2 + sub_x) * 2)) & 0x03;
+                for (int r = 0; r < 8; r++) {
+                    int co = chr_base + tile_id * 16 + r;
+                    uint8_t lo = g_chr_ram[co], hi = g_chr_ram[co + 8];
+                    for (int b = 7; b >= 0; b--) {
+                        int ci = ((lo >> b) & 1) | (((hi >> b) & 1) << 1);
+                        uint32_t c = bg_color(pal_base, ci);
+                        int px = ox + tx * 8 + (7 - b), py = ty * 8 + r;
+                        int i = (py * 512 + px) * 3;
+                        rgb[i + 0] = (c >> 16) & 0xFF;
+                        rgb[i + 1] = (c >> 8) & 0xFF;
+                        rgb[i + 2] = c & 0xFF;
+                    }
+                }
+            }
+        }
+    }
+    save_png(path, 512, 240, rgb, 512 * 3);
 }
 
 /* ---- OAM Debug View ----
@@ -480,6 +517,20 @@ void ppu_render_frame(uint32_t *framebuf) {
             s_split_holdoff--;
         } else {
             split_y = 240;
+        }
+
+        /* DEBUG (env-gated): per-frame PPU state, for localizing render bugs. */
+        if (getenv("NESRECOMP_SPLIT_DEBUG")) {
+            int spr_on = 0;
+            for (int s = 0; s < 64; s++) if (g_ppu_oam[s*4] < 0xEF) spr_on++;
+            fprintf(stderr,
+                "[yc] F=%llu act=%d split_y=%d mir=%d ctrl=%02X mask=%02X "
+                "scroll=%d,%d hud=%d,%d t=%04X v=%04X OAM0=Y%d T%02X X%d spr_on=%d\n",
+                (unsigned long long)g_frame_count, g_spr0_split_active, split_y,
+                mapper_get_mirroring(), g_ppuctrl, g_ppumask,
+                g_ppuscroll_x, g_ppuscroll_y, g_ppuscroll_x_hud, g_ppuscroll_y_hud,
+                runtime_get_ppu_t() & 0x3FFF, g_ppuaddr,
+                g_ppu_oam[0], g_ppu_oam[1], g_ppu_oam[3], spr_on);
         }
 
         /* MMC1 mirroring — look up once per frame, not per pixel */

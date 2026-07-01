@@ -11,6 +11,7 @@
 #include "coroutine.h"
 #include "nes_runtime.h"
 #include <stdio.h>
+#include <stdlib.h>  /* getenv (NESRECOMP_NO_COROUTINE diagnostic gate) */
 
 #ifdef _WIN32
 #include <windows.h>
@@ -119,6 +120,10 @@ static int s_restart_requested = 0;
 
 int coroutine_scheduler_setjmp(void)
 {
+    /* DIAGNOSTIC gate: NESRECOMP_NO_COROUTINE=1 makes this a no-op so the
+     * coroutine subsystem never activates. Used to confirm that a routine
+     * misdetected as a scheduler (LDX #$FF; TXS) is the cause of a bug. */
+    if (getenv("NESRECOMP_NO_COROUTINE")) return 0;
     if (!s_active) {
         s_active = 1;
         /* Convert main thread to fiber (required for SwitchToFiber) */

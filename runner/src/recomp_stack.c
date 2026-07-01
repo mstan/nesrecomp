@@ -14,20 +14,95 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <string.h>
 
 const char *g_recomp_stack[RECOMP_STACK_DEPTH];
 int         g_recomp_stack_top = 0;
 const char *g_last_recomp_func = "(none)";
 
+/* ---------------------------------------------------------------------------
+ * Buffer-count watchpoint (env-gated: NESRECOMP_BUFWATCH="addr" or "addr:lo:hi")
+ * Yoshi's Cookie keeps a VRAM update-list on the 6502 stack page; its first
+ * entry's COUNT byte gets clobbered before func_F4C0 flushes it. This watches
+ * one byte of g_ram continuously (sampled at every function boundary, so it
+ * catches direct PHA writes that bypass nes_write) and logs every change with
+ * the CPU stack pointer, recomp depth, and the two enclosing functions — so we
+ * can attribute the clobber to an exact function/S without arm-and-capture. */
+static void buf_watch(char ctx) {
+    static int s_on = -1; static uint16_t s_addr = 0x102;
+    static unsigned long long s_lo = 0, s_hi = ~0ULL;
+    static int s_prev = -1; static int s_lines = 0;
+    if (s_on < 0) {
+        const char *e = getenv("NESRECOMP_BUFWATCH");
+        if (e && *e) {
+            s_on = 1; s_addr = (uint16_t)strtoul(e, NULL, 16);
+            const char *c1 = strchr(e, ':');
+            if (c1) { s_lo = strtoull(c1 + 1, NULL, 10);
+                const char *c2 = strchr(c1 + 1, ':');
+                if (c2) s_hi = strtoull(c2 + 1, NULL, 10); }
+        } else s_on = 0;
+    }
+    if (!s_on) return;
+    if (g_frame_count < s_lo || g_frame_count > s_hi) return;
+    int cur = g_ram[s_addr & 0x7FF];
+    if (cur != s_prev) {
+        if (s_lines < 400) {
+            const char *f0 = (g_recomp_stack_top > 0) ? g_recomp_stack[g_recomp_stack_top-1] : "(none)";
+            const char *f1 = (g_recomp_stack_top > 1) ? g_recomp_stack[g_recomp_stack_top-2] : "(none)";
+            fprintf(stderr, "[bufw] %c F=%llu $%03X %02X->%02X S=%02X depth=%d  fn=%s <- %s  hdr[100..107]=%02X %02X %02X %02X %02X %02X %02X %02X\n",
+                ctx, (unsigned long long)g_frame_count, s_addr,
+                s_prev < 0 ? 0xFF : s_prev, cur, g_cpu.S, g_recomp_stack_top, f0, f1,
+                g_ram[0x100],g_ram[0x101],g_ram[0x102],g_ram[0x103],
+                g_ram[0x104],g_ram[0x105],g_ram[0x106],g_ram[0x107]);
+            fflush(stderr);
+            s_lines++;
+        }
+        s_prev = cur;
+    }
+}
+
 BailTraceEntry g_bail_trace[BAIL_TRACE_SIZE];
 int g_bail_trace_count = 0;
 int g_bail_trace_idx = 0;
 
+/* ---------------------------------------------------------------------------
+ * Per-function net-S tracker (env-gated: NESRECOMP_SDELTA="lo:hi").
+ * Records S at each function entry (parallel to the shadow stack) and, at the
+ * matching exit, logs any function whose net stack effect (entryS - exitS) is
+ * nonzero — the recompiled function left the 6502 stack pointer imbalanced.
+ * A function with a consistent nonzero net is a stack-idiom the emitter models
+ * wrong (a PLA/PHA skipped by a branch-as-call, a synthetic return, etc.). */
+static uint8_t s_entry_S[RECOMP_STACK_DEPTH];
+static void sdelta_exit(void) {
+    static int s_on = -1; static unsigned long long s_lo=0, s_hi=~0ULL; static int s_lines=0;
+    if (s_on < 0) {
+        const char *e = getenv("NESRECOMP_SDELTA");
+        if (e && *e) { s_on = 1; s_lo = strtoull(e, NULL, 10);
+            const char *c = strchr(e, ':'); if (c) s_hi = strtoull(c+1, NULL, 10); }
+        else s_on = 0;
+    }
+    if (!s_on) return;
+    if (g_frame_count < s_lo || g_frame_count > s_hi) return;
+    int d = g_recomp_stack_top - 1;
+    if (d < 0 || d >= RECOMP_STACK_DEPTH) return;
+    int8_t net = (int8_t)(s_entry_S[d] - g_cpu.S);   /* >0 = net push (S down), <0 = net pull (S up) */
+    if (net != 0 && s_lines < 300) {
+        const char *fn = g_recomp_stack[d];
+        fprintf(stderr, "[sdelta] F=%llu depth=%d fn=%s entryS=%02X exitS=%02X net=%d\n",
+            (unsigned long long)g_frame_count, g_recomp_stack_top, fn ? fn : "?",
+            s_entry_S[d], g_cpu.S, net);
+        fflush(stderr); s_lines++;
+    }
+}
+
 void recomp_stack_push(const char *name)
 {
-    if (g_recomp_stack_top < RECOMP_STACK_DEPTH)
+    if (g_recomp_stack_top < RECOMP_STACK_DEPTH) {
+        s_entry_S[g_recomp_stack_top] = g_cpu.S;
         g_recomp_stack[g_recomp_stack_top++] = name;
+    }
     g_last_recomp_func = name;
+    buf_watch('P');
 
     /* Recursion diagnostic — opt-in (NESRECOMP_RECURSION_DEBUG=1) and FIRE-ONCE.
      * Dumps the shadow stack the first time depth crosses 50. Off by default so
@@ -51,6 +126,8 @@ void recomp_stack_push(const char *name)
 
 void recomp_stack_pop(void)
 {
+    buf_watch('p');
+    sdelta_exit();
     if (g_recomp_stack_top > 0)
         g_recomp_stack_top--;
     g_last_recomp_func = (g_recomp_stack_top > 0)

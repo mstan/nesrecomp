@@ -954,6 +954,30 @@ void nes_write(uint16_t addr, uint8_t val) {
     bus_tick();
     s_open_bus = val;   /* writes also drive the data bus (open-bus tracking) */
 
+    /* DIAGNOSTIC (env-gated): flag when the 6502 stack pointer descends into the
+     * low stack page (where some games keep a VRAM update buffer) — once per
+     * frame per function, to catch a stack/buffer collision. NESRECOMP_SLOW_S=1. */
+    {
+        static int s_slow = -1;
+        if (s_slow < 0) s_slow = getenv("NESRECOMP_SLOW_S") ? 1 : 0;
+        if (s_slow) {
+            /* Track the running minimum S; when a new low is reached, dump the
+             * recomp call-stack depth + top frames. A very low S with a SHALLOW
+             * recomp stack = a per-call stack leak; a deep stack = real nesting. */
+            extern const char *g_recomp_stack[]; extern int g_recomp_stack_top;
+            static uint8_t s_minS = 0xFF; static unsigned long long s_mf = ~0ULL;
+            if (g_frame_count != s_mf) { s_mf = g_frame_count; s_minS = 0xFF; }
+            if (g_cpu.S < s_minS && g_cpu.S < 0x40) {
+                s_minS = g_cpu.S;
+                fprintf(stderr, "[lowS] F=%llu S=%02X depth=%d top:",
+                    (unsigned long long)g_frame_count, g_cpu.S, g_recomp_stack_top);
+                for (int i = g_recomp_stack_top - 1, n = 0; i >= 0 && n < 8; i--, n++)
+                    fprintf(stderr, " %s", g_recomp_stack[i] ? g_recomp_stack[i] : "?");
+                fprintf(stderr, "\n");
+            }
+        }
+    }
+
     if (addr <= 0x1FFF) {
         uint16_t a = addr & 0x07FF;
         if (g_ws_oam_sidecar && (a & 0x0700) == 0x0200 && (a & 3) == 3)
@@ -1016,6 +1040,40 @@ uint16_t nes_read16_jmpbug(uint16_t addr) {
 
 void ppu_write_reg(uint16_t reg, uint8_t val) {
     ppu_trace_write(reg, val);
+    /* Focused VRAM-write trace (env-gated, frame-windowed): logs $2000 (increment
+     * mode) and $2006/$2007 writes with the current PPU address + increment stride,
+     * for localizing screen-build addressing bugs. NESRECOMP_VRAM_TRACE=lo:hi. */
+    {
+        static int s_vt = -1; static unsigned long long s_lo=0, s_hi=0;
+        if (s_vt < 0) {
+            const char *e = getenv("NESRECOMP_VRAM_TRACE");
+            if (e && e[0]) { s_vt = 1; s_lo = strtoull(e, NULL, 10);
+                const char *c = strchr(e, ':'); s_hi = c ? strtoull(c+1, NULL, 10) : s_lo; }
+            else s_vt = 0;
+        }
+        if (s_vt == 1 && g_frame_count >= s_lo && g_frame_count <= s_hi &&
+            (reg == 0x2000 || reg == 0x2006)) {
+            extern const char *g_last_recomp_func;
+            fprintf(stderr, "[vram] F=%llu %s=%02X addr=%04X inc=%d  fn=%s\n",
+                (unsigned long long)g_frame_count,
+                reg==0x2000?"CTRL":"ADDR", val,
+                g_ppuaddr, (g_ppuctrl & 0x04) ? 32 : 1,
+                g_last_recomp_func ? g_last_recomp_func : "?");
+            /* One-shot stack-page dump on the first $2006 write of the window,
+             * to inspect the VRAM buffer func_F4C0 reads. */
+            static unsigned long long s_dumped = 0;
+            if (reg == 0x2006 && s_dumped != g_frame_count) {
+                s_dumped = g_frame_count;
+                fprintf(stderr, "[stack] F=%llu S=%02X page $0100-$01FF:\n",
+                    (unsigned long long)g_frame_count, g_cpu.S);
+                for (int r = 0; r < 256; r += 16) {
+                    fprintf(stderr, "  %02X:", r);
+                    for (int c = 0; c < 16; c++) fprintf(stderr, " %02X", g_ram[0x100 + r + c]);
+                    fprintf(stderr, "\n");
+                }
+            }
+        }
+    }
     s_ppu_io_latch = val;   /* any PPU register write refreshes the I/O latch */
     /* Per-frame renderer (dot-PPU off): any PPU write between $2002 reads means
      * the read was a latch reset (e.g. LDA $2002; STA $2006), not a sprite-0

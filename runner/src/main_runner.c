@@ -847,6 +847,26 @@ smoke_skip_input:
         }
     }
 
+    /* Scroll-free nametable dump (env-gated debug tap): NESRECOMP_NT_DUMP=<frame>
+     * writes both physical nametables side-by-side to NESRECOMP_NT_DUMP_PATH (or
+     * C:/temp/nt_dump.png) on that frame. Localizes render-vs-state bugs. */
+    {
+        static int s_nt_state = -1;
+        static unsigned long long s_nt_frame = 0;
+        static const char *s_nt_path = NULL;
+        if (s_nt_state < 0) {
+            const char *e = getenv("NESRECOMP_NT_DUMP");
+            s_nt_state = (e && e[0]) ? 1 : 0;
+            if (s_nt_state) s_nt_frame = strtoull(e, NULL, 10);
+            s_nt_path = getenv("NESRECOMP_NT_DUMP_PATH");
+            if (!s_nt_path || !s_nt_path[0]) s_nt_path = "C:/temp/nt_dump.png";
+        }
+        if (s_nt_state == 1 && g_frame_count == s_nt_frame) {
+            extern void ppu_dump_nametables(const char *path);
+            ppu_dump_nametables(s_nt_path);
+        }
+    }
+
     /* Smoke test: hash framebuffer at intervals and check exit */
     if (s_smoke_frames) {
         if (g_frame_count % s_smoke_interval == 0 &&
