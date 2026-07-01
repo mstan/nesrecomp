@@ -321,6 +321,99 @@ def cmd_abcycle(exe, rom, nesref_exe, core, frames):
         return 0
 
 
+def reconstruct_image(delta_path, size):
+    """Reconstruct a per-frame byte image (size bytes) from a delta-JSONL trace."""
+    by_frame = {}
+    for line in open(delta_path):
+        line = line.strip()
+        if not line:
+            continue
+        r = json.loads(line)
+        a = int(r["adr"], 16)
+        if a < size:
+            by_frame.setdefault(int(r["f"]), []).append((a, int(r["val"], 16)))
+    out = {}
+    cur = bytearray(size)
+    for f in sorted(by_frame):
+        for a, v in by_frame[f]:
+            cur[a] = v
+        out[f] = bytes(cur)
+    return out
+
+
+def cmd_abppu(exe, rom, nesref_exe, core, frames):
+    """A-vs-B PPU-mem: recomp OAM+palette vs Mesen's (extracted in-process from
+    nesref's retro_serialize blob). Closes the PPU-internal gap the libretro
+    memory API can't (VIDEO_RAM is null on all NES cores). Image layout matches
+    NESRECOMP_PPUMEM_TRACE: [0x000-0x0FF]=OAM, [0x100-0x11F]=palette."""
+    print(f"[A-vs-B PPU] recomp OAM+palette vs Mesen/nesref (in-process, {frames} frames)")
+    with tempfile.TemporaryDirectory() as d:
+        rc_path = os.path.join(d, "rc_ppu.jsonl")
+        env = dict(os.environ); env["NESRECOMP_PPUMEM_TRACE"] = rc_path
+        exe_abs = os.path.abspath(exe)
+        subprocess.run([exe_abs, os.path.abspath(rom), "--smoke", str(frames)],
+                       env=env, cwd=os.path.dirname(exe_abs),
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        nr_path = os.path.join(d, "nr_ppu.jsonl")
+        env2 = dict(os.environ)
+        env2["NESREF_FRAMES"] = str(frames); env2["NESREF_PPU_FILE"] = nr_path
+        env2["NESREF_TRACE_FILE"] = os.path.join(d, "nr_ram.jsonl")
+        nr_abs = os.path.abspath(nesref_exe)
+        subprocess.run([nr_abs, os.path.abspath(core), os.path.abspath(rom)],
+                       env=env2, cwd=os.path.dirname(nr_abs),
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+        rc = reconstruct_image(rc_path, 0x120)
+        nr = reconstruct_image(nr_path, 0x120)
+        if not rc or not nr:
+            print(f"  FAIL: empty (recomp {len(rc)}, nesref {len(nr)})")
+            return 1
+        print(f"  recomp {len(rc)} change-frames, nesref {len(nr)} change-frames")
+
+        # Traces are sparse (a row only when OAM/palette changed), so index the
+        # image AS-OF a frame = the last snapshot at or before it.
+        rc_keys, nr_keys = sorted(rc), sorted(nr)
+        import bisect
+        def asof(d, keys, f):
+            i = bisect.bisect_right(keys, f) - 1
+            return d[keys[i]] if i >= 0 else None
+        # Palette mirror slots: recomp stores 0 at $3F10/14/18/1C (+backdrop $3F00
+        # mirror class); Mesen stores real values. Exclude them from palette match.
+        PAL_MIRROR = {0x100, 0x110, 0x114, 0x118, 0x11c}
+
+        def region_match(a, b, lo, hi, skip=()):
+            idx = [i for i in range(lo, hi) if i not in skip]
+            same = sum(1 for i in idx if a[i] == b[i])
+            return same / len(idx)
+        # Boot-offset search maximizing OAM agreement (the discriminating region).
+        sample = rc_keys[len(rc_keys)//3: 2*len(rc_keys)//3]
+        best_off, best_m = 0, -1.0
+        for off in range(0, 16):
+            ms, n = 0.0, 0
+            for f in sample:
+                b = asof(nr, nr_keys, f + off)
+                if b is not None:
+                    ms += region_match(rc[f], b, 0, 0x100); n += 1
+            if n and ms / n > best_m:
+                best_m, best_off = ms / n, off
+        # Report OAM and (mirror-normalized) palette agreement at the chosen offset.
+        oam_tot = pal_tot = 0.0; n = 0
+        for f in rc_keys:
+            b = asof(nr, nr_keys, f + best_off)
+            if b is not None:
+                oam_tot += region_match(rc[f], b, 0x000, 0x100)
+                pal_tot += region_match(rc[f], b, 0x100, 0x120, skip=PAL_MIRROR)
+                n += 1
+        print(f"  best boot offset = +{best_off}")
+        print(f"  OAM     match = {oam_tot/n*100:.2f}%   (256 bytes/frame, {n} frames)")
+        print(f"  palette match = {pal_tot/n*100:.2f}%   (27 non-mirror bytes/frame; $3F10/14/18/1C excluded)")
+        if oam_tot/n > 0.90:
+            print(f"  => offset VALIDATED: Mesen OAM extracted from the serialize blob agrees with the recomp.")
+        else:
+            print(f"  => LOW OAM agreement: extraction offset may be wrong, or a real PPU divergence. Investigate.")
+        return 0
+
+
 def cmd_diff(a_path, b_path):
     ar, br = load(a_path), load(b_path)
     div = first_divergence(ar, br)
@@ -360,6 +453,10 @@ def main():
         exe, rom, nesref_exe, core = sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5]
         frames = int(sys.argv[6]) if len(sys.argv) > 6 else 900
         return cmd_abcycle(exe, rom, nesref_exe, core, frames)
+    if cmd == "abppu":
+        exe, rom, nesref_exe, core = sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5]
+        frames = int(sys.argv[6]) if len(sys.argv) > 6 else 900
+        return cmd_abppu(exe, rom, nesref_exe, core, frames)
     if cmd == "diff":
         return cmd_diff(sys.argv[2], sys.argv[3])
     if cmd == "run":
