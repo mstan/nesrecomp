@@ -791,11 +791,14 @@ static void maybe_deliver_irq(void) {
 
 void maybe_trigger_vblank(int cycles) {
 
-    /* Rung 2: one-time dot-clock init. next_frame_budget() returns OPS_PER_FRAME
-     * verbatim when the dot clock is off, so the legacy path is byte-unchanged. */
+    /* Rung 2: one-time dot-clock init. Dot-accurate frame length is the DEFAULT
+     * (SMB live-validated by the owner + co-sim-certified on SMB/MM3); set
+     * NESRECOMP_DOT_CLOCK=0 to force the legacy fixed-29781 threshold. When off,
+     * next_frame_budget() returns OPS_PER_FRAME verbatim so the legacy path is
+     * byte-unchanged. */
     if (s_dotclock < 0) {
         const char *e = getenv("NESRECOMP_DOT_CLOCK");
-        s_dotclock = (e && *e && *e != '0') ? 1 : 0;
+        s_dotclock = (e && *e) ? (*e != '0') : 1;   /* default ON */
         s_frame_budget = next_frame_budget();
     }
 
