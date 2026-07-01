@@ -257,6 +257,70 @@ def cmd_abram(exe, rom, nesref_exe, core, frames):
         return 0
 
 
+def cmd_abcycle(exe, rom, nesref_exe, core, frames):
+    """A-vs-B CYCLE: recomp g_nes_cycles vs Mesen's cycle counter (extracted
+    in-process from nesref's retro_serialize blob -- no external Mesen.exe). Both
+    count real guest cycles, so the per-frame advance rate should match hardware;
+    the residual is the Axis-2 frame-length skew (recomp OPS_PER_FRAME=29781 vs
+    NTSC 29780.5). This is the cross-impl cycle channel the floor was missing, and
+    the baseline the Rung-2 dot-master clock must drive toward zero."""
+    print(f"[A-vs-B CYCLE] recomp g_nes_cycles vs Mesen (in-process, {frames} frames)")
+    with tempfile.TemporaryDirectory() as d:
+        rc_path = os.path.join(d, "cosim.jsonl")
+        env = dict(os.environ); env["NESRECOMP_COSIM_HASH"] = rc_path
+        env.pop("NESRECOMP_COSIM_INJECT", None)
+        exe_abs = os.path.abspath(exe)
+        subprocess.run([exe_abs, os.path.abspath(rom), "--smoke", str(frames)],
+                       env=env, cwd=os.path.dirname(exe_abs),
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        cyc_path = os.path.join(d, "nesref_cyc.jsonl")
+        env2 = dict(os.environ)
+        env2["NESREF_FRAMES"] = str(frames); env2["NESREF_CYCLE_FILE"] = cyc_path
+        env2["NESREF_TRACE_FILE"] = os.path.join(d, "nr_ram.jsonl")
+        nr_abs = os.path.abspath(nesref_exe)
+        subprocess.run([nr_abs, os.path.abspath(core), os.path.abspath(rom)],
+                       env=env2, cwd=os.path.dirname(nr_abs),
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+        rc = {r["f"]: int(r["clk"]) for r in load(rc_path)}
+        nr = {}
+        for line in open(cyc_path):
+            line = line.strip()
+            if line:
+                r = json.loads(line); nr[r["f"]] = int(r["cyc"])
+        if not rc or not nr:
+            print(f"  FAIL: empty (recomp {len(rc)}, nesref {len(nr)})")
+            return 1
+
+        # Per-frame advance rate + JITTER on each side (offset-independent).
+        # The recomp frame boundary is a cycle THRESHOLD with deferred/nested NMI
+        # firing, so per-frame length is not constant -- report the spread, not
+        # just the mean, or the number misleads (a clean "29777" hides 24k-33k swings).
+        import statistics
+        def stats(series):
+            fs = sorted(series); fs = fs[len(fs)//5:]  # drop first 20% (boot)
+            if len(fs) < 3:
+                return None
+            deltas = [series[fs[i]] - series[fs[i-1]]
+                      for i in range(1, len(fs)) if fs[i] == fs[i-1] + 1]
+            mean = (series[fs[-1]] - series[fs[0]]) / (fs[-1] - fs[0])
+            return {"mean": mean, "n": len(fs),
+                    "std": statistics.pstdev(deltas) if len(deltas) > 1 else 0.0,
+                    "min": min(deltas) if deltas else 0, "max": max(deltas) if deltas else 0}
+        rc_s, nr_s = stats(rc), stats(nr)
+        print(f"  recomp: {rc_s['mean']:.3f} cyc/frame  (std {rc_s['std']:.0f}, "
+              f"min {rc_s['min']}, max {rc_s['max']}, n={rc_s['n']})")
+        print(f"  Mesen : {nr_s['mean']:.3f} cyc/frame  (std {nr_s['std']:.0f}, "
+              f"min {nr_s['min']}, max {nr_s['max']}, n={nr_s['n']})")
+        drift = rc_s['mean'] - nr_s['mean']
+        print(f"  mean drift = {drift:+.3f} cyc/frame")
+        print(f"  READ: Mesen's frame length is essentially constant (std~0 = 29780.5). The recomp's")
+        print(f"        is JITTERY (std {rc_s['std']:.0f}) because its frame boundary is a cycle threshold")
+        print(f"        with deferred/nested NMI firing -- mean ~4 below hardware. This is the pre-existing")
+        print(f"        frame-driver cadence (NOT Rung 1); Rung 2 (dot-master clock) makes it a fixed 29780.5.")
+        return 0
+
+
 def cmd_diff(a_path, b_path):
     ar, br = load(a_path), load(b_path)
     div = first_divergence(ar, br)
@@ -292,6 +356,10 @@ def main():
         exe, rom, nesref_exe, core = sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5]
         frames = int(sys.argv[6]) if len(sys.argv) > 6 else 900
         return cmd_abram(exe, rom, nesref_exe, core, frames)
+    if cmd == "abcycle":
+        exe, rom, nesref_exe, core = sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5]
+        frames = int(sys.argv[6]) if len(sys.argv) > 6 else 900
+        return cmd_abcycle(exe, rom, nesref_exe, core, frames)
     if cmd == "diff":
         return cmd_diff(sys.argv[2], sys.argv[3])
     if cmd == "run":
