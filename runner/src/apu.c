@@ -615,3 +615,84 @@ void apu_generate(int16_t *buf, int n_samples) {
         buf[i] = last;
     }
 }
+
+/* ---- Co-sim full-APU-state serializer (see apu.h) ----
+ * Explicit little-endian, fixed field order, no struct padding — so the blob is
+ * deterministic across runs and (unlike a raw struct memcpy) comparable across
+ * implementations later. Excludes the sample output ring (s_ring/head/tail) and
+ * the mix accumulators: those are host-side audio-delivery bookkeeping, not
+ * guest-architectural state (the guest cannot observe them), exactly the kind of
+ * host-only field the co-sim doc says to exclude. Includes everything the guest
+ * CAN observe or that decides future APU output: channel timers/sequencers,
+ * envelopes, sweep, length, the DMC memory reader + output unit, and the frame
+ * counter's mode/inhibit/flag/cycle-phase. */
+static int cosim_put_u8 (uint8_t *b, int i, uint8_t v)  { b[i] = v; return i + 1; }
+static int cosim_put_u16(uint8_t *b, int i, uint16_t v) { b[i]=(uint8_t)v; b[i+1]=(uint8_t)(v>>8); return i+2; }
+static int cosim_put_u32(uint8_t *b, int i, uint32_t v) {
+    b[i]=(uint8_t)v; b[i+1]=(uint8_t)(v>>8); b[i+2]=(uint8_t)(v>>16); b[i+3]=(uint8_t)(v>>24); return i+4;
+}
+static int cosim_put_f32(uint8_t *b, int i, float f) {
+    uint32_t u; memcpy(&u, &f, sizeof(u)); return cosim_put_u32(b, i, u);
+}
+
+static int cosim_put_pulse(uint8_t *b, int i, const Pulse *p) {
+    i = cosim_put_u8 (b, i, p->duty);
+    i = cosim_put_u8 (b, i, (uint8_t)((p->halt?1:0) | (p->const_vol?2:0) | (p->sweep_en?4:0)
+                                    | (p->sweep_neg?8:0) | (p->sweep_reload?16:0) | (p->enabled?32:0)));
+    i = cosim_put_u8 (b, i, p->vol);
+    i = cosim_put_u8 (b, i, p->sweep_period);
+    i = cosim_put_u8 (b, i, p->sweep_shift);
+    i = cosim_put_u8 (b, i, p->sweep_div);
+    i = cosim_put_u16(b, i, p->timer);
+    i = cosim_put_f32(b, i, p->timer_acc);
+    i = cosim_put_u8 (b, i, p->seq);
+    i = cosim_put_u8 (b, i, p->env_div);
+    i = cosim_put_u8 (b, i, p->env_vol);
+    i = cosim_put_u8 (b, i, (uint8_t)(p->env_start?1:0));
+    i = cosim_put_u8 (b, i, p->length);
+    i = cosim_put_u8 (b, i, (uint8_t)p->which);
+    return i;
+}
+
+int apu_get_state_blob(uint8_t *buf, int cap) {
+    if (cap < 256) return 0;   /* current layout is ~120 bytes; guard generously */
+    int i = 0;
+    i = cosim_put_pulse(buf, i, &s_p1);
+    i = cosim_put_pulse(buf, i, &s_p2);
+    /* Triangle */
+    i = cosim_put_u8 (buf, i, (uint8_t)((s_tri.halt?1:0)|(s_tri.linear_reload?2:0)|(s_tri.enabled?4:0)));
+    i = cosim_put_u8 (buf, i, s_tri.linear_load);
+    i = cosim_put_u8 (buf, i, s_tri.linear);
+    i = cosim_put_u16(buf, i, s_tri.timer);
+    i = cosim_put_f32(buf, i, s_tri.timer_acc);
+    i = cosim_put_u8 (buf, i, s_tri.seq);
+    i = cosim_put_u8 (buf, i, s_tri.length);
+    /* Noise */
+    i = cosim_put_u8 (buf, i, (uint8_t)((s_noise.halt?1:0)|(s_noise.const_vol?2:0)
+                                      |(s_noise.mode?4:0)|(s_noise.env_start?8:0)|(s_noise.enabled?16:0)));
+    i = cosim_put_u8 (buf, i, s_noise.vol);
+    i = cosim_put_u8 (buf, i, s_noise.period_idx);
+    i = cosim_put_f32(buf, i, s_noise.timer_acc);
+    i = cosim_put_u16(buf, i, s_noise.lfsr);
+    i = cosim_put_u8 (buf, i, s_noise.env_div);
+    i = cosim_put_u8 (buf, i, s_noise.env_vol);
+    i = cosim_put_u8 (buf, i, s_noise.length);
+    /* DMC */
+    i = cosim_put_u8 (buf, i, (uint8_t)((s_dmc.loop?1:0)|(s_dmc.irq_en?2:0)|(s_dmc.irq_flag?4:0)
+                                      |(s_dmc.buf_empty?8:0)|(s_dmc.silence?16:0)|(s_dmc.enabled?32:0)));
+    i = cosim_put_u8 (buf, i, s_dmc.rate_idx);
+    i = cosim_put_u16(buf, i, s_dmc.start_addr);
+    i = cosim_put_u16(buf, i, s_dmc.start_len);
+    i = cosim_put_u16(buf, i, s_dmc.cur_addr);
+    i = cosim_put_u16(buf, i, s_dmc.bytes_left);
+    i = cosim_put_u8 (buf, i, s_dmc.sample_buf);
+    i = cosim_put_u8 (buf, i, s_dmc.shift);
+    i = cosim_put_u8 (buf, i, s_dmc.bits_left);
+    i = cosim_put_u8 (buf, i, s_dmc.output);
+    i = cosim_put_f32(buf, i, s_dmc.timer_acc);
+    /* Frame counter / sequencer phase */
+    i = cosim_put_u8 (buf, i, (uint8_t)((s_fc_mode?1:0)|(s_fc_irq_inh?2:0)|(s_fc_irq_flag?4:0)));
+    i = cosim_put_u32(buf, i, (uint32_t)s_fc_cycle_acc);
+    i = cosim_put_u32(buf, i, (uint32_t)s_dmc_stall);
+    return i;
+}

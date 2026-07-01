@@ -18,9 +18,10 @@
  * NESRECOMP_APU_TRACE=<path>  ->  capture every $4000-$401F APU register write as
  * (cpu_cycle, addr, val) into a bounded ring, dumped to CSV at exit. Used to diff
  * the recomp's APU-input stream bit-exactly against the Mesen2 oracle's. Pays
- * nothing (one branch) unless the env var is set. Cycle stamp is the monotonic
- * CPU-cycle estimate g_frame_count*OPS_PER_FRAME + s_ops_count, computed at the
- * call site so inter-write deltas line up with Mesen's cpu.cycleCount. */
+ * nothing (one branch) unless the env var is set. Cycle stamp is the true
+ * monotonic counter g_nes_cycles (real instruction + DMC + OAM DMA cycles), so
+ * inter-write deltas line up with Mesen's cpu.cycleCount without inheriting the
+ * old fixed-frame-length (29781) estimate error. */
 #define APU_TRACE_CAP (1u << 20)   /* 1,048,576 entries */
 typedef struct { uint64_t cyc; uint16_t addr; uint8_t val; } ApuTraceEnt;
 static ApuTraceEnt *s_apu_trace = NULL;
@@ -417,6 +418,19 @@ static int  s_vblank_depth = 0;   /* NMI nesting depth (0 = not in NMI) */
                                    * the NMI handler (column loader).  Allow
                                    * re-entrancy so the wait loop can exit. */
 static uint32_t s_ops_count = 0;
+
+/* Monotonic guest CPU-cycle counter (see nes_runtime.h). Advanced by the same
+ * _c as s_ops_count, but never reset — the co-sim alignment ruler. */
+uint64_t g_nes_cycles = 0;
+
+/* OAM DMA ($4014) cycle-steal accumulator. Writing $4014 halts the CPU 513/514
+ * cycles while 256 bytes copy into OAM; those cycles elapse on hardware (PPU
+ * and APU keep advancing). Charged in the $4014 handler, drained by
+ * runtime_take_oam_dma_stall() into the CPU frame budget + APU clock, exactly
+ * mirroring apu_take_dmc_stall(). */
+static int s_oam_dma_stall = 0;
+int runtime_take_oam_dma_stall(void) { int s = s_oam_dma_stall; s_oam_dma_stall = 0; return s; }
+
 /* Debug cadence counters. Accumulate across a wall-clock frame; the verify
  * layer pops them after native NMI completes. */
 static uint32_t s_dbg_nmi_fires = 0;
@@ -526,6 +540,139 @@ void nes_wram_trace_frame(void) {
     fflush(s_wram_trace_f);
 }
 
+/* ---- Differential co-sim full-state hash (env-gated, observability only) ----
+ * NESRECOMP_COSIM_HASH=<path> -> once per frame at the NMI boundary, emit one
+ * JSONL row: {"f":<frame>,"clk":<g_nes_cycles>,"chain":"<hex>","sub":{...}} where
+ * `sub` carries a per-subsystem FNV-1a-64 hash of the WHOLE guest-architectural
+ * machine (no axis-verdict trimming) and `chain` is a running fingerprint of the
+ * entire trajectory (first frame `chain` differs between two runs = the first
+ * divergence). This is the recomp side of the frame-granular differential
+ * co-sim (see recomp-template/NES/DIFFERENTIAL-COSIM-PROPOSAL.md). Pure read of
+ * live state; does not touch emulation or timing. Zero cost unless the env set.
+ *
+ * Subsystem split follows the doc's "mask by class, never drop a subsystem":
+ *   cpu      A/X/Y/S/P + N/V/D/I/Z/C   (PC excluded — currency caveat)
+ *   ram      $000-$0FF + $200-$7FF     (stack page split out below)
+ *   stack    $100-$1FF                 (recomp never pushes JSR return addrs =>
+ *                                        cross-impl expected-diff; REPORTED, not
+ *                                        a false "no divergence"; A-vs-A matches)
+ *   ppu_mem  nametables + OAM + palette
+ *   ppu_regs ctrl/mask/status/oamaddr + loopy v(g_ppuaddr)/t(s_ppu_t)/w-latch/read-buf
+ *   apu      full channel + frame-sequencer state (the savestate.c blind spot)
+ *   mapper   bank regs + MMC3 IRQ counters (MapperState)
+ *   chr      g_chr_ram (meaningful for CHR-RAM carts)
+ *   sram     $6000-$7FFF battery RAM
+ *   openbus  the CPU data-bus latch
+ * EXCLUDED (host-only, per the doc): SDL/audio, DRC ring, fibers, fn pointers. */
+static uint8_t s_open_bus;            /* tentative fwd decl; defined (=0) later in this TU */
+static FILE *s_cosim_f = NULL;
+static int   s_cosim_state = -1;      /* -1 unqueried, 0 off, 1 on */
+static uint64_t s_cosim_chain = 1469598103934665603ULL;  /* FNV offset basis */
+/* Gate-3 fault injection: NESRECOMP_COSIM_INJECT=<frame>:<region>:<index>:<xor>
+ * flips ONE live-state byte at the given frame BEFORE hashing, so the coordinator
+ * can prove the tool detects + localizes a divergence (and is not silently blind
+ * to a whole subsystem). region: "ram"|"oam". */
+static long long s_cosim_inj_frame = -1;
+static int        s_cosim_inj_region = 0;  /* 0=none 1=ram 2=oam */
+static int        s_cosim_inj_index = 0;
+static uint8_t    s_cosim_inj_xor   = 0;
+
+static inline uint64_t cosim_fnv(uint64_t h, const void *data, int len) {
+    const uint8_t *p = (const uint8_t *)data;
+    for (int k = 0; k < len; k++) { h ^= p[k]; h *= 1099511628211ULL; }
+    return h;
+}
+static inline uint64_t cosim_hash_bytes(const void *data, int len) {
+    return cosim_fnv(1469598103934665603ULL, data, len);
+}
+
+void nes_cosim_hash_frame(void) {
+    if (s_cosim_state < 0) {
+        const char *e = getenv("NESRECOMP_COSIM_HASH");
+        s_cosim_f = (e && *e) ? fopen(e, "w") : NULL;
+        s_cosim_state = s_cosim_f ? 1 : 0;
+        const char *inj = getenv("NESRECOMP_COSIM_INJECT");
+        if (inj && *inj) {
+            char reg[16] = {0};
+            long long fr; int idx; unsigned xr;
+            /* %i on the index accepts both decimal and 0x-hex robustly. */
+            if (sscanf(inj, "%lld:%15[^:]:%i:%x", &fr, reg, &idx, &xr) == 4) {
+                s_cosim_inj_frame = fr;
+                s_cosim_inj_index = idx;
+                s_cosim_inj_xor   = (uint8_t)xr;
+                if      (!strcmp(reg, "ram")) s_cosim_inj_region = 1;
+                else if (!strcmp(reg, "oam")) s_cosim_inj_region = 2;
+            }
+        }
+    }
+    if (s_cosim_state != 1) return;
+
+    /* Gate 3: apply the one-byte fault to LIVE state before we read it, so the
+     * hasher must actually read real state to see it (a constant-returning
+     * hasher would fail this gate). */
+    if (s_cosim_inj_region && (long long)g_frame_count == s_cosim_inj_frame) {
+        if (s_cosim_inj_region == 1) g_ram[s_cosim_inj_index & 0x7FF]     ^= s_cosim_inj_xor;
+        else                         g_ppu_oam[s_cosim_inj_index & 0xFF]  ^= s_cosim_inj_xor;
+    }
+
+    /* CPU (PC excluded — recomp keeps no live PC; currency caveat). */
+    uint8_t cpu[11] = { g_cpu.A, g_cpu.X, g_cpu.Y, g_cpu.S, g_cpu.P,
+                        g_cpu.N, g_cpu.V, g_cpu.D, g_cpu.I, g_cpu.Z, g_cpu.C };
+    uint64_t h_cpu = cosim_hash_bytes(cpu, sizeof(cpu));
+
+    /* RAM excluding the stack page; stack page hashed separately. */
+    uint64_t h_ram = cosim_hash_bytes(g_ram, 0x100);
+    h_ram = cosim_fnv(h_ram, g_ram + 0x200, 0x600);
+    uint64_t h_stack = cosim_hash_bytes(g_ram + 0x100, 0x100);
+
+    /* PPU memory + registers. */
+    uint64_t h_ppumem = cosim_hash_bytes(g_ppu_nt, 0x1000);
+    h_ppumem = cosim_fnv(h_ppumem, g_ppu_oam, 0x100);
+    h_ppumem = cosim_fnv(h_ppumem, g_ppu_pal, 0x20);
+    uint8_t preg[9];
+    preg[0]=g_ppuctrl; preg[1]=g_ppumask; preg[2]=g_ppustatus; preg[3]=g_oamaddr;
+    preg[4]=(uint8_t)g_ppuaddr; preg[5]=(uint8_t)(g_ppuaddr>>8);
+    preg[6]=(uint8_t)s_ppu_t;   preg[7]=(uint8_t)(s_ppu_t>>8);
+    preg[8]=(uint8_t)(g_ppuaddr_latch?1:0);   /* w write-toggle */
+    uint64_t h_ppureg = cosim_hash_bytes(preg, sizeof(preg));
+    h_ppureg = cosim_fnv(h_ppureg, &g_ppudata_buf, 1);  /* PPUDATA read buffer */
+
+    /* APU (full state via the serializer — the save-state blind spot). */
+    uint8_t apu_blob[256];
+    int apu_n = apu_get_state_blob(apu_blob, sizeof(apu_blob));
+    uint64_t h_apu = cosim_hash_bytes(apu_blob, apu_n);
+
+    /* Mapper (bank regs + MMC3 IRQ counters). memset first: MapperState has
+     * padding between its uint8_t and int fields, and a raw struct hash would
+     * otherwise fold in uninitialized stack bytes → a false, nondeterministic
+     * divergence (Gate 1 caught exactly this). Zeroing makes padding canonical. */
+    MapperState ms; memset(&ms, 0, sizeof(ms)); mapper_get_state(&ms);
+    uint64_t h_map = cosim_hash_bytes(&ms, sizeof(ms));
+
+    uint64_t h_chr = cosim_hash_bytes(g_chr_ram, 0x2000);
+    uint64_t h_sram = cosim_hash_bytes(g_sram, 0x2000);
+    uint64_t h_ob  = cosim_hash_bytes(&s_open_bus, 1);
+
+    /* Fold every sub-hash into the running chain (order fixed). */
+    uint64_t subs[10] = { h_cpu, h_ram, h_stack, h_ppumem, h_ppureg,
+                          h_apu, h_map, h_chr, h_sram, h_ob };
+    s_cosim_chain = cosim_fnv(s_cosim_chain, subs, sizeof(subs));
+
+    fprintf(s_cosim_f,
+        "{\"f\":%llu,\"clk\":%llu,\"chain\":\"%016llx\",\"sub\":{"
+        "\"cpu\":\"%016llx\",\"ram\":\"%016llx\",\"stack\":\"%016llx\","
+        "\"ppu_mem\":\"%016llx\",\"ppu_regs\":\"%016llx\",\"apu\":\"%016llx\","
+        "\"mapper\":\"%016llx\",\"chr\":\"%016llx\",\"sram\":\"%016llx\","
+        "\"openbus\":\"%016llx\"}}\n",
+        (unsigned long long)g_frame_count, (unsigned long long)g_nes_cycles,
+        (unsigned long long)s_cosim_chain,
+        (unsigned long long)h_cpu, (unsigned long long)h_ram, (unsigned long long)h_stack,
+        (unsigned long long)h_ppumem, (unsigned long long)h_ppureg, (unsigned long long)h_apu,
+        (unsigned long long)h_map, (unsigned long long)h_chr, (unsigned long long)h_sram,
+        (unsigned long long)h_ob);
+    fflush(s_cosim_f);
+}
+
 /* Per-frame PPU-memory delta trace (Axis 4/5a), env NESRECOMP_PPUMEM_TRACE=<path>.
  * Same JSONL shape as the WRAM trace, over a synthetic PPU-memory image so the
  * existing wram_diff.py works unchanged:
@@ -621,13 +768,19 @@ void maybe_trigger_vblank(int cycles) {
      * (the DMC byte period is >> 4), so this does not recurse. */
     int dmc_stall = apu_take_dmc_stall();
     if (dmc_stall) apu_clock_cycles(dmc_stall);
+    /* OAM DMA cycle-steal (see $4014 handler): the APU/PPU advance through the
+     * ~513 stolen cycles too, so clock the APU through them like the DMC steal. */
+    int oam_stall = runtime_take_oam_dma_stall();
+    if (oam_stall) apu_clock_cycles(oam_stall);
     maybe_deliver_irq();
 
-    /* Count cycles — always, even during NMI handler execution. Stolen DMC DMA
-     * cycles are counted here so the frame advances as on hardware. */
+    /* Count cycles — always, even during NMI handler execution. Stolen DMC and
+     * OAM DMA cycles are counted here so the frame advances as on hardware. */
     {
-        uint32_t _c = ((cycles > 0) ? (uint32_t)cycles : 1) + (uint32_t)dmc_stall;
+        uint32_t _c = ((cycles > 0) ? (uint32_t)cycles : 1)
+                    + (uint32_t)dmc_stall + (uint32_t)oam_stall;
         s_ops_count       += _c;
+        g_nes_cycles      += _c;   /* monotonic; never reset (co-sim ruler) */
         s_dbg_cycles_ticked += _c;
         s_dbg_instrs_ticked++;
     }
@@ -651,8 +804,12 @@ void maybe_trigger_vblank(int cycles) {
      * Deferring to backward branches ensures the code has reached a loop
      * boundary (like the $1A spin-wait) where state is consistent. */
     if (s_vblank_depth == 0) {
-        /* Immediate fire — safe at top level. */
-        s_ops_count = 0;
+        /* Immediate fire — safe at top level. Carry the overshoot (the
+         * triggering instruction pushed s_ops_count a few cycles past the
+         * threshold) into the next frame instead of discarding it — removes an
+         * instruction-mix-dependent per-frame drift. Guaranteed >= OPS_PER_FRAME
+         * here (we passed the check above), so the result is non-negative. */
+        s_ops_count -= OPS_PER_FRAME;
         s_vblank_depth++;
         g_ppustatus = (g_ppustatus & ~0x40) | 0x80;
         /* Zapper games only: save the legacy pulse counter across the NMI
@@ -713,7 +870,13 @@ void maybe_trigger_vblank(int cycles) {
 void maybe_fire_pending_vblank(void) {
     if (!s_vblank_pending) return;
     s_vblank_pending = 0;
-    s_ops_count = 0;
+    /* Carry the overshoot like the immediate-fire path. This deferred path can
+     * fire well past OPS_PER_FRAME (that is why the pending mechanism exists), so
+     * a single subtraction leaves any residual budget for the next frame; the
+     * carry is approximate here and is superseded by the Rung-2 dot-master clock,
+     * which makes the frame boundary a true dot event rather than a threshold. */
+    if (s_ops_count >= OPS_PER_FRAME) s_ops_count -= OPS_PER_FRAME;
+    else                              s_ops_count = 0;
     s_vblank_depth++;
 
     /* Standard VBlank start: set VBlank flag, clear sprite-0-hit flag. */
@@ -989,6 +1152,13 @@ void nes_write(uint16_t addr, uint8_t val) {
     if (addr == 0x4014) {
         uint16_t src = (uint16_t)val << 8;
         for (int i = 0; i < 256; i++) g_ppu_oam[i] = nes_read(src + i);
+        /* Cycle-steal: OAM DMA halts the CPU 513 cycles (+1 alignment cycle if
+         * the transfer is requested on an odd CPU cycle) = 513/514. Charge it
+         * so the frame budget and APU sequencer advance as on hardware; drained
+         * next maybe_trigger_vblank. Parity from g_nes_cycles is approximate to
+         * one instruction (exact intra-instruction placement is Rung 3), which
+         * is far tighter than today's zero-cost model. */
+        s_oam_dma_stall += 513 + (int)(g_nes_cycles & 1u);
         if (g_ws_oam_sidecar) {
             /* Keep the render-side sidecar paired with the OAM snapshot.
              * DMA from the tracked shadow page adopts the shadow sidecar;
@@ -1013,7 +1183,7 @@ void nes_write(uint16_t addr, uint8_t val) {
         return;
     }
     if (addr >= 0x4000 && addr <= 0x401F) {
-        apu_trace_push(g_frame_count * (uint64_t)OPS_PER_FRAME + s_ops_count, addr, val);
+        apu_trace_push(g_nes_cycles, addr, val);
         apu_write(addr, val);
         return;
     }

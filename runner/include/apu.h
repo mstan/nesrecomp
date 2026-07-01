@@ -29,3 +29,11 @@ int     apu_take_dmc_stall(void);
  * Polled by the general pending-IRQ delivery hook (runtime.c). Level — stays
  * true until the handler acknowledges the source. */
 bool    apu_irq_asserted(void);
+
+/* Co-sim: serialize the FULL APU architectural state (all 5 channels + the
+ * frame-counter/sequencer phase + DMC-stall accumulator) into buf as a
+ * deterministic little-endian byte blob, for the differential co-sim state
+ * hash. This is the save-state blind spot (savestate.c omits the APU). Returns
+ * the number of bytes written, or 0 if cap is too small. Pure read; no state
+ * mutation, no host-only pointers included. */
+int     apu_get_state_blob(uint8_t *buf, int cap);

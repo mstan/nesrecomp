@@ -259,6 +259,14 @@ extern uint8_t g_ws_obj_ctx_valid;   /* context valid flag (game policy sets/cle
 /* Frame counter incremented each VBlank */
 extern uint64_t g_frame_count;
 
+/* Monotonic guest CPU-cycle counter — advanced by exactly the same _c that
+ * feeds the per-frame s_ops_count accumulator (real instruction cycles + DMC
+ * DMA steal + OAM DMA steal). Never reset. This is the co-sim's shared
+ * alignment ruler and the faithful cycle stamp for the APU trace; it replaces
+ * the old g_frame_count*OPS_PER_FRAME + s_ops_count estimate, which inherited
+ * the fixed-frame-length (29781) error. See DIFFERENTIAL-COSIM-PROPOSAL Rung 1. */
+extern uint64_t g_nes_cycles;
+
 /* Save the current native framebuffer as a PNG */
 void runner_screenshot(const char *path);
 
