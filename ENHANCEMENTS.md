@@ -71,9 +71,35 @@ original approach). Cheap, no new harness, but approximate — good for a first
 bracket, not a byte-exact verdict.
 
 **(d) Seed/scheduler freeze.** For RNG-driven games, freeze the seed
-(`NESRECOMP_FREEZE`/`NESREF_FREEZE`) so attract stays aligned — works for Zelda.
-Does **not** help host-modeled state (MM3 fibers): you cannot freeze host
-scheduler state into alignment; that is why MM3 needs (a) or (b), not (d).
+(`NESRECOMP_FREEZE`/`NESREF_FREEZE`) so attract stays aligned. Does **not** help
+host-modeled state (MM3 fibers): you cannot freeze host scheduler state into
+alignment; that is why MM3 needs (a) or (b), not (d). **And it is only partial for
+FrameCounter-driven attract (Zelda, below)** — freezing the RNG *seed* (`$18`)
+does not align the *FrameCounter* (`$15`), and animated/demo attract derives from
+`$15`, so the two engines still display different moments.
+
+### Worked example — Zelda (MMC1, CHR-RAM): FrameCounter-phase desync
+
+Measured 2026-07-01. Gate 1 PASS; **cycle CONVERGED (+0.004, phase-independent —
+Rung 1/2 hold)**. But free-run attract RAM/PPU do NOT give a clean verdict:
+`abram` 98.5% (matches the burndown's raw) with the top divergent byte being
+**`$0015` (the FrameCounter) at 100%**, plus everything derived from it
+(`$0600`-page timers, `$02f`-page); `abppu` OAM 78% / palette 68% / **NT 3%**
+because the animated title + demo are a phase-shifted sequence. The `$18`
+seed-freeze reduced divergence (112→99 addrs) but cannot align `$15`: the recomp
+and Mesen advance the FrameCounter from different boot points, and the RAM-best
+offset (+8) doesn't make `$15` match. Zelda therefore needs **FrameCounter
+phase-sync**, not just a seed-freeze: either §1(a) scripted-to-a-static-state, or
+a one-time boot-time counter alignment (force recomp `$15` = oracle `$15` once,
+distinct from a per-frame freeze which would stop it advancing). Until then,
+Zelda's clean RAM/PPU verdict is deferred; its cycle/determinism axes are green.
+
+Two distinct free-run breakdowns now have worked examples: **MM3** (host-fiber
+scheduler, no bit-faithful state) and **Zelda** (FrameCounter-phase). Both prove
+the general point: free-run frame-alignment is exact only for
+deterministic-and-phase-locked attract (SMB, Faxanadu); everything else needs §1
+state/phase sync for a full RAM/PPU verdict, though the phase-independent cycle
+and determinism axes stay valid everywhere.
 
 ### Recommendation
 
