@@ -49,15 +49,19 @@ The recomp and oracle free-run; frame `N` of the recomp is compared to oracle
 frame `N + offset` (a constant boot latency). This is exact for a deterministic,
 phase-locked attract demo.
 
-The recomp co-sim trace is tagged with **`g_cosim_vframe`**, a video-frame clock
-that ticks on **every** frame boundary (NMI on *or* off) — distinct from
-`g_frame_count`, which only advances when the NMI callback fires. This matters
-because the oracle counts every video frame: without it, an NMI-off stretch
-(init, screen transitions) would drop trace rows and shift the offset mid-run
-(the old "NMI-off frame-count desync"). With it, the offset stays constant.
-`g_cosim_vframe` and the NMI-off trace emit (`nes_cosim_emit_boundary`) are
-env-gated (active only when a `NESRECOMP_*_TRACE`/`COSIM_HASH` env var is set),
-so there is **zero effect on shipped gameplay**; `g_frame_count` is untouched.
+The recomp co-sim trace is tagged with **`g_cosim_vframe`**, a video-frame index
+**derived from the cycle ruler** — `round(g_frame_boundary_cyc / 29780.5)` = the
+true NTSC video-frame number — computed at each emit, NOT counted per NMI. This
+matters because the oracle counts every video frame: a per-NMI counter (like
+`g_frame_count`) STALLS whenever the frame boundary is deferred or depth-suppressed
+(post-NMI work during boot/scene transitions), so real video frames elapse
+un-counted and byte-identical state looks phase-divergent — a pure measurement
+artifact (this was the entire Zelda "FrameCounter-phase" false alarm). Deriving the
+index from cycles removes it: whichever frames emit carry their true video-frame
+number and align to the oracle across suppressed gaps. Emission stays POST-NMI-handler
+(so the sampled phase matches the oracle's end-of-frame serialize); NMI-off frames
+emit at the boundary. The trace path is env-gated and `g_frame_count` (the
+game-logic clock) is untouched, so there is **zero effect on shipped gameplay**.
 
 When trajectories still drift (host-modeled state, RNG/FrameCounter phase), the
 coordinator's `adaptive_offset_*` (windowed piecewise offset) and, for scrolling
@@ -104,12 +108,15 @@ python "$COORD" abppu   <exe> <rom> "$NESREF" "$CORE" 900   # auto-detects CHR-R
 
 ## Coverage (2026-07-02)
 
-Cycle + RAM + PPU converge on **SMB** (NROM), **Faxanadu** (MMC1/CHR-RAM),
-**MM3** (MMC3, logic-converges — coroutine ZP is host-modeled); gates 1/2/3 pass
-across all. **Gumshoe** (GxROM) converges on RAM/OAM/palette/cycle; its attract
-nametable has one genuine ~18-column scroll residual (a small ZP divergence,
-`ENHANCEMENTS.md` §1). **Zelda** (MMC1/CHR-RAM) cycle + determinism converge; its
-RAM/PPU verdict is FrameCounter-phase-blocked pending a state-sync fixture.
+Cycle + RAM + PPU converge on **SMB** (NROM: RAM 99.94, drift +0.000, OAM 99.96,
+NT 99.97), **Faxanadu** (MMC1/CHR-RAM: OAM 100, NT 99.92), **MM3** (MMC3, logic-
+converges — coroutine ZP is host-modeled; OAM 99.48, NT 99.92); gates 1/2/3 pass
+across all. **Zelda** (MMC1/CHR-RAM): **RAM 100.00% CONVERGED** — the former
+"FrameCounter-phase block" was a stalled-index measurement artifact, fixed by the
+cycle-derived index; its `abppu` still reads low (animated-title alignment, RAM
+proves faithfulness — `ENHANCEMENTS.md` §1). **Gumshoe** (GxROM) converges on
+RAM/OAM/palette/cycle-mean; its attract nametable has one genuine ~1-frame
+cycle-timing lead through the NMI-off scene transition (`ENHANCEMENTS.md` §1).
 
 ## Rules
 
