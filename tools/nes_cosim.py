@@ -26,8 +26,26 @@ import sys, os, subprocess, json, tempfile
 SUBS = ["cpu", "ram", "stack", "ppu_mem", "ppu_regs", "apu", "mapper", "chr", "sram", "openbus"]
 
 
+def clear_saves(exe):
+    """Delete the recomp's battery SRAM before a run so every session boots from
+    the same canonical fresh state (matching nesref, which boots fresh). Without
+    this, battery games (Zelda, Faxanadu) fail Gate 1: the first instance writes
+    <exe_dir>/saves/*.srm, the second loads it → a different boot path and a
+    spurious 'sram nondeterminism' divergence that is really just save-state
+    carryover, not a determinism leak."""
+    saves = os.path.join(os.path.dirname(os.path.abspath(exe)), "saves")
+    if os.path.isdir(saves):
+        for fn in os.listdir(saves):
+            if fn.endswith(".srm"):
+                try:
+                    os.remove(os.path.join(saves, fn))
+                except OSError:
+                    pass
+
+
 def run(exe, rom, out_path, frames, inject=None):
     """Run one instrumented smoke session; return path to the JSONL hash stream."""
+    clear_saves(exe)
     env = dict(os.environ)
     env["NESRECOMP_COSIM_HASH"] = out_path
     if inject:
@@ -247,6 +265,7 @@ def cmd_abram(exe, rom, nesref_exe, core, frames):
         rc_path = os.path.join(d, "recomp_ram.jsonl")
         env = dict(os.environ); env["NESRECOMP_WRAM_TRACE"] = rc_path
         env.pop("NESRECOMP_COSIM_INJECT", None)
+        clear_saves(exe)
         exe_abs = os.path.abspath(exe)
         subprocess.run([exe_abs, os.path.abspath(rom), "--smoke", str(frames)],
                        env=env, cwd=os.path.dirname(exe_abs),
@@ -349,6 +368,7 @@ def cmd_abcycle(exe, rom, nesref_exe, core, frames):
         rc_path = os.path.join(d, "cosim.jsonl")
         env = dict(os.environ); env["NESRECOMP_COSIM_HASH"] = rc_path
         env.pop("NESRECOMP_COSIM_INJECT", None)
+        clear_saves(exe)
         exe_abs = os.path.abspath(exe)
         subprocess.run([exe_abs, os.path.abspath(rom), "--smoke", str(frames)],
                        env=env, cwd=os.path.dirname(exe_abs),
@@ -426,6 +446,106 @@ def reconstruct_image(delta_path, size):
     return out
 
 
+def adaptive_offset_ppu(rc, nr, rc_keys, nr_keys, win=40, drift=3):
+    """Windowed alignment for the sparse PPU-mem traces — the abppu twin of
+    adaptive_offset_match. Follows a mid-run frame-offset shift (the NMI-off
+    frame-count desync, Gumshoe-class: recomp counts NMI callbacks, oracle counts
+    video frames) so the whole-run OAM/palette/NT verdict isn't dragged down by a
+    discrete re-sync point. Per window, search only +/-drift of the current offset
+    (small enough to track a genuine shift but not to wander far enough to mask a
+    real divergence); alignment is scored on OAM (the discriminating region).
+    Returns (oam, pal, nt, [(frame, old_off, new_off), ...])."""
+    import bisect
+    PAL_MIRROR = {0x100, 0x110, 0x114, 0x118, 0x11c}
+
+    def asof(f):
+        i = bisect.bisect_right(nr_keys, f) - 1
+        return nr[nr_keys[i]] if i >= 0 else None
+
+    def rmatch(a, b, lo, hi, skip=()):
+        idx = [i for i in range(lo, hi) if i not in skip]
+        return sum(1 for i in idx if a[i] == b[i]) / len(idx) if idx else 1.0
+
+    def win_best(frames, lo, hi):
+        best_o, best_m = None, -1.0
+        for o in range(max(0, lo), hi + 1):
+            ms = n = 0.0
+            for f in frames:
+                b = asof(f + o)
+                if b is not None:
+                    ms += rmatch(rc[f], b, 0, 0x100); n += 1
+            if n and ms / n > best_m:
+                best_m, best_o = ms / n, o
+        return best_o
+
+    if not rc_keys:
+        return 0.0, 0.0, 0.0, []
+    cur = win_best(rc_keys[:win], 0, 15)
+    if cur is None:
+        cur = 0
+    resyncs = []
+    oam_tot = pal_tot = nt_tot = 0.0; n = 0
+    for i in range(0, len(rc_keys), win):
+        wf = rc_keys[i:i + win]
+        o = win_best(wf, cur - drift, cur + drift)
+        if o is None:
+            o = cur
+        if o != cur:
+            resyncs.append((wf[0], cur, o)); cur = o
+        for f in wf:
+            b = asof(f + cur)
+            if b is not None:
+                oam_tot += rmatch(rc[f], b, 0x000, 0x100)
+                pal_tot += rmatch(rc[f], b, 0x100, 0x120, skip=PAL_MIRROR)
+                nt_tot  += rmatch(rc[f], b, 0x200, 0xA00)
+                n += 1
+    if not n:
+        return 0.0, 0.0, 0.0, resyncs
+    return oam_tot / n, pal_tot / n, nt_tot / n, resyncs
+
+
+def scroll_phase_match(rc, nr, rc_keys, nr_keys, off, step=2):
+    """Disambiguate a low nametable match that a frame offset can't fix: attract
+    demos SCROLL, and a small demo-timing phase (the NMI-off frame-count desync)
+    leaves the recomp at a different horizontal scroll COLUMN than the oracle at
+    the same aligned frame. Operate on the VISIBLE primary nametable (NT0, $2000)
+    only -- the secondary NT is an off-screen prefetch buffer that legitimately
+    differs at different scroll positions. Per frame, recover the best whole-screen
+    horizontal column shift (32-col torus). High recovery => correct rendering, off
+    only by demo scroll-phase, not a rendering divergence. The residual after
+    recovery is the handful of columns that scrolled into view (each side prefetched
+    a different edge). Returns (mean_recovered, median_shift, n)."""
+    import bisect, statistics
+
+    def asof(f):
+        i = bisect.bisect_right(nr_keys, f) - 1
+        return nr[nr_keys[i]] if i >= 0 else None
+
+    def grid(img):
+        return [[img[0x200 + r * 32 + c] for c in range(32)] for r in range(30)]
+
+    def best_shift(ga, gb):
+        best_m, best_s = -1.0, 0
+        for s in range(32):
+            m = sum(1 for r in range(30) for c in range(32)
+                    if ga[r][c] == gb[r][(c + s) % 32])
+            if m > best_m:
+                best_m, best_s = m, s
+        return best_m / (30 * 32), best_s
+
+    tot, shifts = 0.0, []
+    n = 0
+    for f in rc_keys[::step]:
+        b = asof(f + off)
+        if b is None:
+            continue
+        m, s = best_shift(grid(rc[f]), grid(b))
+        tot += m; shifts.append(s); n += 1
+    if not n:
+        return 0.0, 0, 0
+    return tot / n, int(statistics.median(shifts)), n
+
+
 def cmd_abppu(exe, rom, nesref_exe, core, frames):
     """A-vs-B PPU-mem: recomp OAM+palette vs Mesen's (extracted in-process from
     nesref's retro_serialize blob). Closes the PPU-internal gap the libretro
@@ -435,6 +555,7 @@ def cmd_abppu(exe, rom, nesref_exe, core, frames):
     with tempfile.TemporaryDirectory() as d:
         rc_path = os.path.join(d, "rc_ppu.jsonl")
         env = dict(os.environ); env["NESRECOMP_PPUMEM_TRACE"] = rc_path
+        clear_saves(exe)
         exe_abs = os.path.abspath(exe)
         # Capture the recomp boot banner to detect CHR-RAM: CHR-RAM (0 CHR banks)
         # is serialized inline in Mesen's savestate, pushing the nametable region
@@ -508,6 +629,39 @@ def cmd_abppu(exe, rom, nesref_exe, core, frames):
             print(f"  => offset VALIDATED: Mesen OAM extracted from the serialize blob agrees with the recomp.")
         else:
             print(f"  => LOW OAM agreement: extraction offset may be wrong, or a real PPU divergence. Investigate.")
+        # Adaptive (piecewise) offset — the abppu twin of abram's. A single boot
+        # offset can't track a mid-run frame-count desync (Gumshoe NMI-off), which
+        # drags the whole-run NT/OAM verdict down even when the state matches once
+        # re-aligned. Re-check with a windowed offset when the fixed pass looks
+        # divergent: if a discrete shift recovers a high match it was alignment;
+        # if it stays low it is a real PPU divergence / FrameCounter-phase.
+        OAM_OK, NT_OK = 0.90, 0.95   # OAM never hits 100% (sprite-eval timing phase)
+        if oam_tot/n < OAM_OK or nt_tot/n < NT_OK:
+            a_oam, a_pal, a_nt, resyncs = adaptive_offset_ppu(rc, nr, rc_keys, nr_keys)
+            print(f"  adaptive-offset match: OAM {a_oam*100:.2f}%  palette {a_pal*100:.2f}%  "
+                  f"nametable {a_nt*100:.2f}%  ({len(resyncs)} offset shift(s))")
+            for fr, o0, o1 in resyncs[:6]:
+                print(f"    offset shift @ frame {fr}: +{o0} -> +{o1}  (NMI-off frame-count desync)")
+            if a_oam > OAM_OK and a_nt > NT_OK:
+                tail = " once re-aligned (fixed-offset spread was NMI-off frame-count desync)" if resyncs else ""
+                print(f"  => CONVERGED{tail}: PPU state matches.")
+            elif a_oam > OAM_OK:
+                # OAM/palette converge but NT doesn't and no frame offset helps.
+                # Before calling it a divergence, test scroll-phase: attract demos
+                # scroll, so a demo-timing phase shows up as a horizontal column
+                # shift the frame offset can't undo.
+                sp_m, sp_shift, sp_n = scroll_phase_match(rc, nr, rc_keys, nr_keys, best_off)
+                print(f"  scroll-phase NT match = {sp_m*100:.2f}%  (median shift {sp_shift} cols, {sp_n} frames)")
+                if sp_m > NT_OK:
+                    print(f"  => CONVERGED modulo attract scroll-phase: OAM/palette match and the NT "
+                          f"recovers under a per-frame horizontal scroll shift => correct rendering, off "
+                          f"only by demo timing (the NMI-off frame-count desync), not a rendering bug.")
+                else:
+                    print(f"  => still NT {sp_m*100:.1f}% under scroll-shift => genuine PPU/rendering "
+                          f"divergence to chase.")
+            else:
+                print(f"  => still OAM {a_oam*100:.1f}% / NT {a_nt*100:.1f}% after re-align => genuine PPU "
+                      f"divergence or FrameCounter/host-state phase (not fixable by offset).")
         return 0
 
 

@@ -211,6 +211,8 @@ cmake --build build --config Release
 | `runner/include/game_extras.h` | Per-game hook interface | Yes |
 | `PATTERNS.md` | 6502 dispatch idioms | Reference |
 | `EXTRACTION.md` | Bank extraction procedures | Reference |
+| `COSIM.md` | Differential co-simulation tooling (recomp-vs-Mesen first-divergence) | Reference |
+| `ENHANCEMENTS.md` | Co-sim deferred-capability roadmap + worked examples | Reference |
 
 ---
 

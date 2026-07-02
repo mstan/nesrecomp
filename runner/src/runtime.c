@@ -429,6 +429,15 @@ uint64_t g_nes_cycles = 0;
  * essentially-constant frame length. */
 uint64_t g_frame_boundary_cyc = 0;
 
+/* Co-sim video-frame clock. Unlike g_frame_count (which advances only when the
+ * NMI callback fires, i.e. only when NMI is enabled), this ticks on EVERY frame
+ * boundary — NMI on or off. The oracle (Mesen) counts every video frame, so
+ * tagging the co-sim trace rows with this index keeps the recomp aligned to the
+ * oracle across NMI-off stretches (init, screen transitions), turning the
+ * frame-count desync into a constant boot offset instead of a mid-run shift.
+ * Only referenced by the env-gated co-sim trace path — no effect on gameplay. */
+uint64_t g_cosim_vframe = 0;
+
 /* OAM DMA ($4014) cycle-steal accumulator. Writing $4014 halts the CPU 513/514
  * cycles while 256 bytes copy into OAM; those cycles elapse on hardware (PPU
  * and APU keep advancing). Charged in the $4014 handler, drained by
@@ -554,7 +563,7 @@ void nes_wram_trace_frame(void) {
             for (int a = 0; a < 0x800; a++) {
                 fprintf(s_wram_trace_f,
                         "{\"f\":%llu,\"adr\":\"0x%04x\",\"old\":\"0x%02x\",\"val\":\"0x%02x\"}\n",
-                        (unsigned long long)g_frame_count, a, 0, g_ram[a]);
+                        (unsigned long long)g_cosim_vframe, a, 0, g_ram[a]);
                 s_wram_prev[a] = g_ram[a];
             }
             fflush(s_wram_trace_f);
@@ -566,7 +575,7 @@ void nes_wram_trace_frame(void) {
         if (g_ram[a] != s_wram_prev[a]) {
             fprintf(s_wram_trace_f,
                     "{\"f\":%llu,\"adr\":\"0x%04x\",\"old\":\"0x%02x\",\"val\":\"0x%02x\"}\n",
-                    (unsigned long long)g_frame_count, a, s_wram_prev[a], g_ram[a]);
+                    (unsigned long long)g_cosim_vframe, a, s_wram_prev[a], g_ram[a]);
             s_wram_prev[a] = g_ram[a];
         }
     }
@@ -643,7 +652,7 @@ void nes_cosim_hash_frame(void) {
     /* Gate 3: apply the one-byte fault to LIVE state before we read it, so the
      * hasher must actually read real state to see it (a constant-returning
      * hasher would fail this gate). */
-    if (s_cosim_inj_region && (long long)g_frame_count == s_cosim_inj_frame) {
+    if (s_cosim_inj_region && (long long)g_cosim_vframe == s_cosim_inj_frame) {
         if (s_cosim_inj_region == 1) g_ram[s_cosim_inj_index & 0x7FF]     ^= s_cosim_inj_xor;
         else                         g_ppu_oam[s_cosim_inj_index & 0xFF]  ^= s_cosim_inj_xor;
     }
@@ -697,7 +706,7 @@ void nes_cosim_hash_frame(void) {
         "\"ppu_mem\":\"%016llx\",\"ppu_regs\":\"%016llx\",\"apu\":\"%016llx\","
         "\"mapper\":\"%016llx\",\"chr\":\"%016llx\",\"sram\":\"%016llx\","
         "\"openbus\":\"%016llx\"}}\n",
-        (unsigned long long)g_frame_count, (unsigned long long)g_nes_cycles,
+        (unsigned long long)g_cosim_vframe, (unsigned long long)g_nes_cycles,
         (unsigned long long)g_frame_boundary_cyc,
         (unsigned long long)s_cosim_chain,
         (unsigned long long)h_cpu, (unsigned long long)h_ram, (unsigned long long)h_stack,
@@ -732,7 +741,7 @@ void nes_ppumem_trace_frame(void) {
             for (int a = 0; a < 0xA00; a++) {
                 fprintf(s_ppu_trace_f,
                         "{\"f\":%llu,\"adr\":\"0x%04x\",\"old\":\"0x%02x\",\"val\":\"0x%02x\"}\n",
-                        (unsigned long long)g_frame_count, a, 0, img[a]);
+                        (unsigned long long)g_cosim_vframe, a, 0, img[a]);
                 s_ppu_prev[a] = img[a];
             }
             fflush(s_ppu_trace_f);
@@ -745,11 +754,22 @@ void nes_ppumem_trace_frame(void) {
         if (img[a] != s_ppu_prev[a]) {
             fprintf(s_ppu_trace_f,
                     "{\"f\":%llu,\"adr\":\"0x%04x\",\"old\":\"0x%02x\",\"val\":\"0x%02x\"}\n",
-                    (unsigned long long)g_frame_count, a, s_ppu_prev[a], img[a]);
+                    (unsigned long long)g_cosim_vframe, a, s_ppu_prev[a], img[a]);
             s_ppu_prev[a] = img[a];
         }
     }
     fflush(s_ppu_trace_f);
+}
+
+/* Emit all env-gated co-sim trace rows for the current frame boundary. Called
+ * from the frame-boundary path (maybe_trigger_vblank / maybe_fire_pending_vblank)
+ * on NMI-OFF frames, where nes_vblank_callback() — which normally emits these —
+ * does not run. Each function is individually env-gated, so this is a no-op in
+ * normal builds. Keeps the recomp co-sim trace ticking on every video frame. */
+void nes_cosim_emit_boundary(void) {
+    nes_wram_trace_frame();
+    nes_ppumem_trace_frame();
+    nes_cosim_hash_frame();
 }
 
 /* ---- General pending-IRQ delivery hook ----------------------------------
@@ -873,12 +893,21 @@ void maybe_trigger_vblank(int cycles) {
         g_ppuscroll_x_hud = 0;
         g_ppuscroll_y_hud = 0;
         g_ppuctrl_hud     = g_ppuctrl & 0x38;
+        /* Video-frame clock ticks on EVERY boundary, NMI on or off, so the
+         * env-gated co-sim trace stays aligned to the oracle's video-frame count
+         * across NMI-off stretches (see g_cosim_vframe). */
+        g_cosim_vframe++;
         /* Fire the frame-boundary callback only when NMI is enabled.
          * (Cadence/oracle sync for NMI-disabled init remains a separate
          * concern — see notes on 52f0ea5.) */
         if (g_ppuctrl & 0x80) {
             s_dbg_nmi_fires++;
             nes_vblank_callback();
+        } else {
+            /* NMI-off frame: the callback (and its co-sim trace emit) is skipped,
+             * but this is still a video frame the oracle counts. Emit the co-sim
+             * trace here so the recomp frame index stays aligned (env-gated). */
+            nes_cosim_emit_boundary();
         }
         if (g_zapper_enabled) {
             g_spr0_reads_ctr_legacy = saved_ctr0;
@@ -946,11 +975,18 @@ void maybe_fire_pending_vblank(void) {
     g_ppuscroll_y_hud = 0;
     g_ppuctrl_hud     = g_ppuctrl & 0x38;
 
+    /* Tick the video-frame clock once per real (non-nested) deferred frame; a
+     * nested callback (depth>1) early-returns without committing a frame, so it
+     * must not tick. Mirrors the immediate-fire path. */
+    if (s_vblank_depth == 1) g_cosim_vframe++;
     if (g_ppuctrl & 0x80) {
         s_dbg_nmi_fires++;
         nes_vblank_callback();
     } else if (s_vblank_depth > 1) {
         g_ram[0x1A] = 1;
+    } else {
+        /* NMI-off deferred frame: emit the co-sim trace at the boundary. */
+        nes_cosim_emit_boundary();
     }
 
     if (g_zapper_enabled) {

@@ -109,24 +109,54 @@ broadly divergent because everything after frame 370 is misaligned. Segmenting
 proves it: PRE-370 at offset +2 = 99.72%, POST-370 at offset +5 = 99.10% — both
 clean. Dot clock is NOT implicated (off/on identical).
 
-**Fix (co-sim tooling enhancement):** make the offset PIECEWISE — detect the
-discontinuity (a cycle-delta outlier / NMI-off stretch) and re-derive the offset
-for the following segment; or, more fundamentally, align on the **fire count**
-(every `s_frame_budget` crossing = one video frame, NMI on or off) instead of
-`g_frame_count`. The latter needs the co-sim tap to emit a row on every budget
-fire, not only on NMI-on callbacks — then the recomp's frame clock equals the
-oracle's video-frame clock and the offset stays constant across NMI-off stretches.
-Until then, segment the run at NMI-off transitions (as above) for a clean verdict.
+**Fix — DONE (2026-07-02), both halves:**
+1. *Coordinator, piecewise offset* (`adaptive_offset_match` in `abram`,
+   `adaptive_offset_ppu` in `abppu`): a windowed offset that follows a mid-run
+   shift; if discrete shifts recover a high match it was alignment, if it stays
+   low it is a real divergence. This classifies but does not remove the desync.
+2. *Runtime, fire-count alignment* (the fundamental fix): new `g_cosim_vframe`
+   ticks on **every** frame boundary — NMI on or off — and `nes_cosim_emit_boundary()`
+   emits the WRAM/PPU/hash trace rows on NMI-off frames (where `nes_vblank_callback`,
+   which normally emits them, is skipped). All three trace functions now tag rows
+   with `g_cosim_vframe` instead of `g_frame_count`. This makes the recomp's co-sim
+   frame clock equal the oracle's video-frame count, so the offset is a **constant
+   boot latency** across NMI-off stretches. `g_frame_count` (the game-logic clock)
+   is untouched, and the whole path is env-gated → zero gameplay impact.
+   **Measured effect on Gumshoe: `abram` offset shifts 1 → 0 (was +2→+5 @400),
+   RAM 99.36% CONVERGED with a constant offset; regression-clean on MM3/Faxanadu
+   (Faxanadu OAM 99.88→100.00%, NT 99.70→99.92%).**
 
-Three distinct free-run breakdowns now have worked examples: **MM3** (host-fiber
+**What the fix REVEALED — a genuine (small) Gumshoe residual, no longer masked.**
+With the frame-count desync removed, Gumshoe's `abppu` nametable is *still* ~71%,
+recovering to ~91% only under an ~18-column horizontal scroll shift (`scroll_phase_match`).
+This is now isolated as a **real state divergence**, not an alignment artifact:
+`abram` shows persistent ZP diffs at `$000c` (44%), `$000d` (48%), `$0076` (24%)
+plus `$06xx`, which drive a genuine ~18-column scroll drift in the attract demo.
+SMB (NT = 100% via the same extraction) proves it is not an extraction bug.
+**Chasing it needs Ghidra + Gumshoe demo-logic analysis** (which ZP variable is
+the demo/scroll timer and why it advances differently) — deferred as Gumshoe is
+attract-focus and ships live; logged here as the one open genuine-divergence lead
+the improved co-sim surfaced. Everything else on Gumshoe (RAM logic, OAM, palette,
+cycle, determinism) converges.
+
+Three distinct free-run breakdowns had worked examples: **MM3** (host-fiber
 scheduler, no bit-faithful state), **Zelda** (FrameCounter-phase), and **Gumshoe**
-(NMI-off frame-count shift — the recomp underlying state is actually correct; only
-the alignment breaks). The general point: free-run *fixed-offset* frame-alignment
-is exact only for deterministic, phase-locked, NMI-always-on attract (SMB,
-Faxanadu); everything else needs §1 state/phase sync OR the piecewise/fire-count
-alignment fix for a full RAM/PPU verdict. The phase-independent cycle and
-determinism axes stay valid everywhere (Gumshoe's cycle is clean bar the one
-outlier).
+(NMI-off frame-count shift). Gumshoe's alignment breakdown is now **fixed at the
+runtime**; what remains for Gumshoe is the genuine scroll residual above. The
+general point still holds: free-run *fixed-offset* frame-alignment is exact only
+for deterministic, phase-locked attract (SMB, Faxanadu); NMI-off games now get a
+constant offset via the fire-count fix, while host-modeled (MM3) and
+FrameCounter-phase (Zelda) games still need §1 state/phase sync for a full RAM/PPU
+verdict. The phase-independent cycle and determinism axes stay valid everywhere.
+
+**Battery-save note (coordinator, 2026-07-02):** battery games (Zelda, Faxanadu)
+write `<exe_dir>/saves/*.srm`; a second run loading it takes a different boot path
+and fails Gate 1 with a spurious `sram` "nondeterminism" (really save carryover —
+one run has SRAM, the next boots into it). The coordinator now calls
+`clear_saves()` before every recomp launch so each session boots from the same
+canonical fresh state (matching `nesref`, which boots fresh). Zelda Gate 1 now
+PASSES (911 == 911, was 911 vs 903). This is the programmatic form of the old
+"delete *.srm before running battery games" gotcha.
 
 ### Recommendation
 
