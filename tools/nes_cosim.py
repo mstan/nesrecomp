@@ -194,6 +194,50 @@ def ram_match(a_ram, b_ram, mask_stack=True):
     return same / tot
 
 
+def adaptive_offset_match(rc, nr, rc_frames, win=40, drift=3):
+    """Windowed alignment that FOLLOWS a mid-run frame-offset shift (the NMI-off
+    frame-count desync, e.g. Gumshoe): the recomp counts NMI callbacks, the oracle
+    counts video frames, so an NMI-off stretch bumps the offset. Per window, search
+    only within +/-drift of the current offset (small, so it can track a genuine
+    shift but can't wander far enough to mask a real logic divergence). Returns
+    (overall_match, [(frame, old_off, new_off), ...]). If the match stays high only
+    with shifts at discrete points, the spread was alignment, not divergence; if it
+    stays low at every offset (Zelda FrameCounter-phase, MM3 fibers), it is real."""
+    if not rc_frames:
+        return 0.0, []
+    def win_best(frames, lo, hi):
+        best_o, best_m = None, -1.0
+        for o in range(max(0, lo), hi + 1):
+            ms = n = 0.0
+            for f in frames:
+                if f + o in nr:
+                    ms += ram_match(rc[f], nr[f + o]); n += 1
+            if n and ms / n > best_m:
+                best_m, best_o = ms / n, o
+        return best_o, best_m
+    cur, _ = win_best(rc_frames[:win], 0, 15)
+    if cur is None:
+        cur = 0
+    resyncs, tot_same, tot = [], 0, 0
+    for i in range(0, len(rc_frames), win):
+        wf = rc_frames[i:i + win]
+        o, _ = win_best(wf, cur - drift, cur + drift)
+        if o is None:
+            o = cur
+        if o != cur:
+            resyncs.append((wf[0], cur, o)); cur = o
+        for f in wf:
+            if f + cur in nr:
+                a, b = rc[f], nr[f + cur]
+                for k in range(2048):
+                    if 0x100 <= k <= 0x1FF:
+                        continue
+                    tot += 1
+                    if a[k] == b[k]:
+                        tot_same += 1
+    return (tot_same / tot if tot else 0.0), resyncs
+
+
 def cmd_abram(exe, rom, nesref_exe, core, frames):
     """A-vs-B: recomp RAM vs Mesen (nesref) RAM, frame-granular. Certifies that a
     change preserves logic-level convergence (the strongest cross-impl signal the
@@ -273,7 +317,23 @@ def cmd_abram(exe, rom, nesref_exe, core, frames):
             f, diffs = first
             print(f"  first non-stack RAM divergence @ recomp frame {f}: {len(diffs)} byte(s), "
                   f"e.g. ${diffs[0]:04x} recomp={rc[f][diffs[0]]:#04x} mesen={nr[f+best_off][diffs[0]]:#04x}")
-            print(f"  (broad spread => investigate as a real divergence)")
+        # Broad spread? Re-check with an adaptive (piecewise) offset. If a discrete
+        # offset shift recovers a high match, the spread was a frame-count desync at
+        # an NMI-off transition (Gumshoe-class), NOT a logic divergence. If it stays
+        # low, the divergence is real/phase (Zelda FrameCounter, MM3 fibers).
+        if len(hist) > 3:
+            adapt_m, resyncs = adaptive_offset_match(rc, nr, rc_frames)
+            print(f"  adaptive-offset RAM match = {adapt_m*100:.2f}%  ({len(resyncs)} offset shift(s))")
+            for fr, o0, o1 in resyncs[:6]:
+                print(f"    offset shift @ frame {fr}: +{o0} -> +{o1}  (NMI-off frame-count desync)")
+            if adapt_m > 0.99 and resyncs:
+                print(f"  => CONVERGED once re-aligned: the fixed-offset spread was NMI-off frame-count "
+                      f"desync, not a logic divergence.")
+            elif adapt_m > 0.99:
+                print(f"  => CONVERGED: logic matches; residual is frame-sync/RNG-phase ZP flags.")
+            else:
+                print(f"  => still {adapt_m*100:.1f}% after re-align => genuine divergence or "
+                      f"FrameCounter/host-state phase (not fixable by offset).")
         return 0
 
 
