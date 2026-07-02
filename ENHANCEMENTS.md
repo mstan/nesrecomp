@@ -80,19 +80,40 @@ does not align the *FrameCounter* (`$15`), and animated/demo attract derives fro
 
 ### Worked example — Zelda (MMC1, CHR-RAM): FrameCounter-phase desync
 
-Measured 2026-07-01. Gate 1 PASS; **cycle CONVERGED (+0.004, phase-independent —
-Rung 1/2 hold)**. But free-run attract RAM/PPU do NOT give a clean verdict:
-`abram` 98.5% (matches the burndown's raw) with the top divergent byte being
-**`$0015` (the FrameCounter) at 100%**, plus everything derived from it
-(`$0600`-page timers, `$02f`-page); `abppu` OAM 78% / palette 68% / **NT 3%**
-because the animated title + demo are a phase-shifted sequence. The `$18`
-seed-freeze reduced divergence (112→99 addrs) but cannot align `$15`: the recomp
-and Mesen advance the FrameCounter from different boot points, and the RAM-best
-offset (+8) doesn't make `$15` match. Zelda therefore needs **FrameCounter
-phase-sync**, not just a seed-freeze: either §1(a) scripted-to-a-static-state, or
-a one-time boot-time counter alignment (force recomp `$15` = oracle `$15` once,
-distinct from a per-frame freeze which would stop it advancing). Until then,
-Zelda's clean RAM/PPU verdict is deferred; its cycle/determinism axes are green.
+Measured 2026-07-01; **root-narrowed 2026-07-02**. Gate 1 PASS; **cycle CONVERGED
+(+0.004, phase-independent — Rung 1/2 hold)**. But free-run attract RAM/PPU do NOT
+give a clean verdict: `abram` 98.5% with the top divergent byte being **`$0015`
+(the FrameCounter) at 100%**, plus everything derived from it (`$0600`-page timers,
+`$02f`-page); `abppu` OAM 78% / palette 68% / **NT 3%** because the animated title
++ demo are a phase-shifted sequence.
+
+**Measured mechanism (raw early-boot `$15` dump, no alignment, `$18` frozen):**
+both sides hold `$15=$00` through frame 11 and both increment to `$01` at frame
+12 (same start) — but then **the recomp increments `$15` every frame** (12→`01`,
+13→`02`, …, 19→`08`) while **Mesen increments it only ~once per 7 frames** during
+f12–35 (`01` held to f20, `02`@f21, `03`@f28, `04`@f36) before switching to
+every-frame at ~f36. So during boot-init the recomp runs its `$15`-incrementing
+NMI handler ~7× more often than Mesen, leaving `$15` a **constant +6 ahead** in
+value thereafter (f444 rc `$b1` vs `$ab`; f884 rc `$69` vs `$63`). This is why
+`$15` wants a different frame offset (+21) than the bulk of RAM (+15) — the two
+are phase-inconsistent. **This is a boot-cadence divergence (recomp advances the
+NMI-off/boot-init sequence faster than Mesen), the SAME class as Gumshoe's
+transition slip — not a rendering bug.** Everything `$15`-derived (title
+animation, demo) is therefore a phase-shifted sequence, which is the entire "NT
+3%" reading.
+
+**Why it stops here (RULE 0):** determining *why* the boot loop advances 7× faster
+— a runtime NMI/PPU-flag timing issue vs a game-code boot-path difference (e.g. a
+wait-for-vblank / delay loop the recomp resolves too fast) — requires reading
+Zelda's 6502 boot code in Ghidra. Not yet done. **Next diagnostic when Ghidra is
+loaded:** trace `g_ppuctrl` bit 7 (NMI-enable) per frame across f12–36 on the
+recomp — if it is set every frame, the game is enabling NMI every frame (a boot
+wait-loop resolving early → find what it waits on, `$2002`/sprite-0/a counter);
+if it toggles, something else drives the `$15` increment. Then map to Zelda's boot
+sequence. **Tooling workaround for a clean verdict meanwhile:** §1(a) scripted-to-
+a-static-state, or a one-time boot-time counter alignment (force recomp `$15` =
+oracle `$15` once, distinct from a per-frame freeze which stops it advancing).
+Until then, Zelda's clean RAM/PPU verdict is deferred; cycle/determinism are green.
 
 ### Worked example — Gumshoe (mapper 66 GxROM): NMI-off frame-count shift
 
@@ -129,15 +150,28 @@ clean. Dot clock is NOT implicated (off/on identical).
 **What the fix REVEALED — a genuine (small) Gumshoe residual, no longer masked.**
 With the frame-count desync removed, Gumshoe's `abppu` nametable is *still* ~71%,
 recovering to ~91% only under an ~18-column horizontal scroll shift (`scroll_phase_match`).
-This is now isolated as a **real state divergence**, not an alignment artifact:
-`abram` shows persistent ZP diffs at `$000c` (44%), `$000d` (48%), `$0076` (24%)
-plus `$06xx`, which drive a genuine ~18-column scroll drift in the attract demo.
-SMB (NT = 100% via the same extraction) proves it is not an extraction bug.
-**Chasing it needs Ghidra + Gumshoe demo-logic analysis** (which ZP variable is
-the demo/scroll timer and why it advances differently) — deferred as Gumshoe is
-attract-focus and ships live; logged here as the one open genuine-divergence lead
-the improved co-sim surfaced. Everything else on Gumshoe (RAM logic, OAM, palette,
-cycle, determinism) converges.
+This is now isolated as a **real state divergence**, not an alignment artifact.
+
+**Measured mechanism (per-frame trajectory of the diverging bytes, 2026-07-02):**
+the diverging bytes are frame timers — `$0076` is a countdown (`$ff,$fe,$fd…`),
+`$0601`/`$060d` are count-ups — and on every one the recomp is exactly **1 frame
+AHEAD** of the oracle, a **constant** lead (e.g. `$0076`: rc hits `$ff` at f367,
+Mesen at f368; still +1 at f451 rc `$ae` vs `$af`). All of it originates at the
+**NMI-off scene transition ~f367–373**: the recomp runs the transition one frame
+faster than Mesen, after which every frame-derived timer — and thus the attract
+scroll — sits a constant 1 frame ahead. The `g_cosim_vframe` fix corrected the
+frame *count* (0 offset shifts) but not this sub-frame slip in how long the NMI-off
+stretch lasts. It is **not a logic or rendering bug** — the recomp renders
+correctly, one frame early. SMB (NT = 100% via the same extraction) confirms it is
+not an extraction artifact.
+
+This is the ±1 boundary-phase class also seen transiently on MM3/Faxanadu, here
+root-located to the NMI-off transition. **Chasing why the recomp's NMI-off
+transition is 1 frame short needs Ghidra + Gumshoe transition-code analysis**
+(and/or per-instruction cycle-accounting audit over the NMI-off stretch) — deferred
+as Gumshoe is attract-focus and ships live, and the slip is sub-frame timing, not
+correctness. Everything else on Gumshoe (RAM logic, OAM, palette, cycle,
+determinism) converges.
 
 Three distinct free-run breakdowns had worked examples: **MM3** (host-fiber
 scheduler, no bit-faithful state), **Zelda** (FrameCounter-phase), and **Gumshoe**
