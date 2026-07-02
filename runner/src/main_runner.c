@@ -724,14 +724,14 @@ smoke_skip_input:
      * the frame boundary so the nesref oracle and recomp share identical RNG. */
     { extern void nes_apply_freeze(void); nes_apply_freeze(); }
 
-    /* Per-frame WRAM delta trace for the nesref state-divergence diff (env-gated). */
-    { extern void nes_wram_trace_frame(void); nes_wram_trace_frame(); }
-
-    /* Per-frame PPU-memory (OAM/palette/nametable) delta trace vs Mesen-Lua (env-gated). */
-    { extern void nes_ppumem_trace_frame(void); nes_ppumem_trace_frame(); }
-
-    /* Per-frame full-machine state hash for the differential co-sim (env-gated). */
-    { extern void nes_cosim_hash_frame(void); nes_cosim_hash_frame(); }
+    /* Co-sim trace emission (WRAM/PPU/hash) — emitted here POST-NMI-handler so the
+     * sampled state is at the same phase as the oracle (end-of-frame). The row is
+     * tagged with the cycle-DERIVED video-frame index (round(g_frame_boundary_cyc /
+     * 29780.5)), not a per-NMI counter, so NMI-off / suppressed frames don't skew
+     * the index — the frames that emit carry their true video-frame number and align
+     * to the oracle across gaps. Each trace fn is individually env-gated (no-op when
+     * unset). See g_cosim_vframe / nes_cosim_emit_boundary. */
+    { extern void nes_cosim_emit_boundary(void); nes_cosim_emit_boundary(); }
 
     /* (The APU frame-counter IRQ is driven on the CPU-cycle stream in
      * maybe_trigger_vblank → apu_clock_cycles, not per-NMI here, so it also

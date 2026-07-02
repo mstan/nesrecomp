@@ -429,13 +429,16 @@ uint64_t g_nes_cycles = 0;
  * essentially-constant frame length. */
 uint64_t g_frame_boundary_cyc = 0;
 
-/* Co-sim video-frame clock. Unlike g_frame_count (which advances only when the
- * NMI callback fires, i.e. only when NMI is enabled), this ticks on EVERY frame
- * boundary — NMI on or off. The oracle (Mesen) counts every video frame, so
- * tagging the co-sim trace rows with this index keeps the recomp aligned to the
- * oracle across NMI-off stretches (init, screen transitions), turning the
- * frame-count desync into a constant boot offset instead of a mid-run shift.
- * Only referenced by the env-gated co-sim trace path — no effect on gameplay. */
+/* Co-sim video-frame index — DERIVED FROM ELAPSED CYCLES, not counted per NMI.
+ * Set at each trace emit (nes_cosim_emit_boundary) to round(g_frame_boundary_cyc /
+ * 29780.5) = the true NTSC video-frame number. This is what keeps the trace index
+ * equal to the oracle's video-frame count even across NMI-off / post-NMI stretches:
+ * a frame counter that ticks per NMI callback (like g_frame_count) STALLS when the
+ * boundary is deferred or depth-suppressed, so real video frames elapse un-counted
+ * and byte-identical boot/transition state (Zelda $15, Gumshoe timers) looks
+ * phase-divergent when the recomp is really matching Mesen frame-for-frame — a pure
+ * MEASUREMENT artifact. Deriving the index from the cycle ruler removes it. Only
+ * read on the env-gated trace path; g_frame_count (the game-logic clock) is untouched. */
 uint64_t g_cosim_vframe = 0;
 
 /* OAM DMA ($4014) cycle-steal accumulator. Writing $4014 halts the CPU 513/514
@@ -761,12 +764,16 @@ void nes_ppumem_trace_frame(void) {
     fflush(s_ppu_trace_f);
 }
 
-/* Emit all env-gated co-sim trace rows for the current frame boundary. Called
- * from the frame-boundary path (maybe_trigger_vblank / maybe_fire_pending_vblank)
- * on NMI-OFF frames, where nes_vblank_callback() — which normally emits these —
- * does not run. Each function is individually env-gated, so this is a no-op in
- * normal builds. Keeps the recomp co-sim trace ticking on every video frame. */
+/* Emit all env-gated co-sim trace rows for the current frame boundary, tagged with
+ * the cycle-derived video-frame index (see g_cosim_vframe). Called post-NMI-handler
+ * from nes_vblank_callback (NMI on) and directly at the boundary for NMI-off frames.
+ * Deriving the index from g_frame_boundary_cyc (set at the boundary FIRE, pre-handler)
+ * means NMI-off / suppressed frames don't skew the index: whichever frames do emit
+ * carry their true video-frame number, so they align to the oracle across gaps.
+ * Each trace function is individually env-gated → no-op in normal builds. */
 void nes_cosim_emit_boundary(void) {
+    /* round(g_frame_boundary_cyc / 29780.5) = NTSC video-frame number. */
+    g_cosim_vframe = (2ULL * g_frame_boundary_cyc + 29780ULL) / 59561ULL;
     nes_wram_trace_frame();
     nes_ppumem_trace_frame();
     nes_cosim_hash_frame();
@@ -893,20 +900,14 @@ void maybe_trigger_vblank(int cycles) {
         g_ppuscroll_x_hud = 0;
         g_ppuscroll_y_hud = 0;
         g_ppuctrl_hud     = g_ppuctrl & 0x38;
-        /* Video-frame clock ticks on EVERY boundary, NMI on or off, so the
-         * env-gated co-sim trace stays aligned to the oracle's video-frame count
-         * across NMI-off stretches (see g_cosim_vframe). */
-        g_cosim_vframe++;
-        /* Fire the frame-boundary callback only when NMI is enabled.
-         * (Cadence/oracle sync for NMI-disabled init remains a separate
-         * concern — see notes on 52f0ea5.) */
+        /* Fire the frame-boundary callback only when NMI is enabled. The callback
+         * emits the co-sim trace post-handler. When NMI is disabled the callback is
+         * skipped, but this is still a video frame the oracle counts — emit the
+         * trace here (cycle-indexed) so NMI-off frames stay represented. */
         if (g_ppuctrl & 0x80) {
             s_dbg_nmi_fires++;
             nes_vblank_callback();
         } else {
-            /* NMI-off frame: the callback (and its co-sim trace emit) is skipped,
-             * but this is still a video frame the oracle counts. Emit the co-sim
-             * trace here so the recomp frame index stays aligned (env-gated). */
             nes_cosim_emit_boundary();
         }
         if (g_zapper_enabled) {
@@ -975,18 +976,13 @@ void maybe_fire_pending_vblank(void) {
     g_ppuscroll_y_hud = 0;
     g_ppuctrl_hud     = g_ppuctrl & 0x38;
 
-    /* Tick the video-frame clock once per real (non-nested) deferred frame; a
-     * nested callback (depth>1) early-returns without committing a frame, so it
-     * must not tick. Mirrors the immediate-fire path. */
-    if (s_vblank_depth == 1) g_cosim_vframe++;
     if (g_ppuctrl & 0x80) {
         s_dbg_nmi_fires++;
         nes_vblank_callback();
     } else if (s_vblank_depth > 1) {
         g_ram[0x1A] = 1;
     } else {
-        /* NMI-off deferred frame: emit the co-sim trace at the boundary. */
-        nes_cosim_emit_boundary();
+        nes_cosim_emit_boundary();   /* NMI-off (non-nested) deferred frame */
     }
 
     if (g_zapper_enabled) {

@@ -75,10 +75,18 @@ def load(path):
 
 def first_divergence(a_rows, b_rows):
     """Return (frame, [subsystems], a_row, b_row) of the first frame whose chain
-    or any sub-hash differs, else None. Aligns by frame ordinal 'f'."""
+    or any sub-hash differs, else None. Aligns by frame ordinal 'f'.
+
+    Both sides are deduped last-wins per 'f': the cycle-derived video-frame index
+    can map two emits (e.g. an NMI-off boundary emit and the following NMI-on emit
+    at a boot/scene transition) to the same frame number. reconstruct_ram() already
+    takes the last state per frame, so this matches that semantics — otherwise the
+    first f=N row of A would be compared against the last f=N row of B, a spurious
+    'divergence' that is really just intra-frame double-emit, not nondeterminism."""
+    a_by_f = {r["f"]: r for r in a_rows}
     b_by_f = {r["f"]: r for r in b_rows}
-    for ar in a_rows:
-        f = ar["f"]
+    for f in sorted(a_by_f):
+        ar = a_by_f[f]
         br = b_by_f.get(f)
         if br is None:
             continue
