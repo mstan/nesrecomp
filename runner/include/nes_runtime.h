@@ -55,8 +55,14 @@ uint16_t nes_read16_jmpbug(uint16_t addr);
 /* Called for JMP (indirect) — dispatch to the correct recompiled function */
 int call_by_address(uint16_t addr);  /* returns 1 on hit, 0 on miss */
 
-/* Logging for dispatch misses */
+/* Logging for dispatch misses.
+ * nes_log_dispatch_miss_bank is the full form used by generated dispatch on
+ * banked mappers: gen_addr is the address in the recompiler's layout (what an
+ * [[extra_func]] entry needs), cpu_addr the original 6502 target (for byte
+ * classification), bank the window-resolved bank. The legacy single-arg form
+ * delegates with g_current_bank (kept for committed generated code). */
 void nes_log_dispatch_miss(uint16_t addr);
+void nes_log_dispatch_miss_bank(uint16_t gen_addr, uint16_t cpu_addr, int bank);
 void nes_log_inline_miss(uint16_t dispatch_pc, uint8_t a_val);
 
 /* ---- Dispatch-miss policy ----
@@ -282,6 +288,7 @@ extern int g_current_bank;
 extern int g_mmc3_r6_odd;     /* 1 if R6 is odd — $8000 addresses need +$2000 */
 extern int g_mmc3_r7_even;   /* 1 if R7 is even — $A000 addresses need -$2000 */
 extern int g_mmc3_bank_a000; /* R7/2 — 16KB bank index for $A000-$BFFF dispatch */
+extern int g_mmc3_win_bank8k[4]; /* live 8KB bank per CPU window, mode-aware */
 
 /* ---- Controller ---- */
 /* Button bitmask: bit7=A, bit6=B, bit5=Select, bit4=Start,

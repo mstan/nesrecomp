@@ -2606,20 +2606,25 @@ static void emit_dispatch(FILE *f, const EmittedWrapper *wrappers, int wrapper_c
 
     if (rom->mapper == 4) {
         fprintf(f,
-            "    extern int g_mmc3_r6_odd, g_mmc3_r7_even;\n"
-            "    extern int g_mmc3_bank_a000;\n"
-            "    /* For $A000-$BFFF addresses, the active bank is R7/2 (g_mmc3_bank_a000),\n"
-            "     * not R6/2 (g_current_bank).  Capture before remapping changes addr. */\n"
-            "    int _bank = (addr >= 0xA000 && addr < 0xC000) ? g_mmc3_bank_a000 : g_current_bank;\n"
-            "    /* When R6 is odd, code from the $8000 range gets remapped to $A000 offset.\n"
-            "     * Calls from that code to $A000+ targets may need R6's bank, not R7's.\n"
-            "     * Enable fallback: try g_mmc3_bank_a000 first, retry with g_current_bank. */\n"
-            "    int _a000_r6_fallback = (g_mmc3_r6_odd && addr >= 0xA000 && addr < 0xC000\n"
-            "                             && g_current_bank != g_mmc3_bank_a000);\n"
-            "    if (g_mmc3_r6_odd && addr >= 0x8000 && addr < 0xA000)\n"
-            "        addr += 0x2000; /* 8KB bank odd: $8000 range -> $A000 offset */\n"
-            "    else if (g_mmc3_r7_even && addr >= 0xA000 && addr < 0xC000)\n"
-            "        addr -= 0x2000; /* 8KB bank even: $A000 range -> $8000 offset */\n"
+            "    extern int g_mmc3_win_bank8k[4];\n"
+            "    /* MMC3: resolve the target through the live 8KB bank of its CPU\n"
+            "     * window ($8000/$A000/$C000/$E000).  g_mmc3_win_bank8k is mode-aware\n"
+            "     * (PRG mode 1 fixes $8000 to the second-to-last bank and swaps $C000\n"
+            "     * via R6 — e.g. SMB3), so this stays correct in both PRG modes.\n"
+            "     * Rebase addr into the recompiler's layout: switchable 16KB banks are\n"
+            "     * generated at $8000/$A000 offsets, the fixed pair at $C000/$E000. */\n"
+            "    uint16_t _cpu_addr = addr;\n"
+            "    int _w = (addr >> 13) & 3;\n"
+            "    int _b8 = g_mmc3_win_bank8k[_w];\n"
+            "    int _bank = _b8 >> 1;\n"
+            "    /* Legacy fallback: code running in an odd-R6 $8000 window may call\n"
+            "     * $A000+ targets that live in the $8000 window's 16KB bank, not R7's.\n"
+            "     * On a would-be miss, retry once with the $8000 window's bank. */\n"
+            "    int _a000_r6_fallback = ((g_mmc3_win_bank8k[0] & 1) && _w == 1\n"
+            "                             && (g_mmc3_win_bank8k[0] >> 1) != _bank);\n"
+            "    addr = (uint16_t)(((_bank == %d) ? 0xC000 : 0x8000)\n"
+            "                      + ((_b8 & 1) ? 0x2000 : 0) + (addr & 0x1FFF));\n",
+            fixed_bank
         );
     } else if (rom->mapper == 66) {
         fprintf(f,
@@ -2710,7 +2715,9 @@ static void emit_dispatch(FILE *f, const EmittedWrapper *wrappers, int wrapper_c
             }
             if (!has_default) {
                 if (rom->mapper == 4)
-                    fprintf(f, "                default: if (_a000_r6_fallback) { _bank = g_current_bank; _a000_r6_fallback = 0; goto _dispatch_retry; } nes_log_dispatch_miss(addr); return 0;\n");
+                    fprintf(f, "                default: if (_a000_r6_fallback) { _bank = g_mmc3_win_bank8k[0] >> 1; _a000_r6_fallback = 0; goto _dispatch_retry; } nes_log_dispatch_miss_bank(addr, _cpu_addr, _bank); return 0;\n");
+                else if (rom->mapper == 66)
+                    fprintf(f, "                default: nes_log_dispatch_miss_bank(addr, addr, _bank); return 0;\n");
                 else
                     fprintf(f, "                default: nes_log_dispatch_miss(addr); return 0;\n");
             }
@@ -2720,14 +2727,33 @@ static void emit_dispatch(FILE *f, const EmittedWrapper *wrappers, int wrapper_c
     }
 
     /* Extra_label secondary entries — add dispatch cases for their ROM addresses */
-    fprintf(f,
-        "        default:\n"
-        "            nes_log_dispatch_miss(addr);\n"
-        "            return 0;\n"
-        "    }\n"
-        "    return 1;\n"
-        "}\n"
-    );
+    if (rom->mapper == 4)
+        fprintf(f,
+            "        default:\n"
+            "            nes_log_dispatch_miss_bank(addr, _cpu_addr, _bank);\n"
+            "            return 0;\n"
+            "    }\n"
+            "    return 1;\n"
+            "}\n"
+        );
+    else if (rom->mapper == 66)
+        fprintf(f,
+            "        default:\n"
+            "            nes_log_dispatch_miss_bank(addr, addr, _bank);\n"
+            "            return 0;\n"
+            "    }\n"
+            "    return 1;\n"
+            "}\n"
+        );
+    else
+        fprintf(f,
+            "        default:\n"
+            "            nes_log_dispatch_miss(addr);\n"
+            "            return 0;\n"
+            "    }\n"
+            "    return 1;\n"
+            "}\n"
+        );
 }
 
 bool codegen_emit(const NESRom *rom, const FunctionList *funcs,

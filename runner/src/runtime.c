@@ -1689,17 +1689,23 @@ static uint8_t classify_miss_target(const uint8_t bytes[8]) {
 }
 
 void nes_log_dispatch_miss(uint16_t addr) {
+    nes_log_dispatch_miss_bank(addr, addr, g_current_bank);
+}
+
+void nes_log_dispatch_miss_bank(uint16_t addr, uint16_t cpu_addr, int bank) {
     /* Let the game handle unmapped addresses (e.g. SRAM code remapping) */
     if (game_dispatch_override(addr)) return;
     static uint32_t last = 0xFFFFFFFF;
-    uint32_t key = ((uint32_t)g_current_bank << 16) | addr;
+    uint32_t key = ((uint32_t)bank << 16) | addr;
     bool first_for_key = (key != last);
 
     /* Capture target bytes + classification up front so we can print it
-     * inline with the first-sighting log line. */
+     * inline with the first-sighting log line. Peek via the original 6502
+     * address — the live window holds the actual target bytes; the rebased
+     * gen-layout addr may point at a different window's contents. */
     uint8_t tbytes[8];
     for (int i = 0; i < 8; i++)
-        tbytes[i] = mapper_peek_prg((uint16_t)(addr + i));
+        tbytes[i] = mapper_peek_prg((uint16_t)(cpu_addr + i));
     uint8_t tclass = classify_miss_target(tbytes);
     const char *class_name =
         (tclass == MISS_TARGET_ZERO)     ? "ZERO_FILLED" :
@@ -1716,16 +1722,16 @@ void nes_log_dispatch_miss(uint16_t addr) {
                             ((uint16_t)g_ram[0x100 + s_hi_idx] << 8);
 
     if (first_for_key) {
-        printf("[Dispatch] MISS: no func for $%04X bank=%d target=%s "
+        printf("[Dispatch] MISS: no func for $%04X bank=%d (cpu=$%04X) target=%s "
                "A=%02X X=%02X Y=%02X call_site=$%04X\n",
-               addr, g_current_bank, class_name,
+               addr, bank, cpu_addr, class_name,
                g_cpu.A, g_cpu.X, g_cpu.Y, call_site_pc);
         last = key;
     }
     g_miss_count_any++;
     g_miss_last_addr  = addr;
     g_miss_last_frame = g_frame_count;
-    g_miss_last_bank  = g_current_bank;
+    g_miss_last_bank  = bank;
     /* Capture caller context: top of recomp call stack + 6502 stack snapshot */
     const char *c0 = "(none)";
     const char *c1 = "(none)";
@@ -1750,7 +1756,7 @@ void nes_log_dispatch_miss(uint16_t addr) {
     {
         MissRecord *r = &g_miss_ring[g_miss_ring_head];
         r->addr         = addr;
-        r->bank         = g_current_bank;
+        r->bank         = bank;
         r->frame        = g_frame_count;
         r->cpu_a        = g_cpu.A;
         r->cpu_x        = g_cpu.X;
@@ -1780,18 +1786,18 @@ void nes_log_dispatch_miss(uint16_t addr) {
         snprintf(miss_path, sizeof(miss_path), "%sdispatch_misses.log", g_exe_dir);
         FILE *mf = fopen(miss_path, "a");
         if (mf) {
-            fprintf(mf, "extra_func %d 0x%04X  # target=%s A=%02X X=%02X Y=%02X call_site=$%04X\n",
-                    g_current_bank, addr, class_name,
+            fprintf(mf, "extra_func %d 0x%04X  # cpu=$%04X target=%s A=%02X X=%02X Y=%02X call_site=$%04X\n",
+                    bank, addr, cpu_addr, class_name,
                     g_cpu.A, g_cpu.X, g_cpu.Y, call_site_pc);
             fclose(mf);
         }
         printf("[Dispatch] NEW miss logged: extra_func %d 0x%04X (frame %llu) target=%s\n",
-               g_current_bank, addr, (unsigned long long)g_frame_count, class_name);
+               bank, addr, (unsigned long long)g_frame_count, class_name);
         fflush(stdout);
     }
 
     g_dispatch_miss_count++;
-    apply_dispatch_miss_policy("dispatch", addr, g_current_bank,
+    apply_dispatch_miss_policy("dispatch", addr, bank,
                                class_name, call_site_pc);
 }
 
