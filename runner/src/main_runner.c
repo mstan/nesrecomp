@@ -626,9 +626,10 @@ smoke_skip_input:
     if (!s_smoke_frames)
     script_tick(g_frame_count, g_ram);
 
-    /* TCP debug server: poll for commands each frame */
-    if (!s_smoke_frames)
-        debug_server_poll();
+    /* TCP debug server: poll for commands each frame. Polled in smoke mode
+     * too — headless runs are the main consumer of automated TCP probes,
+     * and the poll is non-blocking. */
+    debug_server_poll();
 
     /* Log per-frame state BEFORE NMI runs */
     debug_log_frame(s_cb_count);
