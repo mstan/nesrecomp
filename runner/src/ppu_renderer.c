@@ -28,6 +28,16 @@ uint8_t  g_render_irq_scrolly_after  = 0;
 /* What the renderer actually uses for scanline after IRQ */
 uint8_t  g_render_post_irq_ppuctrl_row = 0;
 int      g_render_post_irq_chr_base = 0;
+
+/* CHR window as it stood when the frame's render began (pre-IRQ regime).
+ * The BG pass services the MMC3 scanline IRQ row by row, so the game's IRQ
+ * handler swaps CHR banks (SMB3: status-bar banks at scanline 191) BEFORE
+ * the sprite pass runs. Sprites on rows above the switch must fetch their
+ * patterns from this snapshot, not the live (post-IRQ) g_chr_ram — fetching
+ * live gave every sprite the HUD banks: blank patterns in-level (invisible
+ * Mario/enemies), garbage tiles on the SMB3 world map. BG needs no snapshot
+ * because its rows render in scanline order alongside the IRQ service. */
+static uint8_t s_chr_pre_irq[0x2000];
 int      g_render_post_irq_origin_y = 0;
 int      g_render_post_irq_phys_nt = -1;
 int      g_render_post_irq_use_hud = -1;
@@ -416,6 +426,10 @@ void ppu_render_frame(uint32_t *framebuf) {
      * active, so the native render path is unchanged. */
     HdPixel *g_hp = NULL;
     if (hdpack_recording()) { hdpack_frame_begin(); g_hp = hdpack_pixels(); }
+
+    /* Pre-IRQ CHR snapshot for the sprite pass (see s_chr_pre_irq). Taken
+     * before any scanline-IRQ service can rebank the live window. */
+    memcpy(s_chr_pre_irq, g_chr_ram, sizeof(s_chr_pre_irq));
 
     /* Effective widescreen margins this frame: clamp the per-frame values
      * to the configured framebuffer margins; -1 = follow configured.
@@ -865,8 +879,15 @@ render_sprites:
             }
 
             int chr_off = tile_chr_base + tile_num * 16 + tile_row;
-            uint8_t lo = g_chr_ram[chr_off];
-            uint8_t hi = g_chr_ram[chr_off + 8];
+            /* Rows at or above the IRQ switch line fetch from the pre-IRQ
+             * regime; rows below it (status bar) see the live post-IRQ
+             * window. Per-row selection mirrors hardware, where sprite
+             * pattern fetches happen on each scanline. */
+            const uint8_t *chr_src =
+                (g_render_irq_fired && py >= g_render_irq_scanline + 1)
+                    ? g_chr_ram : s_chr_pre_irq;
+            uint8_t lo = chr_src[chr_off];
+            uint8_t hi = chr_src[chr_off + 8];
 
             for (int bit = 7; bit >= 0; bit--) {
                 /* flip_h mirrors which CHR bit we read; screen position is always (7-bit) */
@@ -901,7 +922,7 @@ render_sprites:
                     HdPixel *hp = &g_hp[py * g_render_width + fb_x];
                     hp->sp_has   = 1;
                     hp->sp_index = (int32_t)((tile_chr_base >> 4) + tile_num);
-                    hp->sp_t16   = &g_chr_ram[tile_chr_base + tile_num * 16];
+                    hp->sp_t16   = &chr_src[tile_chr_base + tile_num * 16];
                     hp->sp_p1 = g_ppu_pal[(spr_pal * 4 + 1) & 0x1F] & 0x3F;
                     hp->sp_p2 = g_ppu_pal[(spr_pal * 4 + 2) & 0x1F] & 0x3F;
                     hp->sp_p3 = g_ppu_pal[(spr_pal * 4 + 3) & 0x1F] & 0x3F;
