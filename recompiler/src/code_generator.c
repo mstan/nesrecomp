@@ -2989,6 +2989,72 @@ static void emit_dispatch(FILE *f, const EmittedWrapper *wrappers, int wrapper_c
     );
 }
 
+/* ---- per-bank split of <prefix>_full.c ----------------------------------
+ * GitHub hard-caps individual files at 100 MB and <prefix>_full.c crossed it
+ * for large multi-bank games (MM3: 152 MB). Function bodies are therefore
+ * written to per-bank part files (<prefix>_full_bank<NN>.c) which the
+ * umbrella <prefix>_full.c #includes IN EMISSION ORDER. The translation unit
+ * is textually identical to the old single file (same single-TU semantics:
+ * forward decls, wrapper-dedupe definition order, file-scope statics), and
+ * game builds are untouched — they still compile only <prefix>_full.c.
+ * Emission is GROUPED BY BANK (one part per PRG bank, banks ordered by first
+ * appearance in the function list, original relative order preserved within
+ * each bank — the list interleaves banks heavily, so naive rotate-on-change
+ * fragments into 100+ files). Reordering across banks is safe because every
+ * emitted function (and secondary label) gets a forward declaration in the
+ * umbrella before any body is included. */
+#define CODEGEN_MAX_FULL_PARTS 512
+
+typedef struct {
+    char path[512];     /* on-disk path for fopen */
+    char name[128];     /* basename for the umbrella #include */
+} FullPart;
+
+static void codegen_remove_stale_parts(const char *base_noext) {
+    /* Delete every part file a previous run could have produced, so a regen
+     * that yields fewer banks never leaves stale orphans behind in
+     * generated/ (they are committed in game repos). Names are fully
+     * enumerable, so plain remove() beats directory-walking portability.
+     * (The seq-suffixed names cover files from the interim rotate-on-change
+     * emitter revision.) */
+    char p[600];
+    for (int bank = 0; bank < 256; bank++) {
+        snprintf(p, sizeof p, "%s_bank%02d.c", base_noext, bank);
+        remove(p);
+        for (int seq = 2; seq <= 64; seq++) {
+            snprintf(p, sizeof p, "%s_bank%02d_%d.c", base_noext, bank, seq);
+            remove(p);
+        }
+    }
+}
+
+static FILE *codegen_open_bank_part(const char *base_noext, int bank,
+                                    FullPart *parts, int *part_count) {
+    if (*part_count >= CODEGEN_MAX_FULL_PARTS) {
+        fprintf(stderr, "codegen: exceeded %d full.c parts\n", CODEGEN_MAX_FULL_PARTS);
+        return NULL;
+    }
+    FullPart *pp = &parts[*part_count];
+    int b = (bank >= 0 && bank < 256) ? bank : 255;
+    const char *slash = strrchr(base_noext, '/');
+    const char *bslash = strrchr(base_noext, '\\');
+    if (bslash && (!slash || bslash > slash)) slash = bslash;
+    const char *base_name = slash ? slash + 1 : base_noext;
+    snprintf(pp->path, sizeof pp->path, "%s_bank%02d.c", base_noext, b);
+    snprintf(pp->name, sizeof pp->name, "%s_bank%02d.c", base_name, b);
+    FILE *f = fopen(pp->path, "w");
+    if (!f) {
+        fprintf(stderr, "codegen: cannot open %s\n", pp->path);
+        return NULL;
+    }
+    fprintf(f, "/* %s — PRG bank %d function bodies.\n"
+               " * Generated part of %s.c: #included by the umbrella; NOT a\n"
+               " * standalone translation unit. Do not compile or edit directly. */\n\n",
+            pp->name, b, base_name);
+    (*part_count)++;
+    return f;
+}
+
 bool codegen_emit(const NESRom *rom, const FunctionList *funcs,
                   const char *out_full_path, const char *out_dispatch_path,
                   const AnnotationTable *at, const GameConfig *cfg,
@@ -3073,18 +3139,80 @@ bool codegen_emit(const NESRom *rom, const FunctionList *funcs,
         }
     }
 
+    /* Function bodies go to per-bank part files (see FullPart above); the
+     * umbrella #includes them after this loop, preserving emission order. */
+    char base_noext[512];
+    {
+        size_t bl = strlen(out_full_path);
+        if (bl > 2 && strcmp(out_full_path + bl - 2, ".c") == 0) bl -= 2;
+        if (bl >= sizeof base_noext) bl = sizeof base_noext - 1;
+        memcpy(base_noext, out_full_path, bl);
+        base_noext[bl] = '\0';
+    }
+    codegen_remove_stale_parts(base_noext);
+    FullPart *parts = (FullPart *)malloc((size_t)CODEGEN_MAX_FULL_PARTS * sizeof(FullPart));
+    if (!parts) {
+        fprintf(stderr, "codegen: out of memory allocating part list\n");
+        fclose(f_full);
+        free(aliases);
+        free(wrappers);
+        return false;
+    }
+    int part_count = 0;
+
+    /* Banks in order of first appearance among emitted entries. */
+    int bank_order[256];
+    int bank_order_count = 0;
+    bool bank_seen[256];
+    memset(bank_seen, 0, sizeof bank_seen);
     for (int i = 0; i < funcs->count; i++) {
         if (!entry_emits_standalone(funcs, cfg, &funcs->entries[i])) continue;
-        /* Skip merge_range non-canonical entries — but only if they were
-         * actually emitted as secondary labels in the canonical function's body.
-         * Overlapping mid-instruction entries can't be merged and must be
-         * emitted as independent functions. */
         if (entry_is_merge_range_secondary(rom, funcs, cfg, i)) continue;
-
-        coverage_record_emitted_function(funcs->entries[i].bank,
-                                         funcs->entries[i].addr);
-        emit_function(f_full, rom, &funcs->entries[i], funcs, at, cfg);
+        int b = funcs->entries[i].bank;
+        if (b < 0 || b > 255) b = 255;
+        if (!bank_seen[b]) {
+            bank_seen[b] = true;
+            bank_order[bank_order_count++] = b;
+        }
     }
+
+    for (int bo = 0; bo < bank_order_count; bo++) {
+        int part_bank = bank_order[bo];
+        FILE *f_part = codegen_open_bank_part(base_noext, part_bank,
+                                              parts, &part_count);
+        if (!f_part) {
+            fclose(f_full);
+            free(parts);
+            free(aliases);
+            free(wrappers);
+            return false;
+        }
+        for (int i = 0; i < funcs->count; i++) {
+            if (!entry_emits_standalone(funcs, cfg, &funcs->entries[i])) continue;
+            /* Skip merge_range non-canonical entries — but only if they were
+             * actually emitted as secondary labels in the canonical function's body.
+             * Overlapping mid-instruction entries can't be merged and must be
+             * emitted as independent functions. */
+            if (entry_is_merge_range_secondary(rom, funcs, cfg, i)) continue;
+            int b = funcs->entries[i].bank;
+            if (b < 0 || b > 255) b = 255;
+            if (b != part_bank) continue;
+
+            coverage_record_emitted_function(funcs->entries[i].bank,
+                                             funcs->entries[i].addr);
+            emit_function(f_part, rom, &funcs->entries[i], funcs, at, cfg);
+        }
+        fclose(f_part);
+    }
+
+    fprintf(f_full, "/* Function bodies: one part per PRG bank, #included below\n"
+                    " * (single translation unit — see the FullPart note in the\n"
+                    " * recompiler's code_generator.c). */\n");
+    for (int pi = 0; pi < part_count; pi++)
+        fprintf(f_full, "#include \"%s\"\n", parts[pi].name);
+    fprintf(f_full, "\n");
+    printf("[NESRecomp] full.c split: %d bank part file(s)\n", part_count);
+    free(parts);
 
     /* Add NMI/RESET/IRQ entry points for runner.
      * If the vector target is in the switchable bank ($8000-$BFFF), use _b0 suffix. */
