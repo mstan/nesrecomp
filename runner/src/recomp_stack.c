@@ -105,17 +105,28 @@ void recomp_stack_push(const char *name)
     buf_watch('P');
 
     /* Recursion diagnostic — opt-in (NESRECOMP_RECURSION_DEBUG=1) and FIRE-ONCE.
-     * Dumps the shadow stack the first time depth crosses 50. Off by default so
-     * deeply-recursing recompiled control flow can't spam stderr and stall. */
-    if (g_recomp_stack_top == 50) {
-        static int s_enabled = -1, s_dumped = 0;
+     * Dumps the shadow stack the first time depth crosses a threshold. The
+     * threshold is configurable via NESRECOMP_RECURSION_DEPTH (default 50): a
+     * survivable deep-but-bounded recursion (e.g. SMB3 func_8859 at ~50 during
+     * the title-menu open) grabs the fire-once dump before the FATAL overflow
+     * later in the run, so being able to arm the dump near the stack cap
+     * (RECOMP_STACK_DEPTH-8) captures the recursion that actually overflows.
+     * Off by default so deeply-recursing recompiled control flow can't spam
+     * stderr and stall. */
+    {
+        static int s_enabled = -1, s_dumped = 0, s_threshold = 50;
         if (s_enabled < 0) {
             const char *e = getenv("NESRECOMP_RECURSION_DEBUG");
             s_enabled = (e && *e) ? 1 : 0;
+            const char *d = getenv("NESRECOMP_RECURSION_DEPTH");
+            if (d && *d) {
+                int t = atoi(d);
+                if (t > 1 && t < RECOMP_STACK_DEPTH) s_threshold = t;
+            }
         }
-        if (s_enabled && !s_dumped) {
-            fprintf(stderr, "\n[RECURSION] Stack depth hit 50 at frame %llu (dumping once):\n",
-                    (unsigned long long)g_frame_count);
+        if (s_enabled && !s_dumped && g_recomp_stack_top == s_threshold) {
+            fprintf(stderr, "\n[RECURSION] Stack depth hit %d at frame %llu (dumping once):\n",
+                    s_threshold, (unsigned long long)g_frame_count);
             for (int i = g_recomp_stack_top - 1; i >= 0; i--)
                 fprintf(stderr, "  [%d] %s\n", i, g_recomp_stack[i] ? g_recomp_stack[i] : "?");
             fflush(stderr);

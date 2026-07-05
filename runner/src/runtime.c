@@ -1825,6 +1825,28 @@ static int s_tail_active_n = 0;
 static int s_tail_pending_slot = -1;
 
 int call_by_address_tail(uint16_t addr, int caller_bank) {
+    /* Env-gated tail-drift diagnostic (NESRECOMP_TAILDBG="loAddr:hiAddr"):
+     * logs the first ~60 tail entries whose addr is in [lo,hi] with S and
+     * active-tail count, so a JMP-loop that fails to flatten (because S drifts
+     * per lap and the (addr,S) cycle detector never matches) shows its exact
+     * S trajectory without pause/step. */
+    {
+        static int s_on = -1; static uint16_t s_lo = 0, s_hi = 0; static int s_lines = 0;
+        if (s_on < 0) {
+            const char *e = getenv("NESRECOMP_TAILDBG");
+            if (e && *e) { s_on = 1; s_lo = (uint16_t)strtoul(e, NULL, 16);
+                const char *c = strchr(e, ':'); s_hi = c ? (uint16_t)strtoul(c+1, NULL, 16) : s_lo; }
+            else s_on = 0;
+        }
+        if (s_on && addr >= s_lo && addr <= s_hi && s_lines < 60) {
+            int match = -1;
+            for (int i = 0; i < s_tail_active_n; i++)
+                if (s_tail_active[i].addr == addr && s_tail_active[i].s == g_cpu.S) { match = i; break; }
+            fprintf(stderr, "[taildbg] addr=$%04X S=$%02X active_n=%d match=%d frame=%llu\n",
+                    addr, g_cpu.S, s_tail_active_n, match, (unsigned long long)g_frame_count);
+            fflush(stderr); s_lines++;
+        }
+    }
     for (int i = 0; i < s_tail_active_n; i++) {
         if (s_tail_active[i].addr == addr && s_tail_active[i].s == g_cpu.S) {
             s_tail_pending      = addr;
@@ -1864,9 +1886,13 @@ int call_by_address_tail(uint16_t addr, int caller_bank) {
  * cpu_addr the original 6502 target (live-window byte classification), bank
  * the window-resolved bank. */
 void nes_record_dispatch_miss_bank(uint16_t addr, uint16_t cpu_addr, int bank) {
-    static uint32_t last = 0xFFFFFFFF;
-    uint32_t key = ((uint32_t)bank << 16) | addr;
-    bool first_for_key = (key != last);
+    /* Print the console line only on FIRST sighting of the address. The old
+     * consecutive-key dedup re-printed forever when two misses alternated
+     * per frame (measured on SMB3: ~6 lines/frame of spam, real slowdown
+     * from console I/O). The durable file + ring still record every miss. */
+    bool first_for_key = true;
+    for (int i = 0; i < g_miss_unique_count; i++)
+        if (g_miss_unique_addrs[i] == addr) { first_for_key = false; break; }
 
     /* Capture target bytes + classification up front so we can print it
      * inline with the first-sighting log line. Peek via the original 6502
@@ -1900,7 +1926,6 @@ void nes_record_dispatch_miss_bank(uint16_t addr, uint16_t cpu_addr, int bank) {
                "A=%02X X=%02X Y=%02X call_site=$%04X\n",
                addr, bank, cpu_addr, class_name,
                g_cpu.A, g_cpu.X, g_cpu.Y, call_site_pc);
-        last = key;
     }
     g_miss_count_any++;
     g_miss_last_addr  = addr;
