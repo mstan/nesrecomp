@@ -1,42 +1,30 @@
-/* nesref — minimal SDL2 libretro frontend: a known-good NES interpreter used
- * as the differential oracle for the NES recompiler. Loads a libretro NES core
- * (e.g. nestopia_libretro.dll / fceumm_libretro.dll), plays a ROM with reliable
- * SDL keyboard input, and — the whole point — exposes the SAME TCP debug-server
- * protocol the recomp runner does, so the exact same probe tooling talks to
- * either side and you diff them 1:1.
+/* nesref — minimal SDL2 libretro frontend hosting a cycle-accurate NES core
+ * (Mesen / fceumm / nestopia libretro DLL) as the differential ORACLE for the
+ * NES static recompiler. Mirrors snesrecomp/tools/snesref: loads the core, runs
+ * a ROM, and logs per-frame CPU-RAM changes (same JSON shape as the recomp's
+ * NESRECOMP_WRAM_TRACE) for first-divergence diffing via wram_diff.py.
  *
  *   nesref.exe <core.dll> <rom.nes>
  *
- * Interface parity with nesrecomp's runner/src/debug_server.c: same loopback
- * port (4370), same line-delimited JSON commands, same response shapes. The
- * memory-level commands are backed by the libretro core's exposed memory:
- *   read_ram/dump_ram/write_ram  -> SYSTEM_RAM (2KB WRAM) + SAVE_RAM ($6000-$7FFF)
- *   read_ppu                     -> VIDEO_RAM (nametable CIRAM) when the core exposes it
- *   read_frame_ram / history     -> per-frame WRAM+SRAM ring (like the runner's ring)
- *   save_state / load_state, ping, frame, help, quit
- * PPU internals (t/v/w, OAM, palette) and CPU registers are NOT exposed by a
- * stock libretro core — those stay the in-process patched-Nestopia oracle's job.
- * Commands that can't be backed return the same {"ok":false,"error":...} shape.
+ * Env:
+ *   NESREF_TRACE_FILE=<path>   per-frame RAM-delta JSONL   (default nesref_trace.jsonl)
+ *   NESREF_FRAMES=<N>          headless: run N frames (no input), flush, quit
+ *   NESREF_DUMP="a,b,c"        also print RAM $00..$0F at these frame numbers (oracle readback)
  *
- * Keys (match the recomp NES keybinds): arrows=D-pad, Z=A, X=B, Tab=Select,
- *   Enter=Start.  F1-F9 = load state slot, Shift+F1-F9 = save slot, Esc = quit.
- * Env: NESREF_TRACE=1 writes a per-frame WRAM-diff nes_trace.jsonl; NESREF_WAV
- *   names an audio dump; NESREF_PORT overrides 4370; NESREF_QUIT_FRAMES=N exits.
+ * Keys: arrows=D-pad, Z=B, X=A, Enter=Start, RShift=Select, Esc=quit.
  */
 #define WIN32_LEAN_AND_MEAN
-#include <winsock2.h>
-#include <ws2tcpip.h>
 #include <windows.h>
-#pragma comment(lib, "ws2_32.lib")
 #define SDL_MAIN_HANDLED
 #include <SDL.h>
 #include <cstdio>
 #include <cstdint>
-#include <cstdlib>
 #include <cstring>
-#include <cstdarg>
+#include <cstdlib>
 #include <vector>
 #include "libretro.h"
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h"
 
 // ---- core function pointers ----
 static HMODULE g_core;
@@ -52,113 +40,105 @@ LR(retro_serialize_size) LR(retro_serialize) LR(retro_unserialize)
 LR(retro_get_memory_data) LR(retro_get_memory_size)
 #undef LR
 
-template<class T> static void bindsym(T& fn, const char* name) {
+template<class T> static void bind(T& fn, const char* name) {
     fn = (T)GetProcAddress(g_core, name);
     if (!fn) { fprintf(stderr, "missing core symbol: %s\n", name); exit(2); }
 }
 
-// ---- video / input state ----
+// ---- video state ----
 static SDL_Window*   g_win;
 static SDL_Renderer* g_ren;
 static SDL_Texture*  g_tex;
 static int g_tex_w = 0, g_tex_h = 0;
 static retro_pixel_format g_fmt = RETRO_PIXEL_FORMAT_0RGB1555;
-static SDL_GameController* g_pad = nullptr;
+
+// ---- last frame as RGB24 (for screenshot / framebuf diff) ----
+static std::vector<uint8_t> g_rgb;  // w*h*3
+static int g_rgb_w=0, g_rgb_h=0;
+static void store_rgb(const void* data, unsigned w, unsigned h, size_t pitch) {
+    g_rgb.resize((size_t)w*h*3); g_rgb_w=w; g_rgb_h=h;
+    for (unsigned y=0;y<h;y++) {
+        const uint8_t* row=(const uint8_t*)data + y*pitch;
+        for (unsigned x=0;x<w;x++) {
+            uint8_t r,g,b;
+            if (g_fmt==RETRO_PIXEL_FORMAT_XRGB8888) {
+                const uint32_t p=((const uint32_t*)row)[x]; r=(p>>16)&0xFF; g=(p>>8)&0xFF; b=p&0xFF;
+            } else if (g_fmt==RETRO_PIXEL_FORMAT_RGB565) {
+                const uint16_t p=((const uint16_t*)row)[x]; r=((p>>11)&0x1F)<<3; g=((p>>5)&0x3F)<<2; b=(p&0x1F)<<3;
+            } else { // 0RGB1555
+                const uint16_t p=((const uint16_t*)row)[x]; r=((p>>10)&0x1F)<<3; g=((p>>5)&0x1F)<<3; b=(p&0x1F)<<3;
+            }
+            uint8_t* o=&g_rgb[((size_t)y*w+x)*3]; o[0]=r; o[1]=g; o[2]=b;
+        }
+    }
+}
+static void write_shot(const char* path) {
+    if (g_rgb_w<=0) { fprintf(stderr,"[nesref shot] no frame yet\n"); return; }
+    if (stbi_write_png(path, g_rgb_w, g_rgb_h, 3, g_rgb.data(), g_rgb_w*3))
+        printf("[nesref shot] %s (%dx%d)\n", path, g_rgb_w, g_rgb_h);
+    fflush(stdout);
+}
+
+// ---- CPU-RAM trace (NES work RAM = 2KB, $0000-$07FF) ----
+#define WRAM_LO 0x0000
+#define WRAM_HI 0x07ff
+static FILE* g_log;
+static uint8_t g_prev[WRAM_HI - WRAM_LO + 1];
+static bool    g_primed = false;
 static uint32_t g_frame = 0;
-static char g_core_name[64] = "libretro";
 
-static void open_first_pad() {
-    if (g_pad) return;
-    for (int i = 0; i < SDL_NumJoysticks(); i++)
-        if (SDL_IsGameController(i)) {
-            g_pad = SDL_GameControllerOpen(i);
-            if (g_pad) { printf("[controller: %s]\n", SDL_GameControllerName(g_pad)); fflush(stdout); return; }
-        }
+static const char* trace_path() {
+    const char* p = getenv("NESREF_TRACE_FILE");
+    return (p && p[0]) ? p : "nesref_trace.jsonl";
 }
-
-// ---- libretro memory accessors ----
-// Mirrors nesrecomp debug_server.c read_byte(): $0000-$1FFF WRAM (+mirrors),
-// $6000-$7FFF SRAM, $2000-$2FFF nametable, else 0. WRAM/SRAM/CIRAM come from the
-// core; PPU palette/OAM and CPU regs are not exposed by stock libretro.
-static uint8_t* mem_ptr(unsigned which, size_t* out_sz) {
-    uint8_t* p = (uint8_t*)p_retro_get_memory_data(which);
-    size_t sz  = p_retro_get_memory_size(which);
-    if (out_sz) *out_sz = p ? sz : 0;
-    return p;
+static void emit(int addr, uint8_t o, uint8_t n) {
+    if (!g_log) { g_log = fopen(trace_path(), "a"); if (!g_log) return; }
+    fprintf(g_log, "{\"f\":%u,\"adr\":\"0x%04x\",\"old\":\"0x%02x\",\"val\":\"0x%02x\"}\n",
+            g_frame, addr, o, n);
 }
-static uint8_t read_byte(uint32_t addr) {
-    size_t sz;
-    if (addr < 0x2000) {                                   // WRAM + mirrors
-        uint8_t* w = mem_ptr(RETRO_MEMORY_SYSTEM_RAM, &sz);
-        if (w && sz) return w[addr & (sz - 1 >= 0x7FF ? 0x7FF : sz - 1)];
-        return 0;
-    }
-    if (addr >= 0x6000 && addr < 0x8000) {                 // battery SRAM
-        uint8_t* s = mem_ptr(RETRO_MEMORY_SAVE_RAM, &sz);
-        uint32_t off = addr - 0x6000;
-        if (s && off < sz) return s[off];
-        return 0;
-    }
-    if (addr >= 0x2000 && addr < 0x3000) {                 // nametable (CIRAM)
-        uint8_t* v = mem_ptr(RETRO_MEMORY_VIDEO_RAM, &sz);
-        if (v && sz) return v[(addr - 0x2000) & (sz - 1)];
-        return 0;
-    }
-    return 0;
-}
-static void write_byte(uint32_t addr, uint8_t val) {
-    size_t sz;
-    if (addr < 0x2000) {
-        uint8_t* w = mem_ptr(RETRO_MEMORY_SYSTEM_RAM, &sz);
-        if (w && sz) w[addr & (sz - 1 >= 0x7FF ? 0x7FF : sz - 1)] = val;
-    } else if (addr >= 0x6000 && addr < 0x8000) {
-        uint8_t* s = mem_ptr(RETRO_MEMORY_SAVE_RAM, &sz);
-        uint32_t off = addr - 0x6000;
-        if (s && off < sz) s[off] = val;
-    }
-}
-
-// ---- per-frame ring buffer (WRAM + SRAM snapshots) ----
-// Same idea as the runner's NESFrameRecord ring: lets read_frame_ram/history
-// query historical state so you can diff a captured window against the recomp.
-#define RING_CAP 3600                     // ~60s @60fps; 10KB/frame -> ~36MB
-struct NesRefRecord { uint32_t frame; uint8_t wram[0x800]; uint8_t sram[0x2000]; };
-static NesRefRecord* g_ring = nullptr;    // heap-allocated on demand
-static uint64_t g_ring_count = 0;         // total frames ever recorded
-
-static void ring_record() {
-    if (!g_ring) { g_ring = (NesRefRecord*)calloc(RING_CAP, sizeof(NesRefRecord)); if (!g_ring) return; }
-    NesRefRecord* r = &g_ring[g_frame % RING_CAP];
-    r->frame = g_frame;
-    size_t sz;
-    uint8_t* w = mem_ptr(RETRO_MEMORY_SYSTEM_RAM, &sz);
-    memset(r->wram, 0, sizeof(r->wram));
-    if (w) memcpy(r->wram, w, sz < sizeof(r->wram) ? sz : sizeof(r->wram));
-    uint8_t* s = mem_ptr(RETRO_MEMORY_SAVE_RAM, &sz);
-    memset(r->sram, 0, sizeof(r->sram));
-    if (s) memcpy(r->sram, s, sz < sizeof(r->sram) ? sz : sizeof(r->sram));
-    g_ring_count = (uint64_t)g_frame + 1;
-}
-
-// ---- optional per-frame WRAM-diff trace (NESREF_TRACE=1) ----
-static FILE*  g_trace;
-static int    g_trace_on = 0;
-static uint8_t g_trace_prev[0x800];
-static int     g_trace_primed = 0;
 static void trace_tick() {
-    if (!g_trace_on) return;
-    size_t sz; uint8_t* w = mem_ptr(RETRO_MEMORY_SYSTEM_RAM, &sz);
-    if (!w || !sz) return;
-    int n = (int)(sz < 0x800 ? sz : 0x800);
-    if (!g_trace_primed) { memcpy(g_trace_prev, w, n); g_trace_primed = 1; return; }
-    if (!g_trace) { g_trace = fopen("nes_trace.jsonl", "a"); if (!g_trace) { g_trace_on = 0; return; } }
-    for (int a = 0; a < n; a++)
-        if (w[a] != g_trace_prev[a]) {
-            fprintf(g_trace, "{\"f\":%u,\"addr\":\"0x%04x\",\"region\":\"ram\",\"old\":\"0x%02x\",\"new\":\"0x%02x\"}\n",
-                    g_frame, a, g_trace_prev[a], w[a]);
-            g_trace_prev[a] = w[a];
-        }
-    if ((g_frame % 30) == 0) fflush(g_trace);
+    uint8_t* ram = (uint8_t*)p_retro_get_memory_data(RETRO_MEMORY_SYSTEM_RAM);
+    size_t sz = p_retro_get_memory_size(RETRO_MEMORY_SYSTEM_RAM);
+    if (!ram || sz <= WRAM_HI) return;
+    if (!g_primed) {
+        for (int a=WRAM_LO;a<=WRAM_HI;a++){ g_prev[a-WRAM_LO]=ram[a]; emit(a,0,ram[a]); }
+        g_primed=true; return;
+    }
+    for (int a=WRAM_LO;a<=WRAM_HI;a++){ uint8_t v=ram[a]; if(v!=g_prev[a-WRAM_LO]){ emit(a,g_prev[a-WRAM_LO],v); g_prev[a-WRAM_LO]=v; } }
+    if (g_log && (g_frame % 30)==0) fflush(g_log);
+}
+
+// Cross-engine RNG/seed freeze: force fixed RAM bytes each frame so the oracle
+// and recomp share identical RNG (Random $18 seeded by FrameCounter desyncs
+// free-running engines). NESREF_FREEZE="0x18=0x00,0x..=0x..". Honors the same
+// spec as the recomp's NESRECOMP_FREEZE. Applied after retro_run (frame end).
+static void apply_freeze() {
+    static int st=-1; static int addrs[16]; static int vals[16]; static int n=0;
+    if (st<0) { st=0; const char* e=getenv("NESREF_FREEZE");
+        if (e && e[0]) { char buf[256]; strncpy(buf,e,sizeof buf-1); buf[sizeof buf-1]=0;
+            for (char* t=strtok(buf,","); t && n<16; t=strtok(nullptr,",")) {
+                unsigned a,v; if (sscanf(t," 0x%x = 0x%x",&a,&v)==2){addrs[n]=a;vals[n]=v;n++;} }
+            st=n?1:0; } }
+    if (st!=1) return;
+    uint8_t* ram=(uint8_t*)p_retro_get_memory_data(RETRO_MEMORY_SYSTEM_RAM);
+    size_t sz=p_retro_get_memory_size(RETRO_MEMORY_SYSTEM_RAM);
+    if (!ram) return;
+    for (int i=0;i<n;i++) if ((size_t)addrs[i]<sz) ram[addrs[i]]=(uint8_t)vals[i];
+}
+
+// Optional oracle readback: print RAM $00..$0F at requested frames.
+static void dump_check() {
+    static std::vector<long> frames; static bool init=false;
+    if (!init) { init=true; const char* v=getenv("NESREF_DUMP");
+        if (v && v[0]) { char buf[256]; strncpy(buf,v,sizeof buf-1); buf[sizeof buf-1]=0;
+            for (char* t=strtok(buf,","); t; t=strtok(nullptr,",")) frames.push_back(atol(t)); } }
+    for (long f : frames) if ((long)g_frame==f) {
+        uint8_t* ram=(uint8_t*)p_retro_get_memory_data(RETRO_MEMORY_SYSTEM_RAM);
+        if (!ram) return;
+        printf("[nesref dump f=%u] $00..$0F:", g_frame);
+        for (int a=0;a<16;a++) printf(" %02x", ram[a]);
+        printf("\n"); fflush(stdout);
+    }
 }
 
 // ---- libretro callbacks ----
@@ -169,26 +149,34 @@ static bool cb_environment(unsigned cmd, void* data) {
         case RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY: *(const char**)data = "."; return true;
         case RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY:   *(const char**)data = "."; return true;
         case RETRO_ENVIRONMENT_SET_PERFORMANCE_LEVEL: return true;
-        case RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE: if (data) *(bool*)data = false; return true;
+        case RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE: if(data) *(bool*)data=false; return true;
         default: return false;
     }
 }
 static void ensure_texture(unsigned w, unsigned h) {
-    if ((int)w == g_tex_w && (int)h == g_tex_h && g_tex) return;
+    if ((int)w==g_tex_w && (int)h==g_tex_h && g_tex) return;
     if (g_tex) SDL_DestroyTexture(g_tex);
-    Uint32 sf = (g_fmt == RETRO_PIXEL_FORMAT_XRGB8888) ? SDL_PIXELFORMAT_ARGB8888
-              : (g_fmt == RETRO_PIXEL_FORMAT_RGB565)   ? SDL_PIXELFORMAT_RGB565
-              :                                          SDL_PIXELFORMAT_ARGB1555;
+    Uint32 sf = (g_fmt==RETRO_PIXEL_FORMAT_XRGB8888) ? SDL_PIXELFORMAT_ARGB8888
+              : (g_fmt==RETRO_PIXEL_FORMAT_RGB565)   ? SDL_PIXELFORMAT_RGB565
+              :                                        SDL_PIXELFORMAT_ARGB1555;
     g_tex = SDL_CreateTexture(g_ren, sf, SDL_TEXTUREACCESS_STREAMING, w, h);
-    g_tex_w = w; g_tex_h = h;
+    g_tex_w=w; g_tex_h=h;
 }
 static void cb_video(const void* data, unsigned w, unsigned h, size_t pitch) {
-    if (data && w && h) { ensure_texture(w, h); SDL_UpdateTexture(g_tex, nullptr, data, (int)pitch); }
+    if (data && w && h) store_rgb(data, w, h, pitch);   // capture every frame (works headless)
+    if (!g_ren) return;
+    if (data && w && h) { ensure_texture(w,h); SDL_UpdateTexture(g_tex, nullptr, data, (int)pitch); }
     SDL_RenderClear(g_ren);
     if (g_tex) SDL_RenderCopy(g_ren, g_tex, nullptr, nullptr);
     SDL_RenderPresent(g_ren);
 }
 // ---- audio capture (NESREF_WAV) ----
+// Always-on ground-truth PCM tap: NESREF_WAV=<path> streams the core's audio
+// callbacks to a stereo s16 WAV at the core's reported sample rate. The header
+// is finalized on clean exit; a force-killed capture is still recoverable (the
+// analyzer's loader tolerates an unfinalized header). Works headless — the core
+// renders audio every retro_run regardless of pacing, so a NESREF_FRAMES run
+// yields a deterministic faster-than-realtime oracle capture.
 static FILE*    g_wav;
 static uint64_t g_wav_frames;
 static uint32_t g_wav_rate = 48000;
@@ -212,292 +200,340 @@ static void wav_close() {
 static void  cb_audio_sample(int16_t l, int16_t r) { if (g_wav) { int16_t s[2] = {l, r}; fwrite(s, 4, 1, g_wav); g_wav_frames++; } }
 static size_t cb_audio_batch(const int16_t* data, size_t frames) { if (g_wav && data && frames) { fwrite(data, 4, frames, g_wav); g_wav_frames += frames; } return frames; }
 static void  cb_input_poll(void) {}
-static int16_t cb_input_state(unsigned port, unsigned device, unsigned, unsigned id) {
-    if (port != 0 || device != RETRO_DEVICE_JOYPAD) return 0;
-    const Uint8* ks = SDL_GetKeyboardState(nullptr);
-    SDL_Scancode sc; SDL_GameControllerButton gb;
-    switch (id) {                                          // NES recomp keybinds
-        case RETRO_DEVICE_ID_JOYPAD_A:      sc = SDL_SCANCODE_Z;      gb = SDL_CONTROLLER_BUTTON_A; break;
-        case RETRO_DEVICE_ID_JOYPAD_B:      sc = SDL_SCANCODE_X;      gb = SDL_CONTROLLER_BUTTON_B; break;
-        case RETRO_DEVICE_ID_JOYPAD_SELECT: sc = SDL_SCANCODE_TAB;    gb = SDL_CONTROLLER_BUTTON_BACK; break;
-        case RETRO_DEVICE_ID_JOYPAD_START:  sc = SDL_SCANCODE_RETURN; gb = SDL_CONTROLLER_BUTTON_START; break;
-        case RETRO_DEVICE_ID_JOYPAD_UP:     sc = SDL_SCANCODE_UP;     gb = SDL_CONTROLLER_BUTTON_DPAD_UP; break;
-        case RETRO_DEVICE_ID_JOYPAD_DOWN:   sc = SDL_SCANCODE_DOWN;   gb = SDL_CONTROLLER_BUTTON_DPAD_DOWN; break;
-        case RETRO_DEVICE_ID_JOYPAD_LEFT:   sc = SDL_SCANCODE_LEFT;   gb = SDL_CONTROLLER_BUTTON_DPAD_LEFT; break;
-        case RETRO_DEVICE_ID_JOYPAD_RIGHT:  sc = SDL_SCANCODE_RIGHT;  gb = SDL_CONTROLLER_BUTTON_DPAD_RIGHT; break;
-        default: return 0;
-    }
-    if (ks[sc]) return 1;
-    if (g_pad && SDL_GameControllerGetButton(g_pad, gb)) return 1;
-    if (g_pad) {
-        const int DZ = 16000;
-        if (id == RETRO_DEVICE_ID_JOYPAD_LEFT  && SDL_GameControllerGetAxis(g_pad, SDL_CONTROLLER_AXIS_LEFTX) < -DZ) return 1;
-        if (id == RETRO_DEVICE_ID_JOYPAD_RIGHT && SDL_GameControllerGetAxis(g_pad, SDL_CONTROLLER_AXIS_LEFTX) >  DZ) return 1;
-        if (id == RETRO_DEVICE_ID_JOYPAD_UP    && SDL_GameControllerGetAxis(g_pad, SDL_CONTROLLER_AXIS_LEFTY) < -DZ) return 1;
-        if (id == RETRO_DEVICE_ID_JOYPAD_DOWN  && SDL_GameControllerGetAxis(g_pad, SDL_CONTROLLER_AXIS_LEFTY) >  DZ) return 1;
-    }
+
+// ---- Input script (NESREF_SCRIPT) with STATE-ANCHORING ----
+// Runtime interpreter matching the recomp runner's input_script.c so the co-sim
+// drives BOTH engines through the SAME inputs into gameplay. Commands: HOLD/
+// RELEASE (instant), WAIT n (hold current mask n frames), WAIT_RAM8 <hex_addr>
+// <hex_val> (block until WRAM[addr]==val, 30s timeout). WAIT_RAM8 is the key
+// addition: it anchors input on GAME STATE (e.g. Update_Select $0100==$C0 = in a
+// horizontal level) so both engines apply the next input at the SAME state,
+// immune to load-timing frame drift. TURBO/SCREENSHOT/LOG/EXIT ignored (oracle
+// runs to NESREF_FRAMES). NES mask bits: A 0x80 B 0x40 SEL 0x20 ST 0x10 U 0x08
+// D 0x04 L 0x02 R 0x01.
+struct SCmd { int type; int iarg; uint8_t barg; uint16_t addr; uint8_t val; };
+// type: 0=WAIT, 1=HOLD, 2=RELEASE, 3=WAIT_RAM8
+static std::vector<SCmd> g_cmds;
+static bool g_have_script = false;
+static int  g_pc = 0, g_wait_left = 0;
+static uint8_t g_held = 0;
+static long g_waitram_start = -1;
+static bool g_script_done = false;   // set when all commands consumed (= recomp EXIT)
+static uint8_t script_btn_mask(const char* n){
+    if(!strcmp(n,"A"))return 0x80;      if(!strcmp(n,"B"))return 0x40;
+    if(!strcmp(n,"SELECT"))return 0x20; if(!strcmp(n,"START"))return 0x10;
+    if(!strcmp(n,"UP"))return 0x08;     if(!strcmp(n,"DOWN"))return 0x04;
+    if(!strcmp(n,"LEFT"))return 0x02;   if(!strcmp(n,"RIGHT"))return 0x01;
     return 0;
 }
-
-// ---- save states (Fn=load slot, Shift+Fn=save slot) ----
-static void slot_path(int slot, char* out, size_t n) { snprintf(out, n, "nes_state_%d.bin", slot); }
-static void save_state_file(const char* path) {
-    size_t n = p_retro_serialize_size(); if (!n) return;
-    std::vector<uint8_t> buf(n);
-    if (p_retro_serialize(buf.data(), n)) { FILE* f = fopen(path, "wb"); if (f) { fwrite(buf.data(), 1, n, f); fclose(f); } }
-}
-static bool load_state_file(const char* path) {
-    FILE* f = fopen(path, "rb"); if (!f) return false;
-    fseek(f, 0, SEEK_END); long fn = ftell(f); fseek(f, 0, SEEK_SET);
-    if (fn <= 0) { fclose(f); return false; }
-    size_t need = p_retro_serialize_size();
-    size_t bn = ((size_t)fn > need) ? (size_t)fn : need;
-    std::vector<uint8_t> buf(bn, 0);
-    fread(buf.data(), 1, (size_t)fn, f); fclose(f);
-    return p_retro_unserialize(buf.data(), need);
-}
-
-// ====================================================================
-// TCP debug server — nesrecomp protocol parity (loopback 4370, line JSON)
-// ====================================================================
-static SOCKET g_listen = INVALID_SOCKET, g_client = INVALID_SOCKET;
-static char   g_rxbuf[8192]; static int g_rxlen = 0;
-
-static void srv_send(const char* s) {
-    if (g_client == INVALID_SOCKET) return;
-    int len = (int)strlen(s);
-    send(g_client, s, len, 0); send(g_client, "\n", 1, 0);
-}
-static void srv_fmt(const char* fmt, ...) {
-    char buf[2048]; va_list ap; va_start(ap, fmt); vsnprintf(buf, sizeof(buf), fmt, ap); va_end(ap);
-    srv_send(buf);
-}
-static void srv_ok(int id)               { srv_fmt("{\"id\":%d,\"ok\":true}", id); }
-static void srv_err(int id, const char* m){ srv_fmt("{\"id\":%d,\"ok\":false,\"error\":\"%s\"}", id, m); }
-
-// minimal JSON field readers (same flavour as debug_server.c)
-static bool j_str(const char* j, const char* key, char* out, int cap) {
-    char pat[64]; snprintf(pat, sizeof(pat), "\"%s\"", key);
-    const char* p = strstr(j, pat); if (!p) return false;
-    p = strchr(p + strlen(pat), ':'); if (!p) return false; p++;
-    while (*p == ' ' || *p == '\t') p++;
-    if (*p == '"') { p++; int i = 0; while (*p && *p != '"' && i < cap - 1) out[i++] = *p++; out[i] = 0; return true; }
-    int i = 0; while (*p && *p != ',' && *p != '}' && *p != ' ' && i < cap - 1) out[i++] = *p++; out[i] = 0; return i > 0;
-}
-static int j_int(const char* j, const char* key, int def) {
-    char v[32]; if (!j_str(j, key, v, sizeof(v))) return def; return atoi(v);
-}
-static uint32_t hexu32(const char* s) {
-    if (s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) s += 2;
-    return (uint32_t)strtoul(s, nullptr, 16);
-}
-
-static void srv_dispatch(const char* line) {
-    char cmd[64]; if (!j_str(line, "cmd", cmd, sizeof(cmd))) { strncpy(cmd, line, 63); cmd[63] = 0;
-        int n = (int)strlen(cmd); while (n > 0 && (cmd[n-1]=='\r'||cmd[n-1]=='\n'||cmd[n-1]==' ')) cmd[--n]=0; }
-    int id = j_int(line, "id", 0);
-
-    if (!strcmp(cmd, "ping")) { srv_fmt("{\"id\":%d,\"ok\":true,\"frame\":%u}", id, g_frame); return; }
-    if (!strcmp(cmd, "frame")) { srv_fmt("{\"id\":%d,\"ok\":true,\"frame\":%u,\"last_func\":\"%s\"}", id, g_frame, g_core_name); return; }
-    if (!strcmp(cmd, "quit")) { srv_ok(id); closesocket(g_client); g_client = INVALID_SOCKET; exit(0); }
-    if (!strcmp(cmd, "help")) {
-        srv_fmt("{\"id\":%d,\"ok\":true,\"commands\":[\"ping\",\"frame\",\"read_ram\",\"dump_ram\",\"write_ram\",\"read_ppu\",\"read_frame_ram\",\"history\",\"save_state\",\"load_state\",\"quit\"],"
-                "\"note\":\"nesref: libretro differential oracle, nesrecomp debug_server protocol parity. PPU palette/OAM + CPU regs need the in-process patched oracle, not a stock libretro core.\"}", id);
-        return;
+static void load_script(){
+    const char* path=getenv("NESREF_SCRIPT");
+    if(!path||!path[0]) return;
+    FILE* f=fopen(path,"r");
+    if(!f){ fprintf(stderr,"[nesref script] cannot open %s\n",path); return; }
+    char line[256];
+    while(fgets(line,sizeof line,f)){
+        char cmd[32]={0}, a1[32]={0}, a2[32]={0}; int nn=sscanf(line,"%31s %31s %31s",cmd,a1,a2);
+        if(nn<1) continue;
+        SCmd c={0,0,0,0,0};
+        if(!strcmp(cmd,"HOLD")&&nn>=2){ c.type=1; c.barg=script_btn_mask(a1); g_cmds.push_back(c); }
+        else if(!strcmp(cmd,"RELEASE")&&nn>=2){ c.type=2; c.barg=script_btn_mask(a1); g_cmds.push_back(c); }
+        else if(!strcmp(cmd,"WAIT")&&nn>=2){ c.type=0; c.iarg=atoi(a1); g_cmds.push_back(c); }
+        else if(!strcmp(cmd,"WAIT_RAM8")&&nn>=3){ c.type=3;
+            c.addr=(uint16_t)strtol(a1,0,16); c.val=(uint8_t)strtol(a2,0,16); g_cmds.push_back(c); }
+        /* TURBO/SCREENSHOT/LOG/EXIT/ASSERT_RAM8 ignored */
     }
-    if (!strcmp(cmd, "read_ram") || !strcmp(cmd, "read_ppu")) {
-        char a[32]; if (!j_str(line, "addr", a, sizeof(a))) { srv_err(id, "missing addr"); return; }
-        uint32_t addr = hexu32(a); int len = j_int(line, "len", 1); if (len < 1) len = 1; if (len > 256) len = 256;
-        char hex[513]; for (int i = 0; i < len; i++) snprintf(hex + i*2, 3, "%02x", read_byte(addr + i));
-        srv_fmt("{\"id\":%d,\"ok\":true,\"addr\":\"0x%04X\",\"len\":%d,\"hex\":\"%s\"}", id, addr, len, hex); return;
-    }
-    if (!strcmp(cmd, "dump_ram")) {
-        char a[32]; if (!j_str(line, "addr", a, sizeof(a))) { srv_err(id, "missing addr"); return; }
-        uint32_t addr = hexu32(a); int len = j_int(line, "len", 256); if (len < 1) len = 1; if (len > 8192) len = 8192;
-        for (int off = 0; off < len; ) { int chunk = len - off; if (chunk > 256) chunk = 256;
-            char hex[513]; for (int i = 0; i < chunk; i++) snprintf(hex + i*2, 3, "%02x", read_byte(addr + off + i));
-            srv_fmt("{\"id\":%d,\"ok\":true,\"addr\":\"0x%04X\",\"offset\":%d,\"len\":%d,\"hex\":\"%s\"}", id, addr+off, off, chunk, hex); off += chunk; }
-        return;
-    }
-    if (!strcmp(cmd, "write_ram")) {
-        char a[32], v[32]; if (!j_str(line, "addr", a, sizeof(a))) { srv_err(id, "missing addr"); return; }
-        if (!j_str(line, "val", v, sizeof(v))) { srv_err(id, "missing val"); return; }
-        write_byte(hexu32(a), (uint8_t)hexu32(v)); srv_ok(id); return;
-    }
-    if (!strcmp(cmd, "history")) {
-        uint64_t oldest = (g_ring_count > RING_CAP) ? g_ring_count - RING_CAP : 0;
-        uint64_t newest = g_ring_count ? g_ring_count - 1 : 0;
-        srv_fmt("{\"id\":%d,\"ok\":true,\"count\":%llu,\"oldest\":%llu,\"newest\":%llu,\"capacity\":%d}",
-                id, (unsigned long long)g_ring_count, (unsigned long long)oldest, (unsigned long long)newest, RING_CAP); return;
-    }
-    if (!strcmp(cmd, "read_frame_ram")) {
-        int f = j_int(line, "frame", -1); if (f < 0) { srv_err(id, "missing frame"); return; }
-        uint64_t oldest = (g_ring_count > RING_CAP) ? g_ring_count - RING_CAP : 0;
-        if (!g_ring || (uint64_t)f < oldest || (uint64_t)f >= g_ring_count) { srv_err(id, "frame not in buffer"); return; }
-        NesRefRecord* r = &g_ring[(uint32_t)f % RING_CAP];
-        if (r->frame != (uint32_t)f) { srv_err(id, "frame record mismatch"); return; }
-        char a[32]; const char* region = j_str(line, "region", a, sizeof(a)) ? a : "ram";
-        char ad[32]; uint32_t addr = j_str(line, "addr", ad, sizeof(ad)) ? hexu32(ad) : 0;
-        int len = j_int(line, "len", 16); if (len < 1) len = 1; if (len > 256) len = 256;
-        char hex[513];
-        for (int i = 0; i < len; i++) {
-            uint8_t b = 0; uint32_t x = addr + i;
-            if (!strcmp(region, "sram")) { if (x < 0x2000) b = r->sram[x]; }
-            else                         { if (x < 0x800)  b = r->wram[x]; }
-            snprintf(hex + i*2, 3, "%02x", b);
+    fclose(f);
+    g_have_script=!g_cmds.empty();
+    fprintf(stderr,"[nesref script] loaded %s: %zu commands\n",path,g_cmds.size());
+}
+// Advance the script for the frame about to be computed; sets g_held. Reads live
+// WRAM for WAIT_RAM8. Called once per frame BEFORE retro_run.
+static void script_tick(const uint8_t* ram){
+    if(!g_have_script) return;
+    for(int guard=0; guard<100000; guard++){
+        if(g_pc>=(int)g_cmds.size()){ g_held=0; g_script_done=true; return; }  // done (= recomp EXIT)
+        SCmd& c=g_cmds[g_pc];
+        if(c.type==1){ g_held|=c.barg; g_pc++; continue; }
+        if(c.type==2){ g_held&=(uint8_t)~c.barg; g_pc++; continue; }
+        if(c.type==0){                                      // WAIT n
+            if(g_wait_left==0) g_wait_left=c.iarg;
+            g_wait_left--;
+            if(g_wait_left>0) return;
+            g_wait_left=0; g_pc++; continue;
         }
-        srv_fmt("{\"id\":%d,\"ok\":true,\"frame\":%u,\"region\":\"%s\",\"addr\":\"0x%04X\",\"len\":%d,\"hex\":\"%s\"}", id, r->frame, region, addr, len, hex); return;
+        if(c.type==3){                                      // WAIT_RAM8 addr val
+            if(g_waitram_start<0) g_waitram_start=(long)g_frame;
+            if(ram && ram[c.addr & 0x7FF]==c.val){ g_waitram_start=-1; g_pc++; continue; }
+            if((long)g_frame - g_waitram_start > 30*60){     // 30s timeout (match recomp)
+                fprintf(stderr,"[nesref script] WAIT_RAM8 $%04X==%02X TIMEOUT (got %02X) f=%u\n",
+                        c.addr, c.val, ram?ram[c.addr&0x7FF]:0, g_frame);
+                g_waitram_start=-1; g_pc++; continue;
+            }
+            return;                                          // keep waiting; hold current mask
+        }
+        g_pc++;
     }
-    if (!strcmp(cmd, "save_state")) {
-        char p[256]; const char* path = j_str(line, "path", p, sizeof(p)) ? p : "nes_state.bin";
-        save_state_file(path); srv_fmt("{\"id\":%d,\"ok\":true,\"path\":\"%s\"}", id, path); return;
-    }
-    if (!strcmp(cmd, "load_state")) {
-        char p[256]; const char* path = j_str(line, "path", p, sizeof(p)) ? p : "nes_state.bin";
-        bool ok = load_state_file(path); if (ok) srv_fmt("{\"id\":%d,\"ok\":true,\"path\":\"%s\"}", id, path); else srv_err(id, "load failed"); return;
-    }
-    srv_err(id, "unknown command (try 'help')");
 }
-
-static void srv_init(int port) {
-    WSADATA wsa; if (WSAStartup(MAKEWORD(2,2), &wsa) != 0) { fprintf(stderr, "[debug] WSAStartup failed\n"); return; }
-    g_listen = socket(AF_INET, SOCK_STREAM, 0);
-    if (g_listen == INVALID_SOCKET) { fprintf(stderr, "[debug] socket failed\n"); return; }
-    int yes = 1; setsockopt(g_listen, SOL_SOCKET, SO_REUSEADDR, (const char*)&yes, sizeof(yes));
-    sockaddr_in a; memset(&a, 0, sizeof(a)); a.sin_family = AF_INET; a.sin_addr.s_addr = htonl(INADDR_LOOPBACK); a.sin_port = htons((u_short)port);
-    if (bind(g_listen, (sockaddr*)&a, sizeof(a)) != 0) { fprintf(stderr, "[debug] bind %d failed\n", port); closesocket(g_listen); g_listen = INVALID_SOCKET; return; }
-    listen(g_listen, 1);
-    u_long nb = 1; ioctlsocket(g_listen, FIONBIO, &nb);
-    printf("[debug] TCP server listening on 127.0.0.1:%d (nesrecomp protocol parity)\n", port); fflush(stdout);
-}
-static void srv_poll() {
-    if (g_listen == INVALID_SOCKET) return;
-    if (g_client == INVALID_SOCKET) {
-        SOCKET c = accept(g_listen, nullptr, nullptr);
-        if (c != INVALID_SOCKET) { u_long nb = 1; ioctlsocket(c, FIONBIO, &nb); g_client = c; g_rxlen = 0; }
-        else return;
-    }
-    for (;;) {
-        char tmp[2048]; int n = recv(g_client, tmp, sizeof(tmp), 0);
-        if (n == 0) { closesocket(g_client); g_client = INVALID_SOCKET; return; }
-        if (n < 0) { if (WSAGetLastError() == WSAEWOULDBLOCK) break; closesocket(g_client); g_client = INVALID_SOCKET; return; }
-        for (int i = 0; i < n; i++) {
-            char ch = tmp[i];
-            if (ch == '\n') { g_rxbuf[g_rxlen] = 0; if (g_rxlen) srv_dispatch(g_rxbuf); g_rxlen = 0; }
-            else if (g_rxlen < (int)sizeof(g_rxbuf) - 1) g_rxbuf[g_rxlen++] = ch;
+static int16_t cb_input_state(unsigned port, unsigned device, unsigned, unsigned id) {
+    if (port!=0 || device!=RETRO_DEVICE_JOYPAD) return 0;
+    if (g_have_script) {
+        uint8_t m = g_held;   // set by script_tick() before this frame's retro_run
+        switch (id) {
+            case RETRO_DEVICE_ID_JOYPAD_A:      return (m&0x80)?1:0;
+            case RETRO_DEVICE_ID_JOYPAD_B:      return (m&0x40)?1:0;
+            case RETRO_DEVICE_ID_JOYPAD_SELECT: return (m&0x20)?1:0;
+            case RETRO_DEVICE_ID_JOYPAD_START:  return (m&0x10)?1:0;
+            case RETRO_DEVICE_ID_JOYPAD_UP:     return (m&0x08)?1:0;
+            case RETRO_DEVICE_ID_JOYPAD_DOWN:   return (m&0x04)?1:0;
+            case RETRO_DEVICE_ID_JOYPAD_LEFT:   return (m&0x02)?1:0;
+            case RETRO_DEVICE_ID_JOYPAD_RIGHT:  return (m&0x01)?1:0;
+            default: return 0;
         }
     }
+    const Uint8* ks = SDL_GetKeyboardState(nullptr);
+    SDL_Scancode sc;
+    switch (id) {
+        case RETRO_DEVICE_ID_JOYPAD_B:      sc=SDL_SCANCODE_Z;      break;
+        case RETRO_DEVICE_ID_JOYPAD_A:      sc=SDL_SCANCODE_X;      break;
+        case RETRO_DEVICE_ID_JOYPAD_START:  sc=SDL_SCANCODE_RETURN; break;
+        case RETRO_DEVICE_ID_JOYPAD_SELECT: sc=SDL_SCANCODE_RSHIFT; break;
+        case RETRO_DEVICE_ID_JOYPAD_UP:     sc=SDL_SCANCODE_UP;     break;
+        case RETRO_DEVICE_ID_JOYPAD_DOWN:   sc=SDL_SCANCODE_DOWN;   break;
+        case RETRO_DEVICE_ID_JOYPAD_LEFT:   sc=SDL_SCANCODE_LEFT;   break;
+        case RETRO_DEVICE_ID_JOYPAD_RIGHT:  sc=SDL_SCANCODE_RIGHT;  break;
+        default: return 0;
+    }
+    return ks[sc] ? 1 : 0;
 }
 
 int main(int argc, char** argv) {
-    if (argc < 3) { fprintf(stderr, "usage: nesref <core.dll> <rom.nes>\n"); return 1; }
-    const char* corePath = argv[1]; const char* romPath = argv[2];
+    if (argc < 3) { fprintf(stderr,"usage: nesref <core.dll> <rom.nes>\n"); return 1; }
+    const char* corePath = argv[1];
+    const char* romPath  = argv[2];
 
     g_core = LoadLibraryA(corePath);
-    if (!g_core) { fprintf(stderr, "LoadLibrary failed: %s (err %lu)\n", corePath, GetLastError()); return 2; }
-    bindsym(p_retro_init, "retro_init"); bindsym(p_retro_deinit, "retro_deinit");
-    bindsym(p_retro_api_version, "retro_api_version");
-    bindsym(p_retro_get_system_info, "retro_get_system_info");
-    bindsym(p_retro_get_system_av_info, "retro_get_system_av_info");
-    bindsym(p_retro_set_environment, "retro_set_environment");
-    bindsym(p_retro_set_video_refresh, "retro_set_video_refresh");
-    bindsym(p_retro_set_audio_sample, "retro_set_audio_sample");
-    bindsym(p_retro_set_audio_sample_batch, "retro_set_audio_sample_batch");
-    bindsym(p_retro_set_input_poll, "retro_set_input_poll");
-    bindsym(p_retro_set_input_state, "retro_set_input_state");
-    bindsym(p_retro_set_controller_port_device, "retro_set_controller_port_device");
-    bindsym(p_retro_load_game, "retro_load_game"); bindsym(p_retro_unload_game, "retro_unload_game");
-    bindsym(p_retro_run, "retro_run");
-    bindsym(p_retro_serialize_size, "retro_serialize_size");
-    bindsym(p_retro_serialize, "retro_serialize"); bindsym(p_retro_unserialize, "retro_unserialize");
-    bindsym(p_retro_get_memory_data, "retro_get_memory_data");
-    bindsym(p_retro_get_memory_size, "retro_get_memory_size");
+    if (!g_core) { fprintf(stderr,"LoadLibrary failed: %s (err %lu)\n", corePath, GetLastError()); return 2; }
+    bind(p_retro_init,"retro_init"); bind(p_retro_deinit,"retro_deinit");
+    bind(p_retro_api_version,"retro_api_version");
+    bind(p_retro_get_system_info,"retro_get_system_info");
+    bind(p_retro_get_system_av_info,"retro_get_system_av_info");
+    bind(p_retro_set_environment,"retro_set_environment");
+    bind(p_retro_set_video_refresh,"retro_set_video_refresh");
+    bind(p_retro_set_audio_sample,"retro_set_audio_sample");
+    bind(p_retro_set_audio_sample_batch,"retro_set_audio_sample_batch");
+    bind(p_retro_set_input_poll,"retro_set_input_poll");
+    bind(p_retro_set_input_state,"retro_set_input_state");
+    bind(p_retro_set_controller_port_device,"retro_set_controller_port_device");
+    bind(p_retro_load_game,"retro_load_game"); bind(p_retro_unload_game,"retro_unload_game");
+    bind(p_retro_run,"retro_run");
+    bind(p_retro_serialize_size,"retro_serialize_size");
+    bind(p_retro_serialize,"retro_serialize"); bind(p_retro_unserialize,"retro_unserialize");
+    bind(p_retro_get_memory_data,"retro_get_memory_data");
+    bind(p_retro_get_memory_size,"retro_get_memory_size");
 
     p_retro_set_environment(cb_environment);
     p_retro_init();
 
-    retro_system_info si; memset(&si, 0, sizeof si); p_retro_get_system_info(&si);
-    if (si.library_name) { strncpy(g_core_name, si.library_name, sizeof(g_core_name)-1); g_core_name[sizeof(g_core_name)-1]=0; }
-    printf("core: %s %s  need_fullpath=%d\n", si.library_name ? si.library_name : "?",
-           si.library_version ? si.library_version : "?", si.need_fullpath);
+    retro_system_info si; memset(&si,0,sizeof si); p_retro_get_system_info(&si);
+    printf("core: %s %s  need_fullpath=%d\n", si.library_name?si.library_name:"?",
+           si.library_version?si.library_version:"?", si.need_fullpath);
 
-    retro_game_info gi; memset(&gi, 0, sizeof gi); gi.path = romPath;
+    retro_game_info gi; memset(&gi,0,sizeof gi); gi.path=romPath;
     std::vector<uint8_t> rom;
     if (!si.need_fullpath) {
-        FILE* f = fopen(romPath, "rb"); if (!f) { fprintf(stderr, "cannot open rom %s\n", romPath); return 3; }
-        fseek(f, 0, SEEK_END); long n = ftell(f); fseek(f, 0, SEEK_SET);
-        rom.resize(n); fread(rom.data(), 1, n, f); fclose(f); gi.data = rom.data(); gi.size = rom.size();
+        FILE* f=fopen(romPath,"rb"); if(!f){ fprintf(stderr,"cannot open rom %s\n",romPath); return 3; }
+        fseek(f,0,SEEK_END); long n=ftell(f); fseek(f,0,SEEK_SET);
+        rom.resize(n); fread(rom.data(),1,n,f); fclose(f);
+        gi.data=rom.data(); gi.size=rom.size();
     }
     p_retro_set_video_refresh(cb_video);
     p_retro_set_audio_sample(cb_audio_sample);
     p_retro_set_audio_sample_batch(cb_audio_batch);
     p_retro_set_input_poll(cb_input_poll);
     p_retro_set_input_state(cb_input_state);
-    if (!p_retro_load_game(&gi)) { fprintf(stderr, "retro_load_game failed\n"); return 4; }
+    if (!p_retro_load_game(&gi)) { fprintf(stderr,"retro_load_game failed\n"); return 4; }
     p_retro_set_controller_port_device(0, RETRO_DEVICE_JOYPAD);
 
-    retro_system_av_info av; memset(&av, 0, sizeof av); p_retro_get_system_av_info(&av);
-    int vw = (int)av.geometry.base_width, vh = (int)av.geometry.base_height;
-    if (vw <= 0) vw = 256; if (vh <= 0) vh = 240;
-    printf("core timing: fps=%.4f sample_rate=%.2f\n", av.timing.fps, av.timing.sample_rate);
+    // Probe which memory regions this core exposes (NESREF_MEMPROBE=1). Finding
+    // (2026-07-01): Mesen, FCEUmm, and Nestopia libretro cores ALL expose only
+    // SYSTEM_RAM (2KB) for NES — VIDEO_RAM/SAVE_RAM/RTC are null/0. So the
+    // libretro path cannot supply PPU-internal memory or a cycle counter; the
+    // co-sim PPU-mem and cycle cross-checks require the external MesenCE Lua
+    // (emu.read(nesNametableRam/nesSpriteRam/nesPaletteRam) + cpu.cycleCount).
+    if (getenv("NESREF_MEMPROBE")) {
+        struct { int id; const char* n; } mem[] = {
+            {RETRO_MEMORY_SAVE_RAM,"SAVE_RAM"}, {RETRO_MEMORY_RTC,"RTC"},
+            {RETRO_MEMORY_SYSTEM_RAM,"SYSTEM_RAM"}, {RETRO_MEMORY_VIDEO_RAM,"VIDEO_RAM"} };
+        for (auto& m : mem) {
+            void* d = p_retro_get_memory_data(m.id);
+            size_t s = p_retro_get_memory_size(m.id);
+            printf("[nesref mem] %-10s data=%p size=%zu\n", m.n, d, s);
+        }
+        fflush(stdout);
+    }
 
-    { const char* t = getenv("NESREF_TRACE"); g_trace_on = (t && t[0] && t[0] != '0') ? 1 : 0; }
-    { const char* wp = getenv("NESREF_WAV"); if (wp && wp[0]) wav_open(wp, av.timing.sample_rate > 0 ? av.timing.sample_rate : 48000.0); }
-    long quit_frames = 0; { const char* qf = getenv("NESREF_QUIT_FRAMES"); if (qf && qf[0]) quit_frames = atol(qf); }
-    int port = 4370; { const char* pp = getenv("NESREF_PORT"); if (pp && pp[0]) port = atoi(pp); }
-    srv_init(port);
+    retro_system_av_info av; memset(&av,0,sizeof av); p_retro_get_system_av_info(&av);
+    int vw=(int)av.geometry.base_width, vh=(int)av.geometry.base_height;
+    if(vw<=0)vw=256; if(vh<=0)vh=240;
+    { const char* wp = getenv("NESREF_WAV");
+      if (wp && wp[0]) {
+          double sr = av.timing.sample_rate > 0 ? av.timing.sample_rate : 48000.0;
+          wav_open(wp, sr);
+          printf("WAV capture -> %s @ %.1f Hz\n", wp, sr); fflush(stdout);
+      } }
 
-    SDL_SetMainReady();
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER | SDL_INIT_JOYSTICK) != 0) { fprintf(stderr, "SDL_Init: %s\n", SDL_GetError()); return 5; }
-    open_first_pad();
-    g_win = SDL_CreateWindow("nesref (libretro) — nesrecomp oracle | Fn load / Shift+Fn save / Esc quit",
-        SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, vw * 2, vh * 2, SDL_WINDOW_RESIZABLE);
-    g_ren = SDL_CreateRenderer(g_win, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-    SDL_RenderSetLogicalSize(g_ren, vw, vh);
+    // Headless when NESREF_FRAMES is set: no SDL window (deterministic capture).
+    const char* framesEnv = getenv("NESREF_FRAMES");
+    long run_frames = (framesEnv && framesEnv[0]) ? atol(framesEnv) : -1;
+    bool headless = (run_frames > 0);
 
-    printf("RUN. KB: arrows=DPad Z=A X=B Tab=Select Enter=Start | Fn=load slot, Shift+Fn=save | Esc=quit\n"); fflush(stdout);
+    if (!headless) {
+        SDL_SetMainReady();
+        if (SDL_Init(SDL_INIT_VIDEO) != 0) { fprintf(stderr,"SDL_Init: %s\n",SDL_GetError()); return 5; }
+        g_win = SDL_CreateWindow("nesref (libretro oracle) — Esc quit",
+            SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, vw*2, vh*2, SDL_WINDOW_RESIZABLE);
+        g_ren = SDL_CreateRenderer(g_win, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+        SDL_RenderSetLogicalSize(g_ren, vw, vh);
+        printf("RUN. KB: arrows=DPad Z=B X=A Enter=Start RShift=Select Esc=quit\n"); fflush(stdout);
+    } else {
+        printf("RUN headless: %ld frames\n", run_frames); fflush(stdout);
+    }
 
-    bool running = true;
-    Uint64 freq = SDL_GetPerformanceFrequency(), prev = SDL_GetPerformanceCounter();
-    const double target = (double)freq / 60.098;
+    load_script();   // NESREF_SCRIPT: per-frame input for co-sim drive-through
+
+    bool running=true;
+    Uint64 freq = headless?0:SDL_GetPerformanceFrequency();
+    Uint64 prev = headless?0:SDL_GetPerformanceCounter();
+    const double target = headless?0:(double)freq / 60.098;
     while (running) {
-        SDL_Event e;
-        while (SDL_PollEvent(&e)) {
-            if (e.type == SDL_QUIT) running = false;
-            else if (e.type == SDL_CONTROLLERDEVICEADDED) open_first_pad();
-            else if (e.type == SDL_CONTROLLERDEVICEREMOVED) { if (g_pad) { SDL_GameControllerClose(g_pad); g_pad = nullptr; } open_first_pad(); }
-            else if (e.type == SDL_KEYDOWN && e.key.repeat == 0) {
-                SDL_Scancode s = e.key.keysym.scancode;
-                if (s == SDL_SCANCODE_ESCAPE) running = false;
-                else if (s >= SDL_SCANCODE_F1 && s <= SDL_SCANCODE_F9) {
-                    int slot = (int)(s - SDL_SCANCODE_F1) + 1; char path[64]; slot_path(slot, path, sizeof path);
-                    if (e.key.keysym.mod & KMOD_SHIFT) { save_state_file(path); printf("[slot %d saved]\n", slot); }
-                    else { printf("[slot %d %s]\n", slot, load_state_file(path) ? "loaded" : "empty/failed"); }
-                    fflush(stdout);
-                }
+        if (!headless) {
+            SDL_Event e;
+            while (SDL_PollEvent(&e)) {
+                if (e.type==SDL_QUIT) running=false;
+                else if (e.type==SDL_KEYDOWN && e.key.repeat==0 && e.key.keysym.scancode==SDL_SCANCODE_ESCAPE) running=false;
             }
         }
-        srv_poll();
+        // State-anchored input: advance the script (reading live WRAM for
+        // WAIT_RAM8) to set this frame's held buttons before the core polls.
+        script_tick((const uint8_t*)p_retro_get_memory_data(RETRO_MEMORY_SYSTEM_RAM));
         p_retro_run();
         g_frame++;
-        ring_record();
+        apply_freeze();   // force shared RNG/seed before snapshotting (matches recomp order)
         trace_tick();
-        srv_poll();
-        if (quit_frames > 0 && g_frame >= (uint32_t)quit_frames) running = false;
-        for (;;) {
-            Uint64 now = SDL_GetPerformanceCounter(); double el = (double)(now - prev);
-            if (el >= target) { prev = now; break; }
-            double rem_ms = (target - el) * 1000.0 / (double)freq;
-            if (rem_ms > 1.5) SDL_Delay((Uint32)(rem_ms - 1.0));
+        dump_check();
+        { static long sf=-2; static const char* sfile=nullptr;
+          if (sf==-2){ const char* v=getenv("NESREF_SHOT"); sf=(v&&v[0])?atol(v):-1;
+                       sfile=getenv("NESREF_SHOT_FILE"); if(!sfile||!sfile[0]) sfile="nesref_shot.png"; }
+          if (sf>0 && (long)g_frame==sf) write_shot(sfile); }
+        // Gated savestate dump (NESREF_STATEDUMP=<frame>:<path>): probe whether
+        // Mesen's serialize blob is parseable for PPU/APU/cycle state in-process.
+        { static long df=-2; static const char* dpath=nullptr;
+          if (df==-2){ const char* v=getenv("NESREF_STATEDUMP");
+                       if(v&&v[0]){ static char pb[512]; long f; char p[480];
+                                    if(sscanf(v,"%ld:%479s",&f,p)==2){df=f;strcpy(pb,p);dpath=pb;} else df=-1; }
+                       else df=-1; }
+          if (df>0 && (long)g_frame==df) {
+              size_t sz=p_retro_serialize_size();
+              std::vector<uint8_t> blob(sz);
+              if (p_retro_serialize(blob.data(), sz)) {
+                  FILE* bf=fopen(dpath,"wb"); if(bf){ fwrite(blob.data(),1,sz,bf); fclose(bf);
+                      printf("[nesref statedump] frame %ld -> %s (%zu bytes)\n", df, dpath, sz); fflush(stdout); }
+              } else printf("[nesref statedump] retro_serialize failed (sz=%zu)\n", sz);
+          } }
+
+        // In-process CYCLE oracle (NESREF_CYCLE_FILE=<path>): Mesen exposes no
+        // cycle counter over libretro's memory API, but its full state -- incl.
+        // the monotonic CPU cycle count -- is in the retro_serialize blob. We
+        // pull it in-process (no external Mesen.exe). The offset is discovered
+        // self-calibrating: at a calibration frame, scan the blob for the unique
+        // 8-byte LE value ~= frame * 29780.5 and lock it (robust across ROM/core
+        // version -- no magic constant). Then emit {f,cyc} per frame.
+        { static int st=-1; static FILE* cf=nullptr; static long coff=-1;
+          if (st<0){ const char* v=getenv("NESREF_CYCLE_FILE"); cf=(v&&v[0])?fopen(v,"w"):nullptr; st=cf?1:0; }
+          if (st==1) {
+              size_t sz=p_retro_serialize_size();
+              static std::vector<uint8_t> blob; blob.resize(sz);
+              if (p_retro_serialize(blob.data(), sz)) {
+                  if (coff<0 && g_frame>=30) {
+                      // Lock the cycle-counter offset: unique 8-byte LE within 1% of frame*29780.5.
+                      double expect=(double)g_frame*29780.5; long lo=(long)(expect*0.99), hi=(long)(expect*1.01);
+                      long found=-1; int n=0;
+                      for (size_t o=0;o+8<=sz;o++){ uint64_t val; memcpy(&val,&blob[o],8);
+                          if ((long long)val>=lo && (long long)val<=hi){ found=(long)o; n++; } }
+                      if (n==1){ coff=found; printf("[nesref cycle] locked offset 0x%lx (f=%u cyc=%llu)\n",
+                                    coff, g_frame, (unsigned long long)*(uint64_t*)&blob[coff]); fflush(stdout); }
+                      else printf("[nesref cycle] calib f=%u: %d candidates (need 1), retrying\n", g_frame, n);
+                  }
+                  if (coff>=0){ uint64_t cyc; memcpy(&cyc,&blob[coff],8);
+                      fprintf(cf, "{\"f\":%u,\"cyc\":%llu}\n", g_frame, (unsigned long long)cyc);
+                      if ((g_frame%30)==0) fflush(cf); }
+              }
+          } }
+
+        // In-process PPU-mem oracle (NESREF_PPU_FILE=<path>): OAM + palette + the
+        // 2KB nametable RAM from the serialize blob. libretro exposes no PPU memory
+        // (VIDEO_RAM is null on Mesen/FCEUmm/Nestopia), but the savestate has it.
+        // Anchor on the 2KB WRAM found by CONTENT match (memmem of the live
+        // SYSTEM_RAM -- robust, ROM-independent); the PPU regions sit at fixed deltas
+        // relative to it in the Mesen-core layout (OAM = wram-0x16c, palette =
+        // wram-0x190, nametables = wram+0xab4; NROM/SMB-measured, override via
+        // NESREF_PPU_OAM_D / _PAL_D / _NT_D for other mappers). Emits a per-frame
+        // delta-JSONL image matching the recomp's NESRECOMP_PPUMEM_TRACE:
+        // [0x000-0x0FF]=OAM, [0x100-0x11F]=palette, [0x200-0x9FF]=nametable 2KB.
+        { static int st=-1; static FILE* pf=nullptr; static uint8_t prev[0xA00]; static bool primed=false;
+          static long oamd=0x16c, pald=0x190, ntd=-0xab4;  /* wram-relative (ntd negative => after wram) */
+          if (st<0){ const char* v=getenv("NESREF_PPU_FILE"); pf=(v&&v[0])?fopen(v,"w"):nullptr; st=pf?1:0;
+                     const char* a=getenv("NESREF_PPU_OAM_D"); if(a)oamd=strtol(a,0,0);
+                     const char* p=getenv("NESREF_PPU_PAL_D"); if(p)pald=strtol(p,0,0);
+                     const char* n=getenv("NESREF_PPU_NT_D");  if(n)ntd=strtol(n,0,0); }
+          if (st==1) {
+              size_t sz=p_retro_serialize_size();
+              static std::vector<uint8_t> blob; blob.resize(sz);
+              uint8_t* wram=(uint8_t*)p_retro_get_memory_data(RETRO_MEMORY_SYSTEM_RAM);
+              if (wram && p_retro_serialize(blob.data(), sz)) {
+                  // Locate the 2KB WRAM in the blob (first exact 2048-byte match).
+                  long wo=-1;
+                  for (size_t o=0;o+2048<=sz;o++){ if(!memcmp(&blob[o],wram,2048)){wo=(long)o;break;} }
+                  if (wo>=0) {
+                      uint8_t img[0xA00]; memset(img,0,sizeof img);
+                      long oo=wo-oamd, po=wo-pald, no=wo-ntd;
+                      if (oo>=0 && po>=0 && no>=0 &&
+                          oo+256<=(long)sz && po+32<=(long)sz && no+0x800<=(long)sz) {
+                          memcpy(img,       &blob[oo], 256);    // OAM        -> [0x000-0x0FF]
+                          memcpy(img+0x100, &blob[po], 32);     // palette    -> [0x100-0x11F]
+                          memcpy(img+0x200, &blob[no], 0x800);  // nametables -> [0x200-0x9FF]
+                          if (!primed){ for(int a=0;a<0xA00;a++){ prev[a]=img[a];
+                                fprintf(pf,"{\"f\":%u,\"adr\":\"0x%04x\",\"old\":\"0x00\",\"val\":\"0x%02x\"}\n",g_frame,a,img[a]); }
+                                primed=true; }
+                          else { for(int a=0;a<0xA00;a++) if(img[a]!=prev[a]){
+                                fprintf(pf,"{\"f\":%u,\"adr\":\"0x%04x\",\"old\":\"0x%02x\",\"val\":\"0x%02x\"}\n",g_frame,a,prev[a],img[a]);
+                                prev[a]=img[a]; } }
+                          if ((g_frame%30)==0) fflush(pf);
+                      }
+                  }
+              }
+          } }
+
+        if (run_frames>0 && (long)g_frame>=run_frames) { if(g_log){fflush(g_log);} running=false; }
+        // Script finished (all commands incl. the post-anchor settle consumed) =
+        // the recomp's EXIT: stop here so both engines' FINAL state is the same
+        // script point, not NESREF_FRAMES (which would overshoot past the anchor).
+        if (g_have_script && g_script_done) { if(g_log){fflush(g_log);} running=false; }
+        if (!headless) {
+            for (;;) {
+                Uint64 now=SDL_GetPerformanceCounter();
+                double el=(double)(now-prev);
+                if (el>=target) { prev=now; break; }
+                double rem_ms=(target-el)*1000.0/(double)freq;
+                if (rem_ms>1.5) SDL_Delay((Uint32)(rem_ms-1.0));
+            }
         }
     }
-    if (g_trace) fflush(g_trace);
+    if (g_log) fflush(g_log);
     wav_close();
     p_retro_unload_game(); p_retro_deinit();
-    if (g_client != INVALID_SOCKET) closesocket(g_client);
-    if (g_listen != INVALID_SOCKET) closesocket(g_listen);
-    WSACleanup();
-    SDL_Quit(); FreeLibrary(g_core);
-    free(g_ring);
+    if (!headless) SDL_Quit();
+    FreeLibrary(g_core);
     return 0;
 }

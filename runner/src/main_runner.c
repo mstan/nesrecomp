@@ -753,6 +753,19 @@ smoke_skip_input:
         recomp_audio_debug_push_i16("t1_apu", s_audio_frame,
                                     AUDIO_SAMPLES_PER_FRAME, 44100.0, 1);
 
+        /* T0: per-channel raw DAC levels for the same 735-sample window
+         * (pulse1/pulse2/triangle/noise/dmc), staged by apu_generate. NULL
+         * when capture is off; skipped when a synth source replaced the APU. */
+        if (s_synth_mode == RAD_SYNTH_OFF) {
+            static const char *t0_names[5] =
+                {"t0_pulse1", "t0_pulse2", "t0_triangle", "t0_noise", "t0_dmc"};
+            for (int t0c = 0; t0c < 5; t0c++) {
+                const int16_t *t0buf = apu_debug_t0(t0c);
+                if (t0buf) recomp_audio_debug_push_i16(t0_names[t0c], t0buf,
+                                                       AUDIO_SAMPLES_PER_FRAME, 44100.0, 1);
+            }
+        }
+
         /* Apply the launcher volume (0..100) as a linear scale. */
         int vol = g_nes_config.volume;
         if (vol < 100) {

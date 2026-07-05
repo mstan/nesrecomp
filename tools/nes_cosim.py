@@ -16,6 +16,10 @@ Commands:
   gate1   <exe> <rom> [frames]        recomp-vs-recomp determinism (A-vs-A must be 0)
   gate3   <exe> <rom> [frames]        fault injection: must halt at the injected frame,
                                       in the injected subsystem (catches a blind hasher)
+  abaudio <exe> <rom> <nesref> <core> [secs=30] [keep_dir] [script]
+                                      A-vs-B audio-fidelity: recomp t1_apu tap vs
+                                      Mesen NESREF_WAV; self-floor + oracle metrics
+                                      (pitch cents / onsets / timbre L1 / drift)
   diff    <a.jsonl> <b.jsonl>         first-divergence report between two hash streams
   run     <exe> <rom> <out> [frames] [inject]   one instrumented run -> JSONL
 
@@ -673,6 +677,125 @@ def cmd_abppu(exe, rom, nesref_exe, core, frames):
         return 0
 
 
+def cmd_abaudio(exe, rom, nesref_exe, core, secs, keep_dir=None, script=None):
+    """A-vs-B AUDIO: recomp APU mix (t1_apu tap) vs Mesen (nesref NESREF_WAV),
+    drift-tolerant music-fidelity metrics via tools/nes_audio_ab.py.
+
+    Three captures per verdict (the SNES-campaign discipline):
+      A  recomp capture 1  (RECOMP_AUDIO_DEBUG dump, realtime windowed run)
+      A' recomp capture 2  -> SELF-FLOOR: what the metrics read when the audio
+                              is by construction the same program twice. Any
+                              A-vs-oracle number is only meaningful relative
+                              to this floor.
+      B  nesref/Mesen headless WAV (deterministic, faster than realtime)
+
+    The recomp runs WINDOWED (audio is generated per-NMI and skipped in
+    --smoke), so a N-second capture takes ~N wall seconds and briefly shows a
+    game window; nesref runs headless. PASS criteria (from the burndown +
+    snesrecomp campaign): |pitch| < 3 cents; onset match >= 0.90 with |err|
+    median under a frame; timbre band-L1 within 3x self-floor (absolute < 0.15);
+    |drift| < 1000 ppm. These bound "sounds the same" — not bit-exactness."""
+    import shutil
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import nes_audio_ab
+
+    out_root = keep_dir or tempfile.mkdtemp(prefix="nes_abaudio_")
+    os.makedirs(out_root, exist_ok=True)
+    exe_abs, rom_abs = os.path.abspath(exe), os.path.abspath(rom)
+    nr_abs = os.path.abspath(nesref_exe)
+    print(f"[A-vs-B AUDIO] {os.path.basename(exe)} vs Mesen/nesref, {secs}s"
+          f"{' scripted' if script else ' attract'}")
+    print(f"  captures -> {out_root}")
+
+    # Deterministic input on BOTH sides: while a script is loaded the runner's
+    # script_get_buttons() fully overrides live keyboard/gamepad input, and
+    # nesref interprets the SAME file via NESREF_SCRIPT (HOLD/RELEASE/WAIT/
+    # WAIT_RAM8; other commands ignored). Without an explicit script we
+    # generate a neutral WAIT so a drifting gamepad or a stray keystroke into
+    # the focused window can't push the game out of attract mid-capture (this
+    # exact contamination produced the first bogus SMB captures).
+    script_path = os.path.abspath(script) if script else os.path.join(out_root, "neutral_input.txt")
+    if not script:
+        with open(script_path, "w") as f:
+            f.write(f"WAIT {(secs + 20) * 60}\n")
+
+    def recomp_capture(tag):
+        d = os.path.join(out_root, tag)
+        os.makedirs(d, exist_ok=True)
+        clear_saves(exe_abs)
+        env = dict(os.environ)
+        env["RECOMP_AUDIO_DEBUG"] = d
+        env["RECOMP_AUDIO_DEBUG_SECS"] = str(secs + 5)
+        env["RECOMP_AUDIO_DEBUG_DUMP_SECS"] = str(secs)
+        env.pop("RECOMP_AUDIO_SYNTH", None)
+        env.pop("NESRECOMP_COSIM_HASH", None)
+        p = subprocess.run([exe_abs, rom_abs, "--script", script_path], env=env,
+                           cwd=os.path.dirname(exe_abs),
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                           timeout=secs * 4 + 120)
+        wav = os.path.join(d, "t1_apu.wav")
+        if not os.path.isfile(wav):
+            raise RuntimeError(f"recomp capture produced no {wav} (exit {p.returncode})")
+        return wav
+
+    def oracle_capture():
+        wav = os.path.join(out_root, "oracle.wav")
+        env = dict(os.environ)
+        env["NESREF_FRAMES"] = str(int(secs * 60.0988) + 30)
+        env["NESREF_WAV"] = wav
+        env["NESREF_SCRIPT"] = script_path
+        env.pop("NESREF_TRACE_FILE", None)
+        subprocess.run([nr_abs, os.path.abspath(core), rom_abs], env=env,
+                       cwd=os.path.dirname(nr_abs), stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL, timeout=secs * 4 + 120)
+        if not os.path.isfile(wav):
+            raise RuntimeError("nesref produced no oracle.wav")
+        return wav
+
+    import time
+    print("  [1/3] recomp capture A (realtime, windowed)...")
+    wav_a = recomp_capture("rc_a")
+    # settle: let the previous instance release the shared TCP debug port
+    # (all games bind 4370) before relaunching, else the second boot can die
+    time.sleep(3)
+    print("  [2/3] recomp capture A' (self-floor)...")
+    wav_a2 = recomp_capture("rc_b")
+    print("  [3/3] nesref/Mesen oracle (headless)...")
+    wav_b = oracle_capture()
+
+    floor = nes_audio_ab.compare(wav_a, wav_a2)
+    nes_audio_ab.print_report(floor, "SELF-FLOOR recomp-vs-recomp")
+    ab = nes_audio_ab.compare(wav_b, wav_a)
+    nes_audio_ab.print_report(ab, "recomp vs Mesen oracle")
+
+    with open(os.path.join(out_root, "abaudio.json"), "w") as f:
+        json.dump({"floor": floor, "ab": ab}, f, indent=2)
+
+    # ---- verdict ----
+    fails = []
+    lf = ab["pitch"].get("logf_psd")
+    if lf is None or abs(lf["cents"]) >= 3.0:
+        fails.append(f"pitch {lf['cents']:+.2f} cents" if lf else "pitch unmeasurable")
+    o = ab["onset"]
+    if not o or not o.get("matched") or o["match_rate"] < 0.90:
+        fails.append(f"onset match {o['match_rate']*100:.0f}%" if o and o.get("matched")
+                     else "onsets unmatched")
+    t = ab["timbre"]
+    tfloor = floor["timbre"].get("band_l1", 0.0)
+    if not t or t["band_l1"] > max(0.15, 3.0 * tfloor):
+        fails.append(f"timbre L1 {t['band_l1']:.3f} (floor {tfloor:.3f})" if t else "timbre unmeasurable")
+    d = ab["drift"]
+    if d and abs(d["drift_ppm"]) > 1000:
+        fails.append(f"drift {d['drift_ppm']:+.0f} ppm")
+    print(f"\n  self-floor timbre L1 = {tfloor:.3f}; oracle timbre L1 = "
+          f"{t['band_l1'] if t else float('nan'):.3f}")
+    if fails:
+        print(f"  FAIL: {'; '.join(fails)}")
+        return 1
+    print("  PASS: pitch/onset/timbre/drift all within snesrecomp-campaign bounds")
+    return 0
+
+
 def cmd_diff(a_path, b_path):
     ar, br = load(a_path), load(b_path)
     div = first_divergence(ar, br)
@@ -716,6 +839,12 @@ def main():
         exe, rom, nesref_exe, core = sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5]
         frames = int(sys.argv[6]) if len(sys.argv) > 6 else 900
         return cmd_abppu(exe, rom, nesref_exe, core, frames)
+    if cmd == "abaudio":
+        exe, rom, nesref_exe, core = sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5]
+        secs = int(sys.argv[6]) if len(sys.argv) > 6 else 30
+        keep = sys.argv[7] if len(sys.argv) > 7 else None
+        script = sys.argv[8] if len(sys.argv) > 8 else None
+        return cmd_abaudio(exe, rom, nesref_exe, core, secs, keep, script)
     if cmd == "diff":
         return cmd_diff(sys.argv[2], sys.argv[3])
     if cmd == "run":

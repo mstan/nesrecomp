@@ -163,6 +163,23 @@ static int     s_mix_n;
 static ApuChannelLevels s_lv_last;
 static int     s_shadow_cached = -1;
 
+/* ---- T0 per-channel debug taps (recomp_audio_debug five-tap model) ----
+ * Side rings written in lockstep with s_ring at the same head slot, drained by
+ * apu_generate into per-frame staging buffers that main_runner pushes as the
+ * t0_* taps. Each entry is the sample-window average of the channel's raw DAC
+ * input (the same per-cycle levels the canon mixer consumed), linearly rescaled
+ * to int16 so per-channel waveform shape survives in the dumped WAVs:
+ * pulse/triangle/noise 0..15 -> x2184, dmc 0..127 -> x258. Env-gated on
+ * RECOMP_AUDIO_DEBUG via recomp_audio_debug_enabled(): zero extra work per
+ * cycle when capture is off. */
+#define APU_T0_CHANNELS  5
+#define APU_T0_FRAME_MAX 1024
+static int     s_t0_cached = -1;      /* -1 unqueried; 0 off; 1 capturing */
+static float   s_t0_acc[APU_T0_CHANNELS];
+static int16_t s_t0_ring[APU_T0_CHANNELS][APU_RING_SIZE];
+static int16_t s_t0_frame[APU_T0_CHANNELS][APU_T0_FRAME_MAX];
+int recomp_audio_debug_enabled(void); /* impl lives in main_runner.c (recomp_audio_debug.h) */
+
 /* ---- Envelope ---- */
 static void tick_envelope(uint8_t *div, uint8_t *vol, bool *start,
                            bool loop, uint8_t period) {
@@ -374,6 +391,8 @@ void apu_init(void) {
     /* sample-accurate engine state (ring + integration accumulators) */
     s_ring_head = s_ring_tail = 0;
     s_out_acc = 0.0f; s_mix_acc = 0.0f; s_mix_n = 0; s_shadow_cached = -1;
+    s_t0_cached = -1;
+    memset(s_t0_acc, 0, sizeof(s_t0_acc));
 
     /* Arm the (default-OFF) verified-enhancement audio shadow. */
     apu_shadow_init();
@@ -578,10 +597,18 @@ static void advance_frame_seq(void) {
 
 void apu_clock_cycles(int cpu_cycles) {
     if (s_shadow_cached < 0) s_shadow_cached = apu_shadow_enabled();
+    if (s_t0_cached < 0)     s_t0_cached = recomp_audio_debug_enabled() ? 1 : 0;
     for (int c = 0; c < cpu_cycles; c++) {
         advance_frame_seq();
         apu_step_channels(1.0f);
-        s_mix_acc += mix_sample_f(s_shadow_cached ? &s_lv_last : NULL);
+        s_mix_acc += mix_sample_f((s_shadow_cached || s_t0_cached) ? &s_lv_last : NULL);
+        if (s_t0_cached) {
+            s_t0_acc[0] += (float)s_lv_last.pulse1;
+            s_t0_acc[1] += (float)s_lv_last.pulse2;
+            s_t0_acc[2] += (float)s_lv_last.triangle;
+            s_t0_acc[3] += (float)s_lv_last.noise;
+            s_t0_acc[4] += (float)s_lv_last.dmc;
+        }
         s_mix_n++;
         s_out_acc += 1.0f;
         if (s_out_acc >= CYC_PER_SAMPLE) {
@@ -590,6 +617,19 @@ void apu_clock_cycles(int cpu_cycles) {
             if (avg >  32767.0f) avg =  32767.0f;
             if (avg < -32767.0f) avg = -32767.0f;
             int16_t canon = (int16_t)avg;
+            if (s_t0_cached) {
+                /* Same averaging window as the canon mix; write the side rings
+                 * at the slot ring_push is about to fill so the streams stay
+                 * sample-aligned. */
+                float inv = (s_mix_n > 0) ? 1.0f / (float)s_mix_n : 0.0f;
+                int h = s_ring_head;
+                s_t0_ring[0][h] = (int16_t)(s_t0_acc[0] * inv * 2184.0f);
+                s_t0_ring[1][h] = (int16_t)(s_t0_acc[1] * inv * 2184.0f);
+                s_t0_ring[2][h] = (int16_t)(s_t0_acc[2] * inv * 2184.0f);
+                s_t0_ring[3][h] = (int16_t)(s_t0_acc[3] * inv * 2184.0f);
+                s_t0_ring[4][h] = (int16_t)(s_t0_acc[4] * inv * 258.0f);
+                memset(s_t0_acc, 0, sizeof(s_t0_acc));
+            }
             ring_push(s_shadow_cached ? apu_shadow_sample(canon, &s_lv_last) : canon);
             s_mix_acc = 0.0f; s_mix_n = 0;
         }
@@ -607,13 +647,30 @@ bool apu_irq_asserted(void) {
  * last sample; the DRC bridge's servo + stall-conceal absorb the slight jitter. */
 void apu_generate(int16_t *buf, int n_samples) {
     int16_t last = 0;
+    int16_t lastc[APU_T0_CHANNELS] = {0, 0, 0, 0, 0};
+    int cap = (s_t0_cached == 1);
     for (int i = 0; i < n_samples; i++) {
         if (s_ring_tail != s_ring_head) {
             last = s_ring[s_ring_tail];
+            if (cap)
+                for (int k = 0; k < APU_T0_CHANNELS; k++)
+                    lastc[k] = s_t0_ring[k][s_ring_tail];
             s_ring_tail = (s_ring_tail + 1) & (APU_RING_SIZE - 1);
         }
         buf[i] = last;
+        if (cap && i < APU_T0_FRAME_MAX)
+            for (int k = 0; k < APU_T0_CHANNELS; k++)
+                s_t0_frame[k][i] = lastc[k];
     }
+}
+
+/* Per-channel T0 staging buffer for the frame most recently drained by
+ * apu_generate. ch: 0=pulse1 1=pulse2 2=triangle 3=noise 4=dmc. NULL when
+ * RECOMP_AUDIO_DEBUG capture is off. Valid for the same sample count passed to
+ * apu_generate (<= APU_T0_FRAME_MAX). */
+const int16_t *apu_debug_t0(int ch) {
+    if (s_t0_cached != 1 || ch < 0 || ch >= APU_T0_CHANNELS) return NULL;
+    return s_t0_frame[ch];
 }
 
 /* ---- Co-sim full-APU-state serializer (see apu.h) ----

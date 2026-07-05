@@ -396,6 +396,29 @@ L1 0.083 vs oracle. Residual: small mid-band tilt; DMC DMA steal unmodeled.)
 > NOT the lever — the residual is a small mid-band tilt (110-220 low / 440-880 high), not
 > high-band aliasing. Verdict: APU **input bit-identical**, rhythm 0.99, timbre near floor.
 > `_acc/audio_slice/AUDIO_SLICE_003.md`.
+>
+> **Slice 005 (2026-07-05, COMMITTED harness — re-measurement + certification):** the
+> slice-001..004 analysis scripts died with the `_acc/` tree; rebuilt as **committed**
+> tooling mirroring the snesrecomp issue-#4 audio campaign: `tools/nes_audio_ab.py`
+> (drift/onset/log-f-PSD-pitch/third-octave-timbre-L1 A/B, numpy-only) +
+> `tools/nes_cosim.py abaudio` (orchestrates recomp T1 capture ×2 for a SELF-FLOOR +
+> Mesen `NESREF_WAV` oracle, script-driven deterministic input on BOTH sides) + per-channel
+> **T0 taps** (`apu_debug_t0`, t0_pulse1/2/triangle/noise/dmc WAVs, env-gated zero-cost) +
+> `NESREF_WAV` restored in the unified nesref frontend. Results (30 s, Mesen 0.9.9 oracle):
+> **MM3 attract** timbre L1 **0.019** / pitch **+0.00 cents** / onsets 93% (median 0.0 ms) /
+> drift +268 ppm; **Faxanadu attract** L1 **0.058** / +0.00 cents / onsets 99% / +130 ppm;
+> **SMB scripted 1-1** L1 **0.075** / +0.00 cents / onsets 99% / +34 ppm. Self-floor on all
+> three: L1 0.000, onsets 100% @ 0.0 ms, log-f sim 1.000 (scripted captures are fully
+> deterministic — better than the old realtime floor 0.057). Two measurement artifacts
+> killed en route (the SNES campaign's lessons recurring): (a) asymmetric 48k→44.1k oracle
+> resample = phantom +400 Hz centroid tilt (analyzer now defaults to the higher native
+> rate); (b) the unipolar DAC-mix DC pedestal vs Mesen's DC-block skewed level/LSD
+> (analyzer now DC-blocks both). Also: un-scripted windowed captures are input-contaminable
+> (a stray START mid-capture) — `abaudio` always drives a script. **VERDICT: recomp NES
+> audio is certified faithful at the same bar as the snesrecomp campaign** — pitch exact,
+> rhythm at/near ceiling, timbre at or under the old 0.083 across three mappers. Residual
+> (non-audible, documented): constant −3 dB level vs Mesen post-DC-block, MM3 attract
+> onset tail (timing drift class, not synthesis), box-decimate HF response.
 
 - `runner/src/apu.c`: pulse×2 (duty/env/sweep/length `:52-76`), triangle (linear+length
   `:78-90`), noise (LFSR mode0/1+env+length `:92-107`), DMC (`:109-131,214-251`).

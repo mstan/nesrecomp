@@ -30,6 +30,14 @@ int     apu_take_dmc_stall(void);
  * true until the handler acknowledges the source. */
 bool    apu_irq_asserted(void);
 
+/* Audio-fidelity T0 tap: per-channel staging buffer for the frame most
+ * recently drained by apu_generate. ch: 0=pulse1 1=pulse2 2=triangle 3=noise
+ * 4=dmc. Entries are the sample-window-averaged raw DAC channel inputs,
+ * linearly rescaled to int16 (pulse/tri/noise 0..15 -> x2184, dmc 0..127 ->
+ * x258). Returns NULL unless RECOMP_AUDIO_DEBUG capture is armed — zero cost
+ * otherwise. main_runner pushes these as the t0_* recomp_audio_debug taps. */
+const int16_t *apu_debug_t0(int ch);
+
 /* Co-sim: serialize the FULL APU architectural state (all 5 channels + the
  * frame-counter/sequencer phase + DMC-stall accumulator) into buf as a
  * deterministic little-endian byte blob, for the differential co-sim state
