@@ -25,6 +25,11 @@ set(NESRECOMP_RUNNER_SOURCES
     ${NESRECOMP_RUNNER_ROOT}/src/launcher.c
     ${NESRECOMP_RUNNER_ROOT}/src/crc32.c
     ${NESRECOMP_RUNNER_ROOT}/src/coroutine.c
+    # Interpreter fallback tier + the shared 6502 decode table from the
+    # recompiler (single source of truth, so interpreted/recompiled decode
+    # cannot diverge). See docs/PHASE1_INTERP_FALLBACK_PLAN.md.
+    ${NESRECOMP_RUNNER_ROOT}/src/interp.c
+    ${NESRECOMP_RUNNER_ROOT}/../recompiler/src/cpu6502_decoder.c
     ${NESRECOMP_RUNNER_ROOT}/src/keybinds.c
     ${NESRECOMP_RUNNER_ROOT}/src/controller.c
     ${NESRECOMP_RUNNER_ROOT}/src/override_chr.c
@@ -38,7 +43,10 @@ set(NESRECOMP_RUNNER_SOURCES
     ${NESRECOMP_RUNNER_ROOT}/src/color_lut.c
 )
 
-set(NESRECOMP_RUNNER_INCLUDE_DIRS ${NESRECOMP_RUNNER_ROOT}/include)
+set(NESRECOMP_RUNNER_INCLUDE_DIRS
+    ${NESRECOMP_RUNNER_ROOT}/include
+    ${NESRECOMP_RUNNER_ROOT}/../recompiler/src   # cpu6502_decoder.h (shared decode table)
+)
 
 # ---- Prod vs debug: TCP debug server + observability rings ----
 # The TCP debug server (debug_server.c: socket listener, 36000-frame ring buffer,

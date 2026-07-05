@@ -404,6 +404,7 @@ void runtime_init(void) {
     ppu_trace_init();
     load_dispatch_miss_policy_from_env();
     load_brk_policy_from_env();
+    nes_fring_init_dump();
 }
 
 /* Deterministic VBlank simulation: fires NMI every N bus operations.
@@ -414,9 +415,14 @@ void runtime_init(void) {
  * The threshold is tuned so games run at approximately correct speed
  * when combined with the wall-clock frame pacing in nes_vblank_callback. */
 static int  s_vblank_depth = 0;   /* NMI nesting depth (0 = not in NMI) */
-#define MAX_VBLANK_DEPTH 3        /* Some games (Metroid) spin-wait for NMI inside
-                                   * the NMI handler (column loader).  Allow
-                                   * re-entrancy so the wait loop can exit. */
+#define MAX_VBLANK_DEPTH 8        /* Some games spin-wait for NMI inside the NMI
+                                   * handler: Metroid's column loader needs one
+                                   * nested level; SMB3 (NESTED_NMI_RUN_HANDLER)
+                                   * runs its whole progression inside NMI and
+                                   * stacks several waits during title/boot —
+                                   * depth 3 measured as a hard deadlock (every
+                                   * further fire skipped, so the tick that
+                                   * would release the wait never arrives). */
 static uint32_t s_ops_count = 0;
 
 /* Monotonic guest CPU-cycle counter (see nes_runtime.h). Advanced by the same
@@ -856,6 +862,40 @@ void maybe_trigger_vblank(int cycles) {
         s_dbg_cycles_ticked += _c;
         s_dbg_instrs_ticked++;
     }
+    /* Hang watchdog (env NESRECOMP_HANG_TIMEOUT_S): a hang that never reaches
+     * a frame boundary starves every observability surface (the TCP poll runs
+     * per frame), so probe the wall clock here on the instruction stream and
+     * dump the dispatch ring + vblank state before exiting. Off by default. */
+    {
+        static long long s_hang_deadline = -2;   /* -2 uninit, -1 disabled */
+        if (s_hang_deadline == -2) {
+            const char *e = getenv("NESRECOMP_HANG_TIMEOUT_S");
+            s_hang_deadline = (e && *e) ? (long long)time(NULL) + atoll(e) : -1;
+        }
+        if (s_hang_deadline > 0 && (s_dbg_instrs_ticked & 0xFFFFF) == 0 &&
+            (long long)time(NULL) > s_hang_deadline) {
+            extern uint64_t g_frame_count;
+            fprintf(stderr, "[HANG] wall-clock timeout: frame=%llu vblank_depth=%d "
+                    "ops=%u budget=%u pending=%d depth_skips=%llu\n",
+                    (unsigned long long)g_frame_count, s_vblank_depth,
+                    (unsigned)s_ops_count, (unsigned)s_frame_budget,
+                    s_vblank_pending, (unsigned long long)s_dbg_max_depth_skips);
+            nes_dump_dispatch_ring();
+            /* Post-mortem memory image: 2KB WRAM + 8KB SRAM. */
+            {
+                FILE *hf = fopen("C:/temp/hang_ram.bin", "wb");
+                if (hf) {
+                    fwrite(g_ram, 1, 0x0800, hf);
+                    fwrite(g_sram, 1, 0x2000, hf);
+                    fclose(hf);
+                    fprintf(stderr, "[HANG] RAM+SRAM image -> C:/temp/hang_ram.bin\n");
+                }
+            }
+            fflush(stderr); fflush(stdout);
+            exit(42);
+        }
+    }
+
     /* Dot-accurate PPU (opt-in): paint visible scanlines incrementally as the
      * CPU sweeps the frame's cycle budget. No-op unless NESRECOMP_DOT_PPU set. */
     if (g_dot_ppu_on) ppu_dot_advance(s_ops_count);
@@ -877,6 +917,7 @@ void maybe_trigger_vblank(int cycles) {
      * boundary (like the $1A spin-wait) where state is consistent. */
     if (s_vblank_depth == 0) {
         g_frame_boundary_cyc = g_nes_cycles;   /* true frame-length ruler (pre-handler) */
+        nes_fring_push('F', nes_fring_shadow_digest());
         /* Immediate fire — safe at top level. Carry the overshoot (the
          * triggering instruction pushed s_ops_count a few cycles past the
          * threshold) into the next frame instead of discarding it — removes an
@@ -917,6 +958,7 @@ void maybe_trigger_vblank(int cycles) {
         s_vblank_depth--;
     } else {
         /* Deferred fire — wait for backward branch (loop boundary) */
+        if (!s_vblank_pending) nes_fring_push('P', nes_fring_shadow_digest());
         s_vblank_pending = 1;
         /* Safety cap: if a backward-branch checkpoint never arrives and
          * the cycle budget has blown past 1.5× the frame budget, force
@@ -936,6 +978,7 @@ void maybe_trigger_vblank(int cycles) {
         if (s_ops_count > (s_frame_budget + s_frame_budget / 2)) {
             s_dbg_forced_cap_hits++;
             if (!(g_ppuctrl & 0x80)) s_dbg_pending_no_ppu++;
+            nes_fring_push('C', nes_fring_shadow_digest());
             maybe_fire_pending_vblank();
         }
     }
@@ -947,6 +990,7 @@ void maybe_trigger_vblank(int cycles) {
 void maybe_fire_pending_vblank(void) {
     if (!s_vblank_pending) return;
     s_vblank_pending = 0;
+    nes_fring_push('V', nes_fring_shadow_digest());
     g_frame_boundary_cyc = g_nes_cycles;   /* true frame-length ruler (pre-handler) */
     /* Carry the overshoot like the immediate-fire path. This deferred path can
      * fire well past OPS_PER_FRAME (that is why the pending mechanism exists), so
@@ -1233,6 +1277,10 @@ void nes_write(uint16_t addr, uint8_t val) {
     if (addr == 0x4014) {
         uint16_t src = (uint16_t)val << 8;
         for (int i = 0; i < 256; i++) g_ppu_oam[i] = nes_read(src + i);
+        if (val < 0x08) nes_fring_set_dma_page(val);
+        { int vis = 0;
+          for (int i = 0; i < 64; i++) if (g_ppu_oam[i * 4] < 0xF0) vis++;
+          nes_fring_push('D', (uint16_t)((vis << 8) | val)); }
         /* Cycle-steal: OAM DMA halts the CPU 513 cycles (+1 alignment cycle if
          * the transfer is requested on an odd CPU cycle) = 513/514. Charge it
          * so the frame budget and APU sequencer advance as on hardware; drained
@@ -1639,6 +1687,11 @@ MissRecord g_miss_ring[MAX_MISS_RING];
 int        g_miss_ring_head  = 0;
 int        g_miss_ring_count = 0;
 
+/* Most-recently-recorded miss classification/context, stashed by
+ * nes_record_dispatch_miss for nes_dispatch_miss_apply_policy. */
+static char     s_last_miss_class[16] = "CODE";
+static uint16_t s_last_miss_ctx       = 0;
+
 #ifdef RECOMP_STACK_TRACKING
 extern const char *g_recomp_stack[];
 extern int         g_recomp_stack_top;
@@ -1688,18 +1741,233 @@ static uint8_t classify_miss_target(const uint8_t bytes[8]) {
     return MISS_TARGET_CODE;
 }
 
-void nes_log_dispatch_miss(uint16_t addr) {
-    /* Let the game handle unmapped addresses (e.g. SRAM code remapping) */
-    if (game_dispatch_override(addr)) return;
-    static uint32_t last = 0xFFFFFFFF;
-    uint32_t key = ((uint32_t)g_current_bank << 16) | addr;
-    bool first_for_key = (key != last);
+/* ---- Dispatch tail trampoline ----
+ * Dynamic JMP tails must not grow the C stack: a JMP loop chain dispatched
+ * recursively adds a frame per lap and overflows (measured on SMB3 once all
+ * mapper-4 absolute transfers went window-dynamic). Instead, a JMP-tail
+ * dispatched while already inside a dispatch DEFERS its target and returns;
+ * push_all_jsr keeps the 6502 stack canonical, so every generated JSR site's
+ * bail check (callee returned without popping its return address → S
+ * mismatch) unwinds the C stack to the outermost dispatch frame, which then
+ * drives the deferred target from a flat loop. When the driven function
+ * finally RTSes, the 6502 stack is exactly what the original callers expect,
+ * so the unwound JSR sites that still run resume correctly. */
+int g_nes_dispatch_depth = 0;
+int g_nested_nmi_policy = NESTED_NMI_POKE_SPIN_FLAGS;
+/* CPU window ($8000/$A000/$C000/$E000) the CURRENTLY executing generated
+ * function lives in. Generated JSR sites on banked mappers push
+ * (base | gen_pc&0x1FFF) as the 6502 return address so stack-reading idioms
+ * (DynJump-style dispatchers, PLA/RTS computed gotos) see true CPU addresses
+ * even when the code executes in a window that differs from its gen labels
+ * (SMB3: bank 26 gen'd at $9xxx runs at $Bxxx; mode-1 bank 30 gen'd at $Dxxx
+ * runs at $9xxx — static pushes fed DynJump tables read through the WRONG
+ * window, minting mid-instruction dispatch targets like $9292). Maintained by
+ * nes_dispatch_call (every dynamic transfer carries the operand's window);
+ * static calls stay in-window except fixed-$E000 targets, which the emitter
+ * wraps explicitly. Boot vectors live in the $E000 window. */
+uint16_t g_code_window_base = 0xE000;
+static int32_t s_tail_pending = -1;
+static int     s_tail_caller  = -1;
+
+/* Always-on ring of the last dispatches (addr, caller_bank, S, depth, kind)
+ * for post-mortem attribution — dumped by launcher.c's unexpected-exit
+ * handler. Kind: 'C'=call (JSR), 'T'=tail (JMP), 'D'=deferred lap. */
+#define DISPATCH_RING_N 512
+typedef struct { uint16_t addr; int16_t cb; uint8_t s; uint8_t depth; char kind; uint16_t wb; } DispatchRingEnt;
+static DispatchRingEnt s_dring[DISPATCH_RING_N];
+static uint32_t s_dring_head = 0;
+
+static void dring_push(uint16_t addr, int cb, char kind) {
+    DispatchRingEnt *e = &s_dring[s_dring_head % DISPATCH_RING_N];
+    e->addr = addr; e->cb = (int16_t)cb; e->s = g_cpu.S;
+    e->depth = (uint8_t)(g_nes_dispatch_depth > 255 ? 255 : g_nes_dispatch_depth);
+    e->kind = kind;
+    e->wb = g_code_window_base;
+    s_dring_head++;
+}
+
+/* Context markers from the runner (NMI enter/exit etc.) so the dispatch ring
+ * shows which dispatches ran inside which handler invocation. */
+void nes_dring_mark(char kind, uint16_t tag) {
+    dring_push(tag, -1, kind);
+}
+
+/* ---- Always-on frame-event ring (see nes_runtime.h for the event map) ----
+ * Sized for ~10k frames of steady-state events so a scripted run's whole
+ * history is retained; eviction keeps memory bounded at ~1.5MB. */
+#define FRING_N 65536
+static NesFrameEvt s_fring[FRING_N];
+static uint32_t s_fring_head = 0;
+static uint8_t  s_fring_dma_page = 0x02;  /* last $4014 source page in RAM */
+
+void nes_fring_set_dma_page(uint8_t page) { s_fring_dma_page = page; }
+
+uint16_t nes_fring_shadow_digest(void) {
+    /* Count would-be-visible sprites (Y < $F0) in the RAM shadow OAM page.
+     * Pages >= $08 (SRAM/ROM DMA sources) have no RAM image to digest. */
+    if (s_fring_dma_page >= 0x08) return 0x00FF;
+    const uint8_t *p = g_ram + ((uint16_t)s_fring_dma_page << 8);
+    int vis = 0;
+    for (int i = 0; i < 64; i++)
+        if (p[i * 4] < 0xF0) vis++;
+    return (uint16_t)((vis << 8) | s_fring_dma_page);
+}
+
+void nes_fring_push(char kind, uint16_t aux) {
+    NesFrameEvt *e = &s_fring[s_fring_head % FRING_N];
+    e->cyc    = g_nes_cycles;
+    e->ops    = s_ops_count;
+    e->budget = s_frame_budget;
+    e->aux    = aux;
+    e->depth  = (uint8_t)(s_vblank_depth > 255 ? 255 : s_vblank_depth);
+    e->kind   = kind;
+    s_fring_head++;
+}
+
+int nes_fring_last(int n, NesFrameEvt *dst) {
+    uint32_t avail = s_fring_head < FRING_N ? s_fring_head : FRING_N;
+    uint32_t take  = (n > 0 && (uint32_t)n < avail) ? (uint32_t)n : avail;
+    for (uint32_t i = 0; i < take; i++)
+        dst[i] = s_fring[(s_fring_head - take + i) % FRING_N];
+    return (int)take;
+}
+
+static const char *s_fring_dump_path = NULL;
+static void fring_dump_atexit(void) {
+    FILE *f = fopen(s_fring_dump_path, "w");
+    if (!f) return;
+    uint32_t n = s_fring_head < FRING_N ? s_fring_head : FRING_N;
+    fprintf(f, "kind,cyc,ops,budget,depth,aux\n");
+    for (uint32_t i = 0; i < n; i++) {
+        const NesFrameEvt *e = &s_fring[(s_fring_head - n + i) % FRING_N];
+        fprintf(f, "%c,%llu,%u,%u,%u,0x%04X\n", e->kind,
+                (unsigned long long)e->cyc, e->ops, e->budget, e->depth, e->aux);
+    }
+    fclose(f);
+}
+void nes_fring_init_dump(void) {
+    const char *e = getenv("NESRECOMP_FRING_DUMP");
+    if (e && *e) { s_fring_dump_path = e; atexit(fring_dump_atexit); }
+}
+
+void nes_dump_dispatch_ring(void) {
+    uint32_t n = s_dring_head < DISPATCH_RING_N ? s_dring_head : DISPATCH_RING_N;
+    printf("[EXIT] last %u dispatches (oldest first; kind C=jsr T=tail D=driven-lap):\n", n);
+    for (uint32_t i = 0; i < n; i++) {
+        const DispatchRingEnt *e = &s_dring[(s_dring_head - n + i) % DISPATCH_RING_N];
+        printf("  %c $%04X cb=%d S=$%02X depth=%u wb=$%04X\n", e->kind, e->addr, e->cb, e->s, e->depth, e->wb);
+    }
+    fflush(stdout);
+}
+
+int nes_dispatch_call(uint16_t addr, int caller_bank) {
+    dring_push(addr, caller_bank, 'C');
+    uint16_t save_wb = g_code_window_base;
+    if (addr >= 0x8000) g_code_window_base = addr & 0xE000;
+    g_nes_dispatch_depth++;
+    int r = call_by_address_cb(addr, caller_bank);
+    g_nes_dispatch_depth--;
+    g_code_window_base = save_wb;
+    return r;
+}
+
+/* JMP tails dispatch RECURSIVELY by default — that keeps the resume path
+ * intact (the tail target's final RTS pops the caller's return address and
+ * control unwinds through the live C frames exactly as the 6502 expects; C
+ * depth stays bounded by real JSR depth). The one unbounded shape is a JMP
+ * CYCLE: a loop lap across functions adds C frames with ZERO net 6502-stack
+ * change (same tail target, same S, already active in this chain). On
+ * detecting a lap, DEFER to the MATCHING ancestor tail frame: the lap body's
+ * C frames between the two tails represent zero net 6502 stack, so unwinding
+ * just them (via return/bail propagation) discards nothing, and the ancestor
+ * frame re-runs the lap iteratively. All C frames BELOW the ancestor stay
+ * live, so when the loop finally exits via RTS the 6502 return address pops
+ * into intact C frames and execution resumes exactly where the 6502 expects
+ * (unwinding to depth 0 instead loses those frames — measured on SMB3 as an
+ * unexpected exit when Video_Misc_Updates2's terminator RTS had no caller
+ * frame left to resume). */
+#define TAIL_ACTIVE_MAX 64
+static struct { uint16_t addr; uint8_t s; } s_tail_active[TAIL_ACTIVE_MAX];
+static int s_tail_active_n = 0;
+static int s_tail_pending_slot = -1;
+
+int call_by_address_tail(uint16_t addr, int caller_bank) {
+    /* Env-gated tail-drift diagnostic (NESRECOMP_TAILDBG="loAddr:hiAddr"):
+     * logs the first ~60 tail entries whose addr is in [lo,hi] with S and
+     * active-tail count, so a JMP-loop that fails to flatten (because S drifts
+     * per lap and the (addr,S) cycle detector never matches) shows its exact
+     * S trajectory without pause/step. */
+    {
+        static int s_on = -1; static uint16_t s_lo = 0, s_hi = 0; static int s_lines = 0;
+        if (s_on < 0) {
+            const char *e = getenv("NESRECOMP_TAILDBG");
+            if (e && *e) { s_on = 1; s_lo = (uint16_t)strtoul(e, NULL, 16);
+                const char *c = strchr(e, ':'); s_hi = c ? (uint16_t)strtoul(c+1, NULL, 16) : s_lo; }
+            else s_on = 0;
+        }
+        if (s_on && addr >= s_lo && addr <= s_hi && s_lines < 60) {
+            int match = -1;
+            for (int i = 0; i < s_tail_active_n; i++)
+                if (s_tail_active[i].addr == addr && s_tail_active[i].s == g_cpu.S) { match = i; break; }
+            fprintf(stderr, "[taildbg] addr=$%04X S=$%02X active_n=%d match=%d frame=%llu\n",
+                    addr, g_cpu.S, s_tail_active_n, match, (unsigned long long)g_frame_count);
+            fflush(stderr); s_lines++;
+        }
+    }
+    for (int i = 0; i < s_tail_active_n; i++) {
+        if (s_tail_active[i].addr == addr && s_tail_active[i].s == g_cpu.S) {
+            s_tail_pending      = addr;
+            s_tail_pending_slot = i;
+            s_tail_caller       = caller_bank;
+            return 1;   /* cycle lap: defer to the matching ancestor tail */
+        }
+    }
+    int slot = -1;
+    if (s_tail_active_n < TAIL_ACTIVE_MAX) {
+        slot = s_tail_active_n++;
+        s_tail_active[slot].addr = addr;
+        s_tail_active[slot].s    = g_cpu.S;
+    }
+    dring_push(addr, caller_bank, 'T');
+    int r;
+    for (;;) {
+        r = nes_dispatch_call(addr, caller_bank);
+        if (slot >= 0 && s_tail_pending >= 0 && s_tail_pending_slot == slot) {
+            /* Our own lap came back around: consume it and iterate. */
+            s_tail_pending      = -1;
+            s_tail_pending_slot = -1;
+            dring_push(addr, caller_bank, 'D');
+            continue;
+        }
+        break;
+    }
+    if (slot >= 0) s_tail_active_n = slot;
+    return r;
+}
+
+/* Record a dispatch miss into the ring + dispatch_misses.log + counters, and
+ * stash its classification/context for the policy step. Does NOT consult the
+ * per-game override and does NOT apply the miss policy — callers compose those
+ * (nes_log_dispatch_miss* below; nes_interp_dispatch* in interp.c).
+ * Bank-aware form: addr is the gen-layout address (what [[extra_func]] needs),
+ * cpu_addr the original 6502 target (live-window byte classification), bank
+ * the window-resolved bank. */
+void nes_record_dispatch_miss_bank(uint16_t addr, uint16_t cpu_addr, int bank) {
+    /* Print the console line only on FIRST sighting of the address. The old
+     * consecutive-key dedup re-printed forever when two misses alternated
+     * per frame (measured on SMB3: ~6 lines/frame of spam, real slowdown
+     * from console I/O). The durable file + ring still record every miss. */
+    bool first_for_key = true;
+    for (int i = 0; i < g_miss_unique_count; i++)
+        if (g_miss_unique_addrs[i] == addr) { first_for_key = false; break; }
 
     /* Capture target bytes + classification up front so we can print it
-     * inline with the first-sighting log line. */
+     * inline with the first-sighting log line. Peek via the original 6502
+     * address — the live window holds the actual target bytes; the rebased
+     * gen-layout addr may point at a different window's contents. */
     uint8_t tbytes[8];
     for (int i = 0; i < 8; i++)
-        tbytes[i] = mapper_peek_prg((uint16_t)(addr + i));
+        tbytes[i] = mapper_peek_prg((uint16_t)(cpu_addr + i));
     uint8_t tclass = classify_miss_target(tbytes);
     const char *class_name =
         (tclass == MISS_TARGET_ZERO)     ? "ZERO_FILLED" :
@@ -1715,17 +1983,21 @@ void nes_log_dispatch_miss(uint16_t addr) {
     uint16_t call_site_pc = (uint16_t)g_ram[0x100 + s_lo_idx] |
                             ((uint16_t)g_ram[0x100 + s_hi_idx] << 8);
 
+    /* Stash for nes_dispatch_miss_apply_policy (interp fallback decline path). */
+    strncpy(s_last_miss_class, class_name, sizeof(s_last_miss_class) - 1);
+    s_last_miss_class[sizeof(s_last_miss_class) - 1] = '\0';
+    s_last_miss_ctx = call_site_pc;
+
     if (first_for_key) {
-        printf("[Dispatch] MISS: no func for $%04X bank=%d target=%s "
+        printf("[Dispatch] MISS: no func for $%04X bank=%d (cpu=$%04X) target=%s "
                "A=%02X X=%02X Y=%02X call_site=$%04X\n",
-               addr, g_current_bank, class_name,
+               addr, bank, cpu_addr, class_name,
                g_cpu.A, g_cpu.X, g_cpu.Y, call_site_pc);
-        last = key;
     }
     g_miss_count_any++;
     g_miss_last_addr  = addr;
     g_miss_last_frame = g_frame_count;
-    g_miss_last_bank  = g_current_bank;
+    g_miss_last_bank  = bank;
     /* Capture caller context: top of recomp call stack + 6502 stack snapshot */
     const char *c0 = "(none)";
     const char *c1 = "(none)";
@@ -1750,7 +2022,7 @@ void nes_log_dispatch_miss(uint16_t addr) {
     {
         MissRecord *r = &g_miss_ring[g_miss_ring_head];
         r->addr         = addr;
-        r->bank         = g_current_bank;
+        r->bank         = bank;
         r->frame        = g_frame_count;
         r->cpu_a        = g_cpu.A;
         r->cpu_x        = g_cpu.X;
@@ -1780,19 +2052,45 @@ void nes_log_dispatch_miss(uint16_t addr) {
         snprintf(miss_path, sizeof(miss_path), "%sdispatch_misses.log", g_exe_dir);
         FILE *mf = fopen(miss_path, "a");
         if (mf) {
-            fprintf(mf, "extra_func %d 0x%04X  # target=%s A=%02X X=%02X Y=%02X call_site=$%04X\n",
-                    g_current_bank, addr, class_name,
+            fprintf(mf, "extra_func %d 0x%04X  # cpu=$%04X target=%s A=%02X X=%02X Y=%02X call_site=$%04X\n",
+                    bank, addr, cpu_addr, class_name,
                     g_cpu.A, g_cpu.X, g_cpu.Y, call_site_pc);
             fclose(mf);
         }
         printf("[Dispatch] NEW miss logged: extra_func %d 0x%04X (frame %llu) target=%s\n",
-               g_current_bank, addr, (unsigned long long)g_frame_count, class_name);
+               bank, addr, (unsigned long long)g_frame_count, class_name);
         fflush(stdout);
     }
 
     g_dispatch_miss_count++;
-    apply_dispatch_miss_policy("dispatch", addr, g_current_bank,
-                               class_name, call_site_pc);
+}
+
+/* Legacy recording entry: bank-unaware (g_current_bank attribution). */
+void nes_record_dispatch_miss(uint16_t addr) {
+    nes_record_dispatch_miss_bank(addr, addr, g_current_bank);
+}
+
+/* Apply the configured miss policy (LOG_RETURN / FATAL / TRAP) using the most
+ * recently recorded miss's classification/context. Split from recording so the
+ * interpreter fallback can record-and-interpret without applying FATAL/TRAP,
+ * yet still apply the policy on the paths where it declines to interpret. */
+void nes_dispatch_miss_apply_policy(uint16_t addr) {
+    apply_dispatch_miss_policy("dispatch", addr, g_miss_last_bank,
+                               s_last_miss_class, s_last_miss_ctx);
+}
+
+/* Combined entries: override + record + policy. The single-arg form is
+ * retained for committed generated code and non-banked mappers. */
+void nes_log_dispatch_miss(uint16_t addr) {
+    if (game_dispatch_override(addr)) return;
+    nes_record_dispatch_miss(addr);
+    nes_dispatch_miss_apply_policy(addr);
+}
+
+void nes_log_dispatch_miss_bank(uint16_t addr, uint16_t cpu_addr, int bank) {
+    if (game_dispatch_override(addr)) return;
+    nes_record_dispatch_miss_bank(addr, cpu_addr, bank);
+    nes_dispatch_miss_apply_policy(addr);
 }
 
 void nes_log_inline_miss(uint16_t dispatch_pc, uint8_t a_val) {

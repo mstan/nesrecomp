@@ -21,6 +21,11 @@ int                   g_current_bank = 0;
 int                   g_mmc3_r6_odd  = 0;
 int                   g_mmc3_r7_even = 0;
 int                   g_mmc3_bank_a000 = 0;
+/* Live 8KB PRG bank behind each CPU window ($8000/$A000/$C000/$E000),
+ * mode-aware (PRG mode 1 fixes $8000 and swaps $C000 via R6). Dispatch
+ * resolves call targets through the window's bank, so it stays correct
+ * for games that run in mode 1 (e.g. SMB3). */
+int                   g_mmc3_win_bank8k[4] = {0, 0, 0, 0};
 static int            s_mapper_type  = 0;
 static int            s_mirroring    = 3; /* default: horizontal */
 
@@ -144,6 +149,16 @@ static void mmc3_apply_prg(void) {
     g_mmc3_r6_odd    = r6 & 1;
     g_mmc3_r7_even   = !(r7 & 1);
     g_mmc3_bank_a000 = r7 / 2;
+
+    if (prg_mode == 0) {
+        g_mmc3_win_bank8k[0] = r6;
+        g_mmc3_win_bank8k[2] = second_last;
+    } else {
+        g_mmc3_win_bank8k[0] = second_last;
+        g_mmc3_win_bank8k[2] = r6;
+    }
+    g_mmc3_win_bank8k[1] = r7;
+    g_mmc3_win_bank8k[3] = last;
 
     if (s_mapper_trace) {
         fprintf(s_mapper_trace, "MMC3_PRG,R6=%d,R7=%d,mode=%d,F=%llu\n",

@@ -626,9 +626,10 @@ smoke_skip_input:
     if (!s_smoke_frames)
     script_tick(g_frame_count, g_ram);
 
-    /* TCP debug server: poll for commands each frame */
-    if (!s_smoke_frames)
-        debug_server_poll();
+    /* TCP debug server: poll for commands each frame. Polled in smoke mode
+     * too — headless runs are the main consumer of automated TCP probes,
+     * and the poll is non-blocking. */
+    debug_server_poll();
 
     /* Log per-frame state BEFORE NMI runs */
     debug_log_frame(s_cb_count);
@@ -665,12 +666,37 @@ smoke_skip_input:
      * responsible for gating the game's actual NMI handler on
      * (g_ppuctrl & 0x80) and the nested-depth check internally. */
     if ((g_ppuctrl & 0x80) && runtime_get_vblank_depth() > 1) {
-        /* Nested NMI with NMI enabled: skip the handler (would corrupt
-         * mid-VRAM transfer state), but still set $1A/$20 to resolve any
-         * spin-wait. Do NOT run game_run_nmi here — nested NMIs should
-         * not advance oracle/frame cadence. */
-        g_ram[0x1A] = 1;
-        g_ram[0x20] = 1;
+        if (g_nested_nmi_policy == NESTED_NMI_RUN_HANDLER) {
+            /* Re-entrant-NMI game (e.g. SMB3): its handler is nested-safe by
+             * design and progression DEPENDS on the nested run (the nested
+             * IntNMI takes the light path and DECs VBlank_Tick, releasing
+             * in-NMI wait loops). Run it with the same register/stack
+             * save-restore discipline as the top-level path. */
+            uint8_t s_pre = g_cpu.S;
+            uint8_t a_pre = g_cpu.A, x_pre = g_cpu.X, y_pre = g_cpu.Y;
+            uint8_t n_pre = g_cpu.N, v_pre = g_cpu.V, d_pre = g_cpu.D;
+            uint8_t i_pre = g_cpu.I, z_pre = g_cpu.Z, c_pre = g_cpu.C;
+            uint8_t p_save = (uint8_t)((g_cpu.N<<7)|(g_cpu.V<<6)|(1<<5)|
+                                       (g_cpu.D<<3)|(g_cpu.I<<2)|(g_cpu.Z<<1)|g_cpu.C);
+            g_ram[0x100+g_cpu.S] = 0x00;   g_cpu.S--;   /* PCH placeholder */
+            g_ram[0x100+g_cpu.S] = 0x00;   g_cpu.S--;   /* PCL placeholder */
+            g_ram[0x100+g_cpu.S] = p_save; g_cpu.S--;   /* P (status flags) */
+            nes_dring_mark('N', (uint16_t)runtime_get_vblank_depth());
+            nes_fring_push('N', (uint16_t)runtime_get_vblank_depth());
+            game_run_nmi();
+            nes_dring_mark('n', (uint16_t)runtime_get_vblank_depth());
+            g_cpu.S = s_pre;
+            g_cpu.A = a_pre; g_cpu.X = x_pre; g_cpu.Y = y_pre;
+            g_cpu.N = n_pre; g_cpu.V = v_pre; g_cpu.D = d_pre;
+            g_cpu.I = i_pre; g_cpu.Z = z_pre; g_cpu.C = c_pre;
+        } else {
+            /* Legacy: skip the handler (would corrupt mid-VRAM transfer
+             * state), but still set $1A/$20 to resolve any spin-wait (SMB).
+             * Do NOT run game_run_nmi — nested NMIs should not advance
+             * oracle/frame cadence. */
+            g_ram[0x1A] = 1;
+            g_ram[0x20] = 1;
+        }
     } else {
         /* Top-level frame boundary (or NMI-disabled frame): push stack
          * frame only if NMI is actually going to run, then delegate to
@@ -693,9 +719,12 @@ smoke_skip_input:
             g_ram[0x100+g_cpu.S] = 0x00;   g_cpu.S--;   /* PCL placeholder */
             g_ram[0x100+g_cpu.S] = p_save; g_cpu.S--;   /* P (status flags) */
             runtime_set_vblank_firing(1);
+            nes_dring_mark('N', (uint16_t)runtime_get_vblank_depth());
+            nes_fring_push('T', (uint16_t)runtime_get_vblank_depth());
         }
         game_run_nmi();
         if (nmi_will_run) {
+            nes_dring_mark('n', (uint16_t)runtime_get_vblank_depth());
             runtime_set_vblank_firing(0);
             /* On real 6502, RTI always restores S and all registers.
              * The recompiled NMI handler may return early (bail), so

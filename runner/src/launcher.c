@@ -189,10 +189,26 @@ static void atexit_handler(void) {
     extern uint64_t g_frame_count;
     /* Only log if the game exited unexpectedly (recomp stack still active) */
     if (g_recomp_stack_top > 0) {
+        extern void nes_dump_dispatch_ring(void);
         printf("[EXIT] Unexpected exit at frame %llu, recomp stack (top=%d):\n",
                (unsigned long long)g_frame_count, g_recomp_stack_top);
+        /* Native backtrace of the exit() caller chain (env NESRECOMP_EXIT_BT). */
+        if (getenv("NESRECOMP_EXIT_BT")) {
+            void *bt[40]; USHORT n = CaptureStackBackTrace(0, 40, bt, NULL);
+            HANDLE proc = GetCurrentProcess(); SymInitialize(proc, NULL, TRUE);
+            printf("[EXIT-BT] exit() call chain:\n");
+            for (USHORT i = 0; i < n; i++) {
+                char sb[sizeof(SYMBOL_INFO) + 256]; SYMBOL_INFO *sym = (SYMBOL_INFO *)sb;
+                sym->SizeOfStruct = sizeof(SYMBOL_INFO); sym->MaxNameLen = 255; DWORD64 disp = 0;
+                if (SymFromAddr(proc, (DWORD64)bt[i], &disp, sym))
+                    printf("  [%2u] %s+0x%llx\n", i, sym->Name, (unsigned long long)disp);
+                else printf("  [%2u] %p\n", i, bt[i]);
+            }
+            fflush(stdout);
+        }
         for (int i = g_recomp_stack_top - 1; i >= 0 && i >= g_recomp_stack_top - 20; i--)
             printf("  [%d] %s\n", i, g_recomp_stack[i] ? g_recomp_stack[i] : "?");
+        nes_dump_dispatch_ring();
         fflush(stdout);
     }
 }

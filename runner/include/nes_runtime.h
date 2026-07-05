@@ -54,10 +54,54 @@ uint16_t nes_read16_jmpbug(uint16_t addr);
 /* ---- Dispatch ---- */
 /* Called for JMP (indirect) — dispatch to the correct recompiled function */
 int call_by_address(uint16_t addr);  /* returns 1 on hit, 0 on miss */
+/* Cross-8KB dispatch with a caller-bank fallback: if the runtime bank-register
+ * lookup misses (stale g_current_bank), retry the dispatch keyed on the caller's
+ * statically-known bank.  caller_bank < 0 disables the fallback (== call_by_address). */
+int call_by_address_cb(uint16_t addr, int caller_bank);
+/* Depth-counted dispatch used by generated JSR sites; drives deferred JMP-tail
+ * targets from a flat loop at the outermost frame (see runtime.c trampoline). */
+int nes_dispatch_call(uint16_t addr, int caller_bank);
+/* Dispatch for generated JMP tails: defers when already inside a dispatch so
+ * JMP loop chains cannot grow the C stack. */
+int call_by_address_tail(uint16_t addr, int caller_bank);
+/* Dump the always-on ring of recent dispatches (post-mortem attribution). */
+void nes_dump_dispatch_ring(void);
+/* Push a context marker into the dispatch ring (kind e.g. 'N'/'n' = NMI
+ * enter/exit; tag = vblank depth or other context id). */
+void nes_dring_mark(char kind, uint16_t tag);
+/* Window base of the currently executing generated function (see runtime.c);
+ * generated JSR pushes use it to mint true CPU return addresses. */
+extern uint16_t g_code_window_base;
 
-/* Logging for dispatch misses */
+/* Logging for dispatch misses.
+ * nes_log_dispatch_miss_bank is the full form used by generated dispatch on
+ * banked mappers: gen_addr is the address in the recompiler's layout (what an
+ * [[extra_func]] entry needs), cpu_addr the original 6502 target (for byte
+ * classification), bank the window-resolved bank. The legacy single-arg form
+ * delegates with g_current_bank (kept for committed generated code). */
 void nes_log_dispatch_miss(uint16_t addr);
+void nes_log_dispatch_miss_bank(uint16_t gen_addr, uint16_t cpu_addr, int bank);
 void nes_log_inline_miss(uint16_t dispatch_pc, uint8_t a_val);
+
+/* Split halves of nes_log_dispatch_miss (see runtime.c). The interpreter
+ * fallback records the miss, interprets, and only applies the policy if it
+ * declines. */
+void nes_record_dispatch_miss(uint16_t addr);
+void nes_record_dispatch_miss_bank(uint16_t gen_addr, uint16_t cpu_addr, int bank);
+void nes_dispatch_miss_apply_policy(uint16_t addr);
+
+/* Interpreter fallback entry, invoked from the generated call_by_address miss
+ * paths. Returns 1 if the miss was interpreted (game continues), else 0 (the
+ * miss policy has been applied; caller behaves as the legacy `return 0`).
+ * Implemented in interp.c. */
+int nes_interp_dispatch(uint16_t addr);
+/* Bank-aware form used by generated banked-mapper dispatch: interprets at the
+ * live cpu address, records the miss in gen-layout coordinates. */
+int nes_interp_dispatch_bank(uint16_t cpu_addr, uint16_t gen_addr, int bank);
+
+/* Defined by the generated dispatch TU: 1 if the game was recompiled with
+ * push_all_jsr (the interpreter's stack-boundary contract requires it). */
+extern int g_recomp_push_all_jsr;
 
 /* ---- Dispatch-miss policy ----
  * Configures what happens after nes_log_dispatch_miss / nes_log_inline_miss
@@ -87,6 +131,23 @@ extern uint64_t g_dispatch_miss_count;        /* call_by_address misses */
 extern uint64_t g_inline_dispatch_miss_count; /* inline_dispatch defaults */
 
 void nes_set_dispatch_miss_policy(DispatchMissPolicy policy);
+
+/* ---- Nested-NMI policy ----
+ * What the frame-boundary callback does when a vblank fires while the game is
+ * ALREADY inside its NMI handler (vblank depth > 1):
+ *   POKE_SPIN_FLAGS  legacy: skip the handler, set the $1A/$20 spin-wait
+ *                    resolver bytes (SMB-tuned; wrong for other games).
+ *   RUN_HANDLER      run the game's NMI handler nested, with full register/
+ *                    stack save-restore. For games whose NMI is re-entrancy-
+ *                    aware by design and whose progression DEPENDS on the
+ *                    nested run (SMB3: nested IntNMI takes the light path and
+ *                    DECs VBlank_Tick, releasing the in-NMI wait loops).
+ * Set from extras.c game_on_init(); default POKE_SPIN_FLAGS. */
+typedef enum {
+    NESTED_NMI_POKE_SPIN_FLAGS = 0,
+    NESTED_NMI_RUN_HANDLER     = 1,
+} NestedNmiPolicy;
+extern int g_nested_nmi_policy;
 
 /* Implemented by debug_server.c. Sets the pause flag so the next
  * debug_server_wait_if_paused blocks in the TCP loop. Safe to call from
@@ -181,6 +242,31 @@ uint32_t runtime_pop_nmi_fires(void);
 uint32_t runtime_pop_cycle_budget_used(void);
 uint32_t runtime_pop_instrs_ticked(void);
 uint32_t runtime_pop_forced_caps(void);
+
+/* ---- Always-on frame-event ring ----
+ * Continuous capture of the frame-boundary machinery: every VBlank fire
+ * ('F' immediate at depth 0, 'P' pending-set, 'C' cap-forced fire, 'V'
+ * deferred fire consumed), every $4014 OAM DMA ('D'), and the runner's
+ * NMI-handler entries ('N' nested branch, 'T' top-level branch). Probes
+ * QUERY this history (TCP `fring`, or exit dump via
+ * NESRECOMP_FRING_DUMP=<path>); capture is never armed at probe time.
+ * aux packs (visible_sprite_count << 8) | page: for 'D' the count is over
+ * the just-copied g_ppu_oam; for fire events over the RAM shadow page
+ * (last DMA source, default $02) — the phase discriminator for
+ * DMA-vs-render beat bugs. For 'N'/'T', aux = vblank depth. */
+typedef struct {
+    uint64_t cyc;      /* g_nes_cycles at event */
+    uint32_t ops;      /* intra-frame cycle counter at event */
+    uint32_t budget;   /* frame budget the counter runs against */
+    uint16_t aux;      /* kind-specific (see above) */
+    uint8_t  depth;    /* VBlank nesting depth at event */
+    char     kind;
+} NesFrameEvt;
+void     nes_fring_push(char kind, uint16_t aux);
+uint16_t nes_fring_shadow_digest(void);           /* fire-time aux helper */
+int      nes_fring_last(int n, NesFrameEvt *dst); /* newest n, oldest-first */
+void     nes_fring_set_dma_page(uint8_t page);
+void     nes_fring_init_dump(void);               /* arm NESRECOMP_FRING_DUMP */
 
 /* PPU registers */
 extern uint8_t g_ppuctrl;
@@ -282,6 +368,7 @@ extern int g_current_bank;
 extern int g_mmc3_r6_odd;     /* 1 if R6 is odd — $8000 addresses need +$2000 */
 extern int g_mmc3_r7_even;   /* 1 if R7 is even — $A000 addresses need -$2000 */
 extern int g_mmc3_bank_a000; /* R7/2 — 16KB bank index for $A000-$BFFF dispatch */
+extern int g_mmc3_win_bank8k[4]; /* live 8KB bank per CPU window, mode-aware */
 
 /* ---- Controller ---- */
 /* Button bitmask: bit7=A, bit6=B, bit5=Select, bit4=Start,

@@ -766,6 +766,29 @@ static void handle_call_stack(int id, const char *json)
 }
 #endif
 
+static void handle_fring(int id, const char *json)
+{
+    int n = json_get_int(json, "n", 64);
+    if (n < 1) n = 1;
+    if (n > 512) n = 512;
+    NesFrameEvt *ev = (NesFrameEvt *)malloc((size_t)n * sizeof *ev);
+    if (!ev) { send_err(id, "alloc failed"); return; }
+    int got = nes_fring_last(n, ev);
+    char *buf = (char *)malloc((size_t)got * 96 + 256);
+    if (!buf) { free(ev); send_err(id, "alloc failed"); return; }
+    int pos = snprintf(buf, 256, "{\"id\":%d,\"ok\":true,\"count\":%d,\"events\":[", id, got);
+    for (int i = 0; i < got; i++) {
+        pos += sprintf(buf + pos,
+            "%s{\"k\":\"%c\",\"cyc\":%llu,\"ops\":%u,\"bud\":%u,\"d\":%u,\"aux\":\"0x%04X\"}",
+            i ? "," : "", ev[i].kind, (unsigned long long)ev[i].cyc,
+            ev[i].ops, ev[i].budget, ev[i].depth, ev[i].aux);
+    }
+    pos += sprintf(buf + pos, "]}");
+    send_line(buf);
+    free(buf);
+    free(ev);
+}
+
 static void handle_watchdog_status(int id, const char *json)
 {
     (void)json;
@@ -1565,6 +1588,7 @@ static const CmdEntry s_commands[] = {
     { "first_failure",     "verify mode: first frame where native diverged from oracle",                  handle_first_failure },
     { "ppu_state",         "PPU registers + sprite-0 split state + render-IRQ diagnostics",               handle_ppu_state },
     { "watchdog_status",   "watchdog backward-branch counter and last firing reason",                     handle_watchdog_status },
+    { "fring",             "frame-event ring: VBlank fires + $4014 OAM DMA with phase digests",           handle_fring },
 #ifdef RECOMP_STACK_TRACKING
     { "call_stack",        "current recompile-stack (function-name shadow stack); main loops never pop", handle_call_stack },
 #endif
