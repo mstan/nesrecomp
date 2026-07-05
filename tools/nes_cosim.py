@@ -43,6 +43,56 @@ def clear_saves(exe):
                     pass
 
 
+# Co-sim drive script. Set from a trailing CLI arg (env is unreliable across the
+# msys2 python boundary — COSIM_SCRIPT silently doesn't propagate). CLI arg wins;
+# COSIM_SCRIPT env is a fallback for environments where it does propagate.
+COSIM_SCRIPT_PATH = None
+
+
+def cosim_script():
+    return COSIM_SCRIPT_PATH or os.environ.get("COSIM_SCRIPT")
+
+
+def recomp_drive_args(frames):
+    """Recomp CLI for a co-sim session. Default: headless attract (--smoke N).
+    With a drive script set, drive the recomp through that input script instead
+    (windowed) so the co-sim can reach input-gated screens (world map, 1-1).
+    Both engines read the SAME script (nesref via NESREF_SCRIPT)."""
+    s = cosim_script()
+    if s:
+        return ["--script", os.path.abspath(s)]
+    return ["--smoke", str(frames)]
+
+
+def nesref_script_env(env):
+    """Mirror the drive script into the nesref oracle's NESREF_SCRIPT (set in the
+    subprocess env dict, which DOES propagate — unlike the parent's env)."""
+    s = cosim_script()
+    if s:
+        env["NESREF_SCRIPT"] = os.path.abspath(s)
+    return env
+
+
+def parse_benign(default=""):
+    """Addresses to exclude from the divergence verdict as KNOWN host-modeled /
+    RNG-phase noise (frame-sync ticks, NMI-protected temps, RNG pool). Without
+    this the first-divergence report fixates on a benign temp at frame ~4 and
+    hides the real state split. Format: COSIM_BENIGN='0x01,0x10,0x15,0x781-0x789'.
+    Ranges are inclusive. Env overrides `default`."""
+    spec = os.environ.get("COSIM_BENIGN", default)
+    s = set()
+    for tok in spec.split(","):
+        tok = tok.strip()
+        if not tok:
+            continue
+        if "-" in tok:
+            a, b = tok.split("-", 1)
+            s.update(range(int(a, 0), int(b, 0) + 1))
+        else:
+            s.add(int(tok, 0))
+    return s
+
+
 def run(exe, rom, out_path, frames, inject=None):
     """Run one instrumented smoke session; return path to the JSONL hash stream."""
     clear_saves(exe)
@@ -275,12 +325,13 @@ def cmd_abram(exe, rom, nesref_exe, core, frames):
         env.pop("NESRECOMP_COSIM_INJECT", None)
         clear_saves(exe)
         exe_abs = os.path.abspath(exe)
-        subprocess.run([exe_abs, os.path.abspath(rom), "--smoke", str(frames)],
+        subprocess.run([exe_abs, os.path.abspath(rom), *recomp_drive_args(frames)],
                        env=env, cwd=os.path.dirname(exe_abs),
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         nr_path = os.path.join(d, "nesref_ram.jsonl")
         env2 = dict(os.environ)
         env2["NESREF_FRAMES"] = str(frames); env2["NESREF_TRACE_FILE"] = nr_path
+        nesref_script_env(env2)
         nr_abs = os.path.abspath(nesref_exe)
         subprocess.run([nr_abs, os.path.abspath(core), os.path.abspath(rom)],
                        env=env2, cwd=os.path.dirname(nr_abs),
@@ -306,23 +357,32 @@ def cmd_abram(exe, rom, nesref_exe, core, frames):
                 best_m, best_off = ms / n, off
         print(f"  best boot offset = +{best_off}   steady-state RAM match = {best_m*100:.2f}% (stack-masked)")
 
-        # First real (stack-masked) divergence at the chosen offset.
+        # Benign mask: host-modeled/RNG-phase addresses that always diverge
+        # innocuously (COSIM_BENIGN). Excluding them is what turns the verdict
+        # HONEST — otherwise the first-divergence latches onto a frame-4 temp and
+        # a real state split (recomp in a level, oracle on the map) is reported
+        # as "converged". SMB3 default: Temp_Var1/2 $01/$15, VBlank_Tick $10,
+        # scroll temp $69, Random_Pool $781-$789.
+        benign = parse_benign("0x01,0x10,0x15,0x69,0x781-0x789")
+        def masked(i):
+            return (0x100 <= i <= 0x1FF) or (i in benign)
+
+        # First real (stack- and benign-masked) divergence at the chosen offset.
         first = None
         for f in rc_frames:
             if f + best_off not in nr:
                 continue
-            if ram_match(rc[f], nr[f + best_off]) < 1.0:
-                diffs = [i for i in range(2048)
-                         if not (0x100 <= i <= 0x1FF) and rc[f][i] != nr[f + best_off][i]]
-                if diffs:
-                    first = (f, diffs)
-                    break
+            diffs = [i for i in range(2048)
+                     if not masked(i) and rc[f][i] != nr[f + best_off][i]]
+            if diffs:
+                first = (f, diffs)
+                break
         # Divergent-address histogram over steady state (skip boot ramp): how
         # often each byte differs. A short list of always-diverging addresses =
         # frame-sync flags / FrameCounter-derived RNG-phase (benign snapshot-timing
         # artifacts); a broad spread = a real logic divergence to chase.
         from collections import Counter
-        hist = Counter(); ncmp = 0
+        hist = Counter(); hist_benign = Counter(); ncmp = 0
         for f in rc_frames:
             if f < 200 or f + best_off not in nr:
                 continue
@@ -332,18 +392,26 @@ def cmd_abram(exe, rom, nesref_exe, core, frames):
                 if 0x100 <= i <= 0x1FF:
                     continue
                 if a[i] != b[i]:
-                    hist[i] += 1
-        print(f"  steady-state divergent addresses: {len(hist)} distinct over {ncmp} frames")
+                    (hist_benign if i in benign else hist)[i] += 1
+        print(f"  steady-state divergent addresses (benign-masked): {len(hist)} real, "
+              f"{len(hist_benign)} benign, over {ncmp} frames")
         for a, c in hist.most_common(12):
-            print(f"    ${a:04x}: {c}/{ncmp} ({c/ncmp*100:.0f}%)")
-        if len(hist) <= 3:
-            print(f"  => CONVERGED (logic): only frame-sync/RNG-phase flags differ, not game state.")
-        elif first is None:
-            print(f"  PASS: no non-stack RAM divergence across aligned frames (logic converges)")
-        else:
+            print(f"    ${a:04x}: {c}/{ncmp} ({c/ncmp*100:.0f}%)  REAL")
+        # HONEST verdict: the first NON-BENIGN divergence is the real state split.
+        # Do NOT declare convergence when real state bytes differ (the old code
+        # averaged them away / re-aligned past them -> false "CONVERGED").
+        if first is None and not hist:
+            print(f"  => CONVERGED: no real (non-benign) RAM divergence across aligned frames.")
+        elif first is not None:
             f, diffs = first
-            print(f"  first non-stack RAM divergence @ recomp frame {f}: {len(diffs)} byte(s), "
+            print(f"  ***DIVERGED*** first REAL RAM divergence @ recomp frame {f}: {len(diffs)} byte(s), "
                   f"e.g. ${diffs[0]:04x} recomp={rc[f][diffs[0]]:#04x} mesen={nr[f+best_off][diffs[0]]:#04x}")
+            print(f"     (state split — NOT masked by benign/RNG. Chase this frame in the game logic.)")
+            return 1
+        else:
+            print(f"  first real divergence not localized to a single frame; "
+                  f"{len(hist)} real divergent addr(s) in steady state -> genuine divergence.")
+            return 1
         # Broad spread? Re-check with an adaptive (piecewise) offset. If a discrete
         # offset shift recovers a high match, the spread was a frame-count desync at
         # an NMI-off transition (Gumshoe-class), NOT a logic divergence. If it stays
@@ -569,7 +637,7 @@ def cmd_abppu(exe, rom, nesref_exe, core, frames):
         # is serialized inline in Mesen's savestate, pushing the nametable region
         # +0x2000 in the blob vs CHR-ROM games. Auto-set NESREF_PPU_NT_D so abppu
         # is correct-by-default on both (no manual override).
-        p = subprocess.run([exe_abs, os.path.abspath(rom), "--smoke", str(frames)],
+        p = subprocess.run([exe_abs, os.path.abspath(rom), *recomp_drive_args(frames)],
                            env=env, cwd=os.path.dirname(exe_abs),
                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         import re
@@ -579,6 +647,7 @@ def cmd_abppu(exe, rom, nesref_exe, core, frames):
         env2 = dict(os.environ)
         env2["NESREF_FRAMES"] = str(frames); env2["NESREF_PPU_FILE"] = nr_path
         env2["NESREF_TRACE_FILE"] = os.path.join(d, "nr_ram.jsonl")
+        nesref_script_env(env2)
         if chr_ram and "NESREF_PPU_NT_D" not in os.environ:
             env2["NESREF_PPU_NT_D"] = "-0x2ab4"   # CHR-RAM NT offset
             print("  (CHR-RAM detected -> NT offset +0x2000)")
@@ -687,6 +756,89 @@ def cmd_diff(a_path, b_path):
     return 0
 
 
+def cmd_abstate(exe, rom, nesref_exe, core, frames):
+    """SINGLE-POINT STATE DIFF at a script anchor. Drive BOTH engines (COSIM_SCRIPT,
+    which should end at a WAIT_RAM8 game-state anchor + short settle) and diff their
+    FINAL reconstructed RAM + OAM + palette + nametable. No frame alignment: both
+    are anchored to the SAME game state, so any byte difference is a real
+    divergence (benign-masked). This sidesteps the load-timing frame drift that
+    made the frame-by-frame abram/abppu report false convergence on input-driven
+    runs. Prereq: COSIM_SCRIPT set."""
+    if not cosim_script():
+        print("  abstate needs a drive script arg (trailing) ending at a WAIT_RAM8 anchor")
+        return 2
+    print(f"[A-vs-B STATE] single-point diff at script anchor (up to {frames} frames)")
+    import re
+    benign = parse_benign("0x01,0x10,0x15,0x69,0x781-0x789")
+    PALMIRROR = {0x110, 0x114, 0x118, 0x11c}   # $3F10/14/18/1C mirror $3F00/...
+    with tempfile.TemporaryDirectory() as d:
+        rc_ram = os.path.join(d, "rc_ram.jsonl"); rc_ppu = os.path.join(d, "rc_ppu.jsonl")
+        env = dict(os.environ)
+        env["NESRECOMP_WRAM_TRACE"] = rc_ram; env["NESRECOMP_PPUMEM_TRACE"] = rc_ppu
+        env.pop("NESRECOMP_COSIM_INJECT", None); clear_saves(exe)
+        exe_abs = os.path.abspath(exe)
+        p = subprocess.run([exe_abs, os.path.abspath(rom), *recomp_drive_args(frames)],
+                           env=env, cwd=os.path.dirname(exe_abs),
+                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        nr_ram = os.path.join(d, "nr_ram.jsonl"); nr_ppu = os.path.join(d, "nr_ppu.jsonl")
+        env2 = dict(os.environ)
+        env2["NESREF_FRAMES"] = str(frames)
+        env2["NESREF_TRACE_FILE"] = nr_ram; env2["NESREF_PPU_FILE"] = nr_ppu
+        nesref_script_env(env2)
+        # Mesen serialize-blob nametable offset. NROM default (-0xab4) is wrong for
+        # MMC3: its mapper state pushes the NT +0x2000 (empirically calibrated on
+        # SMB3 = -0x2ab4, same as the CHR-RAM layout). Auto-detect mapper 4 from the
+        # recomp boot banner; env override (COSIM_NT_D) wins.
+        nt_d = os.environ.get("COSIM_NT_D")
+        if not nt_d:
+            m4 = re.search(r"Mapper\s*4\b", p.stdout or "")
+            if m4:
+                nt_d = "-0x2ab4"
+        if nt_d:
+            env2["NESREF_PPU_NT_D"] = nt_d
+            print(f"  (NT blob-offset override NESREF_PPU_NT_D={nt_d})")
+        nr_abs = os.path.abspath(nesref_exe)
+        subprocess.run([nr_abs, os.path.abspath(core), os.path.abspath(rom)],
+                       env=env2, cwd=os.path.dirname(nr_abs),
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+        rc_r = reconstruct_ram(rc_ram); nr_r = reconstruct_ram(nr_ram)
+        rc_p = reconstruct_image(rc_ppu, 0xA00); nr_p = reconstruct_image(nr_ppu, 0xA00)
+        if not rc_r or not nr_r or not rc_p or not nr_p:
+            print(f"  FAIL: empty trace (rc_ram {len(rc_r)}, nr_ram {len(nr_r)}, "
+                  f"rc_ppu {len(rc_p)}, nr_ppu {len(nr_p)})")
+            return 1
+        RA = rc_r[max(rc_r)]; NA = nr_r[max(nr_r)]
+        RP = rc_p[max(rc_p)]; NP = nr_p[max(nr_p)]
+        print(f"  recomp final RAM@f{max(rc_r)} PPU@f{max(rc_p)}; "
+              f"nesref final RAM@f{max(nr_r)} PPU@f{max(nr_p)}")
+
+        ram_d = [i for i in range(2048)
+                 if not (0x100 <= i <= 0x1FF) and i not in benign and RA[i] != NA[i]]
+        oam_d = [i for i in range(0x000, 0x100) if RP[i] != NP[i]]
+        pal_d = [i for i in range(0x100, 0x120) if i not in PALMIRROR and RP[i] != NP[i]]
+        nt_d  = [i for i in range(0x200, 0xA00) if RP[i] != NP[i]]
+        print(f"  final-state diffs: RAM {len(ram_d)} real, OAM {len(oam_d)}/256, "
+              f"palette {len(pal_d)}/28, nametable {len(nt_d)}/2048")
+        zp = [i for i in ram_d if i < 0x100]
+        p2 = [i for i in ram_d if 0x200 <= i < 0x300]
+        other = [i for i in ram_d if i not in zp and i not in p2]
+        print(f"    RAM ZP({len(zp)}): " + " ".join(f"${i:02x}" for i in zp))
+        print(f"    RAM page2/shadowOAM({len(p2)}): " + " ".join(f"${i:03x}" for i in p2))
+        print(f"    RAM other({len(other)}): " + " ".join(f"${i:04x}" for i in other))
+        print(f"    OAM diff offsets: " + " ".join(f"${i:03x}" for i in oam_d))
+        for i in pal_d[:12]:
+            print(f"    PAL  $3f{i-0x100:02x}: recomp={RP[i]:#04x} mesen={NP[i]:#04x}")
+        real = bool(ram_d or oam_d or pal_d) or len(nt_d) > 64
+        if real:
+            print(f"  ***DIVERGED*** at the anchored game state — REAL divergence "
+                  f"(both engines confirmed at the same WAIT_RAM8 anchor).")
+            return 1
+        print(f"  => CONVERGED at anchored state (RAM/OAM/palette identical, "
+              f"NT within {len(nt_d)} bytes).")
+        return 0
+
+
 def main():
     if len(sys.argv) < 2:
         print(__doc__)
@@ -707,6 +859,8 @@ def main():
     if cmd == "abram":
         exe, rom, nesref_exe, core = sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5]
         frames = int(sys.argv[6]) if len(sys.argv) > 6 else 900
+        if len(sys.argv) > 7:
+            globals()["COSIM_SCRIPT_PATH"] = sys.argv[7]
         return cmd_abram(exe, rom, nesref_exe, core, frames)
     if cmd == "abcycle":
         exe, rom, nesref_exe, core = sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5]
@@ -716,6 +870,12 @@ def main():
         exe, rom, nesref_exe, core = sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5]
         frames = int(sys.argv[6]) if len(sys.argv) > 6 else 900
         return cmd_abppu(exe, rom, nesref_exe, core, frames)
+    if cmd == "abstate":
+        exe, rom, nesref_exe, core = sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5]
+        frames = int(sys.argv[6]) if len(sys.argv) > 6 else 3000
+        if len(sys.argv) > 7:
+            globals()["COSIM_SCRIPT_PATH"] = sys.argv[7]
+        return cmd_abstate(exe, rom, nesref_exe, core, frames)
     if cmd == "diff":
         return cmd_diff(sys.argv[2], sys.argv[3])
     if cmd == "run":
