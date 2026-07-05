@@ -243,6 +243,31 @@ uint32_t runtime_pop_cycle_budget_used(void);
 uint32_t runtime_pop_instrs_ticked(void);
 uint32_t runtime_pop_forced_caps(void);
 
+/* ---- Always-on frame-event ring ----
+ * Continuous capture of the frame-boundary machinery: every VBlank fire
+ * ('F' immediate at depth 0, 'P' pending-set, 'C' cap-forced fire, 'V'
+ * deferred fire consumed), every $4014 OAM DMA ('D'), and the runner's
+ * NMI-handler entries ('N' nested branch, 'T' top-level branch). Probes
+ * QUERY this history (TCP `fring`, or exit dump via
+ * NESRECOMP_FRING_DUMP=<path>); capture is never armed at probe time.
+ * aux packs (visible_sprite_count << 8) | page: for 'D' the count is over
+ * the just-copied g_ppu_oam; for fire events over the RAM shadow page
+ * (last DMA source, default $02) — the phase discriminator for
+ * DMA-vs-render beat bugs. For 'N'/'T', aux = vblank depth. */
+typedef struct {
+    uint64_t cyc;      /* g_nes_cycles at event */
+    uint32_t ops;      /* intra-frame cycle counter at event */
+    uint32_t budget;   /* frame budget the counter runs against */
+    uint16_t aux;      /* kind-specific (see above) */
+    uint8_t  depth;    /* VBlank nesting depth at event */
+    char     kind;
+} NesFrameEvt;
+void     nes_fring_push(char kind, uint16_t aux);
+uint16_t nes_fring_shadow_digest(void);           /* fire-time aux helper */
+int      nes_fring_last(int n, NesFrameEvt *dst); /* newest n, oldest-first */
+void     nes_fring_set_dma_page(uint8_t page);
+void     nes_fring_init_dump(void);               /* arm NESRECOMP_FRING_DUMP */
+
 /* PPU registers */
 extern uint8_t g_ppuctrl;
 extern uint8_t g_ppumask;

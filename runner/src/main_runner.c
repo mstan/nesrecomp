@@ -682,6 +682,7 @@ smoke_skip_input:
             g_ram[0x100+g_cpu.S] = 0x00;   g_cpu.S--;   /* PCL placeholder */
             g_ram[0x100+g_cpu.S] = p_save; g_cpu.S--;   /* P (status flags) */
             nes_dring_mark('N', (uint16_t)runtime_get_vblank_depth());
+            nes_fring_push('N', (uint16_t)runtime_get_vblank_depth());
             game_run_nmi();
             nes_dring_mark('n', (uint16_t)runtime_get_vblank_depth());
             g_cpu.S = s_pre;
@@ -719,6 +720,7 @@ smoke_skip_input:
             g_ram[0x100+g_cpu.S] = p_save; g_cpu.S--;   /* P (status flags) */
             runtime_set_vblank_firing(1);
             nes_dring_mark('N', (uint16_t)runtime_get_vblank_depth());
+            nes_fring_push('T', (uint16_t)runtime_get_vblank_depth());
         }
         game_run_nmi();
         if (nmi_will_run) {

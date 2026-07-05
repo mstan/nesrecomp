@@ -404,6 +404,7 @@ void runtime_init(void) {
     ppu_trace_init();
     load_dispatch_miss_policy_from_env();
     load_brk_policy_from_env();
+    nes_fring_init_dump();
 }
 
 /* Deterministic VBlank simulation: fires NMI every N bus operations.
@@ -916,6 +917,7 @@ void maybe_trigger_vblank(int cycles) {
      * boundary (like the $1A spin-wait) where state is consistent. */
     if (s_vblank_depth == 0) {
         g_frame_boundary_cyc = g_nes_cycles;   /* true frame-length ruler (pre-handler) */
+        nes_fring_push('F', nes_fring_shadow_digest());
         /* Immediate fire — safe at top level. Carry the overshoot (the
          * triggering instruction pushed s_ops_count a few cycles past the
          * threshold) into the next frame instead of discarding it — removes an
@@ -956,6 +958,7 @@ void maybe_trigger_vblank(int cycles) {
         s_vblank_depth--;
     } else {
         /* Deferred fire — wait for backward branch (loop boundary) */
+        if (!s_vblank_pending) nes_fring_push('P', nes_fring_shadow_digest());
         s_vblank_pending = 1;
         /* Safety cap: if a backward-branch checkpoint never arrives and
          * the cycle budget has blown past 1.5× the frame budget, force
@@ -975,6 +978,7 @@ void maybe_trigger_vblank(int cycles) {
         if (s_ops_count > (s_frame_budget + s_frame_budget / 2)) {
             s_dbg_forced_cap_hits++;
             if (!(g_ppuctrl & 0x80)) s_dbg_pending_no_ppu++;
+            nes_fring_push('C', nes_fring_shadow_digest());
             maybe_fire_pending_vblank();
         }
     }
@@ -986,6 +990,7 @@ void maybe_trigger_vblank(int cycles) {
 void maybe_fire_pending_vblank(void) {
     if (!s_vblank_pending) return;
     s_vblank_pending = 0;
+    nes_fring_push('V', nes_fring_shadow_digest());
     g_frame_boundary_cyc = g_nes_cycles;   /* true frame-length ruler (pre-handler) */
     /* Carry the overshoot like the immediate-fire path. This deferred path can
      * fire well past OPS_PER_FRAME (that is why the pending mechanism exists), so
@@ -1272,6 +1277,10 @@ void nes_write(uint16_t addr, uint8_t val) {
     if (addr == 0x4014) {
         uint16_t src = (uint16_t)val << 8;
         for (int i = 0; i < 256; i++) g_ppu_oam[i] = nes_read(src + i);
+        if (val < 0x08) nes_fring_set_dma_page(val);
+        { int vis = 0;
+          for (int i = 0; i < 64; i++) if (g_ppu_oam[i * 4] < 0xF0) vis++;
+          nes_fring_push('D', (uint16_t)((vis << 8) | val)); }
         /* Cycle-steal: OAM DMA halts the CPU 513 cycles (+1 alignment cycle if
          * the transfer is requested on an odd CPU cycle) = 513/514. Charge it
          * so the frame budget and APU sequencer advance as on hardware; drained
@@ -1781,6 +1790,64 @@ static void dring_push(uint16_t addr, int cb, char kind) {
  * shows which dispatches ran inside which handler invocation. */
 void nes_dring_mark(char kind, uint16_t tag) {
     dring_push(tag, -1, kind);
+}
+
+/* ---- Always-on frame-event ring (see nes_runtime.h for the event map) ----
+ * Sized for ~10k frames of steady-state events so a scripted run's whole
+ * history is retained; eviction keeps memory bounded at ~1.5MB. */
+#define FRING_N 65536
+static NesFrameEvt s_fring[FRING_N];
+static uint32_t s_fring_head = 0;
+static uint8_t  s_fring_dma_page = 0x02;  /* last $4014 source page in RAM */
+
+void nes_fring_set_dma_page(uint8_t page) { s_fring_dma_page = page; }
+
+uint16_t nes_fring_shadow_digest(void) {
+    /* Count would-be-visible sprites (Y < $F0) in the RAM shadow OAM page.
+     * Pages >= $08 (SRAM/ROM DMA sources) have no RAM image to digest. */
+    if (s_fring_dma_page >= 0x08) return 0x00FF;
+    const uint8_t *p = g_ram + ((uint16_t)s_fring_dma_page << 8);
+    int vis = 0;
+    for (int i = 0; i < 64; i++)
+        if (p[i * 4] < 0xF0) vis++;
+    return (uint16_t)((vis << 8) | s_fring_dma_page);
+}
+
+void nes_fring_push(char kind, uint16_t aux) {
+    NesFrameEvt *e = &s_fring[s_fring_head % FRING_N];
+    e->cyc    = g_nes_cycles;
+    e->ops    = s_ops_count;
+    e->budget = s_frame_budget;
+    e->aux    = aux;
+    e->depth  = (uint8_t)(s_vblank_depth > 255 ? 255 : s_vblank_depth);
+    e->kind   = kind;
+    s_fring_head++;
+}
+
+int nes_fring_last(int n, NesFrameEvt *dst) {
+    uint32_t avail = s_fring_head < FRING_N ? s_fring_head : FRING_N;
+    uint32_t take  = (n > 0 && (uint32_t)n < avail) ? (uint32_t)n : avail;
+    for (uint32_t i = 0; i < take; i++)
+        dst[i] = s_fring[(s_fring_head - take + i) % FRING_N];
+    return (int)take;
+}
+
+static const char *s_fring_dump_path = NULL;
+static void fring_dump_atexit(void) {
+    FILE *f = fopen(s_fring_dump_path, "w");
+    if (!f) return;
+    uint32_t n = s_fring_head < FRING_N ? s_fring_head : FRING_N;
+    fprintf(f, "kind,cyc,ops,budget,depth,aux\n");
+    for (uint32_t i = 0; i < n; i++) {
+        const NesFrameEvt *e = &s_fring[(s_fring_head - n + i) % FRING_N];
+        fprintf(f, "%c,%llu,%u,%u,%u,0x%04X\n", e->kind,
+                (unsigned long long)e->cyc, e->ops, e->budget, e->depth, e->aux);
+    }
+    fclose(f);
+}
+void nes_fring_init_dump(void) {
+    const char *e = getenv("NESRECOMP_FRING_DUMP");
+    if (e && *e) { s_fring_dump_path = e; atexit(fring_dump_atexit); }
 }
 
 void nes_dump_dispatch_ring(void) {
