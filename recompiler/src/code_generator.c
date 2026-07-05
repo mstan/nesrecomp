@@ -991,18 +991,19 @@ static void emit_call_target(FILE *f, const NESRom *rom, uint16_t addr,
     /* Cross-8KB dispatch carries a caller-bank hint: when the runtime bank
      * register lookup misses (stale g_current_bank), the dispatch retries with
      * the caller's statically-known bank — cross-8KB calls are intra-16KB-bank,
-     * so the caller's bank is the correct fallback. */
-    if (opts.use_caller_bank) {
-        if (opts.jsr_pop_fallback)
-            fprintf(f, "if (!call_by_address_cb(0x%04X, %d)) g_cpu.S += 2;", addr, opts.caller_bank);
+     * so the caller's bank is the correct fallback.
+     * Tail transfers (JMP) go through call_by_address_tail, which defers when
+     * already inside a dispatch so JMP loop chains cannot grow the C stack;
+     * calls (JSR) go through the depth-counted nes_dispatch_call. */
+    {
+        int cb = opts.use_caller_bank ? opts.caller_bank : -1;
+        if (opts.tail_return)
+            fprintf(f, "call_by_address_tail(0x%04X, %d); return;\n", addr, cb);
+        else if (opts.jsr_pop_fallback)
+            fprintf(f, "if (!nes_dispatch_call(0x%04X, %d)) g_cpu.S += 2;\n", addr, cb);
         else
-            fprintf(f, "call_by_address_cb(0x%04X, %d);", addr, opts.caller_bank);
-    } else if (opts.jsr_pop_fallback)
-        fprintf(f, "if (!call_by_address(0x%04X)) g_cpu.S += 2;", addr);
-    else
-        fprintf(f, "call_by_address(0x%04X);", addr);
-    if (opts.tail_return) fprintf(f, " return;");
-    fprintf(f, "\n");
+            fprintf(f, "nes_dispatch_call(0x%04X, %d);\n", addr, cb);
+    }
 }
 
 /* LDA/LDX/LDY: register loaded from immediate or memory. `reg` is 'A','X','Y'. */
@@ -1660,14 +1661,35 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                     } else {
                         call_src = fixed_bank;
                     }
+                    /* MMC3 PRG mode 1 swaps $C000-$DFFF via R6 (e.g. SMB3), so a
+                     * $C000-$DFFF operand is a window selection, not a fixed-bank
+                     * address.  Only $E000+ is fixed in both modes. */
+                    if (rom->mapper == 4 && abs16 < 0xE000) {
+                        jsr_opts.force_dynamic = true;
+                        if (bank != fixed_bank) {
+                            jsr_opts.use_caller_bank = true;
+                            jsr_opts.caller_bank = bank;
+                        }
+                    }
                     emit_call_target(f, rom, abs16, call_src, fixed_bank, jsr_opts);
                 } else if (abs16 >= 0x8000) {
                     /* MMC3 (mapper 4): 8KB banks at $8000-$9FFF and $A000-$BFFF
-                     * are switched independently.  A JSR from one 8KB half to
-                     * the other crosses the 8KB-window boundary. */
-                    int cross_8kb = (rom->mapper == 4 &&
-                                     pc >= 0x8000 && pc < 0xC000 &&
-                                     (pc < 0xA000) != (abs16 < 0xA000));
+                     * are switched independently.  An absolute operand SELECTS a
+                     * window by its value; which physical bank answers there is
+                     * runtime mapper state.  A switchable bank's code can execute
+                     * in EITHER window (e.g. SMB3 maps even banks at $A000), so
+                     * even a same-gen-half `JSR $96E5` from code running in the
+                     * $A000 window really targets the $8000 window (fixed/R6) —
+                     * a static same-bank bind runs the wrong function (measured:
+                     * SMB3 bank-26 $8CBF JSR $96E5 bound to func_96E5_b13 while
+                     * hardware executes fixed-bank-30 $96E5; the misdirected flow
+                     * ended in a DynJump table misread jumping to $6622 WRAM).
+                     * Therefore EVERY absolute JSR into $8000-$BFFF from
+                     * switchable-bank mapper-4 code dispatches dynamically:
+                     * call_by_address_cb resolves the operand through the live
+                     * window (g_mmc3_win_bank8k) and falls back to the
+                     * interpreter when the resolved variant was not generated. */
+                    int cross_8kb = (rom->mapper == 4);
                     /* A cross-8KB call crosses the $8000/$A000 window boundary, so
                      * its target lives in whichever window the mapper points the
                      * OTHER 8KB slot at — and that is a RUNTIME fact, not a static
@@ -1696,11 +1718,10 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                          * determined at runtime by the mapper, so dispatch via
                          * call_by_address. */
                         jsr_opts.force_dynamic = true;
-                        if (cross_8kb) {
+                        if (cross_8kb && bank != fixed_bank) {
                             /* Pass the caller's bank as the dispatch fallback (see
-                             * emit_call_target): if g_current_bank is stale at the
-                             * call, the target still resolves to the caller's own
-                             * 16KB bank. */
+                             * emit_call_target): if the window lookup misses, the
+                             * target still resolves to the caller's own 16KB bank. */
                             jsr_opts.use_caller_bank = true;
                             jsr_opts.caller_bank = bank;
                         }
@@ -1787,6 +1808,14 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                             .push_dummy_static = need_jmp_push,
                             .tail_return = true,
                         };
+                        /* MMC3 PRG mode 1: $C000-$DFFF is the R6 window, not the
+                         * fixed bank — resolve through the live window. Tail
+                         * trampoline keeps loop chains flat. */
+                        if (rom->mapper == 4 && abs16 < 0xE000) {
+                            o.force_dynamic = true;
+                            o.push_dummy_static = false;
+                            o.push_dummy_dynamic = need_jmp_push;
+                        }
                         emit_call_target(f, rom, abs16, fixed_bank, fixed_bank, o);
                     }
                 } else if (abs16 >= 0x8000) {
@@ -1840,6 +1869,9 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                             if (emitted_addrs[ei] == abs16) { label_in_body = true; break; }
                         }
                         if (label_in_body) {
+                            /* Same-gen-half in-body target (cross-half JMPs went
+                             * dynamic above): caller and target share a window at
+                             * runtime, so the goto is sound for any mapping. */
                             fprintf(f, "maybe_trigger_vblank(2);\n    goto label_%04X;\n", abs16);
                         } else {
                             /* push_jmp check for same-bank JMP */
@@ -1849,6 +1881,17 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                                 .push_dummy_static = need_jmp_push,
                                 .tail_return = true,
                             };
+                            if (rom->mapper == 4) {
+                                /* Same window-selection ambiguity as the JSR path:
+                                 * the operand names a window, not this bank — go
+                                 * through the live-window dispatch. The tail
+                                 * trampoline keeps JMP loop chains flat. */
+                                o.force_dynamic = true;
+                                o.push_dummy_static = false;
+                                o.push_dummy_dynamic = need_jmp_push;
+                                o.use_caller_bank = true;
+                                o.caller_bank = bank;
+                            }
                             emit_call_target(f, rom, abs16, bank, fixed_bank, o);
                         }
                     }
@@ -2894,8 +2937,9 @@ static void emit_dispatch(FILE *f, const EmittedWrapper *wrappers, int wrapper_c
         "    }\n"
         "    return 1;\n"
         "}\n\n"
-        "/* Legacy entry: no caller-bank hint (JMP-indirect, interp, debug server). */\n"
-        "int call_by_address(uint16_t addr) { return call_by_address_cb(addr, -1); }\n"
+        "/* Legacy entry: no caller-bank hint (JMP-indirect, interp, debug server).\n"
+        " * Depth-counted so deferred JMP-tail targets get driven (see runtime.c). */\n"
+        "int call_by_address(uint16_t addr) { return nes_dispatch_call(addr, -1); }\n"
     );
 }
 

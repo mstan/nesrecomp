@@ -58,6 +58,12 @@ int call_by_address(uint16_t addr);  /* returns 1 on hit, 0 on miss */
  * lookup misses (stale g_current_bank), retry the dispatch keyed on the caller's
  * statically-known bank.  caller_bank < 0 disables the fallback (== call_by_address). */
 int call_by_address_cb(uint16_t addr, int caller_bank);
+/* Depth-counted dispatch used by generated JSR sites; drives deferred JMP-tail
+ * targets from a flat loop at the outermost frame (see runtime.c trampoline). */
+int nes_dispatch_call(uint16_t addr, int caller_bank);
+/* Dispatch for generated JMP tails: defers when already inside a dispatch so
+ * JMP loop chains cannot grow the C stack. */
+int call_by_address_tail(uint16_t addr, int caller_bank);
 
 /* Logging for dispatch misses.
  * nes_log_dispatch_miss_bank is the full form used by generated dispatch on

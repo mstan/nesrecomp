@@ -1693,6 +1693,70 @@ static uint8_t classify_miss_target(const uint8_t bytes[8]) {
     return MISS_TARGET_CODE;
 }
 
+/* ---- Dispatch tail trampoline ----
+ * Dynamic JMP tails must not grow the C stack: a JMP loop chain dispatched
+ * recursively adds a frame per lap and overflows (measured on SMB3 once all
+ * mapper-4 absolute transfers went window-dynamic). Instead, a JMP-tail
+ * dispatched while already inside a dispatch DEFERS its target and returns;
+ * push_all_jsr keeps the 6502 stack canonical, so every generated JSR site's
+ * bail check (callee returned without popping its return address → S
+ * mismatch) unwinds the C stack to the outermost dispatch frame, which then
+ * drives the deferred target from a flat loop. When the driven function
+ * finally RTSes, the 6502 stack is exactly what the original callers expect,
+ * so the unwound JSR sites that still run resume correctly. */
+int g_nes_dispatch_depth = 0;
+static int32_t s_tail_pending = -1;
+static int     s_tail_caller  = -1;
+
+int nes_dispatch_call(uint16_t addr, int caller_bank) {
+    g_nes_dispatch_depth++;
+    int r = call_by_address_cb(addr, caller_bank);
+    g_nes_dispatch_depth--;
+    if (g_nes_dispatch_depth == 0) {
+        while (s_tail_pending >= 0) {
+            uint16_t a = (uint16_t)s_tail_pending;
+            int      c = s_tail_caller;
+            s_tail_pending = -1;
+            g_nes_dispatch_depth++;
+            r = call_by_address_cb(a, c);
+            g_nes_dispatch_depth--;
+        }
+    }
+    return r;
+}
+
+/* JMP tails dispatch RECURSIVELY by default — that keeps the resume path
+ * intact (the tail target's final RTS pops the caller's return address and
+ * control unwinds through the live C frames exactly as the 6502 expects; C
+ * depth stays bounded by real JSR depth). The one unbounded shape is a JMP
+ * CYCLE: a loop lap across functions adds C frames with ZERO net 6502-stack
+ * change. Detect that exact shape — same tail target with the same S already
+ * active in this dispatch chain — and defer: unwinding a zero-net-stack lap
+ * discards nothing (registers/RAM/S survive the unwind untouched), and the
+ * outermost dispatch frame re-dispatches the lap flat. */
+#define TAIL_ACTIVE_MAX 64
+static struct { uint16_t addr; uint8_t s; } s_tail_active[TAIL_ACTIVE_MAX];
+static int s_tail_active_n = 0;
+
+int call_by_address_tail(uint16_t addr, int caller_bank) {
+    for (int i = 0; i < s_tail_active_n; i++) {
+        if (s_tail_active[i].addr == addr && s_tail_active[i].s == g_cpu.S) {
+            s_tail_pending = addr;
+            s_tail_caller  = caller_bank;
+            return 1;   /* cycle lap: defer to the outermost dispatch frame */
+        }
+    }
+    int slot = -1;
+    if (s_tail_active_n < TAIL_ACTIVE_MAX) {
+        slot = s_tail_active_n++;
+        s_tail_active[slot].addr = addr;
+        s_tail_active[slot].s    = g_cpu.S;
+    }
+    int r = nes_dispatch_call(addr, caller_bank);
+    if (slot >= 0) s_tail_active_n = slot;
+    return r;
+}
+
 /* Record a dispatch miss into the ring + dispatch_misses.log + counters, and
  * stash its classification/context for the policy step. Does NOT consult the
  * per-game override and does NOT apply the miss policy — callers compose those
