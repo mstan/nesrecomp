@@ -64,6 +64,8 @@ int nes_dispatch_call(uint16_t addr, int caller_bank);
 /* Dispatch for generated JMP tails: defers when already inside a dispatch so
  * JMP loop chains cannot grow the C stack. */
 int call_by_address_tail(uint16_t addr, int caller_bank);
+/* Dump the always-on ring of recent dispatches (post-mortem attribution). */
+void nes_dump_dispatch_ring(void);
 
 /* Logging for dispatch misses.
  * nes_log_dispatch_miss_bank is the full form used by generated dispatch on
@@ -123,6 +125,23 @@ extern uint64_t g_dispatch_miss_count;        /* call_by_address misses */
 extern uint64_t g_inline_dispatch_miss_count; /* inline_dispatch defaults */
 
 void nes_set_dispatch_miss_policy(DispatchMissPolicy policy);
+
+/* ---- Nested-NMI policy ----
+ * What the frame-boundary callback does when a vblank fires while the game is
+ * ALREADY inside its NMI handler (vblank depth > 1):
+ *   POKE_SPIN_FLAGS  legacy: skip the handler, set the $1A/$20 spin-wait
+ *                    resolver bytes (SMB-tuned; wrong for other games).
+ *   RUN_HANDLER      run the game's NMI handler nested, with full register/
+ *                    stack save-restore. For games whose NMI is re-entrancy-
+ *                    aware by design and whose progression DEPENDS on the
+ *                    nested run (SMB3: nested IntNMI takes the light path and
+ *                    DECs VBlank_Tick, releasing the in-NMI wait loops).
+ * Set from extras.c game_on_init(); default POKE_SPIN_FLAGS. */
+typedef enum {
+    NESTED_NMI_POKE_SPIN_FLAGS = 0,
+    NESTED_NMI_RUN_HANDLER     = 1,
+} NestedNmiPolicy;
+extern int g_nested_nmi_policy;
 
 /* Implemented by debug_server.c. Sets the pause flag so the next
  * debug_server_wait_if_paused blocks in the TCP loop. Safe to call from

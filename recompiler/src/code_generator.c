@@ -2786,11 +2786,7 @@ static void emit_dispatch(FILE *f, const EmittedWrapper *wrappers, int wrapper_c
             "    int _w = (addr >> 13) & 3;\n"
             "    int _b8 = g_mmc3_win_bank8k[_w];\n"
             "    int _bank = _b8 >> 1;\n"
-            "    /* Legacy fallback: code running in an odd-R6 $8000 window may call\n"
-            "     * $A000+ targets that live in the $8000 window's 16KB bank, not R7's.\n"
-            "     * On a would-be miss, retry once with the $8000 window's bank. */\n"
-            "    int _a000_r6_fallback = ((g_mmc3_win_bank8k[0] & 1) && _w == 1\n"
-            "                             && (g_mmc3_win_bank8k[0] >> 1) != _bank);\n"
+            "    (void)_caller_bank; /* window resolution is authoritative; see miss default */\n"
             "    addr = (uint16_t)(((_bank == %d) ? 0xC000 : 0x8000)\n"
             "                      + ((_b8 & 1) ? 0x2000 : 0) + (addr & 0x1FFF));\n",
             fixed_bank
@@ -2853,7 +2849,7 @@ static void emit_dispatch(FILE *f, const EmittedWrapper *wrappers, int wrapper_c
                 variants[0] != fixed_bank) {
                 fprintf(f, "            switch (_bank) {\n");
                 fprintf(f, "                case %d: %s(); break;\n", variants[0], nm);
-                fprintf(f, "                default: if (_a000_r6_fallback) { _bank = g_mmc3_win_bank8k[0] >> 1; _a000_r6_fallback = 0; goto _dispatch_retry; } if (_caller_bank >= 0 && _caller_bank != _bank) { _bank = _caller_bank; _caller_bank = -1; goto _dispatch_retry; } return nes_interp_dispatch_bank(_cpu_addr, addr, _bank);\n");
+                fprintf(f, "                default: return nes_interp_dispatch_bank(_cpu_addr, addr, _bank);\n");
                 fprintf(f, "            }\n");
                 fprintf(f, "            break;\n");
             } else {
@@ -2906,7 +2902,15 @@ static void emit_dispatch(FILE *f, const EmittedWrapper *wrappers, int wrapper_c
                  * caller-bank fallback (cross-8KB calls whose g_current_bank was
                  * stale resolve to the caller's own 16KB bank), then interp. */
                 if (rom->mapper == 4)
-                    fprintf(f, "                default: if (_a000_r6_fallback) { _bank = g_mmc3_win_bank8k[0] >> 1; _a000_r6_fallback = 0; goto _dispatch_retry; } if (_caller_bank >= 0 && _caller_bank != _bank) { _bank = _caller_bank; _caller_bank = -1; goto _dispatch_retry; } return nes_interp_dispatch_bank(_cpu_addr, addr, _bank);\n");
+                    /* No caller-bank / r6-odd retries here: those heuristics
+                     * predate window-resolved dispatch (g_mmc3_win_bank8k) and
+                     * redirect a clean "variant not generated" miss into a
+                     * DIFFERENT bank's code (measured on SMB3: sound-engine
+                     * dispatches at $B293 ran bank-13 title code via the
+                     * caller-bank retry). The window-resolved bank is
+                     * authoritative; a miss goes to the interpreter, which
+                     * executes the true bytes through the live windows. */
+                    fprintf(f, "                default: return nes_interp_dispatch_bank(_cpu_addr, addr, _bank);\n");
                 else if (rom->mapper == 66)
                     fprintf(f, "                default: return nes_interp_dispatch_bank(addr, addr, _bank);\n");
                 else

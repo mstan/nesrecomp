@@ -189,10 +189,12 @@ static void atexit_handler(void) {
     extern uint64_t g_frame_count;
     /* Only log if the game exited unexpectedly (recomp stack still active) */
     if (g_recomp_stack_top > 0) {
+        extern void nes_dump_dispatch_ring(void);
         printf("[EXIT] Unexpected exit at frame %llu, recomp stack (top=%d):\n",
                (unsigned long long)g_frame_count, g_recomp_stack_top);
         for (int i = g_recomp_stack_top - 1; i >= 0 && i >= g_recomp_stack_top - 20; i--)
             printf("  [%d] %s\n", i, g_recomp_stack[i] ? g_recomp_stack[i] : "?");
+        nes_dump_dispatch_ring();
         fflush(stdout);
     }
 }

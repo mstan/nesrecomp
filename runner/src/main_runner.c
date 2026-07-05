@@ -666,12 +666,34 @@ smoke_skip_input:
      * responsible for gating the game's actual NMI handler on
      * (g_ppuctrl & 0x80) and the nested-depth check internally. */
     if ((g_ppuctrl & 0x80) && runtime_get_vblank_depth() > 1) {
-        /* Nested NMI with NMI enabled: skip the handler (would corrupt
-         * mid-VRAM transfer state), but still set $1A/$20 to resolve any
-         * spin-wait. Do NOT run game_run_nmi here — nested NMIs should
-         * not advance oracle/frame cadence. */
-        g_ram[0x1A] = 1;
-        g_ram[0x20] = 1;
+        if (g_nested_nmi_policy == NESTED_NMI_RUN_HANDLER) {
+            /* Re-entrant-NMI game (e.g. SMB3): its handler is nested-safe by
+             * design and progression DEPENDS on the nested run (the nested
+             * IntNMI takes the light path and DECs VBlank_Tick, releasing
+             * in-NMI wait loops). Run it with the same register/stack
+             * save-restore discipline as the top-level path. */
+            uint8_t s_pre = g_cpu.S;
+            uint8_t a_pre = g_cpu.A, x_pre = g_cpu.X, y_pre = g_cpu.Y;
+            uint8_t n_pre = g_cpu.N, v_pre = g_cpu.V, d_pre = g_cpu.D;
+            uint8_t i_pre = g_cpu.I, z_pre = g_cpu.Z, c_pre = g_cpu.C;
+            uint8_t p_save = (uint8_t)((g_cpu.N<<7)|(g_cpu.V<<6)|(1<<5)|
+                                       (g_cpu.D<<3)|(g_cpu.I<<2)|(g_cpu.Z<<1)|g_cpu.C);
+            g_ram[0x100+g_cpu.S] = 0x00;   g_cpu.S--;   /* PCH placeholder */
+            g_ram[0x100+g_cpu.S] = 0x00;   g_cpu.S--;   /* PCL placeholder */
+            g_ram[0x100+g_cpu.S] = p_save; g_cpu.S--;   /* P (status flags) */
+            game_run_nmi();
+            g_cpu.S = s_pre;
+            g_cpu.A = a_pre; g_cpu.X = x_pre; g_cpu.Y = y_pre;
+            g_cpu.N = n_pre; g_cpu.V = v_pre; g_cpu.D = d_pre;
+            g_cpu.I = i_pre; g_cpu.Z = z_pre; g_cpu.C = c_pre;
+        } else {
+            /* Legacy: skip the handler (would corrupt mid-VRAM transfer
+             * state), but still set $1A/$20 to resolve any spin-wait (SMB).
+             * Do NOT run game_run_nmi — nested NMIs should not advance
+             * oracle/frame cadence. */
+            g_ram[0x1A] = 1;
+            g_ram[0x20] = 1;
+        }
     } else {
         /* Top-level frame boundary (or NMI-disabled frame): push stack
          * frame only if NMI is actually going to run, then delegate to

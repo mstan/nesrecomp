@@ -414,9 +414,14 @@ void runtime_init(void) {
  * The threshold is tuned so games run at approximately correct speed
  * when combined with the wall-clock frame pacing in nes_vblank_callback. */
 static int  s_vblank_depth = 0;   /* NMI nesting depth (0 = not in NMI) */
-#define MAX_VBLANK_DEPTH 3        /* Some games (Metroid) spin-wait for NMI inside
-                                   * the NMI handler (column loader).  Allow
-                                   * re-entrancy so the wait loop can exit. */
+#define MAX_VBLANK_DEPTH 8        /* Some games spin-wait for NMI inside the NMI
+                                   * handler: Metroid's column loader needs one
+                                   * nested level; SMB3 (NESTED_NMI_RUN_HANDLER)
+                                   * runs its whole progression inside NMI and
+                                   * stacks several waits during title/boot —
+                                   * depth 3 measured as a hard deadlock (every
+                                   * further fire skipped, so the tick that
+                                   * would release the wait never arrives). */
 static uint32_t s_ops_count = 0;
 
 /* Monotonic guest CPU-cycle counter (see nes_runtime.h). Advanced by the same
@@ -856,6 +861,30 @@ void maybe_trigger_vblank(int cycles) {
         s_dbg_cycles_ticked += _c;
         s_dbg_instrs_ticked++;
     }
+    /* Hang watchdog (env NESRECOMP_HANG_TIMEOUT_S): a hang that never reaches
+     * a frame boundary starves every observability surface (the TCP poll runs
+     * per frame), so probe the wall clock here on the instruction stream and
+     * dump the dispatch ring + vblank state before exiting. Off by default. */
+    {
+        static long long s_hang_deadline = -2;   /* -2 uninit, -1 disabled */
+        if (s_hang_deadline == -2) {
+            const char *e = getenv("NESRECOMP_HANG_TIMEOUT_S");
+            s_hang_deadline = (e && *e) ? (long long)time(NULL) + atoll(e) : -1;
+        }
+        if (s_hang_deadline > 0 && (s_dbg_instrs_ticked & 0xFFFFF) == 0 &&
+            (long long)time(NULL) > s_hang_deadline) {
+            extern uint64_t g_frame_count;
+            fprintf(stderr, "[HANG] wall-clock timeout: frame=%llu vblank_depth=%d "
+                    "ops=%u budget=%u pending=%d depth_skips=%llu\n",
+                    (unsigned long long)g_frame_count, s_vblank_depth,
+                    (unsigned)s_ops_count, (unsigned)s_frame_budget,
+                    s_vblank_pending, (unsigned long long)s_dbg_max_depth_skips);
+            nes_dump_dispatch_ring();
+            fflush(stderr); fflush(stdout);
+            exit(42);
+        }
+    }
+
     /* Dot-accurate PPU (opt-in): paint visible scanlines incrementally as the
      * CPU sweeps the frame's cycle budget. No-op unless NESRECOMP_DOT_PPU set. */
     if (g_dot_ppu_on) ppu_dot_advance(s_ops_count);
@@ -1705,23 +1734,41 @@ static uint8_t classify_miss_target(const uint8_t bytes[8]) {
  * finally RTSes, the 6502 stack is exactly what the original callers expect,
  * so the unwound JSR sites that still run resume correctly. */
 int g_nes_dispatch_depth = 0;
+int g_nested_nmi_policy = NESTED_NMI_POKE_SPIN_FLAGS;
 static int32_t s_tail_pending = -1;
 static int     s_tail_caller  = -1;
 
+/* Always-on ring of the last dispatches (addr, caller_bank, S, depth, kind)
+ * for post-mortem attribution — dumped by launcher.c's unexpected-exit
+ * handler. Kind: 'C'=call (JSR), 'T'=tail (JMP), 'D'=deferred lap. */
+#define DISPATCH_RING_N 64
+typedef struct { uint16_t addr; int16_t cb; uint8_t s; uint8_t depth; char kind; } DispatchRingEnt;
+static DispatchRingEnt s_dring[DISPATCH_RING_N];
+static uint32_t s_dring_head = 0;
+
+static void dring_push(uint16_t addr, int cb, char kind) {
+    DispatchRingEnt *e = &s_dring[s_dring_head % DISPATCH_RING_N];
+    e->addr = addr; e->cb = (int16_t)cb; e->s = g_cpu.S;
+    e->depth = (uint8_t)(g_nes_dispatch_depth > 255 ? 255 : g_nes_dispatch_depth);
+    e->kind = kind;
+    s_dring_head++;
+}
+
+void nes_dump_dispatch_ring(void) {
+    uint32_t n = s_dring_head < DISPATCH_RING_N ? s_dring_head : DISPATCH_RING_N;
+    printf("[EXIT] last %u dispatches (oldest first; kind C=jsr T=tail D=driven-lap):\n", n);
+    for (uint32_t i = 0; i < n; i++) {
+        const DispatchRingEnt *e = &s_dring[(s_dring_head - n + i) % DISPATCH_RING_N];
+        printf("  %c $%04X cb=%d S=$%02X depth=%u\n", e->kind, e->addr, e->cb, e->s, e->depth);
+    }
+    fflush(stdout);
+}
+
 int nes_dispatch_call(uint16_t addr, int caller_bank) {
+    dring_push(addr, caller_bank, 'C');
     g_nes_dispatch_depth++;
     int r = call_by_address_cb(addr, caller_bank);
     g_nes_dispatch_depth--;
-    if (g_nes_dispatch_depth == 0) {
-        while (s_tail_pending >= 0) {
-            uint16_t a = (uint16_t)s_tail_pending;
-            int      c = s_tail_caller;
-            s_tail_pending = -1;
-            g_nes_dispatch_depth++;
-            r = call_by_address_cb(a, c);
-            g_nes_dispatch_depth--;
-        }
-    }
     return r;
 }
 
@@ -1730,20 +1777,28 @@ int nes_dispatch_call(uint16_t addr, int caller_bank) {
  * control unwinds through the live C frames exactly as the 6502 expects; C
  * depth stays bounded by real JSR depth). The one unbounded shape is a JMP
  * CYCLE: a loop lap across functions adds C frames with ZERO net 6502-stack
- * change. Detect that exact shape — same tail target with the same S already
- * active in this dispatch chain — and defer: unwinding a zero-net-stack lap
- * discards nothing (registers/RAM/S survive the unwind untouched), and the
- * outermost dispatch frame re-dispatches the lap flat. */
+ * change (same tail target, same S, already active in this chain). On
+ * detecting a lap, DEFER to the MATCHING ancestor tail frame: the lap body's
+ * C frames between the two tails represent zero net 6502 stack, so unwinding
+ * just them (via return/bail propagation) discards nothing, and the ancestor
+ * frame re-runs the lap iteratively. All C frames BELOW the ancestor stay
+ * live, so when the loop finally exits via RTS the 6502 return address pops
+ * into intact C frames and execution resumes exactly where the 6502 expects
+ * (unwinding to depth 0 instead loses those frames — measured on SMB3 as an
+ * unexpected exit when Video_Misc_Updates2's terminator RTS had no caller
+ * frame left to resume). */
 #define TAIL_ACTIVE_MAX 64
 static struct { uint16_t addr; uint8_t s; } s_tail_active[TAIL_ACTIVE_MAX];
 static int s_tail_active_n = 0;
+static int s_tail_pending_slot = -1;
 
 int call_by_address_tail(uint16_t addr, int caller_bank) {
     for (int i = 0; i < s_tail_active_n; i++) {
         if (s_tail_active[i].addr == addr && s_tail_active[i].s == g_cpu.S) {
-            s_tail_pending = addr;
-            s_tail_caller  = caller_bank;
-            return 1;   /* cycle lap: defer to the outermost dispatch frame */
+            s_tail_pending      = addr;
+            s_tail_pending_slot = i;
+            s_tail_caller       = caller_bank;
+            return 1;   /* cycle lap: defer to the matching ancestor tail */
         }
     }
     int slot = -1;
@@ -1752,7 +1807,19 @@ int call_by_address_tail(uint16_t addr, int caller_bank) {
         s_tail_active[slot].addr = addr;
         s_tail_active[slot].s    = g_cpu.S;
     }
-    int r = nes_dispatch_call(addr, caller_bank);
+    dring_push(addr, caller_bank, 'T');
+    int r;
+    for (;;) {
+        r = nes_dispatch_call(addr, caller_bank);
+        if (slot >= 0 && s_tail_pending >= 0 && s_tail_pending_slot == slot) {
+            /* Our own lap came back around: consume it and iterate. */
+            s_tail_pending      = -1;
+            s_tail_pending_slot = -1;
+            dring_push(addr, caller_bank, 'D');
+            continue;
+        }
+        break;
+    }
     if (slot >= 0) s_tail_active_n = slot;
     return r;
 }
