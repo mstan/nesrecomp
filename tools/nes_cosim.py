@@ -827,6 +827,17 @@ def cmd_abstate(exe, rom, nesref_exe, core, frames):
         print(f"    RAM page2/shadowOAM({len(p2)}): " + " ".join(f"${i:03x}" for i in p2))
         print(f"    RAM other({len(other)}): " + " ".join(f"${i:04x}" for i in other))
         print(f"    OAM diff offsets: " + " ".join(f"${i:03x}" for i in oam_d))
+        for i in zp + other:
+            print(f"    RAM ${i:04x}: recomp={RA[i]:#04x} mesen={NA[i]:#04x}")
+        # Decode every sprite touched by an OAM diff, both engines side by side.
+        for s in sorted({i // 4 for i in oam_d}):
+            r = RP[s*4:s*4+4]; n = NP[s*4:s*4+4]
+            print(f"    OAM spr{s:02d}: recomp Y={r[0]:02x} T={r[1]:02x} A={r[2]:02x} X={r[3]:02x}"
+                  f"  | mesen Y={n[0]:02x} T={n[1]:02x} A={n[2]:02x} X={n[3]:02x}")
+        for s in sorted({(i - 0x200) // 4 for i in p2}):
+            r = RA[0x200+s*4:0x200+s*4+4]; n = NA[0x200+s*4:0x200+s*4+4]
+            print(f"    SHDW spr{s:02d}: recomp Y={r[0]:02x} T={r[1]:02x} A={r[2]:02x} X={r[3]:02x}"
+                  f"  | mesen Y={n[0]:02x} T={n[1]:02x} A={n[2]:02x} X={n[3]:02x}")
         for i in pal_d[:12]:
             print(f"    PAL  $3f{i-0x100:02x}: recomp={RP[i]:#04x} mesen={NP[i]:#04x}")
         real = bool(ram_d or oam_d or pal_d) or len(nt_d) > 64
