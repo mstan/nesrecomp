@@ -880,6 +880,16 @@ void maybe_trigger_vblank(int cycles) {
                     (unsigned)s_ops_count, (unsigned)s_frame_budget,
                     s_vblank_pending, (unsigned long long)s_dbg_max_depth_skips);
             nes_dump_dispatch_ring();
+            /* Post-mortem memory image: 2KB WRAM + 8KB SRAM. */
+            {
+                FILE *hf = fopen("C:/temp/hang_ram.bin", "wb");
+                if (hf) {
+                    fwrite(g_ram, 1, 0x0800, hf);
+                    fwrite(g_sram, 1, 0x2000, hf);
+                    fclose(hf);
+                    fprintf(stderr, "[HANG] RAM+SRAM image -> C:/temp/hang_ram.bin\n");
+                }
+            }
             fflush(stderr); fflush(stdout);
             exit(42);
         }
@@ -1735,14 +1745,26 @@ static uint8_t classify_miss_target(const uint8_t bytes[8]) {
  * so the unwound JSR sites that still run resume correctly. */
 int g_nes_dispatch_depth = 0;
 int g_nested_nmi_policy = NESTED_NMI_POKE_SPIN_FLAGS;
+/* CPU window ($8000/$A000/$C000/$E000) the CURRENTLY executing generated
+ * function lives in. Generated JSR sites on banked mappers push
+ * (base | gen_pc&0x1FFF) as the 6502 return address so stack-reading idioms
+ * (DynJump-style dispatchers, PLA/RTS computed gotos) see true CPU addresses
+ * even when the code executes in a window that differs from its gen labels
+ * (SMB3: bank 26 gen'd at $9xxx runs at $Bxxx; mode-1 bank 30 gen'd at $Dxxx
+ * runs at $9xxx — static pushes fed DynJump tables read through the WRONG
+ * window, minting mid-instruction dispatch targets like $9292). Maintained by
+ * nes_dispatch_call (every dynamic transfer carries the operand's window);
+ * static calls stay in-window except fixed-$E000 targets, which the emitter
+ * wraps explicitly. Boot vectors live in the $E000 window. */
+uint16_t g_code_window_base = 0xE000;
 static int32_t s_tail_pending = -1;
 static int     s_tail_caller  = -1;
 
 /* Always-on ring of the last dispatches (addr, caller_bank, S, depth, kind)
  * for post-mortem attribution — dumped by launcher.c's unexpected-exit
  * handler. Kind: 'C'=call (JSR), 'T'=tail (JMP), 'D'=deferred lap. */
-#define DISPATCH_RING_N 64
-typedef struct { uint16_t addr; int16_t cb; uint8_t s; uint8_t depth; char kind; } DispatchRingEnt;
+#define DISPATCH_RING_N 512
+typedef struct { uint16_t addr; int16_t cb; uint8_t s; uint8_t depth; char kind; uint16_t wb; } DispatchRingEnt;
 static DispatchRingEnt s_dring[DISPATCH_RING_N];
 static uint32_t s_dring_head = 0;
 
@@ -1751,7 +1773,14 @@ static void dring_push(uint16_t addr, int cb, char kind) {
     e->addr = addr; e->cb = (int16_t)cb; e->s = g_cpu.S;
     e->depth = (uint8_t)(g_nes_dispatch_depth > 255 ? 255 : g_nes_dispatch_depth);
     e->kind = kind;
+    e->wb = g_code_window_base;
     s_dring_head++;
+}
+
+/* Context markers from the runner (NMI enter/exit etc.) so the dispatch ring
+ * shows which dispatches ran inside which handler invocation. */
+void nes_dring_mark(char kind, uint16_t tag) {
+    dring_push(tag, -1, kind);
 }
 
 void nes_dump_dispatch_ring(void) {
@@ -1759,16 +1788,19 @@ void nes_dump_dispatch_ring(void) {
     printf("[EXIT] last %u dispatches (oldest first; kind C=jsr T=tail D=driven-lap):\n", n);
     for (uint32_t i = 0; i < n; i++) {
         const DispatchRingEnt *e = &s_dring[(s_dring_head - n + i) % DISPATCH_RING_N];
-        printf("  %c $%04X cb=%d S=$%02X depth=%u\n", e->kind, e->addr, e->cb, e->s, e->depth);
+        printf("  %c $%04X cb=%d S=$%02X depth=%u wb=$%04X\n", e->kind, e->addr, e->cb, e->s, e->depth, e->wb);
     }
     fflush(stdout);
 }
 
 int nes_dispatch_call(uint16_t addr, int caller_bank) {
     dring_push(addr, caller_bank, 'C');
+    uint16_t save_wb = g_code_window_base;
+    if (addr >= 0x8000) g_code_window_base = addr & 0xE000;
     g_nes_dispatch_depth++;
     int r = call_by_address_cb(addr, caller_bank);
     g_nes_dispatch_depth--;
+    g_code_window_base = save_wb;
     return r;
 }
 

@@ -66,6 +66,12 @@ int nes_dispatch_call(uint16_t addr, int caller_bank);
 int call_by_address_tail(uint16_t addr, int caller_bank);
 /* Dump the always-on ring of recent dispatches (post-mortem attribution). */
 void nes_dump_dispatch_ring(void);
+/* Push a context marker into the dispatch ring (kind e.g. 'N'/'n' = NMI
+ * enter/exit; tag = vblank depth or other context id). */
+void nes_dring_mark(char kind, uint16_t tag);
+/* Window base of the currently executing generated function (see runtime.c);
+ * generated JSR pushes use it to mint true CPU return addresses. */
+extern uint16_t g_code_window_base;
 
 /* Logging for dispatch misses.
  * nes_log_dispatch_miss_bank is the full form used by generated dispatch on

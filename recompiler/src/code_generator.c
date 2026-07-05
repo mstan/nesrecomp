@@ -965,13 +965,22 @@ static void emit_call_target(FILE *f, const NESRom *rom, uint16_t addr,
     int lookup_bank = gxrom_paired_bank(rom, bank, addr);
 
     if (!opts.force_dynamic) {
+        /* Static call into the always-fixed $E000 window from mapper-4 code:
+         * the callee executes in window base $E000 regardless of the caller's
+         * window, so scope g_code_window_base for its JSR pushes. (All other
+         * cross-window transfers are dynamic and handled by nes_dispatch_call;
+         * same-window static calls inherit the caller's base correctly.) */
+        int wb_wrap = (rom->mapper == 4 && addr >= 0xE000);
         uint16_t alias_owner = 0;
         int alias_bank = -1;
         int alias_entry = 0;
         if (codegen_lookup_body_alias(addr, lookup_bank, &alias_owner, &alias_bank, &alias_entry)) {
             char nm[32];
             format_func_name(nm, sizeof nm, alias_owner, alias_bank, fixed_bank);
-            fprintf(f, "%s_body(%d);", nm, alias_entry);
+            if (wb_wrap)
+                fprintf(f, "{ uint16_t _swb = g_code_window_base; g_code_window_base = 0xE000; %s_body(%d); g_code_window_base = _swb; }", nm, alias_entry);
+            else
+                fprintf(f, "%s_body(%d);", nm, alias_entry);
             if (opts.tail_return) fprintf(f, " return;");
             fprintf(f, "\n");
             return;
@@ -980,7 +989,10 @@ static void emit_call_target(FILE *f, const NESRom *rom, uint16_t addr,
             if (opts.push_dummy_static) fprintf(f, DUMMY_PUSH_PAIR);
             char nm[32];
             format_func_name(nm, sizeof nm, addr, lookup_bank, fixed_bank);
-            fprintf(f, "%s();", nm);
+            if (wb_wrap)
+                fprintf(f, "{ uint16_t _swb = g_code_window_base; g_code_window_base = 0xE000; %s(); g_code_window_base = _swb; }", nm);
+            else
+                fprintf(f, "%s();", nm);
             if (opts.tail_return) fprintf(f, " return;");
             fprintf(f, "\n");
             return;
@@ -1290,7 +1302,17 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
              * is_func_entry — valid_starts is the ground truth. */                \
             bool _cross = !_valid_local || (_tgt < func_base); \
             if (_cross) { \
-                fprintf(f, "if (" cond_str ") { call_by_address(0x%04X); return; }\n", _tgt); \
+                if (rom->mapper == 4) \
+                    /* Branches are RELATIVE: the target is always in the      \
+                     * EXECUTING window, so translate the gen-layout constant  \
+                     * through the live window base (measured: SMB3 bank-26    \
+                     * updater's terminator BEQ to the shared RTS one byte     \
+                     * before func_base dispatched gen $9292 as a cpu addr and \
+                     * ran bank-30 bytes mid-routine instead of cpu $B292). */ \
+                    fprintf(f, "if (" cond_str ") { call_by_address_tail((uint16_t)(g_code_window_base | 0x%04X), %d); return; }\n", \
+                            _tgt & 0x1FFF, bank == fixed_bank ? -1 : bank); \
+                else \
+                    fprintf(f, "if (" cond_str ") { call_by_address(0x%04X); return; }\n", _tgt); \
             } else if (_tgt <= pc) { \
                 /* Backward branch (loop) — emit VBlank trigger + watchdog check */ \
                 fprintf(f, "if (" cond_str ") {\n    maybe_trigger_vblank(2);\n#ifdef WATCHDOG_ENABLED\n    watchdog_check();\n#endif\n    goto label_%04X;\n    }\n", _tgt); \
@@ -1593,10 +1615,25 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                  * Subsumes per-function stack_bail_func / cond_bail_func. */
                 fprintf(f, "{ uint8_t _cbs = g_cpu.S; ");
                 uint16_t ret_addr = pc + 2; /* 6502 JSR pushes PC+2 (last byte of JSR) */
-                fprintf(f, "g_ram[0x100 + g_cpu.S] = 0x%02X; g_cpu.S--; ",
-                        (ret_addr >> 8) & 0xFF);
-                fprintf(f, "g_ram[0x100 + g_cpu.S] = 0x%02X; g_cpu.S--; ",
-                        ret_addr & 0xFF);
+                if (rom->mapper == 4) {
+                    /* Banked mapper: gen-layout PC constants are NOT the CPU
+                     * address when the code executes in a window that differs
+                     * from its gen labels. Stack-reading idioms (DynJump-style
+                     * inline-table dispatchers, PLA/RTS gotos) interpret the
+                     * pushed return as a CPU address, so mint it from the live
+                     * executing window (g_code_window_base) + the in-window
+                     * offset. RTS itself ignores the value (C return), and the
+                     * bail check compares S only. */
+                    fprintf(f, "uint16_t _rp = (uint16_t)(g_code_window_base | 0x%04X); ",
+                            ret_addr & 0x1FFF);
+                    fprintf(f, "g_ram[0x100 + g_cpu.S] = (uint8_t)(_rp >> 8); g_cpu.S--; ");
+                    fprintf(f, "g_ram[0x100 + g_cpu.S] = (uint8_t)_rp; g_cpu.S--; ");
+                } else {
+                    fprintf(f, "g_ram[0x100 + g_cpu.S] = 0x%02X; g_cpu.S--; ",
+                            (ret_addr >> 8) & 0xFF);
+                    fprintf(f, "g_ram[0x100 + g_cpu.S] = 0x%02X; g_cpu.S--; ",
+                            ret_addr & 0xFF);
+                }
             }
             /* Check against inline_pointer: JSR to a routine that reads 2
              * inline bytes as a data pointer into zero page. */
@@ -1782,6 +1819,11 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                         }
                         if (label_exists)
                             fprintf(f, "goto label_%04X;\n", abs16);
+                        else if (rom->mapper == 4)
+                            /* Mapper 4: the operand is a window selection; the
+                             * tail dispatch resolves it and maintains the code
+                             * window base for the callee's JSR pushes. */
+                            fprintf(f, "maybe_trigger_vblank(2); call_by_address_tail(0x%04X, -1); return;\n", abs16);
                         else if (codegen_lookup_body_alias(abs16, fixed_bank,
                                                            &alias_owner, &alias_bank, &alias_entry))
                             fprintf(f, "func_%04X_body(%d); return;\n", alias_owner, alias_entry);

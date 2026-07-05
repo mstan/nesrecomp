@@ -109,6 +109,7 @@ extern int call_by_address(uint16_t addr);
  * Returns 1 if the target was covered and executed natively; 0 on miss
  * (caller interprets the target inline). */
 static int interp_dispatch_target(uint16_t target) {
+    nes_dring_mark('P', target);   /* interp probe (pre-dispatch) */
     s_probe_armed = 1;
     s_probe_addr  = target;
     int hit = call_by_address(target);
@@ -127,6 +128,7 @@ static int interp_run(uint16_t entry) {
     if (s_depth >= INTERP_MAX_DEPTH) return 0;
     s_depth++;
     s_stats.runs++;
+    nes_dring_mark('I', entry);   /* interp run start (cpu pc) */
 
     const uint8_t S_floor = g_cpu.S;
     uint16_t ipc = entry;

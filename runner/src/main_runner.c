@@ -681,7 +681,9 @@ smoke_skip_input:
             g_ram[0x100+g_cpu.S] = 0x00;   g_cpu.S--;   /* PCH placeholder */
             g_ram[0x100+g_cpu.S] = 0x00;   g_cpu.S--;   /* PCL placeholder */
             g_ram[0x100+g_cpu.S] = p_save; g_cpu.S--;   /* P (status flags) */
+            nes_dring_mark('N', (uint16_t)runtime_get_vblank_depth());
             game_run_nmi();
+            nes_dring_mark('n', (uint16_t)runtime_get_vblank_depth());
             g_cpu.S = s_pre;
             g_cpu.A = a_pre; g_cpu.X = x_pre; g_cpu.Y = y_pre;
             g_cpu.N = n_pre; g_cpu.V = v_pre; g_cpu.D = d_pre;
@@ -716,9 +718,11 @@ smoke_skip_input:
             g_ram[0x100+g_cpu.S] = 0x00;   g_cpu.S--;   /* PCL placeholder */
             g_ram[0x100+g_cpu.S] = p_save; g_cpu.S--;   /* P (status flags) */
             runtime_set_vblank_firing(1);
+            nes_dring_mark('N', (uint16_t)runtime_get_vblank_depth());
         }
         game_run_nmi();
         if (nmi_will_run) {
+            nes_dring_mark('n', (uint16_t)runtime_get_vblank_depth());
             runtime_set_vblank_firing(0);
             /* On real 6502, RTI always restores S and all registers.
              * The recompiled NMI handler may return early (bail), so
