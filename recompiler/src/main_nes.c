@@ -354,6 +354,10 @@ static void print_usage(void) {
         "Options:\n"
         "  --game <path>          Game-specific config (trampolines, dispatch tables, etc.)\n"
         "                         If omitted, auto-detects ./game.toml or uses defaults.\n"
+        "  --output-prefix <name> Override game.toml output_prefix. Lets a multi-variant\n"
+        "                         game regen one game.toml under distinct prefixes so the\n"
+        "                         per-bank split files never collide (e.g. zelda_stock /\n"
+        "                         zelda_hd).\n"
         "  --proposal-out <path>  Write a proposed game.toml based on auto-discovery.\n"
         "  --reverse-debug        Emit RDB_STORE8 / g_rdb_current_func for Tier-1\n"
         "                         reverse-debugger builds. See REVERSE_DEBUGGER.md.\n"
@@ -363,8 +367,8 @@ static void print_usage(void) {
         "  generated/<prefix>_full.c       All recompiled functions\n"
         "  generated/<prefix>_dispatch.c   Address-to-function dispatch table\n"
         "\n"
-        "  The output prefix comes from game.toml [game]/output_prefix, or is\n"
-        "  derived from the ROM filename if no config is provided.\n"
+        "  The output prefix comes from --output-prefix, else game.toml\n"
+        "  [game]/output_prefix, else the ROM filename if no config is provided.\n"
         "\n"
         "Examples:\n"
         "  NESRecomp \"Super Mario Bros.nes\"                    # quick start\n"
@@ -381,6 +385,7 @@ int main(int argc, char *argv[]) {
     const char *rom_path  = NULL;
     const char *game_path = NULL;
     const char *proposal_out = NULL;
+    const char *prefix_override = NULL;
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
@@ -388,6 +393,8 @@ int main(int argc, char *argv[]) {
             return 0;
         } else if (strcmp(argv[i], "--game") == 0 && i+1 < argc) {
             game_path = argv[++i];
+        } else if (strcmp(argv[i], "--output-prefix") == 0 && i+1 < argc) {
+            prefix_override = argv[++i];
         } else if (strcmp(argv[i], "--proposal-out") == 0 && i+1 < argc) {
             proposal_out = argv[++i];
         } else if (strcmp(argv[i], "--reverse-debug") == 0) {
@@ -444,9 +451,14 @@ int main(int argc, char *argv[]) {
         printf("[NESRecomp] No --game config; using empty dispatch tables\n");
     }
 
-    /* Determine output prefix: from config, or derived from ROM basename */
+    /* Determine output prefix: --output-prefix wins (lets a multi-variant game
+     * regen the same game.toml under distinct prefixes so per-bank split files
+     * never collide — e.g. zelda_stock_* vs zelda_hd_*), then game.toml's
+     * output_prefix, else the ROM basename. */
     char output_prefix[128];
-    if (cfg.output_prefix[0]) {
+    if (prefix_override && prefix_override[0]) {
+        snprintf(output_prefix, sizeof(output_prefix), "%s", prefix_override);
+    } else if (cfg.output_prefix[0]) {
         snprintf(output_prefix, sizeof(output_prefix), "%s", cfg.output_prefix);
     } else {
         /* Derive from ROM filename without path or extension */
