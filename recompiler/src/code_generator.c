@@ -14,6 +14,7 @@
 #include "annotations.h"
 #include "cpu6502_decoder.h"
 #include "coverage.h"
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -37,11 +38,41 @@ typedef struct {
     int entry_index;
 } BodyAlias;
 
+/* A multi-entry function's `func_XXXX_body` — recorded by
+ * emit_function_body_open() as it emits each one, so codegen_emit can
+ * forward-declare every body in the shared decls header without
+ * re-deriving is_multi_entry via a duplicate of emit_function's layout
+ * scan (see the split-TU decls.h note near codegen_emit). Bodies used to
+ * be `static` (safe when the whole game was one #include-stitched TU);
+ * sub-sharding a bank across multiple standalone part TUs means a body
+ * and its own wrapper(s), or a body and a same-bank BodyAlias caller
+ * elsewhere in the code, can land in different part files, so bodies are
+ * now external and need real forward declarations. */
+typedef struct {
+    uint16_t addr;
+    int bank;
+} BodyOwner;
+
 static const EmittedWrapper *g_codegen_wrappers = NULL;
 static int g_codegen_wrapper_count = 0;
 static BodyAlias *g_codegen_aliases = NULL;
 static int g_codegen_alias_count = 0;
+static BodyOwner *g_codegen_body_owners = NULL;
+static int g_codegen_body_owner_count = 0;
+static int g_codegen_body_owner_cap = 0;
 static SymbolTable *g_symtab = NULL;
+
+/* Called by emit_function_body_open() for every multi-entry function as it
+ * emits the body's opening brace. Silently drops the record past capacity
+ * (matches the pattern in wrapper_list_add) rather than aborting codegen —
+ * the caller-provided capacity (MAX_EMITTED_WRAPPERS, an upper bound on the
+ * number of standalone-emitting entries) makes overflow unreachable in
+ * practice. */
+static void codegen_record_body_owner(uint16_t addr, int bank) {
+    if (!g_codegen_body_owners) return;
+    if (g_codegen_body_owner_count >= g_codegen_body_owner_cap) return;
+    g_codegen_body_owners[g_codegen_body_owner_count++] = (BodyOwner){ addr, bank };
+}
 
 /* Emit a block comment with the symbol name for addr, if one exists.
  * Writes nothing if no symbol is found or the table is NULL. */
@@ -126,6 +157,46 @@ static void emit_forward_decls(FILE *f, const EmittedWrapper *wrappers, int wrap
         fprintf(f, "void %s(void);", nm);
         emit_sym(f, addr);
         fprintf(f, "\n");
+    }
+    fprintf(f, "\n");
+}
+
+/* Emit symbol-name aliases (from a .sym file) as #defines mapping the
+ * human-readable name to the generated func_XXXX identifier. Writes nothing
+ * if no symbol table was supplied. Shared by the <prefix>_full_decls.h
+ * writer (codegen_emit) — every part TU sees these via the decls header. */
+static void emit_symbol_aliases(FILE *f, const EmittedWrapper *wrappers, int wrapper_count,
+                                int fixed_bank, SymbolTable *st) {
+    if (!(st && st->count > 0)) return;
+    fprintf(f, "/* Symbol aliases (from .sym file) */\n");
+    for (int i = 0; i < wrapper_count; i++) {
+        uint16_t addr = wrappers[i].addr;
+        int bank = wrappers[i].bank;
+        const char *name = symbol_lookup(st, addr);
+        if (!name) continue;
+        char nm[32];
+        format_func_name(nm, sizeof nm, addr, bank, fixed_bank);
+        fprintf(f, "#define %s %s\n", name, nm);
+    }
+    fprintf(f, "\n");
+}
+
+/* Forward-declare every multi-entry function's `_body` (external since bank
+ * sub-sharding; see the BodyOwner comment). Written into the shared decls
+ * header from the BodyOwner list codegen_record_body_owner() collected
+ * while the bank part TUs were being emitted — codegen_emit writes decls.h
+ * AFTER the bank-emission loop for exactly this reason (see the split-TU
+ * decls.h note there): this avoids re-deriving is_multi_entry via a second,
+ * possibly-divergent copy of emit_function's layout-scan logic. */
+static void emit_body_forward_decls(FILE *f, const BodyOwner *owners, int owner_count,
+                                    const NESRom *rom) {
+    if (owner_count == 0) return;
+    int fixed = rom->prg_banks - 1;
+    fprintf(f, "/* Multi-entry function body forward declarations */\n");
+    for (int i = 0; i < owner_count; i++) {
+        char nm[32];
+        format_func_name(nm, sizeof nm, owners[i].addr, owners[i].bank, fixed);
+        fprintf(f, "void %s_body(int _entry);\n", nm);
     }
     fprintf(f, "\n");
 }
@@ -2216,17 +2287,22 @@ static void emit_function_open(FILE *f, uint16_t addr, int bank, int fixed_bank,
 }
 
 /* Open a multi-entry _body function: signature, optional symbol comment, and
- * reverse-debug entry hook. Stack-tracking is handled by the wrapper, not here. */
+ * reverse-debug entry hook. Stack-tracking is handled by the wrapper, not here.
+ * EXTERNAL linkage (not `static`): bank sub-sharding can place a body in a
+ * different part TU than its own wrapper(s) or a same-bank BodyAlias caller,
+ * so every body needs a real forward declaration in the shared decls header
+ * (see codegen_record_body_owner / the split-TU note near codegen_emit). */
 static void emit_function_body_open(FILE *f, uint16_t addr, int bank, int fixed_bank,
                                     const char *sym_name) {
     char nm[32];
     format_func_name(nm, sizeof nm, addr, bank, fixed_bank);
-    fprintf(f, "static void %s_body(int _entry) {", nm);
+    fprintf(f, "void %s_body(int _entry) {", nm);
     if (sym_name) fprintf(f, " /* %s */", sym_name);
     fprintf(f, "\n");
     if (g_codegen_reverse_debug)
         fprintf(f, "#if NESRECOMP_REVERSE_DEBUG\n    g_rdb_current_func = 0x%04X; rdb_on_call(0x%04X);\n#endif\n",
                 addr, addr);
+    codegen_record_body_owner(addr, bank);
 }
 
 /* Emit a thin wrapper that pushes the stack-tracker, calls the multi-entry body
@@ -2991,32 +3067,62 @@ static void emit_dispatch(FILE *f, const EmittedWrapper *wrappers, int wrapper_c
 
 /* ---- per-bank split of <prefix>_full.c ----------------------------------
  * GitHub hard-caps individual files at 100 MB and <prefix>_full.c crossed it
- * for large multi-bank games (MM3: 152 MB). Function bodies are therefore
- * written to per-bank part files (<prefix>_full_bank<NN>.c) which the
- * umbrella <prefix>_full.c #includes IN EMISSION ORDER. The translation unit
- * is textually identical to the old single file (same single-TU semantics:
- * forward decls, wrapper-dedupe definition order, file-scope statics), and
- * game builds are untouched — they still compile only <prefix>_full.c.
- * Emission is GROUPED BY BANK (one part per PRG bank, banks ordered by first
- * appearance in the function list, original relative order preserved within
- * each bank — the list interleaves banks heavily, so naive rotate-on-change
- * fragments into 100+ files). Reordering across banks is safe because every
- * emitted function (and secondary label) gets a forward declaration in the
- * umbrella before any body is included. */
+ * for large multi-bank games (MM3: 152 MB) — the original motivation for
+ * this split. Function bodies are written to per-bank part files
+ * (<prefix>_full_bank<NN>.c). These are REAL standalone translation units
+ * (not textually #included by the umbrella): each part #includes the shared
+ * <prefix>_full_decls.h (includes, FLAG_NZ/FLAG_NZC_* macros, the
+ * g_rti_target extern, symbol aliases, every func_XXXX forward decl, and
+ * every multi-entry func_XXXX_body forward decl) and compiles independently,
+ * so a full-game build compiles all parts + the (small) umbrella in
+ * parallel across cores instead of as one giant single-TU compile.
+ * Emission is GROUPED BY BANK (banks ordered by first appearance in the
+ * function list, original relative order preserved within each bank — the
+ * list interleaves banks heavily, so naive rotate-on-change fragments into
+ * 100+ files). Grouping across banks is safe because every emitted function
+ * (and secondary label, and multi-entry body) has its forward declaration
+ * in the shared decls header, visible to every part and the umbrella alike.
+ *
+ * SUB-SHARDING: a single PRG bank can itself be too big for one TU to
+ * compile quickly in parallel with the others (e.g. Metroid's fixed bank:
+ * 8.3 MB / 2694 functions, ~60% of the whole game, gated the wall-clock of
+ * an 8-way parallel build almost as badly as the pre-split single-TU
+ * umbrella did). codegen_emit streams each bank's functions into a part
+ * file and tracks the running byte count (via ftell — a good-enough proxy
+ * for "roughly how much text we've written," not an exact byte count);
+ * once a part crosses BANK_PART_BUDGET it is closed and a new sub-part is
+ * opened for the rest of the bank. A bank that never crosses the budget
+ * produces exactly one sub-part, which is then renamed from the tentative
+ * "..._bank<NN>_part00.c" to the plain "..._bank<NN>.c" (no _partPP suffix)
+ * — this is why every part is opened with a provisional sub-shard name and
+ * only renamed at the end, once codegen_emit knows how many sub-parts that
+ * bank actually needed. A bank that DOES cross the budget keeps its
+ * "..._bank<NN>_part<PP>.c" names (PP zero-padded, 00-based) for however
+ * many sub-parts it took. Functions are never split across a sub-part
+ * boundary — the boundary only falls between two emit_function() calls —
+ * so this is purely a re-grouping of already-independent function bodies,
+ * not a change to any function's emitted bytes. This is safe now that
+ * func_XXXX_body functions have external linkage (see the BodyOwner
+ * comment): a wrapper and the body it calls, or a same-bank BodyAlias
+ * caller and the body it calls, can end up in different sub-part TUs of
+ * the same bank and still link correctly via the decls.h forward decl. */
 #define CODEGEN_MAX_FULL_PARTS 512
+#define BANK_PART_BUDGET (1024 * 1024) /* ~1 MiB target per sub-part TU */
 
 typedef struct {
     char path[512];     /* on-disk path for fopen */
-    char name[128];     /* basename for the umbrella #include */
+    char name[128];     /* basename (informational; no longer used for an
+                          * umbrella #include — parts are standalone TUs) */
 } FullPart;
 
 static void codegen_remove_stale_parts(const char *base_noext) {
     /* Delete every part file a previous run could have produced, so a regen
-     * that yields fewer banks never leaves stale orphans behind in
-     * generated/ (they are committed in game repos). Names are fully
-     * enumerable, so plain remove() beats directory-walking portability.
-     * (The seq-suffixed names cover files from the interim rotate-on-change
-     * emitter revision.) */
+     * that yields fewer banks (or fewer/more sub-parts within a bank) never
+     * leaves stale orphans behind in generated/ (they are committed in game
+     * repos). Names are fully enumerable, so plain remove() beats
+     * directory-walking portability. (The seq-suffixed names cover files
+     * from the interim rotate-on-change emitter revision; partPP covers
+     * bank sub-sharding.) */
     char p[600];
     for (int bank = 0; bank < 256; bank++) {
         snprintf(p, sizeof p, "%s_bank%02d.c", base_noext, bank);
@@ -3025,11 +3131,23 @@ static void codegen_remove_stale_parts(const char *base_noext) {
             snprintf(p, sizeof p, "%s_bank%02d_%d.c", base_noext, bank, seq);
             remove(p);
         }
+        for (int part = 0; part < 256; part++) {
+            snprintf(p, sizeof p, "%s_bank%02d_part%02d.c", base_noext, bank, part);
+            remove(p);
+        }
     }
 }
 
-static FILE *codegen_open_bank_part(const char *base_noext, int bank,
-                                    FullPart *parts, int *part_count) {
+/* Opens the sub_part'th part file for `bank` under its PROVISIONAL name
+ * ("..._bank<NN>_part<PP>.c" — sub_part is always >= 0 here; the caller
+ * renames down to the plain "..._bank<NN>.c" name after the fact if the
+ * bank turned out to fit in a single sub-part). See the BANK_PART_BUDGET
+ * comment above for why naming is provisional-then-renamed rather than
+ * decided up front: the emitter streams function bodies and only learns a
+ * bank's total size by having emitted all of it. */
+static FILE *codegen_open_bank_part(const char *base_noext, int bank, int sub_part,
+                                    FullPart *parts, int *part_count,
+                                    const char *decls_name) {
     if (*part_count >= CODEGEN_MAX_FULL_PARTS) {
         fprintf(stderr, "codegen: exceeded %d full.c parts\n", CODEGEN_MAX_FULL_PARTS);
         return NULL;
@@ -3040,19 +3158,51 @@ static FILE *codegen_open_bank_part(const char *base_noext, int bank,
     const char *bslash = strrchr(base_noext, '\\');
     if (bslash && (!slash || bslash > slash)) slash = bslash;
     const char *base_name = slash ? slash + 1 : base_noext;
-    snprintf(pp->path, sizeof pp->path, "%s_bank%02d.c", base_noext, b);
-    snprintf(pp->name, sizeof pp->name, "%s_bank%02d.c", base_name, b);
+    snprintf(pp->path, sizeof pp->path, "%s_bank%02d_part%02d.c", base_noext, b, sub_part);
+    snprintf(pp->name, sizeof pp->name, "%s_bank%02d_part%02d.c", base_name, b, sub_part);
     FILE *f = fopen(pp->path, "w");
     if (!f) {
         fprintf(stderr, "codegen: cannot open %s\n", pp->path);
         return NULL;
     }
-    fprintf(f, "/* %s — PRG bank %d function bodies.\n"
-               " * Generated part of %s.c: #included by the umbrella; NOT a\n"
-               " * standalone translation unit. Do not compile or edit directly. */\n\n",
-            pp->name, b, base_name);
+    fprintf(f, "/* %s — PRG bank %d function bodies (sub-part %d).\n"
+               " * STANDALONE translation unit — compiled independently (in\n"
+               " * parallel with every other bank part/sub-part and the\n"
+               " * umbrella %s.c). Do not compile as part of another TU or\n"
+               " * edit directly; the source of truth is the recompiler's\n"
+               " * code_generator.c. Renamed to drop the _partNN suffix if\n"
+               " * this bank turned out to fit in a single sub-part. */\n\n",
+            pp->name, b, sub_part, base_name);
+    fprintf(f, "#include \"%s\"\n\n", decls_name);
     (*part_count)++;
     return f;
+}
+
+/* Rename the tentative "..._bank<NN>_part00.c" down to the plain
+ * "..._bank<NN>.c" once codegen_emit knows a bank needed only one
+ * sub-part. Updates `pp` (the FullPart entry codegen_open_bank_part just
+ * filled in) to match, so anything inspecting `parts[]` afterward sees the
+ * final on-disk name. remove(new_path) first: Windows rename() fails if
+ * the destination already exists (codegen_remove_stale_parts ran before
+ * this regen, so it normally won't, but a rename from an interrupted prior
+ * run could leave one behind). */
+static void codegen_flatten_single_subpart(const char *base_noext, int bank, FullPart *pp) {
+    int b = (bank >= 0 && bank < 256) ? bank : 255;
+    char new_path[512], new_name[128];
+    const char *slash = strrchr(base_noext, '/');
+    const char *bslash = strrchr(base_noext, '\\');
+    if (bslash && (!slash || bslash > slash)) slash = bslash;
+    const char *base_name = slash ? slash + 1 : base_noext;
+    snprintf(new_path, sizeof new_path, "%s_bank%02d.c", base_noext, b);
+    snprintf(new_name, sizeof new_name, "%s_bank%02d.c", base_name, b);
+    remove(new_path);
+    if (rename(pp->path, new_path) != 0) {
+        fprintf(stderr, "codegen: warning: could not rename %s -> %s (errno %d); "
+                        "leaving the _part00 name\n", pp->path, new_path, errno);
+        return;
+    }
+    snprintf(pp->path, sizeof pp->path, "%s", new_path);
+    snprintf(pp->name, sizeof pp->name, "%s", new_name);
 }
 
 bool codegen_emit(const NESRom *rom, const FunctionList *funcs,
@@ -3079,33 +3229,66 @@ bool codegen_emit(const NESRom *rom, const FunctionList *funcs,
     g_codegen_alias_count = collect_body_aliases(rom, funcs, cfg, aliases, MAX_BODY_ALIASES);
     g_codegen_aliases = aliases;
 
+    /* Body-owner list: populated by emit_function_body_open() as the bank
+     * loop below runs; consumed after the loop to forward-declare every
+     * func_XXXX_body in decls.h. See the BodyOwner comment. Capacity
+     * mirrors MAX_EMITTED_WRAPPERS — an upper bound on the number of
+     * standalone-emitting entries, and therefore on the number that can be
+     * multi-entry. */
+    BodyOwner *body_owners = (BodyOwner *)malloc((size_t)MAX_EMITTED_WRAPPERS * sizeof(BodyOwner));
+    if (!body_owners) {
+        fprintf(stderr, "codegen: out of memory allocating body owner set\n");
+        free(aliases);
+        free(wrappers);
+        return false;
+    }
+    g_codegen_body_owners = body_owners;
+    g_codegen_body_owner_count = 0;
+    g_codegen_body_owner_cap = MAX_EMITTED_WRAPPERS;
+
     FILE *f_full = fopen(out_full_path, "w");
     if (!f_full) {
         fprintf(stderr, "codegen: cannot open %s\n", out_full_path);
+        free(body_owners);
         free(aliases);
         free(wrappers);
         return false;
     }
 
-    emit_header(f_full);
-    emit_forward_decls(f_full, wrappers, wrapper_count, rom);
-
     int fixed_bank = rom->prg_banks - 1;
 
-    /* Emit symbol name aliases as #defines (optional, from .sym file) */
-    if (st && st->count > 0) {
-        fprintf(f_full, "/* Symbol aliases (from .sym file) */\n");
-        for (int i = 0; i < wrapper_count; i++) {
-            uint16_t addr = wrappers[i].addr;
-            int bank = wrappers[i].bank;
-            const char *name = symbol_lookup(st, addr);
-            if (!name) continue;
-            char nm[32];
-            format_func_name(nm, sizeof nm, addr, bank, fixed_bank);
-            fprintf(f_full, "#define %s %s\n", name, nm);
-        }
-        fprintf(f_full, "\n");
+    /* base_noext: out_full_path with the trailing ".c" stripped, e.g.
+     * "generated/metroid_full". Used to derive both the per-bank part
+     * paths (<base_noext>_bankNN[_partPP].c) and the shared decls header
+     * path (<base_noext>_decls.h). */
+    char base_noext[512];
+    {
+        size_t bl = strlen(out_full_path);
+        if (bl > 2 && strcmp(out_full_path + bl - 2, ".c") == 0) bl -= 2;
+        if (bl >= sizeof base_noext) bl = sizeof base_noext - 1;
+        memcpy(base_noext, out_full_path, bl);
+        base_noext[bl] = '\0';
     }
+    char decls_path[600], decls_name[160];
+    {
+        const char *slash = strrchr(base_noext, '/');
+        const char *bslash = strrchr(base_noext, '\\');
+        if (bslash && (!slash || bslash > slash)) slash = bslash;
+        const char *base_name = slash ? slash + 1 : base_noext;
+        snprintf(decls_path, sizeof decls_path, "%s_decls.h", base_noext);
+        snprintf(decls_name, sizeof decls_name, "%s_decls.h", base_name);
+    }
+
+    /* Umbrella <prefix>_full.c is a SMALL standalone TU: just the shared
+     * decls + the g_rti_target definition + the NMI/RESET/IRQ runner entry
+     * points (emitted further below). It does not #include the bank parts
+     * — those are independent TUs compiled in parallel. Writing this
+     * #include line only needs decls_name (a filename), not decls.h's
+     * actual content — the file itself is written further below, AFTER
+     * the bank loop, once every func_XXXX_body forward decl is known. */
+    fprintf(f_full, "/* AUTO-GENERATED by NESRecomp. DO NOT EDIT. */\n");
+    fprintf(f_full, "#include \"%s\"\n\n", decls_name);
+
     /* Pre-scan: find coroutine yield function entry points.
      * The yield function contains: TSX ($BA); STX zp,Y ($96 nn);
      * JMP scheduler ($4C lo hi).  Multiple function entries may alias
@@ -3139,16 +3322,10 @@ bool codegen_emit(const NESRom *rom, const FunctionList *funcs,
         }
     }
 
-    /* Function bodies go to per-bank part files (see FullPart above); the
-     * umbrella #includes them after this loop, preserving emission order. */
-    char base_noext[512];
-    {
-        size_t bl = strlen(out_full_path);
-        if (bl > 2 && strcmp(out_full_path + bl - 2, ".c") == 0) bl -= 2;
-        if (bl >= sizeof base_noext) bl = sizeof base_noext - 1;
-        memcpy(base_noext, out_full_path, bl);
-        base_noext[bl] = '\0';
-    }
+    /* Function bodies go to per-bank part files (see FullPart above). Each
+     * part is now a standalone TU (includes decls_name itself, opened in
+     * codegen_open_bank_part) — base_noext/decls_name were computed above,
+     * before the decls header was written. */
     codegen_remove_stale_parts(base_noext);
     FullPart *parts = (FullPart *)malloc((size_t)CODEGEN_MAX_FULL_PARTS * sizeof(FullPart));
     if (!parts) {
@@ -3176,17 +3353,22 @@ bool codegen_emit(const NESRom *rom, const FunctionList *funcs,
         }
     }
 
+    int sub_shard_banks = 0; /* banks that needed more than one sub-part */
     for (int bo = 0; bo < bank_order_count; bo++) {
         int part_bank = bank_order[bo];
-        FILE *f_part = codegen_open_bank_part(base_noext, part_bank,
-                                              parts, &part_count);
+        int sub_part = 0;
+        FILE *f_part = codegen_open_bank_part(base_noext, part_bank, sub_part,
+                                              parts, &part_count, decls_name);
         if (!f_part) {
             fclose(f_full);
             free(parts);
+            free(body_owners);
             free(aliases);
             free(wrappers);
             return false;
         }
+        long bytes_in_part = 0;
+        int first_part_index = part_count - 1; /* parts[] slot for this bank's part00 */
         for (int i = 0; i < funcs->count; i++) {
             if (!entry_emits_standalone(funcs, cfg, &funcs->entries[i])) continue;
             /* Skip merge_range non-canonical entries — but only if they were
@@ -3200,19 +3382,77 @@ bool codegen_emit(const NESRom *rom, const FunctionList *funcs,
 
             coverage_record_emitted_function(funcs->entries[i].bank,
                                              funcs->entries[i].addr);
+            long before = ftell(f_part);
             emit_function(f_part, rom, &funcs->entries[i], funcs, at, cfg);
+            long after = ftell(f_part);
+            if (after > before) bytes_in_part += (after - before);
+
+            /* Budget crossed: close this sub-part and open the next one.
+             * Functions are never split — the boundary only falls between
+             * two emit_function() calls (see the BANK_PART_BUDGET note). */
+            if (bytes_in_part >= BANK_PART_BUDGET) {
+                fclose(f_part);
+                sub_part++;
+                f_part = codegen_open_bank_part(base_noext, part_bank, sub_part,
+                                                parts, &part_count, decls_name);
+                if (!f_part) {
+                    fclose(f_full);
+                    free(parts);
+                    free(body_owners);
+                    free(aliases);
+                    free(wrappers);
+                    return false;
+                }
+                bytes_in_part = 0;
+            }
         }
         fclose(f_part);
+        if (sub_part == 0) {
+            /* Bank fit in one sub-part: drop the provisional _part00 suffix
+             * so small banks keep the plain "..._bank<NN>.c" name (as
+             * before sub-sharding existed). */
+            codegen_flatten_single_subpart(base_noext, part_bank, &parts[first_part_index]);
+        } else {
+            sub_shard_banks++;
+        }
     }
 
-    fprintf(f_full, "/* Function bodies: one part per PRG bank, #included below\n"
-                    " * (single translation unit — see the FullPart note in the\n"
-                    " * recompiler's code_generator.c). */\n");
-    for (int pi = 0; pi < part_count; pi++)
-        fprintf(f_full, "#include \"%s\"\n", parts[pi].name);
-    fprintf(f_full, "\n");
-    printf("[NESRecomp] full.c split: %d bank part file(s)\n", part_count);
+    /* Bank parts (and sub-parts) are standalone TUs — the umbrella doesn't
+     * #include them, it just needs part_count for the status line. */
+    printf("[NESRecomp] full.c split: %d standalone bank part TU(s) (%d bank(s) sub-sharded "
+          "across multiple TUs)\n", part_count, sub_shard_banks);
     free(parts);
+
+    /* Shared header, written now (not before the bank loop) because it must
+     * forward-declare every func_XXXX_body, and the body-owner list is only
+     * complete once every bank part has been emitted (see the BodyOwner /
+     * BANK_PART_BUDGET comments above). Every part TU and the umbrella
+     * already reference it by name (decls_name) via the #include lines
+     * written when each was opened — those are just text; the compiler
+     * doesn't read this file until a separate build step runs, well after
+     * codegen_emit returns. Order: pragma once, the runtime includes +
+     * FLAG_NZ/FLAG_NZC_* macros + g_rti_target extern (emit_header), the
+     * optional symbol-name #define aliases, every func_XXXX forward
+     * declaration, then every func_XXXX_body forward declaration. */
+    FILE *f_decls = fopen(decls_path, "w");
+    if (!f_decls) {
+        fprintf(stderr, "codegen: cannot open %s\n", decls_path);
+        fclose(f_full);
+        free(body_owners);
+        free(aliases);
+        free(wrappers);
+        return false;
+    }
+    fprintf(f_decls, "#pragma once\n\n");
+    emit_header(f_decls);
+    emit_symbol_aliases(f_decls, wrappers, wrapper_count, fixed_bank, st);
+    emit_forward_decls(f_decls, wrappers, wrapper_count, rom);
+    emit_body_forward_decls(f_decls, body_owners, g_codegen_body_owner_count, rom);
+    fclose(f_decls);
+    free(body_owners);
+    g_codegen_body_owners = NULL;
+    g_codegen_body_owner_count = 0;
+    g_codegen_body_owner_cap = 0;
 
     /* Add NMI/RESET/IRQ entry points for runner.
      * If the vector target is in the switchable bank ($8000-$BFFF), use _b0 suffix. */
