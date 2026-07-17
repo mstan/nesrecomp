@@ -29,6 +29,15 @@
 #ifdef NESRECOMP_LAUNCHER
 #include "launcher/launcher_capi.h"
 #endif
+#ifdef RECOMP_LAUNCHER
+/* The shared recomp-ui Dear ImGui launcher (consumed as a git submodule;
+ * recomp_ui.cmake defines RECOMP_LAUNCHER and adds its src/ to the include
+ * path). Supersedes the in-tree RmlUi launcher above; the old gate is kept
+ * side-by-side so a build defining NESRECOMP_LAUNCHER instead still works. */
+#include "recomp_launcher.h"
+#include "launcher_profile.h"
+#include "save_ram.h"
+#endif
 
 /* Declared in main_runner.c */
 void nesrecomp_runner_run(int argc, char **argv);
@@ -175,6 +184,26 @@ static int verify_rom(const char *path, uint32_t expected_crc) {
     }
     return 1;
 }
+
+#ifdef RECOMP_LAUNCHER
+/* Read the iNES battery bit (header byte 6, bit 1) from a ROM file. The
+ * recomp-ui launcher is console-agnostic and can't parse NES headers itself,
+ * so the seam detects battery-backed SRAM here — matching main_runner.c's
+ * s_rom_has_battery — to decide whether to show the SAVES panel. Returns 0 for
+ * an absent/short/non-iNES file (no save UI, same as a non-battery cart). */
+static int rom_has_battery(const char *path) {
+    if (!path || !path[0]) return 0;
+    FILE *f = fopen(path, "rb");
+    if (!f) return 0;
+    unsigned char header[16];
+    size_t n = fread(header, 1, sizeof(header), f);
+    fclose(f);
+    if (n < 16) return 0;
+    if (header[0] != 'N' || header[1] != 'E' || header[2] != 'S' || header[3] != 0x1A)
+        return 0;
+    return (header[6] & 0x02) ? 1 : 0;
+}
+#endif
 
 /* ---- main ---- */
 
@@ -399,6 +428,136 @@ int main(int argc, char *argv[]) {
                 g_nes_config.deadzone[0]   = ls.deadzone[0];
                 g_nes_config.deadzone[1]   = ls.deadzone[1];
                 g_nes_config.skip_launcher = ls.skip_launcher;
+                g_nes_config.hdpack_enabled = ls.hdpack_enabled;
+                snprintf(g_nes_config.hdpack_dir, sizeof(g_nes_config.hdpack_dir), "%s", ls.hdpack_dir);
+                config_save(config_path());
+                if (rom_path[0]) { rom_cfg_write(rom_path); gui_resolved = 1; }
+            }
+            /* act == 2 (unavailable) -> fall through to the console resolver */
+        }
+    }
+#endif
+
+#ifdef RECOMP_LAUNCHER
+    {
+        int have_positional = (argc >= 2 && argv[1][0] != '-');
+        int force_launcher  = (argc >= 2 && strcmp(argv[1], "--launcher") == 0);
+        int no_gui_env      = getenv("NESRECOMP_NO_LAUNCHER") != NULL;
+        int want_gui = !have_positional && !no_gui_env &&
+                       (!g_nes_config.skip_launcher || force_launcher);
+        if (want_gui) {
+            char init_rom[512]; init_rom[0] = '\0';
+            rom_cfg_read(init_rom, sizeof(init_rom));
+
+            /* The recomp-ui settings struct shares every NES-mapped field name
+             * with the config, but is a superset (PSX/SNES controls we leave
+             * zero — the profile's capability flags hide those rows). */
+            RecompLauncherCSettings ls;
+            memset(&ls, 0, sizeof(ls));
+            ls.window_scale   = g_nes_config.window_scale;
+            ls.fullscreen     = g_nes_config.fullscreen;
+            ls.integer_scale  = g_nes_config.integer_scale;
+            ls.linear_filter  = g_nes_config.linear_filter;
+            ls.renderer       = g_nes_config.renderer;
+            ls.widescreen     = g_nes_config.widescreen;
+            ls.enable_audio   = 1;    /* NES audio is always on; volume gates it */
+            ls.volume         = g_nes_config.volume;
+            ls.player_src[0]  = g_nes_config.player_src[0];
+            ls.player_src[1]  = g_nes_config.player_src[1];
+            ls.deadzone[0]    = g_nes_config.deadzone[0];
+            ls.deadzone[1]    = g_nes_config.deadzone[1];
+            ls.skip_launcher  = g_nes_config.skip_launcher;
+            ls.hdpack_enabled = g_nes_config.hdpack_enabled;
+            snprintf(ls.hdpack_dir, sizeof(ls.hdpack_dir), "%s", g_nes_config.hdpack_dir);
+
+            /* Profile first (theme/platform/renderer labels/capabilities), then
+             * the per-game specifics on top. */
+            RecompLauncherCGameInfo gi;
+            memset(&gi, 0, sizeof(gi));
+            launcher_profile_apply("nes", &gi);
+            gi.name             = game_get_name();
+            gi.region           = "NTSC-U (USA)";
+            gi.expected_crc     = expected_crc;
+            gi.has_expected_crc = expected_crc != 0;
+#ifdef NESRECOMP_GAME_PLAYERS
+            gi.num_players      = NESRECOMP_GAME_PLAYERS;
+#else
+            gi.num_players      = 2;   /* most NES titles are 2-player */
+#endif
+#ifdef NESRECOMP_GAME_WIDESCREEN
+            gi.widescreen_supported = 1;
+#else
+            gi.widescreen_supported = 0;
+#endif
+#ifdef NESRECOMP_GAME_NO_HDPACK
+            gi.hdpack_supported = 0;
+#else
+            gi.hdpack_supported = 1;
+#endif
+#ifdef NESRECOMP_GAME_ZAPPER
+            gi.zapper           = 1;   /* light-gun games: DuckHunt, Gumshoe */
+#endif
+#ifdef NESRECOMP_GAME_PASSWORD_SAVE
+            /* Password/mantra save (e.g. Faxanadu): the SAVES row edits the
+             * password text file next to the exe, not binary SRAM. */
+            static char s_pw_save_path[600];
+            snprintf(s_pw_save_path, sizeof(s_pw_save_path), "%s%s",
+                     g_exe_dir, NESRECOMP_GAME_PASSWORD_SAVE);
+            gi.password_save_path  = s_pw_save_path;
+#  ifdef NESRECOMP_GAME_PASSWORD_SAVE_LABEL
+            gi.password_save_label = NESRECOMP_GAME_PASSWORD_SAVE_LABEL;
+#  else
+            gi.password_save_label = "Password";
+#  endif
+#endif
+            /* Battery SRAM: show the SAVES panel for battery-backed games. A
+             * build declares itself battery-backed with NESRECOMP_GAME_BATTERY
+             * (e.g. Zelda, Kirby) so the panel appears unconditionally — even on
+             * the very first launch before any ROM has been picked. As a
+             * fallback we also sniff the last-used ROM's iNES header, so an
+             * unflagged build that has booted a battery ROM still shows it. Bind
+             * only — no runtime activation (that happens in main_runner). */
+#ifdef NESRECOMP_GAME_BATTERY
+            int game_is_battery = 1;
+#else
+            int game_is_battery = 0;
+#endif
+            if (game_is_battery || rom_has_battery(init_rom)) {
+                save_ram_ui_bind(game_get_name());
+                gi.sram_path = save_ram_path();
+            }
+            /* Paths: exe-anchored, so the launcher and the runner agree on one
+             * config.ini / keybinds.ini regardless of the cwd. */
+            gi.config_path = config_path();
+            static char s_keybinds_path[600];
+            {
+                char dir[512];
+                nesrecomp_exe_dir(dir, sizeof(dir));
+                snprintf(s_keybinds_path, sizeof(s_keybinds_path), "%skeybinds.ini", dir);
+            }
+            gi.keybinds_path = s_keybinds_path;
+
+            char win_title[96];
+            snprintf(win_title, sizeof(win_title), "%s - Launcher",
+                     gi.name ? gi.name : "NES");
+            /* assets_dir is resolved next to the exe by the capi shim; "." is a
+             * harmless placeholder. */
+            int act = recomp_launcher_run_window(win_title, &ls, &gi, ".",
+                                                 init_rom, rom_path, sizeof(rom_path));
+            if (act == 1) return 0;   /* user closed the launcher */
+            if (act == 0) {
+                g_nes_config.window_scale   = ls.window_scale;
+                g_nes_config.fullscreen     = ls.fullscreen;
+                g_nes_config.integer_scale  = ls.integer_scale;
+                g_nes_config.linear_filter  = ls.linear_filter;
+                g_nes_config.renderer       = ls.renderer;
+                g_nes_config.widescreen     = ls.widescreen;
+                g_nes_config.volume         = ls.volume;
+                g_nes_config.player_src[0]  = ls.player_src[0];
+                g_nes_config.player_src[1]  = ls.player_src[1];
+                g_nes_config.deadzone[0]    = ls.deadzone[0];
+                g_nes_config.deadzone[1]    = ls.deadzone[1];
+                g_nes_config.skip_launcher  = ls.skip_launcher;
                 g_nes_config.hdpack_enabled = ls.hdpack_enabled;
                 snprintf(g_nes_config.hdpack_dir, sizeof(g_nes_config.hdpack_dir), "%s", ls.hdpack_dir);
                 config_save(config_path());
