@@ -8,6 +8,48 @@ A static 6502 recompiler framework for NES games. Translates NES ROM machine cod
 
 **This is NOT an emulator.** Each 6502 instruction is translated to equivalent C code at build time. JSR becomes a direct C function call, branches become gotos, and the NES hardware (PPU, APU, mapper) is simulated by the runner library.
 
+## How to use NESRecomp
+
+### Use the Windows CLI
+
+1. Open the [Releases](https://github.com/mstan/nesrecomp/releases) page.
+2. Download `nesrecomp-cli-windows-x86_64.zip`. Do not download GitHub's
+   "Source code" archives.
+3. Extract the zip to its own folder.
+4. Open PowerShell in that folder.
+5. Run:
+
+```powershell
+.\nesrecomp.exe build `
+  --rom "C:\Games\MyGame.nes" `
+  --output "C:\Projects\MyGameRecomp"
+```
+
+No BIOS file is needed. The output folder contains generated C source, a
+proposed `game.toml`, CMake files, and build scripts.
+
+To check that the generated source compiles:
+
+```powershell
+cd "C:\Projects\MyGameRecomp"
+.\build.ps1
+```
+
+This builds a static library. It does not create a playable game by itself.
+Each game still needs game-specific configuration and runner integration. Use
+one of the [Game Projects](#game-projects) as a starting point for a full port.
+
+If you already have a `game.toml`, pass it to the build command:
+
+```powershell
+.\nesrecomp.exe build `
+  --rom "C:\Games\MyGame.nes" `
+  --game "C:\Projects\MyGamePort\game.toml" `
+  --output "C:\Projects\MyGameRecomp"
+```
+
+NESRecomp does not include game ROMs.
+
 ## Platform Support
 
 | Platform | Status |
@@ -76,7 +118,7 @@ ROM hacking. See `override_text.h` in FaxanaduRecomp for the full API.
 NES ROM (.nes)
     |
     v
-NESRecomp.exe + game.toml
+nesrecomp.exe build + optional game.toml
     |
     v
 generated/<game>_full.c      (recompiled 6502 -> C)
@@ -228,7 +270,7 @@ points whose first byte decodes as `MN_ILLEGAL`, so byte values in the illegal
 range that appear inside data tables don't get misidentified as code and
 executed.
 
-## Building
+## Build NESRecomp from source
 
 CMake 3.20+ is required. The recompiler itself is pure C11 with no external
 dependencies; game runners additionally need SDL2.
@@ -237,12 +279,22 @@ dependencies; game runners additionally need SDL2.
 
 ```bash
 # Build the recompiler
-cmake -S . -B build -G "Visual Studio 17 2022" -A x64
-cmake --build build --config Release
+cmake -S recompiler -B build/recompiler -G "Visual Studio 17 2022" -A x64
+cmake --build build/recompiler --config Release
 
 # Recompile a game ROM
-build/Release/NESRecomp.exe <rom.nes> --game <path/to/game.toml>
+build/recompiler/Release/NESRecomp.exe <rom.nes> --game <path/to/game.toml>
 ```
+
+To build the same self-contained Windows zip published on the Releases page,
+install Python 3.12 and PyInstaller, then run:
+
+```powershell
+py -3.12 -m pip install pyinstaller
+py -3.12 tools/build_cli.py
+```
+
+The zip is written to `build/cli-release/`.
 
 ### macOS / Linux
 

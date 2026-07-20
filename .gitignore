@@ -12,6 +12,10 @@ generated/
 *.csv
 !*_annotations.csv
 
+# Python tooling caches
+__pycache__/
+*.pyc
+
 
 # Local MCP server config (paths are machine-specific); see .mcp.json.example
 .mcp.json
