@@ -405,21 +405,25 @@ int nes_interp_dispatch_bank(uint16_t cpu_addr, uint16_t gen_addr, int bank) {
     /* Per-game manual override still wins (e.g. Zelda SRAM remap). */
     if (game_dispatch_override(addr)) return 1;
 
-    /* Always record the miss so the discovery/manifest loop sees every one,
-     * even though the game keeps running. */
-    nes_record_dispatch_miss_bank(gen_addr, cpu_addr, bank);
-
     /* Covered-ness probe answer for an in-flight interp_run dispatch. */
     if (s_probe_armed && addr == s_probe_addr) {
         s_probe_armed = 0;
+        if (addr >= 0x8000)
+            nes_record_dispatch_miss_bank(gen_addr, cpu_addr, bank);
         return 0;   /* "miss" — interp_run will handle the target inline */
     }
 
     if (s_enabled == 1) {
-        if (interp_run(addr)) return 1;   /* handled — game continues */
+        int handled = interp_run(addr);
+        if (handled) {
+            if (addr >= 0x8000)
+                nes_record_dispatch_miss_bank(gen_addr, cpu_addr, bank);
+            return 1;   /* handled — game continues */
+        }
         /* interp declined (watchdog / depth) — fall through to legacy policy. */
     }
 
+    nes_record_dispatch_miss_bank(gen_addr, cpu_addr, bank);
     nes_dispatch_miss_apply_policy(addr);
     return 0;
 }
