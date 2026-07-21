@@ -575,12 +575,19 @@ void nes_vblank_callback(void) {
             savestate_load("C:/temp/quicksave.sav");
             record_sync_frame(g_frame_count); /* g_frame_count now = restored value */
         }
-        /* Toggle borderless-desktop fullscreen: F11 or Alt+Enter. */
+        /* Toggle fullscreen: F11 or Alt+Enter. Flips between windowed and the
+         * CONFIGURED tri-state mode (2 = exclusive, otherwise borderless-desktop)
+         * so the hotkey respects the launcher's choice. SDL_WINDOW_FULLSCREEN_DESKTOP
+         * contains the SDL_WINDOW_FULLSCREEN bit, so masking with plain
+         * SDL_WINDOW_FULLSCREEN alone still detects EITHER mode. */
         if (ev.type == SDL_KEYDOWN && s_window &&
             (ev.key.keysym.sym == SDLK_F11 ||
              (ev.key.keysym.sym == SDLK_RETURN && (ev.key.keysym.mod & KMOD_ALT)))) {
-            Uint32 is_fs = SDL_GetWindowFlags(s_window) & SDL_WINDOW_FULLSCREEN_DESKTOP;
-            SDL_SetWindowFullscreen(s_window, is_fs ? 0 : SDL_WINDOW_FULLSCREEN_DESKTOP);
+            Uint32 is_fs = SDL_GetWindowFlags(s_window) & SDL_WINDOW_FULLSCREEN;
+            Uint32 want = (g_nes_config.fullscreen == 2)
+                              ? SDL_WINDOW_FULLSCREEN
+                              : SDL_WINDOW_FULLSCREEN_DESKTOP;
+            SDL_SetWindowFullscreen(s_window, is_fs ? 0 : want);
         }
     }
 
@@ -1277,7 +1284,10 @@ void nesrecomp_runner_run(int argc, char *argv[]) {
         char window_title[64];
         snprintf(window_title, sizeof(window_title), "NESRecomp - %s", game_get_name());
         Uint32 win_flags = SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE;
-        if (g_nes_config.fullscreen) win_flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
+        /* Launcher tri-state: 1 = borderless (desktop resolution, letterboxed by
+         * SDL_RenderSetLogicalSize), 2 = exclusive (real display mode change). */
+        if (g_nes_config.fullscreen == 2)      win_flags |= SDL_WINDOW_FULLSCREEN;
+        else if (g_nes_config.fullscreen == 1) win_flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
         int scale = g_nes_config.window_scale < 1 ? 1 : g_nes_config.window_scale;
         s_window = SDL_CreateWindow(window_title,
             SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,

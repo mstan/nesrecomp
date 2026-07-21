@@ -18,7 +18,7 @@ extern "C" {
 // Mirrors nes_launcher::NesLauncherSettings as plain C (bools as int).
 typedef struct NesLauncherCSettings {
     int  window_scale;      // 1..N
-    int  fullscreen;        // 0 windowed, 1 borderless-desktop
+    int  fullscreen;        // 0 windowed, 1 borderless-desktop (legacy RmlUi launcher: no exclusive mode)
     int  integer_scale;     // bool
     int  linear_filter;     // bool
     int  renderer;          // game output: 0 accelerated, 1 software

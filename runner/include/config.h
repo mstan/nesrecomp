@@ -12,7 +12,7 @@
 typedef struct {
     /* Display */
     int window_scale;     /* 1..N integer scale (native 256x240); default 3 */
-    int fullscreen;       /* 0 windowed, 1 borderless-desktop */
+    int fullscreen;       /* tri-state: 0 off, 1 borderless, 2 exclusive */
     int integer_scale;    /* snap to whole-pixel multiples; default 1 */
     int linear_filter;    /* bilinear (1) vs nearest (0); default 0 */
     int renderer;         /* game output: 0 accelerated, 1 software; default 0 */

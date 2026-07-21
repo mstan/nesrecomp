@@ -105,7 +105,9 @@ void config_load(const char *path) {
         char *valstr = trim(eq + 1);
         int   val = atoi(valstr);
         if      (!strcmp(key, "WindowScale"))   g_nes_config.window_scale  = clampi(val, 1, 8);
-        else if (!strcmp(key, "Fullscreen"))    g_nes_config.fullscreen    = val ? 1 : 0;
+        else if (!strcmp(key, "Fullscreen"))
+            /* Tri-state (launcher vocabulary): 0 off, 1 borderless, 2 exclusive. */
+            g_nes_config.fullscreen = clampi(val, 0, 2);
         else if (!strcmp(key, "IntegerScale"))  g_nes_config.integer_scale = val ? 1 : 0;
         else if (!strcmp(key, "LinearFilter"))  g_nes_config.linear_filter = val ? 1 : 0;
         else if (!strcmp(key, "Renderer"))      g_nes_config.renderer      = clampi(val, 0, 1);
@@ -130,7 +132,7 @@ void config_save(const char *path) {
     fprintf(f, "# NESRecomp settings — edited by the launcher's Settings view.\n");
     fprintf(f, "[Display]\n");
     fprintf(f, "WindowScale = %d\n",   c->window_scale);
-    fprintf(f, "Fullscreen = %d\n",    c->fullscreen);
+    fprintf(f, "Fullscreen = %d\n",    c->fullscreen);  /* 0 off, 1 borderless, 2 exclusive */
     fprintf(f, "IntegerScale = %d\n",  c->integer_scale);
     fprintf(f, "LinearFilter = %d\n",  c->linear_filter);
     fprintf(f, "Renderer = %d\n",      c->renderer);

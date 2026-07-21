@@ -38,7 +38,7 @@ enum class InputSource : int {
 struct NesLauncherSettings {
     // --- Display ---
     int  window_scale  = 3;       // 1..N integer scale (NES native 256x240)
-    int  fullscreen    = 0;       // 0 windowed, 1 borderless-desktop
+    int  fullscreen    = 0;       // 0 windowed, 1 borderless-desktop (legacy RmlUi launcher: no exclusive mode)
     bool integer_scale = true;    // snap to whole-pixel multiples
     bool linear_filter = false;   // bilinear vs nearest
     int  renderer      = 0;       // game output: 0 accelerated, 1 software
