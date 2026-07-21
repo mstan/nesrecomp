@@ -1263,6 +1263,32 @@ static void wram_write_watch(uint16_t a, uint8_t oldv, uint8_t val) {
     }
 }
 
+void nes_trace_sram_fetch(uint16_t addr, uint8_t val) {
+    static int state = -1;
+    static uint16_t lo = 0x6000;
+    static uint16_t hi = 0x7FFF;
+    static int lines = 0;
+    if (state < 0) {
+        const char *e = getenv("NESRECOMP_SRAM_CODE_TRACE");
+        if (e && *e) {
+            state = 1;
+            unsigned a = 0, b = 0;
+            if (sscanf(e, "%x:%x", &a, &b) == 2) {
+                lo = (uint16_t)a;
+                hi = (uint16_t)b;
+            }
+        } else {
+            state = 0;
+        }
+    }
+    if (!state || addr < lo || addr > hi || lines >= 600)
+        return;
+    fprintf(stderr, "[sramtrace] R $%04X=%02X frame=%llu S=%02X bank=%d\n",
+            addr, val, (unsigned long long)g_frame_count, g_cpu.S, g_current_bank);
+    fflush(stderr);
+    lines++;
+}
+
 void nes_write(uint16_t addr, uint8_t val) {
     bus_tick();
     s_open_bus = val;   /* writes also drive the data bus (open-bus tracking) */

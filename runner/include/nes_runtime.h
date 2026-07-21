@@ -50,6 +50,7 @@ uint16_t nes_read16zp(uint8_t zp_addr);  /* Zero-page 16-bit (wraps at $FF) */
  *   returns   = (hi << 8) | lo where lo = nes_read(addr) and
  *               hi = nes_read((addr & 0xFF00) | ((addr+1) & 0xFF)) */
 uint16_t nes_read16_jmpbug(uint16_t addr);
+void     nes_trace_sram_fetch(uint16_t addr, uint8_t val);
 
 /* ---- Dispatch ---- */
 /* Called for JMP (indirect) — dispatch to the correct recompiled function */

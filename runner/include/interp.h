@@ -29,6 +29,11 @@
  * behaves as the legacy `return 0`. */
 int nes_interp_dispatch(uint16_t addr);
 
+/* Execute from a known guest PC without recording it as a dispatch miss.
+ * Used for explicit continuation/resume paths where the caller already has
+ * a PC from the guest stack rather than a missing generated entry. */
+int nes_interp_resume(uint16_t addr);
+
 /* Runtime control. enabled defaults on when push_all_jsr is set, unless the
  * env var NESRECOMP_INTERP_FALLBACK=off overrides. */
 void nes_interp_set_enabled(int enabled);

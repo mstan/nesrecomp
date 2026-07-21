@@ -21,6 +21,7 @@
  */
 #include "interp.h"
 #include "nes_runtime.h"
+#include "game_extras.h"
 #include "mapper.h"
 #include "cpu6502_decoder.h"
 
@@ -73,7 +74,11 @@ static void interp_lazy_init(void) {
 static inline uint8_t interp_fetch(uint16_t pc) {
     if (pc >= 0x8000)              return mapper_peek_prg(pc);
     if (pc < 0x2000)              return g_ram[pc & 0x07FF];
-    if (pc >= 0x6000)             return g_sram[pc - 0x6000];      /* $6000-$7FFF SRAM */
+    if (pc >= 0x6000) {
+        uint8_t v = g_sram[pc - 0x6000];
+        nes_trace_sram_fetch(pc, v);
+        return v;
+    }
     return 0x00; /* $2000-$5FFF: not a code region — decodes as BRK and bails */
 }
 
@@ -124,7 +129,7 @@ static int interp_dispatch_target(uint16_t target) {
  * entry level). Returns 1 if it ran to a clean boundary, 0 if it bailed
  * (watchdog / depth guard / non-code region) so the caller applies policy.
  */
-static int interp_run(uint16_t entry) {
+static int interp_run_ex(uint16_t entry, int stop_on_stack_lift) {
     if (s_depth >= INTERP_MAX_DEPTH) return 0;
     s_depth++;
     s_stats.runs++;
@@ -314,10 +319,15 @@ static int interp_run(uint16_t entry) {
             case MN_JSR: {
                 uint16_t target = abs16;
                 uint16_t ret = (uint16_t)(ipc + 2);   /* 6502 pushes PC+2 */
+                uint8_t call_s = g_cpu.S;
                 g_ram[0x100 + g_cpu.S] = (uint8_t)((ret >> 8) & 0xFF); g_cpu.S--;
                 g_ram[0x100 + g_cpu.S] = (uint8_t)(ret & 0xFF);        g_cpu.S--;
                 if (interp_dispatch_target(target)) {
-                    /* covered: ran natively; its RTS popped our push. Continue. */
+                    /* Covered: ran natively. If it changed S relative to the
+                     * pre-JSR value, it took the generated stack-mismatch bail
+                     * path. That is a non-local return boundary; do not fall
+                     * through to the next interpreted instruction. */
+                    if (g_cpu.S != call_s) { result = 1; goto done; }
                     next = (uint16_t)(ipc + 3);
                 } else {
                     next = target;  /* miss: interpret inline (push stays on 6502 stack) */
@@ -365,16 +375,22 @@ static int interp_run(uint16_t entry) {
 
         ipc = next;
 
-        /* Unifying boundary rule: any instruction that lifts S above the entry
-         * frame (terminating RTS handled above, or a PLA/PLA-style bail that
-         * unwinds the caller's frame) means we've returned to native code. */
-        if (g_cpu.S > S_floor) { result = 1; goto done; }
+        /* Miss fallback boundary rule: any instruction that lifts S above the
+         * entry frame (terminating RTS handled above, or a PLA/PLA-style bail
+         * that unwinds the caller's frame) means we've returned to native code.
+         * Explicit continuation resumes disable this rule because their entry
+         * code may intentionally start with PLA/PLP-style stack restoration. */
+        if (stop_on_stack_lift && g_cpu.S > S_floor) { result = 1; goto done; }
     }
 
 done:
     if (this_run > s_stats.max_instrs_run) s_stats.max_instrs_run = this_run;
     s_depth--;
     return result;
+}
+
+static int interp_run(uint16_t entry) {
+    return interp_run_ex(entry, 1);
 }
 
 /* ---- Entry from the generated dispatcher ----
@@ -406,6 +422,13 @@ int nes_interp_dispatch_bank(uint16_t cpu_addr, uint16_t gen_addr, int bank) {
 
     nes_dispatch_miss_apply_policy(addr);
     return 0;
+}
+
+int nes_interp_resume(uint16_t addr) {
+    interp_lazy_init();
+    if (s_enabled != 1)
+        return 0;
+    return interp_run_ex(addr, 0);
 }
 
 /* Legacy entry: cpu==gen address, g_current_bank attribution. */
