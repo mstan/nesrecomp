@@ -801,25 +801,50 @@ void nes_cosim_emit_boundary(void) {
  * top level (s_vblank_depth == 0) so an IRQ never preempts the batched NMI
  * frame driver — sub-frame NMI/IRQ interleave is the deferred Axis 2 work. */
 static int s_in_irq = 0;
+
+static uint16_t irq_last_consumed_rts_target(void) {
+    uint8_t lo = g_ram[0x100 + ((g_cpu.S - 1) & 0xFF)];
+    uint8_t hi = g_ram[0x100 + g_cpu.S];
+    return (uint16_t)(((uint16_t)hi << 8) | lo) + 1;
+}
+
+void runtime_call_irq_handler(void) {
+    if (s_in_irq) return;
+
+    uint8_t s_pre = g_cpu.S;
+    uint8_t a_pre = g_cpu.A, x_pre = g_cpu.X, y_pre = g_cpu.Y;
+    uint8_t n_pre = g_cpu.N, v_pre = g_cpu.V, d_pre = g_cpu.D;
+    uint8_t i_pre = g_cpu.I, z_pre = g_cpu.Z, c_pre = g_cpu.C;
+
+    uint8_t p_irq = (uint8_t)((g_cpu.N<<7)|(g_cpu.V<<6)|(1<<5)|
+                               (g_cpu.D<<3)|(g_cpu.I<<2)|(g_cpu.Z<<1)|g_cpu.C);
+    g_ram[0x100+g_cpu.S] = 0x00;  g_cpu.S--;   /* PCH placeholder */
+    g_ram[0x100+g_cpu.S] = 0x00;  g_cpu.S--;   /* PCL placeholder */
+    g_ram[0x100+g_cpu.S] = p_irq; g_cpu.S--;   /* P (B=0) */
+    g_cpu.I = 1;
+    s_in_irq = 1;
+    func_IRQ();
+    for (int i = 0; i < 8 && g_cpu.S < s_pre; ++i) {
+        uint16_t target = irq_last_consumed_rts_target();
+        if (target < 0x8000)
+            break;
+        if (!call_by_address(target))
+            break;
+    }
+    s_in_irq = 0;
+    g_cpu.S = s_pre;
+    g_cpu.A = a_pre; g_cpu.X = x_pre; g_cpu.Y = y_pre;
+    g_cpu.N = n_pre; g_cpu.V = v_pre; g_cpu.D = d_pre;
+    g_cpu.I = i_pre; g_cpu.Z = z_pre; g_cpu.C = c_pre;
+}
+
 static void maybe_deliver_irq(void) {
     if (g_cpu.I)              return;   /* IRQ masked */
     if (s_in_irq)             return;   /* no re-entry while a handler runs */
     if (s_vblank_depth != 0)  return;   /* defer during the NMI frame driver */
     if (!apu_irq_asserted())  return;   /* no source asserting the line */
 
-    /* Enter IRQ: push P (B clear, bit5 set), then PCL/PCH placeholders in the
-     * NMI convention — func_IRQ() is a direct call whose RTI pops these three
-     * bytes (the placeholder return address is never dereferenced).  Same push
-     * order as the MMC3 path in ppu_renderer.c. */
-    uint8_t p_irq = (uint8_t)((g_cpu.N<<7)|(g_cpu.V<<6)|(1<<5)|
-                               (g_cpu.D<<3)|(g_cpu.I<<2)|(g_cpu.Z<<1)|g_cpu.C);
-    g_ram[0x100+g_cpu.S] = 0x00;  g_cpu.S--;   /* PCH placeholder */
-    g_ram[0x100+g_cpu.S] = 0x00;  g_cpu.S--;   /* PCL placeholder */
-    g_ram[0x100+g_cpu.S] = p_irq; g_cpu.S--;   /* P (B=0)         */
-    g_cpu.I = 1;                                /* IRQ entry sets I */
-    s_in_irq = 1;
-    func_IRQ();                                 /* handler's RTI pops P/PCL/PCH */
-    s_in_irq = 0;
+    runtime_call_irq_handler();
 }
 
 void maybe_trigger_vblank(int cycles) {

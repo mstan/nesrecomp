@@ -75,13 +75,8 @@ static uint8_t s_bg_opaque[DOT_MAXW];
  * swap CHR banks / scroll mid-frame; if it wrote $2006 (changed v) we resync the
  * render scroll from v. Guarded by s_busy against re-entry. */
 static void dot_fire_mmc3_irq(void) {
-    uint8_t p_irq = (uint8_t)((g_cpu.N<<7)|(g_cpu.V<<6)|(1<<5)|
-                               (g_cpu.D<<3)|(g_cpu.I<<2)|(g_cpu.Z<<1)|g_cpu.C);
-    g_ram[0x100 + g_cpu.S] = 0x00;  g_cpu.S--;   /* PCH placeholder */
-    g_ram[0x100 + g_cpu.S] = 0x00;  g_cpu.S--;   /* PCL placeholder */
-    g_ram[0x100 + g_cpu.S] = p_irq; g_cpu.S--;   /* P */
     uint16_t v_before = g_ppuaddr;
-    func_IRQ();
+    runtime_call_irq_handler();
     if (g_ppuaddr != v_before)
         runtime_sync_scroll_from_v();
 }

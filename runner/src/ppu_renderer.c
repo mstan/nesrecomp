@@ -371,15 +371,9 @@ int ppu_predict_spr0_hit_scanline(void) {
  * non-MMC3 mappers mapper_clock_scanline() returns 0, so this is a no-op. */
 static void service_mmc3_scanline_irq(int reported_scanline) {
     if (mapper_clock_scanline() && !g_disable_render_irq) {
-        /* Push PCH, PCL, P — same convention as NMI so RTI can pop them */
-        uint8_t p_irq = (uint8_t)((g_cpu.N<<7)|(g_cpu.V<<6)|(1<<5)|
-                                   (g_cpu.D<<3)|(g_cpu.I<<2)|(g_cpu.Z<<1)|g_cpu.C);
         g_render_irq_ppuctrl_before = g_ppuctrl;
-        g_ram[0x100+g_cpu.S] = 0x00;    g_cpu.S--;  /* PCH */
-        g_ram[0x100+g_cpu.S] = 0x00;    g_cpu.S--;  /* PCL */
-        g_ram[0x100+g_cpu.S] = p_irq;   g_cpu.S--;  /* P   */
         { uint16_t v_before = g_ppuaddr;
-        func_IRQ();
+        runtime_call_irq_handler();
         /* Mid-frame $2006 writes set the PPU v register directly.  The
          * renderer must derive scroll from v (not t/$2005) so the IRQ
          * handler's scroll change takes effect.  Only sync if the handler

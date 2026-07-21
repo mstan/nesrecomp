@@ -192,6 +192,10 @@ void func_RESET(void);
 void func_NMI(void);
 void func_IRQ(void);
 
+/* Deliver an IRQ through the generated IRQ vector while preserving the
+ * interrupted CPU context if generated code returns before its RTI epilogue. */
+void runtime_call_irq_handler(void);
+
 /* ---- PPU Interface ---- */
 /* Called by runtime.c when PPU registers are written */
 void ppu_write_reg(uint16_t reg, uint8_t val);
