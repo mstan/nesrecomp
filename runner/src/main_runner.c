@@ -922,6 +922,8 @@ smoke_skip_input:
         }
         g_frame_count++;
         if ((int)g_frame_count >= s_smoke_frames) {
+            extern int g_nes_expected_exit;
+            g_nes_expected_exit = 1;
             smoke_write_results();
             exit(0);
         }
