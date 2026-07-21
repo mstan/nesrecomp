@@ -55,6 +55,7 @@ void     nes_trace_sram_fetch(uint16_t addr, uint8_t val);
 /* ---- Dispatch ---- */
 /* Called for JMP (indirect) — dispatch to the correct recompiled function */
 int call_by_address(uint16_t addr);  /* returns 1 on hit, 0 on miss */
+void nes_trace_indirect_jump(uint16_t pc, uint16_t target);
 /* Cross-8KB dispatch with a caller-bank fallback: if the runtime bank-register
  * lookup misses (stale g_current_bank), retry the dispatch keyed on the caller's
  * statically-known bank.  caller_bank < 0 disables the fallback (== call_by_address). */

@@ -1843,6 +1843,25 @@ void nes_dring_mark(char kind, uint16_t tag) {
     dring_push(tag, -1, kind);
 }
 
+void nes_trace_indirect_jump(uint16_t pc, uint16_t target) {
+    static int s_dbg_init = 0;
+    static uint16_t s_dbg_target = 0;
+    static int s_dbg_on = 0;
+    if (!s_dbg_init) {
+        const char *e = getenv("NESRECOMP_INDIRJMPDBG");
+        if (e && *e) {
+            s_dbg_target = (uint16_t)strtoul(e, NULL, 16);
+            s_dbg_on = 1;
+        }
+        s_dbg_init = 1;
+    }
+    if (s_dbg_on && target == s_dbg_target) {
+        fprintf(stderr, "[indirjmpdbg] pc=$%04X target=$%04X S=$%02X frame=%llu wb=$%04X\n",
+                pc, target, g_cpu.S, (unsigned long long)g_frame_count, g_code_window_base);
+        fflush(stderr);
+    }
+}
+
 /* ---- Always-on frame-event ring (see nes_runtime.h for the event map) ----
  * Sized for ~10k frames of steady-state events so a scripted run's whole
  * history is retained; eviction keeps memory bounded at ~1.5MB. */
