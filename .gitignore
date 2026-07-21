@@ -1,6 +1,21 @@
 build/
 build_recomp/
+_build*/
 generated/
+
+# CMake configure/build by-products (also created in out-of-tree build dirs)
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+compile_commands.json
+install_manifest.txt
+Testing/
+
+# Visual Studio per-user workspace files
+.vs/
+*.suo
+*.user
 
 # ROM files — never commit game ROMs
 *.nes

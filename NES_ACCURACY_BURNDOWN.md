@@ -315,10 +315,10 @@ mismatch. SMB uses NMI only — GREEN on SMB is reachable before full IRQ slicin
 - **Open-bus PARTIAL (landed 2026-06-28).** `runtime.c` now tracks the CPU data bus
   (`s_open_bus`, updated on every read via the `nes_read` wrapper + every `nes_write`);
   unmapped `$4020-$5FFF` and write-only APU regs (`$4000-$4013`) return open bus instead of
-  0/0xFF. SMB zero-regression. **Deferred:** `$2002` lower-5-bit open-bus — the recomp's
-  `ppu_read_reg($2002)` encodes boot-readiness in low bits, so mixing open-bus there hangs SMB
-  RESET; needs investigating the recomp $2002 model first. Unmapped-read behavior is
-  NESdev-spec but not yet oracle-tested (needs a test ROM reading `$4020-$5FFF`).
+  0/0xFF. SMB zero-regression. `$2002` lower-5-bit open bus is now modeled with the PPU I/O
+  latch (`s_ppu_io_latch`), refreshed on PPU register writes and `$2004`/`$2007` reads.
+  Unmapped-read behavior is NESdev-spec but not yet oracle-tested (needs a test ROM reading
+  `$4020-$5FFF`).
 - `$4015` APU status read (length-counter/IRQ flags) — verify it reflects real channel
   state and clears the frame-IRQ flag.
 - Mapper read side-effects beyond MMC3 A12 not generalized.
