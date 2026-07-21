@@ -315,6 +315,7 @@ uint64_t           g_inline_dispatch_miss_count = 0;
 
 BrkPolicy g_brk_policy = BRK_DIAG;
 uint64_t  g_brk_count  = 0;
+int       g_nes_expected_exit = 0;
 
 void nes_set_dispatch_miss_policy(DispatchMissPolicy policy) {
     g_dispatch_miss_policy = policy;

@@ -215,9 +215,10 @@ static int rom_has_battery(const char *path) {
 static void atexit_handler(void) {
     extern const char *g_recomp_stack[];
     extern int g_recomp_stack_top;
+    extern int g_nes_expected_exit;
     extern uint64_t g_frame_count;
     /* Only log if the game exited unexpectedly (recomp stack still active) */
-    if (g_recomp_stack_top > 0) {
+    if (g_recomp_stack_top > 0 && !g_nes_expected_exit) {
         extern void nes_dump_dispatch_ring(void);
         printf("[EXIT] Unexpected exit at frame %llu, recomp stack (top=%d):\n",
                (unsigned long long)g_frame_count, g_recomp_stack_top);

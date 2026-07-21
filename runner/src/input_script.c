@@ -254,6 +254,8 @@ void script_tick(uint64_t frame, const uint8_t *ram) {
             case CMD_EXIT:
                 printf("[Script] EXIT %d at frame %llu\n",
                        c->iarg, (unsigned long long)frame);
+                extern int g_nes_expected_exit;
+                g_nes_expected_exit = 1;
                 s_exit_code = c->iarg;
                 return;
             case CMD_ASSERT_RAM8: {
@@ -305,6 +307,8 @@ void script_tick(uint64_t frame, const uint8_t *ram) {
     /* Reached end of script with no EXIT — treat as EXIT 0 */
     if (s_cmd_cursor >= s_cmd_count) {
         printf("[Script] Script complete at frame %llu\n", (unsigned long long)frame);
+        extern int g_nes_expected_exit;
+        g_nes_expected_exit = 1;
         s_exit_code = 0;
     }
 }
