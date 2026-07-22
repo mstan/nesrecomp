@@ -19,7 +19,6 @@ REQUIRED_HEADERS = (
     "coroutine.h",
     "nes_runtime.h",
     "recomp_stack.h",
-    "reverse_debug.h",
 )
 
 

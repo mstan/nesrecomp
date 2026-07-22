@@ -13,10 +13,6 @@
  */
 #include "debug_server.h"
 #include "game_extras.h"
-#ifdef ENABLE_NESTOPIA_ORACLE
-#include "nestopia_oracle_cmds.h"
-#endif
-#include "reverse_debug.h"
 #include "nes_runtime.h"
 
 #include <stdio.h>
@@ -1627,7 +1623,6 @@ static void handle_help(int id, const char *json)
     }
     pos += snprintf(buf + pos, 16384 - pos,
         "],\"subsystems\":["
-        "{\"prefix\":\"rdb_\",\"note\":\"reverse-debugger (Tier 1+): rdb_break_*, rdb_step_*, rdb_watch_add/clear/list/continue, rdb_anchor_on/off/status, rdb_parked. See REVERSE_DEBUGGER.md.\"},"
         "{\"prefix\":\"game-specific\",\"note\":\"per-game extras may register additional commands via game_handle_debug_cmd(). Send the bare command name to see if it responds.\"}"
         "]}");
     send_line(buf);
@@ -1653,18 +1648,6 @@ static void process_command(const char *line)
     /* Try game-specific command handler first (allows overriding built-ins) */
     if (game_handle_debug_cmd(cmd, id, line))
         return;
-
-#ifdef ENABLE_NESTOPIA_ORACLE
-    /* Try generic Nestopia oracle commands */
-    if (nestopia_oracle_handle_cmd(cmd, id, line))
-        return;
-#endif
-
-#if NESRECOMP_REVERSE_DEBUG
-    /* Reverse-debugger Tier 1+ commands (rdb_*) */
-    if (rdb_handle_cmd(cmd, id, line))
-        return;
-#endif
 
     for (const CmdEntry *e = s_commands; e->name; e++) {
         if (strcmp(cmd, e->name) == 0) {

@@ -170,9 +170,8 @@ Files (all in `runner`/`recompiler` — never generated):
 
 Test:
 1. Pick a `push_all_jsr` game with known misses (Megaman3 or Faxanadu). Regenerate + build.
-2. Differentially validate `interp_run` against the **Nestopia oracle** (already wired via
-   `emu_step`/TCP): from a captured pre-miss state, run the routine in both, compare
-   `g_cpu` + RAM.
+2. Differentially validate `interp_run` against **nesref/Mesen**: drive the same input
+   script in both runs and compare the captured CPU-visible state and RAM traces.
 3. Play through; confirm the game no longer truncates at the first miss, the whole miss set
    shows up in `dispatch_misses.log`, and screenshots match the oracle.
 4. Only then generalize rollout and start Phase 2 (manifest JSON + fold tool).

@@ -112,11 +112,9 @@ interpreter-friendly:
   (already used at `runtime.c:1102`).
 - **Misses are already ring-buffered and classified** (`g_miss_ring`, `MissRecord`) —
   the manifest loop can consume this instead of re-instrumenting.
-- **A reusable 6502 core exists** (`runner/nestopia-core/.../NstCpu.cpp`) but is
-  oracle-only, gated behind `ENABLE_NESTOPIA_ORACLE`, and built around its own bus — so
-  it's a reference, not a drop-in. The recompiler's `cpu6502_decoder.c` already holds the
-  opcode **metadata** table (mnemonic, addr-mode, size, cycles), which a fresh
-  interpreter can drive.
+- **A maintained opcode table exists** in the recompiler's `cpu6502_decoder.c`
+  (mnemonic, addr-mode, size, cycles), which a compact interpreter can drive. Reference
+  behavior is checked externally with `nesref`/Mesen rather than an embedded emulator.
 
 ---
 
@@ -140,7 +138,7 @@ A compact 6502 interpreter, callable per-address, that shares `g_cpu` / `g_ram` 
 - Effort: a 6502 interpreter is a well-trodden ~1,500–2,500 LoC artifact; the opcode
   metadata, memory bus, and register state already exist. The genuinely novel design work
   is the **interp↔recompiled boundary handoff** (defining clean return points), not the
-  opcode semantics. Reuse Nestopia as a semantics reference / differential oracle.
+  opcode semantics. Use `nesref`/Mesen as the differential oracle.
 
 ### Phase 2 — Auto-manifest discovery loop (closes the loop)
 
@@ -250,7 +248,7 @@ advances neither.
 ## 7. Recommended next step
 
 Prototype Phase 1 against one game with known dynamic-dispatch misses (Faxanadu or
-Megaman3 are good candidates per the survey). Validate the interp result against the
-Nestopia oracle (already wired for `emu_step`). If the boundary-handoff design holds up,
+Megaman3 are good candidates per the survey). Validate the interp result against
+`nesref`/Mesen traces. If the boundary-handoff design holds up,
 add Phase 2's manifest emitter and fold tool. Decide on full Phase-1 rollout only after
 the one-game prototype proves the handoff.

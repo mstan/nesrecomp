@@ -42,8 +42,8 @@ window). Extend that model to every axis; never synthesize state by pause/step.
 | Drive | in-process `extern "C"` bridge + TCP cmds (`nestopia_oracle_cmds.c`) | `--testrunner <rom> <lua>` headless + Lua callbacks; PCM via Sound Recorder / source hook |
 
 **Decision (locked):** Mesen2 replaces Nestopia as the single accurate oracle for
-state-divergence, cycle timing, and audio. Nestopia bridge stays in-tree until Mesen2
-parity (state + cycle + audio) is reached, then is retired.
+state-divergence, cycle timing, and audio. The embedded Nestopia bridge was retired on
+2026-07-22 after the standalone `nesref`/Mesen path reached the required parity.
 
 Oracle binary on disk: `_acc/audio_slice/mesen/Mesen.exe` (MesenCE 2.2.1 Windows).
 Repo: https://github.com/nesdev-org/MesenCE (GPL-3.0).
@@ -366,8 +366,7 @@ ring of `addr,val,PC,cycle`) diffed against Mesen2 `addMemoryCallback`. Port `mm
 - Sprite-0 via heuristic, not true BG/sprite opaque-pixel overlap.
 
 **Validation:** blargg `sprite_hit_tests`, `sprite_overflow_tests`, `ppu_vbl_nmi`;
-per-frame framebuffer diff vs Mesen2 (the Nestopia `framebuf_diff` cmd already exists —
-re-point at Mesen2). Per-scanline diff is the GREEN bar.
+per-frame framebuffer diff through `nesref`/Mesen. Per-scanline diff is the GREEN bar.
 
 ---
 
@@ -618,9 +617,8 @@ makes both sides reproducible for the other axes' diffs.
 - [ ] `nes_cycles.{c,h}` monotonic counter + alternating frame budget (the deferred frame-length fix).
 - [x] APU register-write ring (`NESRECOMP_APU_TRACE`, `runtime.c:674`) + `apu_stream_diff.py` (Axis 5b). **DONE slice 002.**
 - [x] `audio_drift_diff.py` — onset-train align + onset histogram + timbre band-energy. **DONE.**
-- [ ] Mesen2 oracle: `mesen_oracle.lua` (state/cycle/APU-reg via `--testrunner`) + a
-      `mesen_bridge.cpp` source-hook (PCM ring in `NesSoundMixer`, cycle ring at
-      `NesCpu::EndCpuCycle`) to replace `nestopia_*`.
+- [x] Mesen oracle: standalone `nesref`/Mesen traces replace the embedded oracle for
+      RAM, cycle, PPU-memory, video, and audio comparisons.
 - [x] `framebuf_diff.py` — palette-independent structural framebuffer match (Axis 5a). **DONE ppu-001.**
 - [x] Dispatch-miss coverage (Axis 6) — in-tree `--smoke` JSON + `dispatch_misses.log` + always-on miss ring (`runtime.c`). **MEASURED coverage-001: 0 misses on SMB.** (No port needed.)
 - [x] **nesref** state-divergence (Axis 4) — `nesref.lua` (Mesen per-frame RAM tap) + `NESRECOMP_WRAM_TRACE` (recomp tap) + `wram_diff.py`. **MEASURED state-001: RAM 99% match, only dead stack-page bytes differ.** (snesref pattern, Mesen-based.)
@@ -633,9 +631,9 @@ makes both sides reproducible for the other axes' diffs.
 1. **NOW** — Audio slice on SMB: recomp T1 PCM vs Mesen2 PCM, drift-tolerant diff
    (deliverable ii). → see `_acc/audio_slice/`.
 2. APU register-write ring (recomp) + Lua APU-reg capture (Mesen2) → cycle-exact reg diff.
-3. Mesen2 `mesen_bridge` replaces Nestopia for state + cycle (Axis 1–4).
+3. Standalone `nesref`/Mesen replaces the embedded oracle for state + cycle (Axis 1–4).
 4. Cycle axis (delta method) + coverage tool on SMB.
-5. PPU dot-accuracy + IRQ slicing; cross-title (Zelda/Metroid/MM3); retire Nestopia.
+5. PPU dot-accuracy + IRQ slicing; cross-title (Zelda/Metroid/MM3); embedded oracle retired.
 
 ---
 

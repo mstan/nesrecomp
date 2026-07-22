@@ -1121,12 +1121,12 @@ smoke_skip_input:
     }
 }
 
-/* ---- Public render function for emulated mode ---- */
+/* ---- Public render function for an external emulator mode ---- */
 /* Accepts a 256x240 ARGB8888 buffer and presents it to the SDL window.
- * Used by the emulated mode frame loop (Nestopia drives rendering). */
+ * Used by game-specific emulator-backed frame loops. */
 void runner_present_framebuf(const uint32_t *argb_buf) {
     if (!s_texture || !s_renderer || !argb_buf) return;
-    /* Copy to s_framebuf so TCP screenshot works in emulated mode */
+    /* Copy to s_framebuf so TCP screenshots see the presented frame. */
     memcpy(s_framebuf, argb_buf, (size_t)g_render_width * 240 * 4);
     SDL_UpdateTexture(s_texture, NULL, argb_buf, g_render_width * 4);
     SDL_RenderClear(s_renderer);

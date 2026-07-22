@@ -119,15 +119,6 @@ void debug_server_shutdown(void);
 /* Check if a TCP client is connected. */
 int debug_server_is_connected(void);
 
-/* ---- Legacy watch/follower API removed ----
- * Previously this header exposed poll-based watchpoints (`watch`/`unwatch`),
- * write-level followers (`follow`/`unfollow`/`follow_history`), and
- * S-register deltas (`watch_s`/`unwatch_s`/`watch_s_history`).  All three
- * are superseded by the Tier 2.5 synchronous watch in
- * runner/src/reverse_debug.c (`rdb_watch_add`, `rdb_watch_continue`).
- * The Tier 2.5 watch fires inside RDB_STORE8 with full PC/func attribution
- * and park semantics, subsuming every use case.  See REVERSE_DEBUGGER.md. */
-
 /* ---- Input override ---- */
 
 /* Returns >= 0 if the debug server wants to override controller input,

@@ -4,9 +4,6 @@ The TCP debug server is the **only** sanctioned debugging interface for
 nesrecomp game projects. If a piece of state cannot be observed over TCP,
 **add a command** in `runner/src/debug_server.c` — do not work around it.
 
-The same protocol is used by both the native recomp build and the embedded
-Nestopia oracle.
-
 ---
 
 ## IMPORTANT — How to Find the TCP Server
@@ -25,16 +22,16 @@ Search `runner/src/debug_server.c` — it is always there.
 
 ## Ports
 
-Each game project uses its own port pair. Selection lives in
+Each game project uses its own port. Selection lives in
 `extras.c::game_on_init()` — that is the single source of truth.
 
-| Project | Native Port | Oracle Port |
-|---------|-------------|-------------|
-| Super Mario Bros. | 4370 | 4371 |
-| Dr. Mario / Faxanadu / LoZ / Yoshi's Cookie | 4370 | 4371 |
-| Mega Man 3 | 4372 | 4373 |
-| Yoshi | 4380 | 4381 |
-| Metroid | 5370 | — |
+| Project | Port |
+|---------|------|
+| Super Mario Bros. | 4370 |
+| Dr. Mario / Faxanadu / LoZ / Yoshi's Cookie | 4370 |
+| Mega Man 3 | 4372 |
+| Yoshi | 4380 |
+| Metroid | 5370 |
 
 Do not change a project's ports without updating sibling docs.
 
@@ -45,7 +42,7 @@ Do not change a project's ports without updating sibling docs.
 The TCP server is **not always on**. It is enabled by:
 
 1. A `debug.ini` file in the same directory as the game executable, OR
-2. The `--verify` or `--emulated` CLI flags (which imply debug mode)
+2. A game-specific CLI flag that enables debug mode
 
 To enable for a game: create an empty `debug.ini` next to the `.exe`.
 
@@ -70,7 +67,7 @@ To enable for a game: create an empty `debug.ini` next to the `.exe`.
 
 ## Ring Buffer
 
-Both servers maintain a per-frame ring buffer recording CPU/PPU/RAM/mapper
+The server maintains a per-frame ring buffer recording CPU/PPU/RAM/mapper
 state. **Query it retroactively** with `get_frame`, `frame_range`,
 `frame_timeseries`, and `history`. Do not pause the game to inspect a
 single frame — pull it from the ring buffer instead.
@@ -123,68 +120,6 @@ Source of truth: the `s_commands[]` table in
 |---------|---------|
 | `mapper_state` | Current PRG/CHR bank mapping, mapper registers. |
 
-### Reverse debugger (rdb_*) — see `REVERSE_DEBUGGER.md`
-
-Enabled by regenerating with `NESRecomp.exe --reverse-debug` and building
-with `-DNESRECOMP_REVERSE_DEBUG=ON`. Implementation in
-`runner/src/reverse_debug.c`. Zero cost when off — generator emits plain
-`nes_write` and runtime omits the whole translation unit.
-
-**Tier 1 — synchronous bus-write ring** (1 M entries, range-filtered):
-| Command | Purpose |
-|---------|---------|
-| `rdb_status` | Unified status of all rdb_* state. |
-| `rdb_range` `{lo,hi}` | Arm an address-range filter. Up to 8. |
-| `rdb_range_clear` | Drop all armed ranges. |
-| `rdb_reset` | Clear the store ring. |
-| `rdb_count` | Entries in the ring. |
-| `rdb_dump` `{start,max}` | Emit entries as JSON (`block`, `frame`, `addr`, `val`, `pc`, `func`). |
-
-**Tier 1.5 — call trace** (64 k entries):
-| Command | Purpose |
-|---------|---------|
-| `trace_calls` / `trace_calls_reset` | Arm / reset. |
-| `get_call_trace` `{from,to,max}` | Dump `(frame, func, caller)`. |
-
-**Tier 2 — block-level trace** (256 k entries, A/X/Y/P captured per block):
-| Command | Purpose |
-|---------|---------|
-| `trace_blocks` / `trace_blocks_reset` | Arm / reset. |
-| `trace_blocks_range` `{lo,hi}` | Restrict to a PC range (up to 8). |
-| `get_block_trace` `{from,to,max}` | Dump `(frame, pc, func, a, x, y, p)`. |
-
-**Tier 2.5 — block breakpoints + synchronous WRAM watchpoints**
-(supersedes legacy `watch`/`follow`/`watch_s`):
-| Command | Purpose |
-|---------|---------|
-| `rdb_break` `{pc}` / `rdb_break_clear` / `rdb_break_list` | Block-PC breakpoint table (16 slots). |
-| `rdb_break_continue` | Resume from any parked state. |
-| `rdb_step_block` | One-shot break on the next block entered. |
-| `rdb_watch_add` `{addr[,val]}` / `rdb_watch_clear` / `rdb_watch_list` | WRAM-write watchpoints (16 slots). `val` omitted = any. |
-| `rdb_watch_continue` | Resume from a watch hit. |
-| `rdb_parked` | Unified park report: `reason` (1=break, 2=watch, 3=step), `pc`, `func`, `watch_addr`, `watch_val`. |
-
-Parking calls `debug_server_poll` in a tight spin, so TCP stays live
-while the CPU is stopped — send `rdb_break_continue` / `rdb_watch_continue`
-to release. `rdb_parked` is safe to poll from outside the parked thread.
-
-**Tier 3 — native WRAM anchors + reconstruction**:
-| Command | Purpose |
-|---------|---------|
-| `rdb_anchor_on` `{interval}` | Snapshot 2 KB WRAM every `interval` blocks (default 4096, 64 slots). Also auto-records all $0000-$07FF stores into the Tier 1 ring. |
-| `rdb_anchor_off` | Stop snapshotting; existing anchors retained. |
-| `rdb_anchor_status` | Anchor count, interval, current block index. |
-| `rdb_wram_at_block` `{block}` | Reconstruct 2 KB WRAM at `block` by finding the nearest prior anchor and replaying store-ring entries forward. Reports `store_ring_wrapped` if the store ring has evicted pre-anchor entries (indicates incomplete replay). Returns `hex` = 4 KiB hex string for the 2 KB. |
-
-### Retired commands (use `rdb_*` instead)
-
-Removed in the Tiers-1-3 cleanup. If a script still calls these, migrate:
-| Retired | Replacement |
-|---------|-------------|
-| `watch` / `unwatch` | `rdb_watch_add` / `rdb_watch_clear` (same 16-slot limit, but **synchronous** — fires inside `RDB_STORE8`, not by polling). |
-| `follow` / `unfollow` / `follow_history` | `rdb_watch_add` + `rdb_dump` (full attribution: `pc`, `func`, `block`). |
-| `watch_s` / `unwatch_s` / `watch_s_history` | `trace_blocks` with PC filtering — S is one of many registers now captured per block. |
-
 ### Input
 | Command | Purpose |
 |---------|---------|
@@ -226,23 +161,6 @@ Removed in the Tiers-1-3 cleanup. If a script still calls these, migrate:
 | `watchdog_status` | Why the watchdog tripped (if enabled). |
 | `call_stack` | Recompiled call stack (if `RECOMP_STACK_TRACKING` enabled). |
 | `dispatch_miss_info` | Dispatch table misses (if `ENABLE_DISPATCH_MISS_TRACKING`). |
-
-### Oracle Tier 4 — rewind / step / delta (requires ENABLE_NESTOPIA_ORACLE + `--emulated`)
-
-| Command | Purpose |
-|---------|---------|
-| `emu_step {frames}` | Run 1+ frames on the embedded Nestopia oracle (cap 600). Auto-captures WRAM for next `emu_wram_delta`. |
-| `emu_snapshot` | Serialize full oracle state (~5 KB, 16-slot FIFO ring). Returns monotonic `tag`. |
-| `emu_rewind_to {tag}` | Unserialize oracle back to the snapshot with that tag. |
-| `emu_rewind_list` | List live snapshots: slot, tag, frame, len. |
-| `emu_wram_delta` | `(addr, before, after)` for bytes that changed in the last `emu_step`. |
-
-The Nestopia oracle must be initialized — pass `--emulated` (or
-`--verify`) when launching the game. Without it, every `emu_*`
-command returns `unknown command`.
-
-Per-instruction oracle trace (`emu_insn_trace_*`) is deferred;
-see REVERSE_DEBUGGER.md §Tier 4b for rationale.
 
 ### Game-Specific Commands
 Game-specific commands dispatch via `game_handle_debug_cmd()` in each

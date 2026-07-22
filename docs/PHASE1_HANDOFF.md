@@ -82,7 +82,7 @@ Copy-Item "$mm3\Mega-Man 3 # NES.NES" "$mm3\mm3.nes"   # space-free name (Start-
 # run NESRecomp.exe mm3.nes --game game.toml  (from $mm3, writes generated/mega-man-3_*.c)
 # configure+build (force VS-bundled cmake + ninja + cl; copy ninja to a space-free path first):
 $vscmake="$vs\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe"
-& $vscmake -S . -B build_release -G Ninja "-DCMAKE_MAKE_PROGRAM=<space-free ninja.exe>" -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl -DENABLE_NESTOPIA_ORACLE=OFF
+& $vscmake -S . -B build_release -G Ninja "-DCMAKE_MAKE_PROGRAM=<space-free ninja.exe>" -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl
 & $vscmake --build build_release
 ```
 **Restore MM3 to pristine** (backups in `Megaman3NESRecomp\_phase1_bak\`): junction → `F:\Projects\nesrecomp\nesrecomp`; copy back `nesrecomp.pin` + `generated\mega-man-3_{full,dispatch}.c` + `_coverage.txt`. (Currently MM3 IS restored to pristine; the build_release exe is still the Phase-1 build.)

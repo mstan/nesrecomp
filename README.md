@@ -315,12 +315,9 @@ its `setup.sh` to fetch the pinned nesrecomp, then:
 
 ```bash
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
-      -DENABLE_NESTOPIA_ORACLE=OFF -DCMAKE_PREFIX_PATH="$(brew --prefix)"
+      -DCMAKE_PREFIX_PATH="$(brew --prefix)"
 cmake --build build
 ```
-
-(`ENABLE_NESTOPIA_ORACLE` is a developer verify-mode feature and is off here for
-a plain playable build.)
 
 ## Adding a New Game
 

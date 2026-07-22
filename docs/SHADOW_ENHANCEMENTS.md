@@ -105,10 +105,8 @@ clean way to add precise colorimetry later.
   after texture creation).
 - **Gate:** env `NESRECOMP_PALETTE={raw,2c02,fbx}` (unset/`raw` ⇒ passthrough,
   default).
-- **NOT touched:** the emulated/Nestopia-oracle present path
-  (`runner_present_framebuf`, `runner/src/main_runner.c:781`) — its pixels come
-  from Nestopia, not `g_nes_palette`, and it is the oracle bridge, not recomp
-  output.
+- **NOT touched:** external-emulator presentation through `runner_present_framebuf`;
+  those pixels do not come from `g_nes_palette`.
 
 ### Build
 - `runner/runner.cmake` — explicit source list (NOT globbed); the three new
