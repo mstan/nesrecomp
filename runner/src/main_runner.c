@@ -707,13 +707,6 @@ smoke_skip_input:
             uint8_t a_pre = g_cpu.A, x_pre = g_cpu.X, y_pre = g_cpu.Y;
             uint8_t n_pre = g_cpu.N, v_pre = g_cpu.V, d_pre = g_cpu.D;
             uint8_t i_pre = g_cpu.I, z_pre = g_cpu.Z, c_pre = g_cpu.C;
-            uint8_t p_save = (uint8_t)((g_cpu.N<<7)|(g_cpu.V<<6)|(1<<5)|
-                                       (g_cpu.D<<3)|(g_cpu.I<<2)|(g_cpu.Z<<1)|g_cpu.C);
-            g_ram[0x100+g_cpu.S] = 0x00;   g_cpu.S--;   /* PCH placeholder */
-            g_ram[0x100+g_cpu.S] = 0x00;   g_cpu.S--;   /* PCL placeholder */
-            g_ram[0x100+g_cpu.S] = p_save; g_cpu.S--;   /* P (status flags) */
-            g_cpu.I = 1; /* NMI entry sets I after pushing the old P */
-            runtime_note_interrupt_entry();
             nes_dring_mark('N', (uint16_t)runtime_get_vblank_depth());
             nes_fring_push('N', (uint16_t)runtime_get_vblank_depth());
             game_run_nmi();
@@ -734,8 +727,9 @@ smoke_skip_input:
         }
     } else {
         /* Top-level frame boundary (or NMI-disabled frame): delegate to
-         * game_run_nmi which decides whether to execute func_NMI. The runner
-         * pushes the hardware stack frame before entering generated NMI code. */
+         * game_run_nmi which decides whether to execute func_NMI. The
+         * generated func_NMI simulates the hardware stack frame so direct
+         * callers (verify mode, game overrides) get the same semantics. */
         int nmi_will_run = (g_ppuctrl & 0x80) != 0;
         uint8_t s_pre_nmi = g_cpu.S;
         /* Save all CPU registers.  On real 6502, the NMI handler's
@@ -748,13 +742,6 @@ smoke_skip_input:
         uint8_t n_pre = g_cpu.N, v_pre = g_cpu.V, d_pre = g_cpu.D;
         uint8_t i_pre = g_cpu.I, z_pre = g_cpu.Z, c_pre = g_cpu.C;
         if (nmi_will_run) {
-            uint8_t p_save = (uint8_t)((g_cpu.N<<7)|(g_cpu.V<<6)|(1<<5)|
-                                       (g_cpu.D<<3)|(g_cpu.I<<2)|(g_cpu.Z<<1)|g_cpu.C);
-            g_ram[0x100+g_cpu.S] = 0x00;   g_cpu.S--;   /* PCH placeholder */
-            g_ram[0x100+g_cpu.S] = 0x00;   g_cpu.S--;   /* PCL placeholder */
-            g_ram[0x100+g_cpu.S] = p_save; g_cpu.S--;   /* P (status flags) */
-            g_cpu.I = 1; /* NMI entry sets I after pushing the old P */
-            runtime_note_interrupt_entry();
             runtime_set_vblank_firing(1);
             nes_dring_mark('N', (uint16_t)runtime_get_vblank_depth());
             nes_fring_push('T', (uint16_t)runtime_get_vblank_depth());

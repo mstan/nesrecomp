@@ -3976,11 +3976,17 @@ bool codegen_emit(const NESRom *rom, const FunctionList *funcs,
     fprintf(f_full, "int g_rti_bank = -1; /* bank for last generated RTI instruction */\n");
     fprintf(f_full, "uint16_t g_rts_target = 0; /* last RTS operand popped by generated code */\n\n");
     fprintf(f_full, "void func_NMI(void)   {\n"
-           "    /* The runner pushes the 6502 NMI hardware frame.\n"
+           "    /* Simulate 6502 NMI hardware: push PCH, PCL, P onto stack.\n"
            "     * Uses $0000 as sentinel PC — RTI stores the target in g_rti_target.\n"
            "     * If the handler modified the return address (RTI hijack),\n"
            "     * we dispatch to the hijacked target AFTER the handler returns,\n"
            "     * so the post-NMI code runs outside the NMI context (depth 0). */\n"
+           "    uint8_t _nmi_p = (g_cpu.N<<7)|(g_cpu.V<<6)|0x20|\n"
+           "                     (g_cpu.D<<3)|(g_cpu.I<<2)|(g_cpu.Z<<1)|g_cpu.C;\n"
+           "    g_ram[0x100 + g_cpu.S] = 0x00; g_cpu.S--; /* PCH (sentinel) */\n"
+           "    g_ram[0x100 + g_cpu.S] = 0x00; g_cpu.S--; /* PCL (sentinel) */\n"
+           "    g_ram[0x100 + g_cpu.S] = _nmi_p; g_cpu.S--; /* P */\n"
+           "    g_cpu.I = 1; /* NMI entry sets I after pushing the old P */\n"
            "    g_rti_target = 0;\n");
     if (rom->num_windows > 0) {
         /* GxROM (and other full-32KB-switch mappers): the NMI vector at\n"
