@@ -124,7 +124,7 @@ static int interp_dispatch_target(uint16_t target) {
  * entry level). Returns 1 if it ran to a clean boundary, 0 if it bailed
  * (watchdog / depth guard / non-code region) so the caller applies policy.
  */
-static int interp_run(uint16_t entry) {
+static int interp_run_ex(uint16_t entry, int stop_on_stack_lift) {
     if (s_depth >= INTERP_MAX_DEPTH) return 0;
     s_depth++;
     s_stats.runs++;
@@ -314,10 +314,14 @@ static int interp_run(uint16_t entry) {
             case MN_JSR: {
                 uint16_t target = abs16;
                 uint16_t ret = (uint16_t)(ipc + 2);   /* 6502 pushes PC+2 */
+                uint8_t call_s = g_cpu.S;
                 g_ram[0x100 + g_cpu.S] = (uint8_t)((ret >> 8) & 0xFF); g_cpu.S--;
                 g_ram[0x100 + g_cpu.S] = (uint8_t)(ret & 0xFF);        g_cpu.S--;
                 if (interp_dispatch_target(target)) {
-                    /* covered: ran natively; its RTS popped our push. Continue. */
+                    /* Covered: ran natively. If it changed S relative to the
+                     * pre-JSR value, it took a generated non-local return path;
+                     * do not continue interpreting after the callsite. */
+                    if (g_cpu.S != call_s) { result = 1; goto done; }
                     next = (uint16_t)(ipc + 3);
                 } else {
                     next = target;  /* miss: interpret inline (push stays on 6502 stack) */
@@ -365,16 +369,21 @@ static int interp_run(uint16_t entry) {
 
         ipc = next;
 
-        /* Unifying boundary rule: any instruction that lifts S above the entry
-         * frame (terminating RTS handled above, or a PLA/PLA-style bail that
-         * unwinds the caller's frame) means we've returned to native code. */
-        if (g_cpu.S > S_floor) { result = 1; goto done; }
+        /* Miss fallback boundary rule: any instruction that lifts S above the
+         * entry frame means we've returned to native code. Explicit continuation
+         * resumes disable this because their entry may intentionally restore
+         * state with PLA/PLP-style stack reads. */
+        if (stop_on_stack_lift && g_cpu.S > S_floor) { result = 1; goto done; }
     }
 
 done:
     if (this_run > s_stats.max_instrs_run) s_stats.max_instrs_run = this_run;
     s_depth--;
     return result;
+}
+
+static int interp_run(uint16_t entry) {
+    return interp_run_ex(entry, 1);
 }
 
 /* ---- Entry from the generated dispatcher ----
@@ -412,4 +421,24 @@ int nes_interp_dispatch_bank(uint16_t cpu_addr, uint16_t gen_addr, int bank) {
 int nes_interp_dispatch(uint16_t addr) {
     extern int g_current_bank;
     return nes_interp_dispatch_bank(addr, addr, g_current_bank);
+}
+
+int nes_interp_interrupt(uint16_t addr) {
+    interp_lazy_init();
+
+    /* RAM/SRAM interrupt vectors are intentional code entries, not missed
+     * generated functions. Keep dispatch_misses.log reserved for discovery
+     * defects while still executing the handler against live memory. */
+    if (interp_run(addr))
+        return 1;
+
+    fprintf(stderr, "[Interp] RAM/SRAM interrupt vector $%04X could not be interpreted\n", addr);
+    return 0;
+}
+
+int nes_interp_resume(uint16_t addr) {
+    interp_lazy_init();
+    if (s_enabled != 1)
+        return 0;
+    return interp_run_ex(addr, 0);
 }

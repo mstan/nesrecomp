@@ -20,9 +20,12 @@
 #include "ppu_dot.h"
 #include "mapper.h"
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 
 int g_dot_ppu_on = 0;
+int g_pre_nmi_render_on = 0;
+static int s_dot_default_on = 0;
 
 /* NES system palette (ARGB8888) and the render-IRQ suppression toggle both live
  * in ppu_renderer.c. The PPU v register (g_ppuaddr) lives in runtime.c. */
@@ -75,13 +78,8 @@ static uint8_t s_bg_opaque[DOT_MAXW];
  * swap CHR banks / scroll mid-frame; if it wrote $2006 (changed v) we resync the
  * render scroll from v. Guarded by s_busy against re-entry. */
 static void dot_fire_mmc3_irq(void) {
-    uint8_t p_irq = (uint8_t)((g_cpu.N<<7)|(g_cpu.V<<6)|(1<<5)|
-                               (g_cpu.D<<3)|(g_cpu.I<<2)|(g_cpu.Z<<1)|g_cpu.C);
-    g_ram[0x100 + g_cpu.S] = 0x00;  g_cpu.S--;   /* PCH placeholder */
-    g_ram[0x100 + g_cpu.S] = 0x00;  g_cpu.S--;   /* PCL placeholder */
-    g_ram[0x100 + g_cpu.S] = p_irq; g_cpu.S--;   /* P */
     uint16_t v_before = g_ppuaddr;
-    func_IRQ();
+    runtime_call_irq_handler();
     if (g_ppuaddr != v_before)
         runtime_sync_scroll_from_v();
 }
@@ -294,11 +292,11 @@ static void dot_render_scanline(int sy, uint32_t *target, int snapshot) {
     }
 }
 
-/* Paint one visible scanline and clock its MMC3 A12 edge (the edge precedes the
- * line's fetches on hardware, so the IRQ handler's writes apply to later lines). */
+/* Paint one visible scanline and clock its MMC3 A12 edge. The line's fetches
+ * generate the edge, so IRQ handler writes apply to later scanlines. */
 static void dot_step_scanline(void) {
-    dot_clock_mmc3();
     dot_render_scanline(s_next_visible, s_back, 0);
+    dot_clock_mmc3();
     s_next_visible++;
 }
 
@@ -329,9 +327,17 @@ void ppu_dot_init(uint32_t *framebuf) {
      * is more hardware-faithful but its incremental publish exhibits scroll
      * jitter on high-refresh displays, so it is not the default. */
     const char *e = getenv("NESRECOMP_DOT_PPU");
-    g_dot_ppu_on = (e && *e) ? (*e != '0') : 0;   /* default OFF (per-frame renderer) */
+    g_dot_ppu_on = (e && *e) ? (*e != '0') : s_dot_default_on;
     printf("[ppu_dot] renderer: %s\n",
            g_dot_ppu_on ? "dot-accurate per-scanline (opt-in)" : "per-frame (default)");
+}
+
+void ppu_dot_set_default_enabled(int enabled) {
+    s_dot_default_on = enabled ? 1 : 0;
+}
+
+void ppu_dot_set_pre_nmi_render_enabled(int enabled) {
+    g_pre_nmi_render_on = enabled ? 1 : 0;
 }
 
 void ppu_dot_advance(uint32_t ops) {

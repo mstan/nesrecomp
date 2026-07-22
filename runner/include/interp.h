@@ -29,6 +29,14 @@
  * behaves as the legacy `return 0`. */
 int nes_interp_dispatch(uint16_t addr);
 
+/* Execute an intentional RAM/SRAM vector entry, such as an IRQ vector below
+ * $8000. This is not a static-discovery miss and does not log dispatch_misses. */
+int nes_interp_interrupt(uint16_t addr);
+
+/* Resume an explicit stack continuation without treating initial stack lifts
+ * as a return boundary. */
+int nes_interp_resume(uint16_t addr);
+
 /* Runtime control. enabled defaults on when push_all_jsr is set, unless the
  * env var NESRECOMP_INTERP_FALLBACK=off overrides. */
 void nes_interp_set_enabled(int enabled);

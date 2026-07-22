@@ -23,8 +23,11 @@ int      g_render_irq_fired    = 0;   /* 1 if IRQ fired during last render */
 int      g_render_irq_scanline = -1;  /* scanline where IRQ fired */
 uint8_t  g_render_irq_ppuctrl_before = 0;
 uint8_t  g_render_irq_ppuctrl_after  = 0;
+uint8_t  g_render_irq_scrollx_before = 0;
+uint8_t  g_render_irq_scrolly_before = 0;
 uint8_t  g_render_irq_scrollx_after  = 0;
 uint8_t  g_render_irq_scrolly_after  = 0;
+int      g_render_irq_chr_changed = 0;
 /* What the renderer actually uses for scanline after IRQ */
 uint8_t  g_render_post_irq_ppuctrl_row = 0;
 int      g_render_post_irq_chr_base = 0;
@@ -370,34 +373,36 @@ int ppu_predict_spr0_hit_scanline(void) {
  * oracle (IRQ_SLICE_001: recomp scanline 0 vs Mesen pre-render -1). For
  * non-MMC3 mappers mapper_clock_scanline() returns 0, so this is a no-op. */
 static void service_mmc3_scanline_irq(int reported_scanline) {
-    if (mapper_clock_scanline() && !g_disable_render_irq) {
-        /* Push PCH, PCL, P — same convention as NMI so RTI can pop them */
-        uint8_t p_irq = (uint8_t)((g_cpu.N<<7)|(g_cpu.V<<6)|(1<<5)|
-                                   (g_cpu.D<<3)|(g_cpu.I<<2)|(g_cpu.Z<<1)|g_cpu.C);
+    if (g_disable_render_irq)
+        return;
+    if (mapper_clock_scanline()) {
         g_render_irq_ppuctrl_before = g_ppuctrl;
-        g_ram[0x100+g_cpu.S] = 0x00;    g_cpu.S--;  /* PCH */
-        g_ram[0x100+g_cpu.S] = 0x00;    g_cpu.S--;  /* PCL */
-        g_ram[0x100+g_cpu.S] = p_irq;   g_cpu.S--;  /* P   */
-        { uint16_t v_before = g_ppuaddr;
-        func_IRQ();
-        /* Mid-frame $2006 writes set the PPU v register directly.  The
+        g_render_irq_scrollx_before = g_ppuscroll_x;
+        g_render_irq_scrolly_before = g_ppuscroll_y;
+        uint8_t chr_before[0x2000];
+        memcpy(chr_before, g_chr_ram, sizeof(chr_before));
+        uint64_t v_write_epoch_before = runtime_get_ppu_v_write_epoch();
+        runtime_call_irq_handler();
+        /* Mid-frame $2006 writes set the PPU v register directly. The
          * renderer must derive scroll from v (not t/$2005) so the IRQ
-         * handler's scroll change takes effect.  Only sync if the handler
-         * actually wrote $2006 (changed g_ppuaddr), not just $2005. */
-        if (g_ppuaddr != v_before)
+         * handler's scroll change takes effect. Detect the completed write
+         * pair, not a value change: Kirby writes $0000 when v is already
+         * $0000, but the PPUCTRL nametable bits still need to sync from v. */
+        if (runtime_get_ppu_v_write_epoch() != v_write_epoch_before)
             runtime_sync_scroll_from_v();
-        }
         g_render_irq_fired    = 1;
         g_render_irq_scanline = reported_scanline;
         g_render_irq_ppuctrl_after  = g_ppuctrl;
         g_render_irq_scrollx_after  = g_ppuscroll_x;
         g_render_irq_scrolly_after  = g_ppuscroll_y;
+        g_render_irq_chr_changed = memcmp(chr_before, g_chr_ram, sizeof(chr_before)) != 0;
     }
 }
 
 void ppu_render_frame(uint32_t *framebuf) {
     g_render_irq_fired = 0;
     g_render_irq_scanline = -1;
+    g_render_irq_chr_changed = 0;
 #if RECOMP_RENDER_DIAG
     g_ppu_render_calls++;
     g_ppu_render_last_mask  = g_ppumask;
@@ -430,6 +435,22 @@ void ppu_render_frame(uint32_t *framebuf) {
     /* Pre-IRQ CHR snapshot for the sprite pass (see s_chr_pre_irq). Taken
      * before any scanline-IRQ service can rebank the live window. */
     memcpy(s_chr_pre_irq, g_chr_ram, sizeof(s_chr_pre_irq));
+    uint8_t render_oam[0x100];
+    uint16_t render_oam_x16[64];
+    uint8_t render_start_mask = g_ppumask;
+    memcpy(render_oam, g_ppu_oam, sizeof(render_oam));
+    memcpy(render_oam_x16, g_oam_x16, sizeof(render_oam_x16));
+
+    uint8_t render_start_ctrl = g_ppuctrl;
+    uint8_t render_start_sx = g_ppuscroll_x;
+    uint8_t render_start_sy = g_ppuscroll_y;
+    uint16_t render_start_t = runtime_get_ppu_t() & 0x3FFF;
+    uint64_t render_start_frame = 0;
+    int have_render_start = runtime_get_visible_frame_start(&render_start_ctrl,
+                                                            &render_start_sx,
+                                                            &render_start_sy,
+                                                            &render_start_t,
+                                                            &render_start_frame);
 
     /* Effective widescreen margins this frame: clamp the per-frame values
      * to the configured framebuffer margins; -1 = follow configured.
@@ -459,9 +480,14 @@ void ppu_render_frame(uint32_t *framebuf) {
 
     {
         /* Frame-start sync of v from t — see 81b8a47 commit message for rationale */
-        runtime_set_ppuaddr(runtime_get_ppu_t() & 0x3FFF);
-        if (runtime_scroll_from_t_valid()) {
-            runtime_sync_scroll_from_t();
+        if (!have_render_start) {
+            runtime_set_ppuaddr(runtime_get_ppu_t() & 0x3FFF);
+            if (runtime_scroll_from_t_valid()) {
+                runtime_sync_scroll_from_t();
+            }
+            render_start_ctrl = g_ppuctrl;
+            render_start_sx = g_ppuscroll_x;
+            render_start_sy = g_ppuscroll_y;
         }
         {
             extern void runtime_record_frame_start_scroll(void);
@@ -577,21 +603,23 @@ void ppu_render_frame(uint32_t *framebuf) {
         service_mmc3_scanline_irq(-1);
 
         for (int sy = 0; sy < 240; sy++) {
-            /* Clock the MMC3 scanline counter for this visible line. When it
-             * fires, the handler may swap CHR banks / scroll mid-frame (e.g.
-             * MM3 status bar vs. playfield use different tile sets). */
-            service_mmc3_scanline_irq(sy);
-
             /* Choose scroll source for this scanline.
              * When split_y==240 (no sprite-0 split), use main game scroll for
              * all scanlines — the HUD values are stale (0,0) from VBlank reset. */
             int use_hud = (split_y < 240 && sy < split_y);
-            uint8_t ppuctrl_row = use_hud ? g_ppuctrl_hud  : g_ppuctrl;
-            int     scroll_x    = use_hud ? g_ppuscroll_x_hud : g_ppuscroll_x;
-            int     scroll_y    = use_hud ? g_ppuscroll_y_hud : g_ppuscroll_y;
+            uint8_t live_ppuctrl = (!g_render_irq_fired && have_render_start)
+                                       ? render_start_ctrl : g_ppuctrl;
+            int live_scroll_x = (!g_render_irq_fired && have_render_start)
+                                    ? render_start_sx : g_ppuscroll_x;
+            int live_scroll_y = (!g_render_irq_fired && have_render_start)
+                                    ? render_start_sy : g_ppuscroll_y;
+            uint8_t ppuctrl_row = use_hud ? g_ppuctrl_hud  : live_ppuctrl;
+            int     scroll_x    = use_hud ? g_ppuscroll_x_hud : live_scroll_x;
+            int     scroll_y    = use_hud ? g_ppuscroll_y_hud : live_scroll_y;
 
             /* BG pattern table: PPUCTRL bit 4 selects $0000 or $1000 */
             int chr_base = (ppuctrl_row & 0x10) ? 0x1000 : 0x0000;
+            const uint8_t *bg_chr_src = g_chr_ram;
 
             /* Capture post-IRQ rendering state on the scanline right after IRQ */
             if (g_render_irq_fired && sy == g_render_irq_scanline + 1) {
@@ -684,8 +712,8 @@ void ppu_render_frame(uint32_t *framebuf) {
 
                 int bit = 7 - pixel_col;
                 int chr_off = chr_base + tile_id * 16 + tile_row;
-                int color_idx = ((g_chr_ram[chr_off] >> bit) & 1) |
-                                (((g_chr_ram[chr_off + 8] >> bit) & 1) << 1);
+                int color_idx = ((bg_chr_src[chr_off] >> bit) & 1) |
+                                (((bg_chr_src[chr_off + 8] >> bit) & 1) << 1);
                 int fb_x = sx + g_widescreen_left;
                 /* PPUMASK bit 1: clip leftmost 8 BG pixels to background color */
                 if (sx >= 0 && sx < 8 && !(g_ppumask & 0x02)) {
@@ -697,7 +725,7 @@ void ppu_render_frame(uint32_t *framebuf) {
                         HdPixel *hp = &g_hp[sy * g_render_width + fb_x];
                         hp->bg_has   = 1;
                         hp->bg_index = (int32_t)((chr_base >> 4) + tile_id);
-                        hp->bg_t16   = &g_chr_ram[chr_base + tile_id * 16];
+                        hp->bg_t16   = &bg_chr_src[chr_base + tile_id * 16];
                         hp->bg_p0 = g_ppu_pal[0] & 0x3F;
                         hp->bg_p1 = g_ppu_pal[(pal_base * 4 + 1) & 0x1F] & 0x3F;
                         hp->bg_p2 = g_ppu_pal[(pal_base * 4 + 2) & 0x1F] & 0x3F;
@@ -727,13 +755,32 @@ void ppu_render_frame(uint32_t *framebuf) {
             } else {
                 abs_nt_y++;
             }
+
+            /* Clock the MMC3 scanline counter after painting this visible line.
+             * The line's pattern fetches generate the A12 edge, so IRQ handler
+             * writes belong to following scanlines. */
+            service_mmc3_scanline_irq(sy);
+        }
+
+        if (getenv("NESRECOMP_SPLIT_DEBUG")) {
+            fprintf(stderr,
+                "[irq] F=%llu fired=%d sl=%d ctrl_before=%02X ctrl_after=%02X "
+                "scroll_after=%d,%d post_row_ctrl=%02X post_chr=%04X "
+                "post_use_hud=%d post_split=%d post_origin_y=%d post_nt_row=%d\n",
+                (unsigned long long)g_frame_count,
+                g_render_irq_fired, g_render_irq_scanline,
+                g_render_irq_ppuctrl_before, g_render_irq_ppuctrl_after,
+                g_render_irq_scrollx_after, g_render_irq_scrolly_after,
+                g_render_post_irq_ppuctrl_row, g_render_post_irq_chr_base,
+                g_render_post_irq_use_hud, g_render_post_irq_split_y,
+                g_render_post_irq_origin_y, g_render_post_irq_phys_nt);
         }
     }
 
 render_sprites:
 
     /* Phase 2: Sprites (OAM) — skip if sprite rendering disabled */
-    if (!(g_ppumask & 0x10)) return;
+    if (!(render_start_mask & 0x10)) return;
 
     /* DEBUG: save OAM tile sheet — 8 cols x 8 rows, each tile at 4x scale (32x32px)
      * Image = 256x256. Magenta BG, grid lines. Transparent pixels = magenta.
@@ -839,14 +886,14 @@ render_sprites:
 
     /* OAM: 64 sprites × 4 bytes: [Y, tile, attr, X] */
     for (int s = 63; s >= 0; s--) {  /* draw back-to-front so sprite 0 is on top */
-        uint8_t spr_y    = g_ppu_oam[s * 4 + 0];
-        uint8_t spr_tile = g_ppu_oam[s * 4 + 1];
-        uint8_t spr_attr = g_ppu_oam[s * 4 + 2];
+        uint8_t spr_y    = render_oam[s * 4 + 0];
+        uint8_t spr_tile = render_oam[s * 4 + 1];
+        uint8_t spr_attr = render_oam[s * 4 + 2];
         /* Sidecar-enabled games render from the unwrapped 16-bit X (which
          * equals the OAM byte for sprites on the vanilla screen); everyone
          * else uses the vanilla 8-bit OAM X. */
-        int spr_x = g_ws_oam_sidecar ? (int)g_oam_x16[s]
-                                     : (int)g_ppu_oam[s * 4 + 3];
+        int spr_x = g_ws_oam_sidecar ? (int)render_oam_x16[s]
+                                     : (int)render_oam[s * 4 + 3];
 
         if (spr_y >= 0xEF) continue; /* off-screen */
 
@@ -879,13 +926,10 @@ render_sprites:
             }
 
             int chr_off = tile_chr_base + tile_num * 16 + tile_row;
-            /* Rows at or above the IRQ switch line fetch from the pre-IRQ
-             * regime; rows below it (status bar) see the live post-IRQ
-             * window. Per-row selection mirrors hardware, where sprite
-             * pattern fetches happen on each scanline. */
-            const uint8_t *chr_src =
-                (g_render_irq_fired && py >= g_render_irq_scanline + 1)
-                    ? g_chr_ram : s_chr_pre_irq;
+            /* Use the active post-IRQ CHR window for the sprite pass. The OAM
+             * and PPUMASK snapshots above preserve the frame-start sprite set
+             * when a scanline IRQ changes rendering state before this pass. */
+            const uint8_t *chr_src = g_chr_ram;
             uint8_t lo = chr_src[chr_off];
             uint8_t hi = chr_src[chr_off + 8];
 
@@ -899,7 +943,7 @@ render_sprites:
                 int color_idx = ((lo >> chr_bit) & 1) | (((hi >> chr_bit) & 1) << 1);
                 if (color_idx == 0) continue; /* transparent */
                 /* PPUMASK bit 2: clip leftmost 8 sprite pixels */
-                if (px < 8 && !(g_ppumask & 0x04)) continue;
+                if (px < 8 && !(render_start_mask & 0x04)) continue;
                 /* Offset sprite X into widescreen framebuffer */
                 int fb_x = px + g_widescreen_left;
                 /* Sprite-0 hit: when sprite 0's opaque pixel overlaps opaque BG,
@@ -908,8 +952,8 @@ render_sprites:
                  *   - No hit at x=255 (per NES spec).
                  *   - Obeys BG/sprite leftmost-8 clip (the px<8 gate above already
                  *     filters sprite side; BG clip is PPUMASK bit 1). */
-                if (s == 0 && px >= 0 && px < 255 && (g_ppumask & 0x18) == 0x18) {
-                    int bg_clipped = (px < 8 && !(g_ppumask & 0x02));
+                if (s == 0 && px >= 0 && px < 255 && (render_start_mask & 0x18) == 0x18) {
+                    int bg_clipped = (px < 8 && !(render_start_mask & 0x02));
                     if (!bg_clipped && framebuf[py * g_render_width + fb_x] != bg)
                         g_ppustatus |= 0x40;
                 }

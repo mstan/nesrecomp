@@ -124,7 +124,13 @@ static uint8_t g_ppudata_buf   = 0; /* PPUDATA read buffer (NES read-delay) */
 static uint16_t s_ppu_t      = 0;
 static uint8_t  s_ppu_fine_x = 0;
 static uint16_t s_ppu_v_at_2006 = 0;  /* v captured at $2006 second write, before $2007 increments */
+static uint64_t s_ppu_v_write_epoch = 0;
 static int      s_scroll_2005_complete = 0; /* 1 if $2005 pair completed after last $2006 pair */
+static int      s_visible_frame_valid = 0;
+static uint8_t  s_visible_frame_ctrl = 0;
+static uint8_t  s_visible_frame_sx = 0, s_visible_frame_sy = 0;
+static uint16_t s_visible_frame_t = 0;
+static uint64_t s_visible_frame_frame = 0;
 
 uint64_t g_frame_count = 0;
 
@@ -415,6 +421,7 @@ void runtime_init(void) {
  * The threshold is tuned so games run at approximately correct speed
  * when combined with the wall-clock frame pacing in nes_vblank_callback. */
 static int  s_vblank_depth = 0;   /* NMI nesting depth (0 = not in NMI) */
+static uint64_t s_interrupt_epoch = 0;
 #define MAX_VBLANK_DEPTH 8        /* Some games spin-wait for NMI inside the NMI
                                    * handler: Metroid's column loader needs one
                                    * nested level; SMB3 (NESTED_NMI_RUN_HANDLER)
@@ -801,25 +808,52 @@ void nes_cosim_emit_boundary(void) {
  * top level (s_vblank_depth == 0) so an IRQ never preempts the batched NMI
  * frame driver — sub-frame NMI/IRQ interleave is the deferred Axis 2 work. */
 static int s_in_irq = 0;
+
+static uint16_t irq_last_consumed_rts_target(void) {
+    uint8_t lo = g_ram[0x100 + ((g_cpu.S - 1) & 0xFF)];
+    uint8_t hi = g_ram[0x100 + g_cpu.S];
+    return (uint16_t)(((uint16_t)hi << 8) | lo) + 1;
+}
+
+void runtime_call_irq_handler(void) {
+    if (s_in_irq) return;
+
+    uint8_t s_pre = g_cpu.S;
+    uint8_t a_pre = g_cpu.A, x_pre = g_cpu.X, y_pre = g_cpu.Y;
+    uint8_t n_pre = g_cpu.N, v_pre = g_cpu.V, d_pre = g_cpu.D;
+    uint8_t i_pre = g_cpu.I, z_pre = g_cpu.Z, c_pre = g_cpu.C;
+
+    runtime_note_interrupt_entry();
+
+    uint8_t p_irq = (uint8_t)((g_cpu.N<<7)|(g_cpu.V<<6)|(1<<5)|
+                               (g_cpu.D<<3)|(g_cpu.I<<2)|(g_cpu.Z<<1)|g_cpu.C);
+    g_ram[0x100+g_cpu.S] = 0x00;  g_cpu.S--;
+    g_ram[0x100+g_cpu.S] = 0x00;  g_cpu.S--;
+    g_ram[0x100+g_cpu.S] = p_irq; g_cpu.S--;
+    g_cpu.I = 1;
+    s_in_irq = 1;
+    func_IRQ();
+    for (int i = 0; i < 8 && g_cpu.S < s_pre; ++i) {
+        uint16_t target = irq_last_consumed_rts_target();
+        if (target < 0x8000)
+            break;
+        if (!call_by_address(target))
+            break;
+    }
+    s_in_irq = 0;
+    g_cpu.S = s_pre;
+    g_cpu.A = a_pre; g_cpu.X = x_pre; g_cpu.Y = y_pre;
+    g_cpu.N = n_pre; g_cpu.V = v_pre; g_cpu.D = d_pre;
+    g_cpu.I = i_pre; g_cpu.Z = z_pre; g_cpu.C = c_pre;
+}
+
 static void maybe_deliver_irq(void) {
     if (g_cpu.I)              return;   /* IRQ masked */
     if (s_in_irq)             return;   /* no re-entry while a handler runs */
     if (s_vblank_depth != 0)  return;   /* defer during the NMI frame driver */
     if (!apu_irq_asserted())  return;   /* no source asserting the line */
 
-    /* Enter IRQ: push P (B clear, bit5 set), then PCL/PCH placeholders in the
-     * NMI convention — func_IRQ() is a direct call whose RTI pops these three
-     * bytes (the placeholder return address is never dereferenced).  Same push
-     * order as the MMC3 path in ppu_renderer.c. */
-    uint8_t p_irq = (uint8_t)((g_cpu.N<<7)|(g_cpu.V<<6)|(1<<5)|
-                               (g_cpu.D<<3)|(g_cpu.I<<2)|(g_cpu.Z<<1)|g_cpu.C);
-    g_ram[0x100+g_cpu.S] = 0x00;  g_cpu.S--;   /* PCH placeholder */
-    g_ram[0x100+g_cpu.S] = 0x00;  g_cpu.S--;   /* PCL placeholder */
-    g_ram[0x100+g_cpu.S] = p_irq; g_cpu.S--;   /* P (B=0)         */
-    g_cpu.I = 1;                                /* IRQ entry sets I */
-    s_in_irq = 1;
-    func_IRQ();                                 /* handler's RTI pops P/PCL/PCH */
-    s_in_irq = 0;
+    runtime_call_irq_handler();
 }
 
 void maybe_trigger_vblank(int cycles) {
@@ -1046,6 +1080,14 @@ void runtime_set_vblank_firing(int active) {
 
 int runtime_get_vblank_depth(void) {
     return s_vblank_depth;
+}
+
+void runtime_note_interrupt_entry(void) {
+    s_interrupt_epoch++;
+}
+
+uint64_t runtime_get_interrupt_epoch(void) {
+    return s_interrupt_epoch;
 }
 
 static int s_saved_vblank_depth = 0;
@@ -1351,11 +1393,13 @@ void ppu_write_reg(uint16_t reg, uint8_t val) {
             else s_vt = 0;
         }
         if (s_vt == 1 && g_frame_count >= s_lo && g_frame_count <= s_hi &&
-            (reg == 0x2000 || reg == 0x2006)) {
+            (reg == 0x2000 || reg == 0x2005 || reg == 0x2006 ||
+             (reg == 0x2007 && (g_ppuaddr & 0x3FFF) >= 0x3F00))) {
             extern const char *g_last_recomp_func;
-            fprintf(stderr, "[vram] F=%llu %s=%02X addr=%04X inc=%d  fn=%s\n",
+            fprintf(stderr, "[vram] F=%llu %s=%02X latch=%d addr=%04X inc=%d  fn=%s\n",
                 (unsigned long long)g_frame_count,
-                reg==0x2000?"CTRL":"ADDR", val,
+                reg==0x2000?"CTRL":(reg==0x2005?"SCROLL":(reg==0x2006?"ADDR":"DATA")), val,
+                g_ppuaddr_latch,
                 g_ppuaddr, (g_ppuctrl & 0x04) ? 32 : 1,
                 g_last_recomp_func ? g_last_recomp_func : "?");
             /* One-shot stack-page dump on the first $2006 write of the window,
@@ -1387,6 +1431,11 @@ void ppu_write_reg(uint16_t reg, uint8_t val) {
             g_ppuctrl = val;
             /* $2000 bits 0-1 → t bits 10-11 (nametable select) */
             s_ppu_t = (s_ppu_t & 0xF3FF) | ((uint16_t)(val & 3) << 10);
+            if (s_vblank_depth > 0 && s_visible_frame_valid) {
+                s_visible_frame_ctrl = g_ppuctrl;
+                s_visible_frame_t = s_ppu_t;
+                s_visible_frame_frame = g_frame_count;
+            }
             break;
         case 0x2001: g_ppumask = val; break;
         case 0x2003: g_oamaddr = val; break;
@@ -1416,6 +1465,14 @@ void ppu_write_reg(uint16_t reg, uint8_t val) {
                           ((uint16_t)(val >> 3) << 5);
                 g_ppuscroll_y = val;
                 s_scroll_2005_complete = 1;
+                if (s_vblank_depth > 0) {
+                    s_visible_frame_valid = 1;
+                    s_visible_frame_ctrl = g_ppuctrl;
+                    s_visible_frame_sx = g_ppuscroll_x;
+                    s_visible_frame_sy = g_ppuscroll_y;
+                    s_visible_frame_t = s_ppu_t;
+                    s_visible_frame_frame = g_frame_count;
+                }
             }
             /* If the HUD scroll was already captured at the sprite-0 hit this
              * frame, this $2005 write is the post-hit playfield scroll — record
@@ -1435,6 +1492,7 @@ void ppu_write_reg(uint16_t reg, uint8_t val) {
                 s_ppu_t = (s_ppu_t & 0xFF00) | val;
                 g_ppuaddr = s_ppu_t & 0x3FFF; /* v = t (14-bit VRAM address) */
                 s_ppu_v_at_2006 = g_ppuaddr;  /* capture v before $2007 increments */
+                s_ppu_v_write_epoch++;
                 s_scroll_2005_complete = 0;    /* $2006 pair completed — t now holds VRAM addr */
                 if (chr_override_active())
                     chr_override_on_ppuaddr(g_ppuaddr);
@@ -1679,7 +1737,7 @@ char     g_miss_last_stack2[64]  = "(none)";
 uint8_t  g_miss_last_sp           = 0;
 uint8_t  g_miss_last_stack_bytes[16];
 
-#define MAX_MISS_UNIQUE 12
+#define MAX_MISS_UNIQUE 256
 uint16_t g_miss_unique_addrs[MAX_MISS_UNIQUE];
 int      g_miss_unique_count = 0;
 
@@ -1886,6 +1944,36 @@ int nes_dispatch_call(uint16_t addr, int caller_bank) {
  * (unwinding to depth 0 instead loses those frames — measured on SMB3 as an
  * unexpected exit when Video_Misc_Updates2's terminator RTS had no caller
  * frame left to resume). */
+int nes_dispatch_indirect_continuation(uint16_t addr, int caller_bank,
+                                       uint16_t expected_operand) {
+    uint8_t before_s = g_cpu.S;
+    uint16_t operand =
+        (uint16_t)g_ram[0x100 + (uint8_t)(before_s + 1)] |
+        ((uint16_t)g_ram[0x100 + (uint8_t)(before_s + 2)] << 8);
+    int handled = nes_dispatch_call(addr, caller_bank);
+    return handled &&
+           operand == expected_operand &&
+           g_cpu.S == (uint8_t)(before_s + 2);
+}
+
+int nes_jsr_stack_ok_after_call(uint8_t before_s, uint64_t before_interrupt_epoch) {
+    if (g_cpu.S == before_s) return 1;
+
+    int8_t delta = (int8_t)(g_cpu.S - before_s);
+    uint64_t interrupts = runtime_get_interrupt_epoch() - before_interrupt_epoch;
+    if (interrupts > 0 && delta < 0) {
+        int bytes_pushed = -delta;
+        int frames_pushed = bytes_pushed / 3;
+        if ((bytes_pushed % 3) == 0 && frames_pushed > 0 &&
+            (uint64_t)frames_pushed <= interrupts) {
+            g_cpu.S = before_s;
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
 #define TAIL_ACTIVE_MAX 64
 static struct { uint16_t addr; uint8_t s; } s_tail_active[TAIL_ACTIVE_MAX];
 static int s_tail_active_n = 0;
@@ -2165,8 +2253,25 @@ void runtime_get_last_sync(uint8_t *sx, uint8_t *sy, uint16_t *t, uint64_t *fram
 }
 
 uint16_t runtime_get_ppu_t(void) { return s_ppu_t; }
+uint64_t runtime_get_ppu_v_write_epoch(void) { return s_ppu_v_write_epoch; }
 uint8_t  runtime_get_ppu_fine_x(void) { return s_ppu_fine_x; }
 int      runtime_scroll_from_t_valid(void) { return s_scroll_2005_complete; }
+
+int runtime_get_visible_frame_start(uint8_t *ctrl, uint8_t *sx,
+                                    uint8_t *sy, uint16_t *t,
+                                    uint64_t *frame) {
+    int fresh = s_visible_frame_valid &&
+                (s_visible_frame_frame == g_frame_count ||
+                 s_visible_frame_frame + 1 == g_frame_count);
+    if (!fresh)
+        return 0;
+    if (ctrl) *ctrl = s_visible_frame_ctrl;
+    if (sx) *sx = s_visible_frame_sx;
+    if (sy) *sy = s_visible_frame_sy;
+    if (t) *t = s_visible_frame_t;
+    if (frame) *frame = s_visible_frame_frame;
+    return 1;
+}
 
 /* Save/restore PPU internal state for runahead (game_post_render). */
 void runtime_get_ppu_internals(uint16_t *t, uint8_t *fine_x, int *scroll_complete,

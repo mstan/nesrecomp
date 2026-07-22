@@ -33,6 +33,15 @@
  * boundary, so it is a plain cached global. */
 extern int g_dot_ppu_on;
 
+/* Games that require live mid-frame OAM/PPU state can request the dot renderer
+ * from game_on_init(). NESRECOMP_DOT_PPU still overrides this default. */
+void ppu_dot_set_default_enabled(int enabled);
+
+/* Game opt-in: render the per-frame compositor at vblank entry, before the NMI
+ * handler mutates OAM/PPU state for the next frame. Off by default. */
+extern int g_pre_nmi_render_on;
+void ppu_dot_set_pre_nmi_render_enabled(int enabled);
+
 /* Read the env flag and register the framebuffer. Call once at startup. */
 void ppu_dot_init(uint32_t *framebuf);
 

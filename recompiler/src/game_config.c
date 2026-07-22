@@ -274,6 +274,20 @@ static bool game_config_load_toml(GameConfig *cfg, const char *path) {
         cfg->merge_ranges[idx].bank    = toml_int_or(t, "bank", -1);
         cfg->merge_ranges[idx].addr_lo = toml_hex(t, "addr_lo");
         cfg->merge_ranges[idx].addr_hi = toml_hex(t, "addr_hi");
+        toml_datum_t pub = toml_bool_in(t, "public");
+        cfg->merge_ranges[idx].public_wrappers = pub.ok ? pub.u.b : true;
+    }
+
+    /* [[indirect_continuation]] */
+    toml_array_t *icont = toml_array_in(root, "indirect_continuation");
+    if (icont) for (int i = 0; i < toml_array_nelem(icont) &&
+                    cfg->indirect_continuation_count < GAME_CFG_MAX_INDIRECT_CONTINUATIONS; i++) {
+        toml_table_t *t = toml_table_at(icont, i);
+        if (!t) continue;
+        int idx = cfg->indirect_continuation_count++;
+        cfg->indirect_continuations[idx].bank = toml_int_or(t, "bank", -1);
+        cfg->indirect_continuations[idx].jmp_addr = toml_hex(t, "jmp_addr");
+        cfg->indirect_continuations[idx].continuation = toml_hex(t, "continuation");
     }
 
     /* [[push_jsr]] */
@@ -281,6 +295,13 @@ static bool game_config_load_toml(GameConfig *cfg, const char *path) {
     if (pj) for (int i = 0; i < toml_array_nelem(pj) && cfg->push_jsr_count < GAME_CFG_MAX_NOP_JSRS; i++) {
         toml_table_t *t = toml_table_at(pj, i);
         if (t) cfg->push_jsrs[cfg->push_jsr_count++] = toml_hex(t, "addr");
+    }
+
+    /* [[return_adjust_func]] */
+    toml_array_t *raf = toml_array_in(root, "return_adjust_func");
+    if (raf) for (int i = 0; i < toml_array_nelem(raf) && cfg->return_adjust_func_count < GAME_CFG_MAX_NOP_JSRS; i++) {
+        toml_table_t *t = toml_table_at(raf, i);
+        if (t) cfg->return_adjust_funcs[cfg->return_adjust_func_count++] = toml_hex(t, "addr");
     }
 
     /* [[push_jmp]] — JMP targets that need a dummy push (bail-containing funcs).
