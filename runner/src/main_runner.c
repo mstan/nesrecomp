@@ -1308,6 +1308,7 @@ int nesrecomp_runner_run(int argc, char *argv[]) {
     extern const char *g_rom_path_for_extras;
     g_rom_path_for_extras = argv[1];
 
+    runtime_session_reset();
     runtime_init();
     keybinds_init(argv[0]);
     game_on_init();
@@ -1571,6 +1572,10 @@ int nesrecomp_runner_run(int argc, char *argv[]) {
 
     /* Unreachable for most games, but clean up anyway */
     if (s_audio_dev) { SDL_CloseAudioDevice(s_audio_dev); s_audio_dev = 0; }
+    if (s_bridge_ready) { rab_free(&s_bridge); s_bridge_ready = 0; }
+    if (s_audio_mtx) { SDL_DestroyMutex(s_audio_mtx); s_audio_mtx = NULL; }
+    save_ram_flush();
+    debug_server_shutdown();
     controller_shutdown();
     if (s_hd_texture) { SDL_DestroyTexture(s_hd_texture); s_hd_texture = NULL; }
     free(s_hd_buf); s_hd_buf = NULL; hdpack_unload();

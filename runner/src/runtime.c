@@ -2480,3 +2480,21 @@ uint32_t nes_runtime_state_digest(void) {
     if(apu_size>0)crc32_update(&c,apu_blob,(size_t)apu_size);
     return crc32_end(&c);
 }
+
+void runtime_session_reset(void) {
+    g_frame_count=0;g_nes_cycles=0;g_bail_active=0;
+    g_ppuctrl=g_ppumask=g_ppustatus=g_oamaddr=0;
+    g_ppuscroll_x=g_ppuscroll_y=0;g_ppuaddr=0;g_ppuaddr_latch=0;g_ppudata_buf=0;
+    g_ppuscroll_x_hud=g_ppuscroll_y_hud=g_ppuctrl_hud=0;
+    g_spr0_split_active=0;g_spr0_reads_ctr_legacy=0;g_spr0_split_write_scanline=-1;
+    s_ppu_t=0;s_ppu_fine_x=0;s_ppu_v_at_2006=0;s_ppu_v_write_epoch=0;
+    s_scroll_2005_complete=0;s_visible_frame_valid=0;s_visible_frame_frame=0;
+    g_controller1_buttons=g_controller2_buttons=0;s_ctrl1_shift=s_ctrl2_shift=0;s_ctrl1_strobe=false;
+    s_vblank_depth=0;s_interrupt_epoch=0;s_ops_count=0;s_oam_dma_stall=0;
+    s_odd_frame=0;s_dot_debt=0;s_frame_budget=OPS_PER_FRAME;s_vblank_pending=0;
+    s_in_irq=0;s_saved_vblank_depth=0;s_open_bus=0;s_ppu_io_latch=0;
+    s_tail_pending=-1;s_tail_caller=-1;s_tail_active_n=0;s_tail_pending_slot=-1;
+    s_last_sync_sx=s_last_sync_sy=0;s_last_sync_t=0;s_last_sync_frame=0;
+    s_frame_start_sx=s_frame_start_sy=0;s_frame_start_t=0;s_frame_start_frame=0;
+    s_irq_scanline_count=0;s_irq_scanline_frame=0;
+}
