@@ -29,6 +29,10 @@
  * behaves as the legacy `return 0`. */
 int nes_interp_dispatch(uint16_t addr);
 
+/* Execute an intentional RAM/SRAM vector entry, such as an IRQ vector below
+ * $8000. This is not a static-discovery miss and does not log dispatch_misses. */
+int nes_interp_interrupt(uint16_t addr);
+
 /* Execute from a known guest PC without recording it as a dispatch miss.
  * Used for explicit continuation/resume paths where the caller already has
  * a PC from the guest stack rather than a missing generated entry. */

@@ -16,6 +16,11 @@
 #include <stdint.h>
 #include <string.h>
 
+extern uint16_t g_rts_target;
+extern uint16_t g_rti_target;
+extern uint16_t g_rti_source;
+extern int g_rti_bank;
+
 const char *g_recomp_stack[RECOMP_STACK_DEPTH];
 int         g_recomp_stack_top = 0;
 const char *g_last_recomp_func = "(none)";
@@ -153,9 +158,15 @@ void bail_trace(uint16_t caller_pc, uint8_t expected_sp)
     e->caller_pc        = caller_pc;
     e->expected_sp      = expected_sp;
     e->actual_sp        = g_cpu.S;
+    e->sp_delta         = (int8_t)(g_cpu.S - expected_sp);
+    e->vblank_depth     = runtime_get_vblank_depth();
     e->recomp_stack_top = g_recomp_stack_top;
     e->recomp_stack_0   = (g_recomp_stack_top > 0) ? g_recomp_stack[g_recomp_stack_top - 1] : "(none)";
     e->recomp_stack_1   = (g_recomp_stack_top > 1) ? g_recomp_stack[g_recomp_stack_top - 2] : "(none)";
+    e->rts_target       = g_rts_target;
+    e->rti_target       = g_rti_target;
+    e->rti_source       = g_rti_source;
+    e->rti_bank         = g_rti_bank;
     g_bail_trace_idx    = (g_bail_trace_idx + 1) % BAIL_TRACE_SIZE;
     if (g_bail_trace_count < BAIL_TRACE_SIZE) g_bail_trace_count++;
 
@@ -174,16 +185,18 @@ void bail_trace(uint16_t caller_pc, uint8_t expected_sp)
             s_bail_log = fopen("bail_trace.log", "w");
             s_opened = 1;
             if (s_bail_log) {
-                fprintf(s_bail_log, "frame,caller_pc,exp_sp,act_sp,stk_top,fn0,fn1\n");
+                fprintf(s_bail_log, "frame,caller_pc,exp_sp,act_sp,delta,depth,stk_top,fn0,fn1,rts_target,rti_target,rti_source,rti_bank\n");
                 fflush(s_bail_log);
             }
         }
         if (s_bail_log) {
-            fprintf(s_bail_log, "%llu,$%04X,$%02X,$%02X,%d,%s,%s\n",
+            fprintf(s_bail_log, "%llu,$%04X,$%02X,$%02X,%d,%d,%d,%s,%s,$%04X,$%04X,$%04X,%d\n",
                     (unsigned long long)e->frame, e->caller_pc,
-                    e->expected_sp, e->actual_sp, e->recomp_stack_top,
+                    e->expected_sp, e->actual_sp, e->sp_delta,
+                    e->vblank_depth, e->recomp_stack_top,
                     e->recomp_stack_0 ? e->recomp_stack_0 : "?",
-                    e->recomp_stack_1 ? e->recomp_stack_1 : "?");
+                    e->recomp_stack_1 ? e->recomp_stack_1 : "?",
+                    e->rts_target, e->rti_target, e->rti_source, e->rti_bank);
             fflush(s_bail_log);
         }
     }

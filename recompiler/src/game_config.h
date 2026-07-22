@@ -24,6 +24,7 @@
 #define GAME_CFG_MAX_MERGE_FUNCS     16
 #define GAME_CFG_MAX_MERGE_RANGES    16
 #define GAME_CFG_MAX_STACK_BAIL_FUNCS 16
+#define GAME_CFG_MAX_INDIRECT_CONTINUATIONS 16
 
 /*
  * Trampoline: a JSR whose operand address is a known bank-switch dispatch
@@ -202,12 +203,32 @@ typedef struct {
  *   bank = 7
  *   addr_lo = 0xEF11
  *   addr_hi = 0xEF8D
+ *   public = true  # optional, default true
  */
 typedef struct {
     int      bank;
     uint16_t addr_lo;   /* inclusive lower bound */
     uint16_t addr_hi;   /* inclusive upper bound */
+    bool     public_wrappers; /* emit dispatchable wrappers for secondary labels */
 } MergeRange;
+
+/*
+ * Indirect continuation: a configured JMP (ind) site whose caller has pushed
+ * a synthetic RTS operand before dispatch. If the dispatched callee returns by
+ * popping that operand, generated code resumes at continuation instead of
+ * returning to the C caller.
+ *
+ * Usage in game.toml:
+ *   [[indirect_continuation]]
+ *   bank = 17
+ *   jmp_addr = 0x9855
+ *   continuation = 0x98D9
+ */
+typedef struct {
+    int      bank;
+    uint16_t jmp_addr;
+    uint16_t continuation;
+} IndirectContinuation;
 
 typedef struct {
     char            output_prefix[64];  /* e.g. "faxanadu" → generated/faxanadu_full.c */
@@ -247,6 +268,9 @@ typedef struct {
     uint16_t        push_jsrs[GAME_CFG_MAX_NOP_JSRS]; /* JSR targets that need 6502 return addr pushed */
     int             push_jsr_count;
 
+    uint16_t        return_adjust_funcs[GAME_CFG_MAX_NOP_JSRS]; /* JSR targets that rewrite their RTS operand */
+    int             return_adjust_func_count;
+
     struct {
         uint16_t target;  /* JMP destination that needs the dummy push */
         uint16_t source;  /* 0 = match any JMP site; nonzero = only this JMP source PC */
@@ -264,6 +288,9 @@ typedef struct {
 
     MergeRange       merge_ranges[GAME_CFG_MAX_MERGE_RANGES];
     int              merge_range_count;
+
+    IndirectContinuation indirect_continuations[GAME_CFG_MAX_INDIRECT_CONTINUATIONS];
+    int              indirect_continuation_count;
 
     ExtraFunc        replace_funcs[GAME_CFG_MAX_EXTRA_FUNCS];  /* body provided by extras.c */
     int              replace_func_count;

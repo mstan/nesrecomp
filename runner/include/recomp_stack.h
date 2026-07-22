@@ -37,9 +37,15 @@ typedef struct {
     uint16_t    caller_pc;
     uint8_t     expected_sp;
     uint8_t     actual_sp;
+    int8_t      sp_delta;
+    int         vblank_depth;
     int         recomp_stack_top;
     const char *recomp_stack_0; /* top of recomp stack at bail */
     const char *recomp_stack_1; /* second entry */
+    uint16_t    rts_target;
+    uint16_t    rti_target;
+    uint16_t    rti_source;
+    int         rti_bank;
 } BailTraceEntry;
 
 extern BailTraceEntry g_bail_trace[BAIL_TRACE_SIZE];

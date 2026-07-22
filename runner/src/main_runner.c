@@ -543,6 +543,8 @@ static void smoke_write_results(void) {
 /* ---- VBlank callback (called from ppu_read_reg when $2002 bit7 fires) ---- */
 void nes_vblank_callback(void) {
     static uint64_t s_cb_count = 0;
+    int pre_nmi_rendered = 0;
+    int pre_nmi_render_irq = 0;
     if (s_cb_count == 0) { /* debug_log_open(); */ }
     s_cb_count++;
 
@@ -551,6 +553,21 @@ void nes_vblank_callback(void) {
      * Runs before the NMI handler below (so PPU memory still reflects the
      * finished frame) and before the present further down. No-op when off. */
     ppu_dot_frame_boundary();
+    if (g_pre_nmi_render_on && !g_dot_ppu_on) {
+        extern int g_render_irq_fired;
+        extern uint8_t g_render_irq_ppuctrl_before, g_render_irq_ppuctrl_after;
+        extern uint8_t g_render_irq_scrollx_before, g_render_irq_scrollx_after;
+        extern uint8_t g_render_irq_scrolly_before, g_render_irq_scrolly_after;
+        extern int g_render_irq_chr_changed;
+        ppu_render_frame(s_framebuf);
+        pre_nmi_rendered = 1;
+        pre_nmi_render_irq =
+            g_render_irq_fired &&
+            (g_render_irq_chr_changed ||
+             g_render_irq_ppuctrl_before != g_render_irq_ppuctrl_after ||
+             g_render_irq_scrollx_before != g_render_irq_scrollx_after ||
+             g_render_irq_scrolly_before != g_render_irq_scrolly_after);
+    }
     if (s_debug && (s_cb_count <= 100 || s_cb_count % 60 == 0))
         printf("[VBlank] callback #%llu frame=%llu\n",
                (unsigned long long)s_cb_count, (unsigned long long)g_frame_count);
@@ -629,8 +646,15 @@ void nes_vblank_callback(void) {
 
 smoke_skip_input:
 
+    if (s_smoke_frames) {
+        int sp = script_get_buttons();
+        if (sp >= 0) g_controller1_buttons = (uint8_t)sp;
+        int tcp_btn = debug_server_get_input_override();
+        if (tcp_btn >= 0) g_controller1_buttons = (uint8_t)tcp_btn;
+        g_controller2_buttons = 0;
+    }
+
     /* Per-frame script execution */
-    if (!s_smoke_frames)
     script_tick(g_frame_count, g_ram);
 
     /* TCP debug server: poll for commands each frame. Polled in smoke mode
@@ -683,14 +707,22 @@ smoke_skip_input:
             uint8_t a_pre = g_cpu.A, x_pre = g_cpu.X, y_pre = g_cpu.Y;
             uint8_t n_pre = g_cpu.N, v_pre = g_cpu.V, d_pre = g_cpu.D;
             uint8_t i_pre = g_cpu.I, z_pre = g_cpu.Z, c_pre = g_cpu.C;
+            uint8_t p_save = (uint8_t)((g_cpu.N<<7)|(g_cpu.V<<6)|(1<<5)|
+                                       (g_cpu.D<<3)|(g_cpu.I<<2)|(g_cpu.Z<<1)|g_cpu.C);
+            g_ram[0x100+g_cpu.S] = 0x00;   g_cpu.S--;   /* PCH placeholder */
+            g_ram[0x100+g_cpu.S] = 0x00;   g_cpu.S--;   /* PCL placeholder */
+            g_ram[0x100+g_cpu.S] = p_save; g_cpu.S--;   /* P (status flags) */
+            runtime_note_interrupt_entry();
             nes_dring_mark('N', (uint16_t)runtime_get_vblank_depth());
             nes_fring_push('N', (uint16_t)runtime_get_vblank_depth());
             game_run_nmi();
             nes_dring_mark('n', (uint16_t)runtime_get_vblank_depth());
-            g_cpu.S = s_pre;
-            g_cpu.A = a_pre; g_cpu.X = x_pre; g_cpu.Y = y_pre;
-            g_cpu.N = n_pre; g_cpu.V = v_pre; g_cpu.D = d_pre;
-            g_cpu.I = i_pre; g_cpu.Z = z_pre; g_cpu.C = c_pre;
+            if (g_rti_target == 0) {
+                g_cpu.S = s_pre;
+                g_cpu.A = a_pre; g_cpu.X = x_pre; g_cpu.Y = y_pre;
+                g_cpu.N = n_pre; g_cpu.V = v_pre; g_cpu.D = d_pre;
+                g_cpu.I = i_pre; g_cpu.Z = z_pre; g_cpu.C = c_pre;
+            }
         } else {
             /* Legacy: skip the handler (would corrupt mid-VRAM transfer
              * state), but still set $1A/$20 to resolve any spin-wait (SMB).
@@ -701,9 +733,8 @@ smoke_skip_input:
         }
     } else {
         /* Top-level frame boundary (or NMI-disabled frame): delegate to
-         * game_run_nmi which decides whether to execute func_NMI. The
-         * generated func_NMI simulates the hardware stack frame so direct
-         * callers (verify mode, game overrides) get the same semantics. */
+         * game_run_nmi which decides whether to execute func_NMI. The runner
+         * pushes the hardware stack frame before entering generated NMI code. */
         int nmi_will_run = (g_ppuctrl & 0x80) != 0;
         uint8_t s_pre_nmi = g_cpu.S;
         /* Save all CPU registers.  On real 6502, the NMI handler's
@@ -716,6 +747,12 @@ smoke_skip_input:
         uint8_t n_pre = g_cpu.N, v_pre = g_cpu.V, d_pre = g_cpu.D;
         uint8_t i_pre = g_cpu.I, z_pre = g_cpu.Z, c_pre = g_cpu.C;
         if (nmi_will_run) {
+            uint8_t p_save = (uint8_t)((g_cpu.N<<7)|(g_cpu.V<<6)|(1<<5)|
+                                       (g_cpu.D<<3)|(g_cpu.I<<2)|(g_cpu.Z<<1)|g_cpu.C);
+            g_ram[0x100+g_cpu.S] = 0x00;   g_cpu.S--;   /* PCH placeholder */
+            g_ram[0x100+g_cpu.S] = 0x00;   g_cpu.S--;   /* PCL placeholder */
+            g_ram[0x100+g_cpu.S] = p_save; g_cpu.S--;   /* P (status flags) */
+            runtime_note_interrupt_entry();
             runtime_set_vblank_firing(1);
             nes_dring_mark('N', (uint16_t)runtime_get_vblank_depth());
             nes_fring_push('T', (uint16_t)runtime_get_vblank_depth());
@@ -724,13 +761,17 @@ smoke_skip_input:
         if (nmi_will_run) {
             nes_dring_mark('n', (uint16_t)runtime_get_vblank_depth());
             runtime_set_vblank_firing(0);
-            /* On real 6502, RTI always restores S and all registers.
-             * The recompiled NMI handler may return early (bail), so
-             * enforce full register restoration. */
-            g_cpu.S = s_pre_nmi;
-            g_cpu.A = a_pre; g_cpu.X = x_pre; g_cpu.Y = y_pre;
-            g_cpu.N = n_pre; g_cpu.V = v_pre; g_cpu.D = d_pre;
-            g_cpu.I = i_pre; g_cpu.Z = z_pre; g_cpu.C = c_pre;
+            /* On real 6502, plain RTI restores S and all registers back to
+             * the interrupted context. If the handler hijacked RTI, though,
+             * func_NMI has already run the hijacked post-NMI code as resumed
+             * game code; keep its CPU state instead of rewinding to the
+             * interrupt-time snapshot. */
+            if (g_rti_target == 0) {
+                g_cpu.S = s_pre_nmi;
+                g_cpu.A = a_pre; g_cpu.X = x_pre; g_cpu.Y = y_pre;
+                g_cpu.N = n_pre; g_cpu.V = v_pre; g_cpu.D = d_pre;
+                g_cpu.I = i_pre; g_cpu.Z = z_pre; g_cpu.C = c_pre;
+            }
         }
     }
 
@@ -839,6 +880,7 @@ smoke_skip_input:
                 printf("[audio-debug] dumped after %llu frames; exiting\n",
                        (unsigned long long)s_audio_frames_seen);
                 fflush(stdout);
+                nesrecomp_expect_process_exit();
                 exit(0);
             }
         }
@@ -857,8 +899,15 @@ smoke_skip_input:
      * by ppu_dot_frame_boundary at the next frame boundary — including
      * widescreen — so the per-frame compositor is skipped. Only NESRECOMP_DOT_PPU=0
      * uses ppu_render_frame now. */
-    if (!g_dot_ppu_on)
+    if (!g_dot_ppu_on && (!g_pre_nmi_render_on ||
+                          (pre_nmi_rendered && !pre_nmi_render_irq))) {
+        extern int g_disable_render_irq;
+        int old_disable_render_irq = g_disable_render_irq;
+        if (pre_nmi_rendered && !pre_nmi_render_irq)
+            g_disable_render_irq = 1;
         ppu_render_frame(s_framebuf);
+        g_disable_render_irq = old_disable_render_irq;
+    }
 
     /* Update Zapper light sensor framebuffer for next frame's $4017 reads */
     runtime_set_zapper_framebuf(s_framebuf);
@@ -912,6 +961,21 @@ smoke_skip_input:
 
     /* Smoke test: hash framebuffer at intervals and check exit */
     if (s_smoke_frames) {
+        {
+            char shot_path[256];
+            if (script_wants_screenshot(shot_path, sizeof(shot_path))) {
+                runner_screenshot(shot_path);
+                printf("[Shot] %s\n", shot_path);
+            }
+        }
+        {
+            int ec = script_check_exit();
+            if (ec >= 0) {
+                smoke_write_results();
+                if (ec == 0) nesrecomp_expect_process_exit();
+                exit(ec);
+            }
+        }
         if (g_frame_count % s_smoke_interval == 0 &&
             s_smoke_hash_count < SMOKE_MAX_HASHES) {
             s_smoke_hashes[s_smoke_hash_count] =
@@ -925,6 +989,7 @@ smoke_skip_input:
             extern int g_nes_expected_exit;
             g_nes_expected_exit = 1;
             smoke_write_results();
+            nesrecomp_expect_process_exit();
             exit(0);
         }
         return; /* skip all SDL rendering/pacing */
@@ -1000,7 +1065,10 @@ smoke_skip_input:
     /* Exit check after screenshot is saved */
     {
         int ec = script_check_exit();
-        if (ec >= 0) exit(ec);
+        if (ec >= 0) {
+            if (ec == 0) nesrecomp_expect_process_exit();
+            exit(ec);
+        }
     }
 
     /* Auto-screenshot disabled — use F8 or input scripts for screenshots */
@@ -1214,8 +1282,11 @@ void nesrecomp_runner_run(int argc, char *argv[]) {
                s_smoke_frames, s_smoke_interval);
         memset(s_framebuf, 0, sizeof(s_framebuf));
         game_run_main();
-        /* Unreachable — game_run_main never returns, smoke exits from vblank */
-        exit(0);
+        fprintf(stderr, "[Smoke] game_run_main returned unexpectedly at frame %llu\n",
+                (unsigned long long)g_frame_count);
+        nes_dump_dispatch_ring();
+        smoke_write_results();
+        exit(1);
     }
 
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMECONTROLLER) < 0) {

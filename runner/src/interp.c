@@ -324,9 +324,8 @@ static int interp_run_ex(uint16_t entry, int stop_on_stack_lift) {
                 g_ram[0x100 + g_cpu.S] = (uint8_t)(ret & 0xFF);        g_cpu.S--;
                 if (interp_dispatch_target(target)) {
                     /* Covered: ran natively. If it changed S relative to the
-                     * pre-JSR value, it took the generated stack-mismatch bail
-                     * path. That is a non-local return boundary; do not fall
-                     * through to the next interpreted instruction. */
+                     * pre-JSR value, it took a generated non-local return path;
+                     * do not continue interpreting after the callsite. */
                     if (g_cpu.S != call_s) { result = 1; goto done; }
                     next = (uint16_t)(ipc + 3);
                 } else {
@@ -376,10 +375,9 @@ static int interp_run_ex(uint16_t entry, int stop_on_stack_lift) {
         ipc = next;
 
         /* Miss fallback boundary rule: any instruction that lifts S above the
-         * entry frame (terminating RTS handled above, or a PLA/PLA-style bail
-         * that unwinds the caller's frame) means we've returned to native code.
-         * Explicit continuation resumes disable this rule because their entry
-         * code may intentionally start with PLA/PLP-style stack restoration. */
+         * entry frame means we've returned to native code. Explicit continuation
+         * resumes disable this because their entry may intentionally restore
+         * state with PLA/PLP-style stack reads. */
         if (stop_on_stack_lift && g_cpu.S > S_floor) { result = 1; goto done; }
     }
 
@@ -439,4 +437,17 @@ int nes_interp_resume(uint16_t addr) {
 int nes_interp_dispatch(uint16_t addr) {
     extern int g_current_bank;
     return nes_interp_dispatch_bank(addr, addr, g_current_bank);
+}
+
+int nes_interp_interrupt(uint16_t addr) {
+    interp_lazy_init();
+
+    /* RAM/SRAM interrupt vectors are intentional code entries, not missed
+     * generated functions. Keep dispatch_misses.log reserved for discovery
+     * defects while still executing the handler against live memory. */
+    if (interp_run(addr))
+        return 1;
+
+    fprintf(stderr, "[Interp] RAM/SRAM interrupt vector $%04X could not be interpreted\n", addr);
+    return 0;
 }

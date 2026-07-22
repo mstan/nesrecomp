@@ -106,6 +106,13 @@ static void add_function_with_source(FunctionList *list, uint16_t addr, int bank
         list->entries[existing].source_flags |= source_flags;
         if (list->entries[existing].evidence_count < 0xFFFF)
             list->entries[existing].evidence_count++;
+        if (source_flags & FUNCTION_SOURCE_MANUAL) {
+            list->entries[existing].kind = FUNCTION_KIND_STANDALONE;
+            list->entries[existing].canonical_addr = addr;
+            list->entries[existing].canonical_bank = bank;
+            list->entries[existing].covering_addr = addr;
+            list->entries[existing].covering_bank = bank;
+        }
         return;
     }
     if (list->count >= MAX_FUNCTIONS) {
@@ -232,10 +239,11 @@ static bool is_data_region(const GameConfig *cfg, int bank, uint16_t addr) {
     return false;
 }
 
-/* Deep-decode validation: decode min_valid instructions at target.
- * Returns true if the stream is valid code (no illegal opcodes).
- * RTS/JMP/RTI/JMP(ind) count as clean terminators.
- * BRK at position 0 is rejected. RTS at position 0 = null handler = accepted. */
+/* Deep-decode validation for weak discovery (pointer/table scans): decode
+ * min_valid instructions at target. Returns true if the stream is valid code
+ * (no illegal opcodes). RTS/JMP/JMP(ind) count as clean terminators.
+ * RTI is deliberately rejected here: IRQ/NMI handlers should come from vectors
+ * or manual seeds, while RTI in a weak-scanned stream is usually table data. */
 #define TABLE_RUN_MIN_VALID 7
 #define TABLE_RUN_MIN_RUN   4
 
@@ -263,7 +271,9 @@ static bool validate_code_target(const NESRom *rom, int bank,
         if (sz == 0) sz = 1;
         pc += sz;
         count++;
-        if (op == 0x60 || op == 0x4C || op == 0x6C || op == 0x40)
+        if (op == 0x40)
+            return false;
+        if (op == 0x60 || op == 0x4C || op == 0x6C)
             return true;  /* clean terminator */
     }
     return true;
@@ -524,6 +534,9 @@ static int classify_secondary_entries(const NESRom *rom, FunctionList *list,
             if (other_idx < 0 || other_idx == idx) continue;
 
             FunctionEntry *other = &list->entries[other_idx];
+            if (other->source_flags & FUNCTION_SOURCE_MANUAL) {
+                continue;
+            }
             if (other->covering_addr == other->addr &&
                 other->covering_bank == other->bank) {
                 other->covering_addr = entry->addr;
@@ -1124,7 +1137,11 @@ static int walk_function(const NESRom *rom, FunctionList *list,
                 int cb_bank = mmc3_resolve_bank(target, walk_r6, walk_r7,
                                                 walk_r6_odd, walk_r7_odd,
                                                 walk_mode, fixed_bank, &cb_addr);
-                if (effective_bank != fixed_bank) {
+                bool mmc3_switchable = (rom->mapper == 4 && target < 0xC000);
+                if (mmc3_switchable && cb_bank != -1) {
+                    add_function_propagated(list, cb_addr, cb_bank, walk_source_flags);
+                    s_regprop_targeted_adds++;
+                } else if (effective_bank != fixed_bank) {
                     /* Bank known via walk context or bank-switch detection.
                      * For GxROM: pair to the correct 16KB half. */
                     int tbank = resolve_bank_for_addr(rom, effective_bank, target);
@@ -1156,7 +1173,8 @@ static int walk_function(const NESRom *rom, FunctionList *list,
                 }
                 /* Even when effective_bank was known, augment with cb_bank if
                  * it's different — direct detection may supersede propagation. */
-                if (effective_bank != fixed_bank && cb_bank != -1 &&
+                if (!mmc3_switchable &&
+                    effective_bank != fixed_bank && cb_bank != -1 &&
                     cb_bank != effective_bank &&
                     !function_list_contains(list, cb_addr, cb_bank)) {
                     add_function_propagated(list, cb_addr, cb_bank, walk_source_flags);
@@ -1197,7 +1215,11 @@ static int walk_function(const NESRom *rom, FunctionList *list,
                 int cb_bank = mmc3_resolve_bank(target, walk_r6, walk_r7,
                                                 walk_r6_odd, walk_r7_odd,
                                                 walk_mode, fixed_bank, &cb_addr);
-                if (effective_bank != fixed_bank) {
+                bool mmc3_switchable = (rom->mapper == 4 && target < 0xC000);
+                if (mmc3_switchable && cb_bank != -1) {
+                    add_function_propagated(list, cb_addr, cb_bank, walk_source_flags);
+                    s_regprop_targeted_adds++;
+                } else if (effective_bank != fixed_bank) {
                     int tbank = resolve_bank_for_addr(rom, effective_bank, target);
                     add_function_propagated(list, target, tbank, walk_source_flags);
                     if (effective_bank != switchable_bank)
@@ -1216,7 +1238,8 @@ static int walk_function(const NESRom *rom, FunctionList *list,
                     for (int _b = 0; _b < fixed_bank; _b++)
                         add_function_uncertain_bank(list, target, _b);
                 }
-                if (effective_bank != fixed_bank && cb_bank != -1 &&
+                if (!mmc3_switchable &&
+                    effective_bank != fixed_bank && cb_bank != -1 &&
                     cb_bank != effective_bank &&
                     !function_list_contains(list, cb_addr, cb_bank)) {
                     add_function_propagated(list, cb_addr, cb_bank, walk_source_flags);
@@ -1310,11 +1333,13 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
         add_function(out, cfg->sram_maps[i].rom_start, cfg->sram_maps[i].bank);
     }
 
-    /* Seed vectors with their correct bank: fixed bank if in $C000+, else bank 0 */
+    /* Seed PRG-ROM vectors with their correct bank: fixed bank if in $C000+,
+     * else bank 0. Vectors below $8000 are RAM/SRAM handlers and must execute
+     * through the runtime interpreter, not as bogus bank-0 ROM functions. */
 #define VEC_BANK(addr) ((addr) >= 0xC000 ? fixed_bank : 0)
-    add_function(out, rom->reset_vector, VEC_BANK(rom->reset_vector));
-    add_function(out, rom->nmi_vector,   VEC_BANK(rom->nmi_vector));
-    add_function(out, rom->irq_vector,   VEC_BANK(rom->irq_vector));
+    if (rom->reset_vector >= 0x8000) add_function(out, rom->reset_vector, VEC_BANK(rom->reset_vector));
+    if (rom->nmi_vector   >= 0x8000) add_function(out, rom->nmi_vector,   VEC_BANK(rom->nmi_vector));
+    if (rom->irq_vector   >= 0x8000) add_function(out, rom->irq_vector,   VEC_BANK(rom->irq_vector));
 #undef VEC_BANK
 
     /* For mappers with fully-switchable 32KB banks (GxROM), each window may
@@ -1332,8 +1357,8 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
             int irq_bank = (irq >= 0xC000) ? upper_bank : lower_bank;
             printf("[FuncFinder] GxROM window %d: NMI=$%04X (bank %d), IRQ=$%04X (bank %d)\n",
                    w, nmi, nmi_bank, irq, irq_bank);
-            add_function(out, nmi, nmi_bank);
-            add_function(out, irq, irq_bank);
+            if (nmi >= 0x8000) add_function(out, nmi, nmi_bank);
+            if (irq >= 0x8000) add_function(out, irq, irq_bank);
         }
     }
 

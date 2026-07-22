@@ -43,6 +43,11 @@
 void nesrecomp_runner_run(int argc, char **argv);
 
 char g_exe_dir[260] = ".";
+static int s_expected_process_exit = 0;
+
+void nesrecomp_expect_process_exit(void) {
+    s_expected_process_exit = 1;
+}
 
 /* ---- rom.cfg helpers ---- */
 
@@ -217,6 +222,7 @@ static void atexit_handler(void) {
     extern int g_recomp_stack_top;
     extern int g_nes_expected_exit;
     extern uint64_t g_frame_count;
+    if (s_expected_process_exit) return;
     /* Only log if the game exited unexpectedly (recomp stack still active) */
     if (g_recomp_stack_top > 0 && !g_nes_expected_exit) {
         extern void nes_dump_dispatch_ring(void);

@@ -211,6 +211,17 @@ static void mmc3_apply_chr(void) {
     s_chr_trace_idx = (s_chr_trace_idx + 1) % CHR_TRACE_SIZE;
     if (s_chr_trace_count < CHR_TRACE_SIZE) s_chr_trace_count++;
 
+    if (s_mapper_trace) {
+        fprintf(s_mapper_trace,
+                "MMC3_CHR,sel=%02X,R0=%d,R1=%d,R2=%d,R3=%d,R4=%d,R5=%d,F=%llu,caller=%s\n",
+                s_mmc3_bank_select,
+                s_mmc3_regs[0], s_mmc3_regs[1], s_mmc3_regs[2],
+                s_mmc3_regs[3], s_mmc3_regs[4], s_mmc3_regs[5],
+                (unsigned long long)g_frame_count,
+                g_last_recomp_func ? g_last_recomp_func : "?");
+        fflush(s_mapper_trace);
+    }
+
     if (s_chr_callback)
         s_chr_callback(g_chr_ram, 0x2000, s_chr_callback_ctx);
 }
@@ -288,7 +299,10 @@ void mapper_init(const uint8_t *prg_data, int prg_banks,
         s_gxrom_chr_bank = 0;
     }
 
-    s_mapper_trace = fopen("C:/temp/mapper_trace.csv", "w");
+    {
+        const char *trace_path = getenv("NESRECOMP_MAPPER_TRACE");
+        s_mapper_trace = (trace_path && trace_path[0]) ? fopen(trace_path, "w") : NULL;
+    }
     if (s_mapper_trace) {
         fprintf(s_mapper_trace, "EVENT,bank,PC,FRAME\n");
         fflush(s_mapper_trace);

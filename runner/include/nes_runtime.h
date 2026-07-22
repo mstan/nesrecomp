@@ -63,11 +63,21 @@ int call_by_address_cb(uint16_t addr, int caller_bank);
 /* Depth-counted dispatch used by generated JSR sites; drives deferred JMP-tail
  * targets from a flat loop at the outermost frame (see runtime.c trampoline). */
 int nes_dispatch_call(uint16_t addr, int caller_bank);
+/* Dispatch an indirect JMP that is expected to return by consuming an already
+ * pushed synthetic RTS operand on the 6502 stack. */
+int nes_dispatch_indirect_continuation(uint16_t addr, int caller_bank,
+                                       uint16_t expected_operand);
+/* Generated JSR sites use this after a callee returns. It accepts exact stack
+ * restoration, plus interrupt-frame drift that the runner can account for. */
+int nes_jsr_stack_ok_after_call(uint8_t before_s, uint64_t before_interrupt_epoch);
 /* Dispatch for generated JMP tails: defers when already inside a dispatch so
  * JMP loop chains cannot grow the C stack. */
 int call_by_address_tail(uint16_t addr, int caller_bank);
 /* Dump the always-on ring of recent dispatches (post-mortem attribution). */
 void nes_dump_dispatch_ring(void);
+/* Mark a forthcoming process exit as intentional so the launcher atexit
+ * diagnostics do not report the still-active RESET stack as a crash. */
+void nesrecomp_expect_process_exit(void);
 /* Push a context marker into the dispatch ring (kind e.g. 'N'/'n' = NMI
  * enter/exit; tag = vblank depth or other context id). */
 void nes_dring_mark(char kind, uint16_t tag);
@@ -100,6 +110,7 @@ int nes_interp_dispatch(uint16_t addr);
 /* Bank-aware form used by generated banked-mapper dispatch: interprets at the
  * live cpu address, records the miss in gen-layout coordinates. */
 int nes_interp_dispatch_bank(uint16_t cpu_addr, uint16_t gen_addr, int bank);
+int nes_interp_interrupt(uint16_t addr);
 
 /* Defined by the generated dispatch TU: 1 if the game was recompiled with
  * push_all_jsr (the interpreter's stack-boundary contract requires it). */
@@ -193,6 +204,11 @@ void nes_brk_executed(uint16_t pc);
 void func_RESET(void);
 void func_NMI(void);
 void func_IRQ(void);
+extern uint16_t g_rti_target;
+
+/* Deliver an IRQ through the generated IRQ vector while preserving the
+ * interrupted CPU context if generated code returns before its RTI epilogue. */
+void runtime_call_irq_handler(void);
 
 /* Deliver an IRQ through the generated IRQ vector while preserving the
  * interrupted CPU context if generated code returns before its RTI epilogue. */
@@ -240,6 +256,8 @@ void maybe_trigger_vblank(int cycles);
 void maybe_fire_pending_vblank(void);
 void runtime_set_vblank_firing(int active);
 int  runtime_get_vblank_depth(void);
+void runtime_note_interrupt_entry(void);
+uint64_t runtime_get_interrupt_epoch(void);
 void runtime_reset_vblank_depth(void);
 void runtime_begin_post_nmi(void);
 void runtime_end_post_nmi(void);
@@ -410,7 +428,11 @@ void    runtime_set_ppudata_buf(uint8_t val);
 uint16_t runtime_get_ppuaddr(void);
 void     runtime_set_ppuaddr(uint16_t addr);
 uint16_t runtime_get_ppu_t(void);
+uint64_t runtime_get_ppu_v_write_epoch(void);
 int      runtime_scroll_from_t_valid(void);
+int      runtime_get_visible_frame_start(uint8_t *ctrl, uint8_t *sx,
+                                         uint8_t *sy, uint16_t *t,
+                                         uint64_t *frame);
 void     runtime_get_latch_state(uint8_t *ppuaddr_latch, uint8_t *scroll_latch);
 void     runtime_set_latch_state(uint8_t ppuaddr_latch, uint8_t scroll_latch);
 extern uint8_t g_oamaddr;
@@ -419,7 +441,7 @@ extern uint8_t g_oamaddr;
 extern uint32_t g_miss_count_any;
 extern uint16_t g_miss_last_addr;
 extern uint64_t g_miss_last_frame;
-#define MAX_MISS_UNIQUE 12
+#define MAX_MISS_UNIQUE 256
 extern uint16_t g_miss_unique_addrs[MAX_MISS_UNIQUE];
 extern int      g_miss_unique_count;
 
