@@ -2306,6 +2306,14 @@ int      runtime_scroll_from_t_valid(void) { return s_scroll_2005_complete; }
 int runtime_get_visible_frame_start(uint8_t *ctrl, uint8_t *sx,
                                     uint8_t *sy, uint16_t *t,
                                     uint64_t *frame) {
+    static int s_enabled = -1;
+    if (s_enabled < 0) {
+        const char *e = getenv("NESRECOMP_VISIBLE_FRAME_START");
+        s_enabled = (e && *e && *e != '0') ? 1 : 0;
+    }
+    if (!s_enabled)
+        return 0;
+
     int fresh = s_visible_frame_valid &&
                 (s_visible_frame_frame == g_frame_count ||
                  s_visible_frame_frame + 1 == g_frame_count);
