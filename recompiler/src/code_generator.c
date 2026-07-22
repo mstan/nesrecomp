@@ -3912,10 +3912,17 @@ bool codegen_emit(const NESRom *rom, const FunctionList *funcs,
         }
     }
 
-    /* Bank parts (and sub-parts) are standalone TUs — the umbrella doesn't
-     * #include them, it just needs part_count for the status line. */
+    /* Bank parts (and sub-parts) are standalone TUs when a game explicitly
+     * compiles them and defines NESRECOMP_SPLIT_PARTS_EXTERNAL. For existing
+     * games that still compile only <prefix>_full.c, textually include the
+     * generated parts here so the split remains backward-compatible. */
     printf("[NESRecomp] full.c split: %d standalone bank part TU(s) (%d bank(s) sub-sharded "
           "across multiple TUs)\n", part_count, sub_shard_banks);
+    fprintf(f_full, "#ifndef NESRECOMP_SPLIT_PARTS_EXTERNAL\n");
+    for (int pi = 0; pi < part_count; pi++) {
+        fprintf(f_full, "#include \"%s\"\n", parts[pi].name);
+    }
+    fprintf(f_full, "#endif\n\n");
     free(parts);
 
     emit_missing_wrapper_stubs(f_full, wrappers, wrapper_count,
