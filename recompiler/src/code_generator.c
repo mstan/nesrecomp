@@ -2731,7 +2731,6 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
     /* Skip functions marked as replace_func — their bodies are provided
      * by custom C implementations in extras.c. */
     if (replace_func_matches(cfg, fixed_bank, pc, bank)) return;
-    if (!should_emit_native_body(rom, cfg, fe)) return;
 
     /* Function-level annotation (appears before the signature) */
     const char *fann = annotation_lookup(at, bank, pc);
