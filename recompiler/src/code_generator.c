@@ -2047,13 +2047,18 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                 }
             }
             bool did_return_adjust_jsr = did_push_jsr && return_adjust_func_matches(cfg, abs16);
+            bool use_tolerant_jsr_stack =
+                (cfg->return_adjust_func_count > 0 || cfg->indirect_continuation_count > 0);
             if (did_push_jsr) {
                 /* Universal bail detection: save S before push so we
                  * can detect post-call stack unwind (PLA PLA RTS etc.).
                  * If S changed after the call, the callee unwound one
                  * or more frames — propagate by returning immediately.
                  * Subsumes per-function stack_bail_func / cond_bail_func. */
-                fprintf(f, "{ uint8_t _cbs = g_cpu.S; uint64_t _irq_epoch = runtime_get_interrupt_epoch(); g_rti_target = 0; g_rti_source = 0; g_rti_bank = -1; ");
+                if (use_tolerant_jsr_stack)
+                    fprintf(f, "{ uint8_t _cbs = g_cpu.S; uint64_t _irq_epoch = runtime_get_interrupt_epoch(); g_rti_target = 0; g_rti_source = 0; g_rti_bank = -1; ");
+                else
+                    fprintf(f, "{ uint8_t _cbs = g_cpu.S; ");
                 uint16_t ret_addr = pc + 2; /* 6502 JSR pushes PC+2 (last byte of JSR) */
                 if (rom->mapper == 4) {
                     /* Banked mapper: gen-layout PC constants are NOT the CPU
@@ -2070,7 +2075,8 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                     fprintf(f, "g_ram[0x100 + g_cpu.S] = (uint8_t)(_rp >> 8); g_cpu.S--; ");
                     fprintf(f, "g_ram[0x100 + g_cpu.S] = (uint8_t)_rp; g_cpu.S--; ");
                 } else {
-                    fprintf(f, "uint16_t _rp = 0x%04X; ", ret_addr);
+                    if (use_tolerant_jsr_stack)
+                        fprintf(f, "uint16_t _rp = 0x%04X; ", ret_addr);
                     if (did_return_adjust_jsr) fprintf(f, "g_rts_target = 0; ");
                     fprintf(f, "g_ram[0x100 + g_cpu.S] = 0x%02X; g_cpu.S--; ",
                             (ret_addr >> 8) & 0xFF);
@@ -2235,7 +2241,10 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                         fprintf(f, "if (g_cpu.S == (uint8_t)(_cbs - 2) && g_rts_target != 0 && g_rts_target != _rp) { call_by_address((uint16_t)(g_rts_target + 1)); }\n");
                         fprintf(f, "if (g_cpu.S == _cbs && g_rts_target != 0 && g_rts_target != _rp) { call_by_address((uint16_t)(g_rts_target + 1)); return; }\n");
                     }
-                    fprintf(f, "if (!nes_jsr_stack_ok_after_call(_cbs, _irq_epoch)) {\n#ifdef RECOMP_STACK_TRACKING\n    bail_trace(0x%04X, _cbs);\n    recomp_stack_pop();\n#endif\n    return; } }\n", pc);
+                    if (use_tolerant_jsr_stack)
+                        fprintf(f, "if (!nes_jsr_stack_ok_after_call(_cbs, _irq_epoch)) {\n#ifdef RECOMP_STACK_TRACKING\n    bail_trace(0x%04X, _cbs);\n    recomp_stack_pop();\n#endif\n    return; } }\n", pc);
+                    else
+                        fprintf(f, "if (g_cpu.S != _cbs) {\n#ifdef RECOMP_STACK_TRACKING\n    bail_trace(0x%04X, _cbs);\n    recomp_stack_pop();\n#endif\n    return; } }\n", pc);
                 }
             }
             break;
