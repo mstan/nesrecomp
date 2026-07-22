@@ -712,6 +712,7 @@ smoke_skip_input:
             g_ram[0x100+g_cpu.S] = 0x00;   g_cpu.S--;   /* PCH placeholder */
             g_ram[0x100+g_cpu.S] = 0x00;   g_cpu.S--;   /* PCL placeholder */
             g_ram[0x100+g_cpu.S] = p_save; g_cpu.S--;   /* P (status flags) */
+            g_cpu.I = 1; /* NMI entry sets I after pushing the old P */
             runtime_note_interrupt_entry();
             nes_dring_mark('N', (uint16_t)runtime_get_vblank_depth());
             nes_fring_push('N', (uint16_t)runtime_get_vblank_depth());
@@ -752,6 +753,7 @@ smoke_skip_input:
             g_ram[0x100+g_cpu.S] = 0x00;   g_cpu.S--;   /* PCH placeholder */
             g_ram[0x100+g_cpu.S] = 0x00;   g_cpu.S--;   /* PCL placeholder */
             g_ram[0x100+g_cpu.S] = p_save; g_cpu.S--;   /* P (status flags) */
+            g_cpu.I = 1; /* NMI entry sets I after pushing the old P */
             runtime_note_interrupt_entry();
             runtime_set_vblank_firing(1);
             nes_dring_mark('N', (uint16_t)runtime_get_vblank_depth());
