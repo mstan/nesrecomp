@@ -77,3 +77,5 @@ endif()
 if(NOT MSVC)
     add_compile_options(-Wno-implicit-function-declaration -Wno-implicit-int)
 endif()
+
+include(${NESRECOMP_RUNNER_ROOT}/recomp_net.cmake)

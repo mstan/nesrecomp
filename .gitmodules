@@ -1,0 +1,3 @@
+[submodule "recomp-net"]
+	path = lib/recomp-net
+	url = https://github.com/TechnicallyComputers/recomp-net.git

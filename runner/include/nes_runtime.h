@@ -233,6 +233,7 @@ void mapper_init(const uint8_t *prg_data, int prg_banks,
 
 /* ---- Runtime Init ---- */
 void runtime_init(void);
+uint32_t nes_runtime_state_digest(void);
 
 /* ---- PRG ROM writable accessor ----
  * Returns a writable pointer to the start of the given 16KB PRG bank (0-based).

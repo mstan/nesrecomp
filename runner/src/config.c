@@ -55,6 +55,7 @@ NesConfig g_nes_config = {
     /*volume*/ 100,
     /*player_src*/ { 1, 2 }, /*deadzone*/ { 30, 30 },
     /*skip_launcher*/ 0,
+    /*netplay*/ "Player", "ws://netplay.technicallycomputers.ca:8765",
     /*hdpack_enabled*/ 1, /*hdpack_dir*/ "",  /* on by default; loads <exe>/hdpack if present */
 };
 
@@ -65,6 +66,7 @@ void config_set_defaults(NesConfig *c) {
         100,
         { 1, 2 }, { 30, 30 },
         0,
+        "Player", "ws://netplay.technicallycomputers.ca:8765",
         1, "",
     };
     if (c) *c = d;
@@ -118,6 +120,10 @@ void config_load(const char *path) {
         else if (!strcmp(key, "Player1Deadzone")) g_nes_config.deadzone[0] = clampi(val, 0, 100);
         else if (!strcmp(key, "Player2Deadzone")) g_nes_config.deadzone[1] = clampi(val, 0, 100);
         else if (!strcmp(key, "SkipLauncher"))  g_nes_config.skip_launcher = val ? 1 : 0;
+        else if (!strcmp(key, "NetplayPlayerName"))
+            snprintf(g_nes_config.netplay_player_name, sizeof(g_nes_config.netplay_player_name), "%s", valstr);
+        else if (!strcmp(key, "NetplayLobbyUrl"))
+            snprintf(g_nes_config.netplay_lobby_url, sizeof(g_nes_config.netplay_lobby_url), "%s", valstr);
         else if (!strcmp(key, "HdPackEnabled")) g_nes_config.hdpack_enabled = val ? 1 : 0;
         else if (!strcmp(key, "HdPackDir"))
             snprintf(g_nes_config.hdpack_dir, sizeof(g_nes_config.hdpack_dir), "%s", valstr);
@@ -148,5 +154,7 @@ void config_save(const char *path) {
     fprintf(f, "Player2Deadzone = %d\n", c->deadzone[1]);
     fprintf(f, "[Launcher]\n");
     fprintf(f, "SkipLauncher = %d\n",  c->skip_launcher);
+    fprintf(f, "NetplayPlayerName = %s\n", c->netplay_player_name);
+    fprintf(f, "NetplayLobbyUrl = %s\n", c->netplay_lobby_url);
     fclose(f);
 }

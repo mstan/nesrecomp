@@ -9,6 +9,7 @@
 #include "game_extras.h"
 #include "override_chr.h"
 #include "ppu_dot.h"
+#include "crc32.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -2438,4 +2439,44 @@ typedef struct { uint64_t frame; uint8_t val; uint8_t which; } ScrollTraceEntryE
 
 const void *runtime_get_scroll_trace_buf(void) {
     return s_scroll_trace;
+}
+
+static void digest_u8(Crc32Context *c, uint8_t v) { crc32_update(c,&v,1); }
+static void digest_u16(Crc32Context *c, uint16_t v) {
+    uint8_t b[2]={(uint8_t)v,(uint8_t)(v>>8)}; crc32_update(c,b,2);
+}
+static void digest_u32(Crc32Context *c, uint32_t v) {
+    uint8_t b[4]={(uint8_t)v,(uint8_t)(v>>8),(uint8_t)(v>>16),(uint8_t)(v>>24)};
+    crc32_update(c,b,4);
+}
+static void digest_u64(Crc32Context *c, uint64_t v) {
+    digest_u32(c,(uint32_t)v); digest_u32(c,(uint32_t)(v>>32));
+}
+
+uint32_t nes_runtime_state_digest(void) {
+    Crc32Context c; MapperState m; uint8_t apu_blob[512]; int apu_size; crc32_begin(&c);
+    digest_u8(&c,g_cpu.A);digest_u8(&c,g_cpu.X);digest_u8(&c,g_cpu.Y);
+    digest_u8(&c,g_cpu.S);digest_u8(&c,g_cpu.P);digest_u8(&c,g_cpu.N);
+    digest_u8(&c,g_cpu.V);digest_u8(&c,g_cpu.D);digest_u8(&c,g_cpu.I);
+    digest_u8(&c,g_cpu.Z);digest_u8(&c,g_cpu.C);
+    crc32_update(&c,g_ram,sizeof(g_ram));crc32_update(&c,g_sram,sizeof(g_sram));
+    crc32_update(&c,g_chr_ram,sizeof(g_chr_ram));crc32_update(&c,g_ppu_oam,sizeof(g_ppu_oam));
+    crc32_update(&c,g_ppu_pal,sizeof(g_ppu_pal));crc32_update(&c,g_ppu_nt,sizeof(g_ppu_nt));
+    digest_u8(&c,g_ppuctrl);digest_u8(&c,g_ppumask);digest_u8(&c,g_ppustatus);
+    digest_u8(&c,g_ppuscroll_x);digest_u8(&c,g_ppuscroll_y);digest_u16(&c,g_ppuaddr);
+    digest_u8(&c,(uint8_t)g_ppuaddr_latch);digest_u8(&c,g_ppudata_buf);
+    digest_u16(&c,s_ppu_t);digest_u8(&c,s_ppu_fine_x);digest_u16(&c,s_ppu_v_at_2006);
+    digest_u8(&c,s_ctrl1_shift);digest_u8(&c,s_ctrl2_shift);digest_u8(&c,(uint8_t)s_ctrl1_strobe);
+    mapper_get_state(&m);
+    digest_u32(&c,(uint32_t)m.mapper_type);digest_u8(&c,m.shift_reg);
+    digest_u32(&c,(uint32_t)m.shift_count);digest_u8(&c,m.ctrl);digest_u8(&c,m.chr0);
+    digest_u8(&c,m.chr1);digest_u8(&c,m.prg_reg);digest_u32(&c,(uint32_t)m.current_bank);
+    digest_u32(&c,(uint32_t)m.mirroring);digest_u8(&c,m.mmc3_bank_select);
+    crc32_update(&c,m.mmc3_regs,sizeof(m.mmc3_regs));digest_u8(&c,m.mmc3_irq_latch);
+    digest_u8(&c,m.mmc3_irq_counter);digest_u32(&c,(uint32_t)m.mmc3_irq_reload);
+    digest_u32(&c,(uint32_t)m.mmc3_irq_enabled);digest_u64(&c,g_frame_count);
+    digest_u64(&c,g_nes_cycles);digest_u32(&c,s_ops_count);digest_u32(&c,s_frame_budget);
+    apu_size=apu_get_state_blob(apu_blob,(int)sizeof(apu_blob));
+    if(apu_size>0)crc32_update(&c,apu_blob,(size_t)apu_size);
+    return crc32_end(&c);
 }

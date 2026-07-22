@@ -37,10 +37,13 @@
 #include "recomp_launcher.h"
 #include "launcher_profile.h"
 #include "save_ram.h"
+#ifdef NESRECOMP_NET
+#include "nes_launcher_netplay.h"
+#endif
 #endif
 
 /* Declared in main_runner.c */
-void nesrecomp_runner_run(int argc, char **argv);
+int nesrecomp_runner_run(int argc, char **argv);
 
 char g_exe_dir[260] = ".";
 static int s_expected_process_exit = 0;
@@ -349,6 +352,7 @@ int main(int argc, char *argv[]) {
     config_load(config_path());
 
     int gui_resolved = 0;
+    int returning_to_lobby = 0;
 #ifdef NESRECOMP_LAUNCHER
     {
         int have_positional = (argc >= 2 && argv[1][0] != '-');
@@ -446,11 +450,13 @@ int main(int argc, char *argv[]) {
 #endif
 
 #ifdef RECOMP_LAUNCHER
+reopen_recomp_launcher:
+    gui_resolved = 0;
     {
         int have_positional = (argc >= 2 && argv[1][0] != '-');
         int force_launcher  = (argc >= 2 && strcmp(argv[1], "--launcher") == 0);
         int no_gui_env      = getenv("NESRECOMP_NO_LAUNCHER") != NULL;
-        int want_gui = !have_positional && !no_gui_env &&
+        int want_gui = !no_gui_env && (returning_to_lobby || !have_positional) &&
                        (!g_nes_config.skip_launcher || force_launcher);
         if (want_gui) {
             char init_rom[512]; init_rom[0] = '\0';
@@ -476,6 +482,9 @@ int main(int argc, char *argv[]) {
             ls.skip_launcher  = g_nes_config.skip_launcher;
             ls.hdpack_enabled = g_nes_config.hdpack_enabled;
             snprintf(ls.hdpack_dir, sizeof(ls.hdpack_dir), "%s", g_nes_config.hdpack_dir);
+#ifdef NESRECOMP_NET
+            nes_launcher_netplay_seed_settings(&ls);
+#endif
 
             /* Profile first (theme/platform/renderer labels/capabilities), then
              * the per-game specifics on top. */
@@ -543,6 +552,14 @@ int main(int argc, char *argv[]) {
                 snprintf(s_keybinds_path, sizeof(s_keybinds_path), "%skeybinds.ini", dir);
             }
             gi.keybinds_path = s_keybinds_path;
+#ifdef NESRECOMP_NET
+            gi.netplay_supported = 1;
+#  ifdef NESRECOMP_GAME_VERSION
+            gi.netplay = nes_launcher_netplay_callbacks(game_get_name(), NESRECOMP_GAME_VERSION);
+#  else
+            gi.netplay = nes_launcher_netplay_callbacks(game_get_name(), "dev");
+#  endif
+#endif
 
             char win_title[96];
             snprintf(win_title, sizeof(win_title), "%s - Launcher",
@@ -567,6 +584,14 @@ int main(int argc, char *argv[]) {
                 g_nes_config.skip_launcher  = ls.skip_launcher;
                 g_nes_config.hdpack_enabled = ls.hdpack_enabled;
                 snprintf(g_nes_config.hdpack_dir, sizeof(g_nes_config.hdpack_dir), "%s", ls.hdpack_dir);
+#ifdef NESRECOMP_NET
+                nes_launcher_netplay_persist_settings(&ls);
+                {
+                    int host_widescreen = g_nes_config.widescreen;
+                    if (nes_launcher_netplay_consume_launch(&ls, &host_widescreen))
+                        g_nes_config.widescreen = host_widescreen;
+                }
+#endif
                 config_save(config_path());
                 if (rom_path[0]) { rom_cfg_write(rom_path); gui_resolved = 1; }
             }
@@ -623,6 +648,12 @@ int main(int argc, char *argv[]) {
         new_argv[new_argc++] = argv[i];
     new_argv[new_argc] = NULL;
 
-    nesrecomp_runner_run(new_argc, new_argv);
+    if (nesrecomp_runner_run(new_argc, new_argv)) {
+#if defined(RECOMP_LAUNCHER) && defined(NESRECOMP_NET)
+        returning_to_lobby = 1;
+        nes_launcher_netplay_returned_to_lobby();
+        goto reopen_recomp_launcher;
+#endif
+    }
     return 0;
 }

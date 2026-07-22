@@ -14,6 +14,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <setjmp.h>
 
 #include <SDL.h>
 #include "nes_runtime.h"
@@ -32,6 +33,9 @@
 #include "config.h"
 #include "hdpack.h"
 #include "ppu_dot.h"
+#ifdef NESRECOMP_NET
+#include "nes_netplay.h"
+#endif
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
@@ -65,6 +69,15 @@ static const char *s_smoke_output   = NULL;  /* output file path (NULL = stdout)
 static uint32_t    s_smoke_hashes[SMOKE_MAX_HASHES];
 static int         s_smoke_hash_frames[SMOKE_MAX_HASHES];
 static int         s_smoke_hash_count = 0;
+#ifdef NESRECOMP_NET
+static jmp_buf s_netplay_return;
+static int s_netplay_return_ready;
+static void netplay_return_to_lobby(const char *why) {
+    fprintf(stderr, "[Netplay] Returning to lobby: %s\n", why ? why : "match ended");
+    if (s_netplay_return_ready) longjmp(s_netplay_return, 1);
+    exit(0);
+}
+#endif
 
 /* ---- SDL state (file-level so nes_vblank_callback can access) ---- */
 static SDL_Window        *s_window    = NULL;
@@ -547,6 +560,10 @@ void nes_vblank_callback(void) {
     int pre_nmi_render_irq = 0;
     if (s_cb_count == 0) { /* debug_log_open(); */ }
     s_cb_count++;
+#ifdef NESRECOMP_NET
+    if (runtime_get_vblank_depth() <= 1 && nes_netplay_active())
+        nes_netplay_finish_frame();
+#endif
 
     /* Dot-PPU: complete the just-finished frame and publish it to the
      * presentation framebuffer, then arm the next frame's visible region.
@@ -582,12 +599,29 @@ void nes_vblank_callback(void) {
         if (ev.type == SDL_QUIT) exit(0);
         if (ev.type == SDL_WINDOWEVENT &&
             ev.window.event == SDL_WINDOWEVENT_CLOSE) exit(0);
-        if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_ESCAPE) exit(0);
+        if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_ESCAPE) {
+#ifdef NESRECOMP_NET
+            if (nes_netplay_active()) netplay_return_to_lobby("local player left");
+#endif
+            exit(0);
+        }
         if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_F5)
             g_turbo ^= 1;
-        if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_F6)
+        if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_F6 &&
+#ifdef NESRECOMP_NET
+            !nes_netplay_active()
+#else
+            1
+#endif
+        )
             savestate_save("C:/temp/quicksave.sav");
-        if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_F7) {
+        if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_F7 &&
+#ifdef NESRECOMP_NET
+            !nes_netplay_active()
+#else
+            1
+#endif
+        ) {
             record_loadstate(g_frame_count, "C:/temp/quicksave.sav");
             savestate_load("C:/temp/quicksave.sav");
             record_sync_frame(g_frame_count); /* g_frame_count now = restored value */
@@ -653,6 +687,35 @@ smoke_skip_input:
         if (tcp_btn >= 0) g_controller1_buttons = (uint8_t)tcp_btn;
         g_controller2_buttons = 0;
     }
+
+#ifdef NESRECOMP_NET
+    /* One lockstep tick is admitted per outer VBlank. Nested VBlanks reuse the
+     * already-published inputs, which keeps coroutine/spin-wait callbacks from
+     * sampling or advancing the network timeline twice. */
+    if (runtime_get_vblank_depth() <= 1 && nes_netplay_active()) {
+        uint8_t local = nes_netplay_input_player()
+                      ? g_controller2_buttons : g_controller1_buttons;
+        uint32_t tick=0, a=0, b=0;
+        if (nes_netplay_needs_local_sample()) nes_netplay_stage_local(local);
+        while (!nes_netplay_poll_admit()) {
+            if (nes_netplay_state_desync(&tick,&a,&b)) {
+                fprintf(stderr,"[Netplay] State digest mismatch at tick %u: %08X != %08X\n",tick,a,b);
+                netplay_return_to_lobby("deterministic state mismatch");
+            }
+            if (nes_netplay_input_desync(&tick,&a,&b)) {
+                fprintf(stderr,"[Netplay] Input mismatch at tick %u: %08X != %08X\n",tick,a,b);
+                netplay_return_to_lobby("input stream mismatch");
+            }
+            if (nes_netplay_peer_disconnected(1500))
+                netplay_return_to_lobby("peer disconnected");
+            nes_netplay_wait_recv(2);
+        }
+        if (nes_netplay_state_desync(&tick,&a,&b))
+            netplay_return_to_lobby("deterministic state mismatch");
+        g_controller1_buttons=nes_netplay_published_buttons(0);
+        g_controller2_buttons=nes_netplay_published_buttons(1);
+    }
+#endif
 
     /* Per-frame script execution. Nested callbacks resolve guest spin-waits
      * but do not present or advance g_frame_count, so consuming WAIT commands
@@ -1217,7 +1280,7 @@ uint8_t *runner_get_prg_bank_rw(int bank_num) {
  * nesrecomp_runner_run — main runner entry point, called by launcher.c after
  * ROM discovery and CRC verification. argv[1] is guaranteed to be the ROM path.
  */
-void nesrecomp_runner_run(int argc, char *argv[]) {
+int nesrecomp_runner_run(int argc, char *argv[]) {
 
     /* Parse optional flags */
     for (int i = 2; i < argc; i++) {
@@ -1248,6 +1311,18 @@ void nesrecomp_runner_run(int argc, char *argv[]) {
     runtime_init();
     keybinds_init(argv[0]);
     game_on_init();
+
+#ifdef NESRECOMP_NET
+    {
+        NesNetplayConfig net;
+        if (!nes_netplay_take_pending_config(&net)) nes_netplay_config_defaults(&net);
+        nes_netplay_apply_env(&net);
+        if (net.enabled && nes_netplay_start(&net) != 0) {
+            fprintf(stderr, "[Netplay] Could not start the requested session.\n");
+            return 1;
+        }
+    }
+#endif
 
     /* SRAM persistence (saves/<title>.srm <-> g_sram). Auto-enabled for battery
      * games via the iNES bit; synthetic-SRAM games opt in from game_on_init()
@@ -1485,12 +1560,32 @@ void nesrecomp_runner_run(int argc, char *argv[]) {
 
     /* game_run_main() defaults to func_RESET() (native recompiled main loop,
      * never returns). In emulated mode, it runs FCEUX frames in a loop. */
-    game_run_main();
+#ifdef NESRECOMP_NET
+    s_netplay_return_ready = 1;
+    if (setjmp(s_netplay_return) == 0)
+#endif
+        game_run_main();
+#ifdef NESRECOMP_NET
+    s_netplay_return_ready = 0;
+#endif
 
     /* Unreachable for most games, but clean up anyway */
-    SDL_DestroyTexture(s_texture);
-    SDL_DestroyRenderer(s_renderer);
-    SDL_DestroyWindow(s_window);
+    if (s_audio_dev) { SDL_CloseAudioDevice(s_audio_dev); s_audio_dev = 0; }
+    controller_shutdown();
+    if (s_hd_texture) { SDL_DestroyTexture(s_hd_texture); s_hd_texture = NULL; }
+    free(s_hd_buf); s_hd_buf = NULL; hdpack_unload();
+    if (s_texture) { SDL_DestroyTexture(s_texture); s_texture = NULL; }
+    if (s_renderer) { SDL_DestroyRenderer(s_renderer); s_renderer = NULL; }
+    if (s_window) { SDL_DestroyWindow(s_window); s_window = NULL; }
+    if (s_dbg_texture) { SDL_DestroyTexture(s_dbg_texture); s_dbg_texture = NULL; }
+    if (s_dbg_renderer) { SDL_DestroyRenderer(s_dbg_renderer); s_dbg_renderer = NULL; }
+    if (s_dbg_window) { SDL_DestroyWindow(s_dbg_window); s_dbg_window = NULL; }
+    if (s_watch_renderer) { SDL_DestroyRenderer(s_watch_renderer); s_watch_renderer = NULL; }
+    if (s_watch_window) { SDL_DestroyWindow(s_watch_window); s_watch_window = NULL; }
     SDL_Quit();
-    free(s_prg_data);
+    free(s_prg_data); s_prg_data = NULL;
+#ifdef NESRECOMP_NET
+    if (nes_netplay_active()) { nes_netplay_shutdown(); return 1; }
+#endif
+    return 0;
 }
