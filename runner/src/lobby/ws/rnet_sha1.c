@@ -56,7 +56,6 @@ static void sha1_process(Sha1Ctx *ctx, const uint8_t block[64])
     ctx->state[3] += d;
     ctx->state[4] += e;
 }
-
 static void sha1_init(Sha1Ctx *ctx)
 {
     ctx->state[0] = 0x67452301u;
@@ -114,4 +113,3 @@ void rnet_sha1(const uint8_t *data, size_t len, uint8_t out[20])
     sha1_update(&ctx, data, len);
     sha1_final(&ctx, out);
 }
-

@@ -7,7 +7,6 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-
 /* Minimal RFC6455 helpers (text frames, no extensions). */
 
 int rnet_ws_accept_key(const char *client_key, char out_b64[32]);
@@ -26,4 +25,3 @@ int rnet_ws_read_text(int fd, char *buf, size_t cap, int *closed);
 #endif
 
 #endif
-

@@ -60,7 +60,6 @@ static void b64_encode(const uint8_t *in, size_t n, char *out)
         out[o] = '\0';
     }
 }
-
 int rnet_ws_accept_key(const char *client_key, char out_b64[32])
 {
     char concat[128];
@@ -237,4 +236,3 @@ int rnet_ws_read_text(int fd, char *buf, size_t cap, int *closed)
     buf[plen] = '\0';
     return (int)plen;
 }
-

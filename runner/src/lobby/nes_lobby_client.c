@@ -1280,4 +1280,3 @@ int nes_lobby_poll_signal(int *type, int *flag, char *text, size_t text_cap)
 }
 
 #endif /* NES_HAS_LOBBY_CLIENT */
-
