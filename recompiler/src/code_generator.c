@@ -3975,7 +3975,6 @@ bool codegen_emit(const NESRom *rom, const FunctionList *funcs,
     const char *reset_sfx = (rom->reset_vector < 0xC000) ? "_b0" : "";
     const char *nmi_sfx   = (rom->nmi_vector   < 0xC000) ? "_b0" : "";
     const char *irq_sfx   = (rom->irq_vector   < 0xC000) ? "_b0" : "";
-    int nmi_rti_hijack = rom_has_static_nmi_rti_hijack(rom);
     if (rom->reset_vector < 0x8000)
         fprintf(f_full, "void func_RESET(void) { (void)nes_interp_interrupt(0x%04X); }\n", rom->reset_vector);
     else
@@ -4027,7 +4026,6 @@ bool codegen_emit(const NESRom *rom, const FunctionList *funcs,
         else
             fprintf(f_full, "    func_%04X%s();\n", rom->nmi_vector, nmi_sfx);
     }
-    if (nmi_rti_hijack) {
     fprintf(f_full,
            "    if (g_rti_target != 0) {\n"
            "        /* Post-NMI code runs outside NMI context on real hardware\n"
@@ -4040,15 +4038,6 @@ bool codegen_emit(const NESRom *rom, const FunctionList *funcs,
            "        runtime_end_post_nmi();\n"
            "    }\n"
            "}\n");
-    } else {
-        fprintf(f_full,
-           "    /* This ROM has no static NMI RTI-hijack pattern. A nonzero\n"
-           "     * RTI target here is an interrupted guest stack frame; the\n"
-           "     * native call stack resumes it, so do not enter it as a fresh\n"
-           "     * top-level routine. */\n"
-           "    g_rti_target = 0;\n"
-           "}\n");
-    }
     if (rom->irq_vector < 0x8000)
         fprintf(f_full, "void func_IRQ(void)   { (void)nes_interp_interrupt(0x%04X); }\n", rom->irq_vector);
     else
