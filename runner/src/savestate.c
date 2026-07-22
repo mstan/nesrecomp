@@ -14,7 +14,7 @@
 #include <string.h>
 
 #define SS_MAGIC   "NSSR"
-#define SS_VERSION 1
+#define SS_VERSION 2
 
 /* PPU internals exposed from runtime.c */
 extern uint16_t g_ppuaddr;

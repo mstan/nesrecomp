@@ -16,7 +16,7 @@ import { join } from "path";
 import { tmpdir } from "os";
 
 interface RomBuilderOpts {
-  mapper?: number;   // 0 or 4 (MMC3). Default 0.
+  mapper?: number;   // 0, 4 (MMC3), or 40. Default 0.
   prgBanks?: number; // 16KB banks. Default 1 (mapper 0) or 2 (mapper 4).
 }
 
@@ -24,6 +24,7 @@ export class RomBuilder {
   private prgBanks: Uint8Array[]; // array of 16KB banks
   private mapper: number;
   private activeBank: number = 0;
+  private activeBank8: number | null = null;
   private cursor = 0; // offset into the active bank (0 = $8000 for switchable, 0 = $C000 for fixed)
 
   constructor(opts: RomBuilderOpts = {}) {
@@ -40,7 +41,20 @@ export class RomBuilder {
     if (n < 0 || n >= this.prgBanks.length)
       throw new Error(`bank ${n} out of range 0-${this.prgBanks.length - 1}`);
     this.activeBank = n;
+    this.activeBank8 = null;
     this.cursor = 0;
+    return this;
+  }
+
+  /** Select a physical 8KB PRG bank for Mapper-40 fixtures. */
+  bank8(n: number): this {
+    if (this.mapper !== 40)
+      throw new Error("bank8() is only valid for mapper 40");
+    if (n < 0 || n >= this.prgBanks.length * 2)
+      throw new Error(`8KB bank ${n} out of range`);
+    this.activeBank8 = n;
+    this.activeBank = n >> 1;
+    this.cursor = (n & 1) * 0x2000;
     return this;
   }
 
@@ -48,6 +62,13 @@ export class RomBuilder {
    *  For the fixed/last bank: valid range $C000-$FFFF.
    *  For any other bank: valid range $8000-$BFFF. */
   org(addr: number): this {
+    if (this.mapper === 40 && this.activeBank8 !== null) {
+      const base = (this.activeBank8 & 1) ? 0xa000 : 0x8000;
+      if (addr < base || addr >= base + 0x2000)
+        throw new Error(`org address $${addr.toString(16)} outside selected 8KB identity`);
+      this.cursor = (this.activeBank8 & 1) * 0x2000 + (addr - base);
+      return this;
+    }
     const isFixed = this.activeBank === this.prgBanks.length - 1;
     if (isFixed && this.mapper === 0) {
       // NROM-128 legacy: $C000-$FFFF
@@ -100,6 +121,13 @@ export class RomBuilder {
    *  Useful for placing static data (vectors, jump-table targets) outside
    *  the natural emit flow. */
   poke(addr: number, value: number): this {
+    if (this.mapper === 40 && this.activeBank8 !== null) {
+      const base = (this.activeBank8 & 1) ? 0xa000 : 0x8000;
+      if (addr < base || addr >= base + 0x2000)
+        throw new Error(`poke addr $${addr.toString(16)} outside selected 8KB identity`);
+      this.prg[(this.activeBank8 & 1) * 0x2000 + (addr - base)] = value & 0xff;
+      return this;
+    }
     const isFixed = this.activeBank === this.prgBanks.length - 1;
     let off: number;
     if (isFixed) {
@@ -228,12 +256,13 @@ export class RomBuilder {
   toBuffer(): Buffer {
     const prgBanksByte = this.prgBanks.length;
     const mapperLo = (this.mapper & 0x0f) << 4;
+    const mapperHi = this.mapper & 0xf0;
     const header = Buffer.from([
       0x4e, 0x45, 0x53, 0x1a, // "NES\x1a"
       prgBanksByte,             // N x 16KB PRG
       0x00,                     // 0x 8KB CHR (CHR RAM)
       0x01 | mapperLo,          // flags6: vertical mirroring + mapper low nibble
-      0x00,                     // flags7
+      mapperHi,                 // flags7: mapper high nibble
       0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     ]);
     return Buffer.concat([header, ...this.prgBanks.map((b) => Buffer.from(b))]);

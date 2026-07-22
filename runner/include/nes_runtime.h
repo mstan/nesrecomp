@@ -111,6 +111,7 @@ int nes_interp_dispatch(uint16_t addr);
  * live cpu address, records the miss in gen-layout coordinates. */
 int nes_interp_dispatch_bank(uint16_t cpu_addr, uint16_t gen_addr, int bank);
 int nes_interp_interrupt(uint16_t addr);
+int nes_interp_step_tail(uint16_t addr, int caller_bank);
 
 /* Defined by the generated dispatch TU: 1 if the game was recompiled with
  * push_all_jsr (the interpreter's stack-boundary contract requires it). */

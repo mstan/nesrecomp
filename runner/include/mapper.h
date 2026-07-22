@@ -14,8 +14,8 @@ void mapper_write(uint16_t addr, uint8_t val);
 const uint8_t *mapper_get_switchable_bank(void);
 const uint8_t *mapper_get_fixed_bank(void);
 
-/* Peek a byte at a CPU address $8000-$FFFF from the currently mapped PRG
- * window. Returns 0 for addresses < $8000 or when no ROM is loaded.
+/* Peek a byte from the currently mapped PRG window. Mapper 40 also exposes
+ * executable PRG at $6000-$7FFF; other mappers return 0 below $8000.
  * Safe to call from any context; does not mutate mapper state. */
 uint8_t mapper_peek_prg(uint16_t addr);
 
@@ -52,6 +52,10 @@ typedef struct {
     uint8_t mmc3_irq_counter;
     int     mmc3_irq_reload;
     int     mmc3_irq_enabled;
+    uint8_t mapper40_bank_c000_8k;
+    uint16_t mapper40_irq_count;
+    int     mapper40_irq_enabled;
+    int     mapper40_irq_pending;
 } MapperState;
 
 void mapper_get_state(MapperState *out);
@@ -72,6 +76,8 @@ void mapper_set_chr_callback(mapper_chr_callback_t cb, void *ctx);
  * Returns 1 if an IRQ should fire (counter hit zero and IRQs enabled).
  */
 int mapper_clock_scanline(void);
+void mapper_clock_cpu(int cycles);
+int mapper_irq_asserted(void);
 
 /* Debug: get $A000 mirroring write stats */
 void mapper_get_a000_debug(int *count, uint8_t *last_val, uint64_t *last_frame);

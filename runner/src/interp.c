@@ -73,6 +73,8 @@ static void interp_lazy_init(void) {
 /* ---- Side-effect-free instruction fetch (bank-correct) ---- */
 static inline uint8_t interp_fetch(uint16_t pc) {
     if (pc >= 0x8000)              return mapper_peek_prg(pc);
+    if (pc >= 0x6000 && mapper_get_type() == 40)
+        return mapper_peek_prg(pc);
     if (pc < 0x2000)              return g_ram[pc & 0x07FF];
     if (pc >= 0x6000) {
         uint8_t v = g_sram[pc - 0x6000];
@@ -129,8 +131,10 @@ static int interp_dispatch_target(uint16_t target) {
  * entry level). Returns 1 if it ran to a clean boundary, 0 if it bailed
  * (watchdog / depth guard / non-code region) so the caller applies policy.
  */
-static int interp_run_ex(uint16_t entry, int stop_on_stack_lift) {
+static int interp_run_ex(uint16_t entry, int stop_on_stack_lift,
+                         uint32_t max_steps, uint16_t *out_next) {
     if (s_depth >= INTERP_MAX_DEPTH) return 0;
+    if (out_next) *out_next = 0;
     s_depth++;
     s_stats.runs++;
     nes_dring_mark('I', entry);   /* interp run start (cpu pc) */
@@ -374,6 +378,11 @@ static int interp_run_ex(uint16_t entry, int stop_on_stack_lift) {
 
         ipc = next;
 
+        if (max_steps && this_run >= max_steps) {
+            if (out_next) *out_next = ipc;
+            goto done;
+        }
+
         /* Miss fallback boundary rule: any instruction that lifts S above the
          * entry frame means we've returned to native code. Explicit continuation
          * resumes disable this because their entry may intentionally restore
@@ -388,7 +397,14 @@ done:
 }
 
 static int interp_run(uint16_t entry) {
-    return interp_run_ex(entry, 1);
+    return interp_run_ex(entry, 1, 0, NULL);
+}
+
+int nes_interp_step_tail(uint16_t addr, int caller_bank) {
+    uint16_t next = 0;
+    if (!interp_run_ex(addr, 0, 1, &next)) return 0;
+    if (next) return call_by_address_tail(next, caller_bank);
+    return 1;
 }
 
 /* ---- Entry from the generated dispatcher ----
@@ -411,6 +427,18 @@ int nes_interp_dispatch_bank(uint16_t cpu_addr, uint16_t gen_addr, int bank) {
         return 0;   /* "miss" — interp_run will handle the target inline */
     }
 
+    /* CPU RAM and cartridge SRAM code cannot have a generated function. It is
+     * intentional dynamic execution rather than static-discovery fallback, so
+     * keep it available under fallback=off. Mapper 40 is the exception: its
+     * $6000-$7FFF window is PRG ROM and must retain normal strict dispatch. */
+    if (addr < 0x2000 ||
+        (addr >= 0x6000 && addr < 0x8000 && mapper_get_type() != 40)) {
+        if (interp_run(addr))
+            return 1;
+        fprintf(stderr, "[Interp] RAM/SRAM entry $%04X could not be interpreted\n", addr);
+        return 0;
+    }
+
     if (s_enabled == 1) {
         int handled = interp_run(addr);
         if (handled) {
@@ -428,9 +456,7 @@ int nes_interp_dispatch_bank(uint16_t cpu_addr, uint16_t gen_addr, int bank) {
 
 int nes_interp_resume(uint16_t addr) {
     interp_lazy_init();
-    if (s_enabled != 1)
-        return 0;
-    return interp_run_ex(addr, 0);
+    return interp_run_ex(addr, 0, 0, NULL);
 }
 
 /* Legacy entry: cpu==gen address, g_current_bank attribution. */

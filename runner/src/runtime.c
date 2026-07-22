@@ -805,9 +805,10 @@ void nes_cosim_emit_boundary(void) {
  * IRQ-disable clears the DMC flag).  We re-poll every instruction, so a
  * still-asserted line re-fires after RTI — matching hardware IRQ behaviour.
  *
- * Gates: I-flag clear (IRQ is maskable, unlike NMI); no re-entry; and only at
- * top level (s_vblank_depth == 0) so an IRQ never preempts the batched NMI
- * frame driver — sub-frame NMI/IRQ interleave is the deferred Axis 2 work. */
+ * Gates: I-flag clear (IRQ is maskable, unlike NMI) and no re-entry. Most
+ * mappers defer IRQs while the batched NMI frame driver is active. Mapper 40
+ * is the exception: its NMI deliberately enables the one-shot scanline IRQ
+ * and spin-waits for the IRQ handler to finish the status-bar split. */
 static int s_in_irq = 0;
 
 static uint16_t irq_last_consumed_rts_target(void) {
@@ -836,7 +837,7 @@ void runtime_call_irq_handler(void) {
     func_IRQ();
     for (int i = 0; i < 8 && g_cpu.S < s_pre; ++i) {
         uint16_t target = irq_last_consumed_rts_target();
-        if (target < 0x8000)
+        if (target < 0x8000 && !(mapper_get_type() == 40 && target >= 0x6000))
             break;
         if (!call_by_address(target))
             break;
@@ -851,8 +852,9 @@ void runtime_call_irq_handler(void) {
 static void maybe_deliver_irq(void) {
     if (g_cpu.I)              return;   /* IRQ masked */
     if (s_in_irq)             return;   /* no re-entry while a handler runs */
-    if (s_vblank_depth != 0)  return;   /* defer during the NMI frame driver */
-    if (!apu_irq_asserted())  return;   /* no source asserting the line */
+    if (s_vblank_depth != 0 && mapper_get_type() != 40)
+        return;                         /* defer during the NMI frame driver */
+    if (!apu_irq_asserted() && !mapper_irq_asserted()) return;
 
     runtime_call_irq_handler();
 }
@@ -885,13 +887,15 @@ void maybe_trigger_vblank(int cycles) {
      * ~513 stolen cycles too, so clock the APU through them like the DMC steal. */
     int oam_stall = runtime_take_oam_dma_stall();
     if (oam_stall) apu_clock_cycles(oam_stall);
+    uint32_t total_cycles = ((cycles > 0) ? (uint32_t)cycles : 1)
+                          + (uint32_t)dmc_stall + (uint32_t)oam_stall;
+    mapper_clock_cpu((int)total_cycles);
     maybe_deliver_irq();
 
     /* Count cycles — always, even during NMI handler execution. Stolen DMC and
      * OAM DMA cycles are counted here so the frame advances as on hardware. */
     {
-        uint32_t _c = ((cycles > 0) ? (uint32_t)cycles : 1)
-                    + (uint32_t)dmc_stall + (uint32_t)oam_stall;
+        uint32_t _c = total_cycles;
         s_ops_count       += _c;
         g_nes_cycles      += _c;   /* monotonic; never reset (co-sim ruler) */
         s_dbg_cycles_ticked += _c;
@@ -915,6 +919,19 @@ void maybe_trigger_vblank(int cycles) {
                     (unsigned long long)g_frame_count, s_vblank_depth,
                     (unsigned)s_ops_count, (unsigned)s_frame_budget,
                     s_vblank_pending, (unsigned long long)s_dbg_max_depth_skips);
+#ifdef RECOMP_STACK_TRACKING
+            {
+                extern const char *g_recomp_stack[];
+                extern int g_recomp_stack_top;
+                extern const char *g_last_recomp_func;
+                fprintf(stderr, "[HANG] active=%s recomp_depth=%d\n",
+                        g_last_recomp_func ? g_last_recomp_func : "?",
+                        g_recomp_stack_top);
+                for (int i = g_recomp_stack_top - 1; i >= 0; i--)
+                    fprintf(stderr, "  [%d] %s\n", i,
+                            g_recomp_stack[i] ? g_recomp_stack[i] : "?");
+            }
+#endif
             nes_dump_dispatch_ring();
             /* Post-mortem memory image: 2KB WRAM + 8KB SRAM. */
             {
@@ -1184,7 +1201,10 @@ static uint8_t nes_read_inner(uint16_t addr) {
         }
         return s_open_bus;   /* write-only APU regs ($4000-$4013,$4015w) read open bus */
     }
-    if (addr >= 0x6000 && addr <= 0x7FFF) return g_sram[addr - 0x6000];
+    if (addr >= 0x6000 && addr <= 0x7FFF) {
+        if (mapper_get_type() == 40) return mapper_peek_prg(addr);
+        return g_sram[addr - 0x6000];
+    }
     if (addr >= 0x8000 && addr <= 0xBFFF) {
         const uint8_t *bank = mapper_get_switchable_bank();
         return bank ? bank[addr - 0x8000] : 0xFF;
@@ -1216,7 +1236,10 @@ uint8_t apu_dmc_read(uint16_t addr) {
         const uint8_t *bank = mapper_get_switchable_bank();
         return bank ? bank[addr - 0x8000] : 0xFF;
     }
-    if (addr >= 0x6000) return g_sram[addr - 0x6000];
+    if (addr >= 0x6000) {
+        if (mapper_get_type() == 40) return mapper_peek_prg(addr);
+        return g_sram[addr - 0x6000];
+    }
     return 0xFF;
 }
 
@@ -1385,7 +1408,10 @@ void nes_write(uint16_t addr, uint8_t val) {
         apu_write(addr, val);
         return;
     }
-    if (addr >= 0x6000 && addr <= 0x7FFF) { g_sram[addr - 0x6000] = val; return; }
+    if (addr >= 0x6000 && addr <= 0x7FFF) {
+        if (mapper_get_type() == 40) return;
+        g_sram[addr - 0x6000] = val; return;
+    }
     if (addr >= 0x8000) { mapper_write(addr, val); return; }
 }
 
@@ -1967,7 +1993,8 @@ void nes_dump_dispatch_ring(void) {
 int nes_dispatch_call(uint16_t addr, int caller_bank) {
     dring_push(addr, caller_bank, 'C');
     uint16_t save_wb = g_code_window_base;
-    if (addr >= 0x8000) g_code_window_base = addr & 0xE000;
+    if (addr >= 0x8000 || (mapper_get_type() == 40 && addr >= 0x6000))
+        g_code_window_base = addr & 0xE000;
     g_nes_dispatch_depth++;
     int r = call_by_address_cb(addr, caller_bank);
     g_nes_dispatch_depth--;
@@ -2021,9 +2048,31 @@ int nes_jsr_stack_ok_after_call(uint8_t before_s, uint64_t before_interrupt_epoc
 }
 
 #define TAIL_ACTIVE_MAX 64
-static struct { uint16_t addr; uint8_t s; } s_tail_active[TAIL_ACTIVE_MAX];
+static struct {
+    uint16_t addr;
+    uint8_t s;
+    uint64_t interrupt_epoch;
+} s_tail_active[TAIL_ACTIVE_MAX];
 static int s_tail_active_n = 0;
 static int s_tail_pending_slot = -1;
+
+static int tail_crosses_interrupt(int slot) {
+    return s_tail_active[slot].interrupt_epoch < runtime_get_interrupt_epoch() &&
+           (s_vblank_depth > 0 || s_in_irq);
+}
+
+static int tail_matches_active(int slot, uint16_t addr) {
+    if (s_tail_active[slot].addr != addr) return 0;
+    if (s_tail_active[slot].s == g_cpu.S) return 1;
+
+    /* A handler may JMP directly back to the loop it interrupted instead of
+     * executing RTI. On the 6502 that abandons the interrupt call chain. In
+     * the recomp the interrupted tail frame is still suspended beneath the
+     * synchronous callback, so collapse the transfer to that ancestor even
+     * though interrupt entry changed S. Epoch + active-context checks keep
+     * ordinary recursive calls with a different hardware stack distinct. */
+    return tail_crosses_interrupt(slot);
+}
 
 int call_by_address_tail(uint16_t addr, int caller_bank) {
     /* Env-gated tail-drift diagnostic (NESRECOMP_TAILDBG="loAddr:hiAddr"):
@@ -2042,14 +2091,14 @@ int call_by_address_tail(uint16_t addr, int caller_bank) {
         if (s_on && addr >= s_lo && addr <= s_hi && s_lines < 60) {
             int match = -1;
             for (int i = 0; i < s_tail_active_n; i++)
-                if (s_tail_active[i].addr == addr && s_tail_active[i].s == g_cpu.S) { match = i; break; }
+                if (tail_matches_active(i, addr)) { match = i; break; }
             fprintf(stderr, "[taildbg] addr=$%04X S=$%02X active_n=%d match=%d frame=%llu\n",
                     addr, g_cpu.S, s_tail_active_n, match, (unsigned long long)g_frame_count);
             fflush(stderr); s_lines++;
         }
     }
     for (int i = 0; i < s_tail_active_n; i++) {
-        if (s_tail_active[i].addr == addr && s_tail_active[i].s == g_cpu.S) {
+        if (tail_matches_active(i, addr)) {
             s_tail_pending      = addr;
             s_tail_pending_slot = i;
             s_tail_caller       = caller_bank;
@@ -2061,6 +2110,7 @@ int call_by_address_tail(uint16_t addr, int caller_bank) {
         slot = s_tail_active_n++;
         s_tail_active[slot].addr = addr;
         s_tail_active[slot].s    = g_cpu.S;
+        s_tail_active[slot].interrupt_epoch = runtime_get_interrupt_epoch();
     }
     dring_push(addr, caller_bank, 'T');
     int r;

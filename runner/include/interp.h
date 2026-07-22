@@ -22,11 +22,10 @@
 #pragma once
 #include <stdint.h>
 
-/* Entry point invoked from the generated call_by_address miss paths.
- * Returns 1 if the miss was handled (interpreted) and the game should
- * continue; 0 if not handled (interpreter disabled / unsupported), in which
- * case the configured dispatch-miss policy has been applied and the caller
- * behaves as the legacy `return 0`. */
+/* Entry point invoked from generated call_by_address paths. CPU RAM and
+ * cartridge SRAM targets are intentional dynamic code and are interpreted
+ * even when fallback is disabled. ROM misses use the configured fallback and
+ * dispatch-miss policy. Returns 1 when execution was handled. */
 int nes_interp_dispatch(uint16_t addr);
 
 /* Execute an intentional RAM/SRAM vector entry, such as an IRQ vector below
@@ -35,7 +34,9 @@ int nes_interp_interrupt(uint16_t addr);
 
 /* Execute from a known guest PC without recording it as a dispatch miss.
  * Used for explicit continuation/resume paths where the caller already has
- * a PC from the guest stack rather than a missing generated entry. */
+ * a PC from the guest stack rather than a missing generated entry. This is
+ * intentional execution, not fallback, so it remains available when dispatch
+ * miss fallback is disabled. */
 int nes_interp_resume(uint16_t addr);
 
 /* Runtime control. enabled defaults on when push_all_jsr is set, unless the

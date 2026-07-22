@@ -4,6 +4,7 @@
  * Supported mappers:
  *   0 — NROM (Super Mario Bros., etc.)   No bank switching; PRG fixed at $8000-$FFFF.
  *   1 — MMC1 (Faxanadu, etc.)            5-bit serial shift register, 4 sub-registers.
+ *   2 — UxROM (Mega Man, etc.)            Switchable 16KB low bank, fixed last high bank.
  *   4 — MMC3 (Mega Man 3, SMB3, etc.)    Bank select/data registers, scanline IRQ.
  *  66 — GxROM (Gumshoe, etc.)            Simple 32KB PRG + 8KB CHR bank select.
  *
@@ -21,6 +22,7 @@ int                   g_current_bank = 0;
 int                   g_mmc3_r6_odd  = 0;
 int                   g_mmc3_r7_even = 0;
 int                   g_mmc3_bank_a000 = 0;
+int                   g_mapper40_bank_c000_8k = 0;
 /* Live 8KB PRG bank behind each CPU window ($8000/$A000/$C000/$E000),
  * mode-aware (PRG mode 1 fixes $8000 and swaps $C000 via R6). Dispatch
  * resolves call targets through the window's bank, so it stays correct
@@ -55,6 +57,23 @@ static void *s_chr_callback_ctx = NULL;
 
 /* ── Mapper 66 (GxROM) state ────────────────────────────────────────────────── */
 static int s_gxrom_chr_bank = 0;  /* 8KB CHR bank selected by bits 0-1 */
+
+/* Mapper 40 (BTL SMB2A) state. */
+static uint16_t s_mapper40_irq_count = 0;
+static int s_mapper40_irq_enabled = 0;
+static int s_mapper40_irq_pending = 0;
+static uint8_t s_mapper40_prg_high[0x4000];
+
+static void mapper40_apply_prg(void) {
+    if (!s_prg_data || s_prg_banks <= 0) return;
+    int total8 = s_prg_banks * 2;
+    g_mapper40_bank_c000_8k %= total8;
+    memcpy(s_mapper40_prg_high,
+           s_prg_data + (size_t)g_mapper40_bank_c000_8k * 0x2000, 0x2000);
+    memcpy(s_mapper40_prg_high + 0x2000,
+           s_prg_data + (size_t)(7 % total8) * 0x2000, 0x2000);
+    g_current_bank = g_mapper40_bank_c000_8k >> 1;
+}
 
 /* ── Mapper 1 (MMC1) state ─────────────────────────────────────────────────── */
 static uint8_t s_shift_reg   = 0x10; /* Reset state: bit 4 set */
@@ -290,6 +309,14 @@ void mapper_init(const uint8_t *prg_data, int prg_banks,
         mmc3_apply_prg(); /* Set up initial PRG windows */
     }
 
+    g_mapper40_bank_c000_8k = 0;
+    s_mapper40_irq_count = 0;
+    s_mapper40_irq_enabled = 0;
+    s_mapper40_irq_pending = 0;
+    if (mapper_type == 40) {
+        mapper40_apply_prg();
+    }
+
     /* GxROM: power-on selects the last 32KB bank (vectors live there).
      * g_current_bank is in 16KB units; GxROM 32KB bank N = 16KB banks 2N, 2N+1.
      * Set to 2N so get_switchable returns lower half, get_fixed returns upper. */
@@ -359,6 +386,23 @@ void mapper_write(uint16_t addr, uint8_t val) {
             }
             return;
 
+        case 2:
+            /* UxROM: any write to $8000-$FFFF selects the 16KB bank mapped at
+             * $8000-$BFFF. The last 16KB bank remains fixed at $C000-$FFFF. */
+            if (addr < 0x8000 || s_prg_banks <= 0) return;
+            {
+                int new_bank = val % s_prg_banks;
+                if (new_bank != g_current_bank) {
+                    g_current_bank = new_bank;
+                    if (s_mapper_trace) {
+                        fprintf(s_mapper_trace, "UXROM_PRG,bank=%d,F=%llu\n",
+                                new_bank, (unsigned long long)g_frame_count);
+                        fflush(s_mapper_trace);
+                    }
+                }
+            }
+            return;
+
         case 4:
             /* MMC3: bank select/data + mirroring + IRQ */
             if (addr < 0x8000) return;
@@ -418,6 +462,22 @@ void mapper_write(uint16_t addr, uint8_t val) {
             }
             return;
 
+        case 40:
+            if (addr >= 0x8000 && addr <= 0x9FFF) {
+                s_mapper40_irq_enabled = 0;
+                s_mapper40_irq_count = 0;
+                s_mapper40_irq_pending = 0;
+            } else if (addr >= 0xA000 && addr <= 0xBFFF) {
+                s_mapper40_irq_enabled = 1;
+            } else if (addr >= 0xE000) {
+                int total8 = s_prg_banks * 2;
+                if (total8 > 0) {
+                    g_mapper40_bank_c000_8k = val % total8;
+                    mapper40_apply_prg();
+                }
+            }
+            return;
+
         case 66:
             /* GxROM: bits 4-5 select 32KB PRG bank, bits 0-1 select 8KB CHR bank.
              * Any write to $8000-$FFFF triggers the bank switch. */
@@ -472,6 +532,22 @@ int mapper_clock_scanline(void) {
     return fire;
 }
 
+void mapper_clock_cpu(int cycles) {
+    if (s_mapper_type != 40 || !s_mapper40_irq_enabled || cycles <= 0) return;
+    int remaining = 0x1000 - (int)s_mapper40_irq_count;
+    if (cycles >= remaining) {
+        s_mapper40_irq_count = 0;
+        s_mapper40_irq_enabled = 0;
+        s_mapper40_irq_pending = 1;
+    } else {
+        s_mapper40_irq_count = (uint16_t)(s_mapper40_irq_count + cycles);
+    }
+}
+
+int mapper_irq_asserted(void) {
+    return s_mapper_type == 40 && s_mapper40_irq_pending;
+}
+
 const uint8_t *mapper_get_switchable_bank(void) {
     if (!s_prg_data) return NULL;
     switch (s_mapper_type) {
@@ -481,6 +557,9 @@ const uint8_t *mapper_get_switchable_bank(void) {
         case 4:
             /* MMC3: pre-built 16KB buffer from 2x 8KB banks */
             return s_mmc3_prg_low;
+        case 40:
+            /* Fixed physical banks 4/5 form the contiguous $8000-$BFFF pair. */
+            return s_prg_data + (size_t)(4 % (s_prg_banks * 2)) * 0x2000;
         case 66:
             /* GxROM: g_current_bank is the lower 16KB index of the 32KB pair */
             return s_prg_data + (size_t)g_current_bank * 0x4000;
@@ -495,6 +574,8 @@ const uint8_t *mapper_get_fixed_bank(void) {
         case 4:
             /* MMC3: pre-built 16KB buffer from 2x 8KB banks */
             return s_mmc3_prg_high;
+        case 40:
+            return s_mapper40_prg_high;
         case 66:
             /* GxROM: upper 16KB of the current 32KB bank (g_current_bank + 1) */
             return s_prg_data + (size_t)(g_current_bank + 1) * 0x4000;
@@ -509,6 +590,18 @@ int mapper_get_mirroring(void) {
 }
 
 uint8_t mapper_peek_prg(uint16_t addr) {
+    if (s_mapper_type == 40) {
+        if (!s_prg_data || addr < 0x6000) return 0;
+        int bank8;
+        if (addr < 0x8000)      bank8 = 6;
+        else if (addr < 0xA000) bank8 = 4;
+        else if (addr < 0xC000) bank8 = 5;
+        else if (addr < 0xE000) bank8 = g_mapper40_bank_c000_8k;
+        else                    bank8 = 7;
+        int total8 = s_prg_banks * 2;
+        if (total8 <= 0) return 0;
+        return s_prg_data[(size_t)(bank8 % total8) * 0x2000 + (addr & 0x1FFF)];
+    }
     if (addr < 0x8000) return 0;
     const uint8_t *bank = (addr < 0xC000)
         ? mapper_get_switchable_bank()
@@ -580,6 +673,10 @@ void mapper_get_state(MapperState *out) {
     out->mmc3_irq_counter = s_mmc3_irq_counter;
     out->mmc3_irq_reload  = s_mmc3_irq_reload;
     out->mmc3_irq_enabled = s_mmc3_irq_enabled;
+    out->mapper40_bank_c000_8k = (uint8_t)g_mapper40_bank_c000_8k;
+    out->mapper40_irq_count = s_mapper40_irq_count;
+    out->mapper40_irq_enabled = s_mapper40_irq_enabled;
+    out->mapper40_irq_pending = s_mapper40_irq_pending;
 }
 
 void mapper_set_chr_callback(mapper_chr_callback_t cb, void *ctx) {
@@ -604,9 +701,16 @@ void mapper_set_state(const MapperState *in) {
     s_mmc3_irq_counter = in->mmc3_irq_counter;
     s_mmc3_irq_reload  = in->mmc3_irq_reload;
     s_mmc3_irq_enabled = in->mmc3_irq_enabled;
+    g_mapper40_bank_c000_8k = in->mapper40_bank_c000_8k;
+    s_mapper40_irq_count = in->mapper40_irq_count;
+    s_mapper40_irq_enabled = in->mapper40_irq_enabled;
+    s_mapper40_irq_pending = in->mapper40_irq_pending;
     /* Re-apply bank mappings */
     if (s_mapper_type == 4) {
         mmc3_apply_prg();
         mmc3_apply_chr();
+    }
+    if (s_mapper_type == 40) {
+        mapper40_apply_prg();
     }
 }

@@ -31,6 +31,17 @@ static inline bool rom_mapper_full_32k_switch(const NESRom *rom) {
     return rom->mapper == 66; /* GxROM; add other mappers here as needed */
 }
 
+static inline bool rom_mapper40(const NESRom *rom) {
+    return rom->mapper == 40;
+}
+
+/* Convert a Mapper-40 CPU PRG window address to the stable 16KB generated
+ * identity used by the rest of the recompiler. selected_8k is consulted only
+ * for the switchable $C000-$DFFF window; pass -1 when that window is unknown. */
+bool rom_mapper40_cpu_to_generated(const NESRom *rom, uint16_t cpu_addr,
+                                   int selected_8k, uint16_t *out_addr,
+                                   int *out_bank);
+
 /* Read a byte from PRG ROM by NES address + current switchable bank */
 uint8_t rom_read(const NESRom *rom, int switchable_bank, uint16_t addr);
 

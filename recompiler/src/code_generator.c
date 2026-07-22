@@ -625,12 +625,112 @@ static bool entry_is_merge_range_secondary(const NESRom *rom, const FunctionList
     return false;
 }
 
+static bool function_is_suppressed_merge_secondary(const NESRom *rom,
+                                                    const FunctionList *funcs,
+                                                    const GameConfig *cfg,
+                                                    uint16_t addr, int bank) {
+    for (int i = 0; i < funcs->count; i++) {
+        const FunctionEntry *entry = &funcs->entries[i];
+        if (entry->addr == addr && entry->bank == bank)
+            return entry_is_merge_range_secondary(rom, funcs, cfg, i);
+    }
+    return false;
+}
+
+static bool entry_owns_merge_range_addr(const FunctionList *funcs,
+                                        const GameConfig *cfg,
+                                        const FunctionEntry *owner,
+                                        uint16_t addr) {
+    if (!function_list_contains(funcs, addr, owner->bank)) return false;
+
+    for (int ri = 0; ri < cfg->merge_range_count; ri++) {
+        const MergeRange *range = &cfg->merge_ranges[ri];
+        if (owner->bank != range->bank) continue;
+        if (owner->addr < range->addr_lo || owner->addr > range->addr_hi ||
+            addr < range->addr_lo || addr > range->addr_hi)
+            continue;
+
+        uint16_t canonical = 0xFFFF;
+        for (int fi = 0; fi < funcs->count; fi++) {
+            const FunctionEntry *candidate = &funcs->entries[fi];
+            if (candidate->bank != range->bank) continue;
+            if (candidate->addr < range->addr_lo || candidate->addr > range->addr_hi)
+                continue;
+            if (candidate->addr < canonical) canonical = candidate->addr;
+        }
+        if (owner->addr == canonical) return true;
+    }
+
+    return false;
+}
+
+static bool entry_owns_public_merge_range_alias(const FunctionList *funcs,
+                                                const GameConfig *cfg,
+                                                const FunctionEntry *owner,
+                                                const FunctionEntry *alias) {
+    for (int ri = 0; ri < cfg->merge_range_count; ri++) {
+        const MergeRange *range = &cfg->merge_ranges[ri];
+        if (!range->public_wrappers || owner->bank != range->bank ||
+            alias->bank != range->bank)
+            continue;
+        if (owner->addr < range->addr_lo || owner->addr > range->addr_hi ||
+            alias->addr < range->addr_lo || alias->addr > range->addr_hi)
+            continue;
+
+        uint16_t canonical = 0xFFFF;
+        for (int fi = 0; fi < funcs->count; fi++) {
+            const FunctionEntry *candidate = &funcs->entries[fi];
+            if (candidate->bank != range->bank) continue;
+            if (candidate->addr < range->addr_lo || candidate->addr > range->addr_hi)
+                continue;
+            if (candidate->addr < canonical) canonical = candidate->addr;
+        }
+        if (owner->addr == canonical) return true;
+    }
+
+    return false;
+}
+
 #define MAX_SECONDARY_ENTRIES 4096
+
+static bool manual_entry_inherits_pending_pha(const NESRom *rom,
+                                              const FunctionEntry *owner,
+                                              const FunctionEntry *entry,
+                                              const GameConfig *cfg) {
+    if (owner->bank != entry->bank || owner->addr >= entry->addr)
+        return false;
+
+    uint16_t valid_starts[MAX_INSNS_PER_FUNC];
+    int valid_count = 0;
+    int pending_pha_count = 0;
+    scan_function_boundaries(rom, owner->addr, owner->bank, cfg,
+                             valid_starts, &valid_count, MAX_INSNS_PER_FUNC);
+
+    for (int i = 0; i < valid_count; i++) {
+        uint16_t addr = valid_starts[i];
+        if (addr >= entry->addr) break;
+        OpMnemonic mnemonic = g_opcode_table[rom_read(rom, owner->bank, addr)].mnemonic;
+        if (mnemonic == MN_PHA)
+            pending_pha_count++;
+        else if (mnemonic == MN_PLA && pending_pha_count > 0)
+            pending_pha_count--;
+    }
+
+    return pending_pha_count >= 2;
+}
 
 static int find_manual_entry_owner_index_uncached(const NESRom *rom, const FunctionList *funcs,
                                                   const GameConfig *cfg, int entry_index) {
     const FunctionEntry *entry = &funcs->entries[entry_index];
     if (!(entry->source_flags & FUNCTION_SOURCE_MANUAL)) return -1;
+
+    /* A direct entry on RTS did not execute a preceding PHA. Aliasing it into
+     * an enclosing body would make the context-sensitive RTS emitter treat a
+     * plain return as a computed tail dispatch. Keep that entry standalone. */
+    if (entry->addr > 0x8000 &&
+        rom_read(rom, entry->bank, entry->addr) == 0x60 &&
+        rom_read(rom, entry->bank, entry->addr - 1) == 0x48)
+        return -1;
 
     int best_index = -1;
     uint16_t best_addr = 0;
@@ -643,6 +743,7 @@ static int find_manual_entry_owner_index_uncached(const NESRom *rom, const Funct
         if (!entry_emits_standalone(funcs, cfg, owner)) continue;
         if (!(owner->source_flags & FUNCTION_SOURCE_MANUAL) &&
             entry_is_merge_range_secondary(rom, funcs, cfg, oi)) continue;
+        if (manual_entry_inherits_pending_pha(rom, owner, entry, cfg)) continue;
 
         uint16_t valid_starts[MAX_INSNS_PER_FUNC];
         int valid_count = 0;
@@ -687,6 +788,38 @@ static bool build_manual_owner_cache(const NESRom *rom, const FunctionList *func
             owners[i] = find_manual_entry_owner_index_uncached(rom, funcs, cfg, i);
     }
 
+    /* A manual entry can be nested inside another manual entry that is itself
+     * emitted only as a public wrapper. Wrapper collection runs from standalone
+     * bodies, so resolve every chain to the ultimate body owner. Owner addresses
+     * strictly decrease, but keep a hop bound to make malformed input harmless. */
+    for (int i = 0; i < funcs->count; i++) {
+        int owner = owners[i];
+        int hops = 0;
+        while (owner >= 0 && owner < funcs->count &&
+               owners[owner] >= 0 && hops++ < funcs->count) {
+            owner = owners[owner];
+        }
+        if (hops < funcs->count) {
+            bool owner_can_publish = owner >= 0 && owner < funcs->count;
+            if (owner_can_publish) {
+                uint16_t valid_starts[MAX_INSNS_PER_FUNC];
+                int valid_count = 0;
+                scan_function_boundaries(rom, funcs->entries[owner].addr,
+                                         funcs->entries[owner].bank, cfg,
+                                         valid_starts, &valid_count,
+                                         MAX_INSNS_PER_FUNC);
+                owner_can_publish = contains_addr(valid_starts, valid_count,
+                                                  funcs->entries[i].addr);
+            }
+            if (owner_can_publish &&
+                !manual_entry_inherits_pending_pha(rom, &funcs->entries[owner],
+                                                   &funcs->entries[i], cfg))
+                owners[i] = owner;
+            else
+                owners[i] = -1;
+        }
+    }
+
     return true;
 }
 
@@ -727,43 +860,89 @@ static int collect_secondary_addrs(const NESRom *rom, const FunctionList *funcs,
     }
 
     int secondary_count = 0;
-    for (int fi = 0; fi < funcs->count && secondary_count < max_secondary; fi++) {
-        const FunctionEntry *fe = &funcs->entries[fi];
-        if (fe->bank != bank || fe->addr == pc) continue;
-
-        if (fe->source_flags & FUNCTION_SOURCE_MANUAL) {
-            /* Manual entries are dispatch contracts. If they land on a valid
-             * instruction boundary inside this body, publish a wrapper here
-             * even if structural classification chose a different owner. Pick
-             * exactly one containing owner so broad bodies cannot duplicate the
-             * same wrapper. */
-            if (find_manual_entry_owner_index(rom, funcs, cfg, fi) != entry_index)
-                continue;
-        } else if (fe->kind == FUNCTION_KIND_SECONDARY) {
-            if (fe->canonical_bank != bank || fe->canonical_addr != pc) continue;
-        } else {
-            continue;
-        }
-
-        bool valid = false;
-        for (int v = 0; v < valid_count; v++) {
-            if (valid_starts[v] == fe->addr) { valid = true; break; }
-        }
-        if (valid && !contains_addr(secondary_addrs, secondary_count, fe->addr))
-            secondary_addrs[secondary_count++] = fe->addr;
-    }
+    /* Explicit labels and manual entries are public dispatch contracts. Add
+     * them before the much larger auto-secondary set so a permissive body scan
+     * cannot exhaust the bounded array and silently demote configured entries
+     * to fallback. */
     for (int li = 0; li < cfg->extra_label_count && secondary_count < max_secondary; li++) {
         int lbl_bank = cfg->extra_labels[li].bank;
         uint16_t lbl_addr = cfg->extra_labels[li].addr;
-        if (lbl_bank != bank) continue;
-        if (lbl_addr == pc) continue;
-        if (function_list_contains(funcs, lbl_addr, bank)) continue;
+        if (lbl_bank != bank || lbl_addr == pc) continue;
+        bool suppressed_merge_entry =
+            function_is_suppressed_merge_secondary(rom, funcs, cfg, lbl_addr, bank);
+        if (function_list_contains(funcs, lbl_addr, bank) && !suppressed_merge_entry)
+            continue;
+        bool valid = entry_owns_merge_range_addr(funcs, cfg, entry, lbl_addr);
         for (int v = 0; v < valid_count; v++) {
             if (valid_starts[v] == lbl_addr) {
-                if (!contains_addr(secondary_addrs, secondary_count, lbl_addr))
-                    secondary_addrs[secondary_count++] = lbl_addr;
+                valid = true;
                 break;
             }
+        }
+        /* Merge-range emission seeds every discovered entry in the range as a
+         * pending body start. That can publish a configured label after a JMP
+         * even though the finder-style reachability scan above stops earlier. */
+        if (valid && !contains_addr(secondary_addrs, secondary_count, lbl_addr))
+            secondary_addrs[secondary_count++] = lbl_addr;
+    }
+    for (int pass = 0; pass < 2 && secondary_count < max_secondary; pass++) {
+        for (int fi = 0; fi < funcs->count && secondary_count < max_secondary; fi++) {
+            const FunctionEntry *fe = &funcs->entries[fi];
+            bool manual = (fe->source_flags & FUNCTION_SOURCE_MANUAL) != 0;
+            if ((pass == 0) != manual) continue;
+            if (fe->bank != bank || fe->addr == pc) continue;
+
+            if (manual) {
+                if (find_manual_entry_owner_index(rom, funcs, cfg, fi) != entry_index)
+                    continue;
+            } else if (fe->kind == FUNCTION_KIND_SECONDARY) {
+                int owner_index = -1;
+                uint16_t owner_addr = fe->canonical_addr;
+                int owner_bank = fe->canonical_bank;
+
+                /* Structural classification can point an automatic secondary
+                 * at a configured entry which is itself emitted only as a
+                 * wrapper. Resolve that wrapper ownership before deciding
+                 * which real body must publish the automatic entry. */
+                for (int hops = 0; hops < funcs->count; hops++) {
+                    owner_index = -1;
+                    for (int oi = 0; oi < funcs->count; oi++) {
+                        if (funcs->entries[oi].addr == owner_addr &&
+                            funcs->entries[oi].bank == owner_bank) {
+                            owner_index = oi;
+                            break;
+                        }
+                    }
+                    if (owner_index < 0) break;
+
+                    const FunctionEntry *owner = &funcs->entries[owner_index];
+                    int manual_owner = find_manual_entry_owner_index(
+                        rom, funcs, cfg, owner_index);
+                    if (manual_owner >= 0 && manual_owner != owner_index) {
+                        owner_addr = funcs->entries[manual_owner].addr;
+                        owner_bank = funcs->entries[manual_owner].bank;
+                        continue;
+                    }
+                    if (owner->kind == FUNCTION_KIND_SECONDARY &&
+                        (owner->canonical_addr != owner_addr ||
+                         owner->canonical_bank != owner_bank)) {
+                        owner_addr = owner->canonical_addr;
+                        owner_bank = owner->canonical_bank;
+                        continue;
+                    }
+                    break;
+                }
+                if (owner_index != entry_index) continue;
+            } else {
+                continue;
+            }
+
+            bool valid = false;
+            for (int v = 0; v < valid_count; v++) {
+                if (valid_starts[v] == fe->addr) { valid = true; break; }
+            }
+            if (valid && !contains_addr(secondary_addrs, secondary_count, fe->addr))
+                secondary_addrs[secondary_count++] = fe->addr;
         }
     }
     for (int mi = 0; mi < merge_partner_count && secondary_count < max_secondary; mi++) {
@@ -832,6 +1011,7 @@ static int collect_internal_alias_addrs(const NESRom *rom, const FunctionList *f
          * into a single mega-body when the boundary scan is over-permissive. */
         if (fe->source_flags & FUNCTION_SOURCE_MANUAL) continue;
         if (!entry_is_merge_range_secondary(rom, funcs, cfg, fi)) continue;
+        if (!entry_owns_public_merge_range_alias(funcs, cfg, entry, fe)) continue;
         if (contains_addr(existing_addrs, existing_count, fe->addr)) continue;
 
         bool valid = false;
@@ -937,6 +1117,23 @@ static int is_valid_dispatch_target(const GameConfig *cfg, uint16_t addr,
                                      const FunctionList *funcs,
                                      int dispatch_bank, int fixed_bank,
                                      const NESRom *rom) {
+    if (rom && rom_mapper40(rom) && addr >= 0x6000) {
+        int first8 = 0;
+        int last8 = (addr >= 0xC000 && addr < 0xE000)
+                  ? rom->prg_banks * 2 : 1;
+        for (int bank8 = first8; bank8 < last8; bank8++) {
+            uint16_t gen_addr;
+            int gen_bank;
+            if (!rom_mapper40_cpu_to_generated(rom, addr, bank8,
+                                                &gen_addr, &gen_bank))
+                continue;
+            if (rom_read(rom, gen_bank, gen_addr) == 0x00)
+                continue;
+            if (!funcs || function_list_contains(funcs, gen_addr, gen_bank))
+                return 1;
+        }
+        return 0;
+    }
     if (addr >= 0x8000) {
         /* For GxROM and similar full-32KB-switch mappers, $C000+ targets
          * live in the paired upper bank of the current window — not in
@@ -1015,8 +1212,8 @@ static uint16_t resolve_jmp_thunk(const NESRom *rom, int fixed_bank, uint16_t ad
 #define TRAMP_MAX_STORES 16
 
 typedef struct {
-    enum { TV_CONST, TV_XIN, TV_YIN, TV_UNKNOWN } kind;
-    uint8_t k;                      /* value when kind == TV_CONST */
+    enum { TV_CONST, TV_XIN, TV_YIN, TV_RET_LO, TV_RET_HI, TV_UNKNOWN } kind;
+    uint8_t k;                      /* concrete analysis value */
 } TrampVal;
 
 typedef struct { uint16_t addr; TrampVal val; } TrampStore;
@@ -1083,8 +1280,9 @@ static int tramp_load(const NESRom *rom, int bank, const TrampEffects *fx,
         TrampVal lo, hi;
         if (!tramp_mem_lookup(fx, op1, &lo) ||
             !tramp_mem_lookup(fx, (uint8_t)(op1 + 1), &hi)) return 0;
-        if (lo.kind != TV_CONST || hi.kind != TV_CONST ||
-            fx->y.kind != TV_CONST) return 0;
+        int concrete_ptr = lo.kind == TV_CONST && hi.kind == TV_CONST;
+        int live_ret_ptr = lo.kind == TV_RET_LO && hi.kind == TV_RET_HI;
+        if ((!concrete_ptr && !live_ret_ptr) || fx->y.kind != TV_CONST) return 0;
         uint16_t base = (uint16_t)(lo.k | ((uint16_t)hi.k << 8));
         ea = (uint16_t)(base + fx->y.k);
         if ((base & 0xFF00) != (ea & 0xFF00)) (*cycles)++;
@@ -1119,8 +1317,9 @@ static int tramp_store_ea(const TrampEffects *fx, AddrMode am,
         TrampVal lo, hi;
         if (!tramp_mem_lookup(fx, op1, &lo) ||
             !tramp_mem_lookup(fx, (uint8_t)(op1 + 1), &hi)) return 0;
-        if (lo.kind != TV_CONST || hi.kind != TV_CONST ||
-            fx->y.kind != TV_CONST) return 0;
+        int concrete_ptr = lo.kind == TV_CONST && hi.kind == TV_CONST;
+        int live_ret_ptr = lo.kind == TV_RET_LO && hi.kind == TV_RET_HI;
+        if ((!concrete_ptr && !live_ret_ptr) || fx->y.kind != TV_CONST) return 0;
         *ea = (uint16_t)((lo.k | ((uint16_t)hi.k << 8)) + fx->y.k); return 1; }
     default: return 0;
     }
@@ -1131,7 +1330,8 @@ static int tramp_store_ea(const TrampEffects *fx, AddrMode am,
  * (fail_pc/fail_op report where). */
 static int derive_trampoline_effects(const NESRom *rom, int bank,
                                      uint16_t tramp_addr, uint16_t jsr_pc,
-                                     uint8_t selector, TrampEffects *fx,
+                                     uint8_t selector, int live_return,
+                                     TrampEffects *fx,
                                      uint16_t *fail_pc, uint8_t *fail_op) {
     memset(fx, 0, sizeof(*fx));
     fx->a = tramp_const(selector);
@@ -1148,6 +1348,10 @@ static int derive_trampoline_effects(const NESRom *rom, int bank,
     uint16_t ret = (uint16_t)(jsr_pc + 2);
     stk[sp++] = tramp_const((uint8_t)(ret >> 8));
     stk[sp++] = tramp_const((uint8_t)(ret & 0xFF));
+    if (live_return) {
+        stk[0].kind = TV_RET_HI;
+        stk[1].kind = TV_RET_LO;
+    }
 
     uint16_t pc = tramp_addr;
     for (int steps = 0; steps < 64; steps++) {
@@ -1298,16 +1502,26 @@ static void emit_trampoline_effects(FILE *f, const TrampEffects *fx, uint8_t sel
             fprintf(f, "nes_write(0x%04X, g_cpu.X); ", s->addr);
         else if (s->val.kind == TV_YIN)
             fprintf(f, "nes_write(0x%04X, g_cpu.Y); ", s->addr);
+        else if (s->val.kind == TV_RET_LO)
+            fprintf(f, "nes_write(0x%04X, (uint8_t)_inline_ret); ", s->addr);
+        else if (s->val.kind == TV_RET_HI)
+            fprintf(f, "nes_write(0x%04X, (uint8_t)(_inline_ret >> 8)); ", s->addr);
     }
     if (!(fx->a.kind == TV_CONST && fx->a.k == selector)) {
         if (fx->a.kind == TV_CONST)    fprintf(f, "g_cpu.A = 0x%02X; ", fx->a.k);
         else if (fx->a.kind == TV_XIN) fprintf(f, "g_cpu.A = g_cpu.X; ");
         else if (fx->a.kind == TV_YIN) fprintf(f, "g_cpu.A = g_cpu.Y; ");
+        else if (fx->a.kind == TV_RET_LO) fprintf(f, "g_cpu.A = (uint8_t)_inline_ret; ");
+        else if (fx->a.kind == TV_RET_HI) fprintf(f, "g_cpu.A = (uint8_t)(_inline_ret >> 8); ");
     }
     if (fx->x.kind == TV_CONST) fprintf(f, "g_cpu.X = 0x%02X; ", fx->x.k);
     else if (fx->x.kind == TV_YIN) fprintf(f, "g_cpu.X = g_cpu.Y; ");
+    else if (fx->x.kind == TV_RET_LO) fprintf(f, "g_cpu.X = (uint8_t)_inline_ret; ");
+    else if (fx->x.kind == TV_RET_HI) fprintf(f, "g_cpu.X = (uint8_t)(_inline_ret >> 8); ");
     if (fx->y.kind == TV_CONST) fprintf(f, "g_cpu.Y = 0x%02X; ", fx->y.k);
     else if (fx->y.kind == TV_XIN) fprintf(f, "g_cpu.Y = g_cpu.X; ");
+    else if (fx->y.kind == TV_RET_LO) fprintf(f, "g_cpu.Y = (uint8_t)_inline_ret; ");
+    else if (fx->y.kind == TV_RET_HI) fprintf(f, "g_cpu.Y = (uint8_t)(_inline_ret >> 8); ");
     if (fx->flag_c >= 0) fprintf(f, "g_cpu.C = %d; ", fx->flag_c);
     if (fx->flag_v >= 0) fprintf(f, "g_cpu.V = %d; ", fx->flag_v);
     if (fx->nz_set) {
@@ -1318,6 +1532,10 @@ static void emit_trampoline_effects(FILE *f, const TrampEffects *fx, uint8_t sel
             fprintf(f, "FLAG_NZ(g_cpu.X); ");
         else if (fx->nz.kind == TV_YIN)
             fprintf(f, "FLAG_NZ(g_cpu.Y); ");
+        else if (fx->nz.kind == TV_RET_LO)
+            fprintf(f, "FLAG_NZ((uint8_t)_inline_ret); ");
+        else if (fx->nz.kind == TV_RET_HI)
+            fprintf(f, "FLAG_NZ((uint8_t)(_inline_ret >> 8)); ");
     }
     fprintf(f, "maybe_trigger_vblank(%d); ", fx->cycles);
 }
@@ -1338,6 +1556,17 @@ static int gxrom_paired_bank(const NESRom *rom, int source_bank, uint16_t target
     if (target_addr >= 0xC000)
         return source_bank | 1;   /* upper half → odd bank */
     return source_bank;
+}
+
+static bool mapper40_reaches_8k_boundary(const NESRom *rom, uint16_t addr,
+                                         int size, bool *straddles) {
+    if (straddles) *straddles = false;
+    if (!rom_mapper40(rom) || addr < 0x8000 || addr >= 0xC000 || size <= 0)
+        return false;
+    unsigned end = (unsigned)(addr & 0x1FFF) + (unsigned)size;
+    if (end < 0x2000) return false;
+    if (straddles) *straddles = end > 0x2000;
+    return true;
 }
 
 /* Addresses of coroutine yield function entry points.
@@ -1734,29 +1963,39 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
         #define EMIT_BRANCH(cond_str) do { \
             int8_t _off = (int8_t)op1; \
             uint16_t _tgt = (uint16_t)(pc + 2 + _off); \
+            int _taken_cycles = 1 + ((((pc + 2) & 0xFF00) != (_tgt & 0xFF00)) ? 1 : 0); \
             bool _valid_local = is_valid_label_target(_tgt, valid_starts, valid_count, rom, bank); \
+            bool _label_emitted = false; \
+            for (int _ei = 0; _ei < emitted_count; _ei++) { \
+                if (emitted_addrs[_ei] == _tgt) { _label_emitted = true; break; } \
+            } \
             /* Cross-function if target is not in this function's valid_starts    \
              * (pre-scan now stops at the function boundary, so valid_starts       \
              * accurately reflects the function's extent). No need to check        \
              * is_func_entry — valid_starts is the ground truth. */                \
-            bool _cross = !_valid_local || (_tgt < func_base); \
+            bool _cross = !_valid_local || (_tgt < func_base) || \
+                          (_tgt <= pc && !_label_emitted); \
             if (_cross) { \
-                if (rom->mapper == 4) \
+                if (rom->mapper == 4 || rom->mapper == 40) { \
                     /* Branches are RELATIVE: the target is always in the      \
-                     * EXECUTING window, so translate the gen-layout constant  \
-                     * through the live window base (measured: SMB3 bank-26    \
-                     * updater's terminator BEQ to the shared RTS one byte     \
-                     * before func_base dispatched gen $9292 as a cpu addr and \
-                     * ran bank-30 bytes mid-routine instead of cpu $B292). */ \
-                    fprintf(f, "if (" cond_str ") { call_by_address_tail((uint16_t)(g_code_window_base | 0x%04X), %d); return; }\n", \
-                            _tgt & 0x1FFF, bank == fixed_bank ? -1 : bank); \
-                else \
-                    fprintf(f, "if (" cond_str ") { call_by_address(0x%04X); return; }\n", _tgt); \
+                     * EXECUTING window. Preserve its signed displacement from \
+                     * the source 8KB base so branches crossing an 8KB boundary \
+                     * reach the adjacent CPU window instead of wrapping within \
+                     * the source window. */ \
+                    int _live_off = (int)_tgt - (int)(pc & 0xE000); \
+                    if (_live_off >= 0) \
+                        fprintf(f, "if (" cond_str ") { maybe_trigger_vblank(%d); call_by_address_tail((uint16_t)(g_code_window_base + 0x%04X), %d); return; }\n", \
+                                _taken_cycles, _live_off, bank == fixed_bank ? -1 : bank); \
+                    else \
+                        fprintf(f, "if (" cond_str ") { maybe_trigger_vblank(%d); call_by_address_tail((uint16_t)(g_code_window_base - 0x%04X), %d); return; }\n", \
+                                _taken_cycles, -_live_off, bank == fixed_bank ? -1 : bank); \
+                } else \
+                    fprintf(f, "if (" cond_str ") { maybe_trigger_vblank(%d); call_by_address(0x%04X); return; }\n", _taken_cycles, _tgt); \
             } else if (_tgt <= pc) { \
                 /* Backward branch (loop) — emit VBlank trigger + watchdog check */ \
-                fprintf(f, "if (" cond_str ") {\n    maybe_trigger_vblank(2);\n#ifdef WATCHDOG_ENABLED\n    watchdog_check();\n#endif\n    goto label_%04X;\n    }\n", _tgt); \
+                fprintf(f, "if (" cond_str ") {\n    maybe_trigger_vblank(%d);\n#ifdef WATCHDOG_ENABLED\n    watchdog_check();\n#endif\n    goto label_%04X;\n    }\n", _taken_cycles, _tgt); \
             } else { \
-                fprintf(f, "if (" cond_str ") goto label_%04X;\n", _tgt); \
+                fprintf(f, "if (" cond_str ") { maybe_trigger_vblank(%d); goto label_%04X; }\n", _taken_cycles, _tgt); \
             } \
         } while(0)
         case MN_BCC: EMIT_BRANCH("!g_cpu.C"); break;
@@ -1931,7 +2170,7 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                     /* Validate dispatch_bank: every switchable-range target
                      * must have a generated function for that bank.  If any
                      * target is missing, fall back to call_by_address(). */
-                    if (dispatch_bank >= 0 && funcs) {
+                    if (!rom_mapper40(rom) && dispatch_bank >= 0 && funcs) {
                         uint16_t vpc = pc + 3;
                         for (int vi = 0; vi < entry_count; vi++) {
                             uint8_t vlo = rom_read(rom, bank, vpc);
@@ -1963,7 +2202,11 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                      * dispatch bank; on carts with a single switchable bank
                      * candidate (e.g. NROM-256) that bank is always mapped. */
                     int tramp_bank = bank;
-                    if (resolved_idsp < 0xC000 && bank == fixed_bank) {
+                    uint16_t tramp_addr = resolved_idsp;
+                    if (rom_mapper40(rom)) {
+                        rom_mapper40_cpu_to_generated(rom, resolved_idsp, 0,
+                                                      &tramp_addr, &tramp_bank);
+                    } else if (resolved_idsp < 0xC000 && bank == fixed_bank) {
                         if (dispatch_bank >= 0)
                             tramp_bank = dispatch_bank;
                         else if (!rom_mapper_full_32k_switch(rom) && rom->prg_banks <= 2)
@@ -1973,14 +2216,19 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                     {
                         TrampEffects tprobe;
                         uint16_t tfail_pc = 0; uint8_t tfail_op = 0;
-                        tramp_ok = derive_trampoline_effects(rom, tramp_bank, resolved_idsp, pc, 0,
-                                                             &tprobe, &tfail_pc, &tfail_op);
+                        tramp_ok = derive_trampoline_effects(
+                            rom, tramp_bank, tramp_addr, pc, 0,
+                            rom_mapper40(rom),
+                            &tprobe, &tfail_pc, &tfail_op);
                         if (!tramp_ok)
                             fprintf(stderr, "[CodeGen] inline_dispatch $%04X (JSR at $%04X): "
                                     "cannot derive trampoline side effects "
                                     "(op $%02X at $%04X) — emitting none\n",
                                     idsp->addr, pc, tfail_op, tfail_pc);
                     }
+                    if (rom_mapper40(rom))
+                        fprintf(f, "{ uint16_t _inline_ret = (uint16_t)((g_code_window_base | 0x%04X) + 2);\n",
+                                pc & 0x1FFF);
                     fprintf(f, "switch(g_cpu.A) {\n");
                     tpc = pc + 3;
                     for (int ei = 0; ei < entry_count; ei++) {
@@ -1992,11 +2240,16 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                         if (tramp_ok) {
                             TrampEffects tfx;
                             uint16_t tfail_pc = 0; uint8_t tfail_op = 0;
-                            if (derive_trampoline_effects(rom, tramp_bank, resolved_idsp, pc, (uint8_t)ei,
-                                                          &tfx, &tfail_pc, &tfail_op))
+                            if (derive_trampoline_effects(
+                                    rom, tramp_bank, tramp_addr, pc, (uint8_t)ei,
+                                    rom_mapper40(rom),
+                                    &tfx, &tfail_pc, &tfail_op))
                                 emit_trampoline_effects(f, &tfx, (uint8_t)ei);
                         }
-                        if (dest >= 0xC000) {
+                        if (rom_mapper40(rom) && dest >= 0x6000) {
+                            o.force_dynamic = true;
+                            emit_call_target(f, rom, dest, bank, fixed_bank, o);
+                        } else if (dest >= 0xC000) {
                             emit_call_target(f, rom, dest, fixed_bank, fixed_bank, o);
                         } else if (dest >= 0x8000) {
                             if (dispatch_bank >= 0) {
@@ -2025,6 +2278,7 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                     }
                     fprintf(f, "  default: nes_log_inline_miss(0x%04X, g_cpu.A); return;\n", pc);
                     fprintf(f, "}\n");
+                    if (rom_mapper40(rom)) fprintf(f, "}\n");
                     return (int)(tpc - pc);
                 }
             }
@@ -2060,7 +2314,7 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                 else
                     fprintf(f, "{ uint8_t _cbs = g_cpu.S; ");
                 uint16_t ret_addr = pc + 2; /* 6502 JSR pushes PC+2 (last byte of JSR) */
-                if (rom->mapper == 4) {
+                if (rom->mapper == 4 || rom->mapper == 40) {
                     /* Banked mapper: gen-layout PC constants are NOT the CPU
                      * address when the code executes in a window that differs
                      * from its gen labels. Stack-reading idioms (DynJump-style
@@ -2132,7 +2386,12 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
             }
             {
                 EmitCallOpts jsr_opts = { .jsr_pop_fallback = cfg->push_all_jsr };
-                if (abs16 >= 0xC000) {
+                if (rom->mapper == 40 && abs16 >= 0x6000) {
+                    jsr_opts.force_dynamic = true;
+                    jsr_opts.use_caller_bank = true;
+                    jsr_opts.caller_bank = bank;
+                    emit_call_target(f, rom, abs16, bank, fixed_bank, jsr_opts);
+                } else if (abs16 >= 0xC000) {
                     /* GxROM (full 32K switch) pairs both halves of the 32KB
                      * window together; $C000+ is the source's source_bank|1,
                      * NOT a fixed bank.  Traditional mappers (UxROM/MMC1/MMC3)
@@ -2251,7 +2510,29 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
         }
         case MN_JMP:
             if (e->addr_mode == AM_ABS) {
-                if (abs16 >= 0xC000) {
+                /* Coroutine yield pattern: TSX; STX $NN,Y; JMP $scheduler.
+                 *
+                 * This must precede the generic fixed-bank JMP lowering. A
+                 * scheduler normally lives at $C000+, and handling it as a
+                 * tail dispatch re-enters coroutine_scheduler_setjmp() from
+                 * the active fiber. That loses the C continuation which the
+                 * scheduler's RESUME path must later return to. */
+                if (pc >= 3 &&
+                    rom_read(rom, bank, pc - 3) == 0xBA /* TSX */ &&
+                    rom_read(rom, bank, pc - 2) == 0x96 /* STX zp,Y */) {
+                    fprintf(f, "coroutine_yield(); return;\n");
+                } else if (rom->mapper == 40 && abs16 >= 0x6000) {
+                    bool need_jmp_push = push_jmp_matches(cfg, pc, abs16);
+                    EmitCallOpts o = {
+                        .force_dynamic = true,
+                        .vblank_prefix = true,
+                        .push_dummy_dynamic = need_jmp_push,
+                        .tail_return = true,
+                        .use_caller_bank = true,
+                        .caller_bank = bank,
+                    };
+                    emit_call_target(f, rom, abs16, bank, fixed_bank, o);
+                } else if (abs16 >= 0xC000) {
                     uint16_t alias_owner = 0;
                     int alias_bank = -1;
                     int alias_entry = 0;
@@ -2287,15 +2568,6 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                             fprintf(f, "maybe_trigger_vblank(2); func_%04X(); return;\n", abs16);
                         else
                             fprintf(f, "maybe_trigger_vblank(2); call_by_address(0x%04X); return;\n", abs16);
-                    } else if (pc >= 0xC003 &&
-                               rom_read(rom, bank, pc - 3) == 0xBA /* TSX */ &&
-                               rom_read(rom, bank, pc - 2) == 0x96 /* STX zp,Y */) {
-                        /* Coroutine yield pattern: TSX; STX $NN,Y; JMP $scheduler.
-                         * The function saved the stack pointer to a channel table and
-                         * is jumping to the scheduler loop (which never returns to the
-                         * caller). Emit coroutine_yield() which longjmps back to the
-                         * scheduler's setjmp point. */
-                        fprintf(f, "coroutine_yield(); return;\n");
                     } else {
                         /* Check push_jmp: bail-containing targets need a dummy
                          * push so the bail's RTS has something safe to pop.
@@ -2331,7 +2603,11 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                     int jmp_cross_8kb = (rom->mapper == 4 &&
                                          pc >= 0x8000 && pc < 0xC000 &&
                                          (pc < 0xA000) != (abs16 < 0xA000));
-                    if (bank == fixed_bank || sram_sourced || jmp_cross_8kb) {
+                    int mapper4_switchable_jmp =
+                        (rom->mapper == 4 && bank != fixed_bank &&
+                         abs16 >= 0x8000 && abs16 < 0xC000);
+                    if (bank == fixed_bank || sram_sourced || jmp_cross_8kb ||
+                        mapper4_switchable_jmp) {
                         /* push_jmp check for cross-bank JMP via dispatch */
                         bool need_jmp_push = push_jmp_matches(cfg, pc, abs16);
                         EmitCallOpts o = {
@@ -2341,7 +2617,7 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                             .tail_return = true,
                             /* Cross-8KB JMP carries the caller-bank hint too (same
                              * runtime-mapping ambiguity as the JSR path). */
-                            .use_caller_bank = jmp_cross_8kb,
+                            .use_caller_bank = jmp_cross_8kb || mapper4_switchable_jmp,
                             .caller_bank = bank,
                         };
                         emit_call_target(f, rom, abs16, bank, fixed_bank, o);
@@ -2424,8 +2700,8 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                         uint8_t cont_hi = rom_read(rom, bank, pc - 5);
                         uint8_t cont_lo = rom_read(rom, bank, pc - 2);
                         uint16_t cont = (((uint16_t)cont_hi << 8) | cont_lo) + 1;
-                        fprintf(f, "{ uint16_t _jt = nes_read16zp(0x%02X); nes_trace_indirect_jump(0x%04X, _jt); maybe_trigger_vblank(2); call_by_address(_jt); } goto label_%04X;\n",
-                                (uint8_t)abs16, pc, cont);
+                        fprintf(f, "{ uint16_t _jt = nes_read16zp(0x%02X); nes_trace_indirect_jump(0x%04X, _jt); maybe_trigger_vblank(2); call_by_address(_jt); call_by_address_tail(0x%04X, %d); return; }\n",
+                                (uint8_t)abs16, pc, cont, bank);
                     } else {
                         uint16_t cont = 0;
                         if (configured_indirect_continuation(rom, cfg, bank, func_base, pc, &cont)) {
@@ -2449,8 +2725,8 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                         uint8_t cont_hi = rom_read(rom, bank, pc - 5);
                         uint8_t cont_lo = rom_read(rom, bank, pc - 2);
                         uint16_t cont = (((uint16_t)cont_hi << 8) | cont_lo) + 1;
-                        fprintf(f, "{ uint16_t _jt = nes_read16_jmpbug(0x%04X); nes_trace_indirect_jump(0x%04X, _jt); maybe_trigger_vblank(2); call_by_address(_jt); } goto label_%04X;\n",
-                                abs16, pc, cont);
+                        fprintf(f, "{ uint16_t _jt = nes_read16_jmpbug(0x%04X); nes_trace_indirect_jump(0x%04X, _jt); maybe_trigger_vblank(2); call_by_address(_jt); call_by_address_tail(0x%04X, %d); return; }\n",
+                                abs16, pc, cont, bank);
                     } else {
                         uint16_t cont = 0;
                         if (configured_indirect_continuation(rom, cfg, bank, func_base, pc, &cont)) {
@@ -2802,6 +3078,9 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
         }
         for (int i = 0; i < MAX_INSNS_PER_FUNC; i++) {
             if (scan < 0x8000) break;
+            if (rom_mapper40(rom) &&
+                (scan >= 0xC000 || (scan & 0xE000) != (pc & 0xE000)))
+                break;
             /* Remove this address from ps_pending (we're visiting it now) */
             for (int p = 0; p < ps_pending_count; p++) {
                 if (ps_pending[p] == scan) {
@@ -2813,6 +3092,11 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
             uint8_t op = rom_read(rom, bank, scan);
             const OpcodeEntry *e2 = &g_opcode_table[op];
             int sz = (e2->size > 0) ? e2->size : 1;
+            bool ps_base_straddles = false;
+            if (mapper40_reaches_8k_boundary(rom, scan, sz,
+                                             &ps_base_straddles) &&
+                ps_base_straddles)
+                break;
             /* Trampoline / inline_dispatch JSR: may consume more than 3 bytes */
             if (e2->mnemonic == MN_JSR) {
                 uint8_t _lo = rom_read(rom, bank, scan + 1);
@@ -2828,7 +3112,8 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
                     if (_tgt == cfg->inline_dispatches[_ti].addr) {
                         /* Count inline table bytes */
                         uint16_t _tpc = scan + 3;
-                        while (rom_read(rom, bank, _tpc + 1) >= 0x80) _tpc += 2;
+                        uint8_t _min_hi = rom_mapper40(rom) ? 0x60 : 0x80;
+                        while (rom_read(rom, bank, _tpc + 1) >= _min_hi) _tpc += 2;
                         sz = (int)(_tpc - scan);
                         break;
                     }
@@ -2846,6 +3131,11 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
                     }
                 }
             }
+            bool ps_straddles = false;
+            int ps_instruction_size = e2->size > 0 ? e2->size : 1;
+            if (mapper40_reaches_8k_boundary(rom, scan, ps_instruction_size,
+                                             &ps_straddles))
+                break;
             /* Track forward branch targets so we continue past early RTS/JMP */
             switch (e2->mnemonic) {
                 case MN_BCC: case MN_BCS: case MN_BEQ: case MN_BNE:
@@ -2952,65 +3242,9 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
      * Also add alias-only entry labels for omitted in-body function entries so direct
      * JMPs can target the owning body without requiring a standalone wrapper. */
     uint16_t secondary_addrs[MAX_SECONDARY_ENTRIES];
-    int secondary_count = 0;
-    for (int fi = 0; fi < funcs->count && secondary_count < MAX_SECONDARY_ENTRIES; fi++) {
-        const FunctionEntry *fe = &funcs->entries[fi];
-        if (fe->bank != bank || fe->addr == pc) continue;
-
-        if (fe->source_flags & FUNCTION_SOURCE_MANUAL) {
-            /* Manual entries are dispatch contracts. If they land on a valid
-             * instruction boundary inside this body, publish a wrapper here
-             * even if structural classification chose a different owner. Pick
-             * exactly one containing owner so broad bodies cannot duplicate the
-             * same wrapper. */
-            if (find_manual_entry_owner_index(rom, funcs, cfg, fi) !=
-                codegen_find_function_index(funcs, pc, bank))
-                continue;
-        } else if (fe->kind == FUNCTION_KIND_SECONDARY) {
-            if (fe->canonical_bank != bank || fe->canonical_addr != pc) continue;
-        } else {
-            continue;
-        }
-
-        bool valid = false;
-        for (int v = 0; v < valid_count; v++) {
-            if (valid_starts[v] == fe->addr) { valid = true; break; }
-        }
-        if (valid && !contains_addr(secondary_addrs, secondary_count, fe->addr))
-            secondary_addrs[secondary_count++] = fe->addr;
-    }
-    for (int li = 0; li < cfg->extra_label_count && secondary_count < MAX_SECONDARY_ENTRIES; li++) {
-        int lbl_bank = cfg->extra_labels[li].bank;
-        uint16_t lbl_addr = cfg->extra_labels[li].addr;
-        if (lbl_bank != bank) continue;
-        if (lbl_addr == pc) continue; /* same as function start */
-        /* Skip if this address already has its own function (standalone) */
-        if (function_list_contains(funcs, lbl_addr, bank)) continue;
-        for (int v = 0; v < valid_count; v++) {
-            if (valid_starts[v] == lbl_addr) {
-                if (!contains_addr(secondary_addrs, secondary_count, lbl_addr))
-                    secondary_addrs[secondary_count++] = lbl_addr;
-                break;
-            }
-        }
-    }
-    /* Add merge_func/merge_range partners as secondary entries.
-     * Only add if the address is on a valid instruction boundary (in valid_starts).
-     * Overlapping mid-instruction entries (common in 6502 code) get different
-     * instruction streams and must remain as independent functions. */
-    for (int mi = 0; mi < merge_partner_count && secondary_count < MAX_SECONDARY_ENTRIES; mi++) {
-        uint16_t mp = merge_partners[mi];
-        bool found = false;
-        for (int si = 0; si < secondary_count; si++)
-            if (secondary_addrs[si] == mp) { found = true; break; }
-        if (!found) {
-            bool valid = false;
-            for (int v = 0; v < valid_count; v++)
-                if (valid_starts[v] == mp) { valid = true; break; }
-            if (valid)
-                secondary_addrs[secondary_count++] = mp;
-        }
-    }
+    int owner_index = codegen_find_function_index(funcs, pc, bank);
+    int secondary_count = collect_secondary_addrs(
+        rom, funcs, cfg, owner_index, secondary_addrs, MAX_SECONDARY_ENTRIES);
     int public_secondary_count = secondary_count;
     uint16_t internal_alias_addrs[MAX_SECONDARY_ENTRIES];
     int internal_alias_count = collect_internal_alias_addrs(rom, funcs, cfg,
@@ -3078,6 +3312,9 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
 
     uint16_t cursor = pc;
     for (int insn = 0; insn < MAX_INSNS_PER_FUNC; insn++) {
+        if (rom_mapper40(rom) &&
+            (cursor >= 0xC000 || (cursor & 0xE000) != (pc & 0xE000)))
+            break;
         fprintf(f, "label_%04X:;", cursor);
         emit_sym(f, cursor);
         fprintf(f, "\n");
@@ -3102,6 +3339,18 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
 
         uint8_t opcode = rom_read(rom, bank, cursor);
         const OpcodeEntry *e = &g_opcode_table[opcode];
+        int instruction_size = e->size > 0 ? e->size : 1;
+        bool boundary_straddles = false;
+        bool boundary_after = mapper40_reaches_8k_boundary(
+            rom, cursor, instruction_size, &boundary_straddles);
+
+        if (boundary_straddles) {
+            fprintf(f,
+                    "    /* Mapper 40 instruction fetch crosses an 8KB PRG window. */\n"
+                    "    nes_interp_step_tail((uint16_t)(g_code_window_base | 0x%04X), %d); return;\n",
+                    cursor & 0x1FFF, bank);
+            break;
+        }
 
         /* Track forward branch targets (only non-cross-function ones go into pending) */
         switch (e->mnemonic) {
@@ -3189,6 +3438,15 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
                                         merge_partners, merge_partner_count,
                                         emitted_addrs, emitted_count,
                                         sched_reset_addr);
+
+        if (boundary_after && e->mnemonic != MN_JMP &&
+            e->mnemonic != MN_RTS && e->mnemonic != MN_RTI &&
+            e->mnemonic != MN_BRK) {
+            fprintf(f,
+                    "    call_by_address_tail((uint16_t)(g_code_window_base + 0x2000), %d); return;\n",
+                    bank);
+            break;
+        }
 
         /* If this PHA is immediately followed by a branch-target RTS, the fall-through path
          * must dispatch now (before reaching the RTS label, which is bypassed by branches).
@@ -3338,9 +3596,28 @@ static void emit_dispatch(FILE *f, const EmittedWrapper *wrappers, int wrapper_c
      * Remap the address so the dispatch finds the right function. */
     /* Reject sub-$8000 addresses — these are never valid code targets on NES.
      * They come from data-as-code false positives in the function finder. */
-    fprintf(f,
-        "    if (addr < 0x8000) { return nes_interp_dispatch(addr); }\n"
-    );
+    if (rom->mapper == 40) {
+        fprintf(f,
+            "    /* Mapper 40: map raw CPU windows to physical-8KB identities. */\n"
+            "    if (addr < 0x6000) { return nes_interp_dispatch(addr); }\n"
+            "    extern int g_mapper40_bank_c000_8k;\n"
+            "    uint16_t _cpu_addr = addr;\n"
+            "    int _b8;\n"
+            "    if (addr < 0x8000) _b8 = 6;\n"
+            "    else if (addr < 0xA000) _b8 = 4;\n"
+            "    else if (addr < 0xC000) _b8 = 5;\n"
+            "    else if (addr < 0xE000) _b8 = g_mapper40_bank_c000_8k;\n"
+            "    else _b8 = 7;\n"
+            "    int _bank = _b8 >> 1;\n"
+            "    (void)_caller_bank;\n"
+            "    addr = (uint16_t)(0x8000 + ((_b8 & 1) ? 0x2000 : 0)\n"
+            "                      + (addr & 0x1FFF));\n"
+        );
+    } else {
+        fprintf(f,
+            "    if (addr < 0x8000) { return nes_interp_dispatch(addr); }\n"
+        );
+    }
 
     if (rom->mapper == 4) {
         fprintf(f,
@@ -3414,7 +3691,8 @@ static void emit_dispatch(FILE *f, const EmittedWrapper *wrappers, int wrapper_c
              * $A295, which limped on via the caller-bank fallback).  Guard on _bank;
              * on a live-bank mismatch fall through to interp, which reads the live
              * bank correctly.  Gated to mapper 4 so non-MMC3 output is unchanged. */
-            if (rom->mapper == 4 && addr >= 0x8000 && addr < 0xC000 &&
+            if ((rom->mapper == 4 || rom->mapper == 40) &&
+                addr >= 0x8000 && addr < 0xC000 &&
                 variants[0] != fixed_bank) {
                 fprintf(f, "            switch (_bank) {\n");
                 fprintf(f, "                case %d: %s(); break;\n", variants[0], nm);
@@ -3429,7 +3707,7 @@ static void emit_dispatch(FILE *f, const EmittedWrapper *wrappers, int wrapper_c
              * For MMC3, use _bank which selects g_mmc3_bank_a000 for
              * $A000-$BFFF addresses and g_current_bank for $8000-$9FFF.
              * For GxROM, use _bank which pairs $C000+ to (current | 1). */
-            if (rom->mapper == 4 || rom->mapper == 66)
+            if (rom->mapper == 4 || rom->mapper == 40 || rom->mapper == 66)
                 fprintf(f, "            switch (_bank) {\n");
             else
                 fprintf(f, "            switch (g_current_bank) {\n");
@@ -3470,7 +3748,7 @@ static void emit_dispatch(FILE *f, const EmittedWrapper *wrappers, int wrapper_c
                  * active runtime bank.  Try the MMC3 R6-odd alias first, then the
                  * caller-bank fallback (cross-8KB calls whose g_current_bank was
                  * stale resolve to the caller's own 16KB bank), then interp. */
-                if (rom->mapper == 4)
+                if (rom->mapper == 4 || rom->mapper == 40)
                     /* No caller-bank / r6-odd retries here: those heuristics
                      * predate window-resolved dispatch (g_mmc3_win_bank8k) and
                      * redirect a clean "variant not generated" miss into a
@@ -3491,7 +3769,7 @@ static void emit_dispatch(FILE *f, const EmittedWrapper *wrappers, int wrapper_c
     }
 
     /* Extra_label secondary entries — add dispatch cases for their ROM addresses */
-    if (rom->mapper == 4)
+    if (rom->mapper == 4 || rom->mapper == 40)
         fprintf(f,
             "        default:\n"
             "            return nes_interp_dispatch_bank(_cpu_addr, addr, _bank);\n"
@@ -3933,6 +4211,17 @@ bool codegen_emit(const NESRom *rom, const FunctionList *funcs,
     fprintf(f_full, "#endif\n\n");
     free(parts);
 
+    /* The wrapper prepass predicts public entry points before bodies are
+     * emitted. Complex ownership and private-range aliases can still expose
+     * a wrapper only during the real body walk. Every wrapper that actually
+     * exists must be declared and dispatchable, so merge those observations
+     * back into the final wrapper set before writing stubs, headers, or the
+     * dispatch table. */
+    for (int ai = 0; ai < g_codegen_actual_wrapper_count; ai++) {
+        wrapper_list_add(wrappers, &wrapper_count, MAX_EMITTED_WRAPPERS,
+                         actual_wrappers[ai].addr, actual_wrappers[ai].bank);
+    }
+
     emit_missing_wrapper_stubs(f_full, wrappers, wrapper_count,
                                actual_wrappers, g_codegen_actual_wrapper_count,
                                rom, cfg);
@@ -3975,10 +4264,29 @@ bool codegen_emit(const NESRom *rom, const FunctionList *funcs,
     const char *reset_sfx = (rom->reset_vector < 0xC000) ? "_b0" : "";
     const char *nmi_sfx   = (rom->nmi_vector   < 0xC000) ? "_b0" : "";
     const char *irq_sfx   = (rom->irq_vector   < 0xC000) ? "_b0" : "";
-    if (rom->reset_vector < 0x8000)
+    uint16_t mapper40_reset_addr = 0, mapper40_nmi_addr = 0, mapper40_irq_addr = 0;
+    int mapper40_reset_bank = 0, mapper40_nmi_bank = 0, mapper40_irq_bank = 0;
+    bool has_mapper40_reset = rom_mapper40_cpu_to_generated(
+        rom, rom->reset_vector, 0, &mapper40_reset_addr, &mapper40_reset_bank);
+    bool has_mapper40_nmi = rom_mapper40_cpu_to_generated(
+        rom, rom->nmi_vector, 0, &mapper40_nmi_addr, &mapper40_nmi_bank);
+    bool has_mapper40_irq = rom_mapper40_cpu_to_generated(
+        rom, rom->irq_vector, 0, &mapper40_irq_addr, &mapper40_irq_bank);
+    if (has_mapper40_reset) {
+        fprintf(f_full,
+            "void func_RESET(void) { uint16_t _saved_wb = g_code_window_base; "
+            "g_code_window_base = 0x%04X; func_%04X_b%d(); "
+            "g_code_window_base = _saved_wb; }\n",
+            rom->reset_vector & 0xE000, mapper40_reset_addr, mapper40_reset_bank);
+    } else if (rom->reset_vector < 0x8000) {
         fprintf(f_full, "void func_RESET(void) { (void)nes_interp_interrupt(0x%04X); }\n", rom->reset_vector);
-    else
-        fprintf(f_full, "void func_RESET(void) { func_%04X%s(); }\n", rom->reset_vector, reset_sfx);
+    } else {
+        fprintf(f_full,
+            "void func_RESET(void) { uint16_t _saved_wb = g_code_window_base; "
+            "g_code_window_base = 0x%04X; func_%04X%s(); "
+            "g_code_window_base = _saved_wb; }\n",
+            rom->reset_vector & 0xE000, rom->reset_vector, reset_sfx);
+    }
     fprintf(f_full, "uint16_t g_rti_target = 0; /* RTI hijack target (set by RTI, consumed by func_NMI) */\n");
     fprintf(f_full, "uint16_t g_rti_source = 0; /* last generated RTI instruction address */\n");
     fprintf(f_full, "int g_rti_bank = -1; /* bank for last generated RTI instruction */\n");
@@ -3994,7 +4302,10 @@ bool codegen_emit(const NESRom *rom, const FunctionList *funcs,
            "    g_ram[0x100 + g_cpu.S] = 0x00; g_cpu.S--; /* PCH (sentinel) */\n"
            "    g_ram[0x100 + g_cpu.S] = 0x00; g_cpu.S--; /* PCL (sentinel) */\n"
            "    g_ram[0x100 + g_cpu.S] = _nmi_p; g_cpu.S--; /* P */\n"
-           "    g_rti_target = 0;\n");
+           "    g_cpu.I = 1; /* NMI entry sets I after pushing the old P */\n"
+           "    runtime_note_interrupt_entry();\n"
+           "    g_rti_target = 0;\n"
+           "    uint16_t _nmi_saved_wb = g_code_window_base;\n");
     if (rom->num_windows > 0) {
         /* GxROM (and other full-32KB-switch mappers): the NMI vector at\n"
          * $FFFA depends on which 32KB window is currently mapped.  Dispatch\n"
@@ -4020,12 +4331,21 @@ bool codegen_emit(const NESRom *rom, const FunctionList *funcs,
             "    call_by_address(s_nmi_vectors[_w]);\n",
             rom->num_windows, rom->num_windows - 1);
     } else {
-        if (rom->nmi_vector < 0x8000)
+        if (has_mapper40_nmi)
+            fprintf(f_full,
+                "    g_code_window_base = 0x%04X;\n"
+                "    func_%04X_b%d();\n",
+                rom->nmi_vector & 0xE000, mapper40_nmi_addr, mapper40_nmi_bank);
+        else if (rom->nmi_vector < 0x8000)
             fprintf(f_full, "    (void)nes_interp_interrupt(0x%04X);\n", rom->nmi_vector);
         else
-            fprintf(f_full, "    func_%04X%s();\n", rom->nmi_vector, nmi_sfx);
+            fprintf(f_full,
+                "    g_code_window_base = 0x%04X;\n"
+                "    func_%04X%s();\n",
+                rom->nmi_vector & 0xE000, rom->nmi_vector, nmi_sfx);
     }
     fprintf(f_full,
+           "    g_code_window_base = _nmi_saved_wb;\n"
            "    if (g_rti_target != 0) {\n"
            "        /* Post-NMI code runs outside NMI context on real hardware\n"
            "         * (RTI re-enables interrupts, NMI is edge-triggered).\n"
@@ -4037,10 +4357,21 @@ bool codegen_emit(const NESRom *rom, const FunctionList *funcs,
            "        runtime_end_post_nmi();\n"
            "    }\n"
            "}\n");
-    if (rom->irq_vector < 0x8000)
+    if (has_mapper40_irq) {
+        fprintf(f_full,
+            "void func_IRQ(void)   { uint16_t _saved_wb = g_code_window_base; "
+            "g_code_window_base = 0x%04X; func_%04X_b%d(); "
+            "g_code_window_base = _saved_wb; }\n",
+            rom->irq_vector & 0xE000, mapper40_irq_addr, mapper40_irq_bank);
+    } else if (rom->irq_vector < 0x8000) {
         fprintf(f_full, "void func_IRQ(void)   { (void)nes_interp_interrupt(0x%04X); }\n", rom->irq_vector);
-    else
-        fprintf(f_full, "void func_IRQ(void)   { func_%04X%s(); }\n", rom->irq_vector, irq_sfx);
+    } else {
+        fprintf(f_full,
+            "void func_IRQ(void)   { uint16_t _saved_wb = g_code_window_base; "
+            "g_code_window_base = 0x%04X; func_%04X%s(); "
+            "g_code_window_base = _saved_wb; }\n",
+            rom->irq_vector & 0xE000, rom->irq_vector, irq_sfx);
+    }
 
     fclose(f_full);
 

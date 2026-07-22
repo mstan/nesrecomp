@@ -91,6 +91,85 @@ static void mmc3_region_target(uint16_t target, uint8_t raw_bank, char region,
         *out_addr = odd ? target : (uint16_t)(target - 0x2000);
 }
 
+static void add_function_with_source(FunctionList *list, uint16_t addr, int bank,
+                                     uint8_t source_flags);
+
+static bool add_mapper40_cpu_target(const NESRom *rom, FunctionList *list,
+                                    uint16_t target, uint8_t source_flags) {
+    if (!rom_mapper40(rom) || target < 0x6000) return false;
+
+    if (target >= 0xC000 && target < 0xE000) {
+        int total8 = rom->prg_banks * 2;
+        for (int bank8 = 0; bank8 < total8; bank8++) {
+            uint16_t gen_addr;
+            int gen_bank;
+            if (rom_mapper40_cpu_to_generated(rom, target, bank8,
+                                              &gen_addr, &gen_bank)) {
+                add_function_with_source(list, gen_addr, gen_bank, source_flags);
+            }
+        }
+    } else {
+        uint16_t gen_addr;
+        int gen_bank;
+        if (rom_mapper40_cpu_to_generated(rom, target, 0,
+                                          &gen_addr, &gen_bank)) {
+            add_function_with_source(list, gen_addr, gen_bank, source_flags);
+        }
+    }
+    return true;
+}
+
+static bool mapper40_generated_to_cpu(const NESRom *rom, int bank,
+                                      uint16_t addr, uint16_t *out_cpu_addr) {
+    if (!rom_mapper40(rom) || addr < 0x8000 || addr >= 0xC000)
+        return false;
+
+    int bank8 = bank * 2 + ((addr & 0x2000) ? 1 : 0);
+    uint16_t cpu_base;
+    if      (bank8 == 6) cpu_base = 0x6000;
+    else if (bank8 == 4) cpu_base = 0x8000;
+    else if (bank8 == 5) cpu_base = 0xA000;
+    else if (bank8 == 7) cpu_base = 0xE000;
+    else                 cpu_base = 0xC000;
+
+    *out_cpu_addr = (uint16_t)(cpu_base + (addr & 0x1FFF));
+    return true;
+}
+
+static bool mapper40_boundary_next(const NESRom *rom, int bank,
+                                   uint16_t addr, int size,
+                                   uint16_t *out_cpu_next) {
+    uint16_t cpu_addr;
+    if (size <= 0 ||
+        !mapper40_generated_to_cpu(rom, bank, addr, &cpu_addr))
+        return false;
+    unsigned offset = addr & 0x1FFF;
+    if (offset + (unsigned)size < 0x2000) return false;
+
+    *out_cpu_next = (uint16_t)(cpu_addr + (unsigned)size);
+    return true;
+}
+
+static void seed_mapper40_bank_vectors(const NESRom *rom, FunctionList *list) {
+    if (!rom_mapper40(rom)) return;
+
+    int total8 = rom->prg_banks * 2;
+    /* Mapper 40 reserves the final four 8KB banks for the fixed $8000,
+     * $A000, $6000, and $E000 windows. Only the preceding pool is selected
+     * into $C000 and therefore exposes meaningful $DFFA-$DFFF vectors. */
+    int switchable8 = total8 > 4 ? total8 - 4 : total8;
+    for (int bank8 = 0; bank8 < switchable8; bank8++) {
+        int bank16 = bank8 >> 1;
+        uint16_t vec_base = (bank8 & 1) ? 0xBFFA : 0x9FFA;
+        for (int vi = 0; vi < 3; vi++) {
+            uint16_t slot = (uint16_t)(vec_base + vi * 2);
+            uint16_t target = (uint16_t)(rom_read(rom, bank16, slot) |
+                              ((uint16_t)rom_read(rom, bank16, slot + 1) << 8));
+            add_mapper40_cpu_target(rom, list, target, FUNCTION_SOURCE_CONTROL);
+        }
+    }
+}
+
 static int function_list_find_index(const FunctionList *list, uint16_t addr, int bank) {
     for (int i = 0; i < list->count; i++) {
         if (list->entries[i].addr == addr && list->entries[i].bank == bank)
@@ -155,6 +234,22 @@ static void add_function_uncertain_bank(FunctionList *list, uint16_t addr, int b
     add_function_with_source(list, addr, bank, FUNCTION_SOURCE_XBANK);
 }
 
+static bool branch_target_splits_fallthrough(const NESRom *rom, int bank,
+                                             uint16_t fallthrough,
+                                             uint16_t target) {
+    uint16_t scan = fallthrough;
+    for (int i = 0; i < MAX_INSNS_PER_FUNC && scan < target; i++) {
+        uint8_t op = rom_read(rom, bank, scan);
+        int size = g_opcode_table[op].size;
+        if (size <= 0) size = 1;
+        uint32_t next = (uint32_t)scan + (uint32_t)size;
+        if (next > target) return true;
+        if (next > 0xFFFFu) break;
+        scan = (uint16_t)next;
+    }
+    return false;
+}
+
 bool function_list_contains(const FunctionList *list, uint16_t addr, int bank) {
     return function_list_find_index(list, addr, bank) >= 0;
 }
@@ -182,8 +277,8 @@ static uint16_t sram_translate(const GameConfig *cfg, uint16_t addr, int *out_ba
 static void detect_zero_fill_regions(const NESRom *rom, GameConfig *cfg) {
     int total_added = 0;
     for (int bank = 0; bank < rom->prg_banks; bank++) {
-        uint16_t base = (bank == rom->prg_banks - 1) ? 0xC000 : 0x8000;
-        uint16_t end  = (bank == rom->prg_banks - 1) ? 0xFFFA : 0xC000;
+        uint16_t base = (bank == rom->prg_banks - 1 && !rom_mapper40(rom)) ? 0xC000 : 0x8000;
+        uint16_t end  = (bank == rom->prg_banks - 1 && !rom_mapper40(rom)) ? 0xFFFA : 0xC000;
         /* 0xFFFA: stop before interrupt vectors */
         uint16_t run_start = 0;
         bool in_run = false;
@@ -291,6 +386,12 @@ void scan_function_boundaries(const NESRom *rom, uint16_t start_addr,
 
     for (int i = 0; i < MAX_INSNS_PER_FUNC && *out_count < max_addrs; i++) {
         if (pc < 0x8000) break;
+        /* Mapper 40 exposes independent 8KB PRG windows. Generated addresses
+         * identify a physical 8KB half, so an ownership scan must never follow
+         * fallthrough or a pending branch into the adjacent half. */
+        if (rom_mapper40(rom) &&
+            (pc >= 0xC000 || (pc & 0xE000) != (start_addr & 0xE000)))
+            break;
 
         for (int p = 0; p < pending_count; p++) {
             if (pending[p] == pc) {
@@ -306,6 +407,11 @@ void scan_function_boundaries(const NESRom *rom, uint16_t start_addr,
         const OpcodeEntry *e = &g_opcode_table[op];
         int sz = (e->size > 0) ? e->size : 1;
 
+        uint16_t boundary_next = 0;
+        if (mapper40_boundary_next(rom, read_bank, pc, sz, &boundary_next) &&
+            (unsigned)(pc & 0x1FFF) + (unsigned)sz > 0x2000)
+            break;
+
         if (e->mnemonic == MN_JSR) {
             uint16_t target = rom_read(rom, read_bank, pc + 1) |
                               ((uint16_t)rom_read(rom, read_bank, pc + 2) << 8);
@@ -318,7 +424,8 @@ void scan_function_boundaries(const NESRom *rom, uint16_t start_addr,
             for (int ti = 0; ti < cfg->inline_dispatch_count; ti++) {
                 if (target == cfg->inline_dispatches[ti].addr) {
                     uint16_t tpc = pc + 3;
-                    while (rom_read(rom, read_bank, tpc + 1) >= 0x80) tpc += 2;
+                    uint8_t min_hi = rom_mapper40(rom) ? 0x60 : 0x80;
+                    while (rom_read(rom, read_bank, tpc + 1) >= min_hi) tpc += 2;
                     sz = (int)(tpc - pc);
                     break;
                 }
@@ -373,6 +480,17 @@ void scan_function_boundaries(const NESRom *rom, uint16_t start_addr,
         if (e->mnemonic == MN_RTS || e->mnemonic == MN_RTI ||
             e->mnemonic == MN_BRK || e->mnemonic == MN_JMP) {
             if (pending_count == 0) break;
+            if (e->mnemonic == MN_JMP) {
+                uint16_t next = 0;
+                for (int p = 0; p < pending_count; p++) {
+                    if (pending[p] > pc && (next == 0 || pending[p] < next))
+                        next = pending[p];
+                }
+                if (next != 0) {
+                    pc = next;
+                    continue;
+                }
+            }
         }
 
         pc += sz;
@@ -607,14 +725,19 @@ static int s_regprop_targeted_adds = 0;
  * mapper.c / the dispatch TU, and code_generator's mmc3_region_target):
  *   $8000 window, odd 8KB bank  → upper half, generated at $A000 (+0x2000)
  *   $A000 window, even 8KB bank → lower half, generated at $8000 (-0x2000)
- * Other regions (fixed / mode-1) are addressed directly: out_addr = target. */
+ * In mode 1, R6 is mapped at the CPU $C000 window. Convert that CPU address
+ * back to the recompiler's natural 16KB-bank layout as well. */
 static int mmc3_resolve_bank(uint16_t target, int walk_r6, int walk_r7,
                              int walk_r6_odd, int walk_r7_odd,
                              int walk_mode, int fixed_bank, uint16_t *out_addr) {
     *out_addr = target;
     if (target >= 0xE000) return fixed_bank;
     if (target >= 0xC000) {
-        if (walk_mode == 1 && walk_r6 != -1) return walk_r6;
+        if (walk_mode == 1 && walk_r6 != -1) {
+            *out_addr = walk_r6_odd ? (uint16_t)(target - 0x2000)
+                                    : (uint16_t)(target - 0x4000);
+            return walk_r6;
+        }
         if (walk_mode != -1) return fixed_bank;  /* mode 0: $C000 is fixed */
         return -1;                                /* unknown */
     }
@@ -632,6 +755,19 @@ static int mmc3_resolve_bank(uint16_t target, int walk_r6, int walk_r7,
         return -1;
     }
     return -1;
+}
+
+static void add_mmc3_unknown_mode1_targets(const NESRom *rom, FunctionList *list,
+                                           uint16_t target) {
+    if (rom->mapper != 4 || target < 0xC000 || target >= 0xE000) return;
+
+    int fixed_bank = rom->prg_banks - 1;
+    uint16_t even_addr = (uint16_t)(target - 0x4000);
+    uint16_t odd_addr = (uint16_t)(target - 0x2000);
+    for (int bank = 0; bank < fixed_bank; bank++) {
+        add_function_uncertain_bank(list, even_addr, bank);
+        add_function_uncertain_bank(list, odd_addr, bank);
+    }
 }
 
 static int walk_function(const NESRom *rom, FunctionList *list,
@@ -684,10 +820,26 @@ static int walk_function(const NESRom *rom, FunctionList *list,
          * uses the function's original bank, not effective_bank) */
         int read_bank = resolve_bank_for_addr(rom, switchable_bank, pc);
         if (pc < 0x8000) break; /* Not ROM */
+        /* Mapper 40's generated bank/address pair names one physical 8KB
+         * window. Crossing this boundary requires a live mapper dispatch. */
+        if (rom_mapper40(rom) &&
+            (pc >= 0xC000 || (pc & 0xE000) != (start_addr & 0xE000)))
+            break;
 
         uint8_t opcode = rom_read(rom, read_bank, pc);
         const OpcodeEntry *entry = &g_opcode_table[opcode];
         insn_count++;
+
+        int instruction_size = entry->size > 0 ? entry->size : 1;
+        uint16_t boundary_next = 0;
+        if (mapper40_boundary_next(rom, read_bank, pc, instruction_size,
+                                   &boundary_next)) {
+            add_mapper40_cpu_target(
+                rom, list, boundary_next,
+                propagated_discovery_source(walk_source_flags));
+            if ((unsigned)(pc & 0x1FFF) + (unsigned)instruction_size > 0x2000)
+                break;
+        }
 
         if (mn_finder_illegal(entry->mnemonic)) {
             int sz = entry->size;
@@ -862,12 +1014,26 @@ static int walk_function(const NESRom *rom, FunctionList *list,
             case MN_BMI: case MN_BPL: case MN_BVC: case MN_BVS: {
                 int8_t off = (int8_t)rom_read(rom, read_bank, pc + 1);
                 uint16_t tgt = (uint16_t)(pc + 2 + off);
+                uint16_t cpu_pc;
+                if (mapper40_generated_to_cpu(rom, read_bank, pc, &cpu_pc)) {
+                    uint16_t cpu_tgt = (uint16_t)(cpu_pc + 2 + off);
+                    if ((cpu_pc & 0xE000) != (cpu_tgt & 0xE000)) {
+                        add_mapper40_cpu_target(rom, list, cpu_tgt,
+                                                walk_source_flags);
+                        break;
+                    }
+                }
                 if (tgt > pc && pending_count < 256) {
                     /* Forward — track as pending */
                     bool found = false;
                     for (int p = 0; p < pending_count; p++)
                         if (pending[p] == tgt) { found = true; break; }
                     if (!found) pending[pending_count++] = tgt;
+                    if (branch_target_splits_fallthrough(rom, read_bank,
+                                                         (uint16_t)(pc + 2), tgt)) {
+                        int tbank = resolve_bank_for_addr(rom, switchable_bank, tgt);
+                        add_function_propagated(list, tgt, tbank, walk_source_flags);
+                    }
                 } else if (tgt < start_addr && tgt >= 0x8000) {
                     /* Backward branch before this function's start: that code
                      * is only reachable via this branch, register as new function. */
@@ -1061,7 +1227,11 @@ static int walk_function(const NESRom *rom, FunctionList *list,
                         uint8_t tlo = rom_read(rom, read_bank, tpc);
                         uint8_t thi = rom_read(rom, read_bank, tpc + 1);
                         uint16_t dest = (uint16_t)tlo | ((uint16_t)thi << 8);
-                        if (dest >= 0xC000) {
+                        if (rom_mapper40(rom) && dest >= 0x6000) {
+                            add_mapper40_cpu_target(
+                                rom, list, dest,
+                                propagated_discovery_source(walk_source_flags));
+                        } else if (dest >= 0xC000) {
                             int tbank = resolve_bank_for_addr(rom, effective_bank, dest);
                             add_function_propagated(list, dest, tbank, walk_source_flags);
                         } else if (dest >= 0x8000) {
@@ -1110,7 +1280,11 @@ static int walk_function(const NESRom *rom, FunctionList *list,
                 }
             }
 
-            if (target >= 0xC000) {
+            if (add_mapper40_cpu_target(rom, list, target,
+                                        propagated_discovery_source(walk_source_flags))) {
+                /* Mapper 40 operands name live CPU windows, while discovered
+                 * functions use stable physical-bank identities. */
+            } else if (target >= 0xC000) {
                 /* Upper bank target — fixed for traditional mappers,
                  * paired upper bank for GxROM */
                 int tbank = resolve_bank_for_addr(rom, effective_bank, target);
@@ -1123,10 +1297,13 @@ static int walk_function(const NESRom *rom, FunctionList *list,
                     int cb_bank = mmc3_resolve_bank(target, walk_r6, walk_r7,
                                                    walk_r6_odd, walk_r7_odd,
                                                    walk_mode, fixed_bank, &cb_addr);
-                    if (cb_bank != -1 && cb_bank != tbank &&
+                    if (cb_bank != -1 &&
+                        (cb_bank != tbank || cb_addr != target) &&
                         !function_list_contains(list, cb_addr, cb_bank)) {
                         add_function_propagated(list, cb_addr, cb_bank, walk_source_flags);
                         s_regprop_targeted_adds++;
+                    } else if (cb_bank == -1) {
+                        add_mmc3_unknown_mode1_targets(rom, list, target);
                     }
                 }
             } else if (target >= 0x8000) {
@@ -1195,7 +1372,10 @@ static int walk_function(const NESRom *rom, FunctionList *list,
             uint8_t lo = rom_read(rom, read_bank, pc + 1);
             uint8_t hi = rom_read(rom, read_bank, pc + 2);
             uint16_t target = lo | ((uint16_t)hi << 8);
-            if (target >= 0xC000) {
+            if (add_mapper40_cpu_target(rom, list, target,
+                                        propagated_discovery_source(walk_source_flags))) {
+                /* See the JSR path above. */
+            } else if (target >= 0xC000) {
                 int tbank = resolve_bank_for_addr(rom, effective_bank, target);
                 add_function_propagated(list, target, tbank, walk_source_flags);
                 /* MMC3 mode-1 cross-bank: $C000-$DFFF can be R6. */
@@ -1204,10 +1384,13 @@ static int walk_function(const NESRom *rom, FunctionList *list,
                     int cb_bank = mmc3_resolve_bank(target, walk_r6, walk_r7,
                                                    walk_r6_odd, walk_r7_odd,
                                                    walk_mode, fixed_bank, &cb_addr);
-                    if (cb_bank != -1 && cb_bank != tbank &&
+                    if (cb_bank != -1 &&
+                        (cb_bank != tbank || cb_addr != target) &&
                         !function_list_contains(list, cb_addr, cb_bank)) {
                         add_function_propagated(list, cb_addr, cb_bank, walk_source_flags);
                         s_regprop_targeted_adds++;
+                    } else if (cb_bank == -1) {
+                        add_mmc3_unknown_mode1_targets(rom, list, target);
                     }
                 }
             } else if (target >= 0x8000) {
@@ -1309,6 +1492,7 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
     s_regprop_targeted_adds = 0;
 
     int fixed_bank = rom->prg_banks - 1;
+    bool mapper40 = rom_mapper40(rom);
 
     /* Auto-detect zero-fill regions before any function discovery */
     detect_zero_fill_regions(rom, cfg);
@@ -1337,9 +1521,20 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
      * else bank 0. Vectors below $8000 are RAM/SRAM handlers and must execute
      * through the runtime interpreter, not as bogus bank-0 ROM functions. */
 #define VEC_BANK(addr) ((addr) >= 0xC000 ? fixed_bank : 0)
-    if (rom->reset_vector >= 0x8000) add_function(out, rom->reset_vector, VEC_BANK(rom->reset_vector));
-    if (rom->nmi_vector   >= 0x8000) add_function(out, rom->nmi_vector,   VEC_BANK(rom->nmi_vector));
-    if (rom->irq_vector   >= 0x8000) add_function(out, rom->irq_vector,   VEC_BANK(rom->irq_vector));
+    if (rom_mapper40(rom)) {
+        add_mapper40_cpu_target(rom, out, rom->reset_vector, FUNCTION_SOURCE_CONTROL);
+        add_mapper40_cpu_target(rom, out, rom->nmi_vector, FUNCTION_SOURCE_CONTROL);
+        add_mapper40_cpu_target(rom, out, rom->irq_vector, FUNCTION_SOURCE_CONTROL);
+        /* Mapper 40 carts expose the selected $C000 bank's final six bytes at
+         * $DFFA-$DFFF. FDS-style trampolines use those per-bank vectors as
+         * indirect NMI/RESET/IRQ destinations, so every selectable bank's
+         * vector targets are control-flow roots. */
+        seed_mapper40_bank_vectors(rom, out);
+    } else {
+        if (rom->reset_vector >= 0x8000) add_function(out, rom->reset_vector, VEC_BANK(rom->reset_vector));
+        if (rom->nmi_vector   >= 0x8000) add_function(out, rom->nmi_vector,   VEC_BANK(rom->nmi_vector));
+        if (rom->irq_vector   >= 0x8000) add_function(out, rom->irq_vector,   VEC_BANK(rom->irq_vector));
+    }
 #undef VEC_BANK
 
     /* For mappers with fully-switchable 32KB banks (GxROM), each window may
@@ -1387,7 +1582,7 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
      * Criteria: first byte at target is non-illegal opcode.
      * Also checks candidate+1 for RTS-as-JMP dispatch tables. */
     int before_scan = out->count;
-    for (uint16_t off = 0; off <= 0x3FFD; off++) {
+    for (uint16_t off = 0; !mapper40 && off <= 0x3FFD; off++) {
         uint16_t addr = 0xC000 + off;
         if (is_data_region(cfg, fixed_bank, addr)) continue;
         uint8_t lo = rom_read(rom, fixed_bank, addr);
@@ -1422,15 +1617,16 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
     }
     printf("[FuncFinder] Fixed-bank pointer scan added %d candidates\n", out->count - before_scan);
 
-    if (cfg->disable_ptr_scan) {
-        printf("[FuncFinder] Switchable->fixed pointer scan skipped via disable_ptr_scan\n");
+    if (cfg->disable_ptr_scan || mapper40) {
+        printf("[FuncFinder] Switchable->fixed pointer scan skipped (%s)\n",
+               mapper40 ? "Mapper 40 window layout" : "disable_ptr_scan");
     } else {
     /* Switchable-bank → fixed-bank pointer scan: scan each switchable bank
      * for 16-bit LE values pointing into the fixed bank ($C000-$FFFD).
      * Uses validate_code_target for deeper validation since cross-bank
      * pointer matches have higher false-positive risk. */
     int before_sw_fixed_scan = out->count;
-    for (int b = 0; b < fixed_bank; b++) {
+    for (int b = 0; !mapper40 && b < fixed_bank; b++) {
         for (uint16_t off = 0; off <= 0x3FFD; off++) {
             uint16_t addr = 0x8000 + off;
             if (is_data_region(cfg, b, addr)) continue;
@@ -1476,7 +1672,7 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
      * generate unused but valid functions. Harmful FPs (data decoded as code)
      * are eliminated by the deep-decode check + data_region exclusions. */
     int before_sw_scan = out->count;
-    for (int b = 0; b < fixed_bank; b++) {
+    for (int b = 0; !mapper40 && b < fixed_bank; b++) {
         /* Scan source: switchable bank b (tables within the bank itself) */
         for (uint16_t off = 0; off <= 0x3FFD; ) {
             uint16_t scan_addr = 0x8000 + off;
@@ -1573,7 +1769,7 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
      * validate_code_target on each candidate. */
     int before_split = out->count;
     int split_sites = 0;
-    for (int b = 0; b <= fixed_bank; b++) {
+    for (int b = 0; !mapper40 && b <= fixed_bank; b++) {
         uint16_t scan_base = (b == fixed_bank) ? 0xC000 : 0x8000;
         uint16_t scan_end  = (b == fixed_bank) ? 0xFFFE : 0xBFFE;
         for (uint16_t pc = scan_base; pc + 12 <= scan_end; pc++) {
@@ -1704,7 +1900,9 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
             uint8_t lo = rom_read(rom, kb, a);
             uint8_t hi = rom_read(rom, kb, a + 1);
             uint16_t target = (lo | ((uint16_t)hi << 8)) + 1;
-            if (target >= 0x8000 && target <= 0xBFFD) {
+            if (mapper40 && target >= 0x6000 && target <= 0xFFFD) {
+                add_mapper40_cpu_target(rom, out, target, FUNCTION_SOURCE_KNOWN_TABLE);
+            } else if (target >= 0x8000 && target <= 0xBFFD) {
                 if (!function_list_contains(out, target, kb))
                     add_function_with_source(out, target, kb, FUNCTION_SOURCE_KNOWN_TABLE);
             } else if (target >= 0xC000 && target <= 0xFFFD) {
@@ -1725,7 +1923,9 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
             uint8_t lo = rom_read(rom, kb, cfg->known_split_tables[t].lo_start + si * st);
             uint8_t hi = rom_read(rom, kb, cfg->known_split_tables[t].hi_start + si * st);
             uint16_t target = (lo | ((uint16_t)hi << 8)) + cfg->known_split_tables[t].adjust;
-            if (target >= 0x8000 && target <= 0xBFFD) {
+            if (mapper40 && target >= 0x6000 && target <= 0xFFFD) {
+                add_mapper40_cpu_target(rom, out, target, FUNCTION_SOURCE_KNOWN_TABLE);
+            } else if (target >= 0x8000 && target <= 0xBFFD) {
                 if (!function_list_contains(out, target, kb))
                     add_function_with_source(out, target, kb, FUNCTION_SOURCE_KNOWN_TABLE);
             } else if (target >= 0xC000 && target <= 0xFFFD) {
@@ -1757,7 +1957,7 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
      * bank. This catches shared code regions (e.g., Metroid's common
      * routines duplicated across all PRG banks). */
     int before_xbank = out->count;
-    {
+    if (!mapper40) {
         #define XBANK_MATCH_BYTES 8
         int snapshot_count = out->count;
         for (int i = 0; i < snapshot_count; i++) {

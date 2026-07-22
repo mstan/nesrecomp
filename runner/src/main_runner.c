@@ -654,8 +654,11 @@ smoke_skip_input:
         g_controller2_buttons = 0;
     }
 
-    /* Per-frame script execution */
-    script_tick(g_frame_count, g_ram);
+    /* Per-frame script execution. Nested callbacks resolve guest spin-waits
+     * but do not present or advance g_frame_count, so consuming WAIT commands
+     * there makes scripted input run ahead of observable game time. */
+    if (runtime_get_vblank_depth() <= 1)
+        script_tick(g_frame_count, g_ram);
 
     /* TCP debug server: poll for commands each frame. Polled in smoke mode
      * too — headless runs are the main consumer of automated TCP probes,

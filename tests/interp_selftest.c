@@ -50,11 +50,17 @@ uint16_t nes_read16_jmpbug(uint16_t a) {
     return (uint16_t)(nes_read(a) | (nes_read(hi) << 8));
 }
 uint8_t mapper_peek_prg(uint16_t a) { return g_ram[a & 0x07FF]; } /* unused by RAM-resident tests */
+int mapper_get_type(void) { return 0; }
 void maybe_trigger_vblank(int c) { (void)c; }
 int  game_dispatch_override(uint16_t a) { (void)a; return 0; }
 void nes_record_dispatch_miss(uint16_t a) { (void)a; }
+void nes_record_dispatch_miss_bank(uint16_t ga, uint16_t ca, int b) {
+    (void)ga; (void)ca; (void)b;
+}
 void nes_dispatch_miss_apply_policy(uint16_t a) { (void)a; }
 void nes_brk_executed(uint16_t pc) { (void)pc; }
+void nes_trace_sram_fetch(uint16_t a, uint8_t v) { (void)a; (void)v; }
+void nes_dring_mark(char kind, uint16_t tag) { (void)kind; (void)tag; }
 
 /* Mimics the generated dispatcher: a "covered" address runs natively (here a
  * side effect + the native callee's RTS pop, S+=2, then return 1); an
@@ -68,6 +74,10 @@ int call_by_address(uint16_t a) {
         return 1;
     }
     return nes_interp_dispatch(a);
+}
+int call_by_address_tail(uint16_t a, int caller_bank) {
+    (void)caller_bank;
+    return call_by_address(a);
 }
 
 /* ---- Test scaffolding ---- */
@@ -172,6 +182,24 @@ int main(void) {
     CHECK(r == 1,              "T8 dispatch handled");
     CHECK(g_ram[0x18] == 0x43, "T8 [$18] incremented 0x41 -> 0x43");
     CHECK(g_cpu.Z == 0 && g_cpu.N == 0, "T8 flags from INC result");
+
+    printf("[T9] explicit resume remains available with miss fallback disabled\n");
+    fresh();
+    { uint8_t p[] = {0xA9,0x5C, 0x85,0x19, 0x60}; /* LDA#5C;STA$19;RTS */
+      load(0x0600, p, sizeof p); }
+    nes_interp_set_enabled(0);
+    r = nes_interp_resume(0x0600);
+    CHECK(r == 1,              "T9 explicit resume handled");
+    CHECK(g_ram[0x19] == 0x5C, "T9 resumed code ran with fallback disabled");
+
+    printf("[T10] dynamic RAM dispatch remains available with fallback disabled\n");
+    fresh();
+    { uint8_t p[] = {0xA9,0x6D, 0x85,0x1A, 0x60}; /* LDA#6D;STA$1A;RTS */
+      load(0x0600, p, sizeof p); }
+    r = nes_interp_dispatch(0x0600);
+    CHECK(r == 1,              "T10 dynamic RAM dispatch handled");
+    CHECK(g_ram[0x1A] == 0x6D, "T10 RAM code ran with fallback disabled");
+    nes_interp_set_enabled(1);
 
     printf("\n==== interp self-test: %d checks, %d failures ====\n", g_checks, g_fails);
     return g_fails;
