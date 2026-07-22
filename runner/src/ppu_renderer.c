@@ -435,12 +435,6 @@ void ppu_render_frame(uint32_t *framebuf) {
     /* Pre-IRQ CHR snapshot for the sprite pass (see s_chr_pre_irq). Taken
      * before any scanline-IRQ service can rebank the live window. */
     memcpy(s_chr_pre_irq, g_chr_ram, sizeof(s_chr_pre_irq));
-    uint8_t render_oam[0x100];
-    uint16_t render_oam_x16[64];
-    uint8_t render_start_mask = g_ppumask;
-    memcpy(render_oam, g_ppu_oam, sizeof(render_oam));
-    memcpy(render_oam_x16, g_oam_x16, sizeof(render_oam_x16));
-
     uint8_t render_start_ctrl = g_ppuctrl;
     uint8_t render_start_sx = g_ppuscroll_x;
     uint8_t render_start_sy = g_ppuscroll_y;
@@ -780,7 +774,7 @@ void ppu_render_frame(uint32_t *framebuf) {
 render_sprites:
 
     /* Phase 2: Sprites (OAM) — skip if sprite rendering disabled */
-    if (!(render_start_mask & 0x10)) return;
+    if (!(g_ppumask & 0x10)) return;
 
     /* DEBUG: save OAM tile sheet — 8 cols x 8 rows, each tile at 4x scale (32x32px)
      * Image = 256x256. Magenta BG, grid lines. Transparent pixels = magenta.
@@ -886,14 +880,14 @@ render_sprites:
 
     /* OAM: 64 sprites × 4 bytes: [Y, tile, attr, X] */
     for (int s = 63; s >= 0; s--) {  /* draw back-to-front so sprite 0 is on top */
-        uint8_t spr_y    = render_oam[s * 4 + 0];
-        uint8_t spr_tile = render_oam[s * 4 + 1];
-        uint8_t spr_attr = render_oam[s * 4 + 2];
+        uint8_t spr_y    = g_ppu_oam[s * 4 + 0];
+        uint8_t spr_tile = g_ppu_oam[s * 4 + 1];
+        uint8_t spr_attr = g_ppu_oam[s * 4 + 2];
         /* Sidecar-enabled games render from the unwrapped 16-bit X (which
          * equals the OAM byte for sprites on the vanilla screen); everyone
          * else uses the vanilla 8-bit OAM X. */
-        int spr_x = g_ws_oam_sidecar ? (int)render_oam_x16[s]
-                                     : (int)render_oam[s * 4 + 3];
+        int spr_x = g_ws_oam_sidecar ? (int)g_oam_x16[s]
+                                     : (int)g_ppu_oam[s * 4 + 3];
 
         if (spr_y >= 0xEF) continue; /* off-screen */
 
@@ -926,10 +920,13 @@ render_sprites:
             }
 
             int chr_off = tile_chr_base + tile_num * 16 + tile_row;
-            /* Use the active post-IRQ CHR window for the sprite pass. The OAM
-             * and PPUMASK snapshots above preserve the frame-start sprite set
-             * when a scanline IRQ changes rendering state before this pass. */
-            const uint8_t *chr_src = g_chr_ram;
+            /* Rows at or above the IRQ switch line fetch from the pre-IRQ
+             * regime; rows below it (status bar) see the live post-IRQ
+             * window. Per-row selection mirrors hardware, where sprite
+             * pattern fetches happen on each scanline. */
+            const uint8_t *chr_src =
+                (g_render_irq_fired && py >= g_render_irq_scanline + 1)
+                    ? g_chr_ram : s_chr_pre_irq;
             uint8_t lo = chr_src[chr_off];
             uint8_t hi = chr_src[chr_off + 8];
 
@@ -943,7 +940,7 @@ render_sprites:
                 int color_idx = ((lo >> chr_bit) & 1) | (((hi >> chr_bit) & 1) << 1);
                 if (color_idx == 0) continue; /* transparent */
                 /* PPUMASK bit 2: clip leftmost 8 sprite pixels */
-                if (px < 8 && !(render_start_mask & 0x04)) continue;
+                if (px < 8 && !(g_ppumask & 0x04)) continue;
                 /* Offset sprite X into widescreen framebuffer */
                 int fb_x = px + g_widescreen_left;
                 /* Sprite-0 hit: when sprite 0's opaque pixel overlaps opaque BG,
@@ -952,8 +949,8 @@ render_sprites:
                  *   - No hit at x=255 (per NES spec).
                  *   - Obeys BG/sprite leftmost-8 clip (the px<8 gate above already
                  *     filters sprite side; BG clip is PPUMASK bit 1). */
-                if (s == 0 && px >= 0 && px < 255 && (render_start_mask & 0x18) == 0x18) {
-                    int bg_clipped = (px < 8 && !(render_start_mask & 0x02));
+                if (s == 0 && px >= 0 && px < 255 && (g_ppumask & 0x18) == 0x18) {
+                    int bg_clipped = (px < 8 && !(g_ppumask & 0x02));
                     if (!bg_clipped && framebuf[py * g_render_width + fb_x] != bg)
                         g_ppustatus |= 0x40;
                 }
