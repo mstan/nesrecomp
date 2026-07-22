@@ -3994,7 +3994,6 @@ bool codegen_emit(const NESRom *rom, const FunctionList *funcs,
            "    g_ram[0x100 + g_cpu.S] = 0x00; g_cpu.S--; /* PCH (sentinel) */\n"
            "    g_ram[0x100 + g_cpu.S] = 0x00; g_cpu.S--; /* PCL (sentinel) */\n"
            "    g_ram[0x100 + g_cpu.S] = _nmi_p; g_cpu.S--; /* P */\n"
-           "    g_cpu.I = 1; /* NMI entry sets I after pushing the old P */\n"
            "    g_rti_target = 0;\n");
     if (rom->num_windows > 0) {
         /* GxROM (and other full-32KB-switch mappers): the NMI vector at\n"
