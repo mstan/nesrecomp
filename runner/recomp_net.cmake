@@ -22,6 +22,15 @@ function(_nesrecomp_add_recomp_net)
     set(RNET_ENABLE_ICE ${NESRECOMP_NET_ICE} CACHE BOOL "" FORCE)
     add_subdirectory("${NESRECOMP_RECOMP_NET_ROOT}"
                      "${CMAKE_BINARY_DIR}/recomp-net-build" EXCLUDE_FROM_ALL)
+    if(WIN32 AND NESRECOMP_NET_ICE)
+        # Compatibility for the pinned recomp-net/libjuice combination. The
+        # upstream ICE file currently uses pthread mutex names and the older
+        # JUICE_ERR_AGAIN spelling.
+        target_include_directories(recomp_net PRIVATE
+            "${NESRECOMP_RUNNER_ROOT}/src/netplay/compat")
+        target_compile_definitions(recomp_net PRIVATE
+            JUICE_ERR_AGAIN=JUICE_ERR_NOT_AVAIL)
+    endif()
 endfunction()
 
 function(nesrecomp_enable_recomp_net target)
