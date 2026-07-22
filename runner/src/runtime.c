@@ -9,6 +9,7 @@
 #include "game_extras.h"
 #include "override_chr.h"
 #include "ppu_dot.h"
+#include "crc32.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -2438,4 +2439,62 @@ typedef struct { uint64_t frame; uint8_t val; uint8_t which; } ScrollTraceEntryE
 
 const void *runtime_get_scroll_trace_buf(void) {
     return s_scroll_trace;
+}
+
+static void digest_u8(Crc32Context *c, uint8_t v) { crc32_update(c,&v,1); }
+static void digest_u16(Crc32Context *c, uint16_t v) {
+    uint8_t b[2]={(uint8_t)v,(uint8_t)(v>>8)}; crc32_update(c,b,2);
+}
+static void digest_u32(Crc32Context *c, uint32_t v) {
+    uint8_t b[4]={(uint8_t)v,(uint8_t)(v>>8),(uint8_t)(v>>16),(uint8_t)(v>>24)};
+    crc32_update(c,b,4);
+}
+static void digest_u64(Crc32Context *c, uint64_t v) {
+    digest_u32(c,(uint32_t)v); digest_u32(c,(uint32_t)(v>>32));
+}
+
+uint32_t nes_runtime_state_digest(void) {
+    Crc32Context c; MapperState m; uint8_t apu_blob[512]; int apu_size; crc32_begin(&c);
+    digest_u8(&c,g_cpu.A);digest_u8(&c,g_cpu.X);digest_u8(&c,g_cpu.Y);
+    digest_u8(&c,g_cpu.S);digest_u8(&c,g_cpu.P);digest_u8(&c,g_cpu.N);
+    digest_u8(&c,g_cpu.V);digest_u8(&c,g_cpu.D);digest_u8(&c,g_cpu.I);
+    digest_u8(&c,g_cpu.Z);digest_u8(&c,g_cpu.C);
+    crc32_update(&c,g_ram,sizeof(g_ram));crc32_update(&c,g_sram,sizeof(g_sram));
+    crc32_update(&c,g_chr_ram,sizeof(g_chr_ram));crc32_update(&c,g_ppu_oam,sizeof(g_ppu_oam));
+    crc32_update(&c,g_ppu_pal,sizeof(g_ppu_pal));crc32_update(&c,g_ppu_nt,sizeof(g_ppu_nt));
+    digest_u8(&c,g_ppuctrl);digest_u8(&c,g_ppumask);digest_u8(&c,g_ppustatus);
+    digest_u8(&c,g_ppuscroll_x);digest_u8(&c,g_ppuscroll_y);digest_u16(&c,g_ppuaddr);
+    digest_u8(&c,(uint8_t)g_ppuaddr_latch);digest_u8(&c,g_ppudata_buf);
+    digest_u16(&c,s_ppu_t);digest_u8(&c,s_ppu_fine_x);digest_u16(&c,s_ppu_v_at_2006);
+    digest_u8(&c,s_ctrl1_shift);digest_u8(&c,s_ctrl2_shift);digest_u8(&c,(uint8_t)s_ctrl1_strobe);
+    mapper_get_state(&m);
+    digest_u32(&c,(uint32_t)m.mapper_type);digest_u8(&c,m.shift_reg);
+    digest_u32(&c,(uint32_t)m.shift_count);digest_u8(&c,m.ctrl);digest_u8(&c,m.chr0);
+    digest_u8(&c,m.chr1);digest_u8(&c,m.prg_reg);digest_u32(&c,(uint32_t)m.current_bank);
+    digest_u32(&c,(uint32_t)m.mirroring);digest_u8(&c,m.mmc3_bank_select);
+    crc32_update(&c,m.mmc3_regs,sizeof(m.mmc3_regs));digest_u8(&c,m.mmc3_irq_latch);
+    digest_u8(&c,m.mmc3_irq_counter);digest_u32(&c,(uint32_t)m.mmc3_irq_reload);
+    digest_u32(&c,(uint32_t)m.mmc3_irq_enabled);digest_u64(&c,g_frame_count);
+    digest_u64(&c,g_nes_cycles);digest_u32(&c,s_ops_count);digest_u32(&c,s_frame_budget);
+    apu_size=apu_get_state_blob(apu_blob,(int)sizeof(apu_blob));
+    if(apu_size>0)crc32_update(&c,apu_blob,(size_t)apu_size);
+    return crc32_end(&c);
+}
+
+void runtime_session_reset(void) {
+    g_frame_count=0;g_nes_cycles=0;g_bail_active=0;
+    g_ppuctrl=g_ppumask=g_ppustatus=g_oamaddr=0;
+    g_ppuscroll_x=g_ppuscroll_y=0;g_ppuaddr=0;g_ppuaddr_latch=0;g_ppudata_buf=0;
+    g_ppuscroll_x_hud=g_ppuscroll_y_hud=g_ppuctrl_hud=0;
+    g_spr0_split_active=0;g_spr0_reads_ctr_legacy=0;g_spr0_split_write_scanline=-1;
+    s_ppu_t=0;s_ppu_fine_x=0;s_ppu_v_at_2006=0;s_ppu_v_write_epoch=0;
+    s_scroll_2005_complete=0;s_visible_frame_valid=0;s_visible_frame_frame=0;
+    g_controller1_buttons=g_controller2_buttons=0;s_ctrl1_shift=s_ctrl2_shift=0;s_ctrl1_strobe=false;
+    s_vblank_depth=0;s_interrupt_epoch=0;s_ops_count=0;s_oam_dma_stall=0;
+    s_odd_frame=0;s_dot_debt=0;s_frame_budget=OPS_PER_FRAME;s_vblank_pending=0;
+    s_in_irq=0;s_saved_vblank_depth=0;s_open_bus=0;s_ppu_io_latch=0;
+    s_tail_pending=-1;s_tail_caller=-1;s_tail_active_n=0;s_tail_pending_slot=-1;
+    s_last_sync_sx=s_last_sync_sy=0;s_last_sync_t=0;s_last_sync_frame=0;
+    s_frame_start_sx=s_frame_start_sy=0;s_frame_start_t=0;s_frame_start_frame=0;
+    s_irq_scanline_count=0;s_irq_scanline_frame=0;
 }

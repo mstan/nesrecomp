@@ -19,9 +19,17 @@ static void crc32_init_table(void) {
 }
 
 uint32_t crc32_compute(const uint8_t *data, size_t len) {
-    if (!s_table_ready) crc32_init_table();
-    uint32_t crc = 0xFFFFFFFFu;
-    for (size_t i = 0; i < len; i++)
-        crc = s_table[(crc ^ data[i]) & 0xFF] ^ (crc >> 8);
-    return crc ^ 0xFFFFFFFFu;
+    Crc32Context ctx;
+    crc32_begin(&ctx); crc32_update(&ctx, data, len); return crc32_end(&ctx);
 }
+
+void crc32_begin(Crc32Context *ctx) {
+    if (!s_table_ready) crc32_init_table();
+    ctx->value = 0xFFFFFFFFu;
+}
+void crc32_update(Crc32Context *ctx, const void *data, size_t len) {
+    const uint8_t *p = (const uint8_t *)data;
+    if (!s_table_ready) crc32_init_table();
+    for (size_t i=0;i<len;i++) ctx->value=s_table[(ctx->value^p[i])&0xff]^(ctx->value>>8);
+}
+uint32_t crc32_end(const Crc32Context *ctx) { return ctx->value ^ 0xFFFFFFFFu; }
