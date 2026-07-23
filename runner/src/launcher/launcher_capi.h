@@ -24,7 +24,7 @@ typedef struct NesLauncherCSettings {
     int  renderer;          // game output: 0 accelerated, 1 software
     int  widescreen;        // experimental 16:9 (only meaningful if supported)
     int  volume;            // 0..100
-    int  player_src[2];     // 0 none, 1 keyboard, 2 gamepad
+    int  player_src[2];     // P1: 0 none, 1 keyboard, 2 gamepad; P2: 0 or 2
     int  deadzone[2];       // 0..100
     int  skip_launcher;     // bool: boot straight to the game next time
     int  hdpack_enabled;    // bool: load a Mesen HD texture pack

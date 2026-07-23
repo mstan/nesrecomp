@@ -129,6 +129,10 @@ void config_load(const char *path) {
             snprintf(g_nes_config.hdpack_dir, sizeof(g_nes_config.hdpack_dir), "%s", valstr);
     }
     fclose(f);
+    /* Player 2 no longer has a second keyboard layout. Treat legacy keyboard
+     * selections as disabled; P2 is assigned explicitly to a gamepad/netplay. */
+    if (g_nes_config.player_src[1] == 1)
+        g_nes_config.player_src[1] = 0;
 }
 
 void config_save(const char *path) {

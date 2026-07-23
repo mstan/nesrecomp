@@ -148,9 +148,9 @@ exits. All in-tree game projects already use `game.toml`; see Dr. Mario's
 
 ### Configurable Controls
 
-A `keybinds.ini` file is auto-generated next to the game executable on first run. Both player 1 and player 2 bindings are configurable for **keyboard and gamepad**. Edit the INI file and restart the game to apply changes.
+A `keybinds.ini` file is auto-generated next to the game executable on first run. Player 1 keyboard bindings and both players' gamepad bindings are configurable. Edit the INI file and restart the game to apply changes.
 
-**Keyboard** — `[player1]` / `[player2]` sections map each NES button to an SDL key name.
+**Keyboard** — the `[player1]` section maps each NES button to an SDL key name. Player 2 uses an explicitly assigned gamepad or netplay peer rather than sharing Player 1's keyboard. The default Player 1 Select key is `\`; Tab and F1–F12 are reserved runtime hotkeys.
 
 **Gamepad** — game controllers are supported cross-platform via SDL's
 `SDL_GameController` API (Xbox, PlayStation/DualSense, Switch Pro, and generic
@@ -184,9 +184,12 @@ leftstick rightstick dpup dpdown dpleft dpright` (use `none` to unbind).
 
 | Hotkey | Action |
 |--------|--------|
-| `F5`   | Toggle turbo (fast-forward) |
-| `F6` / `F7` | Save / load state |
-| `F11` or `Alt+Enter` | Toggle fullscreen (borderless desktop) |
+| `Tab` | Toggle turbo (fast-forward) |
+| `F1`–`F12` | Load state slot 1–12 |
+| `Shift+F1`–`Shift+F12` | Save state slot 1–12 |
+| `Alt+Enter` | Toggle fullscreen (borderless desktop) |
+
+State slots are stored in the `savestates` directory next to the game executable.
 
 The picture preserves the NES aspect ratio with integer (whole-pixel) scaling
 and nearest-neighbor filtering, so it letterboxes rather than stretching and

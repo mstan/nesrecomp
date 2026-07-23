@@ -338,7 +338,8 @@ void build_src_options(std::vector<SrcOption>& opts, int player,
                        const std::vector<std::string>& pads) {
     opts.clear();
     opts.push_back({ "none", "None" });
-    opts.push_back({ "kbd",  "Keyboard" });
+    if (player == 0)
+        opts.push_back({ "kbd",  "Keyboard" });
     if (player >= 0 && player < (int)pads.size())
         opts.push_back({ "pad", pads[player] });
 }
@@ -579,6 +580,10 @@ Result run(SDL_Window* window, void* /*gl_context*/,
         if (SDL_IsGameController(i))
             if (SDL_GameController* gc = SDL_GameControllerOpen(i))
                 open_pads.push_back(gc);
+    // P2 no longer shares P1's keyboard. Normalize old configs that selected it,
+    // then validate gamepad assignments against the connected devices.
+    if (io.player_src[1] == InputSource::Keyboard)
+        io.player_src[1] = InputSource::None;
     // A "Gamepad" source only makes sense when a controller is actually plugged
     // in; otherwise fall back to Keyboard (P1) / None (P2).
     for (int p = 0; p < 2; p++) {

@@ -16,6 +16,14 @@
 #include <stdint.h>
 #include <setjmp.h>
 
+#ifdef _WIN32
+#include <direct.h>
+#define runner_mkdir(path) _mkdir(path)
+#else
+#include <sys/stat.h>
+#define runner_mkdir(path) mkdir((path), 0755)
+#endif
+
 #include <SDL.h>
 #include "nes_runtime.h"
 #include "input_script.h"
@@ -60,6 +68,23 @@ static SDL_mutex   *s_audio_mtx    = NULL;
 static const char *s_script_path    = NULL;
 static const char *s_record_path    = NULL;
 static const char *s_loadstate_path = NULL;
+static char        s_savestate_dir[1024] = "./savestates";
+
+static void savestate_slots_init(void) {
+    char exe_dir[1024];
+    nesrecomp_exe_dir(exe_dir, sizeof(exe_dir));
+    snprintf(s_savestate_dir, sizeof(s_savestate_dir), "%ssavestates", exe_dir);
+    runner_mkdir(s_savestate_dir); /* EEXIST is expected after the first run. */
+}
+
+static int savestate_slot_from_scancode(SDL_Scancode scancode) {
+    if (scancode < SDL_SCANCODE_F1 || scancode > SDL_SCANCODE_F12) return 0;
+    return (int)(scancode - SDL_SCANCODE_F1) + 1;
+}
+
+static void savestate_slot_path(int slot, char *out, size_t out_len) {
+    snprintf(out, out_len, "%s/slot%02d.sav", s_savestate_dir, slot);
+}
 
 /* ---- Smoke test mode (--smoke N) ---- */
 static int         s_smoke_frames   = 0;     /* 0 = normal, >0 = headless smoke test */
@@ -605,35 +630,38 @@ void nes_vblank_callback(void) {
 #endif
             exit(0);
         }
-        if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_F5)
+        if (ev.type == SDL_KEYDOWN && !ev.key.repeat &&
+            ev.key.keysym.sym == SDLK_TAB)
             g_turbo ^= 1;
-        if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_F6 &&
+        if (ev.type == SDL_KEYDOWN && !ev.key.repeat) {
+            int slot = savestate_slot_from_scancode(ev.key.keysym.scancode);
+            if (slot &&
 #ifdef NESRECOMP_NET
-            !nes_netplay_active()
+                !nes_netplay_active()
 #else
-            1
+                1
 #endif
-        )
-            savestate_save("C:/temp/quicksave.sav");
-        if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_F7 &&
-#ifdef NESRECOMP_NET
-            !nes_netplay_active()
-#else
-            1
-#endif
-        ) {
-            record_loadstate(g_frame_count, "C:/temp/quicksave.sav");
-            savestate_load("C:/temp/quicksave.sav");
-            record_sync_frame(g_frame_count); /* g_frame_count now = restored value */
+            ) {
+                char path[1200];
+                savestate_slot_path(slot, path, sizeof(path));
+                if (ev.key.keysym.mod & KMOD_SHIFT) {
+                    savestate_save(path);
+                } else {
+                    uint64_t load_frame = g_frame_count;
+                    if (savestate_load(path)) {
+                        record_loadstate(load_frame, path);
+                        record_sync_frame(g_frame_count); /* restored frame baseline */
+                    }
+                }
+            }
         }
-        /* Toggle fullscreen: F11 or Alt+Enter. Flips between windowed and the
+        /* Toggle fullscreen: Alt+Enter. Flips between windowed and the
          * CONFIGURED tri-state mode (2 = exclusive, otherwise borderless-desktop)
          * so the hotkey respects the launcher's choice. SDL_WINDOW_FULLSCREEN_DESKTOP
          * contains the SDL_WINDOW_FULLSCREEN bit, so masking with plain
          * SDL_WINDOW_FULLSCREEN alone still detects EITHER mode. */
         if (ev.type == SDL_KEYDOWN && s_window &&
-            (ev.key.keysym.sym == SDLK_F11 ||
-             (ev.key.keysym.sym == SDLK_RETURN && (ev.key.keysym.mod & KMOD_ALT)))) {
+            ev.key.keysym.sym == SDLK_RETURN && (ev.key.keysym.mod & KMOD_ALT)) {
             Uint32 is_fs = SDL_GetWindowFlags(s_window) & SDL_WINDOW_FULLSCREEN;
             Uint32 want = (g_nes_config.fullscreen == 2)
                               ? SDL_WINDOW_FULLSCREEN
@@ -656,8 +684,8 @@ void nes_vblank_callback(void) {
     /* Update controllers from keyboard state via configurable keybinds */
     {
         const uint8_t *keys = SDL_GetKeyboardState(NULL);
-        /* Per-player input source from the launcher: 1 keyboard, 2 gamepad, 0
-         * none. Each player reads only its selected device. */
+        /* P1 may use keyboard or gamepad. P2 is an explicitly assigned gamepad
+         * (or a netplay peer), never a second hidden keyboard layout. */
         int s1 = g_nes_config.player_src[0], s2 = g_nes_config.player_src[1];
         uint8_t btn = (uint8_t)((s1 == 1 ? keybinds_read_player(keys, 1) : 0) |
                                 (s1 == 2 ? controller_read_player(1)      : 0));
@@ -674,8 +702,7 @@ void nes_vblank_callback(void) {
         if (tcp_btn >= 0) btn = (uint8_t)tcp_btn;
 
         g_controller1_buttons = btn;
-        g_controller2_buttons = (uint8_t)((s2 == 1 ? keybinds_read_player(keys, 2) : 0) |
-                                          (s2 == 2 ? controller_read_player(2)      : 0));
+        g_controller2_buttons = (uint8_t)(s2 == 2 ? controller_read_player(2) : 0);
     }
 
 smoke_skip_input:
@@ -1311,6 +1338,7 @@ int nesrecomp_runner_run(int argc, char *argv[]) {
     runtime_session_reset();
     runtime_init();
     keybinds_init(argv[0]);
+    savestate_slots_init();
     game_on_init();
 
 #ifdef NESRECOMP_NET
