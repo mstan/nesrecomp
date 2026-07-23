@@ -12,12 +12,15 @@
  *   snesrecomp-v2/src/debug_server.c
  */
 #include "debug_server.h"
+#include "savestate.h"
 #include "game_extras.h"
 #ifdef ENABLE_NESTOPIA_ORACLE
 #include "nestopia_oracle_cmds.h"
 #endif
 #include "reverse_debug.h"
 #include "nes_runtime.h"
+#include "input_script.h"
+#include "interp.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -440,6 +443,15 @@ static void handle_clear_input(int id, const char *json)
     send_ok(id);
 }
 
+static void handle_set_turbo(int id, const char *json)
+{
+    int enabled = json_get_int(json, "enabled", -1);
+    if (enabled < 0) { send_err(id, "missing enabled"); return; }
+    g_turbo = enabled != 0;
+    send_fmt("{\"id\":%d,\"ok\":true,\"turbo\":%s}",
+             id, g_turbo ? "true" : "false");
+}
+
 static void handle_pause(int id, const char *json)
 {
     (void)json;
@@ -798,6 +810,40 @@ static void handle_watchdog_status(int id, const char *json)
              g_watchdog_stack_dump ? g_watchdog_stack_dump : "");
 }
 
+static void handle_interpreter_stats(int id, const char *json)
+{
+    NesInterpStats stats;
+    (void)json;
+    memset(&stats, 0, sizeof(stats));
+    nes_interp_get_stats(&stats);
+    send_fmt("{\"id\":%d,\"ok\":true,\"enabled\":%s,"
+             "\"instrs_total\":%llu,\"runs\":%llu,\"watchdog_trips\":%llu,"
+             "\"native_handoffs\":%llu,\"instrs_this_frame\":%u,"
+             "\"max_instrs_run\":%u}",
+             id, nes_interp_is_enabled() ? "true" : "false",
+             (unsigned long long)stats.instrs_total,
+             (unsigned long long)stats.runs,
+             (unsigned long long)stats.watchdog_trips,
+             (unsigned long long)stats.native_handoffs,
+             stats.instrs_this_frame, stats.max_instrs_run);
+}
+
+static void handle_runtime_faults(int id, const char *json)
+{
+    extern uint64_t g_unhandled_dispatch_count;
+    (void)json;
+    send_fmt("{\"id\":%d,\"ok\":true,\"brk_count\":%llu,"
+             "\"brk_last_pc\":\"$%04X\",\"brk_last_bank\":%d,"
+             "\"brk_last_frame\":%llu,\"dispatch_policy_count\":%llu,"
+             "\"dispatch_coverage_misses\":%llu,"
+             "\"inline_dispatch_policy_count\":%llu}",
+             id, (unsigned long long)g_brk_count, g_brk_last_pc,
+             g_brk_last_bank, (unsigned long long)g_brk_last_frame,
+             (unsigned long long)g_unhandled_dispatch_count,
+             (unsigned long long)g_dispatch_miss_count,
+             (unsigned long long)g_inline_dispatch_miss_count);
+}
+
 static void handle_dispatch_miss_info(int id, const char *json)
 {
     (void)json;
@@ -899,6 +945,8 @@ static void handle_dispatch_miss_info(int id, const char *json)
 static void handle_quit(int id, const char *json)
 {
     (void)json;
+    fprintf(stderr, "[RunnerExit] TCP quit command at frame %llu\n",
+            (unsigned long long)g_frame_count);
     send_ok(id);
     debug_server_shutdown();
     exit(0);
@@ -1036,6 +1084,36 @@ static void handle_screenshot(int id, const char *json)
     }
     runner_screenshot(path);
     send_fmt("{\"id\":%d,\"ok\":true,\"path\":\"%s\"}", id, path);
+}
+
+static void handle_save_state(int id, const char *json)
+{
+    char path[512];
+    if (!json_get_str(json, "path", path, sizeof(path))) {
+        send_err(id, "missing path");
+        return;
+    }
+    if (!savestate_save(path)) {
+        send_err(id, "save failed");
+        return;
+    }
+    send_fmt("{\"id\":%d,\"ok\":true,\"saved_frame\":%llu}",
+             id, (unsigned long long)g_frame_count);
+}
+
+static void handle_load_state(int id, const char *json)
+{
+    char path[512];
+    if (!json_get_str(json, "path", path, sizeof(path))) {
+        send_err(id, "missing path");
+        return;
+    }
+    if (!savestate_load(path)) {
+        send_err(id, "load failed");
+        return;
+    }
+    send_fmt("{\"id\":%d,\"ok\":true,\"loaded_frame\":%llu}",
+             id, (unsigned long long)g_frame_count);
 }
 
 /* ---- frame_diff: show verify divergence diffs for a frame, or compare two frames' RAM ---- */
@@ -1574,9 +1652,12 @@ static const CmdEntry s_commands[] = {
     { "mapper_state",      "current bank, mapper type, mirror mode, MMC3 register snapshot",              handle_mapper_state },
     { "read_frame_ram",    "read RAM/SRAM/CHR/NT/PAL from a specific historical frame in the ring",       handle_read_frame_ram },
     { "restore_frame",     "rewind: restore RAM+PPU+CPU from a historical frame snapshot",                handle_restore_frame },
+    { "save_state",        "save complete emulator state to path at this frame boundary",                 handle_save_state },
+    { "load_state",        "load emulator state from path (same-session rewind is fully supported)",       handle_load_state },
     { "set_input",         "set controller buttons for a specific frame",                                 handle_set_input },
     { "press",             "press a button for one frame (transient input)",                              handle_press },
     { "clear_input",       "clear all input overrides",                                                   handle_clear_input },
+    { "set_turbo",         "enable or disable uncapped runner speed",                                     handle_set_turbo },
     { "pause",             "pause execution",                                                             handle_pause },
     { "continue",          "resume after pause",                                                          handle_continue },
     { "step",              "step one frame while paused",                                                 handle_step },
@@ -1588,6 +1669,8 @@ static const CmdEntry s_commands[] = {
     { "first_failure",     "verify mode: first frame where native diverged from oracle",                  handle_first_failure },
     { "ppu_state",         "PPU registers + sprite-0 split state + render-IRQ diagnostics",               handle_ppu_state },
     { "watchdog_status",   "watchdog backward-branch counter and last firing reason",                     handle_watchdog_status },
+    { "interpreter_stats", "interpreter fallback enablement, work, handoffs, and watchdog counters",       handle_interpreter_stats },
+    { "runtime_faults",    "BRK and unhandled-dispatch policy counters with last BRK location",            handle_runtime_faults },
     { "fring",             "frame-event ring: VBlank fires + $4014 OAM DMA with phase digests",           handle_fring },
 #ifdef RECOMP_STACK_TRACKING
     { "call_stack",        "current recompile-stack (function-name shadow stack); main loops never pop", handle_call_stack },
@@ -1681,6 +1764,15 @@ static void process_command(const char *line)
 void debug_server_init(int port)
 {
     if (port > 0) s_port = port;
+    const char *port_env = getenv("NESRECOMP_DEBUG_PORT");
+    if (port_env && *port_env) {
+        char *end = NULL;
+        long env_port = strtol(port_env, &end, 10);
+        if (end != port_env && *end == '\0' && env_port > 0 && env_port <= 65535)
+            s_port = (int)env_port;
+        else
+            fprintf(stderr, "[debug] Ignoring invalid NESRECOMP_DEBUG_PORT='%s'\n", port_env);
+    }
 
 #ifdef _WIN32
     WSADATA wsa;
@@ -1963,8 +2055,16 @@ void debug_server_wait_if_paused(void)
         /* Pump SDL events (so window doesn't freeze) */
         SDL_Event ev;
         while (SDL_PollEvent(&ev)) {
-            if (ev.type == SDL_QUIT) exit(0);
-            if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_ESCAPE) exit(0);
+            if (ev.type == SDL_QUIT) {
+                fprintf(stderr, "[RunnerExit] SDL_QUIT while TCP-paused at frame %llu\n",
+                        (unsigned long long)g_frame_count);
+                exit(0);
+            }
+            if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_ESCAPE) {
+                fprintf(stderr, "[RunnerExit] Escape key while TCP-paused at frame %llu\n",
+                        (unsigned long long)g_frame_count);
+                exit(0);
+            }
         }
 
         SDL_Delay(5);  /* 5ms sleep to avoid busy loop */

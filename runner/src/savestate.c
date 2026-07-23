@@ -10,11 +10,14 @@
 #include "savestate.h"
 #include "nes_runtime.h"
 #include "mapper.h"
+#include "apu.h"
 #include <stdio.h>
 #include <string.h>
 
 #define SS_MAGIC   "NSSR"
-#define SS_VERSION 1
+#define SS_VERSION 4
+#define SS_APU_BLOB_CAP 256
+#define SS_RUNTIME_BLOB_CAP 256
 
 /* PPU internals exposed from runtime.c */
 extern uint16_t g_ppuaddr;
@@ -28,19 +31,35 @@ typedef struct {
     uint8_t N, V, D, I, Z, C;
     /* RAM */
     uint8_t ram[0x0800];
+    uint8_t sram[0x2000];
     /* CHR */
     uint8_t chr_ram[0x2000];
     /* PPU */
     uint8_t ppu_oam[0x100];
     uint8_t ppu_pal[0x20];
     uint8_t ppu_nt[0x1000];
-    uint8_t ppuctrl, ppumask, ppustatus;
+    uint8_t ppuctrl, ppumask, ppustatus, oamaddr;
     uint8_t ppuscroll_x, ppuscroll_y;
     uint16_t ppuaddr;
     uint8_t ppuaddr_latch;
     uint8_t scroll_latch;
     /* Mapper */
     MapperState mapper;
+    /* Private runtime/APU architectural state. */
+    uint16_t runtime_blob_size;
+    uint8_t runtime_blob[SS_RUNTIME_BLOB_CAP];
+    uint16_t apu_blob_size;
+    uint8_t apu_blob[SS_APU_BLOB_CAP];
+    /* Controller ports and render-visible sidecars. */
+    uint8_t controller1_buttons, controller2_buttons;
+    uint8_t ppuscroll_x_hud, ppuscroll_y_hud, ppuctrl_hud;
+    int32_t spr0_split_active;
+    int32_t spr0_reads_ctr;
+    int16_t oam_x16[64];
+    int16_t ws_shadow_x16[64];
+    int16_t ws_obj_true_rel;
+    uint8_t ws_obj_rel8, ws_obj_ctx_valid;
+    int32_t zapper_x, zapper_y, zapper_trigger;
     /* Misc */
     uint64_t frame_count;
 } SaveStateData;
@@ -69,6 +88,7 @@ int savestate_save(const char *path) {
 
     /* RAM */
     memcpy(ss.ram, g_ram, sizeof(ss.ram));
+    memcpy(ss.sram, g_sram, sizeof(ss.sram));
     memcpy(ss.chr_ram, g_chr_ram, sizeof(ss.chr_ram));
     memcpy(ss.ppu_oam, g_ppu_oam, sizeof(ss.ppu_oam));
     memcpy(ss.ppu_pal, g_ppu_pal, sizeof(ss.ppu_pal));
@@ -78,6 +98,7 @@ int savestate_save(const char *path) {
     ss.ppuctrl     = g_ppuctrl;
     ss.ppumask     = g_ppumask;
     ss.ppustatus   = g_ppustatus;
+    ss.oamaddr     = g_oamaddr;
     ss.ppuscroll_x = g_ppuscroll_x;
     ss.ppuscroll_y = g_ppuscroll_y;
     ss.ppuaddr     = g_ppuaddr;
@@ -85,6 +106,31 @@ int savestate_save(const char *path) {
 
     /* Mapper */
     mapper_get_state(&ss.mapper);
+
+    {
+        int n = runtime_get_state_blob(ss.runtime_blob, sizeof(ss.runtime_blob));
+        if (n <= 0) { fclose(f); return 0; }
+        ss.runtime_blob_size = (uint16_t)n;
+        n = apu_get_state_blob(ss.apu_blob, sizeof(ss.apu_blob));
+        if (n <= 0) { fclose(f); return 0; }
+        ss.apu_blob_size = (uint16_t)n;
+    }
+
+    ss.controller1_buttons = g_controller1_buttons;
+    ss.controller2_buttons = g_controller2_buttons;
+    ss.ppuscroll_x_hud = g_ppuscroll_x_hud;
+    ss.ppuscroll_y_hud = g_ppuscroll_y_hud;
+    ss.ppuctrl_hud = g_ppuctrl_hud;
+    ss.spr0_split_active = g_spr0_split_active;
+    ss.spr0_reads_ctr = g_spr0_reads_ctr_legacy;
+    memcpy(ss.oam_x16, g_oam_x16, sizeof(ss.oam_x16));
+    memcpy(ss.ws_shadow_x16, g_ws_shadow_x16, sizeof(ss.ws_shadow_x16));
+    ss.ws_obj_true_rel = g_ws_obj_true_rel;
+    ss.ws_obj_rel8 = g_ws_obj_rel8;
+    ss.ws_obj_ctx_valid = g_ws_obj_ctx_valid;
+    ss.zapper_x = g_zapper_x;
+    ss.zapper_y = g_zapper_y;
+    ss.zapper_trigger = g_zapper_trigger;
 
     /* Frame count */
     ss.frame_count = g_frame_count;
@@ -120,6 +166,12 @@ int savestate_load(const char *path) {
     }
     fclose(f);
 
+    if (ss.runtime_blob_size == 0 || ss.runtime_blob_size > sizeof(ss.runtime_blob) ||
+        ss.apu_blob_size == 0 || ss.apu_blob_size > sizeof(ss.apu_blob)) {
+        fprintf(stderr, "[SaveState] Invalid subsystem state in %s\n", path);
+        return 0;
+    }
+
     /* CPU */
     g_cpu.A = ss.A; g_cpu.X = ss.X; g_cpu.Y = ss.Y;
     g_cpu.S = ss.S; g_cpu.P = ss.P;
@@ -128,6 +180,7 @@ int savestate_load(const char *path) {
 
     /* RAM */
     memcpy(g_ram,    ss.ram,     sizeof(ss.ram));
+    memcpy(g_sram,   ss.sram,    sizeof(ss.sram));
     memcpy(g_chr_ram, ss.chr_ram, sizeof(ss.chr_ram));
     memcpy(g_ppu_oam, ss.ppu_oam, sizeof(ss.ppu_oam));
     memcpy(g_ppu_pal, ss.ppu_pal, sizeof(ss.ppu_pal));
@@ -137,6 +190,7 @@ int savestate_load(const char *path) {
     g_ppuctrl     = ss.ppuctrl;
     g_ppumask     = ss.ppumask;
     g_ppustatus   = ss.ppustatus;
+    g_oamaddr     = ss.oamaddr;
     g_ppuscroll_x = ss.ppuscroll_x;
     g_ppuscroll_y = ss.ppuscroll_y;
     g_ppuaddr     = ss.ppuaddr;
@@ -144,6 +198,28 @@ int savestate_load(const char *path) {
 
     /* Mapper */
     mapper_set_state(&ss.mapper);
+
+    if (!runtime_set_state_blob(ss.runtime_blob, ss.runtime_blob_size) ||
+        !apu_set_state_blob(ss.apu_blob, ss.apu_blob_size)) {
+        fprintf(stderr, "[SaveState] Could not restore subsystem state from %s\n", path);
+        return 0;
+    }
+
+    g_controller1_buttons = ss.controller1_buttons;
+    g_controller2_buttons = ss.controller2_buttons;
+    g_ppuscroll_x_hud = ss.ppuscroll_x_hud;
+    g_ppuscroll_y_hud = ss.ppuscroll_y_hud;
+    g_ppuctrl_hud = ss.ppuctrl_hud;
+    g_spr0_split_active = ss.spr0_split_active;
+    g_spr0_reads_ctr_legacy = ss.spr0_reads_ctr;
+    memcpy(g_oam_x16, ss.oam_x16, sizeof(ss.oam_x16));
+    memcpy(g_ws_shadow_x16, ss.ws_shadow_x16, sizeof(ss.ws_shadow_x16));
+    g_ws_obj_true_rel = ss.ws_obj_true_rel;
+    g_ws_obj_rel8 = ss.ws_obj_rel8;
+    g_ws_obj_ctx_valid = ss.ws_obj_ctx_valid;
+    g_zapper_x = ss.zapper_x;
+    g_zapper_y = ss.zapper_y;
+    g_zapper_trigger = ss.zapper_trigger;
 
     /* Frame count */
     g_frame_count = ss.frame_count;

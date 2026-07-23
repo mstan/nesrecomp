@@ -31,6 +31,10 @@ uint8_t      g_ram[0x0800];
 uint8_t      g_sram[0x2000];
 int          g_current_bank = 0;
 int          g_recomp_push_all_jsr = 1;   /* interpreter precondition satisfied */
+uint16_t     g_rts_target = 0;
+uint16_t     g_rti_target = 0;
+uint16_t     g_rti_source = 0;
+int          g_rti_bank = -1;
 
 static int s_native_calls = 0;
 
@@ -53,8 +57,12 @@ uint8_t mapper_peek_prg(uint16_t a) { return g_ram[a & 0x07FF]; } /* unused by R
 void maybe_trigger_vblank(int c) { (void)c; }
 int  game_dispatch_override(uint16_t a) { (void)a; return 0; }
 void nes_record_dispatch_miss(uint16_t a) { (void)a; }
+void nes_record_dispatch_miss_bank(uint16_t gen_addr, uint16_t cpu_addr, int bank) {
+    (void)gen_addr; (void)cpu_addr; (void)bank;
+}
 void nes_dispatch_miss_apply_policy(uint16_t a) { (void)a; }
 void nes_brk_executed(uint16_t pc) { (void)pc; }
+void nes_dring_mark(char kind, uint16_t tag) { (void)kind; (void)tag; }
 
 /* Mimics the generated dispatcher: a "covered" address runs natively (here a
  * side effect + the native callee's RTS pop, S+=2, then return 1); an

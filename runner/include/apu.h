@@ -45,3 +45,7 @@ const int16_t *apu_debug_t0(int ch);
  * the number of bytes written, or 0 if cap is too small. Pure read; no state
  * mutation, no host-only pointers included. */
 int     apu_get_state_blob(uint8_t *buf, int cap);
+
+/* Restore a blob produced by apu_get_state_blob. Host audio queues are cleared
+ * so samples generated before the restored guest state are not replayed. */
+int     apu_set_state_blob(const uint8_t *buf, int len);

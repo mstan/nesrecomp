@@ -54,6 +54,7 @@ uint16_t nes_read16_jmpbug(uint16_t addr);
 /* ---- Dispatch ---- */
 /* Called for JMP (indirect) — dispatch to the correct recompiled function */
 int call_by_address(uint16_t addr);  /* returns 1 on hit, 0 on miss */
+void nes_trace_indirect_jump(uint16_t pc, uint16_t target);
 /* Cross-8KB dispatch with a caller-bank fallback: if the runtime bank-register
  * lookup misses (stale g_current_bank), retry the dispatch keyed on the caller's
  * statically-known bank.  caller_bank < 0 disables the fallback (== call_by_address). */
@@ -194,6 +195,9 @@ typedef enum {
 
 extern BrkPolicy g_brk_policy;
 extern uint64_t  g_brk_count;
+extern uint16_t  g_brk_last_pc;
+extern int       g_brk_last_bank;
+extern uint64_t  g_brk_last_frame;
 
 void nes_set_brk_policy(BrkPolicy policy);
 void nes_brk_executed(uint16_t pc);
@@ -430,6 +434,11 @@ int      runtime_get_visible_frame_start(uint8_t *ctrl, uint8_t *sx,
 void     runtime_get_latch_state(uint8_t *ppuaddr_latch, uint8_t *scroll_latch);
 void     runtime_set_latch_state(uint8_t ppuaddr_latch, uint8_t scroll_latch);
 extern uint8_t g_oamaddr;
+
+/* Save-state support for private timing, bus, controller, and Loopy-PPU state.
+ * The byte blob is opaque outside runtime.c and versioned by savestate.c. */
+int runtime_get_state_blob(uint8_t *buf, int cap);
+int runtime_set_state_blob(const uint8_t *buf, int len);
 
 /* ---- Dispatch miss monitor ---- */
 extern uint32_t g_miss_count_any;

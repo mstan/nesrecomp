@@ -47,6 +47,14 @@ static uint16_t s_probe_addr  = 0;
 
 static int s_depth = 0;             /* interp_run nesting depth */
 
+/* Generated control-flow uses these sidecars to carry a guest continuation
+ * across C frames. The interpreter must participate in the same contract when
+ * a native handoff returns through an interpreted caller. */
+extern uint16_t g_rts_target;
+extern uint16_t g_rti_target;
+extern uint16_t g_rti_source;
+extern int      g_rti_bank;
+
 /* ---- Stats ---- */
 static NesInterpStats s_stats;
 
@@ -110,6 +118,10 @@ extern int call_by_address(uint16_t addr);
  * (caller interprets the target inline). */
 static int interp_dispatch_target(uint16_t target) {
     nes_dring_mark('P', target);   /* interp probe (pre-dispatch) */
+    g_rts_target = 0;
+    g_rti_target = 0;
+    g_rti_source = 0;
+    g_rti_bank = -1;
     s_probe_armed = 1;
     s_probe_addr  = target;
     int hit = call_by_address(target);
@@ -318,11 +330,21 @@ static int interp_run_ex(uint16_t entry, int stop_on_stack_lift) {
                 g_ram[0x100 + g_cpu.S] = (uint8_t)((ret >> 8) & 0xFF); g_cpu.S--;
                 g_ram[0x100 + g_cpu.S] = (uint8_t)(ret & 0xFF);        g_cpu.S--;
                 if (interp_dispatch_target(target)) {
-                    /* Covered: ran natively. If it changed S relative to the
-                     * pre-JSR value, it took a generated non-local return path;
-                     * do not continue interpreting after the callsite. */
-                    if (g_cpu.S != call_s) { result = 1; goto done; }
-                    next = (uint16_t)(ipc + 3);
+                    /* Covered: ran natively. A normal RTS restores call_s and
+                     * resumes just after this JSR. A non-local native return
+                     * can instead pop an interpreted ancestor; preserve that
+                     * guest continuation and let the floor check below decide
+                     * whether it belongs to this interpreter frame or the
+                     * still-live native caller. */
+                    if (g_cpu.S == call_s) {
+                        next = (uint16_t)(ipc + 3);
+                    } else if (g_rti_target != 0) {
+                        next = g_rti_target;
+                    } else if (g_rts_target != 0) {
+                        next = (uint16_t)(g_rts_target + 1);
+                    } else {
+                        result = 1; goto done;
+                    }
                 } else {
                     next = target;  /* miss: interpret inline (push stays on 6502 stack) */
                 }
@@ -332,7 +354,17 @@ static int interp_run_ex(uint16_t entry, int stop_on_stack_lift) {
                 uint16_t target = (e->addr_mode == AM_IND)
                                   ? nes_read16_jmpbug(abs16) : abs16;
                 if (interp_dispatch_target(target)) {
-                    result = 1; goto done;   /* covered: native tail-ran it */
+                    /* A native tail target may RTS/RTI into an interpreted
+                     * ancestor. Resume it while still below this run's stack
+                     * floor; otherwise the floor check returns to native. */
+                    if (g_rti_target != 0)
+                        next = g_rti_target;
+                    else if (g_rts_target != 0)
+                        next = (uint16_t)(g_rts_target + 1);
+                    else {
+                        result = 1; goto done;
+                    }
+                    break;
                 }
                 next = target;               /* miss: interpret inline */
                 break;
@@ -340,7 +372,9 @@ static int interp_run_ex(uint16_t entry, int stop_on_stack_lift) {
             case MN_RTS: {
                 g_cpu.S++; uint8_t lo = g_ram[0x100 + g_cpu.S];
                 g_cpu.S++; uint8_t hi = g_ram[0x100 + g_cpu.S];
-                uint16_t ret = (uint16_t)(((uint16_t)hi << 8) | lo) + 1;
+                g_rts_target = (uint16_t)(((uint16_t)hi << 8) | lo);
+                g_rti_target = 0;
+                uint16_t ret = (uint16_t)(g_rts_target + 1);
                 if (g_cpu.S > S_floor) { result = 1; goto done; }  /* returned to caller */
                 next = ret;                                        /* nested return */
                 break;
@@ -352,6 +386,10 @@ static int interp_run_ex(uint16_t entry, int stop_on_stack_lift) {
                 g_cpu.S++; uint8_t lo = g_ram[0x100 + g_cpu.S];
                 g_cpu.S++; uint8_t hi = g_ram[0x100 + g_cpu.S];
                 uint16_t ret = (uint16_t)(((uint16_t)hi << 8) | lo);  /* RTI does NOT +1 */
+                g_rti_target = ret;
+                g_rti_source = ipc;
+                g_rti_bank = g_current_bank;
+                g_rts_target = 0;
                 if (g_cpu.S > S_floor) { result = 1; goto done; }
                 next = ret;
                 break;

@@ -579,10 +579,22 @@ void nes_vblank_callback(void) {
     SDL_Event ev;
     while (SDL_PollEvent(&ev)) {
         controller_handle_event(&ev);  /* gamepad hotplug */
-        if (ev.type == SDL_QUIT) exit(0);
+        if (ev.type == SDL_QUIT) {
+            fprintf(stderr, "[RunnerExit] SDL_QUIT during frame input at frame %llu\n",
+                    (unsigned long long)g_frame_count);
+            exit(0);
+        }
         if (ev.type == SDL_WINDOWEVENT &&
-            ev.window.event == SDL_WINDOWEVENT_CLOSE) exit(0);
-        if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_ESCAPE) exit(0);
+            ev.window.event == SDL_WINDOWEVENT_CLOSE) {
+            fprintf(stderr, "[RunnerExit] SDL_WINDOWEVENT_CLOSE at frame %llu\n",
+                    (unsigned long long)g_frame_count);
+            exit(0);
+        }
+        if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_ESCAPE) {
+            fprintf(stderr, "[RunnerExit] Escape key at frame %llu\n",
+                    (unsigned long long)g_frame_count);
+            exit(0);
+        }
         if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_F5)
             g_turbo ^= 1;
         if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_F6)
@@ -788,6 +800,14 @@ smoke_skip_input:
     /* Record frame state to ring buffer for TCP timeseries queries */
     debug_server_record_frame();
 
+    /* This is the one stable suspension point shared by every frame: the
+     * game's NMI and post-NMI work have completed, but presentation and the
+     * frame-count increment have not.  Keeping the TCP pause loop here makes
+     * save/load resume on the same native call-stack continuation instead of
+     * taking a snapshot at the earlier command-poll point and restoring it at
+     * an unrelated phase of the callback. */
+    debug_server_wait_if_paused();
+
     /* Cross-engine RNG/seed freeze (env-gated, accuracy harness) — applied at
      * the frame boundary so the nesref oracle and recomp share identical RNG. */
     { extern void nes_apply_freeze(void); nes_apply_freeze(); }
@@ -973,6 +993,8 @@ smoke_skip_input:
             if (ec >= 0) {
                 smoke_write_results();
                 if (ec == 0) nesrecomp_expect_process_exit();
+                fprintf(stderr, "[RunnerExit] input script requested exit %d at frame %llu\n",
+                        ec, (unsigned long long)g_frame_count);
                 exit(ec);
             }
         }
@@ -1065,6 +1087,8 @@ smoke_skip_input:
         int ec = script_check_exit();
         if (ec >= 0) {
             if (ec == 0) nesrecomp_expect_process_exit();
+            fprintf(stderr, "[RunnerExit] input script requested exit %d at frame %llu\n",
+                    ec, (unsigned long long)g_frame_count);
             exit(ec);
         }
     }

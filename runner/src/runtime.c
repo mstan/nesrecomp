@@ -13,6 +13,11 @@
 #include <string.h>
 #include <stdlib.h>
 #include <time.h>
+#ifdef _MSC_VER
+#include <intrin.h>
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
 
 /* ---- APU register-write trace ring (always-on, env-gated) -------------------
  * NESRECOMP_APU_TRACE=<path>  ->  capture every $4000-$401F APU register write as
@@ -318,9 +323,13 @@ static void ppu_trace_write(uint16_t reg, uint8_t val) {
 DispatchMissPolicy g_dispatch_miss_policy = DISPATCH_MISS_LOG_RETURN;
 uint64_t           g_dispatch_miss_count = 0;
 uint64_t           g_inline_dispatch_miss_count = 0;
+uint64_t           g_unhandled_dispatch_count = 0;
 
 BrkPolicy g_brk_policy = BRK_DIAG;
 uint64_t  g_brk_count  = 0;
+uint16_t  g_brk_last_pc = 0;
+int       g_brk_last_bank = 0;
+uint64_t  g_brk_last_frame = 0;
 
 void nes_set_dispatch_miss_policy(DispatchMissPolicy policy) {
     g_dispatch_miss_policy = policy;
@@ -366,6 +375,9 @@ void nes_brk_executed(uint16_t pc) {
     bool first_for_key = (key != last);
 
     g_brk_count++;
+    g_brk_last_pc = pc;
+    g_brk_last_bank = g_current_bank;
+    g_brk_last_frame = g_frame_count;
     if (first_for_key) {
         printf("[BRK] executed at $%04X bank=%d (frame %llu) — "
                "BRK is silently skipped under DIAG; consider real "
@@ -1723,6 +1735,148 @@ void runtime_set_controller_shift(uint8_t shift1, uint8_t shift2, uint8_t strobe
     s_ctrl1_strobe = (bool)strobe;
 }
 
+/* Declared here because the save-state blob spans the frame-scroll diagnostics;
+ * their accessors are implemented later in this translation unit. */
+static uint8_t s_last_sync_sx, s_last_sync_sy;
+static uint16_t s_last_sync_t;
+static uint64_t s_last_sync_frame;
+static uint8_t s_frame_start_sx, s_frame_start_sy;
+static uint16_t s_frame_start_t;
+static uint64_t s_frame_start_frame;
+
+typedef struct {
+    uint64_t nes_cycles;
+    uint64_t frame_boundary_cyc;
+    uint64_t cosim_vframe;
+    uint64_t interrupt_epoch;
+    uint32_t ops_count;
+    uint32_t frame_budget;
+    int32_t  odd_frame;
+    int32_t  dot_debt;
+    int32_t  vblank_pending;
+    int32_t  vblank_depth;
+    int32_t  oam_dma_stall;
+
+    uint16_t ppu_t;
+    uint16_t ppu_v_at_2006;
+    uint64_t ppu_v_write_epoch;
+    uint8_t  ppu_fine_x;
+    uint8_t  ppuaddr_latch;
+    uint8_t  ppudata_buf;
+    uint8_t  ppu_io_latch;
+    uint8_t  open_bus;
+    uint8_t  scroll_2005_complete;
+
+    uint8_t  visible_frame_valid;
+    uint8_t  visible_frame_ctrl;
+    uint8_t  visible_frame_sx;
+    uint8_t  visible_frame_sy;
+    uint16_t visible_frame_t;
+    uint64_t visible_frame_frame;
+
+    uint8_t  ctrl1_shift;
+    uint8_t  ctrl2_shift;
+    uint8_t  ctrl1_strobe;
+
+    uint8_t  last_sync_sx;
+    uint8_t  last_sync_sy;
+    uint16_t last_sync_t;
+    uint64_t last_sync_frame;
+    uint8_t  frame_start_sx;
+    uint8_t  frame_start_sy;
+    uint16_t frame_start_t;
+    uint64_t frame_start_frame;
+} RuntimeStateBlob;
+
+int runtime_get_state_blob(uint8_t *buf, int cap) {
+    RuntimeStateBlob s;
+    if (!buf || cap < (int)sizeof(s)) return 0;
+    memset(&s, 0, sizeof(s));
+    s.nes_cycles = g_nes_cycles;
+    s.frame_boundary_cyc = g_frame_boundary_cyc;
+    s.cosim_vframe = g_cosim_vframe;
+    s.interrupt_epoch = s_interrupt_epoch;
+    s.ops_count = s_ops_count;
+    s.frame_budget = s_frame_budget;
+    s.odd_frame = s_odd_frame;
+    s.dot_debt = s_dot_debt;
+    s.vblank_pending = s_vblank_pending;
+    s.vblank_depth = s_vblank_depth;
+    s.oam_dma_stall = s_oam_dma_stall;
+    s.ppu_t = s_ppu_t;
+    s.ppu_v_at_2006 = s_ppu_v_at_2006;
+    s.ppu_v_write_epoch = s_ppu_v_write_epoch;
+    s.ppu_fine_x = s_ppu_fine_x;
+    s.ppuaddr_latch = (uint8_t)g_ppuaddr_latch;
+    s.ppudata_buf = g_ppudata_buf;
+    s.ppu_io_latch = s_ppu_io_latch;
+    s.open_bus = s_open_bus;
+    s.scroll_2005_complete = (uint8_t)s_scroll_2005_complete;
+    s.visible_frame_valid = (uint8_t)s_visible_frame_valid;
+    s.visible_frame_ctrl = s_visible_frame_ctrl;
+    s.visible_frame_sx = s_visible_frame_sx;
+    s.visible_frame_sy = s_visible_frame_sy;
+    s.visible_frame_t = s_visible_frame_t;
+    s.visible_frame_frame = s_visible_frame_frame;
+    s.ctrl1_shift = s_ctrl1_shift;
+    s.ctrl2_shift = s_ctrl2_shift;
+    s.ctrl1_strobe = (uint8_t)s_ctrl1_strobe;
+    s.last_sync_sx = s_last_sync_sx;
+    s.last_sync_sy = s_last_sync_sy;
+    s.last_sync_t = s_last_sync_t;
+    s.last_sync_frame = s_last_sync_frame;
+    s.frame_start_sx = s_frame_start_sx;
+    s.frame_start_sy = s_frame_start_sy;
+    s.frame_start_t = s_frame_start_t;
+    s.frame_start_frame = s_frame_start_frame;
+    memcpy(buf, &s, sizeof(s));
+    return (int)sizeof(s);
+}
+
+int runtime_set_state_blob(const uint8_t *buf, int len) {
+    RuntimeStateBlob s;
+    if (!buf || len != (int)sizeof(s)) return 0;
+    memcpy(&s, buf, sizeof(s));
+    g_nes_cycles = s.nes_cycles;
+    g_frame_boundary_cyc = s.frame_boundary_cyc;
+    g_cosim_vframe = s.cosim_vframe;
+    s_interrupt_epoch = s.interrupt_epoch;
+    s_ops_count = s.ops_count;
+    s_frame_budget = s.frame_budget;
+    s_odd_frame = s.odd_frame;
+    s_dot_debt = s.dot_debt;
+    s_vblank_pending = s.vblank_pending;
+    s_vblank_depth = s.vblank_depth;
+    s_oam_dma_stall = s.oam_dma_stall;
+    s_ppu_t = s.ppu_t;
+    s_ppu_v_at_2006 = s.ppu_v_at_2006;
+    s_ppu_v_write_epoch = s.ppu_v_write_epoch;
+    s_ppu_fine_x = s.ppu_fine_x;
+    g_ppuaddr_latch = s.ppuaddr_latch;
+    g_ppudata_buf = s.ppudata_buf;
+    s_ppu_io_latch = s.ppu_io_latch;
+    s_open_bus = s.open_bus;
+    s_scroll_2005_complete = s.scroll_2005_complete;
+    s_visible_frame_valid = s.visible_frame_valid;
+    s_visible_frame_ctrl = s.visible_frame_ctrl;
+    s_visible_frame_sx = s.visible_frame_sx;
+    s_visible_frame_sy = s.visible_frame_sy;
+    s_visible_frame_t = s.visible_frame_t;
+    s_visible_frame_frame = s.visible_frame_frame;
+    s_ctrl1_shift = s.ctrl1_shift;
+    s_ctrl2_shift = s.ctrl2_shift;
+    s_ctrl1_strobe = s.ctrl1_strobe != 0;
+    s_last_sync_sx = s.last_sync_sx;
+    s_last_sync_sy = s.last_sync_sy;
+    s_last_sync_t = s.last_sync_t;
+    s_last_sync_frame = s.last_sync_frame;
+    s_frame_start_sx = s.frame_start_sx;
+    s_frame_start_sy = s.frame_start_sy;
+    s_frame_start_t = s.frame_start_t;
+    s_frame_start_frame = s.frame_start_frame;
+    return 1;
+}
+
 uint8_t runtime_get_ppudata_buf(void) { return g_ppudata_buf; }
 void    runtime_set_ppudata_buf(uint8_t val) { g_ppudata_buf = val; }
 uint16_t runtime_get_ppuaddr(void) { return g_ppuaddr; }
@@ -1766,6 +1920,8 @@ extern const char *g_last_recomp_func;
 static void apply_dispatch_miss_policy(const char *kind, uint16_t addr,
                                        int bank, const char *class_name,
                                        uint16_t ctx) {
+    if (strcmp(kind, "dispatch") == 0)
+        g_unhandled_dispatch_count++;
     switch (g_dispatch_miss_policy) {
         case DISPATCH_MISS_LOG_RETURN:
             return;
@@ -1848,6 +2004,25 @@ static void dring_push(uint16_t addr, int cb, char kind) {
  * shows which dispatches ran inside which handler invocation. */
 void nes_dring_mark(char kind, uint16_t tag) {
     dring_push(tag, -1, kind);
+}
+
+void nes_trace_indirect_jump(uint16_t pc, uint16_t target) {
+    static int s_dbg_init = 0;
+    static uint16_t s_dbg_target = 0;
+    static int s_dbg_on = 0;
+    if (!s_dbg_init) {
+        const char *e = getenv("NESRECOMP_INDIRJMPDBG");
+        if (e && *e) {
+            s_dbg_target = (uint16_t)strtoul(e, NULL, 16);
+            s_dbg_on = 1;
+        }
+        s_dbg_init = 1;
+    }
+    if (s_dbg_on && target == s_dbg_target) {
+        fprintf(stderr, "[indirjmpdbg] pc=$%04X target=$%04X S=$%02X frame=%llu wb=$%04X\n",
+                pc, target, g_cpu.S, (unsigned long long)g_frame_count, g_code_window_base);
+        fflush(stderr);
+    }
 }
 
 /* ---- Always-on frame-event ring (see nes_runtime.h for the event map) ----
@@ -1969,6 +2144,36 @@ int nes_jsr_stack_ok_after_call(uint8_t before_s, uint64_t before_interrupt_epoc
             g_cpu.S = before_s;
             return 1;
         }
+    }
+
+    static int s_trace_enabled = -1;
+    static int s_trace_emitted = 0;
+    if (s_trace_enabled < 0) {
+        const char *trace_env = getenv("NESRECOMP_JSR_MISMATCH_TRACE");
+        s_trace_enabled = (trace_env && *trace_env) ? 1 : 0;
+    }
+    if (s_trace_enabled && !s_trace_emitted) {
+        extern uint16_t g_rts_target;
+        extern uint16_t g_rti_source;
+        extern int g_rti_bank;
+        s_trace_emitted = 1;
+#ifdef _MSC_VER
+        uintptr_t caller_pc = (uintptr_t)_ReturnAddress();
+        uintptr_t module_base = (uintptr_t)GetModuleHandleW(NULL);
+#else
+        uintptr_t caller_pc = 0;
+        uintptr_t module_base = 0;
+#endif
+        fprintf(stderr,
+                "[JSRMismatch] frame=%llu expected_S=$%02X actual_S=$%02X "
+                "delta=%d interrupts=%llu rts=$%04X rti=$%04X source=$%04X bank=%d "
+                "caller=%p base=%p rva=$%llX\n",
+                (unsigned long long)g_frame_count, before_s, g_cpu.S, delta,
+                (unsigned long long)interrupts, g_rts_target, g_rti_target,
+                g_rti_source, g_rti_bank, (void *)caller_pc, (void *)module_base,
+                (unsigned long long)(caller_pc - module_base));
+        nes_dump_dispatch_ring();
+        fflush(stderr);
     }
 
     return 0;
@@ -2195,10 +2400,6 @@ void nes_log_inline_miss(uint16_t dispatch_pc, uint8_t a_val) {
 }
 
 /* ---- PPU t register: derive scroll from t for rendering ---- */
-static uint8_t s_last_sync_sx = 0, s_last_sync_sy = 0;
-static uint16_t s_last_sync_t = 0;
-static uint64_t s_last_sync_frame = 0;
-
 void runtime_sync_scroll_from_t(void) {
     /* At frame start, derive scroll from t (PPU copies t→v at pre-render).
      * This captures scroll set by $2005/$2006 during the NMI handler.
@@ -2226,10 +2427,6 @@ void runtime_sync_scroll_from_v(void) {
     g_ppuscroll_y = (uint8_t)((((v >> 5) & 0x1F) << 3) | ((v >> 12) & 7));
     g_ppuctrl = (g_ppuctrl & 0xFC) | ((v >> 10) & 3);
 }
-
-static uint8_t s_frame_start_sx = 0, s_frame_start_sy = 0;
-static uint16_t s_frame_start_t = 0;
-static uint64_t s_frame_start_frame = 0;
 
 void runtime_record_frame_start_scroll(void) {
     s_frame_start_sx = g_ppuscroll_x;

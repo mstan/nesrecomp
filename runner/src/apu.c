@@ -753,3 +753,120 @@ int apu_get_state_blob(uint8_t *buf, int cap) {
     i = cosim_put_u32(buf, i, (uint32_t)s_dmc_stall);
     return i;
 }
+
+static int state_get_u8(const uint8_t *b, int n, int *i, uint8_t *v) {
+    if (*i + 1 > n) return 0;
+    *v = b[(*i)++];
+    return 1;
+}
+
+static int state_get_u16(const uint8_t *b, int n, int *i, uint16_t *v) {
+    if (*i + 2 > n) return 0;
+    *v = (uint16_t)(b[*i] | ((uint16_t)b[*i + 1] << 8));
+    *i += 2;
+    return 1;
+}
+
+static int state_get_u32(const uint8_t *b, int n, int *i, uint32_t *v) {
+    if (*i + 4 > n) return 0;
+    *v = (uint32_t)b[*i] |
+         ((uint32_t)b[*i + 1] << 8) |
+         ((uint32_t)b[*i + 2] << 16) |
+         ((uint32_t)b[*i + 3] << 24);
+    *i += 4;
+    return 1;
+}
+
+static int state_get_f32(const uint8_t *b, int n, int *i, float *v) {
+    uint32_t u;
+    if (!state_get_u32(b, n, i, &u)) return 0;
+    memcpy(v, &u, sizeof(u));
+    return 1;
+}
+
+static int state_get_pulse(const uint8_t *b, int n, int *i, Pulse *p) {
+    uint8_t flags, env_start, which;
+    if (!state_get_u8(b,n,i,&p->duty) || !state_get_u8(b,n,i,&flags) ||
+        !state_get_u8(b,n,i,&p->vol) || !state_get_u8(b,n,i,&p->sweep_period) ||
+        !state_get_u8(b,n,i,&p->sweep_shift) || !state_get_u8(b,n,i,&p->sweep_div) ||
+        !state_get_u16(b,n,i,&p->timer) || !state_get_f32(b,n,i,&p->timer_acc) ||
+        !state_get_u8(b,n,i,&p->seq) || !state_get_u8(b,n,i,&p->env_div) ||
+        !state_get_u8(b,n,i,&p->env_vol) || !state_get_u8(b,n,i,&env_start) ||
+        !state_get_u8(b,n,i,&p->length) || !state_get_u8(b,n,i,&which)) return 0;
+    p->halt         = (flags & 1) != 0;
+    p->const_vol    = (flags & 2) != 0;
+    p->sweep_en     = (flags & 4) != 0;
+    p->sweep_neg    = (flags & 8) != 0;
+    p->sweep_reload = (flags & 16) != 0;
+    p->enabled      = (flags & 32) != 0;
+    p->env_start = env_start != 0;
+    p->which = (int)which;
+    return 1;
+}
+
+int apu_set_state_blob(const uint8_t *buf, int len) {
+    int i = 0;
+    uint8_t flags;
+    uint32_t u32;
+    if (!buf || len <= 0) return 0;
+    if (!state_get_pulse(buf,len,&i,&s_p1) || !state_get_pulse(buf,len,&i,&s_p2)) return 0;
+
+    if (!state_get_u8(buf,len,&i,&flags) ||
+        !state_get_u8(buf,len,&i,&s_tri.linear_load) ||
+        !state_get_u8(buf,len,&i,&s_tri.linear) ||
+        !state_get_u16(buf,len,&i,&s_tri.timer) ||
+        !state_get_f32(buf,len,&i,&s_tri.timer_acc) ||
+        !state_get_u8(buf,len,&i,&s_tri.seq) ||
+        !state_get_u8(buf,len,&i,&s_tri.length)) return 0;
+    s_tri.halt = (flags & 1) != 0;
+    s_tri.linear_reload = (flags & 2) != 0;
+    s_tri.enabled = (flags & 4) != 0;
+
+    if (!state_get_u8(buf,len,&i,&flags) ||
+        !state_get_u8(buf,len,&i,&s_noise.vol) ||
+        !state_get_u8(buf,len,&i,&s_noise.period_idx) ||
+        !state_get_f32(buf,len,&i,&s_noise.timer_acc) ||
+        !state_get_u16(buf,len,&i,&s_noise.lfsr) ||
+        !state_get_u8(buf,len,&i,&s_noise.env_div) ||
+        !state_get_u8(buf,len,&i,&s_noise.env_vol) ||
+        !state_get_u8(buf,len,&i,&s_noise.length)) return 0;
+    s_noise.halt = (flags & 1) != 0;
+    s_noise.const_vol = (flags & 2) != 0;
+    s_noise.mode = (flags & 4) != 0;
+    s_noise.env_start = (flags & 8) != 0;
+    s_noise.enabled = (flags & 16) != 0;
+
+    if (!state_get_u8(buf,len,&i,&flags) ||
+        !state_get_u8(buf,len,&i,&s_dmc.rate_idx) ||
+        !state_get_u16(buf,len,&i,&s_dmc.start_addr) ||
+        !state_get_u16(buf,len,&i,&s_dmc.start_len) ||
+        !state_get_u16(buf,len,&i,&s_dmc.cur_addr) ||
+        !state_get_u16(buf,len,&i,&s_dmc.bytes_left) ||
+        !state_get_u8(buf,len,&i,&s_dmc.sample_buf) ||
+        !state_get_u8(buf,len,&i,&s_dmc.shift) ||
+        !state_get_u8(buf,len,&i,&s_dmc.bits_left) ||
+        !state_get_u8(buf,len,&i,&s_dmc.output) ||
+        !state_get_f32(buf,len,&i,&s_dmc.timer_acc)) return 0;
+    s_dmc.loop = (flags & 1) != 0;
+    s_dmc.irq_en = (flags & 2) != 0;
+    s_dmc.irq_flag = (flags & 4) != 0;
+    s_dmc.buf_empty = (flags & 8) != 0;
+    s_dmc.silence = (flags & 16) != 0;
+    s_dmc.enabled = (flags & 32) != 0;
+
+    if (!state_get_u8(buf,len,&i,&flags) || !state_get_u32(buf,len,&i,&u32)) return 0;
+    s_fc_mode = (flags & 1) != 0;
+    s_fc_irq_inh = (flags & 2) != 0;
+    s_fc_irq_flag = (flags & 4) != 0;
+    s_fc_cycle_acc = (int)u32;
+    if (!state_get_u32(buf,len,&i,&u32) || i != len) return 0;
+    s_dmc_stall = (int)u32;
+
+    /* Host delivery state is deliberately not serialized. Discard queued audio
+     * from the abandoned timeline and begin a fresh integration window. */
+    s_ring_head = s_ring_tail = 0;
+    s_out_acc = s_mix_acc = 0.0f;
+    s_mix_n = 0;
+    memset(&s_lv_last, 0, sizeof(s_lv_last));
+    return 1;
+}
