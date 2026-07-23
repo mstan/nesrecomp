@@ -2043,6 +2043,16 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
         }
         case MN_JMP:
             if (e->addr_mode == AM_ABS) {
+                uint16_t cont = 0;
+                if (configured_indirect_continuation(rom, cfg, bank, func_base, pc, &cont)) {
+                    /* A configured pushed-return continuation may use a direct
+                     * JMP just as easily as JMP (ind). The target's eventual
+                     * RTS consumes the manually pushed operand; resume in this
+                     * generated body instead of unwinding its C caller. */
+                    fprintf(f, "maybe_trigger_vblank(2); if (nes_dispatch_indirect_continuation(0x%04X, %d, 0x%04X)) goto label_%04X; return;\n",
+                            abs16, bank, (uint16_t)(cont - 1), cont);
+                    return (int)(cont - pc);
+                }
                 if (abs16 >= 0xC000) {
                     uint16_t alias_owner = 0;
                     int alias_bank = -1;
@@ -2908,10 +2918,10 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
             default: break;
         }
 
-        /* Pushed-continuation indirect JMP: the callee's RTS returns into a
+        /* Pushed-continuation JMP: the callee's RTS returns into a
          * forward address in this same body, so keep emitting through that
          * continuation after skipping any intervening table/data bytes. */
-        if (e->mnemonic == MN_JMP && e->addr_mode == AM_IND) {
+        if (e->mnemonic == MN_JMP) {
             uint16_t cont = 0;
             if (configured_indirect_continuation(rom, cfg, bank, pc, cursor, &cont)) {
                 bool found = false;

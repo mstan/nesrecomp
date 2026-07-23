@@ -65,17 +65,19 @@ export function recompile(
   const fullFiles = existsSync(generatedDir)
     ? require("fs")
         .readdirSync(generatedDir)
-        .filter((f: string) => f.endsWith("_full.c"))
+        .filter(
+          (f: string) => f.includes("_full") && f.endsWith(".c")
+        )
+        .sort()
     : [];
 
   const dispatchC =
     dispatchFiles.length > 0
       ? readFileSync(join(generatedDir, dispatchFiles[0]), "utf-8")
       : "";
-  const fullC =
-    fullFiles.length > 0
-      ? readFileSync(join(generatedDir, fullFiles[0]), "utf-8")
-      : "";
+  const fullC = fullFiles
+    .map((f: string) => readFileSync(join(generatedDir, f), "utf-8"))
+    .join("\n");
 
   // Extract dispatch entries
   const dispatchEntries = (dispatchC.match(/case 0x([0-9A-Fa-f]+):/g) || [])

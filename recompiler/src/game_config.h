@@ -213,7 +213,7 @@ typedef struct {
 } MergeRange;
 
 /*
- * Indirect continuation: a configured JMP (ind) site whose caller has pushed
+ * Indirect continuation: a configured JMP site whose caller has pushed
  * a synthetic RTS operand before dispatch. If the dispatched callee returns by
  * popping that operand, generated code resumes at continuation instead of
  * returning to the C caller.

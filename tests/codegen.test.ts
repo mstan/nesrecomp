@@ -204,6 +204,50 @@ describe("function discovery", () => {
 });
 
 describe("code generation", () => {
+  it("resumes a configured pushed continuation after a direct JMP", () => {
+    // Some games implement a callback as:
+    //   push (continuation - 1); JMP callback
+    // The callback's eventual RTS must resume at the pushed continuation in
+    // this function body. Treating the JMP as an ordinary C tail return drops
+    // the live caller and leaves its synthetic JSR frame on the 6502 stack.
+    const rom = new RomBuilder()
+      .org(0xc000)
+      .lda(0xc0)
+      .pha()
+      .lda(0x1f)
+      .pha()
+      .jmp(0xc030)
+      .org(0xc020)
+      .lda(0x42)
+      .rts()
+      .org(0xc030)
+      .rts()
+      .vectors(0xc000, 0xc000, 0xc000)
+      .writeTemp("direct_pushed_continuation.nes");
+
+    const result = recompile(
+      rom,
+      [
+        "[game]",
+        "push_all_jsr = true",
+        "",
+        "[[indirect_continuation]]",
+        "bank = 0",
+        "jmp_addr = 0xC006",
+        "continuation = 0xC020",
+      ].join("\n")
+    );
+
+    expect(result.fullC).toContain(
+      "nes_dispatch_indirect_continuation(0xC030, 0, 0xC01F)"
+    );
+    expect(result.fullC).toContain("goto label_C020");
+    expect(result.fullC).toContain("label_C020:");
+    expect(result.fullC).not.toContain(
+      "call_by_address_tail(0xC030"
+    );
+  });
+
   it("generates compilable C for simple functions", () => {
     const rom = new RomBuilder()
       .org(0xc000)
@@ -225,7 +269,7 @@ describe("code generation", () => {
     expect(result.fullC).toContain("0x0200");
   });
 
-  it("detects RTI-hijack in NMI handler and emits call to hijacked target", () => {
+  it("preserves an RTI-hijacked NMI target for dynamic post-NMI dispatch", () => {
     // Minimal NMI handler that overwrites its hardware-pushed return PC
     // with a trampoline target, then RTIs.  Mirrors the shape of MM3's
     // $C000 PostNMI trampoline idiom.
@@ -250,14 +294,16 @@ describe("code generation", () => {
       .writeTemp("rti_hijack.nes");
 
     const result = recompile(rom);
-    // The NMI handler's emitted body should contain a call to the hijack target.
-    // The actual instructions live in func_C080_body (the outer func_C080 is a
-    // dispatcher shim that just calls _body).
+    // The handler stores the PC popped by RTI in g_rti_target. func_NMI then
+    // dispatches that target after leaving NMI context; the target is dynamic
+    // because the handler can rewrite its stack frame at runtime.
     const nmiMatch = result.fullC.match(/func_C080_body\([^)]*\)\s*\{[\s\S]*?\n\}/);
     expect(nmiMatch, "func_C080_body definition should be present").not.toBeNull();
     const nmiBody = nmiMatch![0];
-    expect(nmiBody).toContain("RTI-hijack");
-    expect(nmiBody).toContain("call_by_address(0xC150)");
+    expect(nmiBody).toContain("g_rti_source = 0xC08B");
+    expect(nmiBody).toContain("g_rti_target =");
+    expect(result.fullC).toContain("if (g_rti_target != 0)");
+    expect(result.fullC).toContain("call_by_address(g_rti_target)");
   });
 
   it("function finder seeds RTI-hijack target when otherwise unreachable", () => {
@@ -285,8 +331,9 @@ describe("code generation", () => {
     // $C150 must be discovered and dispatched, even though nothing else
     // references it in the ROM.
     expect(result.dispatchEntries).toContain("C150");
-    // And the codegen emission for the NMI handler should still reference it.
-    expect(result.fullC).toContain("call_by_address(0xC150)");
+    // And the target body must be emitted for the dynamic post-NMI dispatch.
+    expect(result.fullC).toContain("void func_C150(void)");
+    expect(result.fullC).toContain("call_by_address(g_rti_target)");
   });
 
   it("MMC3: cross-bank JSR to $8000 region resolved via R6 switch", () => {
