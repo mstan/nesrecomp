@@ -25,7 +25,6 @@ typedef struct {
 
 typedef struct {
     PlayerBinds  p1;
-    PlayerBinds  p2;
     ZapperBinds  zapper;
     GamepadBinds pad1;
     GamepadBinds pad2;
@@ -37,7 +36,8 @@ void keybinds_init(const char *exe_path);
 /* Get current keybind configuration */
 const KeyBinds *keybinds_get(void);
 
-/* Read NES controller byte for player 1 or 2 from SDL keyboard state */
+/* Read the NES controller byte for player 1 from SDL keyboard state.
+ * Player 2 uses its explicitly assigned gamepad (or netplay peer). */
 uint8_t keybinds_read_player(const uint8_t *keys, int player);
 
 /* Get the gamepad bindings for player 1 or 2. */

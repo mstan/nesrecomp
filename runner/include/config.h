@@ -21,7 +21,7 @@ typedef struct {
     /* Audio (always on) */
     int volume;           /* 0..100; default 100 */
 
-    /* Input (2 players): 0 none, 1 keyboard, 2 gamepad */
+    /* Input: P1 supports 0 none, 1 keyboard, 2 gamepad; P2 supports 0 or 2. */
     int player_src[2];    /* default { 1 keyboard, 2 gamepad } */
     int deadzone[2];      /* 0..100 percent; default { 30, 30 } */
 

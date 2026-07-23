@@ -17,22 +17,12 @@ static KeyBinds s_binds = {
     .p1 = {
         .a      = SDL_SCANCODE_Z,
         .b      = SDL_SCANCODE_X,
-        .select = SDL_SCANCODE_TAB,
+        .select = SDL_SCANCODE_BACKSLASH,
         .start  = SDL_SCANCODE_RETURN,
         .up     = SDL_SCANCODE_UP,
         .down   = SDL_SCANCODE_DOWN,
         .left   = SDL_SCANCODE_LEFT,
         .right  = SDL_SCANCODE_RIGHT,
-    },
-    .p2 = {
-        .a      = SDL_SCANCODE_K,
-        .b      = SDL_SCANCODE_L,
-        .select = SDL_SCANCODE_RSHIFT,
-        .start  = SDL_SCANCODE_BACKSLASH,
-        .up     = SDL_SCANCODE_W,
-        .down   = SDL_SCANCODE_S,
-        .left   = SDL_SCANCODE_A,
-        .right  = SDL_SCANCODE_D,
     },
     .zapper = {
         /* Default ON: a Zapper game (g_zapper_enabled) has no other input on a
@@ -205,10 +195,9 @@ static void write_defaults(const char *path) {
     if (!f) return;
     fprintf(f, "# NES Controller Keybinds\n");
     fprintf(f, "# Edit key names to customize. Use SDL key names.\n");
-    fprintf(f, "# Common keys: Z, X, Tab, Return, Up, Down, Left, Right\n");
-    fprintf(f, "# A, B, C, ..., W, S, D, K, L, Space, Left Shift, Right Shift\n\n");
+    fprintf(f, "# Common keys: Z, X, Backslash, Return, Up, Down, Left, Right\n");
+    fprintf(f, "# Tab and F1-F12 are reserved runtime hotkeys.\n\n");
     write_player(f, "player1", &s_binds.p1);
-    write_player(f, "player2", &s_binds.p2);
     fprintf(f, "[zapper]\n");
     fprintf(f, "# Mouse as the Zapper light gun (default on for Zapper games):\n");
     fprintf(f, "# left click = trigger, mouse position = aim.  Set false to disable.\n");
@@ -248,7 +237,8 @@ static void load_ini(const char *path) {
             current = NULL;
             cur_pad = NULL;
             if (strcmp(section, "player1") == 0) current = &s_binds.p1;
-            else if (strcmp(section, "player2") == 0) current = &s_binds.p2;
+            /* Legacy [player2] keyboard sections are intentionally ignored.
+             * P2 is now assigned explicitly to a gamepad or netplay peer. */
             else if (strcmp(section, "zapper") == 0) in_zapper = 1;
             else if (strcmp(section, "gamepad1") == 0) cur_pad = &s_binds.pad1;
             else if (strcmp(section, "gamepad2") == 0) cur_pad = &s_binds.pad2;
@@ -313,6 +303,12 @@ static void load_ini(const char *path) {
         }
     }
     fclose(f);
+    /* Tab became the global turbo hotkey. Migrate the former P1 Select default
+     * in memory so existing generated keybinds.ini files adopt Backslash too. */
+    if (s_binds.p1.select == SDL_SCANCODE_TAB) {
+        s_binds.p1.select = SDL_SCANCODE_BACKSLASH;
+        printf("[Keybinds] Migrated Player 1 Select from Tab to Backslash\n");
+    }
     printf("[Keybinds] Loaded %s\n", path);
 }
 
@@ -334,17 +330,23 @@ const KeyBinds *keybinds_get(void) {
     return &s_binds;
 }
 
+static int is_runtime_hotkey(SDL_Scancode sc) {
+    return sc == SDL_SCANCODE_TAB ||
+           (sc >= SDL_SCANCODE_F1 && sc <= SDL_SCANCODE_F12);
+}
+
 uint8_t keybinds_read_player(const uint8_t *keys, int player) {
-    const PlayerBinds *pb = (player == 1) ? &s_binds.p1 : &s_binds.p2;
+    if (player != 1) return 0;
+    const PlayerBinds *pb = &s_binds.p1;
     uint8_t btn = 0;
-    if (keys[pb->a])      btn |= 0x80;
-    if (keys[pb->b])      btn |= 0x40;
-    if (keys[pb->select]) btn |= 0x20;
-    if (keys[pb->start])  btn |= 0x10;
-    if (keys[pb->up])     btn |= 0x08;
-    if (keys[pb->down])   btn |= 0x04;
-    if (keys[pb->left])   btn |= 0x02;
-    if (keys[pb->right])  btn |= 0x01;
+    if (!is_runtime_hotkey(pb->a)      && keys[pb->a])      btn |= 0x80;
+    if (!is_runtime_hotkey(pb->b)      && keys[pb->b])      btn |= 0x40;
+    if (!is_runtime_hotkey(pb->select) && keys[pb->select]) btn |= 0x20;
+    if (!is_runtime_hotkey(pb->start)  && keys[pb->start])  btn |= 0x10;
+    if (!is_runtime_hotkey(pb->up)     && keys[pb->up])     btn |= 0x08;
+    if (!is_runtime_hotkey(pb->down)   && keys[pb->down])   btn |= 0x04;
+    if (!is_runtime_hotkey(pb->left)   && keys[pb->left])   btn |= 0x02;
+    if (!is_runtime_hotkey(pb->right)  && keys[pb->right])  btn |= 0x01;
     return btn;
 }
 
