@@ -26,14 +26,9 @@
 #include "crc32.h"
 #include "nes_runtime.h"
 #include "config.h"
-#ifdef NESRECOMP_LAUNCHER
-#include "launcher/launcher_capi.h"
-#endif
 #ifdef RECOMP_LAUNCHER
-/* The shared recomp-ui Dear ImGui launcher (consumed as a git submodule;
- * recomp_ui.cmake defines RECOMP_LAUNCHER and adds its src/ to the include
- * path). Supersedes the in-tree RmlUi launcher above; the old gate is kept
- * side-by-side so a build defining NESRECOMP_LAUNCHER instead still works. */
+/* The shared recomp-ui Dear ImGui launcher. recomp_ui.cmake defines
+ * RECOMP_LAUNCHER and adds its public headers to the include path. */
 #include "recomp_launcher.h"
 #include "launcher_profile.h"
 #include "save_ram.h"
@@ -352,107 +347,11 @@ int main(int argc, char *argv[]) {
     uint32_t expected_crc = game_get_expected_crc32();
 
     /* Settings live in config.ini next to the exe (created with defaults if
-     * absent). The GUI launcher edits them; the runner honors them. */
+     * absent). The shared launcher edits them; the runner honors them. */
     config_load(config_path());
 
     int gui_resolved = 0;
     int returning_to_lobby = 0;
-#ifdef NESRECOMP_LAUNCHER
-    {
-        int have_positional = (argc >= 2 && argv[1][0] != '-');
-        int force_launcher  = (argc >= 2 && strcmp(argv[1], "--launcher") == 0);
-        int no_gui_env      = getenv("NESRECOMP_NO_LAUNCHER") != NULL;
-        /* Show the GUI unless a ROM was given on the command line, the user asked
-         * to skip it (and didn't pass --launcher to force it), or it's disabled. */
-        int want_gui = !have_positional && !no_gui_env &&
-                       (!g_nes_config.skip_launcher || force_launcher);
-        if (want_gui) {
-            char init_rom[512]; init_rom[0] = '\0';
-            rom_cfg_read(init_rom, sizeof(init_rom));
-
-            NesLauncherCSettings ls;
-            memset(&ls, 0, sizeof(ls));
-            ls.window_scale  = g_nes_config.window_scale;
-            ls.fullscreen    = g_nes_config.fullscreen;
-            ls.integer_scale = g_nes_config.integer_scale;
-            ls.linear_filter = g_nes_config.linear_filter;
-            ls.renderer      = g_nes_config.renderer;
-            ls.widescreen    = g_nes_config.widescreen;
-            ls.volume        = g_nes_config.volume;
-            ls.player_src[0] = g_nes_config.player_src[0];
-            ls.player_src[1] = g_nes_config.player_src[1];
-            ls.deadzone[0]   = g_nes_config.deadzone[0];
-            ls.deadzone[1]   = g_nes_config.deadzone[1];
-            ls.skip_launcher = g_nes_config.skip_launcher;
-            ls.hdpack_enabled = g_nes_config.hdpack_enabled;
-            snprintf(ls.hdpack_dir, sizeof(ls.hdpack_dir), "%s", g_nes_config.hdpack_dir);
-
-            NesLauncherCGameInfo gi;
-            memset(&gi, 0, sizeof(gi));
-            gi.name             = game_get_name();
-            gi.region           = "NTSC-U (USA)";
-            gi.expected_crc     = expected_crc;
-            gi.has_expected_crc = expected_crc != 0;
-            gi.mapper_board     = NULL;   /* launcher derives from the iNES mapper */
-            gi.uses_sram        = 0;      /* battery bit auto-detected from the ROM */
-            gi.save_basename    = game_get_name();
-#ifdef NESRECOMP_GAME_WIDESCREEN
-            gi.widescreen_supported = 1;  /* per-game opt-in (e.g. SMB) */
-#else
-            gi.widescreen_supported = 0;
-#endif
-            /* HD texture packs are supported by default for every game; a build
-             * opts OUT with NESRECOMP_GAME_NO_HDPACK (e.g. a stock/unpatched
-             * Zelda build that must not offer or load remaster packs). */
-#ifdef NESRECOMP_GAME_NO_HDPACK
-            gi.hdpack_supported = 0;
-#else
-            gi.hdpack_supported = 1;
-#endif
-#ifdef NESRECOMP_GAME_PASSWORD_SAVE
-            /* Per-game password/mantra save (e.g. Faxanadu): the SAVES panel shows
-             * the password text instead of binary SRAM. The file lives next to the
-             * exe (same one the runtime auto-prefill reads/writes). */
-            static char s_pw_save_path[600];
-            snprintf(s_pw_save_path, sizeof(s_pw_save_path), "%s%s",
-                     g_exe_dir, NESRECOMP_GAME_PASSWORD_SAVE);
-            gi.password_save_path  = s_pw_save_path;
-#  ifdef NESRECOMP_GAME_PASSWORD_SAVE_LABEL
-            gi.password_save_label = NESRECOMP_GAME_PASSWORD_SAVE_LABEL;
-#  else
-            gi.password_save_label = "Password";
-#  endif
-#endif
-
-            char win_title[96];
-            snprintf(win_title, sizeof(win_title), "%s - NES Launcher",
-                     gi.name ? gi.name : "NES");
-            int act = nes_launcher_run_window(win_title, &ls, &gi, "launcher",
-                                              init_rom, rom_path, sizeof(rom_path));
-            if (act == 1) return 0;   /* user closed the launcher */
-            if (act == 0) {
-                g_nes_config.window_scale  = ls.window_scale;
-                g_nes_config.fullscreen    = ls.fullscreen;
-                g_nes_config.integer_scale = ls.integer_scale;
-                g_nes_config.linear_filter = ls.linear_filter;
-                g_nes_config.renderer      = ls.renderer;
-                g_nes_config.widescreen    = ls.widescreen;
-                g_nes_config.volume        = ls.volume;
-                g_nes_config.player_src[0] = ls.player_src[0];
-                g_nes_config.player_src[1] = ls.player_src[1];
-                g_nes_config.deadzone[0]   = ls.deadzone[0];
-                g_nes_config.deadzone[1]   = ls.deadzone[1];
-                g_nes_config.skip_launcher = ls.skip_launcher;
-                g_nes_config.hdpack_enabled = ls.hdpack_enabled;
-                snprintf(g_nes_config.hdpack_dir, sizeof(g_nes_config.hdpack_dir), "%s", ls.hdpack_dir);
-                config_save(config_path());
-                if (rom_path[0]) { rom_cfg_write(rom_path); gui_resolved = 1; }
-            }
-            /* act == 2 (unavailable) -> fall through to the console resolver */
-        }
-    }
-#endif
-
 #ifdef RECOMP_LAUNCHER
 reopen_recomp_launcher:
     gui_resolved = 0;
