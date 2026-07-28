@@ -220,6 +220,7 @@ static void atexit_handler(void) {
     /* Only log if the game exited unexpectedly (recomp stack still active) */
     if (g_recomp_stack_top > 0) {
         extern void nes_dump_dispatch_ring(void);
+        nes_write_runtime_fault("unexpected process exit with active recomp stack");
         printf("[EXIT] Unexpected exit at frame %llu, recomp stack (top=%d):\n",
                (unsigned long long)g_frame_count, g_recomp_stack_top);
         /* Native backtrace of the exit() caller chain (env NESRECOMP_EXIT_BT). */

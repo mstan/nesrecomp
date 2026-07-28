@@ -1884,6 +1884,7 @@ void     runtime_set_ppuaddr(uint16_t addr) { g_ppuaddr = addr; }
 
 uint32_t g_miss_count_any   = 0;
 uint16_t g_miss_last_addr   = 0;
+static uint16_t s_miss_last_cpu_addr = 0;
 uint64_t g_miss_last_frame  = 0;
 int      g_miss_last_bank   = 0;
 char     g_miss_last_caller[64]  = "(none)";
@@ -1903,7 +1904,7 @@ int        g_miss_ring_count = 0;
  * nes_record_dispatch_miss for nes_dispatch_miss_apply_policy. */
 static char     s_last_miss_class[16] = "CODE";
 static uint16_t s_last_miss_ctx       = 0;
-static int      s_invalid_miss_dumps  = 0;
+static int      s_dispatch_miss_dumps = 0;
 
 #ifdef RECOMP_STACK_TRACKING
 extern const char *g_recomp_stack[];
@@ -2099,6 +2100,52 @@ void nes_dump_dispatch_ring(void) {
     printf("[EXIT] last %u dispatches (oldest first; kind C=jsr T=tail D=driven-lap):\n", n);
     write_dispatch_ring(stdout, 0);
     fflush(stdout);
+}
+
+void nes_write_runtime_fault(const char *reason) {
+    char path[300];
+    snprintf(path, sizeof(path), "%sruntime_faults.log", g_exe_dir);
+    FILE *out = fopen(path, "a");
+    if (!out) return;
+
+    MapperState ms;
+    mapper_get_state(&ms);
+    fprintf(out,
+            "=== runtime fault: %s ===\n"
+            "frame=%llu cycles=%llu cpu A=$%02X X=$%02X Y=$%02X P=$%02X S=$%02X\n"
+            "window=$%04X bank=%d dispatch_depth=%d vblank_depth=%d ops=%u budget=%u\n"
+            "mapper type=%d current_bank=%d mirroring=%d select=$%02X "
+            "irq_latch=$%02X irq_counter=$%02X irq_reload=%d irq_enabled=%d\n"
+            "mapper_regs %02X %02X %02X %02X %02X %02X %02X %02X\n"
+            "last_miss gen=$%04X cpu=$%04X bank=%d class=%s call_site=$%04X\n",
+            reason ? reason : "(unspecified)",
+            (unsigned long long)g_frame_count,
+            (unsigned long long)g_nes_cycles,
+            g_cpu.A, g_cpu.X, g_cpu.Y, g_cpu.P, g_cpu.S,
+            g_code_window_base, g_current_bank, g_nes_dispatch_depth,
+            s_vblank_depth, s_ops_count, s_frame_budget,
+            ms.mapper_type, ms.current_bank, ms.mirroring,
+            ms.mmc3_bank_select, ms.mmc3_irq_latch,
+            ms.mmc3_irq_counter, ms.mmc3_irq_reload,
+            ms.mmc3_irq_enabled,
+            ms.mmc3_regs[0], ms.mmc3_regs[1],
+            ms.mmc3_regs[2], ms.mmc3_regs[3],
+            ms.mmc3_regs[4], ms.mmc3_regs[5],
+            ms.mmc3_regs[6], ms.mmc3_regs[7],
+            g_miss_last_addr, s_miss_last_cpu_addr, g_miss_last_bank,
+            s_last_miss_class, s_last_miss_ctx);
+#ifdef RECOMP_STACK_TRACKING
+    fprintf(out, "recomp_stack top=%d last=%s\n", g_recomp_stack_top,
+            g_last_recomp_func ? g_last_recomp_func : "(none)");
+    int first = g_recomp_stack_top > 32 ? g_recomp_stack_top - 32 : 0;
+    for (int i = g_recomp_stack_top - 1; i >= first; i--)
+        fprintf(out, "  [%d] %s\n", i,
+                g_recomp_stack[i] ? g_recomp_stack[i] : "?");
+#endif
+    fprintf(out, "last_dispatches\n");
+    write_dispatch_ring(out, 128);
+    fprintf(out, "=== end runtime fault ===\n\n");
+    fclose(out);
 }
 
 int nes_dispatch_call(uint16_t addr, int caller_bank) {
@@ -2297,6 +2344,7 @@ void nes_record_dispatch_miss_bank(uint16_t addr, uint16_t cpu_addr, int bank) {
     }
     g_miss_count_any++;
     g_miss_last_addr  = addr;
+    s_miss_last_cpu_addr = cpu_addr;
     g_miss_last_frame = g_frame_count;
     g_miss_last_bank  = bank;
     /* Capture caller context: top of recomp call stack + 6502 stack snapshot */
@@ -2342,12 +2390,11 @@ void nes_record_dispatch_miss_bank(uint16_t addr, uint16_t cpu_addr, int bank) {
         if (g_miss_ring_count < MAX_MISS_RING) g_miss_ring_count++;
     }
 
-    /* Invalid targets usually mean control-flow corruption, not a missing
-     * function. Persist a bounded post-mortem snapshot immediately because a
-     * later softlock/controlled exit will not pass through the OS crash
-     * handler. Keep this separate from dispatch_misses.log so its extra_func
-     * lines remain machine-consumable by the regeneration loop. */
-    if (tclass != MISS_TARGET_CODE && s_invalid_miss_dumps < 16) {
+    /* Persist bounded context for both legitimate discovery misses and invalid
+     * control flow. A later softlock/controlled exit will not pass through the
+     * OS crash handler. Keep this separate from dispatch_misses.log so its
+     * extra_func lines remain machine-consumable by the regeneration loop. */
+    if (s_dispatch_miss_dumps < 16) {
         char fault_path[300];
         snprintf(fault_path, sizeof(fault_path), "%sdispatch_faults.log", g_exe_dir);
         FILE *ff = fopen(fault_path, "a");
@@ -2363,7 +2410,7 @@ void nes_record_dispatch_miss_bank(uint16_t addr, uint16_t cpu_addr, int bank) {
                     "irq_latch=$%02X irq_counter=$%02X irq_reload=%d irq_enabled=%d\n"
                     "mapper_regs %02X %02X %02X %02X %02X %02X %02X %02X\n"
                     "caller %s\ncaller2 %s\ntarget_bytes",
-                    s_invalid_miss_dumps + 1,
+                    s_dispatch_miss_dumps + 1,
                     (unsigned long long)g_frame_count,
                     (unsigned long long)g_nes_cycles,
                     addr, cpu_addr, bank, class_name, call_site_pc,
@@ -2386,7 +2433,7 @@ void nes_record_dispatch_miss_bank(uint16_t addr, uint16_t cpu_addr, int bank) {
             write_dispatch_ring(ff, 64);
             fprintf(ff, "=== end dispatch fault ===\n\n");
             fclose(ff);
-            s_invalid_miss_dumps++;
+            s_dispatch_miss_dumps++;
         }
     }
 

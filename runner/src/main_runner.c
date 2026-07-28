@@ -1586,6 +1586,7 @@ void nesrecomp_runner_run(int argc, char *argv[]) {
     /* game_run_main() defaults to func_RESET() (native recompiled main loop,
      * never returns). In emulated mode, it runs FCEUX frames in a loop. */
     game_run_main();
+    nes_write_runtime_fault("game_run_main returned unexpectedly");
 
     /* Unreachable for most games, but clean up anyway */
     SDL_DestroyTexture(s_texture);

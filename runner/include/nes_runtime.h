@@ -232,6 +232,9 @@ void mapper_init(const uint8_t *prg_data, int prg_banks,
 
 /* ---- Runtime Init ---- */
 void runtime_init(void);
+/* Append a persistent CPU/mapper/recomp-stack/dispatch-ring snapshot next to
+ * the executable. Used for controlled exits that bypass the OS crash handler. */
+void nes_write_runtime_fault(const char *reason);
 
 /* ---- PRG ROM writable accessor ----
  * Returns a writable pointer to the start of the given 16KB PRG bank (0-based).
