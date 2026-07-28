@@ -926,10 +926,13 @@ render_sprites:
             }
 
             int chr_off = tile_chr_base + tile_num * 16 + tile_row;
-            /* Use the active post-IRQ CHR window for the sprite pass. The OAM
-             * and PPUMASK snapshots above preserve the frame-start sprite set
-             * when a scanline IRQ changes rendering state before this pass. */
-            const uint8_t *chr_src = g_chr_ram;
+            /* Sprite pattern fetches happen on each scanline. The BG pass
+             * services the synthetic MMC3 IRQ before this deferred sprite
+             * pass, so sprites above the split must use the CHR window saved
+             * at frame start; only rows after the IRQ see the live window. */
+            const uint8_t *chr_src =
+                (g_render_irq_fired && py >= g_render_irq_scanline + 1)
+                    ? g_chr_ram : s_chr_pre_irq;
             uint8_t lo = chr_src[chr_off];
             uint8_t hi = chr_src[chr_off + 8];
 
