@@ -375,7 +375,10 @@ static int interp_run_ex(uint16_t entry, int stop_on_stack_lift) {
                 g_rts_target = (uint16_t)(((uint16_t)hi << 8) | lo);
                 g_rti_target = 0;
                 uint16_t ret = (uint16_t)(g_rts_target + 1);
-                if (g_cpu.S > S_floor) { result = 1; goto done; }  /* returned to caller */
+                if (stop_on_stack_lift && g_cpu.S > S_floor) {
+                    result = 1;
+                    goto done;  /* returned to a still-live native caller */
+                }
                 next = ret;                                        /* nested return */
                 break;
             }
@@ -390,7 +393,10 @@ static int interp_run_ex(uint16_t entry, int stop_on_stack_lift) {
                 g_rti_source = ipc;
                 g_rti_bank = g_current_bank;
                 g_rts_target = 0;
-                if (g_cpu.S > S_floor) { result = 1; goto done; }
+                if (stop_on_stack_lift && g_cpu.S > S_floor) {
+                    result = 1;
+                    goto done;
+                }
                 next = ret;
                 break;
             }
