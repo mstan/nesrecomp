@@ -38,6 +38,10 @@ Each game project uses its own port pair. Selection lives in
 
 Do not change a project's ports without updating sibling docs.
 
+For deterministic boot probes, set `NESRECOMP_START_PAUSED=1`. The runner
+stops at its first stable frame boundary so a client can inspect startup state
+before resuming with `continue` or `run_to_frame`.
+
 ---
 
 ## Activation

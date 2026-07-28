@@ -1773,6 +1773,11 @@ void debug_server_init(int port)
         else
             fprintf(stderr, "[debug] Ignoring invalid NESRECOMP_DEBUG_PORT='%s'\n", port_env);
     }
+    const char *start_paused_env = getenv("NESRECOMP_START_PAUSED");
+    if (start_paused_env && *start_paused_env &&
+        strcmp(start_paused_env, "0") != 0) {
+        s_paused = 1;
+    }
 
 #ifdef _WIN32
     WSADATA wsa;
