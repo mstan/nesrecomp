@@ -818,13 +818,17 @@ static void handle_interpreter_stats(int id, const char *json)
     nes_interp_get_stats(&stats);
     send_fmt("{\"id\":%d,\"ok\":true,\"enabled\":%s,"
              "\"instrs_total\":%llu,\"runs\":%llu,\"watchdog_trips\":%llu,"
-             "\"native_handoffs\":%llu,\"instrs_this_frame\":%u,"
+             "\"native_handoffs\":%llu,\"native_handoffs_suppressed\":%llu,"
+             "\"declines\":%llu,\"policy_traps\":%llu,\"instrs_this_frame\":%u,"
              "\"max_instrs_run\":%u}",
              id, nes_interp_is_enabled() ? "true" : "false",
              (unsigned long long)stats.instrs_total,
              (unsigned long long)stats.runs,
              (unsigned long long)stats.watchdog_trips,
              (unsigned long long)stats.native_handoffs,
+             (unsigned long long)stats.native_handoffs_suppressed,
+             (unsigned long long)stats.declines,
+             (unsigned long long)stats.policy_traps,
              stats.instrs_this_frame, stats.max_instrs_run);
 }
 

@@ -22,6 +22,7 @@
 #include "interp.h"
 #include "nes_runtime.h"
 #include "mapper.h"
+#include "game_extras.h"
 #include "cpu6502_decoder.h"
 
 #include <stdio.h>
@@ -34,6 +35,7 @@
 
 /* ---- Config (lazily initialised on first dispatch) ---- */
 static int s_enabled = -1;          /* -1 = uninitialised */
+static int s_native_handoff_mode = -1;
 extern int g_recomp_push_all_jsr;   /* defined by the generated dispatch TU */
 
 /* ---- Covered-ness probe ----
@@ -57,6 +59,7 @@ extern int      g_rti_bank;
 
 /* ---- Stats ---- */
 static NesInterpStats s_stats;
+static char s_last_decline_reason[96] = "interpreter fallback declined";
 
 void nes_interp_get_stats(NesInterpStats *out) { if (out) *out = s_stats; }
 void nes_interp_frame_boundary(void) { s_stats.instrs_this_frame = 0; }
@@ -65,7 +68,7 @@ void nes_interp_set_enabled(int enabled) { s_enabled = enabled ? 1 : 0; }
 int  nes_interp_is_enabled(void) { return s_enabled == 1; }
 
 static void interp_lazy_init(void) {
-    if (s_enabled != -1) return;
+    if (s_enabled != -1 && s_native_handoff_mode != -1) return;
     /* Default: on when the build supports the stack contract; env can force off. */
     int on = g_recomp_push_all_jsr ? 1 : 0;
     const char *e = getenv("NESRECOMP_INTERP_FALLBACK");
@@ -73,8 +76,47 @@ static void interp_lazy_init(void) {
         if (!strcmp(e, "off") || !strcmp(e, "0")) on = 0;
         else if (!strcmp(e, "on") || !strcmp(e, "1")) on = g_recomp_push_all_jsr ? 1 : 0;
     }
-    s_enabled = on;
-    if (on && !g_recomp_push_all_jsr) s_enabled = 0; /* contract needs push_all_jsr */
+    if (s_enabled == -1) {
+        s_enabled = on;
+        if (on && !g_recomp_push_all_jsr) s_enabled = 0; /* contract needs push_all_jsr */
+    }
+
+    /* Native collaboration policy while already inside the interpreter.
+     * safe (default): allow balanced JSR handoffs, keep JMP tails in the
+     * interpreter island. This avoids the fragile mixed native/interp
+     * tail-resume path while preserving useful collaboration for real calls.
+     * on/legacy: old behavior, probe and hand off both JSR and JMP.
+     * off/island: never hand off from interpreter to native. */
+    if (s_native_handoff_mode == -1) {
+        int mode = 1; /* safe */
+        const char *h = getenv("NESRECOMP_INTERP_NATIVE_HANDOFF");
+        if (h && *h) {
+            if (!strcmp(h, "on") || !strcmp(h, "1") || !strcmp(h, "legacy")) mode = 2;
+            else if (!strcmp(h, "off") || !strcmp(h, "0") || !strcmp(h, "island")) mode = 0;
+            else if (!strcmp(h, "safe")) mode = 1;
+        }
+        const char *island = getenv("NESRECOMP_INTERP_ISLAND");
+        if (island && *island) {
+            if (!strcmp(island, "on") || !strcmp(island, "1")) mode = 0;
+            else if (!strcmp(island, "off") || !strcmp(island, "0")) mode = 2;
+        }
+        s_native_handoff_mode = mode;
+    }
+}
+
+static void interp_note_decline(uint16_t entry, uint16_t ipc, const char *reason) {
+    const char *why = (reason && *reason) ? reason : "interpreter fallback declined";
+    snprintf(s_last_decline_reason, sizeof(s_last_decline_reason),
+             "%s (entry=$%04X ipc=$%04X bank=%d)",
+             why, entry, ipc, g_current_bank);
+    s_stats.declines++;
+}
+
+static int interp_native_handoff_allowed(int is_tail) {
+    if (s_native_handoff_mode < 0) interp_lazy_init();
+    if (s_native_handoff_mode == 2) return 1; /* legacy/on */
+    if (s_native_handoff_mode == 0) return 0; /* full island */
+    return is_tail ? 0 : 1;                   /* safe */
 }
 
 /* ---- Side-effect-free instruction fetch (bank-correct) ---- */
@@ -116,7 +158,11 @@ extern int call_by_address(uint16_t addr);
 /* Probe + dispatch a control-transfer target.
  * Returns 1 if the target was covered and executed natively; 0 on miss
  * (caller interprets the target inline). */
-static int interp_dispatch_target(uint16_t target) {
+static int interp_dispatch_target(uint16_t target, int is_tail) {
+    if (!interp_native_handoff_allowed(is_tail)) {
+        s_stats.native_handoffs_suppressed++;
+        return 0;
+    }
     nes_dring_mark('P', target);   /* interp probe (pre-dispatch) */
     g_rts_target = 0;
     g_rti_target = 0;
@@ -137,7 +183,10 @@ static int interp_dispatch_target(uint16_t target) {
  * (watchdog / depth guard / non-code region) so the caller applies policy.
  */
 static int interp_run_ex(uint16_t entry, int stop_on_stack_lift) {
-    if (s_depth >= INTERP_MAX_DEPTH) return 0;
+    if (s_depth >= INTERP_MAX_DEPTH) {
+        interp_note_decline(entry, entry, "interpreter depth guard");
+        return 0;
+    }
     s_depth++;
     s_stats.runs++;
     nes_dring_mark('I', entry);   /* interp run start (cpu pc) */
@@ -154,6 +203,7 @@ static int interp_run_ex(uint16_t entry, int stop_on_stack_lift) {
                             "(bank=%d, ipc=$%04X) — bailing\n",
                     entry, INTERP_STEP_CAP, g_current_bank, ipc);
             s_stats.watchdog_trips++;
+            interp_note_decline(entry, ipc, "interpreter watchdog");
             result = 0;
             break;
         }
@@ -329,7 +379,7 @@ static int interp_run_ex(uint16_t entry, int stop_on_stack_lift) {
                 uint8_t call_s = g_cpu.S;
                 g_ram[0x100 + g_cpu.S] = (uint8_t)((ret >> 8) & 0xFF); g_cpu.S--;
                 g_ram[0x100 + g_cpu.S] = (uint8_t)(ret & 0xFF);        g_cpu.S--;
-                if (interp_dispatch_target(target)) {
+                if (interp_dispatch_target(target, 0)) {
                     /* Covered: ran natively. A normal RTS restores call_s and
                      * resumes just after this JSR. A non-local native return
                      * can instead pop an interpreted ancestor; preserve that
@@ -353,7 +403,7 @@ static int interp_run_ex(uint16_t entry, int stop_on_stack_lift) {
             case MN_JMP: {
                 uint16_t target = (e->addr_mode == AM_IND)
                                   ? nes_read16_jmpbug(abs16) : abs16;
-                if (interp_dispatch_target(target)) {
+                if (interp_dispatch_target(target, 1)) {
                     /* A native tail target may RTS/RTI into an interpreted
                      * ancestor. Resume it while still below this run's stack
                      * floor; otherwise the floor check returns to native. */
@@ -453,8 +503,15 @@ int nes_interp_dispatch_bank(uint16_t cpu_addr, uint16_t gen_addr, int bank) {
     }
 
     if (s_enabled == 1) {
-        if (interp_run(addr)) return 1;   /* handled — game continues */
-        /* interp declined (watchdog / depth) — fall through to legacy policy. */
+        if (!nes_dispatch_miss_last_target_is_code()) {
+            s_stats.policy_traps++;
+            nes_dispatch_miss_interp_declined(addr, "non-code dispatch target");
+            return 0;
+        }
+        if (interp_run(addr)) return 1;   /* handled by fallback */
+        s_stats.policy_traps++;
+        nes_dispatch_miss_interp_declined(addr, s_last_decline_reason);
+        return 0;
     }
 
     nes_dispatch_miss_apply_policy(addr);

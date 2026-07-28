@@ -2593,6 +2593,25 @@ void nes_dispatch_miss_apply_policy(uint16_t addr) {
                                s_last_miss_class, s_last_miss_ctx);
 }
 
+int nes_dispatch_miss_last_target_is_code(void) {
+    return strcmp(s_last_miss_class, "CODE") == 0;
+}
+
+void nes_dispatch_miss_interp_declined(uint16_t addr, const char *reason) {
+    char buf[192];
+    const char *why = (reason && *reason) ? reason : "interpreter fallback declined";
+
+    g_unhandled_dispatch_count++;
+    snprintf(buf, sizeof(buf),
+             "interp declined dispatch miss at $%04X (bank=%d, class=%s, ctx=$%04X): %s",
+             addr, g_miss_last_bank, s_last_miss_class, s_last_miss_ctx, why);
+
+    fprintf(stderr, "[runtime] %s. Snapshotting and pausing instead of exiting.\n", buf);
+    fflush(stderr);
+    nes_write_runtime_fault(buf);
+    debug_server_request_pause(buf);
+}
+
 /* Combined entries: override + record + policy. The single-arg form is
  * retained for committed generated code and non-banked mappers. */
 void nes_log_dispatch_miss(uint16_t addr) {

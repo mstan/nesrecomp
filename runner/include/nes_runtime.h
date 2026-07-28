@@ -100,6 +100,8 @@ void nes_log_inline_miss(uint16_t dispatch_pc, uint8_t a_val);
 void nes_record_dispatch_miss(uint16_t addr);
 void nes_record_dispatch_miss_bank(uint16_t gen_addr, uint16_t cpu_addr, int bank);
 void nes_dispatch_miss_apply_policy(uint16_t addr);
+int  nes_dispatch_miss_last_target_is_code(void);
+void nes_dispatch_miss_interp_declined(uint16_t addr, const char *reason);
 
 /* Interpreter fallback entry, invoked from the generated call_by_address miss
  * paths. Returns 1 if the miss was interpreted (game continues), else 0 (the

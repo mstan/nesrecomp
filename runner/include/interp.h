@@ -51,6 +51,9 @@ typedef struct {
     uint64_t runs;              /* top-level interp_run invocations */
     uint64_t watchdog_trips;    /* runs that hit the per-run instruction cap */
     uint64_t native_handoffs;   /* JSR/JMP handed off to recompiled code */
+    uint64_t native_handoffs_suppressed; /* handoffs kept inside interp island */
+    uint64_t declines;          /* interp could not safely handle a dispatch */
+    uint64_t policy_traps;      /* declines converted to debug pause/fault */
     uint32_t instrs_this_frame; /* interpreted instructions in the current frame */
     uint32_t max_instrs_run;    /* largest single interp_run instruction count */
 } NesInterpStats;
