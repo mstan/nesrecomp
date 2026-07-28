@@ -917,6 +917,18 @@ render_sprites:
             int py = spr_y + 1 + row; /* OAM Y is offset by 1 */
             if (py < 0 || py >= 240) continue;
 
+            /* Sprite rendering enable is a per-scanline PPU state, not a
+             * whole-frame property.  The background pass above services MMC3
+             * IRQ handlers row-by-row; games such as Kirby disable PPUMASK
+             * sprites for the bottom IRQ status bar.  The deferred sprite pass
+             * must therefore use the frame-start mask before the IRQ and the
+             * live post-IRQ mask after it, otherwise playfield sprites draw
+             * over the HUD/status bar. */
+            uint8_t row_mask =
+                (g_render_irq_fired && py >= g_render_irq_scanline + 1)
+                    ? g_ppumask : render_start_mask;
+            if (!(row_mask & 0x10)) continue;
+
             /* For 8x16: rows 0-7 use top tile, rows 8-15 use bottom tile */
             int tile_row = draw_row;
             int tile_num = tile_base;
@@ -946,7 +958,7 @@ render_sprites:
                 int color_idx = ((lo >> chr_bit) & 1) | (((hi >> chr_bit) & 1) << 1);
                 if (color_idx == 0) continue; /* transparent */
                 /* PPUMASK bit 2: clip leftmost 8 sprite pixels */
-                if (px < 8 && !(render_start_mask & 0x04)) continue;
+                if (px < 8 && !(row_mask & 0x04)) continue;
                 /* Offset sprite X into widescreen framebuffer */
                 int fb_x = px + g_widescreen_left;
                 /* Sprite-0 hit: when sprite 0's opaque pixel overlaps opaque BG,
@@ -955,8 +967,8 @@ render_sprites:
                  *   - No hit at x=255 (per NES spec).
                  *   - Obeys BG/sprite leftmost-8 clip (the px<8 gate above already
                  *     filters sprite side; BG clip is PPUMASK bit 1). */
-                if (s == 0 && px >= 0 && px < 255 && (render_start_mask & 0x18) == 0x18) {
-                    int bg_clipped = (px < 8 && !(render_start_mask & 0x02));
+                if (s == 0 && px >= 0 && px < 255 && (row_mask & 0x18) == 0x18) {
+                    int bg_clipped = (px < 8 && !(row_mask & 0x02));
                     if (!bg_clipped && framebuf[py * g_render_width + fb_x] != bg)
                         g_ppustatus |= 0x40;
                 }
