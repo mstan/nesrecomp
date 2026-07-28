@@ -739,7 +739,7 @@ smoke_skip_input:
      * rendering off, which would loop forever. */
     log_on_change("NMI_enable", (g_ppuctrl >> 7) & 1);
     game_on_frame(g_frame_count);
-    save_ram_tick();   /* dirty-checked SRAM flush (~1 Hz); no-op when inactive */
+    save_ram_tick();   /* wall-time-throttled dirty SRAM flush; no-op when inactive */
 
 
     /* Frame boundary: always call game_run_nmi so per-frame work (oracle

@@ -49,8 +49,9 @@ void save_ram_init(const char *default_title, int battery_bit);
 
 /*
  * Per-VBlank dirty-checked flush; the runner calls this every frame. Internally
- * throttled, and a no-op when persistence is inactive or g_sram is unchanged
- * since the last flush.
+ * throttled by real wall time so turbo/headless execution cannot accelerate
+ * disk writes. A flush is attempted at most once every five seconds, and only
+ * if persistence is active and g_sram changed since the last flush.
  */
 void save_ram_tick(void);
 

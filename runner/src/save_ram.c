@@ -8,6 +8,7 @@
 #include "nes_runtime.h"   /* extern uint8_t g_sram[0x2000]; */
 
 #include <stdio.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
@@ -19,11 +20,13 @@
 #  define save_ram_mkdir(p) _mkdir(p)
 #else
 #  include <sys/stat.h>
+#  include <time.h>
 #  include <unistd.h>
 #  define save_ram_mkdir(p) mkdir((p), 0755)
 #endif
 
 #define SRAM_LEN 0x2000
+#define SRAM_FLUSH_INTERVAL_MS 5000ULL
 
 /* ---- state ---- */
 static int      s_active = 0;                /* runtime persistence on (load/flush) */
@@ -33,8 +36,18 @@ static char     s_basename[256] = "";        /* pinned stem (request or sanitize
 static char     s_legacy[1024] = "";         /* optional old save path to migrate */
 static char     s_path[1024] = "";           /* saves/<title>.srm (absolute) */
 static uint8_t  s_snapshot[SRAM_LEN];        /* last-flushed bytes (dirty check) */
-static unsigned s_tick = 0;
+static uint64_t s_next_flush_ms = 0;
 static int      s_atexit_registered = 0;
+
+static uint64_t monotonic_ms(void) {
+#ifdef _WIN32
+    return (uint64_t)GetTickCount64();
+#else
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) return 0;
+    return (uint64_t)ts.tv_sec * 1000ULL + (uint64_t)ts.tv_nsec / 1000000ULL;
+#endif
+}
 
 /* ---- exe-dir helper ---- */
 
@@ -171,6 +184,7 @@ void save_ram_init(const char *default_title, int battery_bit) {
     memcpy(s_snapshot, g_sram, SRAM_LEN);
 
     if (!s_atexit_registered) { atexit(save_ram_flush); s_atexit_registered = 1; }
+    s_next_flush_ms = monotonic_ms() + SRAM_FLUSH_INTERVAL_MS;
     s_active = 1;
 }
 
@@ -187,7 +201,9 @@ void save_ram_flush(void) {
 
 void save_ram_tick(void) {
     if (!s_active) return;
-    if ((++s_tick % 60) != 0) return;   /* ~1 Hz dirty check */
+    uint64_t now = monotonic_ms();
+    if (now < s_next_flush_ms) return;
+    s_next_flush_ms = now + SRAM_FLUSH_INTERVAL_MS;
     save_ram_flush();
 }
 
