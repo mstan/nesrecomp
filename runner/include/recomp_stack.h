@@ -23,6 +23,7 @@ extern const char *g_last_recomp_func;
 
 void recomp_stack_push(const char *name);
 void recomp_stack_pop(void);
+void recomp_stack_reset(void);
 
 /* Bail trace: records recompiler "bail" events (a recompiled function returning
  * early because the 6502 stack pointer did not match on return — the recompiler's

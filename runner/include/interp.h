@@ -36,6 +36,9 @@ int nes_interp_interrupt(uint16_t addr);
 /* Resume an explicit stack continuation without treating initial stack lifts
  * as a return boundary. */
 int nes_interp_resume(uint16_t addr);
+/* Clear interpreter-only native bookkeeping after a non-local save-state
+ * resume discarded the old C stack. */
+void nes_interp_reset_context(void);
 
 /* Runtime control. enabled defaults on when push_all_jsr is set, unless the
  * env var NESRECOMP_INTERP_FALLBACK=off overrides. */

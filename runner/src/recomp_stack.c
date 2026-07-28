@@ -151,6 +151,12 @@ void recomp_stack_pop(void)
                         : "(none)";
 }
 
+void recomp_stack_reset(void)
+{
+    g_recomp_stack_top = 0;
+    g_last_recomp_func = "(none)";
+}
+
 void bail_trace(uint16_t caller_pc, uint8_t expected_sp)
 {
     BailTraceEntry *e = &g_bail_trace[g_bail_trace_idx];

@@ -254,6 +254,24 @@ void nes_vblank_callback(void);
  * Called from generated JMP instructions to ensure games with tight idle
  * loops (no memory reads) still receive timely NMI callbacks. */
 void maybe_trigger_vblank(int cycles);
+/* Instruction-boundary timing plus exact guest continuation tracking.
+ * Generated code passes its layout PC; the runtime maps it through the
+ * currently executing CPU window. The interpreter already has a CPU PC and
+ * uses the second form directly. */
+void nes_instruction_boundary(uint16_t gen_pc, int cycles);
+void nes_cpu_instruction_boundary(uint16_t cpu_pc, int cycles);
+/* Frame callbacks run on a native stack nested below the interrupted guest
+ * instruction. These helpers preserve that interrupted continuation for save
+ * states even while NMI/post-NMI code executes other guest instructions. */
+void runtime_begin_frame_callback(void);
+int  runtime_end_frame_callback(void);
+int  runtime_get_savestate_resume(uint16_t *pc, int *tick_charged);
+/* A successful state load requests a non-local guest restart. The runner
+ * consumes it after the restored frame callback has completed. */
+void runtime_request_guest_resume(uint16_t pc, int tick_charged);
+int  runtime_guest_resume_pending(void);
+int  runtime_take_guest_resume(uint16_t *pc, int *tick_charged);
+void runtime_prepare_guest_resume(uint16_t pc, int tick_charged);
 void maybe_fire_pending_vblank(void);
 void runtime_set_vblank_firing(int active);
 int  runtime_get_vblank_depth(void);

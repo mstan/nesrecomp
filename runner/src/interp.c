@@ -165,7 +165,7 @@ static int interp_run_ex(uint16_t entry, int stop_on_stack_lift) {
         uint16_t abs16 = (uint16_t)(op1 | ((uint16_t)op2 << 8));
 
         /* NMI is sampled between instructions (mirrors codegen's per-insn call). */
-        maybe_trigger_vblank(e->cycles);
+        nes_cpu_instruction_boundary(ipc, e->cycles);
         s_stats.instrs_total++;
         s_stats.instrs_this_frame++;
         this_run++;
@@ -479,4 +479,10 @@ int nes_interp_resume(uint16_t addr) {
     if (s_enabled != 1)
         return 0;
     return interp_run_ex(addr, 0);
+}
+
+void nes_interp_reset_context(void) {
+    s_probe_armed = 0;
+    s_probe_addr = 0;
+    s_depth = 0;
 }

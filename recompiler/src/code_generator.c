@@ -1090,7 +1090,8 @@ done:
 /* Emit the derived side effects ahead of a dispatch case's call.
  * Stores first (they may reference entry X/Y), then registers, then
  * flags, then the body's cycle count. */
-static void emit_trampoline_effects(FILE *f, const TrampEffects *fx, uint8_t selector) {
+static void emit_trampoline_effects(FILE *f, const TrampEffects *fx,
+                                    uint8_t selector, uint16_t continuation) {
     for (int i = 0; i < fx->store_count; i++) {
         const TrampStore *s = &fx->stores[i];
         if (s->val.kind == TV_CONST)
@@ -1120,7 +1121,8 @@ static void emit_trampoline_effects(FILE *f, const TrampEffects *fx, uint8_t sel
         else if (fx->nz.kind == TV_YIN)
             fprintf(f, "FLAG_NZ(g_cpu.Y); ");
     }
-    fprintf(f, "maybe_trigger_vblank(%d); ", fx->cycles);
+    fprintf(f, "nes_cpu_instruction_boundary(0x%04X, %d); ",
+            continuation, fx->cycles);
 }
 
 /* GxROM cross-half bank pairing.  On GxROM (mapper 66), the entire 32KB
@@ -1183,7 +1185,7 @@ static bool return_adjust_func_matches(const GameConfig *cfg, uint16_t target) {
 
 typedef struct {
     bool force_dynamic;          /* skip alias/wrapper, always call_by_address */
-    bool vblank_prefix;          /* emit "maybe_trigger_vblank(2); " */
+    bool vblank_prefix;          /* charge transfer timing at target continuation */
     bool push_dummy_static;      /* push 0,0 before wrapper call (only when wrapper hits) */
     bool push_dummy_dynamic;     /* push 0,0 before call_by_address (when no static target) */
     bool tail_return;            /* append " return;" */
@@ -1200,7 +1202,8 @@ typedef struct {
  * correct generated function. The fixed-bank/$C000+ rule strips the _b suffix. */
 static void emit_call_target(FILE *f, const NESRom *rom, uint16_t addr,
                              int bank, int fixed_bank, EmitCallOpts opts) {
-    if (opts.vblank_prefix) fprintf(f, "maybe_trigger_vblank(2); ");
+    if (opts.vblank_prefix)
+        fprintf(f, "nes_cpu_instruction_boundary(0x%04X, 2); ", addr);
 
     int lookup_bank = gxrom_paired_bank(rom, bank, addr);
 
@@ -1353,7 +1356,8 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
      * 6502, NMI is only sampled between instructions, never mid-instruction.
      * nes_read/nes_write now only increment the bus-op counter (bus_tick),
      * so VBlank can only fire here at the instruction boundary. */
-    fprintf(f, "    /* $%04X: %02X */ maybe_trigger_vblank(%d); ", pc, opcode, e->cycles);
+    fprintf(f, "    /* $%04X: %02X */ nes_instruction_boundary(0x%04X, %d); ",
+            pc, opcode, pc, e->cycles);
 
     if (e->mnemonic == MN_ILLEGAL) {
         fprintf(f, "/* ILLEGAL $%02X — skip %d */\n", opcode, e->size);
@@ -1555,7 +1559,7 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                     fprintf(f, "if (" cond_str ") { call_by_address(0x%04X); return; }\n", _tgt); \
             } else if (_tgt <= pc) { \
                 /* Backward branch (loop) — emit VBlank trigger + watchdog check */ \
-                fprintf(f, "if (" cond_str ") {\n    maybe_trigger_vblank(2);\n#ifdef WATCHDOG_ENABLED\n    watchdog_check();\n#endif\n    goto label_%04X;\n    }\n", _tgt); \
+                fprintf(f, "if (" cond_str ") {\n    nes_instruction_boundary(0x%04X, 2);\n#ifdef WATCHDOG_ENABLED\n    watchdog_check();\n#endif\n    goto label_%04X;\n    }\n", _tgt, _tgt); \
             } else { \
                 fprintf(f, "if (" cond_str ") goto label_%04X;\n", _tgt); \
             } \
@@ -1795,7 +1799,7 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                             uint16_t tfail_pc = 0; uint8_t tfail_op = 0;
                             if (derive_trampoline_effects(rom, tramp_bank, resolved_idsp, pc, (uint8_t)ei,
                                                           &tfx, &tfail_pc, &tfail_op))
-                                emit_trampoline_effects(f, &tfx, (uint8_t)ei);
+                                emit_trampoline_effects(f, &tfx, (uint8_t)ei, dest);
                         }
                         if (dest >= 0xC000) {
                             emit_call_target(f, rom, dest, fixed_bank, fixed_bank, o);
@@ -2049,8 +2053,8 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                      * JMP just as easily as JMP (ind). The target's eventual
                      * RTS consumes the manually pushed operand; resume in this
                      * generated body instead of unwinding its C caller. */
-                    fprintf(f, "maybe_trigger_vblank(2); if (nes_dispatch_indirect_continuation(0x%04X, %d, 0x%04X)) goto label_%04X; return;\n",
-                            abs16, bank, (uint16_t)(cont - 1), cont);
+                    fprintf(f, "nes_cpu_instruction_boundary(0x%04X, 2); if (nes_dispatch_indirect_continuation(0x%04X, %d, 0x%04X)) goto label_%04X; return;\n",
+                            abs16, abs16, bank, (uint16_t)(cont - 1), cont);
                     return (int)(cont - pc);
                 }
                 if (abs16 >= 0xC000) {
@@ -2060,7 +2064,7 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                     if (abs16 == func_base && pc == func_base) {
                         /* JMP $self at function start: true idle spin (single-instr).
                          * while(1) polls VBlank without recursion. */
-                        fprintf(f, "while(1) { maybe_trigger_vblank(2); }\n");
+                        fprintf(f, "while(1) { nes_instruction_boundary(0x%04X, 2); }\n", abs16);
                     } else if (abs16 == func_base) {
                         /* JMP to own entry from within body: loop-back. */
                         fprintf(f, "goto label_%04X;\n", abs16);
@@ -2081,14 +2085,14 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                             /* Mapper 4: the operand is a window selection; the
                              * tail dispatch resolves it and maintains the code
                              * window base for the callee's JSR pushes. */
-                            fprintf(f, "maybe_trigger_vblank(2); call_by_address_tail(0x%04X, -1); return;\n", abs16);
+                            fprintf(f, "nes_cpu_instruction_boundary(0x%04X, 2); call_by_address_tail(0x%04X, -1); return;\n", abs16, abs16);
                         else if (codegen_lookup_body_alias(abs16, fixed_bank,
                                                            &alias_owner, &alias_bank, &alias_entry))
                             fprintf(f, "func_%04X_body(%d); return;\n", alias_owner, alias_entry);
                         else if (codegen_has_emitted_wrapper(abs16, fixed_bank))
-                            fprintf(f, "maybe_trigger_vblank(2); func_%04X(); return;\n", abs16);
+                            fprintf(f, "nes_cpu_instruction_boundary(0x%04X, 2); func_%04X(); return;\n", abs16, abs16);
                         else
-                            fprintf(f, "maybe_trigger_vblank(2); call_by_address(0x%04X); return;\n", abs16);
+                            fprintf(f, "nes_cpu_instruction_boundary(0x%04X, 2); call_by_address(0x%04X); return;\n", abs16, abs16);
                     } else if (pc >= 0xC003 &&
                                rom_read(rom, bank, pc - 3) == 0xBA /* TSX */ &&
                                rom_read(rom, bank, pc - 2) == 0x96 /* STX zp,Y */) {
@@ -2149,10 +2153,10 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                         emit_call_target(f, rom, abs16, bank, fixed_bank, o);
                     } else if (abs16 == func_base && pc == func_base) {
                         /* JMP $self at function start: true idle spin. */
-                        fprintf(f, "while(1) { maybe_trigger_vblank(2); }\n");
+                        fprintf(f, "while(1) { nes_instruction_boundary(0x%04X, 2); }\n", abs16);
                     } else if (abs16 == func_base || is_merge) {
                         /* JMP to own entry or merge partner: loop-back via goto. */
-                        fprintf(f, "maybe_trigger_vblank(2);\n    goto label_%04X;\n", abs16);
+                        fprintf(f, "nes_instruction_boundary(0x%04X, 2);\n    goto label_%04X;\n", abs16, abs16);
                     } else {
                         /* Prefer in-body goto when the target address has already
                          * been emitted as a label in THIS function's body.  This
@@ -2172,7 +2176,7 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                             /* Same-gen-half in-body target (cross-half JMPs went
                              * dynamic above): caller and target share a window at
                              * runtime, so the goto is sound for any mapping. */
-                            fprintf(f, "maybe_trigger_vblank(2);\n    goto label_%04X;\n", abs16);
+                            fprintf(f, "nes_instruction_boundary(0x%04X, 2);\n    goto label_%04X;\n", abs16, abs16);
                         } else {
                             /* push_jmp check for same-bank JMP */
                             bool need_jmp_push = push_jmp_matches(cfg, pc, abs16);
@@ -2211,7 +2215,7 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                     if (sched_reset_addr) {
                         /* Coroutine scheduler START: create fiber, dispatch to
                          * coroutine entry, loop back when it yields. */
-                        fprintf(f, "{ uint16_t _jt = nes_read16zp(0x%02X); maybe_trigger_vblank(2); coroutine_start(g_ram[0x91], _jt); goto label_%04X; }\n",
+                        fprintf(f, "{ uint16_t _jt = nes_read16zp(0x%02X); nes_cpu_instruction_boundary(_jt, 2); coroutine_start(g_ram[0x91], _jt); goto label_%04X; }\n",
                                 (uint8_t)abs16, sched_reset_addr);
                     } else if (pc >= 6 &&
                                rom_read(rom, bank, pc - 6) == 0xA9 &&
@@ -2226,16 +2230,16 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                         uint8_t cont_hi = rom_read(rom, bank, pc - 5);
                         uint8_t cont_lo = rom_read(rom, bank, pc - 2);
                         uint16_t cont = (((uint16_t)cont_hi << 8) | cont_lo) + 1;
-                        fprintf(f, "{ uint16_t _jt = nes_read16zp(0x%02X); maybe_trigger_vblank(2); call_by_address(_jt); } goto label_%04X;\n",
+                        fprintf(f, "{ uint16_t _jt = nes_read16zp(0x%02X); nes_cpu_instruction_boundary(_jt, 2); call_by_address(_jt); } goto label_%04X;\n",
                                 (uint8_t)abs16, cont);
                     } else {
                         uint16_t cont = 0;
                         if (configured_indirect_continuation(rom, cfg, bank, func_base, pc, &cont)) {
-                            fprintf(f, "{ uint16_t _jt = nes_read16zp(0x%02X); maybe_trigger_vblank(2); if (nes_dispatch_indirect_continuation(_jt, %d, 0x%04X)) goto label_%04X; return; }\n",
+                            fprintf(f, "{ uint16_t _jt = nes_read16zp(0x%02X); nes_cpu_instruction_boundary(_jt, 2); if (nes_dispatch_indirect_continuation(_jt, %d, 0x%04X)) goto label_%04X; return; }\n",
                                     (uint8_t)abs16, bank, (uint16_t)(cont - 1), cont);
                             return (int)(cont - pc);
                         }
-                        fprintf(f, "{ uint16_t _jt = nes_read16zp(0x%02X); maybe_trigger_vblank(2); call_by_address_tail(_jt, -1); return; }\n",
+                        fprintf(f, "{ uint16_t _jt = nes_read16zp(0x%02X); nes_cpu_instruction_boundary(_jt, 2); call_by_address_tail(_jt, -1); return; }\n",
                                 (uint8_t)abs16);
                     }
                 } else {
@@ -2251,16 +2255,16 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                         uint8_t cont_hi = rom_read(rom, bank, pc - 5);
                         uint8_t cont_lo = rom_read(rom, bank, pc - 2);
                         uint16_t cont = (((uint16_t)cont_hi << 8) | cont_lo) + 1;
-                        fprintf(f, "{ uint16_t _jt = nes_read16_jmpbug(0x%04X); maybe_trigger_vblank(2); call_by_address(_jt); } goto label_%04X;\n",
+                        fprintf(f, "{ uint16_t _jt = nes_read16_jmpbug(0x%04X); nes_cpu_instruction_boundary(_jt, 2); call_by_address(_jt); } goto label_%04X;\n",
                                 abs16, cont);
                     } else {
                         uint16_t cont = 0;
                         if (configured_indirect_continuation(rom, cfg, bank, func_base, pc, &cont)) {
-                            fprintf(f, "{ uint16_t _jt = nes_read16_jmpbug(0x%04X); maybe_trigger_vblank(2); if (nes_dispatch_indirect_continuation(_jt, %d, 0x%04X)) goto label_%04X; return; }\n",
+                            fprintf(f, "{ uint16_t _jt = nes_read16_jmpbug(0x%04X); nes_cpu_instruction_boundary(_jt, 2); if (nes_dispatch_indirect_continuation(_jt, %d, 0x%04X)) goto label_%04X; return; }\n",
                                     abs16, bank, (uint16_t)(cont - 1), cont);
                             return (int)(cont - pc);
                         }
-                        fprintf(f, "{ uint16_t _jt = nes_read16_jmpbug(0x%04X); maybe_trigger_vblank(2); call_by_address_tail(_jt, -1); return; }\n",
+                        fprintf(f, "{ uint16_t _jt = nes_read16_jmpbug(0x%04X); nes_cpu_instruction_boundary(_jt, 2); call_by_address_tail(_jt, -1); return; }\n",
                                 abs16);
                     }
                 }

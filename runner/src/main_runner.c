@@ -14,6 +14,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <setjmp.h>
 
 #ifdef _WIN32
 #include <direct.h>
@@ -40,6 +41,7 @@
 #include "config.h"
 #include "hdpack.h"
 #include "ppu_dot.h"
+#include "interp.h"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
@@ -88,6 +90,39 @@ static int         s_smoke_interval = 100;   /* hash framebuffer every N frames 
 static const char *s_smoke_output   = NULL;  /* output file path (NULL = stdout) */
 #define SMOKE_MAX_HASHES 10000
 static uint32_t    s_smoke_hashes[SMOKE_MAX_HASHES];
+
+/* Permanent host-stack checkpoint for save-state loads. A state restores the
+ * NES stack, not the nested C calls that happened to be active when F1 was
+ * pressed, so the current callback finishes and then jumps back here. */
+static jmp_buf s_guest_resume_jmp;
+static int     s_guest_resume_ready = 0;
+
+static void finish_frame_callback(void) {
+    int outermost = runtime_end_frame_callback();
+    if (outermost && s_guest_resume_ready && runtime_guest_resume_pending())
+        longjmp(s_guest_resume_jmp, 1);
+}
+
+static void run_guest_execution(void) {
+    (void)setjmp(s_guest_resume_jmp);
+    s_guest_resume_ready = 1;
+
+    uint16_t resume_pc = 0;
+    int tick_charged = 0;
+    if (runtime_take_guest_resume(&resume_pc, &tick_charged)) {
+        runtime_prepare_guest_resume(resume_pc, tick_charged);
+        printf("[SaveState] Resuming guest execution at $%04X\n", resume_pc);
+        fflush(stdout);
+        if (!nes_interp_resume(resume_pc))
+            nes_write_runtime_fault("save-state guest resume failed");
+        else
+            nes_write_runtime_fault("save-state guest resume returned unexpectedly");
+        return;
+    }
+
+    game_run_main();
+    nes_write_runtime_fault("game_run_main returned unexpectedly");
+}
 static int         s_smoke_hash_frames[SMOKE_MAX_HASHES];
 static int         s_smoke_hash_count = 0;
 
@@ -608,6 +643,7 @@ void nes_vblank_callback(void) {
     static uint64_t s_cb_count = 0;
     int pre_nmi_rendered = 0;
     int pre_nmi_render_irq = 0;
+    runtime_begin_frame_callback();
     if (s_cb_count == 0) { /* debug_log_open(); */ }
     s_cb_count++;
 
@@ -869,8 +905,10 @@ smoke_skip_input:
      * On real NES, NMI never re-enters — running PostNMI (sound engine,
      * etc.) during a nested NMI causes side effects like shadow OAM
      * corruption from sprite management code in the PostNMI chain. */
-    if (runtime_get_vblank_depth() > 1)
+    if (runtime_get_vblank_depth() > 1) {
+        finish_frame_callback();
         return;
+    }
 
     game_post_nmi(g_frame_count);
 
@@ -1089,6 +1127,7 @@ smoke_skip_input:
             nesrecomp_expect_process_exit();
             exit(0);
         }
+        finish_frame_callback();
         return; /* skip all SDL rendering/pacing */
     }
 
@@ -1218,6 +1257,7 @@ smoke_skip_input:
     }
 
     pace_ntsc_frame();
+    finish_frame_callback();
 }
 
 /* ---- Public render function for emulated mode ---- */
@@ -1373,7 +1413,7 @@ void nesrecomp_runner_run(int argc, char *argv[]) {
         printf("[Smoke] Headless mode: running %d frames, hashing every %d\n",
                s_smoke_frames, s_smoke_interval);
         memset(s_framebuf, 0, sizeof(s_framebuf));
-        game_run_main();
+        run_guest_execution();
         fprintf(stderr, "[Smoke] game_run_main returned unexpectedly at frame %llu\n",
                 (unsigned long long)g_frame_count);
         nes_dump_dispatch_ring();
@@ -1585,8 +1625,7 @@ void nesrecomp_runner_run(int argc, char *argv[]) {
 
     /* game_run_main() defaults to func_RESET() (native recompiled main loop,
      * never returns). In emulated mode, it runs FCEUX frames in a loop. */
-    game_run_main();
-    nes_write_runtime_fault("game_run_main returned unexpectedly");
+    run_guest_execution();
 
     /* Unreachable for most games, but clean up anyway */
     SDL_DestroyTexture(s_texture);

@@ -9,6 +9,8 @@
 #include "game_extras.h"
 #include "override_chr.h"
 #include "ppu_dot.h"
+#include "interp.h"
+#include "recomp_stack.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -444,6 +446,26 @@ static uint64_t s_interrupt_epoch = 0;
                                    * would release the wait never arrives). */
 static uint32_t s_ops_count = 0;
 
+/* Exact guest continuation at the most recently entered timing boundary.
+ * While a frame callback is active, save states use the outer interrupted
+ * instruction captured at callback entry rather than an NMI instruction that
+ * happened to execute later in the callback. */
+static uint16_t s_guest_pc = 0;
+static int      s_guest_pc_valid = 0;
+static int      s_guest_tick_charged = 0;
+static uint16_t s_frame_resume_pc = 0;
+static int      s_frame_resume_valid = 0;
+static int      s_frame_resume_tick_charged = 0;
+static int      s_frame_callback_depth = 0;
+
+/* State loads are completed inside the current frame callback, then the
+ * runner non-locally discards the stale native call stack and consumes this
+ * request from its permanent top-level checkpoint. */
+static uint16_t s_guest_resume_pc = 0;
+static int      s_guest_resume_tick_charged = 0;
+static int      s_guest_resume_pending = 0;
+static int      s_skip_next_boundary_tick = 0;
+
 /* Monotonic guest CPU-cycle counter (see nes_runtime.h). Advanced by the same
  * _c as s_ops_count, but never reset — the co-sim alignment ruler. */
 uint64_t g_nes_cycles = 0;
@@ -866,6 +888,78 @@ static void maybe_deliver_irq(void) {
     if (!apu_irq_asserted())  return;   /* no source asserting the line */
 
     runtime_call_irq_handler();
+}
+
+static void set_guest_execution_point(uint16_t cpu_pc, int tick_charged) {
+    s_guest_pc = cpu_pc;
+    s_guest_pc_valid = 1;
+    s_guest_tick_charged = tick_charged ? 1 : 0;
+}
+
+void nes_cpu_instruction_boundary(uint16_t cpu_pc, int cycles) {
+    set_guest_execution_point(cpu_pc, 1);
+    if (s_skip_next_boundary_tick && cpu_pc == s_guest_resume_pc) {
+        s_skip_next_boundary_tick = 0;
+        return;
+    }
+    maybe_trigger_vblank(cycles);
+}
+
+void nes_instruction_boundary(uint16_t gen_pc, int cycles) {
+    uint16_t cpu_pc = gen_pc;
+    if (gen_pc >= 0x8000)
+        cpu_pc = (uint16_t)(g_code_window_base | (gen_pc & 0x1FFF));
+    nes_cpu_instruction_boundary(cpu_pc, cycles);
+}
+
+void runtime_begin_frame_callback(void) {
+    if (s_frame_callback_depth++ == 0) {
+        s_frame_resume_pc = s_guest_pc;
+        s_frame_resume_valid = s_guest_pc_valid;
+        s_frame_resume_tick_charged = s_guest_tick_charged;
+    }
+}
+
+int runtime_end_frame_callback(void) {
+    if (s_frame_callback_depth > 0)
+        s_frame_callback_depth--;
+    if (s_frame_callback_depth == 0) {
+        s_frame_resume_valid = 0;
+        return 1;
+    }
+    return 0;
+}
+
+int runtime_get_savestate_resume(uint16_t *pc, int *tick_charged) {
+    if (s_frame_callback_depth > 0 && s_frame_resume_valid) {
+        if (pc) *pc = s_frame_resume_pc;
+        if (tick_charged) *tick_charged = s_frame_resume_tick_charged;
+        return 1;
+    }
+    if (!s_guest_pc_valid)
+        return 0;
+    if (pc) *pc = s_guest_pc;
+    if (tick_charged) *tick_charged = s_guest_tick_charged;
+    return 1;
+}
+
+void runtime_request_guest_resume(uint16_t pc, int tick_charged) {
+    s_guest_resume_pc = pc;
+    s_guest_resume_tick_charged = tick_charged ? 1 : 0;
+    s_guest_resume_pending = 1;
+}
+
+int runtime_guest_resume_pending(void) {
+    return s_guest_resume_pending;
+}
+
+int runtime_take_guest_resume(uint16_t *pc, int *tick_charged) {
+    if (!s_guest_resume_pending)
+        return 0;
+    if (pc) *pc = s_guest_resume_pc;
+    if (tick_charged) *tick_charged = s_guest_resume_tick_charged;
+    s_guest_resume_pending = 0;
+    return 1;
 }
 
 void maybe_trigger_vblank(int cycles) {
@@ -1984,6 +2078,30 @@ int g_nested_nmi_policy = NESTED_NMI_POKE_SPIN_FLAGS;
 uint16_t g_code_window_base = 0xE000;
 static int32_t s_tail_pending = -1;
 static int     s_tail_caller  = -1;
+
+void runtime_prepare_guest_resume(uint16_t pc, int tick_charged) {
+    extern uint16_t g_rts_target;
+
+    /* Everything below here was host-only bookkeeping for native frames that
+     * the runner just discarded. Architectural CPU/PPU/mapper state has
+     * already been restored by savestate_load(). */
+    g_nes_dispatch_depth = 0;
+    s_tail_pending = -1;
+    s_tail_caller = -1;
+    g_rts_target = 0;
+    g_rti_target = 0;
+    s_in_irq = 0;
+    runtime_reset_vblank_depth();
+    nes_interp_reset_context();
+#ifdef RECOMP_STACK_TRACKING
+    recomp_stack_reset();
+#endif
+
+    g_code_window_base = (pc >= 0x8000) ? (uint16_t)(pc & 0xE000) : 0;
+    set_guest_execution_point(pc, tick_charged);
+    s_guest_resume_pc = pc;
+    s_skip_next_boundary_tick = tick_charged ? 1 : 0;
+}
 
 /* Always-on ring of the last dispatches (addr, caller_bank, S, depth, kind)
  * for post-mortem attribution — dumped by launcher.c's unexpected-exit

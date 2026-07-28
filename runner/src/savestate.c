@@ -11,11 +11,13 @@
 #include "nes_runtime.h"
 #include "mapper.h"
 #include "apu.h"
+#include <stddef.h>
 #include <stdio.h>
 #include <string.h>
 
 #define SS_MAGIC   "NSSR"
-#define SS_VERSION 4
+#define SS_VERSION 5
+#define SS_VERSION_LEGACY 4
 #define SS_APU_BLOB_CAP 256
 #define SS_RUNTIME_BLOB_CAP 256
 
@@ -62,6 +64,11 @@ typedef struct {
     int32_t zapper_x, zapper_y, zapper_trigger;
     /* Misc */
     uint64_t frame_count;
+    /* Exact interrupted guest continuation. Version 5 appends these fields so
+     * version-4 files remain readable as a best-effort migration. */
+    uint16_t resume_pc;
+    uint8_t resume_pc_valid;
+    uint8_t resume_tick_charged;
 } SaveStateData;
 
 /* runtime.c must expose latch state — we access via a get/set pair declared below */
@@ -134,6 +141,12 @@ int savestate_save(const char *path) {
 
     /* Frame count */
     ss.frame_count = g_frame_count;
+    {
+        int tick_charged = 0;
+        ss.resume_pc_valid =
+            (uint8_t)runtime_get_savestate_resume(&ss.resume_pc, &tick_charged);
+        ss.resume_tick_charged = (uint8_t)(tick_charged != 0);
+    }
 
     fwrite(&ss, 1, sizeof(ss), f);
     fclose(f);
@@ -144,6 +157,11 @@ int savestate_save(const char *path) {
 }
 
 int savestate_load(const char *path) {
+    uint16_t legacy_resume_pc = 0;
+    int legacy_tick_charged = 0;
+    int legacy_resume_valid =
+        runtime_get_savestate_resume(&legacy_resume_pc, &legacy_tick_charged);
+
     FILE *f = fopen(path, "rb");
     if (!f) { fprintf(stderr, "[SaveState] Cannot open: %s\n", path); return 0; }
 
@@ -154,13 +172,18 @@ int savestate_load(const char *path) {
         fprintf(stderr, "[SaveState] Bad magic in %s\n", path);
         fclose(f); return 0;
     }
-    if (fread(&ver, 1, 1, f) != 1 || ver != SS_VERSION) {
+    if (fread(&ver, 1, 1, f) != 1 ||
+        (ver != SS_VERSION && ver != SS_VERSION_LEGACY)) {
         fprintf(stderr, "[SaveState] Version mismatch in %s\n", path);
         fclose(f); return 0;
     }
 
     SaveStateData ss;
-    if (fread(&ss, 1, sizeof(ss), f) != sizeof(ss)) {
+    memset(&ss, 0, sizeof(ss));
+    size_t state_size = (ver == SS_VERSION_LEGACY)
+                      ? offsetof(SaveStateData, resume_pc)
+                      : sizeof(ss);
+    if (fread(&ss, 1, state_size, f) != state_size) {
         fprintf(stderr, "[SaveState] Truncated data in %s\n", path);
         fclose(f); return 0;
     }
@@ -224,7 +247,20 @@ int savestate_load(const char *path) {
     /* Frame count */
     g_frame_count = ss.frame_count;
 
-    printf("[SaveState] Loaded from %s (frame %llu)\n", path,
-           (unsigned long long)g_frame_count);
+    if (ss.resume_pc_valid) {
+        runtime_request_guest_resume(ss.resume_pc, ss.resume_tick_charged != 0);
+    } else if (ver == SS_VERSION_LEGACY && legacy_resume_valid) {
+        /* Old states did not persist a PC. Loading at the same frame-boundary
+         * phase is common (keyboard slots), so discard the stale native stack
+         * using the current interrupted PC. New saves are exact. */
+        runtime_request_guest_resume(legacy_resume_pc, legacy_tick_charged);
+        fprintf(stderr,
+                "[SaveState] Migrating version-4 state with current continuation $%04X\n",
+                legacy_resume_pc);
+    }
+
+    printf("[SaveState] Loaded from %s (frame %llu%s)\n", path,
+           (unsigned long long)g_frame_count,
+           ver == SS_VERSION_LEGACY ? ", legacy continuation" : "");
     return 1;
 }
