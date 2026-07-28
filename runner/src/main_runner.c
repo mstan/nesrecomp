@@ -145,6 +145,44 @@ static void zapper_on_demand_render(void) {
     runtime_set_zapper_snapshot(s_zapper_snapbuf);
 }
 
+/* Pace normal play to the NTSC NES frame rate. SDL_GetTicks() only has
+ * millisecond precision, so the old fixed 16 ms delay targeted 62.5 Hz and
+ * accumulated wake-up error by restarting its clock every frame. Keep a
+ * high-resolution absolute deadline instead; reset it after turbo or a long
+ * host stall so normal play resumes without trying to repay stale time. */
+static void pace_ntsc_frame(void) {
+    static double next_frame = 0.0;
+    const double ntsc_hz = 60.0988;
+
+    if (g_turbo) {
+        next_frame = 0.0;
+        return;
+    }
+
+    const Uint64 frequency = SDL_GetPerformanceFrequency();
+    const Uint64 now_counter = SDL_GetPerformanceCounter();
+    const double frame_ticks = (double)frequency / ntsc_hz;
+    const double now = (double)now_counter;
+
+    if (next_frame == 0.0 || now > next_frame + frame_ticks * 4.0)
+        next_frame = now + frame_ticks;
+    else
+        next_frame += frame_ticks;
+
+    for (;;) {
+        const double current = (double)SDL_GetPerformanceCounter();
+        const double remaining_ticks = next_frame - current;
+        if (remaining_ticks <= 0.0) break;
+
+        const double remaining_ms =
+            remaining_ticks * 1000.0 / (double)frequency;
+        if (remaining_ms > 1.5)
+            SDL_Delay((Uint32)(remaining_ms - 1.0));
+        else
+            SDL_Delay(0);
+    }
+}
+
 /* ---- OAM debug window (--debug flag) ---- */
 static int                s_debug         = 0;
 static SDL_Window        *s_dbg_window    = NULL;
@@ -1179,15 +1217,7 @@ smoke_skip_input:
         SDL_RenderPresent(s_renderer);
     }
 
-    /* 60Hz pacing — skipped in turbo mode */
-    if (!g_turbo) {
-        static uint32_t s_last_tick = 0;
-        uint32_t now = SDL_GetTicks();
-        if (s_last_tick == 0) s_last_tick = now;
-        uint32_t elapsed = now - s_last_tick;
-        if (elapsed < 16) SDL_Delay(16 - elapsed);
-        s_last_tick = SDL_GetTicks();
-    }
+    pace_ntsc_frame();
 }
 
 /* ---- Public render function for emulated mode ---- */
