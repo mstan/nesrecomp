@@ -387,7 +387,20 @@ static int interp_run_ex(uint16_t entry, int stop_on_stack_lift) {
                      * whether it belongs to this interpreter frame or the
                      * still-live native caller. */
                     if (g_cpu.S == call_s) {
-                        next = (uint16_t)(ipc + 3);
+                        /* Normal native RTS pops the JSR operand we pushed
+                         * below (ipc+2), so execution resumes at ipc+3. Some
+                         * games use JSR helpers that rewrite that return
+                         * operand before RTSing (Kirby $D805 skips inline
+                         * bank/target bytes). In that case S is still
+                         * restored, but the architectural continuation is the
+                         * popped RTS operand + 1. */
+                        uint16_t ret = (uint16_t)(ipc + 2);
+                        if (g_rti_target != 0)
+                            next = g_rti_target;
+                        else if (g_rts_target != 0 && g_rts_target != ret)
+                            next = (uint16_t)(g_rts_target + 1);
+                        else
+                            next = (uint16_t)(ipc + 3);
                     } else if (g_rti_target != 0) {
                         next = g_rti_target;
                     } else if (g_rts_target != 0) {

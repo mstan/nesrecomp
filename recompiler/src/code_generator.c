@@ -1182,6 +1182,11 @@ static bool return_adjust_func_matches(const GameConfig *cfg, uint16_t target) {
 
 #define DUMMY_PUSH_PAIR \
     "g_ram[0x100+g_cpu.S]=0; g_cpu.S--; g_ram[0x100+g_cpu.S]=0; g_cpu.S--; "
+#define DUMMY_JSR_PRE \
+    "{ uint8_t _cbs=g_cpu.S; uint64_t _irq_epoch=runtime_get_interrupt_epoch(); " \
+    "g_rti_target=0; g_rti_source=0; g_rti_bank=-1; " DUMMY_PUSH_PAIR
+#define DUMMY_JSR_POST \
+    " if (!nes_jsr_stack_ok_after_call(_cbs, _irq_epoch)) return; }"
 
 typedef struct {
     bool force_dynamic;          /* skip alias/wrapper, always call_by_address */
@@ -1602,16 +1607,15 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                      * so — exactly like a normal JSR site — we must push a dummy
                      * return before every direct call or S drifts up by 2 per call
                      * (corrupting the stack pointer; S wraps $FF -> $01). */
-                    const char *pr = cfg->push_all_jsr
-                        ? "g_ram[0x100+g_cpu.S]=0; g_cpu.S--; g_ram[0x100+g_cpu.S]=0; g_cpu.S--; "
-                        : "";
+                    const char *pre = cfg->push_all_jsr ? DUMMY_JSR_PRE : "";
+                    const char *post = cfg->push_all_jsr ? DUMMY_JSR_POST : "";
                     if (region == 'F') {
                         fprintf(f, "/* trampoline $%04X (mmc3 no-switch): target=$%04X */\n",
                                 tramp->addr, target);
                         if (target >= 0xC000)
-                            fprintf(f, "%sfunc_%04X();\n", pr, target);
+                            fprintf(f, "%sfunc_%04X();%s\n", pre, target, post);
                         else
-                            fprintf(f, "%scall_by_address(0x%04X);\n", pr, target);
+                            fprintf(f, "%scall_by_address(0x%04X);%s\n", pre, target, post);
                     } else {
                         uint16_t emit_addr; int emit_bank;
                         mmc3_region_target(target, t_bank, region, &emit_addr, &emit_bank);
@@ -1623,10 +1627,15 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                                 tramp->addr, region, target, t_bank, nm);
                         fprintf(f, "{ uint8_t _sa=g_cpu.A,_sx=g_cpu.X,_sy=g_cpu.Y;\n");
                         fprintf(f, "  uint8_t _sbank=g_ram[0x%04X];\n", save);
-                        fprintf(f, "  g_cpu.A=0x%02X; %sfunc_%04X();\n", t_bank, pr, bs_fn);
+                        fprintf(f, "  g_cpu.A=0x%02X; %sfunc_%04X();%s\n", t_bank, pre, bs_fn, post);
                         fprintf(f, "  g_cpu.A=_sa; g_cpu.X=_sx; g_cpu.Y=_sy;\n");
-                        fprintf(f, "  %s%s();\n", pr, nm);
-                        fprintf(f, "  g_cpu.A=_sbank; %sfunc_%04X(); }\n", pr, bs_fn);
+                        if (cfg->push_all_jsr)
+                            fprintf(f, "  { uint16_t _swb=g_code_window_base; g_code_window_base=0x%04X; uint8_t _cbs=g_cpu.S; uint64_t _irq_epoch=runtime_get_interrupt_epoch(); g_rti_target=0; g_rti_source=0; g_rti_bank=-1; " DUMMY_PUSH_PAIR "%s(); int _ok=nes_jsr_stack_ok_after_call(_cbs, _irq_epoch); g_code_window_base=_swb; if (!_ok) return; }\n",
+                                    (uint16_t)(target & 0xE000), nm);
+                        else
+                            fprintf(f, "  { uint16_t _swb=g_code_window_base; g_code_window_base=0x%04X; %s(); g_code_window_base=_swb; }\n",
+                                    (uint16_t)(target & 0xE000), nm);
+                        fprintf(f, "  g_cpu.A=_sbank; %sfunc_%04X();%s }\n", pre, bs_fn, post);
                     }
                     return 3 + tramp->inline_bytes;
                 }
@@ -1645,23 +1654,32 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                         fprintf(f, "  uint8_t _sbank=g_ram[0x%04X];\n", tramp->bank_save_addr);
                     /* push_all_jsr: each callee's RTS pops a 2-byte return, so
                      * push a dummy before every direct call (see MMC3_REGION). */
-                    const char *pr = cfg->push_all_jsr
-                        ? "g_ram[0x100+g_cpu.S]=0; g_cpu.S--; g_ram[0x100+g_cpu.S]=0; g_cpu.S--; "
-                        : "";
-                    fprintf(f, "  g_cpu.%s=0x%02X; %sfunc_%04X();\n", breg, disp_bank, pr, tramp->bs_fn_addr);
+                    const char *pre = cfg->push_all_jsr ? DUMMY_JSR_PRE : "";
+                    const char *post = cfg->push_all_jsr ? DUMMY_JSR_POST : "";
+                    fprintf(f, "  g_cpu.%s=0x%02X; %sfunc_%04X();%s\n", breg, disp_bank, pre, tramp->bs_fn_addr, post);
                     fprintf(f, "  g_cpu.A=_sa; g_cpu.X=_sx; g_cpu.Y=_sy;\n");
                     /* Dispatch directly to the statically-known bank+addr target.
                      * Using call_by_address() would race with NMI (which can change
                      * g_current_bank between the bank switch and the dispatch). */
                     if (disp_addr >= 0xC000) {
-                        fprintf(f, "  %sfunc_%04X();\n", pr, disp_addr);
+                        if (cfg->push_all_jsr)
+                            fprintf(f, "  { uint16_t _swb=g_code_window_base; g_code_window_base=0x%04X; uint8_t _cbs=g_cpu.S; uint64_t _irq_epoch=runtime_get_interrupt_epoch(); g_rti_target=0; g_rti_source=0; g_rti_bank=-1; " DUMMY_PUSH_PAIR "func_%04X(); int _ok=nes_jsr_stack_ok_after_call(_cbs, _irq_epoch); g_code_window_base=_swb; if (!_ok) return; }\n",
+                                    (uint16_t)(disp_addr & 0xE000), disp_addr);
+                        else
+                            fprintf(f, "  { uint16_t _swb=g_code_window_base; g_code_window_base=0x%04X; func_%04X(); g_code_window_base=_swb; }\n",
+                                    (uint16_t)(disp_addr & 0xE000), disp_addr);
                     } else if (disp_addr >= 0x8000) {
-                        fprintf(f, "  %sfunc_%04X_b%d();\n", pr, disp_addr, disp_bank);
+                        if (cfg->push_all_jsr)
+                            fprintf(f, "  { uint16_t _swb=g_code_window_base; g_code_window_base=0x%04X; uint8_t _cbs=g_cpu.S; uint64_t _irq_epoch=runtime_get_interrupt_epoch(); g_rti_target=0; g_rti_source=0; g_rti_bank=-1; " DUMMY_PUSH_PAIR "func_%04X_b%d(); int _ok=nes_jsr_stack_ok_after_call(_cbs, _irq_epoch); g_code_window_base=_swb; if (!_ok) return; }\n",
+                                    (uint16_t)(disp_addr & 0xE000), disp_addr, disp_bank);
+                        else
+                            fprintf(f, "  { uint16_t _swb=g_code_window_base; g_code_window_base=0x%04X; func_%04X_b%d(); g_code_window_base=_swb; }\n",
+                                    (uint16_t)(disp_addr & 0xE000), disp_addr, disp_bank);
                     } else {
-                        fprintf(f, "  %scall_by_address(0x%04X);\n", pr, disp_addr);
+                        fprintf(f, "  %scall_by_address(0x%04X);%s\n", pre, disp_addr, post);
                     }
                     fprintf(f, "  _sa=g_cpu.A;\n");
-                    fprintf(f, "  g_cpu.%s=_sbank; %sfunc_%04X();\n", breg, pr, tramp->bs_fn_addr);
+                    fprintf(f, "  g_cpu.%s=_sbank; %sfunc_%04X();%s\n", breg, pre, tramp->bs_fn_addr, post);
                     fprintf(f, "  g_cpu.A=_sa; }\n");
                     return 3 + tramp->inline_bytes;
                 }
@@ -3206,8 +3224,7 @@ static void emit_dispatch(FILE *f, const EmittedWrapper *wrappers, int wrapper_c
              * $A295, which limped on via the caller-bank fallback).  Guard on _bank;
              * on a live-bank mismatch fall through to interp, which reads the live
              * bank correctly.  Gated to mapper 4 so non-MMC3 output is unchanged. */
-            if (rom->mapper == 4 && addr >= 0x8000 && addr < 0xC000 &&
-                variants[0] != fixed_bank) {
+            if (rom->mapper == 4 && addr >= 0x8000 && addr < 0xC000) {
                 fprintf(f, "            switch (_bank) {\n");
                 fprintf(f, "                case %d: %s(); break;\n", variants[0], nm);
                 fprintf(f, "                default: return nes_interp_dispatch_bank(_cpu_addr, addr, _bank);\n");
