@@ -111,6 +111,10 @@ int nes_interp_dispatch(uint16_t addr);
 /* Bank-aware form used by generated banked-mapper dispatch: interprets at the
  * live cpu address, records the miss in gen-layout coordinates. */
 int nes_interp_dispatch_bank(uint16_t cpu_addr, uint16_t gen_addr, int bank);
+/* Intentional interpreter-only entry. Unlike a miss, this does not add a
+ * dispatch-miss manifest record. Used by generated `force_interp` wrappers. */
+int nes_interp_force(uint16_t addr);
+int nes_interp_force_bank(uint16_t cpu_addr, uint16_t gen_addr, int bank);
 int nes_interp_interrupt(uint16_t addr);
 
 /* Defined by the generated dispatch TU: 1 if the game was recompiled with

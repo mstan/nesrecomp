@@ -40,6 +40,50 @@ int nes_interp_resume(uint16_t addr);
  * resume discarded the old C stack. */
 void nes_interp_reset_context(void);
 
+/*
+ * Native collaboration policy while an interpreter island owns execution.
+ *
+ * ISLAND is the correctness-first default: nested JSR/JMP targets remain in
+ * the interpreter until the island reaches an architectural exit. SAFE allows
+ * balanced JSR calls to bounce into native code but keeps tail transfers in
+ * the island. LEGACY allows both calls and tails to bounce.
+ */
+typedef enum {
+    NES_INTERP_HANDOFF_ISLAND = 0,
+    NES_INTERP_HANDOFF_SAFE   = 1,
+    NES_INTERP_HANDOFF_LEGACY = 2,
+} NesInterpHandoffMode;
+
+void nes_interp_set_native_handoff_mode(NesInterpHandoffMode mode);
+NesInterpHandoffMode nes_interp_get_native_handoff_mode(void);
+
+/*
+ * Explicit architectural outcome of the most recent interpreter run.
+ *
+ * The public dispatch ABI remains a handled/not-handled integer for generated
+ * code compatibility. This result records why execution left the island and
+ * the guest PC/stack state at that boundary, so callers and diagnostics no
+ * longer have to infer every outcome from g_rts_target and S alone.
+ */
+typedef enum {
+    NES_INTERP_EXIT_DECLINED      = 0,
+    NES_INTERP_EXIT_RETURN        = 1,
+    NES_INTERP_EXIT_RTI           = 2,
+    NES_INTERP_EXIT_NATIVE_ESCAPE = 3,
+    NES_INTERP_EXIT_STACK_ESCAPE  = 4,
+    NES_INTERP_EXIT_BRK           = 5,
+} NesInterpExitKind;
+
+typedef struct {
+    NesInterpExitKind kind;
+    uint16_t entry_pc;
+    uint16_t next_pc;
+    uint8_t entry_s;
+    uint8_t exit_s;
+} NesInterpExit;
+
+void nes_interp_get_last_exit(NesInterpExit *out);
+
 /* Runtime control. enabled defaults on when push_all_jsr is set, unless the
  * env var NESRECOMP_INTERP_FALLBACK=off overrides. */
 void nes_interp_set_enabled(int enabled);

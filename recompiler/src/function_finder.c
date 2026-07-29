@@ -1962,6 +1962,12 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
         int bank = (cfg->extra_funcs[i].bank < 0) ? fixed_bank : cfg->extra_funcs[i].bank;
         add_function_with_source(out, cfg->extra_funcs[i].addr, bank, FUNCTION_SOURCE_MANUAL);
     }
+    for (int i = 0; i < cfg->force_interp_count; i++) {
+        int bank = (cfg->force_interp_funcs[i].bank < 0)
+                 ? fixed_bank : cfg->force_interp_funcs[i].bank;
+        add_function_with_source(out, cfg->force_interp_funcs[i].addr, bank,
+                                 FUNCTION_SOURCE_MANUAL);
+    }
     while (queue_pop(&item)) {
         for (int i = 0; i < out->count; i++) {
             if (out->entries[i].addr == item.addr &&

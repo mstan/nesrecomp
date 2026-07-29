@@ -216,6 +216,35 @@ static bool game_config_load_toml(GameConfig *cfg, const char *path) {
         }
     }
 
+    /* [force_interp] — same bulk bank syntax as [functions], but entries are
+     * deliberately kept out of native code so one interpreter island owns
+     * their complete dynamic control-flow region. */
+    toml_table_t *force_interp = toml_table_in(root, "force_interp");
+    if (force_interp) {
+        toml_array_t *fixed = toml_array_in(force_interp, "fixed");
+        if (fixed) for (int i = 0; i < toml_array_nelem(fixed) && cfg->force_interp_count < GAME_CFG_MAX_EXTRA_FUNCS; i++) {
+            toml_datum_t d = toml_int_at(fixed, i);
+            if (d.ok) {
+                int idx = cfg->force_interp_count++;
+                cfg->force_interp_funcs[idx].addr = (uint16_t)d.u.i;
+                cfg->force_interp_funcs[idx].bank = -1;
+            }
+        }
+        for (int b = 0; b < 64; b++) {
+            char key[16]; snprintf(key, sizeof(key), "bank%d", b);
+            toml_array_t *ba = toml_array_in(force_interp, key);
+            if (!ba) continue;
+            for (int i = 0; i < toml_array_nelem(ba) && cfg->force_interp_count < GAME_CFG_MAX_EXTRA_FUNCS; i++) {
+                toml_datum_t d = toml_int_at(ba, i);
+                if (d.ok) {
+                    int idx = cfg->force_interp_count++;
+                    cfg->force_interp_funcs[idx].addr = (uint16_t)d.u.i;
+                    cfg->force_interp_funcs[idx].bank = b;
+                }
+            }
+        }
+    }
+
     /* [[extra_func]] — individual entries: bank + addr */
     toml_array_t *ef = toml_array_in(root, "extra_func");
     if (ef) for (int i = 0; i < toml_array_nelem(ef) && cfg->extra_func_count < GAME_CFG_MAX_EXTRA_FUNCS; i++) {
@@ -338,8 +367,8 @@ static bool game_config_load_toml(GameConfig *cfg, const char *path) {
     }
 
     toml_free(root);
-    printf("[GameConfig] Loaded TOML: %s (prefix='%s', %d extra funcs)\n",
-           path, cfg->output_prefix, cfg->extra_func_count);
+    printf("[GameConfig] Loaded TOML: %s (prefix='%s', %d extra funcs, %d forced interp)\n",
+           path, cfg->output_prefix, cfg->extra_func_count, cfg->force_interp_count);
     return true;
 }
 

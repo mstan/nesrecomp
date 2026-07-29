@@ -212,10 +212,11 @@ sections are summarized below.
 | `[[nop_jsr]] addr` | Skip this JSR entirely (stack-manipulation routines incompatible with recompilation) |
 | `[[data_region]] bank, start, end` | Exclude byte range from pointer scanner (known data, not code) |
 | `[functions] fixed = [...], bankN = [...]` | Bulk `extra_func` lists keyed by bank |
+| `[force_interp] fixed = [...], bankN = [...]` | Seed entries that always execute as interpreter islands |
 
 Numeric values may be given in hex (`0xC000`) or decimal. Address-only directives
-are TOML arrays of tables; per-bank lists under `[functions]` accept plain
-integer arrays.
+are TOML arrays of tables; per-bank lists under `[functions]` and
+`[force_interp]` accept plain integer arrays.
 
 ### Function Discovery: Table-Run Scanner
 

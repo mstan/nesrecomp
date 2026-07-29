@@ -37,6 +37,7 @@ uint16_t     g_rti_source = 0;
 int          g_rti_bank = -1;
 
 static int s_native_calls = 0;
+static int s_miss_count = 0;
 
 uint8_t nes_read(uint16_t a) {
     if (a < 0x2000)                return g_ram[a & 0x07FF];
@@ -55,12 +56,19 @@ uint16_t nes_read16_jmpbug(uint16_t a) {
 }
 uint8_t mapper_peek_prg(uint16_t a) { return g_ram[a & 0x07FF]; } /* unused by RAM-resident tests */
 void maybe_trigger_vblank(int c) { (void)c; }
+void nes_cpu_instruction_boundary(uint16_t pc, int cycles) { (void)pc; (void)cycles; }
 int  game_dispatch_override(uint16_t a) { (void)a; return 0; }
 void nes_record_dispatch_miss(uint16_t a) { (void)a; }
 void nes_record_dispatch_miss_bank(uint16_t gen_addr, uint16_t cpu_addr, int bank) {
-    (void)gen_addr; (void)cpu_addr; (void)bank;
+    (void)gen_addr; (void)cpu_addr; (void)bank; s_miss_count++;
 }
 void nes_dispatch_miss_apply_policy(uint16_t a) { (void)a; }
+int nes_dispatch_miss_last_target_is_code(void) { return 1; }
+void nes_dispatch_miss_interp_declined(uint16_t a, const char *reason) {
+    (void)a; (void)reason;
+}
+void nes_write_runtime_fault(const char *reason) { (void)reason; }
+void debug_server_request_pause(const char *reason) { (void)reason; }
 void nes_brk_executed(uint16_t pc) { (void)pc; }
 void nes_dring_mark(char kind, uint16_t tag) { (void)kind; (void)tag; }
 
@@ -73,6 +81,18 @@ int call_by_address(uint16_t a) {
         s_native_calls++;
         g_ram[0x20] = 0x99;       /* observable native side effect */
         g_cpu.S += 2;             /* native RTS pops the caller's JSR push */
+        return 1;
+    }
+    if (a == 0x0710) {            /* native helper rewrites its return operand */
+        uint8_t lo = g_ram[0x100 + (uint8_t)(g_cpu.S + 1)];
+        uint8_t hi = g_ram[0x100 + (uint8_t)(g_cpu.S + 2)];
+        uint16_t operand = (uint16_t)(lo | ((uint16_t)hi << 8));
+        operand = (uint16_t)(operand + 3); /* skip three inline data bytes */
+        g_ram[0x100 + (uint8_t)(g_cpu.S + 1)] = (uint8_t)operand;
+        g_ram[0x100 + (uint8_t)(g_cpu.S + 2)] = (uint8_t)(operand >> 8);
+        g_rts_target = operand;
+        g_cpu.S += 2;
+        s_native_calls++;
         return 1;
     }
     return nes_interp_dispatch(a);
@@ -89,6 +109,14 @@ static void fresh(void) {
     g_cpu.S = 0xFD;               /* simulate a caller having pushed a return */
     g_ram[0x1FE] = 0x00;          /* dummy caller return addr lo */
     g_ram[0x1FF] = 0x80;          /* dummy caller return addr hi */
+    g_rts_target = 0;
+    g_rti_target = 0;
+    g_rti_source = 0;
+    g_rti_bank = -1;
+    s_miss_count = 0;
+    nes_interp_set_enabled(1);
+    nes_interp_set_native_handoff_mode(NES_INTERP_HANDOFF_ISLAND);
+    nes_interp_reset_context();
 }
 static void load(uint16_t addr, const uint8_t *code, int n) {
     for (int i = 0; i < n; i++) g_ram[(addr + i) & 0x07FF] = code[i];
@@ -108,6 +136,11 @@ int main(void) {
     CHECK(g_cpu.C == 0,      "T1 C == 0");
     CHECK(g_cpu.Z == 0 && g_cpu.N == 0, "T1 Z=0 N=0");
     CHECK(g_cpu.S == 0xFF,   "T1 S returned above floor (0xFF)");
+    { NesInterpExit exit;
+      nes_interp_get_last_exit(&exit);
+      CHECK(exit.kind == NES_INTERP_EXIT_RETURN, "T1 typed exit reports RTS return");
+      CHECK(exit.entry_pc == 0x0600 && exit.next_pc == 0x8001,
+            "T1 typed exit records entry and continuation"); }
 
     printf("[T2] nested MISSED JSR handled in one frame\n");
     fresh();
@@ -132,18 +165,65 @@ int main(void) {
     CHECK(g_cpu.Z == 1,       "T3 Z==1 at exit");
     CHECK(g_ram[0x13] == 0x00,"T3 [$13]==0x00");
 
-    printf("[T4] covered-target handoff (call_by_address native)\n");
+    printf("[T4a] default island keeps a covered target interpreted\n");
     fresh();
+    s_native_calls = 0;
+    { uint8_t caller[] = {0x20,0x00,0x07, 0xA9,0xBB, 0x85,0x14, 0x60};
+      uint8_t guest[]  = {0xA9,0x55, 0x85,0x20, 0x60};
+      load(0x0600, caller, sizeof caller); load(0x0700, guest, sizeof guest); }
+    r = nes_interp_dispatch(0x0600);
+    CHECK(r == 1,             "T4a dispatch handled");
+    CHECK(s_native_calls == 0,"T4a native bounce suppressed");
+    CHECK(g_ram[0x20] == 0x55,"T4a nested guest body interpreted");
+    CHECK(g_ram[0x14] == 0xBB,"T4a caller resumed after nested guest RTS");
+
+    printf("[T4b] safe mode permits a balanced covered-target handoff\n");
+    fresh();
+    nes_interp_set_native_handoff_mode(NES_INTERP_HANDOFF_SAFE);
     s_native_calls = 0;
     { uint8_t p[] = {0x20,0x00,0x07, 0xA9,0xBB, 0x85,0x14, 0x60}; /* JSR$0700(covered);LDA#BB;STA$14;RTS */
       load(0x0600, p, sizeof p); }
     r = nes_interp_dispatch(0x0600);
-    CHECK(r == 1,             "T4 dispatch handled");
-    CHECK(s_native_calls == 1,"T4 native function invoked once");
-    CHECK(g_ram[0x20] == 0x99,"T4 native side effect observed ([$20]==0x99)");
-    CHECK(g_ram[0x14] == 0xBB,"T4 interp resumed after native call ([$14]==0xBB)");
-    CHECK(g_cpu.A == 0xBB,    "T4 A == 0xBB");
-    CHECK(g_cpu.S == 0xFF,    "T4 S returned above floor");
+    CHECK(r == 1,             "T4b dispatch handled");
+    CHECK(s_native_calls == 1,"T4b native function invoked once");
+    CHECK(g_ram[0x20] == 0x99,"T4b native side effect observed");
+    CHECK(g_ram[0x14] == 0xBB,"T4b interp resumed after native call");
+    CHECK(g_cpu.A == 0xBB,    "T4b A == 0xBB");
+    CHECK(g_cpu.S == 0xFF,    "T4b S returned above floor");
+
+    printf("[T4c] native rewritten RTS continuation skips inline data\n");
+    fresh();
+    nes_interp_set_native_handoff_mode(NES_INTERP_HANDOFF_SAFE);
+    s_native_calls = 0;
+    { uint8_t p[] = {
+          0x20,0x10,0x07,       /* JSR $0710 */
+          0x02,0x12,0x34,       /* inline data, deliberately not code */
+          0xA9,0xCC, 0x85,0x15, 0x60
+      };
+      load(0x0600, p, sizeof p); }
+    r = nes_interp_dispatch(0x0600);
+    CHECK(r == 1,             "T4c dispatch handled");
+    CHECK(s_native_calls == 1,"T4c rewriting native helper invoked");
+    CHECK(g_ram[0x15] == 0xCC,"T4c resumed after inline data");
+
+    printf("[T4d] intentional force entry is not a discovery miss\n");
+    fresh();
+    { uint8_t p[] = {0xA9,0x7E, 0x85,0x16, 0x60};
+      load(0x0600, p, sizeof p); }
+    r = nes_interp_force_bank(0x0600, 0x8600, 3);
+    CHECK(r == 1,             "T4d forced entry handled");
+    CHECK(g_ram[0x16] == 0x7E,"T4d forced entry executed");
+    CHECK(s_miss_count == 0,  "T4d force entry did not log a dispatch miss");
+
+    printf("[T4e] save-state continuation cooperates with covered native calls\n");
+    fresh(); /* configured policy remains the default ISLAND */
+    s_native_calls = 0;
+    { uint8_t p[] = {0x20,0x00,0x07, 0x00}; /* JSR $0700; BRK */
+      load(0x0600, p, sizeof p); }
+    r = nes_interp_resume(0x0600);
+    CHECK(r == 1,             "T4e continuation handled");
+    CHECK(s_native_calls == 1,"T4e continuation used cooperative native JSR");
+    CHECK(g_ram[0x20] == 0x99,"T4e native side effect observed");
 
     printf("[T5] SBC with carry (no borrow)\n");
     fresh();

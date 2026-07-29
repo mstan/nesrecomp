@@ -457,6 +457,17 @@ static bool config_has_extra_func(const GameConfig *cfg, int fixed_bank,
     return false;
 }
 
+static bool config_forces_interp(const GameConfig *cfg, int fixed_bank,
+                                 uint16_t addr, int bank) {
+    for (int i = 0; i < cfg->force_interp_count; i++) {
+        int cfg_bank = (cfg->force_interp_funcs[i].bank < 0)
+                     ? fixed_bank : cfg->force_interp_funcs[i].bank;
+        if (cfg_bank == bank && cfg->force_interp_funcs[i].addr == addr)
+            return true;
+    }
+    return false;
+}
+
 static bool native_entry_decode_valid(const NESRom *rom, int bank, uint16_t addr) {
     enum { MIN_VALID = 7 };
     int fixed_bank = rom->prg_banks - 1;
@@ -481,6 +492,8 @@ static bool native_entry_decode_valid(const NESRom *rom, int bank, uint16_t addr
 
 static bool should_emit_native_body(const NESRom *rom, const GameConfig *cfg,
                                     const FunctionEntry *entry) {
+    if (config_forces_interp(cfg, rom->prg_banks - 1, entry->addr, entry->bank))
+        return false;
     if (entry->bank == rom->prg_banks - 1) return true;
     if (config_has_extra_func(cfg, rom->prg_banks - 1, entry->addr, entry->bank)) return true;
     if (entry_source_is_curated(entry)) return true;
@@ -3343,14 +3356,19 @@ static void emit_missing_wrapper_stubs(FILE *f, const EmittedWrapper *wrappers,
 
         char nm[32];
         format_func_name(nm, sizeof nm, addr, bank, fixed_bank);
+        bool forced = config_forces_interp(cfg, fixed_bank, addr, bank);
         if (stub_count == 0)
-            fprintf(f, "/* Interpreter fallback wrappers for discovered entries that were not emitted natively. */\n");
+            fprintf(f, "/* Interpreter wrappers for discovered entries that were not emitted natively. */\n");
         fprintf(f, "void %s(void) {\n", nm);
         fprintf(f, "#ifdef RECOMP_STACK_TRACKING\n");
         fprintf(f, "    recomp_stack_push(\"%s\");\n", nm);
         fprintf(f, "#endif\n");
-        fprintf(f, "    (void)nes_interp_dispatch_bank(0x%04X, 0x%04X, %d);\n",
-                addr, addr, bank);
+        if (forced)
+            fprintf(f, "    (void)nes_interp_force_bank(0x%04X, 0x%04X, %d);\n",
+                    addr, addr, bank);
+        else
+            fprintf(f, "    (void)nes_interp_dispatch_bank(0x%04X, 0x%04X, %d);\n",
+                    addr, addr, bank);
         fprintf(f, "#ifdef RECOMP_STACK_TRACKING\n");
         fprintf(f, "    recomp_stack_pop();\n");
         fprintf(f, "#endif\n");

@@ -36,6 +36,7 @@
 /* ---- Config (lazily initialised on first dispatch) ---- */
 static int s_enabled = -1;          /* -1 = uninitialised */
 static int s_native_handoff_mode = -1;
+static int s_active_handoff_mode = -1; /* per-run override; nests with interp calls */
 extern int g_recomp_push_all_jsr;   /* defined by the generated dispatch TU */
 
 /* ---- Covered-ness probe ----
@@ -60,12 +61,22 @@ extern int      g_rti_bank;
 /* ---- Stats ---- */
 static NesInterpStats s_stats;
 static char s_last_decline_reason[96] = "interpreter fallback declined";
+static NesInterpExit s_last_exit = {
+    NES_INTERP_EXIT_DECLINED, 0, 0, 0, 0
+};
 
 void nes_interp_get_stats(NesInterpStats *out) { if (out) *out = s_stats; }
 void nes_interp_frame_boundary(void) { s_stats.instrs_this_frame = 0; }
+void nes_interp_get_last_exit(NesInterpExit *out) { if (out) *out = s_last_exit; }
 
 void nes_interp_set_enabled(int enabled) { s_enabled = enabled ? 1 : 0; }
 int  nes_interp_is_enabled(void) { return s_enabled == 1; }
+
+void nes_interp_set_native_handoff_mode(NesInterpHandoffMode mode) {
+    if (mode < NES_INTERP_HANDOFF_ISLAND || mode > NES_INTERP_HANDOFF_LEGACY)
+        mode = NES_INTERP_HANDOFF_ISLAND;
+    s_native_handoff_mode = (int)mode;
+}
 
 static void interp_lazy_init(void) {
     if (s_enabled != -1 && s_native_handoff_mode != -1) return;
@@ -82,26 +93,36 @@ static void interp_lazy_init(void) {
     }
 
     /* Native collaboration policy while already inside the interpreter.
-     * safe (default): allow balanced JSR handoffs, keep JMP tails in the
-     * interpreter island. This avoids the fragile mixed native/interp
-     * tail-resume path while preserving useful collaboration for real calls.
-     * on/legacy: old behavior, probe and hand off both JSR and JMP.
-     * off/island: never hand off from interpreter to native. */
+     * off/island (default): the interpreter owns all nested control flow until
+     * an architectural exit. This is the correctness floor: a stack/return
+     * rewriting helper cannot be split across two execution models.
+     * safe: allow balanced JSR handoffs, keep JMP tails in the island.
+     * on/legacy: probe and hand off both JSR and JMP. */
     if (s_native_handoff_mode == -1) {
-        int mode = 1; /* safe */
+        int mode = NES_INTERP_HANDOFF_ISLAND;
         const char *h = getenv("NESRECOMP_INTERP_NATIVE_HANDOFF");
         if (h && *h) {
-            if (!strcmp(h, "on") || !strcmp(h, "1") || !strcmp(h, "legacy")) mode = 2;
-            else if (!strcmp(h, "off") || !strcmp(h, "0") || !strcmp(h, "island")) mode = 0;
-            else if (!strcmp(h, "safe")) mode = 1;
+            if (!strcmp(h, "on") || !strcmp(h, "1") || !strcmp(h, "legacy"))
+                mode = NES_INTERP_HANDOFF_LEGACY;
+            else if (!strcmp(h, "off") || !strcmp(h, "0") || !strcmp(h, "island"))
+                mode = NES_INTERP_HANDOFF_ISLAND;
+            else if (!strcmp(h, "safe"))
+                mode = NES_INTERP_HANDOFF_SAFE;
         }
         const char *island = getenv("NESRECOMP_INTERP_ISLAND");
         if (island && *island) {
-            if (!strcmp(island, "on") || !strcmp(island, "1")) mode = 0;
-            else if (!strcmp(island, "off") || !strcmp(island, "0")) mode = 2;
+            if (!strcmp(island, "on") || !strcmp(island, "1"))
+                mode = NES_INTERP_HANDOFF_ISLAND;
+            else if (!strcmp(island, "off") || !strcmp(island, "0"))
+                mode = NES_INTERP_HANDOFF_LEGACY;
         }
         s_native_handoff_mode = mode;
     }
+}
+
+NesInterpHandoffMode nes_interp_get_native_handoff_mode(void) {
+    if (s_native_handoff_mode < 0) interp_lazy_init();
+    return (NesInterpHandoffMode)s_native_handoff_mode;
 }
 
 static void interp_note_decline(uint16_t entry, uint16_t ipc, const char *reason) {
@@ -114,9 +135,11 @@ static void interp_note_decline(uint16_t entry, uint16_t ipc, const char *reason
 
 static int interp_native_handoff_allowed(int is_tail) {
     if (s_native_handoff_mode < 0) interp_lazy_init();
-    if (s_native_handoff_mode == 2) return 1; /* legacy/on */
-    if (s_native_handoff_mode == 0) return 0; /* full island */
-    return is_tail ? 0 : 1;                   /* safe */
+    int mode = (s_active_handoff_mode >= 0)
+             ? s_active_handoff_mode : s_native_handoff_mode;
+    if (mode == NES_INTERP_HANDOFF_LEGACY) return 1;
+    if (mode == NES_INTERP_HANDOFF_ISLAND) return 0;
+    return is_tail ? 0 : 1; /* safe */
 }
 
 /* ---- Side-effect-free instruction fetch (bank-correct) ---- */
@@ -176,26 +199,43 @@ static int interp_dispatch_target(uint16_t target, int is_tail) {
     return hit;
 }
 
+static NesInterpExit make_exit(NesInterpExitKind kind, uint16_t entry,
+                               uint16_t next_pc, uint8_t entry_s) {
+    NesInterpExit out;
+    out.kind = kind;
+    out.entry_pc = entry;
+    out.next_pc = next_pc;
+    out.entry_s = entry_s;
+    out.exit_s = g_cpu.S;
+    return out;
+}
+
 /*
  * interp_run — execute the missed routine at `entry`, returning when control
  * leaves it back to native code (RTS/RTI/unbalanced-pop lifting S above the
- * entry level). Returns 1 if it ran to a clean boundary, 0 if it bailed
- * (watchdog / depth guard / non-code region) so the caller applies policy.
+ * entry level). The typed exit is the architectural boundary contract; the
+ * public generated-code ABI converts it to handled/not-handled for now.
  */
-static int interp_run_ex(uint16_t entry, int stop_on_stack_lift) {
+static NesInterpExit interp_run_ex(uint16_t entry, int stop_on_stack_lift,
+                                    NesInterpHandoffMode handoff_mode) {
+    const uint8_t entry_s = g_cpu.S;
     if (s_depth >= INTERP_MAX_DEPTH) {
         interp_note_decline(entry, entry, "interpreter depth guard");
-        return 0;
+        s_last_exit = make_exit(NES_INTERP_EXIT_DECLINED, entry, entry, entry_s);
+        return s_last_exit;
     }
     s_depth++;
+    int previous_handoff_mode = s_active_handoff_mode;
+    s_active_handoff_mode = (int)handoff_mode;
     s_stats.runs++;
     nes_dring_mark('I', entry);   /* interp run start (cpu pc) */
 
-    const uint8_t S_floor = g_cpu.S;
+    const uint8_t S_floor = entry_s;
     uint16_t ipc = entry;
     long budget = INTERP_STEP_CAP;
     uint32_t this_run = 0;
-    int result = 1;
+    NesInterpExit result =
+        make_exit(NES_INTERP_EXIT_NATIVE_ESCAPE, entry, entry, entry_s);
 
     for (;;) {
         if (--budget < 0) {
@@ -204,7 +244,7 @@ static int interp_run_ex(uint16_t entry, int stop_on_stack_lift) {
                     entry, INTERP_STEP_CAP, g_current_bank, ipc);
             s_stats.watchdog_trips++;
             interp_note_decline(entry, ipc, "interpreter watchdog");
-            result = 0;
+            result = make_exit(NES_INTERP_EXIT_DECLINED, entry, ipc, entry_s);
             break;
         }
 
@@ -406,7 +446,9 @@ static int interp_run_ex(uint16_t entry, int stop_on_stack_lift) {
                     } else if (g_rts_target != 0) {
                         next = (uint16_t)(g_rts_target + 1);
                     } else {
-                        result = 1; goto done;
+                        result = make_exit(NES_INTERP_EXIT_NATIVE_ESCAPE,
+                                           entry, next, entry_s);
+                        goto done;
                     }
                 } else {
                     next = target;  /* miss: interpret inline (push stays on 6502 stack) */
@@ -425,7 +467,9 @@ static int interp_run_ex(uint16_t entry, int stop_on_stack_lift) {
                     else if (g_rts_target != 0)
                         next = (uint16_t)(g_rts_target + 1);
                     else {
-                        result = 1; goto done;
+                        result = make_exit(NES_INTERP_EXIT_NATIVE_ESCAPE,
+                                           entry, next, entry_s);
+                        goto done;
                     }
                     break;
                 }
@@ -439,7 +483,8 @@ static int interp_run_ex(uint16_t entry, int stop_on_stack_lift) {
                 g_rti_target = 0;
                 uint16_t ret = (uint16_t)(g_rts_target + 1);
                 if (stop_on_stack_lift && g_cpu.S > S_floor) {
-                    result = 1;
+                    result = make_exit(NES_INTERP_EXIT_RETURN,
+                                       entry, ret, entry_s);
                     goto done;  /* returned to a still-live native caller */
                 }
                 next = ret;                                        /* nested return */
@@ -457,7 +502,8 @@ static int interp_run_ex(uint16_t entry, int stop_on_stack_lift) {
                 g_rti_bank = g_current_bank;
                 g_rts_target = 0;
                 if (stop_on_stack_lift && g_cpu.S > S_floor) {
-                    result = 1;
+                    result = make_exit(NES_INTERP_EXIT_RTI,
+                                       entry, ret, entry_s);
                     goto done;
                 }
                 next = ret;
@@ -467,7 +513,9 @@ static int interp_run_ex(uint16_t entry, int stop_on_stack_lift) {
             /* ---- BRK / illegal: mirror codegen (BRK hook; illegal = sized skip) ---- */
             case MN_BRK:
                 nes_brk_executed(ipc);
-                result = 1; goto done;   /* codegen returns from the enclosing fn at BRK */
+                result = make_exit(NES_INTERP_EXIT_BRK,
+                                   entry, ipc, entry_s);
+                goto done;   /* codegen returns from the enclosing fn at BRK */
             case MN_ILLEGAL:
             default:
                 /* code_generator.c treats MN_ILLEGAL as a sized NOP skip — match it. */
@@ -480,17 +528,28 @@ static int interp_run_ex(uint16_t entry, int stop_on_stack_lift) {
          * entry frame means we've returned to native code. Explicit continuation
          * resumes disable this because their entry may intentionally restore
          * state with PLA/PLP-style stack reads. */
-        if (stop_on_stack_lift && g_cpu.S > S_floor) { result = 1; goto done; }
+        if (stop_on_stack_lift && g_cpu.S > S_floor) {
+            result = make_exit(NES_INTERP_EXIT_STACK_ESCAPE,
+                               entry, next, entry_s);
+            goto done;
+        }
     }
 
 done:
     if (this_run > s_stats.max_instrs_run) s_stats.max_instrs_run = this_run;
+    s_active_handoff_mode = previous_handoff_mode;
     s_depth--;
+    result.exit_s = g_cpu.S;
+    s_last_exit = result;
     return result;
 }
 
-static int interp_run(uint16_t entry) {
-    return interp_run_ex(entry, 1);
+static NesInterpExit interp_run(uint16_t entry) {
+    return interp_run_ex(entry, 1, nes_interp_get_native_handoff_mode());
+}
+
+static int interp_exit_handled(NesInterpExit exit) {
+    return exit.kind != NES_INTERP_EXIT_DECLINED;
 }
 
 /* ---- Entry from the generated dispatcher ----
@@ -521,7 +580,7 @@ int nes_interp_dispatch_bank(uint16_t cpu_addr, uint16_t gen_addr, int bank) {
             nes_dispatch_miss_interp_declined(addr, "non-code dispatch target");
             return 0;
         }
-        if (interp_run(addr)) return 1;   /* handled by fallback */
+        if (interp_exit_handled(interp_run(addr))) return 1;   /* handled by fallback */
         s_stats.policy_traps++;
         nes_dispatch_miss_interp_declined(addr, s_last_decline_reason);
         return 0;
@@ -537,13 +596,46 @@ int nes_interp_dispatch(uint16_t addr) {
     return nes_interp_dispatch_bank(addr, addr, g_current_bank);
 }
 
+int nes_interp_force_bank(uint16_t cpu_addr, uint16_t gen_addr, int bank) {
+    interp_lazy_init();
+
+    /* A forced wrapper can be reached by the covered-ness probe from an
+     * already-running interpreter island. Decline that probe without nesting:
+     * the owner island will continue at cpu_addr itself. */
+    if (s_probe_armed && cpu_addr == s_probe_addr) {
+        s_probe_armed = 0;
+        return 0;
+    }
+
+    if (s_enabled == 1 &&
+        interp_exit_handled(interp_run_ex(cpu_addr, 1, NES_INTERP_HANDOFF_ISLAND)))
+        return 1;
+
+    char reason[160];
+    const char *why = (s_enabled == 1)
+                    ? s_last_decline_reason : "interpreter fallback disabled";
+    snprintf(reason, sizeof(reason),
+             "forced interpreter entry $%04X (generated $%04X bank=%d) could not execute: %s",
+             cpu_addr, gen_addr, bank, why);
+    fprintf(stderr, "[Interp] %s\n", reason);
+    s_stats.policy_traps++;
+    nes_write_runtime_fault(reason);
+    debug_server_request_pause(reason);
+    return 0;
+}
+
+int nes_interp_force(uint16_t addr) {
+    return nes_interp_force_bank(addr, addr, g_current_bank);
+}
+
 int nes_interp_interrupt(uint16_t addr) {
     interp_lazy_init();
 
     /* RAM/SRAM interrupt vectors are intentional code entries, not missed
      * generated functions. Keep dispatch_misses.log reserved for discovery
      * defects while still executing the handler against live memory. */
-    if (interp_run(addr))
+    if (interp_exit_handled(
+            interp_run_ex(addr, 1, NES_INTERP_HANDOFF_ISLAND)))
         return 1;
 
     fprintf(stderr, "[Interp] RAM/SRAM interrupt vector $%04X could not be interpreted\n", addr);
@@ -554,11 +646,20 @@ int nes_interp_resume(uint16_t addr) {
     interp_lazy_init();
     if (s_enabled != 1)
         return 0;
-    return interp_run_ex(addr, 0);
+    /* A restored PC is the continuation of the whole suspended program, not
+     * a missed function with a native caller waiting above it. It therefore
+     * cooperates with covered native JSRs while interpreter fallbacks nested
+     * beneath those native calls still install their own island policy. */
+    NesInterpHandoffMode mode =
+        (s_native_handoff_mode == NES_INTERP_HANDOFF_LEGACY)
+        ? NES_INTERP_HANDOFF_LEGACY : NES_INTERP_HANDOFF_SAFE;
+    return interp_exit_handled(interp_run_ex(addr, 0, mode));
 }
 
 void nes_interp_reset_context(void) {
     s_probe_armed = 0;
     s_probe_addr = 0;
     s_depth = 0;
+    s_active_handoff_mode = -1;
+    s_last_exit = make_exit(NES_INTERP_EXIT_DECLINED, 0, 0, g_cpu.S);
 }

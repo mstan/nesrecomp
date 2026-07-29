@@ -247,6 +247,11 @@ typedef struct {
     ExtraFunc       extra_funcs[GAME_CFG_MAX_EXTRA_FUNCS];
     int             extra_func_count;
 
+    /* Function seeds that must execute as one interpreter island even when
+     * static discovery could otherwise emit a native body. */
+    ExtraFunc       force_interp_funcs[GAME_CFG_MAX_EXTRA_FUNCS];
+    int             force_interp_count;
+
     InlineDispatch  inline_dispatches[GAME_CFG_MAX_INLINE_DISPATCHES];
     int             inline_dispatch_count;
 

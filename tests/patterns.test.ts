@@ -60,6 +60,32 @@ fixed = [0xC100]
     expect(result.dispatchEntries).toContain("C100");
     expect(result.dispatchEntries).toContain("C120");
   });
+
+  it("emits configured force_interp entries as intentional interpreter wrappers", () => {
+    const rom = new RomBuilder()
+      .org(0xc000)
+      .jsr(0xc100)
+      .rts()
+      .org(0xc100)
+      .lda(0x42)
+      .rts()
+      .vectors(0xc000, 0xc000, 0xc000)
+      .writeTemp("force_interp.nes");
+
+    const result = recompile(rom, `
+[game]
+output_prefix = "test"
+push_all_jsr = true
+
+[force_interp]
+fixed = [0xC100]
+`);
+    expect(result.dispatchEntries).toContain("C100");
+    expect(result.fullC).toContain(
+      "nes_interp_force_bank(0xC100, 0xC100, 0)"
+    );
+    expect(result.fullC).not.toContain("void func_C100_body");
+  });
 });
 
 describe("split dispatch tables", () => {
