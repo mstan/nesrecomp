@@ -48,10 +48,23 @@ void save_ram_set_legacy_path(const char *legacy_abs);
 void save_ram_init(const char *default_title, int battery_bit);
 
 /*
+ * Notify the persistence layer that SRAM was modified by guest execution or a
+ * debug/script write. Calls with unchanged bytes are ignored by callers.
+ */
+void save_ram_mark_dirty(void);
+
+/*
+ * Accept the current g_sram bytes as the persistence baseline without writing.
+ * Used after loading/importing/clearing/restoring state so those operations do
+ * not immediately rewrite the .srm unless the game changes SRAM afterward.
+ */
+void save_ram_sync_snapshot(void);
+
+/*
  * Per-VBlank dirty-checked flush; the runner calls this every frame. Internally
  * throttled by real wall time so turbo/headless execution cannot accelerate
- * disk writes. A flush is attempted at most once every five seconds, and only
- * if persistence is active and g_sram changed since the last flush.
+ * disk writes. Dirty SRAM is flushed after a quiet period, or after a much
+ * longer maximum interval if a game keeps touching SRAM continuously.
  */
 void save_ram_tick(void);
 

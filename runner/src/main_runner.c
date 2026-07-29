@@ -185,11 +185,17 @@ static void zapper_on_demand_render(void) {
  * accumulated wake-up error by restarting its clock every frame. Keep a
  * high-resolution absolute deadline instead; reset it after turbo or a long
  * host stall so normal play resumes without trying to repay stale time. */
+static int s_turbo_hotkey_held = 0;
+
+static int turbo_active(void) {
+    return g_turbo || s_turbo_hotkey_held;
+}
+
 static void pace_ntsc_frame(void) {
     static double next_frame = 0.0;
     const double ntsc_hz = 60.0988;
 
-    if (g_turbo) {
+    if (turbo_active()) {
         next_frame = 0.0;
         return;
     }
@@ -694,9 +700,10 @@ void nes_vblank_callback(void) {
                     (unsigned long long)g_frame_count);
             exit(0);
         }
-        if (ev.type == SDL_KEYDOWN && !ev.key.repeat &&
-            ev.key.keysym.sym == SDLK_TAB)
-            g_turbo ^= 1;
+        if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_TAB)
+            s_turbo_hotkey_held = 1;
+        if (ev.type == SDL_KEYUP && ev.key.keysym.sym == SDLK_TAB)
+            s_turbo_hotkey_held = 0;
         if (ev.type == SDL_KEYDOWN && !ev.key.repeat) {
             int slot = savestate_slot_from_scancode(ev.key.keysym.scancode);
             if (slot &&
@@ -755,7 +762,7 @@ void nes_vblank_callback(void) {
                                 (s1 == 2 ? controller_read_player(1)      : 0));
 
         /* Recording: capture combined input before script override */
-        record_tick(g_frame_count, btn, g_turbo);
+        record_tick(g_frame_count, btn, turbo_active());
 
         /* Script override: if a script is loaded, use its button state */
         int sp = script_get_buttons();
@@ -942,7 +949,7 @@ smoke_skip_input:
 
     /* Generate one frame of audio after NMI (APU registers now up-to-date).
      * Skip in turbo mode — queued audio would pile up faster than it drains. */
-    if (s_audio_dev && !g_turbo && !s_smoke_frames) {
+    if (s_audio_dev && !turbo_active() && !s_smoke_frames) {
         static int s_synth_mode = -2;            /* -2 = not yet queried */
         static uint64_t s_synth_pos = 0;
         if (s_synth_mode == -2) s_synth_mode = recomp_audio_synth_mode();
@@ -1234,7 +1241,7 @@ smoke_skip_input:
     /* Upload texture and present.
      * In turbo mode, only present every 16th frame to avoid vsync blocking
      * on every SDL_RenderPresent call (~6ms each on a 165Hz monitor). */
-    if (!g_turbo || (g_frame_count & 15) == 0) {
+    if (!turbo_active() || (g_frame_count & 15) == 0) {
         /* Present-time palette swap (opt-in, default Raw = passthrough). Raw
          * presents the raw framebuffer untouched => byte-identical to canon. */
         const uint32_t *present = s_framebuf;

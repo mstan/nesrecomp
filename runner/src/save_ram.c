@@ -2,7 +2,7 @@
  * save_ram.c — generic battery-SRAM persistence (see save_ram.h).
  *
  * Mirrors g_sram ($6000-$7FFF, 8 KB) to <exe_dir>/saves/<title>.srm. Loaded on
- * boot, dirty-checked flush on a timer + atexit, import/clear for the launcher.
+ * boot, write-noted/debounced flush + atexit, import/clear for the launcher.
  */
 #include "save_ram.h"
 #include "nes_runtime.h"   /* extern uint8_t g_sram[0x2000]; */
@@ -26,7 +26,8 @@
 #endif
 
 #define SRAM_LEN 0x2000
-#define SRAM_FLUSH_INTERVAL_MS 5000ULL
+#define SRAM_FLUSH_DEBOUNCE_MS     15000ULL
+#define SRAM_FLUSH_MAX_DIRTY_MS   120000ULL
 
 /* ---- state ---- */
 static int      s_active = 0;                /* runtime persistence on (load/flush) */
@@ -36,7 +37,9 @@ static char     s_basename[256] = "";        /* pinned stem (request or sanitize
 static char     s_legacy[1024] = "";         /* optional old save path to migrate */
 static char     s_path[1024] = "";           /* saves/<title>.srm (absolute) */
 static uint8_t  s_snapshot[SRAM_LEN];        /* last-flushed bytes (dirty check) */
-static uint64_t s_next_flush_ms = 0;
+static int      s_dirty = 0;
+static uint64_t s_first_dirty_ms = 0;
+static uint64_t s_last_dirty_ms = 0;
 static int      s_atexit_registered = 0;
 
 static uint64_t monotonic_ms(void) {
@@ -181,18 +184,34 @@ void save_ram_init(const char *default_title, int battery_bit) {
         printf("[SRAM] Loaded %s\n", s_path);
     else
         printf("[SRAM] No save yet (%s) — starting fresh\n", s_path);
-    memcpy(s_snapshot, g_sram, SRAM_LEN);
+    save_ram_sync_snapshot();
 
     if (!s_atexit_registered) { atexit(save_ram_flush); s_atexit_registered = 1; }
-    s_next_flush_ms = monotonic_ms() + SRAM_FLUSH_INTERVAL_MS;
     s_active = 1;
+}
+
+void save_ram_mark_dirty(void) {
+    if (!s_active) return;
+    uint64_t now = monotonic_ms();
+    if (!s_dirty) {
+        s_dirty = 1;
+        s_first_dirty_ms = now;
+    }
+    s_last_dirty_ms = now;
+}
+
+void save_ram_sync_snapshot(void) {
+    memcpy(s_snapshot, g_sram, SRAM_LEN);
+    s_dirty = 0;
+    s_first_dirty_ms = 0;
+    s_last_dirty_ms = 0;
 }
 
 void save_ram_flush(void) {
     if (!s_active) return;
     if (memcmp(g_sram, s_snapshot, SRAM_LEN) == 0) return;   /* not dirty */
     if (write_bytes(s_path, g_sram, SRAM_LEN)) {
-        memcpy(s_snapshot, g_sram, SRAM_LEN);
+        save_ram_sync_snapshot();
         printf("[SRAM] Saved %s\n", s_path);
     } else {
         fprintf(stderr, "[SRAM] Failed to write %s\n", s_path);
@@ -201,9 +220,16 @@ void save_ram_flush(void) {
 
 void save_ram_tick(void) {
     if (!s_active) return;
+    if (!s_dirty) return;
     uint64_t now = monotonic_ms();
-    if (now < s_next_flush_ms) return;
-    s_next_flush_ms = now + SRAM_FLUSH_INTERVAL_MS;
+    if (memcmp(g_sram, s_snapshot, SRAM_LEN) == 0) {
+        save_ram_sync_snapshot();
+        return;
+    }
+    if (now < s_last_dirty_ms + SRAM_FLUSH_DEBOUNCE_MS &&
+        now < s_first_dirty_ms + SRAM_FLUSH_MAX_DIRTY_MS) {
+        return;
+    }
     save_ram_flush();
 }
 
@@ -241,7 +267,7 @@ int save_ram_import(const char *src_path) {
         return 0;
     }
     if (read_file_into(s_path, g_sram, SRAM_LEN))
-        memcpy(s_snapshot, g_sram, SRAM_LEN);
+        save_ram_sync_snapshot();
     printf("[SRAM] Imported %s\n", src_path);
     return 1;
 }
@@ -252,7 +278,7 @@ int save_ram_clear(void) {
     backup_path(bak, sizeof(bak));
     if (save_ram_exists()) { copy_file(s_path, bak); remove(s_path); }
     memset(g_sram, 0xFF, SRAM_LEN);
-    memcpy(s_snapshot, g_sram, SRAM_LEN);
+    save_ram_sync_snapshot();
     printf("[SRAM] Cleared %s\n", s_path);
     return 1;
 }

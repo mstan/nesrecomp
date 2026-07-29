@@ -303,7 +303,7 @@ static void load_ini(const char *path) {
         }
     }
     fclose(f);
-    /* Tab became the global turbo hotkey. Migrate the former P1 Select default
+    /* Tab became the hold-to-turbo hotkey. Migrate the former P1 Select default
      * in memory so existing generated keybinds.ini files adopt Backslash too. */
     if (s_binds.p1.select == SDL_SCANCODE_TAB) {
         s_binds.p1.select = SDL_SCANCODE_BACKSLASH;

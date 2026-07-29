@@ -11,6 +11,7 @@
 #include "nes_runtime.h"
 #include "mapper.h"
 #include "apu.h"
+#include "save_ram.h"
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
@@ -208,6 +209,7 @@ int savestate_load(const char *path) {
     memcpy(g_ppu_oam, ss.ppu_oam, sizeof(ss.ppu_oam));
     memcpy(g_ppu_pal, ss.ppu_pal, sizeof(ss.ppu_pal));
     memcpy(g_ppu_nt,  ss.ppu_nt,  sizeof(ss.ppu_nt));
+    save_ram_sync_snapshot();
 
     /* PPU registers */
     g_ppuctrl     = ss.ppuctrl;

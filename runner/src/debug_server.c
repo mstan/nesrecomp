@@ -21,6 +21,7 @@
 #include "nes_runtime.h"
 #include "input_script.h"
 #include "interp.h"
+#include "save_ram.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -263,8 +264,13 @@ static void write_byte(uint32_t addr, uint8_t val)
         g_ram[addr] = val;
     else if (addr < 0x2000)
         g_ram[addr & 0x07FF] = val;
-    else if (addr >= 0x6000 && addr < 0x8000)
-        g_sram[addr - 0x6000] = val;
+    else if (addr >= 0x6000 && addr < 0x8000) {
+        uint8_t *slot = &g_sram[addr - 0x6000];
+        if (*slot != val) {
+            *slot = val;
+            save_ram_mark_dirty();
+        }
+    }
 }
 
 /* ---- Command handlers ---- */
@@ -1070,6 +1076,7 @@ static void handle_restore_frame(int id, const char *json)
     memcpy(g_ppu_nt,  r->ppu_nt,   sizeof(r->ppu_nt));
     memcpy(g_ppu_pal, r->ppu_pal,  sizeof(r->ppu_pal));
     memcpy(g_ppu_oam, r->oam,      sizeof(r->oam));
+    save_ram_sync_snapshot();
 
     /* Reset frame counter to the restored frame */
     g_frame_count = (uint64_t)f;

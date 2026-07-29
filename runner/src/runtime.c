@@ -11,6 +11,7 @@
 #include "ppu_dot.h"
 #include "interp.h"
 #include "recomp_stack.h"
+#include "save_ram.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -1346,9 +1347,9 @@ static void ws_sidecar_track(uint16_t a, uint8_t val) {
     g_ws_shadow_x16[slot] = wide;
 }
 
-/* ---- WRAM write-attribution tap (always-on, env-gated) ----------------------
- * NESRECOMP_WRITE_WATCH="0x25,0x26,..."  (comma-separated zeropage/RAM addrs,
- * up to 16) logs every write to a watched RAM address with the writer's emitted
+/* ---- RAM/SRAM write-attribution tap (always-on, env-gated) ------------------
+ * NESRECOMP_WRITE_WATCH="0x25,0x6038,..."  (comma-separated CPU RAM/SRAM addrs,
+ * up to 16) logs every write to a watched address with the writer's emitted
  * function name (g_last_recomp_func, requires RECOMP_STACK_TRACKING) and the
  * live GxROM bank.  Output JSONL to NESRECOMP_WRITE_WATCH_FILE (else stderr).
  * Pays one branch (s_ww_state) per RAM write when disabled. */
@@ -1362,8 +1363,11 @@ static void wram_write_watch(uint16_t a, uint8_t oldv, uint8_t val) {
         if (e && *e) {
             char buf[256]; strncpy(buf, e, sizeof buf - 1); buf[sizeof buf - 1] = 0;
             for (char *t = strtok(buf, ","); t && s_ww_n < 16; t = strtok(NULL, ",")) {
-                unsigned x; if (sscanf(t, " 0x%x", &x) == 1 || sscanf(t, " %u", &x) == 1)
-                    s_ww_addrs[s_ww_n++] = (uint16_t)(x & 0x07FF);
+                unsigned x; if (sscanf(t, " 0x%x", &x) == 1 || sscanf(t, " %u", &x) == 1) {
+                    uint16_t a = (uint16_t)x;
+                    if (a < 0x2000) a &= 0x07FF;
+                    s_ww_addrs[s_ww_n++] = a;
+                }
             }
             const char *p = getenv("NESRECOMP_WRITE_WATCH_FILE");
             s_ww_file = (p && *p) ? fopen(p, "w") : NULL;
@@ -1376,10 +1380,28 @@ static void wram_write_watch(uint16_t a, uint8_t oldv, uint8_t val) {
             extern int g_current_bank;
             extern const char *g_last_recomp_func;
             FILE *o = s_ww_file ? s_ww_file : stderr;
-            fprintf(o, "{\"f\":%llu,\"adr\":\"0x%04x\",\"old\":\"0x%02x\",\"val\":\"0x%02x\","
-                       "\"bank\":%d,\"func\":\"%s\"}\n",
-                    (unsigned long long)g_frame_count, a, oldv, val,
-                    g_current_bank, g_last_recomp_func ? g_last_recomp_func : "?");
+            uint16_t script_ip = (uint16_t)g_ram[0x001E] | ((uint16_t)g_ram[0x001F] << 8);
+            extern int g_mmc3_win_bank8k[4];
+            fprintf(o, "{\"f\":%llu,\"pc\":\"0x%04x\",\"pc_valid\":%d,"
+                       "\"adr\":\"0x%04x\",\"old\":\"0x%02x\",\"val\":\"0x%02x\","
+                       "\"bank\":%d,\"A\":\"0x%02x\",\"X\":\"0x%02x\",\"Y\":\"0x%02x\","
+                       "\"S\":\"0x%02x\",\"win8k\":[%d,%d,%d,%d],\"ip\":\"0x%04x\",\"script\":\"",
+                    (unsigned long long)g_frame_count, s_guest_pc, s_guest_pc_valid,
+                    a, oldv, val,
+                    g_current_bank, g_cpu.A, g_cpu.X, g_cpu.Y, g_cpu.S,
+                    g_mmc3_win_bank8k[0], g_mmc3_win_bank8k[1],
+                    g_mmc3_win_bank8k[2], g_mmc3_win_bank8k[3], script_ip);
+            for (int j = 0; j < 12; j++) {
+                if (j > 0) fputc(' ', o);
+                fprintf(o, "%02x", nes_read((uint16_t)(script_ip + j)));
+            }
+            fprintf(o, "\",\"stack\":\"");
+            for (int j = 1; j <= 12; j++) {
+                if (j > 1) fputc(' ', o);
+                fprintf(o, "%02x", g_ram[0x100 + (uint8_t)(g_cpu.S + j)]);
+            }
+            fprintf(o, "\",\"func\":\"%s\"}\n",
+                    g_last_recomp_func ? g_last_recomp_func : "?");
             fflush(o);
             break;
         }
@@ -1464,7 +1486,15 @@ void nes_write(uint16_t addr, uint8_t val) {
         apu_write(addr, val);
         return;
     }
-    if (addr >= 0x6000 && addr <= 0x7FFF) { g_sram[addr - 0x6000] = val; return; }
+    if (addr >= 0x6000 && addr <= 0x7FFF) {
+        uint8_t *slot = &g_sram[addr - 0x6000];
+        if (s_ww_state != 0) wram_write_watch(addr, *slot, val);
+        if (*slot != val) {
+            *slot = val;
+            save_ram_mark_dirty();
+        }
+        return;
+    }
     if (addr >= 0x8000) { mapper_write(addr, val); return; }
 }
 
@@ -2110,6 +2140,47 @@ void runtime_prepare_guest_resume(uint16_t pc, int tick_charged) {
 typedef struct { uint16_t addr; int16_t cb; uint8_t s; uint8_t depth; char kind; uint16_t wb; } DispatchRingEnt;
 static DispatchRingEnt s_dring[DISPATCH_RING_N];
 static uint32_t s_dring_head = 0;
+static int s_dtrace_state = -1;
+static uint16_t s_dtrace_lo = 0;
+static uint16_t s_dtrace_hi = 0xFFFF;
+static FILE *s_dtrace_file = NULL;
+
+static void dispatch_trace_maybe(uint16_t addr, int cb, char kind) {
+    if (s_dtrace_state < 0) {
+        const char *e = getenv("NESRECOMP_DISPATCH_TRACE");
+        if (e && *e) {
+            s_dtrace_state = 1;
+            s_dtrace_lo = (uint16_t)strtoul(e, NULL, 16);
+            const char *c = strchr(e, ':');
+            s_dtrace_hi = c ? (uint16_t)strtoul(c + 1, NULL, 16) : s_dtrace_lo;
+            const char *p = getenv("NESRECOMP_DISPATCH_TRACE_FILE");
+            s_dtrace_file = (p && *p) ? fopen(p, "w") : NULL;
+        } else {
+            s_dtrace_state = 0;
+        }
+    }
+    if (!s_dtrace_state || addr < s_dtrace_lo || addr > s_dtrace_hi) return;
+
+    extern int g_current_bank;
+    extern const char *g_last_recomp_func;
+    extern int g_mmc3_win_bank8k[4];
+    FILE *o = s_dtrace_file ? s_dtrace_file : stderr;
+    uint16_t script_ip = (uint16_t)g_ram[0x001E] | ((uint16_t)g_ram[0x001F] << 8);
+    fprintf(o,
+            "{\"f\":%llu,\"kind\":\"%c\",\"addr\":\"0x%04x\",\"cb\":%d,"
+            "\"pc\":\"0x%04x\",\"pc_valid\":%d,\"bank\":%d,"
+            "\"wb\":\"0x%04x\",\"A\":\"0x%02x\",\"X\":\"0x%02x\","
+            "\"Y\":\"0x%02x\",\"S\":\"0x%02x\","
+            "\"win8k\":[%d,%d,%d,%d],\"ip\":\"0x%04x\","
+            "\"func\":\"%s\"}\n",
+            (unsigned long long)g_frame_count, kind, addr, cb,
+            s_guest_pc, s_guest_pc_valid, g_current_bank,
+            g_code_window_base, g_cpu.A, g_cpu.X, g_cpu.Y, g_cpu.S,
+            g_mmc3_win_bank8k[0], g_mmc3_win_bank8k[1],
+            g_mmc3_win_bank8k[2], g_mmc3_win_bank8k[3],
+            script_ip, g_last_recomp_func ? g_last_recomp_func : "?");
+    fflush(o);
+}
 
 static void dring_push(uint16_t addr, int cb, char kind) {
     DispatchRingEnt *e = &s_dring[s_dring_head % DISPATCH_RING_N];
@@ -2118,6 +2189,7 @@ static void dring_push(uint16_t addr, int cb, char kind) {
     e->kind = kind;
     e->wb = g_code_window_base;
     s_dring_head++;
+    dispatch_trace_maybe(addr, cb, kind);
 }
 
 /* Context markers from the runner (NMI enter/exit etc.) so the dispatch ring

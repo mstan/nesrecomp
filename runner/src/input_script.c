@@ -4,6 +4,7 @@
 #include "input_script.h"
 #include "nes_runtime.h"
 #include "savestate.h"
+#include "save_ram.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -271,7 +272,10 @@ void script_tick(uint64_t frame, const uint8_t *ram) {
                 printf("[Script] WRITE_RAM8 $%03X=%02X\n", c->iarg, c->barg);
                 break;
             case CMD_WRITE_SRAM8:
-                g_sram[c->iarg & 0x1FFF] = c->barg;
+                if (g_sram[c->iarg & 0x1FFF] != c->barg) {
+                    g_sram[c->iarg & 0x1FFF] = c->barg;
+                    save_ram_mark_dirty();
+                }
                 printf("[Script] WRITE_SRAM8 $%04X=%02X\n", 0x6000 + c->iarg, c->barg);
                 break;
             case CMD_DUMP_RAM: {
