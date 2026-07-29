@@ -1,4 +1,4 @@
-# Accuracy program — phased plan (Option B → Path-C oracle → dot-accurate PPU)
+# Accuracy program — phased plan (Option B → external oracle → dot-accurate PPU)
 
 > Created 2026-06-28. Bail-safe roadmap: **each phase ends with a git checkpoint
 > commit on `accuracy/nes-burndown` (the `_acc/nesrecomp` engine repo)** so we can
@@ -8,9 +8,8 @@
 >
 > Why this order: the input/desync blocker is already SOLVED (RNG-seed freeze), so none
 > of these are input-gated — they're effort-gated engine work. Option B is the most
-> self-contained; Path-C is a prerequisite for cleanly validating the dot-PPU (it
-> provides in-process cycle + PPU-memory the libretro nesref can't); dot-PPU is the
-> biggest rewrite and goes last.
+> self-contained; oracle validation precedes the dot-PPU; dot-PPU is the biggest
+> rewrite and goes last.
 
 ## Phase 0 — Baseline checkpoint (do FIRST)
 
@@ -52,46 +51,18 @@ timbre L1 worsens > ~0.12 or onset match drops < ~0.9 and can't be recovered in-
 `git reset --hard` to the Phase-0 checkpoint. **Checkpoint:** commit `apu.c`/`apu.h`/
 `main_runner.c` + an `AUDIO_SLICE_004.md` writeup once verified.
 
-## Phase 2 — Path-C: in-process source-core oracle (cycle + PPU-mem)
+## Phase 2 — External Mesen oracle (cycle + PPU-mem)
 
-**Goal.** An in-process reference core exposing guest CYCLES and PPU-internal memory
-(VRAM/OAM/palette) — what the libretro nesref can't. See `_acc/audio_slice/PATH_C_SOURCE_CORE_ORACLE.md`.
-
-**Two-pronged core strategy (research FIRST, then pick):**
-- **2a. Find a small accurate core.** Survey for a compact, embeddable NES core that is
-  cycle-accurate (or close) AND can expose per-instruction cycles + PPU memory cheaply.
-  Candidates to evaluate (accuracy + embeddability + license): tetanes, plastic, other
-  Rust/C cores; check vs the known-accurate set (Mesen/puNES/Nintendulator are too big).
-  If one qualifies → dual-build it in (mdref/clownmdemu pattern).
-- **2b. Augment a modifiable core ("construct it out").** If no small core is accurate
-  enough: take a MODIFIABLE base (Nestopia is already in-tree via `nestopia-core` +
-  `nestopia_bridge.cpp`, C++, hackable) and PATCH IN cycle accuracy by cross-referencing
-  the timing from a large accurate C++ reference (MesenCE `Core/NES` — `NesCpu` per-cycle
-  step, `NesPpu` dot timing, A12). Instrument: a per-instruction/per-cycle counter +
-  PPU-memory accessors. Validate the augmented timing against MesenCE incrementally.
-
-**Bridge.** Mirror `nestopia_bridge.cpp`: `init/run_frame/get_ram/get_vram/get_oam/
-get_palette/get_cycle`; populate a shared `FrameRecord` (mirror mdref `frame_snapshots.c`)
-for a unified `divergence_diff` (RAM + PPU-mem + cycle in one surface).
-
-**Validation.** The new bridge MUST agree with the libretro nesref on RAM (the 598=598-style
-cross-check) before trusting its cycle/PPU-mem. Then: cycle diff without the APU-anchor
-hack; PPU-memory (nametable/OAM/palette) byte diff vs the recomp (`g_ppu*`).
-
-**Risk / bail.** 2b's "construct accuracy out" could stall if the base core's timing is too
-far off to patch tractably. BAIL: if after a bounded research+spike the augmented core can't
-reach useful cycle agreement vs MesenCE → fall back to MesenCE-Lua for cycle/PPU-mem (status
-quo) and document. **Checkpoint:** commit the bridge + any engine-side `divergence_diff`
-hooks once it agrees with nesref on RAM.
+The proposed embedded source-core path was evaluated and dropped. The standalone
+`nesref`/Mesen tooling now supplies RAM, cycle, PPU-memory, video, and audio comparison
+without linking an emulator into game builds. See `COSIM.md` for the maintained workflow.
 
 ## STATUS (2026-06-29)
 - **Phase 0 DONE** — baseline commit `a8e5141` (IRQ hook + cycle-driven frame IRQ + open-bus).
 - **Phase 1 DONE** — Option B sample-accurate APU, commit `6d3ea43` (audio no-regression, self-diff 0.057). See AUDIO_SLICE_004.md.
-- **Phase 2 DONE / RESCOPED** — path-C source-embed DROPPED. External MesenCE-Lua serves the two
-  things nesref can't: cycle (`cpu.cycleCount`) + PPU memory (`emu.read`+nesSpriteRam/nesPaletteRam/
-  nesNametableRam/nesPpuMemory). #3 cycle cross-title done; #4 PPU-mem done (SMB 99.84%), commit
-  `da0459a`. See PATH_C_SOURCE_CORE_ORACLE.md (decided against), `runtime.c:nes_ppumem_trace_frame`,
-  `_acc/audio_slice/mesen_ppumem.lua`.
+- **Phase 2 DONE / RESCOPED** — path-C source embedding was dropped. Standalone
+  `nesref`/Mesen supplies cycle and PPU-memory traces. Cross-title cycle work and SMB
+  PPU-memory comparison are complete; see `COSIM.md`.
 - **Phase 3 — Increment 1 DONE (per-scanline parity)** — cycle-driven per-scanline PPU
   behind `NESRECOMP_DOT_PPU` (default OFF, byte-identical when off). New `runner/src/ppu_dot.c`
   + `runner/include/ppu_dot.h`; hooks in `runtime.c` (per-instruction `ppu_dot_advance`, $2002

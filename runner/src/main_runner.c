@@ -125,6 +125,15 @@ static void run_guest_execution(void) {
 }
 static int         s_smoke_hash_frames[SMOKE_MAX_HASHES];
 static int         s_smoke_hash_count = 0;
+#ifdef NESRECOMP_NET
+static jmp_buf s_netplay_return;
+static int s_netplay_return_ready;
+static void netplay_return_to_lobby(const char *why) {
+    fprintf(stderr, "[Netplay] Returning to lobby: %s\n", why ? why : "match ended");
+    if (s_netplay_return_ready) longjmp(s_netplay_return, 1);
+    exit(0);
+}
+#endif
 
 /* ---- SDL state (file-level so nes_vblank_callback can access) ---- */
 static SDL_Window        *s_window    = NULL;
@@ -663,6 +672,10 @@ void nes_vblank_callback(void) {
     nes_fallback_telemetry_frame_boundary();
     if (s_cb_count == 0) { /* debug_log_open(); */ }
     s_cb_count++;
+#ifdef NESRECOMP_NET
+    if (runtime_get_vblank_depth() <= 1 && nes_netplay_active())
+        nes_netplay_finish_frame();
+#endif
 
     /* Dot-PPU: complete the just-finished frame and publish it to the
      * presentation framebuffer, then arm the next frame's visible region.
@@ -875,9 +888,10 @@ smoke_skip_input:
             g_ram[0x20] = 1;
         }
     } else {
-        /* Top-level frame boundary (or NMI-disabled frame): push stack
-         * frame only if NMI is actually going to run, then delegate to
-         * game_run_nmi which decides whether to execute func_NMI. */
+        /* Top-level frame boundary (or NMI-disabled frame): delegate to
+         * game_run_nmi which decides whether to execute func_NMI. The
+         * generated func_NMI simulates the hardware stack frame so direct
+         * callers (verify mode, game overrides) get the same semantics. */
         int nmi_will_run = (g_ppuctrl & 0x80) != 0;
         uint8_t s_pre_nmi = g_cpu.S;
         /* Save all CPU registers.  On real 6502, the NMI handler's
@@ -1141,6 +1155,8 @@ smoke_skip_input:
         }
         g_frame_count++;
         if ((int)g_frame_count >= s_smoke_frames) {
+            extern int g_nes_expected_exit;
+            g_nes_expected_exit = 1;
             smoke_write_results();
             nesrecomp_expect_process_exit();
             exit(0);
@@ -1278,12 +1294,12 @@ smoke_skip_input:
     finish_frame_callback();
 }
 
-/* ---- Public render function for emulated mode ---- */
+/* ---- Public render function for an external emulator mode ---- */
 /* Accepts a 256x240 ARGB8888 buffer and presents it to the SDL window.
- * Used by the emulated mode frame loop (Nestopia drives rendering). */
+ * Used by game-specific emulator-backed frame loops. */
 void runner_present_framebuf(const uint32_t *argb_buf) {
     if (!s_texture || !s_renderer || !argb_buf) return;
-    /* Copy to s_framebuf so TCP screenshot works in emulated mode */
+    /* Copy to s_framebuf so TCP screenshots see the presented frame. */
     memcpy(s_framebuf, argb_buf, (size_t)g_render_width * 240 * 4);
     SDL_UpdateTexture(s_texture, NULL, argb_buf, g_render_width * 4);
     SDL_RenderClear(s_renderer);
@@ -1374,7 +1390,7 @@ uint8_t *runner_get_prg_bank_rw(int bank_num) {
  * nesrecomp_runner_run — main runner entry point, called by launcher.c after
  * ROM discovery and CRC verification. argv[1] is guaranteed to be the ROM path.
  */
-void nesrecomp_runner_run(int argc, char *argv[]) {
+int nesrecomp_runner_run(int argc, char *argv[]) {
 
     /* Parse optional flags */
     for (int i = 2; i < argc; i++) {
@@ -1402,10 +1418,23 @@ void nesrecomp_runner_run(int argc, char *argv[]) {
     extern const char *g_rom_path_for_extras;
     g_rom_path_for_extras = argv[1];
 
+    runtime_session_reset();
     runtime_init();
     keybinds_init(argv[0]);
     savestate_slots_init();
     game_on_init();
+
+#ifdef NESRECOMP_NET
+    {
+        NesNetplayConfig net;
+        if (!nes_netplay_take_pending_config(&net)) nes_netplay_config_defaults(&net);
+        nes_netplay_apply_env(&net);
+        if (net.enabled && nes_netplay_start(&net) != 0) {
+            fprintf(stderr, "[Netplay] Could not start the requested session.\n");
+            return 1;
+        }
+    }
+#endif
 
     /* SRAM persistence (saves/<title>.srm <-> g_sram). Auto-enabled for battery
      * games via the iNES bit; synthetic-SRAM games opt in from game_on_init()
@@ -1646,9 +1675,26 @@ void nesrecomp_runner_run(int argc, char *argv[]) {
     run_guest_execution();
 
     /* Unreachable for most games, but clean up anyway */
-    SDL_DestroyTexture(s_texture);
-    SDL_DestroyRenderer(s_renderer);
-    SDL_DestroyWindow(s_window);
+    if (s_audio_dev) { SDL_CloseAudioDevice(s_audio_dev); s_audio_dev = 0; }
+    if (s_bridge_ready) { rab_free(&s_bridge); s_bridge_ready = 0; }
+    if (s_audio_mtx) { SDL_DestroyMutex(s_audio_mtx); s_audio_mtx = NULL; }
+    save_ram_flush();
+    debug_server_shutdown();
+    controller_shutdown();
+    if (s_hd_texture) { SDL_DestroyTexture(s_hd_texture); s_hd_texture = NULL; }
+    free(s_hd_buf); s_hd_buf = NULL; hdpack_unload();
+    if (s_texture) { SDL_DestroyTexture(s_texture); s_texture = NULL; }
+    if (s_renderer) { SDL_DestroyRenderer(s_renderer); s_renderer = NULL; }
+    if (s_window) { SDL_DestroyWindow(s_window); s_window = NULL; }
+    if (s_dbg_texture) { SDL_DestroyTexture(s_dbg_texture); s_dbg_texture = NULL; }
+    if (s_dbg_renderer) { SDL_DestroyRenderer(s_dbg_renderer); s_dbg_renderer = NULL; }
+    if (s_dbg_window) { SDL_DestroyWindow(s_dbg_window); s_dbg_window = NULL; }
+    if (s_watch_renderer) { SDL_DestroyRenderer(s_watch_renderer); s_watch_renderer = NULL; }
+    if (s_watch_window) { SDL_DestroyWindow(s_watch_window); s_watch_window = NULL; }
     SDL_Quit();
-    free(s_prg_data);
+    free(s_prg_data); s_prg_data = NULL;
+#ifdef NESRECOMP_NET
+    if (nes_netplay_active()) { nes_netplay_shutdown(); return 1; }
+#endif
+    return 0;
 }

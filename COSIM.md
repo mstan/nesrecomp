@@ -88,7 +88,7 @@ Build a game against the co-sim engine (msys cmake is broken — use the VS dev
 shell + VS-bundled cmake; see the build recipe in `CLAUDE.md`):
 
 ```
-cmake -S . -B build_cosim -DENABLE_NESTOPIA_ORACLE=OFF   # first time
+cmake -S . -B build_cosim   # first time
 cmake --build build_cosim --config Release
 ```
 

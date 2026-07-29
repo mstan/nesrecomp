@@ -366,6 +366,200 @@ describe("code generation", () => {
     expect(result.fullC).toContain("func_8100_b2");
   });
 
+  it("Mapper 40 normalizes fixed and switchable 8KB CPU windows", () => {
+    const builder = new RomBuilder({ mapper: 40, prgBanks: 4 })
+      .bank8(7)
+      .org(0xa100)
+      .jsr(0x6000)
+      .jsr(0xc200)
+      .rts()
+      .bank8(6)
+      .org(0x8000)
+      .rts();
+
+    for (let bank8 = 0; bank8 < 8; bank8++) {
+      builder
+        .bank8(bank8)
+        .org((bank8 & 1) ? 0xa200 : 0x8200)
+        .rts();
+    }
+
+    const rom = builder
+      .vectors(0xe100, 0xe100, 0xe100)
+      .writeTemp("mapper40_windows.nes");
+    const result = recompile(
+      rom,
+      `[game]\noutput_prefix = "mapper40-windows"\npush_all_jsr = true\n`
+    );
+
+    expect(result.fullC).toContain("void func_A100_b3(void)");
+    expect(result.fullC).toContain("void func_8000_b3(void)");
+    expect(result.fullC).toContain("func_A100_b3()");
+    expect(result.fullC).toContain("nes_dispatch_call(0x6000");
+    expect(result.fullC).toContain("g_code_window_base | 0x0102");
+    expect(result.dispatchEntries).toContain("8200");
+    expect(result.dispatchEntries).toContain("A200");
+    expect(result.dispatchC).toContain("g_mapper40_bank_c000_8k");
+    expect(result.dispatchC).toContain("if (addr < 0x6000)");
+  });
+
+  it("Mapper 40 discovers per-bank indirect vector targets", () => {
+    const rom = new RomBuilder({ mapper: 40, prgBanks: 4 })
+      .bank8(0)
+      .org(0x9ffa)
+      .word(0x60a0)
+      .word(0x60a0)
+      .word(0x60a0)
+      .bank8(6)
+      .org(0x80a0)
+      .rti()
+      .bank8(7)
+      .org(0xa100)
+      .rti()
+      .vectors(0xe100, 0xe100, 0xe100)
+      .writeTemp("mapper40_bank_vectors.nes");
+
+    const result = recompile(
+      rom,
+      `[game]\noutput_prefix = "mapper40-bank-vectors"\npush_all_jsr = true\n`
+    );
+
+    expect(result.fullC).toContain("void func_80A0_b3(void)");
+    expect(result.dispatchC).toMatch(
+      /case 0x80A0:\r?\n\s*func_80A0_b3\(\); break;/
+    );
+  });
+
+  it("Mapper 40 interprets instructions that straddle an 8KB PRG boundary", () => {
+    const rom = new RomBuilder({ mapper: 40, prgBanks: 4 })
+      .bank8(7)
+      .org(0xa100)
+      .jmp(0xbffd)
+      .bank8(5)
+      .org(0xbffd)
+      .lda(0x01)
+      .emit([0x8d])
+      .bank8(0)
+      .org(0x8000)
+      .emit([0x70, 0x07])
+      .rts()
+      .bank8(7)
+      .vectors(0xe100, 0xe100, 0xe100)
+      .writeTemp("mapper40_boundary_fetch.nes");
+
+    const result = recompile(
+      rom,
+      `[game]\noutput_prefix = "mapper40-boundary"\npush_all_jsr = true\n`
+    );
+
+    expect(result.fullC).toContain("label_BFFF:");
+    expect(result.fullC).toContain(
+      "nes_interp_step_tail((uint16_t)(g_code_window_base | 0x1FFF), 2)"
+    );
+    expect(result.fullC).not.toContain("nes_write(0x5FAD");
+    expect(result.dispatchC).toMatch(/case 0x8002:[\s\S]*func_8002_b0/);
+  });
+
+  it("Mapper 40 keeps generated 8KB boundary entries out of cross-window bodies", () => {
+    // $9FFF is the end of the fixed $8000 window and $A000 begins the
+    // separate fixed $A000 window. The fallthrough discovers $A000, but it
+    // cannot be a secondary entry of the $9FFF body: codegen tails through
+    // the live window instead of emitting label_A000 in that body.
+    const rom = new RomBuilder({ mapper: 40, prgBanks: 4 })
+      .bank8(7)
+      .org(0xa100)
+      .jmp(0x9fff)
+      .bank8(4)
+      .org(0x9fff)
+      .nop()
+      .bank8(5)
+      .org(0xa000)
+      .rts()
+      .bank8(7)
+      .vectors(0xe100, 0xe100, 0xe100)
+      .writeTemp("mapper40_boundary_entry_ownership.nes");
+
+    const result = recompile(
+      rom,
+      `[game]\noutput_prefix = "mapper40-boundary-owner"\npush_all_jsr = true\n`
+    );
+
+    expect(result.fullC).toContain("void func_9FFF_b2(void)");
+    expect(result.fullC).toContain("void func_A000_b2(void)");
+    expect(result.fullC).not.toMatch(
+      /void func_A000_b2\(void\) \{[\s\S]*?func_9FFF_b2_body\(1\)/
+    );
+    expect(result.fullC).not.toContain("case 1: goto label_A000;");
+  });
+
+  it("Mapper 40 maps relative branches across fixed 8KB CPU windows", () => {
+    const rom = new RomBuilder({ mapper: 40, prgBanks: 4 })
+      .bank8(7)
+      .org(0xa100)
+      .jmp(0x7ff9)
+      .bank8(6)
+      .org(0x9ff9)
+      .emit([0xf0, 0x11, 0x60]) // CPU $7FF9: BEQ $800C; RTS
+      .bank8(4)
+      .org(0x800c)
+      .rts()
+      .bank8(7)
+      .vectors(0xe100, 0xe100, 0xe100)
+      .writeTemp("mapper40_relative_boundary.nes");
+
+    const result = recompile(
+      rom,
+      `[game]\noutput_prefix = "mapper40-relative-boundary"\npush_all_jsr = true\n`
+    );
+
+    expect(result.fullC).toContain("void func_9FF9_b3(void)");
+    expect(result.fullC).toContain("void func_800C_b2(void)");
+    expect(result.fullC).toContain("g_code_window_base + 0x200C");
+    expect(result.fullC).not.toContain("g_code_window_base | 0x000C");
+    expect(result.dispatchC).toMatch(/case 0x800C:[\s\S]*func_800C_b2/);
+  });
+
+  it("Mapper 40 normalizes inline-dispatch table targets", () => {
+    const rom = new RomBuilder({ mapper: 40, prgBanks: 4 })
+      .bank8(7)
+      .org(0xa100)
+      .lda(0x00)
+      .jsr(0x6c7d)
+      .word(0xbfb0)
+      .word(0x0000)
+      .rts()
+      .bank8(6)
+      .org(0x8c7d)
+      .emit([
+        0x0a, 0xa8, 0x68, 0x85, 0x04, 0x68, 0x85, 0x05,
+        0xc8, 0xb1, 0x04, 0x85, 0x06, 0xc8, 0xb1, 0x04,
+        0x85, 0x07, 0x6c, 0x06, 0x00
+      ])
+      .bank8(5)
+      .org(0xbfb0)
+      .rts()
+      .bank8(7)
+      .vectors(0xe100, 0xe100, 0xe100)
+      .writeTemp("mapper40_inline_dispatch.nes");
+
+    const result = recompile(
+      rom,
+      `[game]\noutput_prefix = "mapper40-inline"\npush_all_jsr = true\n\n[[inline_dispatch]]\naddr = 0x6C7D\n`
+    );
+
+    expect(result.fullC).toContain("void func_BFB0_b2(void)");
+    expect(result.fullC).toContain("inline_dispatch $6C7D: 1 entries");
+    expect(result.fullC).toContain(
+      "uint16_t _inline_ret = (uint16_t)((g_code_window_base | 0x0102) + 2)"
+    );
+    expect(result.fullC).toContain("nes_write(0x0004, (uint8_t)_inline_ret)");
+    expect(result.fullC).toContain(
+      "nes_write(0x0005, (uint8_t)(_inline_ret >> 8))"
+    );
+    expect(result.fullC).toContain("call_by_address_tail(0xBFB0");
+    expect(result.fullC).not.toContain("void func_8C7D_b3(void)");
+  });
+
   it("MMC3: cross-bank JSR to $C000 region in mode 1 resolved via R6", () => {
     // 4-bank MMC3 ROM. In mode 1 the $C000-$DFFF region is R6 (switchable),
     // which is the bug class that caused MM3's $DBE1 miss. Test that when a
@@ -391,16 +585,87 @@ describe("code generation", () => {
       .writeTemp("mmc3_jsr_c000_mode1.nes");
 
     const result = recompile(rom);
-    // Target address is $C100. In mode 1 with R6=2 the resolver adds $C100
-    // at bank 2. The finder log proves discovery even if the codegen later
-    // filters/remaps the entry (codegen handling of mode-1 $C000+ addresses
-    // from switchable banks is orthogonal to this spike).
-    //
-    // Without the cross-bank fix, the finder would not mention $C100 at
-    // bank 2 at all.
-    expect(result.output).toMatch(/\$C100 bank=2/);
+    // CPU $C100 in an even R6 bank is generated at that bank's natural $8100
+    // identity, and must be publicly dispatchable there.
+    expect(result.fullC).toContain("func_8100_b2");
+    expect(result.dispatchC).toContain("case 0x8100:");
     // At least one bank switch should have been detected during the walk.
     expect(result.output).toMatch(/Bank switches detected: [1-9]/);
+  });
+
+  it("MMC3: unknown mode-1 window fans out generated R6 identities", () => {
+    const rom = new RomBuilder({ mapper: 4, prgBanks: 4 })
+      .bank(3)
+      .org(0xc000)
+      .jsr(0x8000)
+      .rts()
+      .bank(0)
+      .org(0x8000)
+      .jsr(0xc100)
+      .rts()
+      .org(0x8100)
+      .lda(0x55)
+      .rts()
+      .vectors(0xc000, 0xc000, 0xc000)
+      .writeTemp("mmc3_unknown_mode1_fanout.nes");
+
+    const result = recompile(rom);
+    expect(result.fullC).toContain("func_8100_b0");
+    expect(result.dispatchC).toContain("case 0x8100:");
+  });
+
+  it("dispatches switchable MMC3 absolute JMPs through the live window", () => {
+    const rom = new RomBuilder({ mapper: 4, prgBanks: 4 })
+      .bank(0)
+      .org(0x8ce8)
+      .emit(new Array(0x18).fill(0xea))
+      .jmp(0x8ce8)
+      .bank(3)
+      .org(0xc000)
+      .jsr(0x8ce8)
+      .rts()
+      .vectors(0xc000, 0xc000, 0xc000)
+      .writeTemp("mmc3_relocated_absolute_jmp.nes");
+
+    const result = recompile(rom);
+    expect(result.fullC).toMatch(
+      /\$8D00: 4C \*\/[^\n]*call_by_address_tail\(0x8CE8, 0\); return;/
+    );
+  });
+
+  it("scopes mapper-4 vector handlers to their execution windows", () => {
+    const rom = new RomBuilder({ mapper: 4, prgBanks: 4 })
+      .bank(3)
+      .org(0xc000)
+      .rts()
+      .org(0xe080)
+      .jsr(0xe0a0)
+      .rti()
+      .org(0xe0a0)
+      .rts()
+      .org(0xe100)
+      .rti()
+      .vectors(0xe080, 0xc000, 0xe100)
+      .writeTemp("mmc3_vector_windows.nes");
+
+    const result = recompile(rom);
+    expect(result.fullC).toContain(
+      "void func_RESET(void) { uint16_t _saved_wb = g_code_window_base; " +
+      "g_code_window_base = 0xC000; func_C000(); g_code_window_base = _saved_wb; }"
+    );
+    expect(result.fullC).toMatch(
+      /g_code_window_base = 0xE000;\r?\n\s*func_E080\(\);/
+    );
+    expect(result.fullC).toContain(
+      "void func_IRQ(void)   { uint16_t _saved_wb = g_code_window_base; " +
+      "g_code_window_base = 0xE000; func_E100(); g_code_window_base = _saved_wb; }"
+    );
+
+    const restore = result.fullC.indexOf("g_code_window_base = _nmi_saved_wb;");
+    const postNmi = result.fullC.indexOf("runtime_begin_post_nmi();");
+    expect(result.fullC).toContain("runtime_note_interrupt_entry();");
+    expect(restore).toBeGreaterThan(-1);
+    expect(postNmi).toBeGreaterThan(restore);
   });
 
   it("emits bare RTI for non-NMI functions (no over-firing)", () => {

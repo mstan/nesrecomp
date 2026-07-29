@@ -94,6 +94,29 @@ const uint8_t *rom_bank_ptr(const NESRom *rom, int bank) {
     return rom->prg_data + (size_t)bank * PRG_BANK_SIZE;
 }
 
+bool rom_mapper40_cpu_to_generated(const NESRom *rom, uint16_t cpu_addr,
+                                   int selected_8k, uint16_t *out_addr,
+                                   int *out_bank) {
+    if (!rom_mapper40(rom) || cpu_addr < 0x6000) return false;
+
+    int bank8;
+    if (cpu_addr < 0x8000)      bank8 = 6;
+    else if (cpu_addr < 0xA000) bank8 = 4;
+    else if (cpu_addr < 0xC000) bank8 = 5;
+    else if (cpu_addr < 0xE000) bank8 = selected_8k;
+    else                        bank8 = 7;
+
+    int total8 = rom->prg_banks * 2;
+    if (bank8 < 0 || total8 <= 0) return false;
+    bank8 %= total8;
+    if (out_bank) *out_bank = bank8 >> 1;
+    if (out_addr) {
+        *out_addr = (uint16_t)(0x8000 + ((bank8 & 1) ? 0x2000 : 0)
+                             + (cpu_addr & 0x1FFF));
+    }
+    return true;
+}
+
 uint8_t rom_read(const NESRom *rom, int switchable_bank, uint16_t addr) {
     if (addr >= 0xC000) {
         int bank;

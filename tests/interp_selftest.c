@@ -58,6 +58,7 @@ uint16_t nes_read16_jmpbug(uint16_t a) {
     return (uint16_t)(nes_read(a) | (nes_read(hi) << 8));
 }
 uint8_t mapper_peek_prg(uint16_t a) { return g_ram[a & 0x07FF]; } /* unused by RAM-resident tests */
+int mapper_get_type(void) { return 0; }
 void maybe_trigger_vblank(int c) { (void)c; }
 void nes_cpu_instruction_boundary(uint16_t pc, int cycles) { (void)pc; (void)cycles; }
 int  game_dispatch_override(uint16_t a) { (void)a; return 0; }
@@ -116,6 +117,10 @@ int call_by_address(uint16_t a) {
         return 1;
     }
     return nes_interp_dispatch(a);
+}
+int call_by_address_tail(uint16_t a, int caller_bank) {
+    (void)caller_bank;
+    return call_by_address(a);
 }
 
 /* ---- Test scaffolding ---- */

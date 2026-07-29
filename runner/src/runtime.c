@@ -842,9 +842,10 @@ void nes_cosim_emit_boundary(void) {
  * IRQ-disable clears the DMC flag).  We re-poll every instruction, so a
  * still-asserted line re-fires after RTI — matching hardware IRQ behaviour.
  *
- * Gates: I-flag clear (IRQ is maskable, unlike NMI); no re-entry; and only at
- * top level (s_vblank_depth == 0) so an IRQ never preempts the batched NMI
- * frame driver — sub-frame NMI/IRQ interleave is the deferred Axis 2 work. */
+ * Gates: I-flag clear (IRQ is maskable, unlike NMI) and no re-entry. Most
+ * mappers defer IRQs while the batched NMI frame driver is active. Mapper 40
+ * is the exception: its NMI deliberately enables the one-shot scanline IRQ
+ * and spin-waits for the IRQ handler to finish the status-bar split. */
 static int s_in_irq = 0;
 
 static uint16_t irq_last_consumed_rts_target(void) {
@@ -994,13 +995,15 @@ void maybe_trigger_vblank(int cycles) {
      * ~513 stolen cycles too, so clock the APU through them like the DMC steal. */
     int oam_stall = runtime_take_oam_dma_stall();
     if (oam_stall) apu_clock_cycles(oam_stall);
+    uint32_t total_cycles = ((cycles > 0) ? (uint32_t)cycles : 1)
+                          + (uint32_t)dmc_stall + (uint32_t)oam_stall;
+    mapper_clock_cpu((int)total_cycles);
     maybe_deliver_irq();
 
     /* Count cycles — always, even during NMI handler execution. Stolen DMC and
      * OAM DMA cycles are counted here so the frame advances as on hardware. */
     {
-        uint32_t _c = ((cycles > 0) ? (uint32_t)cycles : 1)
-                    + (uint32_t)dmc_stall + (uint32_t)oam_stall;
+        uint32_t _c = total_cycles;
         s_ops_count       += _c;
         g_nes_cycles      += _c;   /* monotonic; never reset (co-sim ruler) */
         s_dbg_cycles_ticked += _c;
@@ -1024,6 +1027,19 @@ void maybe_trigger_vblank(int cycles) {
                     (unsigned long long)g_frame_count, s_vblank_depth,
                     (unsigned)s_ops_count, (unsigned)s_frame_budget,
                     s_vblank_pending, (unsigned long long)s_dbg_max_depth_skips);
+#ifdef RECOMP_STACK_TRACKING
+            {
+                extern const char *g_recomp_stack[];
+                extern int g_recomp_stack_top;
+                extern const char *g_last_recomp_func;
+                fprintf(stderr, "[HANG] active=%s recomp_depth=%d\n",
+                        g_last_recomp_func ? g_last_recomp_func : "?",
+                        g_recomp_stack_top);
+                for (int i = g_recomp_stack_top - 1; i >= 0; i--)
+                    fprintf(stderr, "  [%d] %s\n", i,
+                            g_recomp_stack[i] ? g_recomp_stack[i] : "?");
+            }
+#endif
             nes_dump_dispatch_ring();
             /* Post-mortem memory image: 2KB WRAM + 8KB SRAM. */
             {
@@ -1293,7 +1309,10 @@ static uint8_t nes_read_inner(uint16_t addr) {
         }
         return s_open_bus;   /* write-only APU regs ($4000-$4013,$4015w) read open bus */
     }
-    if (addr >= 0x6000 && addr <= 0x7FFF) return g_sram[addr - 0x6000];
+    if (addr >= 0x6000 && addr <= 0x7FFF) {
+        if (mapper_get_type() == 40) return mapper_peek_prg(addr);
+        return g_sram[addr - 0x6000];
+    }
     if (addr >= 0x8000 && addr <= 0xBFFF) {
         const uint8_t *bank = mapper_get_switchable_bank();
         return bank ? bank[addr - 0x8000] : 0xFF;
@@ -1325,7 +1344,10 @@ uint8_t apu_dmc_read(uint16_t addr) {
         const uint8_t *bank = mapper_get_switchable_bank();
         return bank ? bank[addr - 0x8000] : 0xFF;
     }
-    if (addr >= 0x6000) return g_sram[addr - 0x6000];
+    if (addr >= 0x6000) {
+        if (mapper_get_type() == 40) return mapper_peek_prg(addr);
+        return g_sram[addr - 0x6000];
+    }
     return 0xFF;
 }
 
@@ -1409,6 +1431,32 @@ static void wram_write_watch(uint16_t a, uint8_t oldv, uint8_t val) {
             break;
         }
     }
+}
+
+void nes_trace_sram_fetch(uint16_t addr, uint8_t val) {
+    static int state = -1;
+    static uint16_t lo = 0x6000;
+    static uint16_t hi = 0x7FFF;
+    static int lines = 0;
+    if (state < 0) {
+        const char *e = getenv("NESRECOMP_SRAM_CODE_TRACE");
+        if (e && *e) {
+            state = 1;
+            unsigned a = 0, b = 0;
+            if (sscanf(e, "%x:%x", &a, &b) == 2) {
+                lo = (uint16_t)a;
+                hi = (uint16_t)b;
+            }
+        } else {
+            state = 0;
+        }
+    }
+    if (!state || addr < lo || addr > hi || lines >= 600)
+        return;
+    fprintf(stderr, "[sramtrace] R $%04X=%02X frame=%llu S=%02X bank=%d\n",
+            addr, val, (unsigned long long)g_frame_count, g_cpu.S, g_current_bank);
+    fflush(stderr);
+    lines++;
 }
 
 void nes_write(uint16_t addr, uint8_t val) {
@@ -2615,7 +2663,8 @@ void nes_write_runtime_fault(const char *reason) {
 int nes_dispatch_call(uint16_t addr, int caller_bank) {
     dring_push(addr, caller_bank, 'C');
     uint16_t save_wb = g_code_window_base;
-    if (addr >= 0x8000) g_code_window_base = addr & 0xE000;
+    if (addr >= 0x8000 || (mapper_get_type() == 40 && addr >= 0x6000))
+        g_code_window_base = addr & 0xE000;
     g_nes_dispatch_depth++;
     int r = call_by_address_cb(addr, caller_bank);
     g_nes_dispatch_depth--;
@@ -2699,9 +2748,31 @@ int nes_jsr_stack_ok_after_call(uint8_t before_s, uint64_t before_interrupt_epoc
 }
 
 #define TAIL_ACTIVE_MAX 64
-static struct { uint16_t addr; uint8_t s; } s_tail_active[TAIL_ACTIVE_MAX];
+static struct {
+    uint16_t addr;
+    uint8_t s;
+    uint64_t interrupt_epoch;
+} s_tail_active[TAIL_ACTIVE_MAX];
 static int s_tail_active_n = 0;
 static int s_tail_pending_slot = -1;
+
+static int tail_crosses_interrupt(int slot) {
+    return s_tail_active[slot].interrupt_epoch < runtime_get_interrupt_epoch() &&
+           (s_vblank_depth > 0 || s_in_irq);
+}
+
+static int tail_matches_active(int slot, uint16_t addr) {
+    if (s_tail_active[slot].addr != addr) return 0;
+    if (s_tail_active[slot].s == g_cpu.S) return 1;
+
+    /* A handler may JMP directly back to the loop it interrupted instead of
+     * executing RTI. On the 6502 that abandons the interrupt call chain. In
+     * the recomp the interrupted tail frame is still suspended beneath the
+     * synchronous callback, so collapse the transfer to that ancestor even
+     * though interrupt entry changed S. Epoch + active-context checks keep
+     * ordinary recursive calls with a different hardware stack distinct. */
+    return tail_crosses_interrupt(slot);
+}
 
 int call_by_address_tail(uint16_t addr, int caller_bank) {
     /* Env-gated tail-drift diagnostic (NESRECOMP_TAILDBG="loAddr:hiAddr"):
@@ -2720,14 +2791,14 @@ int call_by_address_tail(uint16_t addr, int caller_bank) {
         if (s_on && addr >= s_lo && addr <= s_hi && s_lines < 60) {
             int match = -1;
             for (int i = 0; i < s_tail_active_n; i++)
-                if (s_tail_active[i].addr == addr && s_tail_active[i].s == g_cpu.S) { match = i; break; }
+                if (tail_matches_active(i, addr)) { match = i; break; }
             fprintf(stderr, "[taildbg] addr=$%04X S=$%02X active_n=%d match=%d frame=%llu\n",
                     addr, g_cpu.S, s_tail_active_n, match, (unsigned long long)g_frame_count);
             fflush(stderr); s_lines++;
         }
     }
     for (int i = 0; i < s_tail_active_n; i++) {
-        if (s_tail_active[i].addr == addr && s_tail_active[i].s == g_cpu.S) {
+        if (tail_matches_active(i, addr)) {
             s_tail_pending      = addr;
             s_tail_pending_slot = i;
             s_tail_caller       = caller_bank;
@@ -2739,6 +2810,7 @@ int call_by_address_tail(uint16_t addr, int caller_bank) {
         slot = s_tail_active_n++;
         s_tail_active[slot].addr = addr;
         s_tail_active[slot].s    = g_cpu.S;
+        s_tail_active[slot].interrupt_epoch = runtime_get_interrupt_epoch();
     }
     dring_push(addr, caller_bank, 'T');
     int r;
@@ -3120,4 +3192,62 @@ typedef struct { uint64_t frame; uint8_t val; uint8_t which; } ScrollTraceEntryE
 
 const void *runtime_get_scroll_trace_buf(void) {
     return s_scroll_trace;
+}
+
+static void digest_u8(Crc32Context *c, uint8_t v) { crc32_update(c,&v,1); }
+static void digest_u16(Crc32Context *c, uint16_t v) {
+    uint8_t b[2]={(uint8_t)v,(uint8_t)(v>>8)}; crc32_update(c,b,2);
+}
+static void digest_u32(Crc32Context *c, uint32_t v) {
+    uint8_t b[4]={(uint8_t)v,(uint8_t)(v>>8),(uint8_t)(v>>16),(uint8_t)(v>>24)};
+    crc32_update(c,b,4);
+}
+static void digest_u64(Crc32Context *c, uint64_t v) {
+    digest_u32(c,(uint32_t)v); digest_u32(c,(uint32_t)(v>>32));
+}
+
+uint32_t nes_runtime_state_digest(void) {
+    Crc32Context c; MapperState m; uint8_t apu_blob[512]; int apu_size; crc32_begin(&c);
+    digest_u8(&c,g_cpu.A);digest_u8(&c,g_cpu.X);digest_u8(&c,g_cpu.Y);
+    digest_u8(&c,g_cpu.S);digest_u8(&c,g_cpu.P);digest_u8(&c,g_cpu.N);
+    digest_u8(&c,g_cpu.V);digest_u8(&c,g_cpu.D);digest_u8(&c,g_cpu.I);
+    digest_u8(&c,g_cpu.Z);digest_u8(&c,g_cpu.C);
+    crc32_update(&c,g_ram,sizeof(g_ram));crc32_update(&c,g_sram,sizeof(g_sram));
+    crc32_update(&c,g_chr_ram,sizeof(g_chr_ram));crc32_update(&c,g_ppu_oam,sizeof(g_ppu_oam));
+    crc32_update(&c,g_ppu_pal,sizeof(g_ppu_pal));crc32_update(&c,g_ppu_nt,sizeof(g_ppu_nt));
+    digest_u8(&c,g_ppuctrl);digest_u8(&c,g_ppumask);digest_u8(&c,g_ppustatus);
+    digest_u8(&c,g_ppuscroll_x);digest_u8(&c,g_ppuscroll_y);digest_u16(&c,g_ppuaddr);
+    digest_u8(&c,(uint8_t)g_ppuaddr_latch);digest_u8(&c,g_ppudata_buf);
+    digest_u16(&c,s_ppu_t);digest_u8(&c,s_ppu_fine_x);digest_u16(&c,s_ppu_v_at_2006);
+    digest_u8(&c,s_ctrl1_shift);digest_u8(&c,s_ctrl2_shift);digest_u8(&c,(uint8_t)s_ctrl1_strobe);
+    mapper_get_state(&m);
+    digest_u32(&c,(uint32_t)m.mapper_type);digest_u8(&c,m.shift_reg);
+    digest_u32(&c,(uint32_t)m.shift_count);digest_u8(&c,m.ctrl);digest_u8(&c,m.chr0);
+    digest_u8(&c,m.chr1);digest_u8(&c,m.prg_reg);digest_u32(&c,(uint32_t)m.current_bank);
+    digest_u32(&c,(uint32_t)m.mirroring);digest_u8(&c,m.mmc3_bank_select);
+    crc32_update(&c,m.mmc3_regs,sizeof(m.mmc3_regs));digest_u8(&c,m.mmc3_irq_latch);
+    digest_u8(&c,m.mmc3_irq_counter);digest_u32(&c,(uint32_t)m.mmc3_irq_reload);
+    digest_u32(&c,(uint32_t)m.mmc3_irq_enabled);digest_u64(&c,g_frame_count);
+    digest_u64(&c,g_nes_cycles);digest_u32(&c,s_ops_count);digest_u32(&c,s_frame_budget);
+    apu_size=apu_get_state_blob(apu_blob,(int)sizeof(apu_blob));
+    if(apu_size>0)crc32_update(&c,apu_blob,(size_t)apu_size);
+    return crc32_end(&c);
+}
+
+void runtime_session_reset(void) {
+    g_frame_count=0;g_nes_cycles=0;g_bail_active=0;
+    g_ppuctrl=g_ppumask=g_ppustatus=g_oamaddr=0;
+    g_ppuscroll_x=g_ppuscroll_y=0;g_ppuaddr=0;g_ppuaddr_latch=0;g_ppudata_buf=0;
+    g_ppuscroll_x_hud=g_ppuscroll_y_hud=g_ppuctrl_hud=0;
+    g_spr0_split_active=0;g_spr0_reads_ctr_legacy=0;g_spr0_split_write_scanline=-1;
+    s_ppu_t=0;s_ppu_fine_x=0;s_ppu_v_at_2006=0;s_ppu_v_write_epoch=0;
+    s_scroll_2005_complete=0;s_visible_frame_valid=0;s_visible_frame_frame=0;
+    g_controller1_buttons=g_controller2_buttons=0;s_ctrl1_shift=s_ctrl2_shift=0;s_ctrl1_strobe=false;
+    s_vblank_depth=0;s_interrupt_epoch=0;s_ops_count=0;s_oam_dma_stall=0;
+    s_odd_frame=0;s_dot_debt=0;s_frame_budget=OPS_PER_FRAME;s_vblank_pending=0;
+    s_in_irq=0;s_saved_vblank_depth=0;s_open_bus=0;s_ppu_io_latch=0;
+    s_tail_pending=-1;s_tail_caller=-1;s_tail_active_n=0;s_tail_pending_slot=-1;
+    s_last_sync_sx=s_last_sync_sy=0;s_last_sync_t=0;s_last_sync_frame=0;
+    s_frame_start_sx=s_frame_start_sy=0;s_frame_start_t=0;s_frame_start_frame=0;
+    s_irq_scanline_count=0;s_irq_scanline_frame=0;
 }

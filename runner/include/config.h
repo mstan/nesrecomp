@@ -28,6 +28,10 @@ typedef struct {
     /* Launcher behaviour */
     int skip_launcher;    /* boot straight to the game; default 0 */
 
+    /* Netplay identity and matchmaking service. */
+    char netplay_player_name[64];
+    char netplay_lobby_url[256];
+
     /* HD texture packs (Mesen HD Pack format). On by default, but a pack only
      * loads if one is actually present, so no pack => byte-identical to stock.
      * hdpack_dir names the pack folder; EMPTY means "use the default location"

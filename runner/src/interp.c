@@ -21,6 +21,7 @@
  */
 #include "interp.h"
 #include "nes_runtime.h"
+#include "game_extras.h"
 #include "mapper.h"
 #include "game_extras.h"
 #include "cpu6502_decoder.h"
@@ -192,8 +193,14 @@ static int interp_native_handoff_allowed(int is_tail) {
 /* ---- Side-effect-free instruction fetch (bank-correct) ---- */
 static inline uint8_t interp_fetch(uint16_t pc) {
     if (pc >= 0x8000)              return mapper_peek_prg(pc);
+    if (pc >= 0x6000 && mapper_get_type() == 40)
+        return mapper_peek_prg(pc);
     if (pc < 0x2000)              return g_ram[pc & 0x07FF];
-    if (pc >= 0x6000)             return g_sram[pc - 0x6000];      /* $6000-$7FFF SRAM */
+    if (pc >= 0x6000) {
+        uint8_t v = g_sram[pc - 0x6000];
+        nes_trace_sram_fetch(pc, v);
+        return v;
+    }
     return 0x00; /* $2000-$5FFF: not a code region — decodes as BRK and bails */
 }
 
@@ -613,14 +620,24 @@ int nes_interp_dispatch_bank(uint16_t cpu_addr, uint16_t gen_addr, int bank) {
     /* Per-game manual override still wins (e.g. Zelda SRAM remap). */
     if (game_dispatch_override(addr)) return 1;
 
-    /* Always record the miss so the discovery/manifest loop sees every one,
-     * even though the game keeps running. */
-    nes_record_dispatch_miss_bank(gen_addr, cpu_addr, bank);
-
     /* Covered-ness probe answer for an in-flight interp_run dispatch. */
     if (s_probe_armed && addr == s_probe_addr) {
         s_probe_armed = 0;
+        if (addr >= 0x8000)
+            nes_record_dispatch_miss_bank(gen_addr, cpu_addr, bank);
         return 0;   /* "miss" — interp_run will handle the target inline */
+    }
+
+    /* CPU RAM and cartridge SRAM code cannot have a generated function. It is
+     * intentional dynamic execution rather than static-discovery fallback, so
+     * keep it available under fallback=off. Mapper 40 is the exception: its
+     * $6000-$7FFF window is PRG ROM and must retain normal strict dispatch. */
+    if (addr < 0x2000 ||
+        (addr >= 0x6000 && addr < 0x8000 && mapper_get_type() != 40)) {
+        if (interp_run(addr))
+            return 1;
+        fprintf(stderr, "[Interp] RAM/SRAM entry $%04X could not be interpreted\n", addr);
+        return 0;
     }
 
     if (s_enabled == 1) {
@@ -635,8 +652,14 @@ int nes_interp_dispatch_bank(uint16_t cpu_addr, uint16_t gen_addr, int bank) {
         return 0;
     }
 
+    nes_record_dispatch_miss_bank(gen_addr, cpu_addr, bank);
     nes_dispatch_miss_apply_policy(addr);
     return 0;
+}
+
+int nes_interp_resume(uint16_t addr) {
+    interp_lazy_init();
+    return interp_run_ex(addr, 0, 0, NULL);
 }
 
 /* Legacy entry: cpu==gen address, g_current_bank attribution. */

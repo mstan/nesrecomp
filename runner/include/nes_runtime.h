@@ -18,8 +18,6 @@ extern CPU6502State g_cpu;
 extern uint8_t      g_ram[0x0800];     /* 2KB work RAM */
 extern int          g_bail_active;     /* set by stack_bail_func return; checked at JSR sites */
 
-/* (Legacy write_bp_* and follower mechanisms removed — superseded by
- *  Tier 2.5 rdb_watch_add in reverse_debug.c.  See REVERSE_DEBUGGER.md.) */
 extern uint8_t      g_sram[0x2000];    /* 8KB battery-backed SRAM ($6000-$7FFF) */
 extern uint8_t      g_chr_ram[0x2000]; /* 8KB CHR RAM/ROM */
 extern int          g_chr_is_rom;      /* 1 = CHR ROM (ignore $2007 writes to $0000-$1FFF) */
@@ -50,6 +48,7 @@ uint16_t nes_read16zp(uint8_t zp_addr);  /* Zero-page 16-bit (wraps at $FF) */
  *   returns   = (hi << 8) | lo where lo = nes_read(addr) and
  *               hi = nes_read((addr & 0xFF00) | ((addr+1) & 0xFF)) */
 uint16_t nes_read16_jmpbug(uint16_t addr);
+void     nes_trace_sram_fetch(uint16_t addr, uint8_t val);
 
 /* ---- Dispatch ---- */
 /* Called for JMP (indirect) — dispatch to the correct recompiled function */
