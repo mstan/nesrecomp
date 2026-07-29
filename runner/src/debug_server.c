@@ -825,6 +825,7 @@ static void handle_interpreter_stats(int id, const char *json)
     send_fmt("{\"id\":%d,\"ok\":true,\"enabled\":%s,"
              "\"instrs_total\":%llu,\"runs\":%llu,\"watchdog_trips\":%llu,"
              "\"native_handoffs\":%llu,\"native_handoffs_suppressed\":%llu,"
+             "\"native_resume_reentries\":%llu,"
              "\"declines\":%llu,\"policy_traps\":%llu,\"instrs_this_frame\":%u,"
              "\"max_instrs_run\":%u}",
              id, nes_interp_is_enabled() ? "true" : "false",
@@ -833,6 +834,7 @@ static void handle_interpreter_stats(int id, const char *json)
              (unsigned long long)stats.watchdog_trips,
              (unsigned long long)stats.native_handoffs,
              (unsigned long long)stats.native_handoffs_suppressed,
+             (unsigned long long)stats.native_resume_reentries,
              (unsigned long long)stats.declines,
              (unsigned long long)stats.policy_traps,
              stats.instrs_this_frame, stats.max_instrs_run);
@@ -866,7 +868,9 @@ static void handle_dispatch_miss_info(int id, const char *json)
     extern uint8_t  g_miss_last_sp;
     extern uint8_t  g_miss_last_stack_bytes[16];
     extern uint16_t g_miss_unique_addrs[];
+    extern int16_t  g_miss_unique_banks[];
     extern int      g_miss_unique_count;
+    extern uint32_t g_miss_unique_total;
 
     /* Build hex string for stack bytes */
     char stack_hex[48];
@@ -875,7 +879,8 @@ static void handle_dispatch_miss_info(int id, const char *json)
     if (stack_hex[0]) stack_hex[47] = '\0';
 
     /* Build unique misses array */
-    char unique_buf[256];
+    char unique_buf[3072];
+    char unique_key_buf[4096];
     int pos = 0;
     unique_buf[pos++] = '[';
     for (int i = 0; i < g_miss_unique_count; i++) {
@@ -885,6 +890,16 @@ static void handle_dispatch_miss_info(int id, const char *json)
     }
     unique_buf[pos++] = ']';
     unique_buf[pos] = '\0';
+    pos = 0;
+    unique_key_buf[pos++] = '[';
+    for (int i = 0; i < g_miss_unique_count; i++) {
+        if (i) unique_key_buf[pos++] = ',';
+        pos += snprintf(unique_key_buf + pos, sizeof(unique_key_buf) - pos,
+                        "\"%d:$%04X\"", g_miss_unique_banks[i],
+                        g_miss_unique_addrs[i]);
+    }
+    unique_key_buf[pos++] = ']';
+    unique_key_buf[pos] = '\0';
 
     /* Build ring array — oldest-first for readability. Each entry carries
      * full classification, CPU state, call-site, target-byte hexdump, and
@@ -937,7 +952,9 @@ static void handle_dispatch_miss_info(int id, const char *json)
              "\"last_stack2\":\"%s\","
              "\"last_sp\":\"$%02X\","
              "\"stack_bytes\":\"%s\","
+             "\"unique_miss_total\":%u,"
              "\"unique_misses\":%s,"
+             "\"unique_miss_keys\":%s,"
              "\"ring\":%s}",
              id,
              (unsigned)g_miss_count_any,
@@ -948,7 +965,9 @@ static void handle_dispatch_miss_info(int id, const char *json)
              g_miss_last_stack2,
              g_miss_last_sp,
              stack_hex,
+             (unsigned)g_miss_unique_total,
              unique_buf,
+             unique_key_buf,
              ring_buf);
 }
 

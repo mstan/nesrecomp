@@ -471,9 +471,16 @@ int runtime_set_state_blob(const uint8_t *buf, int len);
 extern uint32_t g_miss_count_any;
 extern uint16_t g_miss_last_addr;
 extern uint64_t g_miss_last_frame;
+extern int      g_miss_last_bank;
 #define MAX_MISS_UNIQUE 256
 extern uint16_t g_miss_unique_addrs[MAX_MISS_UNIQUE];
+extern int16_t  g_miss_unique_banks[MAX_MISS_UNIQUE];
 extern int      g_miss_unique_count;
+extern uint32_t g_miss_unique_total;
+
+/* Rolls interpreter counters at a real frame boundary and periodically appends
+ * crash-resilient fallback telemetry next to the executable. */
+void nes_fallback_telemetry_frame_boundary(void);
 
 /* Target-byte classification for a miss address.
  * Used to tell "dispatcher was called with garbage input" (ZERO / RTS_STUB)

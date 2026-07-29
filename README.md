@@ -195,6 +195,27 @@ The picture preserves the NES aspect ratio with integer (whole-pixel) scaling
 and nearest-neighbor filtering, so it letterboxes rather than stretching and
 stays crisp at any window or screen size.
 
+### Fallback Discovery Logs
+
+Interpreter fallback discovery is durable by default. The runner appends two
+files next to the game executable:
+
+- `dispatch_misses.log` contains one manifest-ready `extra_func` line for each
+  first-seen bank/address pair.
+- `fallback_telemetry.jsonl` contains an immediately flushed
+  `dispatch_discovery` record for each first sighting, plus approximately
+  once-per-second samples of interpreter instructions, runs, native handoffs,
+  per-target call counts, and per-entry instruction hotspots (including
+  save-state continuation entries). A final `session_end` record is appended
+  on a normal exit. Discovery records and completed samples survive a later
+  crash.
+
+Both logs append across play sessions. Set `NESRECOMP_FALLBACK_LOG` to a custom
+JSONL path, or to `off`, to override the telemetry file. Per-dispatch disk
+writes are intentionally limited to first sightings; repeated hot targets are
+aggregated into periodic samples so observation does not create gameplay
+slowdown.
+
 ### game.toml Directives
 
 The full schema lives in `recompiler/src/game_config.c`; the most commonly used

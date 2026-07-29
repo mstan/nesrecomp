@@ -69,6 +69,53 @@ void nes_interp_get_stats(NesInterpStats *out) { if (out) *out = s_stats; }
 void nes_interp_frame_boundary(void) { s_stats.instrs_this_frame = 0; }
 void nes_interp_get_last_exit(NesInterpExit *out) { if (out) *out = s_last_exit; }
 
+typedef struct {
+    uint8_t used;
+    NesInterpHotspot value;
+} InterpHotspotSlot;
+static InterpHotspotSlot s_hotspots[NES_INTERP_HOTSPOT_CAP];
+
+static void interp_note_hotspot(uint16_t entry, int bank, uint32_t instrs) {
+    uint32_t key = ((uint32_t)(uint16_t)bank << 16) | entry;
+    uint32_t slot = (key * 2654435761u) & (NES_INTERP_HOTSPOT_CAP - 1);
+    for (uint32_t probe = 0; probe < NES_INTERP_HOTSPOT_CAP; probe++) {
+        InterpHotspotSlot *s =
+            &s_hotspots[(slot + probe) & (NES_INTERP_HOTSPOT_CAP - 1)];
+        if (!s->used) {
+            memset(&s->value, 0, sizeof(s->value));
+            s->used = 1;
+            s->value.entry_pc = entry;
+            s->value.bank = (int16_t)bank;
+        }
+        if (s->value.entry_pc == entry && s->value.bank == bank) {
+            s->value.period_calls++;
+            s->value.period_instrs += instrs;
+            if (instrs > s->value.period_max_run)
+                s->value.period_max_run = instrs;
+            s->value.total_calls++;
+            s->value.total_instrs += instrs;
+            return;
+        }
+    }
+}
+
+int nes_interp_get_hotspots(NesInterpHotspot *out, int cap, int clear_period) {
+    if (cap < 0) cap = 0;
+    int copied = 0;
+    for (int i = 0; i < NES_INTERP_HOTSPOT_CAP; i++) {
+        InterpHotspotSlot *s = &s_hotspots[i];
+        if (!s->used || !s->value.period_calls) continue;
+        if (out && copied < cap) out[copied] = s->value;
+        if (copied < cap) copied++;
+        if (clear_period) {
+            s->value.period_calls = 0;
+            s->value.period_instrs = 0;
+            s->value.period_max_run = 0;
+        }
+    }
+    return copied;
+}
+
 void nes_interp_set_enabled(int enabled) { s_enabled = enabled ? 1 : 0; }
 int  nes_interp_is_enabled(void) { return s_enabled == 1; }
 
@@ -219,6 +266,7 @@ static NesInterpExit make_exit(NesInterpExitKind kind, uint16_t entry,
 static NesInterpExit interp_run_ex(uint16_t entry, int stop_on_stack_lift,
                                     NesInterpHandoffMode handoff_mode) {
     const uint8_t entry_s = g_cpu.S;
+    const int entry_bank = g_current_bank;
     if (s_depth >= INTERP_MAX_DEPTH) {
         interp_note_decline(entry, entry, "interpreter depth guard");
         s_last_exit = make_exit(NES_INTERP_EXIT_DECLINED, entry, entry, entry_s);
@@ -537,6 +585,7 @@ static NesInterpExit interp_run_ex(uint16_t entry, int stop_on_stack_lift,
 
 done:
     if (this_run > s_stats.max_instrs_run) s_stats.max_instrs_run = this_run;
+    interp_note_hotspot(entry, entry_bank, this_run);
     s_active_handoff_mode = previous_handoff_mode;
     s_depth--;
     result.exit_s = g_cpu.S;
@@ -653,7 +702,35 @@ int nes_interp_resume(uint16_t addr) {
     NesInterpHandoffMode mode =
         (s_native_handoff_mode == NES_INTERP_HANDOFF_LEGACY)
         ? NES_INTERP_HANDOFF_LEGACY : NES_INTERP_HANDOFF_SAFE;
-    return interp_exit_handled(interp_run_ex(addr, 0, mode));
+    uint16_t pc = addr;
+    for (;;) {
+        NesInterpExit exit = interp_run_ex(pc, 0, mode);
+        if (exit.kind != NES_INTERP_EXIT_NATIVE_ESCAPE)
+            return interp_exit_handled(exit);
+
+        /*
+         * A cooperative native call may unwind without an RTS/RTI sidecar.
+         * This is not a guest-program exit: generated tail-cycle flattening
+         * deliberately discards host C frames while the architectural 6502
+         * continuation remains live. Resume from the instruction boundary
+         * recorded by the runtime instead of returning out of the permanent
+         * save-state driver.
+         */
+        uint16_t resume_pc = 0;
+        int tick_charged = 0;
+        if (!runtime_get_savestate_resume(&resume_pc, &tick_charged) ||
+            resume_pc == 0) {
+            interp_note_decline(pc, exit.next_pc,
+                                "native escape had no guest continuation");
+            s_last_exit = make_exit(NES_INTERP_EXIT_DECLINED, pc,
+                                    exit.next_pc, exit.entry_s);
+            return 0;
+        }
+
+        s_stats.native_resume_reentries++;
+        runtime_prepare_guest_resume(resume_pc, tick_charged);
+        pc = resume_pc;
+    }
 }
 
 void nes_interp_reset_context(void) {

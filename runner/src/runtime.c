@@ -22,6 +22,8 @@
 #include <windows.h>
 #endif
 
+static void fallback_telemetry_init(void);
+
 /* ---- APU register-write trace ring (always-on, env-gated) -------------------
  * NESRECOMP_APU_TRACE=<path>  ->  capture every $4000-$401F APU register write as
  * (cpu_cycle, addr, val) into a bounded ring, dumped to CSV at exit. Used to diff
@@ -426,6 +428,7 @@ void runtime_init(void) {
     load_dispatch_miss_policy_from_env();
     load_brk_policy_from_env();
     nes_fring_init_dump();
+    fallback_telemetry_init();
 }
 
 /* Deterministic VBlank simulation: fires NMI every N bus operations.
@@ -2018,7 +2021,272 @@ uint8_t  g_miss_last_stack_bytes[16];
 
 #define MAX_MISS_UNIQUE 256
 uint16_t g_miss_unique_addrs[MAX_MISS_UNIQUE];
+int16_t  g_miss_unique_banks[MAX_MISS_UNIQUE];
 int      g_miss_unique_count = 0;
+uint32_t g_miss_unique_total = 0;
+
+/* The UI/TCP list is deliberately bounded, but durable discovery must not
+ * start duplicating hot misses after that display fills. This bank-aware hash
+ * table tracks every practical NES target independently of the display cap. */
+#define MISS_SEEN_CAP 4096
+typedef struct {
+    uint16_t addr;
+    int16_t  bank;
+    uint8_t  used;
+    uint64_t total_calls;
+    uint32_t period_calls;
+    uint64_t last_frame;
+} MissSeenEntry;
+static MissSeenEntry s_miss_seen[MISS_SEEN_CAP];
+static int s_miss_seen_overflow_reported = 0;
+
+static MissSeenEntry *miss_seen_touch(int bank, uint16_t addr) {
+    uint32_t key = ((uint32_t)(uint16_t)bank << 16) | addr;
+    uint32_t slot = (key * 2654435761u) & (MISS_SEEN_CAP - 1);
+    for (uint32_t probe = 0; probe < MISS_SEEN_CAP; probe++) {
+        MissSeenEntry *e = &s_miss_seen[(slot + probe) & (MISS_SEEN_CAP - 1)];
+        if (!e->used) {
+            e->used = 1;
+            e->bank = (int16_t)bank;
+            e->addr = addr;
+            e->total_calls = 1;
+            e->period_calls = 1;
+            e->last_frame = g_frame_count;
+            return e;
+        }
+        if (e->bank == bank && e->addr == addr) {
+            e->total_calls++;
+            e->period_calls++;
+            e->last_frame = g_frame_count;
+            return e;
+        }
+    }
+    if (!s_miss_seen_overflow_reported) {
+        fprintf(stderr,
+                "[FallbackTelemetry] target table full; discovery dedup is incomplete\n");
+        s_miss_seen_overflow_reported = 1;
+    }
+    return NULL;
+}
+
+/* Append-only fallback telemetry. First discoveries are closed immediately;
+ * periodic samples are one line per ~60 rendered frames, avoiding the severe
+ * slowdown caused by fopen/fflush on every interpreted dispatch. */
+static int s_fallback_log_initialized = 0;
+static int s_fallback_log_enabled = 1;
+static char s_fallback_log_path[520];
+static long long s_fallback_session = 0;
+static unsigned s_fallback_period_frames = 0;
+static unsigned s_fallback_period_interp_frames = 0;
+static uint32_t s_fallback_period_max_frame_instrs = 0;
+static unsigned s_fallback_retry_frames = 0;
+static NesInterpStats s_fallback_last_stats;
+
+static FILE *fallback_telemetry_open(void) {
+    if (!s_fallback_log_enabled || !s_fallback_log_path[0]) return NULL;
+    return fopen(s_fallback_log_path, "a");
+}
+
+static void fallback_telemetry_write_sample(const char *event, int force) {
+    if (!s_fallback_log_enabled) return;
+    NesInterpStats stats;
+    NesInterpHotspot hotspots[NES_INTERP_HOTSPOT_CAP];
+    nes_interp_get_stats(&stats);
+    int hotspot_count =
+        nes_interp_get_hotspots(hotspots, NES_INTERP_HOTSPOT_CAP, 0);
+    uint64_t instr_delta = stats.instrs_total - s_fallback_last_stats.instrs_total;
+    uint64_t runs_delta = stats.runs - s_fallback_last_stats.runs;
+    uint64_t watchdog_delta =
+        stats.watchdog_trips - s_fallback_last_stats.watchdog_trips;
+    uint64_t handoff_delta =
+        stats.native_handoffs - s_fallback_last_stats.native_handoffs;
+    uint64_t suppressed_delta =
+        stats.native_handoffs_suppressed -
+        s_fallback_last_stats.native_handoffs_suppressed;
+    uint64_t resume_delta =
+        stats.native_resume_reentries -
+        s_fallback_last_stats.native_resume_reentries;
+    uint64_t declines_delta =
+        stats.declines - s_fallback_last_stats.declines;
+    uint64_t traps_delta =
+        stats.policy_traps - s_fallback_last_stats.policy_traps;
+    int touched = 0;
+    for (int i = 0; i < MISS_SEEN_CAP; i++)
+        if (s_miss_seen[i].used && s_miss_seen[i].period_calls) touched++;
+
+    if (!force && instr_delta == 0 && runs_delta == 0 &&
+        touched == 0 && hotspot_count == 0) {
+        s_fallback_period_frames = 0;
+        s_fallback_period_interp_frames = 0;
+        s_fallback_period_max_frame_instrs = 0;
+        s_fallback_last_stats = stats;
+        return;
+    }
+
+    FILE *f = fallback_telemetry_open();
+    if (!f) {
+        /* Retain the period, but retry at most once per second so an invalid
+         * custom path cannot turn into per-frame filesystem churn. */
+        s_fallback_retry_frames = 60;
+        return;
+    }
+    fprintf(f,
+            "{\"event\":\"%s\",\"session\":%lld,\"frame\":%llu,"
+            "\"period_frames\":%u,\"interp_frames\":%u,"
+            "\"period_instrs\":%llu,\"period_runs\":%llu,"
+            "\"period_watchdog_trips\":%llu,"
+            "\"period_native_handoffs\":%llu,"
+            "\"period_native_handoffs_suppressed\":%llu,"
+            "\"period_native_resume_reentries\":%llu,"
+            "\"period_declines\":%llu,\"period_policy_traps\":%llu,"
+            "\"max_frame_instrs\":%u,"
+            "\"total_instrs\":%llu,\"total_runs\":%llu,"
+            "\"total_watchdog_trips\":%llu,"
+            "\"total_native_resume_reentries\":%llu,"
+            "\"total_declines\":%llu,\"total_policy_traps\":%llu,"
+            "\"max_instrs_run\":%u,"
+            "\"total_dispatch_misses\":%u,\"unique_targets\":%u,"
+            "\"targets\":[",
+            event, s_fallback_session, (unsigned long long)g_frame_count,
+            s_fallback_period_frames, s_fallback_period_interp_frames,
+            (unsigned long long)instr_delta, (unsigned long long)runs_delta,
+            (unsigned long long)watchdog_delta,
+            (unsigned long long)handoff_delta,
+            (unsigned long long)suppressed_delta,
+            (unsigned long long)resume_delta,
+            (unsigned long long)declines_delta,
+            (unsigned long long)traps_delta,
+            s_fallback_period_max_frame_instrs,
+            (unsigned long long)stats.instrs_total,
+            (unsigned long long)stats.runs,
+            (unsigned long long)stats.watchdog_trips,
+            (unsigned long long)stats.native_resume_reentries,
+            (unsigned long long)stats.declines,
+            (unsigned long long)stats.policy_traps,
+            stats.max_instrs_run,
+            (unsigned)g_miss_count_any, (unsigned)g_miss_unique_total);
+    int comma = 0;
+    for (int i = 0; i < MISS_SEEN_CAP; i++) {
+        MissSeenEntry *e = &s_miss_seen[i];
+        if (!e->used || !e->period_calls) continue;
+        fprintf(f,
+                "%s{\"bank\":%d,\"addr\":\"$%04X\",\"calls\":%u,"
+                "\"total_calls\":%llu,\"last_frame\":%llu}",
+                comma ? "," : "", e->bank, e->addr, e->period_calls,
+                (unsigned long long)e->total_calls,
+                (unsigned long long)e->last_frame);
+        comma = 1;
+    }
+    fprintf(f, "],\"entries\":[");
+    for (int i = 0; i < hotspot_count; i++) {
+        NesInterpHotspot *h = &hotspots[i];
+        fprintf(f,
+                "%s{\"bank\":%d,\"entry\":\"$%04X\","
+                "\"calls\":%u,\"instrs\":%llu,\"max_run\":%u,"
+                "\"total_calls\":%llu,\"total_instrs\":%llu}",
+                i ? "," : "", h->bank, h->entry_pc, h->period_calls,
+                (unsigned long long)h->period_instrs, h->period_max_run,
+                (unsigned long long)h->total_calls,
+                (unsigned long long)h->total_instrs);
+    }
+    fprintf(f, "]}\n");
+    fclose(f);
+
+    for (int i = 0; i < MISS_SEEN_CAP; i++)
+        s_miss_seen[i].period_calls = 0;
+    nes_interp_get_hotspots(NULL, 0, 1);
+    s_fallback_period_frames = 0;
+    s_fallback_period_interp_frames = 0;
+    s_fallback_period_max_frame_instrs = 0;
+    s_fallback_retry_frames = 0;
+    s_fallback_last_stats = stats;
+}
+
+static void fallback_telemetry_atexit(void) {
+    NesInterpStats stats;
+    nes_interp_get_stats(&stats);
+    if (stats.instrs_this_frame) {
+        s_fallback_period_interp_frames++;
+        if (stats.instrs_this_frame > s_fallback_period_max_frame_instrs)
+            s_fallback_period_max_frame_instrs = stats.instrs_this_frame;
+    }
+    fallback_telemetry_write_sample("session_end", 1);
+}
+
+static void fallback_telemetry_init(void) {
+    if (s_fallback_log_initialized) return;
+    s_fallback_log_initialized = 1;
+    const char *configured = getenv("NESRECOMP_FALLBACK_LOG");
+    if (configured && (!strcmp(configured, "0") || !strcmp(configured, "off"))) {
+        s_fallback_log_enabled = 0;
+        return;
+    }
+    if (configured && *configured)
+        snprintf(s_fallback_log_path, sizeof(s_fallback_log_path), "%s", configured);
+    else
+        snprintf(s_fallback_log_path, sizeof(s_fallback_log_path),
+                 "%sfallback_telemetry.jsonl", g_exe_dir);
+
+    s_fallback_session = (long long)time(NULL);
+    nes_interp_get_stats(&s_fallback_last_stats);
+    FILE *f = fallback_telemetry_open();
+    if (f) {
+        fprintf(f,
+                "{\"event\":\"session_start\",\"version\":1,"
+                "\"session\":%lld,\"frame\":%llu}\n",
+                s_fallback_session, (unsigned long long)g_frame_count);
+        fclose(f);
+    }
+    atexit(fallback_telemetry_atexit);
+}
+
+void nes_fallback_telemetry_frame_boundary(void) {
+    fallback_telemetry_init();
+    if (!s_fallback_log_enabled) {
+        nes_interp_frame_boundary();
+        return;
+    }
+    NesInterpStats stats;
+    nes_interp_get_stats(&stats);
+    s_fallback_period_frames++;
+    if (stats.instrs_this_frame) {
+        s_fallback_period_interp_frames++;
+        if (stats.instrs_this_frame > s_fallback_period_max_frame_instrs)
+            s_fallback_period_max_frame_instrs = stats.instrs_this_frame;
+    }
+    if (s_fallback_retry_frames > 0)
+        s_fallback_retry_frames--;
+    if (s_fallback_period_frames >= 60 && s_fallback_retry_frames == 0)
+        fallback_telemetry_write_sample("sample", 0);
+    nes_interp_frame_boundary();
+}
+
+static void fallback_telemetry_write_discovery(
+    int bank, uint16_t addr, uint16_t cpu_addr, const char *class_name,
+    const uint8_t target_bytes[8], uint16_t call_site_pc,
+    const char *caller, const char *caller2) {
+    fallback_telemetry_init();
+    FILE *f = fallback_telemetry_open();
+    if (!f) return;
+    fprintf(f,
+            "{\"event\":\"dispatch_discovery\",\"session\":%lld,"
+            "\"frame\":%llu,\"cycles\":%llu,\"bank\":%d,"
+            "\"gen_addr\":\"$%04X\",\"cpu_addr\":\"$%04X\","
+            "\"target\":\"%s\",\"target_bytes\":\"",
+            s_fallback_session, (unsigned long long)g_frame_count,
+            (unsigned long long)g_nes_cycles, bank, addr, cpu_addr,
+            class_name);
+    for (int i = 0; i < 8; i++) fprintf(f, "%s%02X", i ? " " : "", target_bytes[i]);
+    fprintf(f,
+            "\",\"A\":\"$%02X\",\"X\":\"$%02X\",\"Y\":\"$%02X\","
+            "\"P\":\"$%02X\",\"S\":\"$%02X\",\"call_site\":\"$%04X\","
+            "\"caller\":\"%s\",\"caller2\":\"%s\","
+            "\"manifest\":\"extra_func %d 0x%04X\"}\n",
+            g_cpu.A, g_cpu.X, g_cpu.Y, g_cpu.P, g_cpu.S, call_site_pc,
+            caller ? caller : "(none)", caller2 ? caller2 : "(none)",
+            bank, addr);
+    fclose(f);
+}
 
 MissRecord g_miss_ring[MAX_MISS_RING];
 int        g_miss_ring_head  = 0;
@@ -2299,10 +2567,15 @@ void nes_write_runtime_fault(const char *reason) {
     if (!out) return;
 
     MapperState ms;
+    uint16_t live_pc = 0;
+    int live_tick_charged = 0;
+    int live_pc_valid =
+        runtime_get_savestate_resume(&live_pc, &live_tick_charged);
     mapper_get_state(&ms);
     fprintf(out,
             "=== runtime fault: %s ===\n"
             "frame=%llu cycles=%llu cpu A=$%02X X=$%02X Y=$%02X P=$%02X S=$%02X\n"
+            "guest_pc=$%04X valid=%d tick_charged=%d\n"
             "window=$%04X bank=%d dispatch_depth=%d vblank_depth=%d ops=%u budget=%u\n"
             "mapper type=%d current_bank=%d mirroring=%d select=$%02X "
             "irq_latch=$%02X irq_counter=$%02X irq_reload=%d irq_enabled=%d\n"
@@ -2312,6 +2585,7 @@ void nes_write_runtime_fault(const char *reason) {
             (unsigned long long)g_frame_count,
             (unsigned long long)g_nes_cycles,
             g_cpu.A, g_cpu.X, g_cpu.Y, g_cpu.P, g_cpu.S,
+            live_pc, live_pc_valid, live_tick_charged,
             g_code_window_base, g_current_bank, g_nes_dispatch_depth,
             s_vblank_depth, s_ops_count, s_frame_budget,
             ms.mapper_type, ms.current_bank, ms.mirroring,
@@ -2491,13 +2765,12 @@ int call_by_address_tail(uint16_t addr, int caller_bank) {
  * cpu_addr the original 6502 target (live-window byte classification), bank
  * the window-resolved bank. */
 void nes_record_dispatch_miss_bank(uint16_t addr, uint16_t cpu_addr, int bank) {
-    /* Print the console line only on FIRST sighting of the address. The old
+    /* Print the console line only on FIRST sighting of the bank/address pair. The old
      * consecutive-key dedup re-printed forever when two misses alternated
      * per frame (measured on SMB3: ~6 lines/frame of spam, real slowdown
      * from console I/O). The durable file + ring still record every miss. */
-    bool first_for_key = true;
-    for (int i = 0; i < g_miss_unique_count; i++)
-        if (g_miss_unique_addrs[i] == addr) { first_for_key = false; break; }
+    MissSeenEntry *seen = miss_seen_touch(bank, addr);
+    bool first_for_key = seen && seen->total_calls == 1;
 
     /* Capture target bytes + classification up front so we can print it
      * inline with the first-sighting log line. Peek via the original 6502
@@ -2584,7 +2857,7 @@ void nes_record_dispatch_miss_bank(uint16_t addr, uint16_t cpu_addr, int bank) {
      * control flow. A later softlock/controlled exit will not pass through the
      * OS crash handler. Keep this separate from dispatch_misses.log so its
      * extra_func lines remain machine-consumable by the regeneration loop. */
-    if (s_dispatch_miss_dumps < 16) {
+    if (first_for_key && s_dispatch_miss_dumps < 16) {
         char fault_path[300];
         snprintf(fault_path, sizeof(fault_path), "%sdispatch_faults.log", g_exe_dir);
         FILE *ff = fopen(fault_path, "a");
@@ -2627,12 +2900,14 @@ void nes_record_dispatch_miss_bank(uint16_t addr, uint16_t cpu_addr, int bank) {
         }
     }
 
-    /* Add to unique list if not already present; log new misses to file */
-    int found = 0;
-    for (int i = 0; i < g_miss_unique_count; i++)
-        if (g_miss_unique_addrs[i] == addr) { found = 1; break; }
-    if (!found && g_miss_unique_count < MAX_MISS_UNIQUE) {
-        g_miss_unique_addrs[g_miss_unique_count++] = addr;
+    /* Add first sightings to the bounded UI list and both durable logs. */
+    if (first_for_key) {
+        g_miss_unique_total++;
+        if (g_miss_unique_count < MAX_MISS_UNIQUE) {
+            g_miss_unique_addrs[g_miss_unique_count] = addr;
+            g_miss_unique_banks[g_miss_unique_count] = (int16_t)bank;
+            g_miss_unique_count++;
+        }
         /* Append to dispatch_misses.log next to the executable */
         char miss_path[300];
         snprintf(miss_path, sizeof(miss_path), "%sdispatch_misses.log", g_exe_dir);
@@ -2643,6 +2918,8 @@ void nes_record_dispatch_miss_bank(uint16_t addr, uint16_t cpu_addr, int bank) {
                     g_cpu.A, g_cpu.X, g_cpu.Y, call_site_pc);
             fclose(mf);
         }
+        fallback_telemetry_write_discovery(
+            bank, addr, cpu_addr, class_name, tbytes, call_site_pc, c0, c1);
         printf("[Dispatch] NEW miss logged: extra_func %d 0x%04X (frame %llu) target=%s\n",
                bank, addr, (unsigned long long)g_frame_count, class_name);
         fflush(stdout);

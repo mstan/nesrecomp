@@ -96,6 +96,7 @@ typedef struct {
     uint64_t watchdog_trips;    /* runs that hit the per-run instruction cap */
     uint64_t native_handoffs;   /* JSR/JMP handed off to recompiled code */
     uint64_t native_handoffs_suppressed; /* handoffs kept inside interp island */
+    uint64_t native_resume_reentries; /* whole-program native escapes recovered */
     uint64_t declines;          /* interp could not safely handle a dispatch */
     uint64_t policy_traps;      /* declines converted to debug pause/fault */
     uint32_t instrs_this_frame; /* interpreted instructions in the current frame */
@@ -103,6 +104,23 @@ typedef struct {
 } NesInterpStats;
 
 void nes_interp_get_stats(NesInterpStats *out);
+
+/* Per-entry activity since the last telemetry flush. This includes explicit
+ * save-state continuation entries, not just missing dispatch targets. */
+#define NES_INTERP_HOTSPOT_CAP 512
+typedef struct {
+    uint16_t entry_pc;
+    int16_t  bank;
+    uint32_t period_calls;
+    uint64_t period_instrs;
+    uint32_t period_max_run;
+    uint64_t total_calls;
+    uint64_t total_instrs;
+} NesInterpHotspot;
+
+/* Returns the number of active period entries copied (up to cap). When
+ * clear_period is nonzero, clears period-only counters after copying. */
+int nes_interp_get_hotspots(NesInterpHotspot *out, int cap, int clear_period);
 
 /* Called once per rendered frame (from the runner) to roll the per-frame
  * instruction counter. Safe to call even if the interpreter never fired. */

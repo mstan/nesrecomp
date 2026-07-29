@@ -432,7 +432,7 @@ static void watch_render_frame(void) {
         SDL_RenderFillRect(s_watch_renderer, &sep);
     }
 
-    /* Dispatch miss monitor — unique address list */
+    /* Dispatch miss monitor — unique bank/address list */
     {
         int oy = 6 + s_watch_count * WATCH_ENTRY_H;
 
@@ -444,7 +444,7 @@ static void watch_render_frame(void) {
         snprintf(hdr_str, sizeof(hdr_str), "DISPATCH MISSES  total:%u", g_miss_count_any);
         watch_draw_str(14, oy + 4, hdr_str, 1, 0x88, 0x44, 0x44);
 
-        /* One row per unique missed address */
+        /* One row per unique missed bank/address pair */
         int row_h = 18;
         int n = g_miss_unique_count;
         SDL_SetRenderDrawColor(s_watch_renderer, 15, 10, 10, 255);
@@ -455,9 +455,11 @@ static void watch_render_frame(void) {
             watch_draw_str(20, oy + 24, "none", 1, 0x44, 0x44, 0x44);
         } else {
             for (int i = 0; i < n; i++) {
-                int is_last = (g_miss_unique_addrs[i] == g_miss_last_addr);
+                int is_last = (g_miss_unique_addrs[i] == g_miss_last_addr &&
+                               g_miss_unique_banks[i] == g_miss_last_bank);
                 char row[24];
-                snprintf(row, sizeof(row), "$%04X", g_miss_unique_addrs[i]);
+                snprintf(row, sizeof(row), "%d:$%04X",
+                         g_miss_unique_banks[i], g_miss_unique_addrs[i]);
                 int rx = 20 + (i % 3) * 120;
                 int ry = oy + 24 + (i / 3) * row_h;
                 watch_draw_str(rx, ry, row, 2,
@@ -627,10 +629,18 @@ static void smoke_write_results(void) {
     fprintf(f, "{\n");
     fprintf(f, "  \"frames_run\": %llu,\n", (unsigned long long)g_frame_count);
     fprintf(f, "  \"dispatch_miss_count\": %u,\n", g_miss_count_any);
-    fprintf(f, "  \"dispatch_miss_unique\": %d,\n", g_miss_unique_count);
+    fprintf(f, "  \"dispatch_miss_unique\": %u,\n",
+            (unsigned)g_miss_unique_total);
     fprintf(f, "  \"dispatch_misses\": [");
     for (int i = 0; i < g_miss_unique_count; i++) {
         fprintf(f, "%s\"$%04X\"", i ? ", " : "", g_miss_unique_addrs[i]);
+    }
+    fprintf(f, "],\n");
+    fprintf(f, "  \"dispatch_miss_keys\": [");
+    for (int i = 0; i < g_miss_unique_count; i++) {
+        fprintf(f, "%s{\"bank\":%d,\"addr\":\"$%04X\"}",
+                i ? ", " : "", g_miss_unique_banks[i],
+                g_miss_unique_addrs[i]);
     }
     fprintf(f, "],\n");
     fprintf(f, "  \"frame_hashes\": {\n");
@@ -650,6 +660,7 @@ void nes_vblank_callback(void) {
     int pre_nmi_rendered = 0;
     int pre_nmi_render_irq = 0;
     runtime_begin_frame_callback();
+    nes_fallback_telemetry_frame_boundary();
     if (s_cb_count == 0) { /* debug_log_open(); */ }
     s_cb_count++;
 

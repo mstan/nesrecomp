@@ -38,6 +38,9 @@ int          g_rti_bank = -1;
 
 static int s_native_calls = 0;
 static int s_miss_count = 0;
+static uint16_t s_resume_pc = 0;
+static int s_resume_tick_charged = 0;
+static int s_resume_prepares = 0;
 
 uint8_t nes_read(uint16_t a) {
     if (a < 0x2000)                return g_ram[a & 0x07FF];
@@ -71,6 +74,17 @@ void nes_write_runtime_fault(const char *reason) { (void)reason; }
 void debug_server_request_pause(const char *reason) { (void)reason; }
 void nes_brk_executed(uint16_t pc) { (void)pc; }
 void nes_dring_mark(char kind, uint16_t tag) { (void)kind; (void)tag; }
+int runtime_get_savestate_resume(uint16_t *pc, int *tick_charged) {
+    if (s_resume_pc == 0) return 0;
+    if (pc) *pc = s_resume_pc;
+    if (tick_charged) *tick_charged = s_resume_tick_charged;
+    return 1;
+}
+void runtime_prepare_guest_resume(uint16_t pc, int tick_charged) {
+    s_resume_pc = pc;
+    s_resume_tick_charged = tick_charged;
+    s_resume_prepares++;
+}
 
 /* Mimics the generated dispatcher: a "covered" address runs natively (here a
  * side effect + the native callee's RTS pop, S+=2, then return 1); an
@@ -95,6 +109,12 @@ int call_by_address(uint16_t a) {
         s_native_calls++;
         return 1;
     }
+    if (a == 0x0720) {            /* native tail unwind: no RTS/RTI sidecar */
+        s_native_calls++;
+        s_resume_pc = 0x0730;
+        s_resume_tick_charged = 1;
+        return 1;
+    }
     return nes_interp_dispatch(a);
 }
 
@@ -114,6 +134,9 @@ static void fresh(void) {
     g_rti_source = 0;
     g_rti_bank = -1;
     s_miss_count = 0;
+    s_resume_pc = 0;
+    s_resume_tick_charged = 0;
+    s_resume_prepares = 0;
     nes_interp_set_enabled(1);
     nes_interp_set_native_handoff_mode(NES_INTERP_HANDOFF_ISLAND);
     nes_interp_reset_context();
@@ -225,6 +248,22 @@ int main(void) {
     CHECK(s_native_calls == 1,"T4e continuation used cooperative native JSR");
     CHECK(g_ram[0x20] == 0x99,"T4e native side effect observed");
 
+    printf("[T4f] save-state continuation recovers a native tail unwind\n");
+    fresh();
+    s_native_calls = 0;
+    { uint8_t caller[] = {0x20,0x20,0x07, 0x00}; /* JSR $0720; BRK */
+      uint8_t resumed[] = {0xA9,0x6D, 0x85,0x17, 0x60};
+      load(0x0600, caller, sizeof caller); load(0x0730, resumed, sizeof resumed); }
+    r = nes_interp_resume(0x0600);
+    CHECK(r == 1,             "T4f continuation handled");
+    CHECK(s_native_calls == 1,"T4f native target invoked once");
+    CHECK(s_resume_prepares == 1,"T4f resume driver re-entered once");
+    CHECK(g_ram[0x17] == 0x6D,"T4f recovered continuation executed");
+    { NesInterpStats stats;
+      nes_interp_get_stats(&stats);
+      CHECK(stats.native_resume_reentries > 0,
+            "T4f native resume re-entry counted"); }
+
     printf("[T5] SBC with carry (no borrow)\n");
     fresh();
     { uint8_t p[] = {0xA9,0x05, 0x38, 0xE9,0x03, 0x85,0x15, 0x60}; /* LDA#5;SEC;SBC#3;STA$15;RTS */
@@ -260,6 +299,30 @@ int main(void) {
     CHECK(r == 1,              "T8 dispatch handled");
     CHECK(g_ram[0x18] == 0x43, "T8 [$18] incremented 0x41 -> 0x43");
     CHECK(g_cpu.Z == 0 && g_cpu.N == 0, "T8 flags from INC result");
+
+    printf("[T9] rendered-frame boundary resets the live instruction counter\n");
+    { NesInterpStats stats;
+      nes_interp_get_stats(&stats);
+      CHECK(stats.instrs_this_frame > 0,
+            "T9 frame counter accumulated interpreted instructions");
+      nes_interp_frame_boundary();
+      nes_interp_get_stats(&stats);
+      CHECK(stats.instrs_this_frame == 0,
+            "T9 frame counter reset at boundary"); }
+    { NesInterpHotspot hotspots[NES_INTERP_HOTSPOT_CAP];
+      int n = nes_interp_get_hotspots(
+          hotspots, NES_INTERP_HOTSPOT_CAP, 0);
+      int found = 0;
+      for (int i = 0; i < n; i++)
+          if (hotspots[i].entry_pc == 0x0600 &&
+              hotspots[i].period_calls > 0 &&
+              hotspots[i].period_instrs > 0)
+              found = 1;
+      CHECK(found, "T9 per-entry hotspot retained calls and instructions");
+      nes_interp_get_hotspots(NULL, 0, 1);
+      CHECK(nes_interp_get_hotspots(
+                hotspots, NES_INTERP_HOTSPOT_CAP, 0) == 0,
+            "T9 hotspot period clears after durable flush"); }
 
     printf("\n==== interp self-test: %d checks, %d failures ====\n", g_checks, g_fails);
     return g_fails;
