@@ -422,6 +422,23 @@ describe("code generation", () => {
     expect(result.fullC).not.toContain("call_by_address_tail(0xC010, -1)");
   });
 
+  it("lowers a backward scheduler handoff inside one merged body to coroutine_yield", () => {
+    const rom = new RomBuilder()
+      .org(0xc000)
+      .emit([0xd0, 0x1e]) // BNE $C020; finder/codegen also walks fallthrough
+      .emit(new Array(0x0e).fill(0xea))
+      .emit([0xa2, 0xff, 0x9a]) // $C010 scheduler stack reset
+      .emit(new Array(0x0d).fill(0xea))
+      .emit([0xba, 0x96, 0x82, 0x4c, 0x10, 0xc0]) // $C020 yield -> $C010
+      .vectors(0xc000, 0xc000, 0xc000)
+      .writeTemp("merged_backward_scheduler_handoff.nes");
+
+    const result = recompile(rom);
+    expect(result.fullC).toContain("coroutine_yield(); return;");
+    expect(result.fullC).not.toContain("goto label_C010;");
+    expect(result.fullC).not.toContain("call_by_address_tail(0xC010, -1)");
+  });
+
   it("assigns merge-range aliases only to their canonical body", () => {
     const rom = new RomBuilder()
       .org(0xc000)

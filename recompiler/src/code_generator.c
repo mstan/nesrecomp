@@ -2729,7 +2729,18 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                     uint16_t alias_owner = 0;
                     int alias_bank = -1;
                     int alias_entry = 0;
-                    if (abs16 == func_base && pc == func_base) {
+                    if (pc >= 0xC003 &&
+                        rom_read(rom, bank, pc - 3) == 0xBA /* TSX */ &&
+                        rom_read(rom, bank, pc - 2) == 0x96 /* STX zp,Y */) {
+                        /* Coroutine yield pattern: TSX; STX $NN,Y; JMP $scheduler.
+                         * This must take precedence over the generic fixed-bank
+                         * backward-JMP handling. A large merged body can cover both
+                         * the yield tail and the lower-address scheduler target
+                         * (MM3: $FF39 -> $FEAA); treating that as an in-body goto or
+                         * tail dispatch re-enters the scheduler without unwinding
+                         * the coroutine fiber and kills the game task. */
+                        fprintf(f, "coroutine_yield(); return;\n");
+                    } else if (abs16 == func_base && pc == func_base) {
                         /* JMP $self at function start: true idle spin (single-instr).
                          * while(1) polls VBlank without recursion. */
                         fprintf(f, "while(1) { nes_instruction_boundary(0x%04X, 2); }\n", abs16);
@@ -2761,15 +2772,6 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                             fprintf(f, "nes_cpu_instruction_boundary(0x%04X, 2); func_%04X(); return;\n", abs16, abs16);
                         else
                             fprintf(f, "nes_cpu_instruction_boundary(0x%04X, 2); call_by_address(0x%04X); return;\n", abs16, abs16);
-                    } else if (pc >= 0xC003 &&
-                               rom_read(rom, bank, pc - 3) == 0xBA /* TSX */ &&
-                               rom_read(rom, bank, pc - 2) == 0x96 /* STX zp,Y */) {
-                        /* Coroutine yield pattern: TSX; STX $NN,Y; JMP $scheduler.
-                         * The function saved the stack pointer to a channel table and
-                         * is jumping to the scheduler loop (which never returns to the
-                         * caller). Emit coroutine_yield() which longjmps back to the
-                         * scheduler's setjmp point. */
-                        fprintf(f, "coroutine_yield(); return;\n");
                     } else {
                         /* Check push_jmp: bail-containing targets need a dummy
                          * push so the bail's RTS has something safe to pop.
