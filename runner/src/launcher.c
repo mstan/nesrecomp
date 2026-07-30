@@ -42,6 +42,10 @@ int nesrecomp_runner_run(int argc, char **argv);
 
 char g_exe_dir[260] = ".";
 static int s_expected_process_exit = 0;
+#if defined(RECOMP_LAUNCHER) && defined(NESRECOMP_NET)
+static int s_pre_match_widescreen;
+static int s_match_widescreen_override;
+#endif
 
 void nesrecomp_expect_process_exit(void) {
     s_expected_process_exit = 1;
@@ -348,6 +352,7 @@ int main(int argc, char *argv[]) {
     config_load(config_path());
 
     int gui_resolved = 0;
+    int returning_to_lobby = 0;
 #ifdef RECOMP_LAUNCHER
 reopen_recomp_launcher:
     gui_resolved = 0;
@@ -381,6 +386,9 @@ reopen_recomp_launcher:
             ls.skip_launcher  = g_nes_config.skip_launcher;
             ls.hdpack_enabled = g_nes_config.hdpack_enabled;
             snprintf(ls.hdpack_dir, sizeof(ls.hdpack_dir), "%s", g_nes_config.hdpack_dir);
+#ifdef NESRECOMP_NET
+            nes_launcher_netplay_seed_settings(&ls);
+#endif
             /* Profile first (theme/platform/renderer labels/capabilities), then
              * the per-game specifics on top. */
             RecompLauncherCGameInfo gi;
@@ -447,6 +455,14 @@ reopen_recomp_launcher:
                 snprintf(s_keybinds_path, sizeof(s_keybinds_path), "%skeybinds.ini", dir);
             }
             gi.keybinds_path = s_keybinds_path;
+#ifdef NESRECOMP_NET
+            gi.netplay_supported = 1;
+#  ifdef NESRECOMP_GAME_VERSION
+            gi.netplay = nes_launcher_netplay_callbacks(game_get_name(), NESRECOMP_GAME_VERSION);
+#  else
+            gi.netplay = nes_launcher_netplay_callbacks(game_get_name(), "dev");
+#  endif
+#endif
             char win_title[96];
             snprintf(win_title, sizeof(win_title), "%s - Launcher",
                      gi.name ? gi.name : "NES");

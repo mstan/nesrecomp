@@ -271,7 +271,8 @@ static NesInterpExit make_exit(NesInterpExitKind kind, uint16_t entry,
  * public generated-code ABI converts it to handled/not-handled for now.
  */
 static NesInterpExit interp_run_ex(uint16_t entry, int stop_on_stack_lift,
-                                    NesInterpHandoffMode handoff_mode) {
+                                    NesInterpHandoffMode handoff_mode,
+                                    uint32_t max_steps) {
     const uint8_t entry_s = g_cpu.S;
     const int entry_bank = g_current_bank;
     if (s_depth >= INTERP_MAX_DEPTH) {
@@ -579,6 +580,12 @@ static NesInterpExit interp_run_ex(uint16_t entry, int stop_on_stack_lift,
 
         ipc = next;
 
+        if (max_steps && this_run >= max_steps) {
+            result = make_exit(NES_INTERP_EXIT_NATIVE_ESCAPE,
+                               entry, ipc, entry_s);
+            goto done;
+        }
+
         /* Miss fallback boundary rule: any instruction that lifts S above the
          * entry frame means we've returned to native code. Explicit continuation
          * resumes disable this because their entry may intentionally restore
@@ -601,11 +608,49 @@ done:
 }
 
 static NesInterpExit interp_run(uint16_t entry) {
-    return interp_run_ex(entry, 1, nes_interp_get_native_handoff_mode());
+    return interp_run_ex(entry, 1, nes_interp_get_native_handoff_mode(), 0);
 }
 
 static int interp_exit_handled(NesInterpExit exit) {
     return exit.kind != NES_INTERP_EXIT_DECLINED;
+}
+
+int nes_interp_step_tail(uint16_t addr, int caller_bank) {
+    interp_lazy_init();
+    static int s_step_trace = -1;
+    static unsigned s_step_trace_count = 0;
+    if (s_step_trace < 0) {
+        const char *e = getenv("NESRECOMP_INTERP_STEP_TRACE");
+        s_step_trace = (e && *e && *e != '0') ? 1 : 0;
+    }
+    unsigned trace_id = s_step_trace_count++;
+    if (s_step_trace && trace_id < 128) {
+        fprintf(stderr,
+                "[InterpStep] #%u enter pc=$%04X op=$%02X bank=%d window=$%04X S=$%02X caller=%d\n",
+                trace_id, addr, interp_fetch(addr), g_current_bank,
+                g_code_window_base, g_cpu.S, caller_bank);
+    }
+
+    /* A Mapper 40 instruction which straddles an 8KB PRG window cannot be
+     * emitted safely as native C. Execute exactly that one instruction, then
+     * resume through the normal bank-aware tail dispatcher. Interpreting the
+     * whole island here can swallow a frame-driving loop before native code
+     * regains control. This is intentional execution, not a dispatch miss. */
+    NesInterpExit exit =
+        interp_run_ex(addr, 0, NES_INTERP_HANDOFF_ISLAND, 1);
+    if (s_step_trace && trace_id < 128) {
+        fprintf(stderr,
+                "[InterpStep] #%u exit kind=%d next=$%04X bank=%d window=$%04X S=$%02X\n",
+                trace_id, (int)exit.kind, exit.next_pc, g_current_bank,
+                g_code_window_base, g_cpu.S);
+    }
+    if (!interp_exit_handled(exit))
+        return 0;
+
+    if (exit.kind == NES_INTERP_EXIT_NATIVE_ESCAPE && exit.next_pc != 0)
+        return call_by_address_tail(exit.next_pc, caller_bank);
+
+    return 1;
 }
 
 /* ---- Entry from the generated dispatcher ----
@@ -634,7 +679,7 @@ int nes_interp_dispatch_bank(uint16_t cpu_addr, uint16_t gen_addr, int bank) {
      * $6000-$7FFF window is PRG ROM and must retain normal strict dispatch. */
     if (addr < 0x2000 ||
         (addr >= 0x6000 && addr < 0x8000 && mapper_get_type() != 40)) {
-        if (interp_run(addr))
+        if (interp_exit_handled(interp_run(addr)))
             return 1;
         fprintf(stderr, "[Interp] RAM/SRAM entry $%04X could not be interpreted\n", addr);
         return 0;
@@ -657,11 +702,6 @@ int nes_interp_dispatch_bank(uint16_t cpu_addr, uint16_t gen_addr, int bank) {
     return 0;
 }
 
-int nes_interp_resume(uint16_t addr) {
-    interp_lazy_init();
-    return interp_run_ex(addr, 0, 0, NULL);
-}
-
 /* Legacy entry: cpu==gen address, g_current_bank attribution. */
 int nes_interp_dispatch(uint16_t addr) {
     extern int g_current_bank;
@@ -679,13 +719,12 @@ int nes_interp_force_bank(uint16_t cpu_addr, uint16_t gen_addr, int bank) {
         return 0;
     }
 
-    if (s_enabled == 1 &&
-        interp_exit_handled(interp_run_ex(cpu_addr, 1, NES_INTERP_HANDOFF_ISLAND)))
+    if (interp_exit_handled(
+            interp_run_ex(cpu_addr, 1, NES_INTERP_HANDOFF_ISLAND, 0)))
         return 1;
 
     char reason[160];
-    const char *why = (s_enabled == 1)
-                    ? s_last_decline_reason : "interpreter fallback disabled";
+    const char *why = s_last_decline_reason;
     snprintf(reason, sizeof(reason),
              "forced interpreter entry $%04X (generated $%04X bank=%d) could not execute: %s",
              cpu_addr, gen_addr, bank, why);
@@ -694,6 +733,14 @@ int nes_interp_force_bank(uint16_t cpu_addr, uint16_t gen_addr, int bank) {
     nes_write_runtime_fault(reason);
     debug_server_request_pause(reason);
     return 0;
+}
+
+int nes_interp_force_generated(uint16_t gen_addr, int bank) {
+    uint16_t cpu_addr = gen_addr;
+    int mapper = mapper_get_type();
+    if ((mapper == 4 || mapper == 40) && gen_addr >= 0x8000)
+        cpu_addr = (uint16_t)(g_code_window_base | (gen_addr & 0x1FFF));
+    return nes_interp_force_bank(cpu_addr, gen_addr, bank);
 }
 
 int nes_interp_force(uint16_t addr) {
@@ -707,7 +754,7 @@ int nes_interp_interrupt(uint16_t addr) {
      * generated functions. Keep dispatch_misses.log reserved for discovery
      * defects while still executing the handler against live memory. */
     if (interp_exit_handled(
-            interp_run_ex(addr, 1, NES_INTERP_HANDOFF_ISLAND)))
+            interp_run_ex(addr, 1, NES_INTERP_HANDOFF_ISLAND, 0)))
         return 1;
 
     fprintf(stderr, "[Interp] RAM/SRAM interrupt vector $%04X could not be interpreted\n", addr);
@@ -716,8 +763,6 @@ int nes_interp_interrupt(uint16_t addr) {
 
 int nes_interp_resume(uint16_t addr) {
     interp_lazy_init();
-    if (s_enabled != 1)
-        return 0;
     /* A restored PC is the continuation of the whole suspended program, not
      * a missed function with a native caller waiting above it. It therefore
      * cooperates with covered native JSRs while interpreter fallbacks nested
@@ -727,7 +772,7 @@ int nes_interp_resume(uint16_t addr) {
         ? NES_INTERP_HANDOFF_LEGACY : NES_INTERP_HANDOFF_SAFE;
     uint16_t pc = addr;
     for (;;) {
-        NesInterpExit exit = interp_run_ex(pc, 0, mode);
+        NesInterpExit exit = interp_run_ex(pc, 0, mode, 0);
         if (exit.kind != NES_INTERP_EXIT_NATIVE_ESCAPE)
             return interp_exit_handled(exit);
 

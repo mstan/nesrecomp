@@ -114,7 +114,12 @@ int nes_interp_dispatch_bank(uint16_t cpu_addr, uint16_t gen_addr, int bank);
  * dispatch-miss manifest record. Used by generated `force_interp` wrappers. */
 int nes_interp_force(uint16_t addr);
 int nes_interp_force_bank(uint16_t cpu_addr, uint16_t gen_addr, int bank);
+/* Intentional interpreter-only entry expressed in generated-layout
+ * coordinates. For 8KB-window mappers, reconstructs the live CPU address
+ * from g_code_window_base before entering the interpreter. */
+int nes_interp_force_generated(uint16_t gen_addr, int bank);
 int nes_interp_interrupt(uint16_t addr);
+int nes_interp_step_tail(uint16_t addr, int caller_bank);
 
 /* Defined by the generated dispatch TU: 1 if the game was recompiled with
  * push_all_jsr (the interpreter's stack-boundary contract requires it). */
@@ -240,6 +245,9 @@ void runtime_init(void);
 /* Append a persistent CPU/mapper/recomp-stack/dispatch-ring snapshot next to
  * the executable. Used for controlled exits that bypass the OS crash handler. */
 void nes_write_runtime_fault(const char *reason);
+/* Reset frame/timing/latch state before starting a fresh launcher session. */
+void runtime_session_reset(void);
+uint32_t nes_runtime_state_digest(void);
 
 /* ---- PRG ROM writable accessor ----
  * Returns a writable pointer to the start of the given 16KB PRG bank (0-based).

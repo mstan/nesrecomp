@@ -16,7 +16,7 @@ import { join } from "path";
 import { tmpdir } from "os";
 
 interface RomBuilderOpts {
-  mapper?: number;   // 0, 4 (MMC3), or 40. Default 0.
+  mapper?: number;   // 0, 4 (MMC3), 40, or 66 (GxROM). Default 0.
   prgBanks?: number; // 16KB banks. Default 1 (mapper 0) or 2 (mapper 4).
 }
 
@@ -67,6 +67,13 @@ export class RomBuilder {
       if (addr < base || addr >= base + 0x2000)
         throw new Error(`org address $${addr.toString(16)} outside selected 8KB identity`);
       this.cursor = (this.activeBank8 & 1) * 0x2000 + (addr - base);
+      return this;
+    }
+    if (this.mapper === 66) {
+      const base = (this.activeBank & 1) ? 0xc000 : 0x8000;
+      if (addr < base || addr >= base + 0x4000)
+        throw new Error(`org address $${addr.toString(16)} outside selected GxROM half`);
+      this.cursor = addr - base;
       return this;
     }
     const isFixed = this.activeBank === this.prgBanks.length - 1;
@@ -126,6 +133,13 @@ export class RomBuilder {
       if (addr < base || addr >= base + 0x2000)
         throw new Error(`poke addr $${addr.toString(16)} outside selected 8KB identity`);
       this.prg[(this.activeBank8 & 1) * 0x2000 + (addr - base)] = value & 0xff;
+      return this;
+    }
+    if (this.mapper === 66) {
+      const base = (this.activeBank & 1) ? 0xc000 : 0x8000;
+      if (addr < base || addr >= base + 0x4000)
+        throw new Error(`poke addr $${addr.toString(16)} outside selected GxROM half`);
+      this.prg[addr - base] = value & 0xff;
       return this;
     }
     const isFixed = this.activeBank === this.prgBanks.length - 1;
@@ -248,6 +262,8 @@ export class RomBuilder {
 
   /** Get current cursor as absolute address */
   get pc(): number {
+    if (this.mapper === 66)
+      return ((this.activeBank & 1) ? 0xc000 : 0x8000) + this.cursor;
     const isFixed = this.activeBank === this.prgBanks.length - 1;
     return isFixed ? 0xc000 + this.cursor : 0x8000 + this.cursor;
   }

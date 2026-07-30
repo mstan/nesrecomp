@@ -74,7 +74,13 @@ endif()
 # which breaks the macOS/strict-Linux build. Demote it to non-fatal for the whole
 # game target, exactly as the per-game MSVC builds tolerate /wd4102 et al.
 # Directory-scoped so it reaches the game target that include()s this file.
-if(NOT MSVC)
+if(MSVC)
+    # Large generated game translation units can exceed COFF's default
+    # section-count limit, especially in debug-information-bearing builds.
+    # Apply /bigobj directory-wide because the game target is declared after
+    # including this file.
+    add_compile_options(/bigobj)
+else()
     add_compile_options(-Wno-implicit-function-declaration -Wno-implicit-int)
 endif()
 

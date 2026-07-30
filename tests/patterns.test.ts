@@ -61,6 +61,36 @@ fixed = [0xC100]
     expect(result.dispatchEntries).toContain("C120");
   });
 
+  it("keeps a manual entry native when an apparent owner is data-only", () => {
+    const rom = new RomBuilder()
+      .org(0xc000)
+      .rts()
+      .org(0xc0f0)
+      .emit(new Array(16).fill(0xea))
+      .lda(0x42)
+      .rts()
+      .vectors(0xc000, 0xc000, 0xc000)
+      .writeTemp("manual_owner_in_data_region.nes");
+
+    const result = recompile(rom, `
+[game]
+output_prefix = "test"
+
+[functions]
+fixed = [0xC0F0, 0xC100]
+
+[[data_region]]
+bank = 0
+start = 0xC0F0
+end = 0xC100
+`);
+    expect(result.dispatchEntries).toContain("C100");
+    expect(result.fullC).toContain("/* $C100: A9 */");
+    expect(result.fullC).not.toContain(
+      "nes_interp_force_generated(0xC100, 0)"
+    );
+  });
+
   it("emits configured force_interp entries as intentional interpreter wrappers", () => {
     const rom = new RomBuilder()
       .org(0xc000)
@@ -82,10 +112,40 @@ fixed = [0xC100]
 `);
     expect(result.dispatchEntries).toContain("C100");
     expect(result.fullC).toContain(
-      "nes_interp_force_bank(0xC100, 0xC100, 0)"
+      "nes_interp_force_generated(0xC100, 0)"
     );
     expect(result.fullC).not.toContain("void func_C100_body");
   });
+
+  it("preserves the live MMC3 CPU window for interpreter wrappers", () => {
+    const rom = new RomBuilder({ mapper: 4, prgBanks: 4 })
+      .bank(2)
+      .org(0x89b4)
+      .lda(0x42)
+      .rts()
+      .bank(3)
+      .org(0xc000)
+      .rts()
+      .vectors(0xc000, 0xc000, 0xc000)
+      .writeTemp("force_interp_mmc3_window.nes");
+
+    const result = recompile(rom, `
+[game]
+output_prefix = "test"
+push_all_jsr = true
+
+[force_interp]
+bank2 = [0x89B4]
+`);
+    expect(result.dispatchEntries).toContain("89B4");
+    expect(result.fullC).toContain(
+      "nes_interp_force_generated(0x89B4, 2)"
+    );
+    expect(result.fullC).not.toContain(
+      "nes_interp_force_bank(0x89B4, 0x89B4, 2)"
+    );
+  });
+
 });
 
 describe("split dispatch tables", () => {

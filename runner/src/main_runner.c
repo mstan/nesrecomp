@@ -42,6 +42,9 @@
 #include "hdpack.h"
 #include "ppu_dot.h"
 #include "interp.h"
+#ifdef NESRECOMP_NET
+#include "nes_netplay.h"
+#endif
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
@@ -720,6 +723,10 @@ void nes_vblank_callback(void) {
             exit(0);
         }
         if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_ESCAPE) {
+#ifdef NESRECOMP_NET
+            if (nes_netplay_active())
+                netplay_return_to_lobby("local player left");
+#endif
             fprintf(stderr, "[RunnerExit] Escape key at frame %llu\n",
                     (unsigned long long)g_frame_count);
             exit(0);
@@ -810,8 +817,43 @@ smoke_skip_input:
         g_controller2_buttons = 0;
     }
 
-    /* Per-frame script execution */
-    script_tick(g_frame_count, g_ram);
+#ifdef NESRECOMP_NET
+    /* One lockstep tick is admitted per outer VBlank. Nested VBlanks reuse the
+     * already-published inputs, which keeps coroutine/spin-wait callbacks from
+     * sampling or advancing the network timeline twice. */
+    if (runtime_get_vblank_depth() <= 1 && nes_netplay_active()) {
+        uint8_t local = nes_netplay_input_player()
+                      ? g_controller2_buttons : g_controller1_buttons;
+        uint32_t tick = 0, a = 0, b = 0;
+        if (nes_netplay_needs_local_sample()) nes_netplay_stage_local(local);
+        while (!nes_netplay_poll_admit()) {
+            if (nes_netplay_state_desync(&tick, &a, &b)) {
+                fprintf(stderr,
+                        "[Netplay] State digest mismatch at tick %u: %08X != %08X\n",
+                        tick, a, b);
+                netplay_return_to_lobby("deterministic state mismatch");
+            }
+            if (nes_netplay_input_desync(&tick, &a, &b)) {
+                fprintf(stderr,
+                        "[Netplay] Input mismatch at tick %u: %08X != %08X\n",
+                        tick, a, b);
+                netplay_return_to_lobby("input stream mismatch");
+            }
+            if (nes_netplay_peer_disconnected(1500))
+                netplay_return_to_lobby("peer disconnected");
+            nes_netplay_wait_recv(2);
+        }
+        if (nes_netplay_state_desync(&tick, &a, &b))
+            netplay_return_to_lobby("deterministic state mismatch");
+        g_controller1_buttons = nes_netplay_published_buttons(0);
+        g_controller2_buttons = nes_netplay_published_buttons(1);
+    }
+#endif
+
+    /* Nested callbacks resolve guest spin-waits but do not present or advance
+     * g_frame_count, so consuming WAIT commands there runs scripts ahead. */
+    if (runtime_get_vblank_depth() <= 1)
+        script_tick(g_frame_count, g_ram);
 
     /* TCP debug server: poll for commands each frame. Polled in smoke mode
      * too — headless runs are the main consumer of automated TCP probes,
@@ -868,6 +910,7 @@ smoke_skip_input:
             g_ram[0x100+g_cpu.S] = 0x00;   g_cpu.S--;   /* PCH placeholder */
             g_ram[0x100+g_cpu.S] = 0x00;   g_cpu.S--;   /* PCL placeholder */
             g_ram[0x100+g_cpu.S] = p_save; g_cpu.S--;   /* P (status flags) */
+            g_cpu.I = 1; /* NMI sets I after pushing the interrupted P */
             runtime_note_interrupt_entry();
             nes_dring_mark('N', (uint16_t)runtime_get_vblank_depth());
             nes_fring_push('N', (uint16_t)runtime_get_vblank_depth());
@@ -909,6 +952,7 @@ smoke_skip_input:
             g_ram[0x100+g_cpu.S] = 0x00;   g_cpu.S--;   /* PCH placeholder */
             g_ram[0x100+g_cpu.S] = 0x00;   g_cpu.S--;   /* PCL placeholder */
             g_ram[0x100+g_cpu.S] = p_save; g_cpu.S--;   /* P (status flags) */
+            g_cpu.I = 1; /* NMI sets I after pushing the interrupted P */
             runtime_note_interrupt_entry();
             runtime_set_vblank_firing(1);
             nes_dring_mark('N', (uint16_t)runtime_get_vblank_depth());
@@ -1672,7 +1716,14 @@ int nesrecomp_runner_run(int argc, char *argv[]) {
 
     /* game_run_main() defaults to func_RESET() (native recompiled main loop,
      * never returns). In emulated mode, it runs FCEUX frames in a loop. */
-    run_guest_execution();
+#ifdef NESRECOMP_NET
+    s_netplay_return_ready = 1;
+    if (setjmp(s_netplay_return) == 0)
+#endif
+        run_guest_execution();
+#ifdef NESRECOMP_NET
+    s_netplay_return_ready = 0;
+#endif
 
     /* Unreachable for most games, but clean up anyway */
     if (s_audio_dev) { SDL_CloseAudioDevice(s_audio_dev); s_audio_dev = 0; }

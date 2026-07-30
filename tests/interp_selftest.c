@@ -30,6 +30,7 @@ CPU6502State g_cpu;
 uint8_t      g_ram[0x0800];
 uint8_t      g_sram[0x2000];
 int          g_current_bank = 0;
+uint16_t     g_code_window_base = 0x8000;
 int          g_recomp_push_all_jsr = 1;   /* interpreter precondition satisfied */
 uint16_t     g_rts_target = 0;
 uint16_t     g_rti_target = 0;
@@ -38,6 +39,7 @@ int          g_rti_bank = -1;
 
 static int s_native_calls = 0;
 static int s_miss_count = 0;
+static int s_mapper_type = 0;
 static uint16_t s_resume_pc = 0;
 static int s_resume_tick_charged = 0;
 static int s_resume_prepares = 0;
@@ -58,7 +60,7 @@ uint16_t nes_read16_jmpbug(uint16_t a) {
     return (uint16_t)(nes_read(a) | (nes_read(hi) << 8));
 }
 uint8_t mapper_peek_prg(uint16_t a) { return g_ram[a & 0x07FF]; } /* unused by RAM-resident tests */
-int mapper_get_type(void) { return 0; }
+int mapper_get_type(void) { return s_mapper_type; }
 void maybe_trigger_vblank(int c) { (void)c; }
 void nes_cpu_instruction_boundary(uint16_t pc, int cycles) { (void)pc; (void)cycles; }
 int  game_dispatch_override(uint16_t a) { (void)a; return 0; }
@@ -74,6 +76,7 @@ void nes_dispatch_miss_interp_declined(uint16_t a, const char *reason) {
 void nes_write_runtime_fault(const char *reason) { (void)reason; }
 void debug_server_request_pause(const char *reason) { (void)reason; }
 void nes_brk_executed(uint16_t pc) { (void)pc; }
+void nes_trace_sram_fetch(uint16_t a, uint8_t v) { (void)a; (void)v; }
 void nes_dring_mark(char kind, uint16_t tag) { (void)kind; (void)tag; }
 int runtime_get_savestate_resume(uint16_t *pc, int *tick_charged) {
     if (s_resume_pc == 0) return 0;
@@ -139,6 +142,8 @@ static void fresh(void) {
     g_rti_source = 0;
     g_rti_bank = -1;
     s_miss_count = 0;
+    s_mapper_type = 0;
+    g_code_window_base = 0x8000;
     s_resume_pc = 0;
     s_resume_tick_charged = 0;
     s_resume_prepares = 0;
@@ -243,31 +248,45 @@ int main(void) {
     CHECK(g_ram[0x16] == 0x7E,"T4d forced entry executed");
     CHECK(s_miss_count == 0,  "T4d force entry did not log a dispatch miss");
 
-    printf("[T4e] save-state continuation cooperates with covered native calls\n");
+    printf("[T4e] generated MMC3 force entry preserves the live CPU window\n");
+    fresh();
+    s_mapper_type = 4;
+    g_code_window_base = 0xA000;
+    { uint8_t p[] = {0xA9,0x6A, 0x85,0x17, 0x60};
+      load(0x0600, p, sizeof p); }
+    r = nes_interp_force_generated(0x8600, 3);
+    CHECK(r == 1,             "T4e generated force entry handled");
+    CHECK(g_ram[0x17] == 0x6A,"T4e generated force entry executed");
+    { NesInterpExit exit;
+      nes_interp_get_last_exit(&exit);
+      CHECK(exit.entry_pc == 0xA600,
+            "T4e generated address projected through live MMC3 window"); }
+
+    printf("[T4f] save-state continuation cooperates with covered native calls\n");
     fresh(); /* configured policy remains the default ISLAND */
     s_native_calls = 0;
     { uint8_t p[] = {0x20,0x00,0x07, 0x00}; /* JSR $0700; BRK */
       load(0x0600, p, sizeof p); }
     r = nes_interp_resume(0x0600);
-    CHECK(r == 1,             "T4e continuation handled");
-    CHECK(s_native_calls == 1,"T4e continuation used cooperative native JSR");
-    CHECK(g_ram[0x20] == 0x99,"T4e native side effect observed");
+    CHECK(r == 1,             "T4f continuation handled");
+    CHECK(s_native_calls == 1,"T4f continuation used cooperative native JSR");
+    CHECK(g_ram[0x20] == 0x99,"T4f native side effect observed");
 
-    printf("[T4f] save-state continuation recovers a native tail unwind\n");
+    printf("[T4g] save-state continuation recovers a native tail unwind\n");
     fresh();
     s_native_calls = 0;
     { uint8_t caller[] = {0x20,0x20,0x07, 0x00}; /* JSR $0720; BRK */
       uint8_t resumed[] = {0xA9,0x6D, 0x85,0x17, 0x60};
       load(0x0600, caller, sizeof caller); load(0x0730, resumed, sizeof resumed); }
     r = nes_interp_resume(0x0600);
-    CHECK(r == 1,             "T4f continuation handled");
-    CHECK(s_native_calls == 1,"T4f native target invoked once");
-    CHECK(s_resume_prepares == 1,"T4f resume driver re-entered once");
-    CHECK(g_ram[0x17] == 0x6D,"T4f recovered continuation executed");
+    CHECK(r == 1,             "T4g continuation handled");
+    CHECK(s_native_calls == 1,"T4g native target invoked once");
+    CHECK(s_resume_prepares == 1,"T4g resume driver re-entered once");
+    CHECK(g_ram[0x17] == 0x6D,"T4g recovered continuation executed");
     { NesInterpStats stats;
       nes_interp_get_stats(&stats);
       CHECK(stats.native_resume_reentries > 0,
-            "T4f native resume re-entry counted"); }
+            "T4g native resume re-entry counted"); }
 
     printf("[T5] SBC with carry (no borrow)\n");
     fresh();
@@ -305,15 +324,33 @@ int main(void) {
     CHECK(g_ram[0x18] == 0x43, "T8 [$18] incremented 0x41 -> 0x43");
     CHECK(g_cpu.Z == 0 && g_cpu.N == 0, "T8 flags from INC result");
 
-    printf("[T9] rendered-frame boundary resets the live instruction counter\n");
+    printf("[T9] explicit resume remains available with miss fallback disabled\n");
+    fresh();
+    { uint8_t p[] = {0xA9,0x5C, 0x85,0x19, 0x60};
+      load(0x0600, p, sizeof p); }
+    nes_interp_set_enabled(0);
+    r = nes_interp_resume(0x0600);
+    CHECK(r == 1,              "T9 explicit resume handled");
+    CHECK(g_ram[0x19] == 0x5C, "T9 resumed code ran with fallback disabled");
+
+    printf("[T10] dynamic RAM dispatch remains available with fallback disabled\n");
+    fresh();
+    { uint8_t p[] = {0xA9,0x6D, 0x85,0x1A, 0x60};
+      load(0x0600, p, sizeof p); }
+    r = nes_interp_dispatch(0x0600);
+    CHECK(r == 1,              "T10 dynamic RAM dispatch handled");
+    CHECK(g_ram[0x1A] == 0x6D, "T10 RAM code ran with fallback disabled");
+    nes_interp_set_enabled(1);
+
+    printf("[T11] rendered-frame boundary resets the live instruction counter\n");
     { NesInterpStats stats;
       nes_interp_get_stats(&stats);
       CHECK(stats.instrs_this_frame > 0,
-            "T9 frame counter accumulated interpreted instructions");
+            "T11 frame counter accumulated interpreted instructions");
       nes_interp_frame_boundary();
       nes_interp_get_stats(&stats);
       CHECK(stats.instrs_this_frame == 0,
-            "T9 frame counter reset at boundary"); }
+            "T11 frame counter reset at boundary"); }
     { NesInterpHotspot hotspots[NES_INTERP_HOTSPOT_CAP];
       int n = nes_interp_get_hotspots(
           hotspots, NES_INTERP_HOTSPOT_CAP, 0);
@@ -323,11 +360,21 @@ int main(void) {
               hotspots[i].period_calls > 0 &&
               hotspots[i].period_instrs > 0)
               found = 1;
-      CHECK(found, "T9 per-entry hotspot retained calls and instructions");
+      CHECK(found, "T11 per-entry hotspot retained calls and instructions");
       nes_interp_get_hotspots(NULL, 0, 1);
       CHECK(nes_interp_get_hotspots(
                 hotspots, NES_INTERP_HOTSPOT_CAP, 0) == 0,
-            "T9 hotspot period clears after durable flush"); }
+            "T11 hotspot period clears after durable flush"); }
+
+    printf("[T12] Mapper-40 boundary fallback executes one instruction then tails native\n");
+    fresh();
+    s_native_calls = 0;
+    { uint8_t p[] = {0x4C,0x00,0x07}; /* JMP $0700 */
+      load(0x0600, p, sizeof p); }
+    r = nes_interp_step_tail(0x0600, 0);
+    CHECK(r == 1,              "T12 boundary step handled");
+    CHECK(s_native_calls == 1, "T12 resumed through native tail target once");
+    CHECK(g_ram[0x20] == 0x99, "T12 native tail target executed");
 
     printf("\n==== interp self-test: %d checks, %d failures ====\n", g_checks, g_fails);
     return g_fails;

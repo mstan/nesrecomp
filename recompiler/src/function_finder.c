@@ -524,6 +524,45 @@ static bool can_demote_control_stub(const NESRom *rom, const FunctionEntry *entr
     return false;
 }
 
+static bool entry_requires_independent_body(const NESRom *rom,
+                                            const GameConfig *cfg,
+                                            const FunctionEntry *entry) {
+    /* Explicit control-flow and configured table evidence are contracts that
+     * the address is independently callable. Such entries must start with
+     * fresh code-generation state rather than inheriting pending PHA/branch
+     * analysis from an unrelated covering function. */
+    if (entry->source_flags & (FUNCTION_SOURCE_CONTROL |
+                               FUNCTION_SOURCE_KNOWN_TABLE |
+                               FUNCTION_SOURCE_SPLIT_TABLE)) {
+        return true;
+    }
+
+    /* Weakly discovered bare return and jump stubs do not carry enough
+     * independent evidence to justify another body. Proven control/table
+     * entries above must remain independent even when they are a single RTS:
+     * their enclosing body may have incompatible pending stack state. */
+    if (can_demote_control_stub(rom, entry)) return false;
+
+    /* Automatic pointer/table/cross-bank scans are intentionally noisy.
+     * A validated entry beginning with JSR is substantially stronger evidence
+     * of an independent routine than a valid-looking interior instruction.
+     * Preserve that shape so it cannot inherit an enclosing function's
+     * pending PHA state; invalid, data, and ambiguous interior candidates may
+     * still be represented as secondaries. */
+    if (entry->source_flags & (FUNCTION_SOURCE_PTR_SCAN |
+                               FUNCTION_SOURCE_TABLE_RUN |
+                               FUNCTION_SOURCE_XBANK)) {
+        if (is_data_region(cfg, entry->bank, entry->addr)) return false;
+        if (!validate_code_target(rom, entry->bank, entry->addr,
+                                  TABLE_RUN_MIN_VALID)) {
+            return false;
+        }
+        int read_bank = resolve_bank_for_addr(rom, entry->bank, entry->addr);
+        return rom_read(rom, read_bank, entry->addr) == 0x20;
+    }
+    return false;
+}
+
 static const char *classify_missing_manual_entry(const NESRom *rom, const GameConfig *cfg,
                                                  uint16_t addr, int bank) {
     int fixed_bank = rom->prg_banks - 1;
@@ -660,8 +699,7 @@ static int classify_secondary_entries(const NESRom *rom, FunctionList *list,
                 other->covering_addr = entry->addr;
                 other->covering_bank = entry->bank;
             }
-            if ((other->source_flags & FUNCTION_SOURCE_CONTROL) &&
-                !can_demote_control_stub(rom, other)) {
+            if (entry_requires_independent_body(rom, cfg, other)) {
                 continue;
             }
             if (other->kind == FUNCTION_KIND_SECONDARY) {
@@ -1521,9 +1559,20 @@ void function_finder_run(const NESRom *rom, FunctionList *out, const GameConfig 
      * else bank 0. Vectors below $8000 are RAM/SRAM handlers and must execute
      * through the runtime interpreter, not as bogus bank-0 ROM functions. */
 #define VEC_BANK(addr) ((addr) >= 0xC000 ? fixed_bank : 0)
-    if (rom->reset_vector >= 0x8000) add_function(out, rom->reset_vector, VEC_BANK(rom->reset_vector));
-    if (rom->nmi_vector   >= 0x8000) add_function(out, rom->nmi_vector,   VEC_BANK(rom->nmi_vector));
-    if (rom->irq_vector   >= 0x8000) add_function(out, rom->irq_vector,   VEC_BANK(rom->irq_vector));
+    if (rom_mapper40(rom)) {
+        add_mapper40_cpu_target(rom, out, rom->reset_vector, FUNCTION_SOURCE_CONTROL);
+        add_mapper40_cpu_target(rom, out, rom->nmi_vector, FUNCTION_SOURCE_CONTROL);
+        add_mapper40_cpu_target(rom, out, rom->irq_vector, FUNCTION_SOURCE_CONTROL);
+        /* Mapper 40 carts expose the selected $C000 bank's final six bytes at
+         * $DFFA-$DFFF. FDS-style trampolines use those per-bank vectors as
+         * indirect NMI/RESET/IRQ destinations, so every selectable bank's
+         * vector targets are control-flow roots. */
+        seed_mapper40_bank_vectors(rom, out);
+    } else {
+        if (rom->reset_vector >= 0x8000) add_function(out, rom->reset_vector, VEC_BANK(rom->reset_vector));
+        if (rom->nmi_vector   >= 0x8000) add_function(out, rom->nmi_vector,   VEC_BANK(rom->nmi_vector));
+        if (rom->irq_vector   >= 0x8000) add_function(out, rom->irq_vector,   VEC_BANK(rom->irq_vector));
+    }
 #undef VEC_BANK
 
     /* For mappers with fully-switchable 32KB banks (GxROM), each window may

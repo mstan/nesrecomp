@@ -9,6 +9,7 @@
 #include "game_extras.h"
 #include "override_chr.h"
 #include "ppu_dot.h"
+#include "crc32.h"
 #include "interp.h"
 #include "recomp_stack.h"
 #include "save_ram.h"
@@ -332,6 +333,7 @@ uint64_t           g_unhandled_dispatch_count = 0;
 
 BrkPolicy g_brk_policy = BRK_DIAG;
 uint64_t  g_brk_count  = 0;
+int       g_nes_expected_exit = 0;
 uint16_t  g_brk_last_pc = 0;
 int       g_brk_last_bank = 0;
 uint64_t  g_brk_last_frame = 0;
@@ -874,7 +876,8 @@ void runtime_call_irq_handler(void) {
     func_IRQ();
     for (int i = 0; i < 8 && g_cpu.S < s_pre; ++i) {
         uint16_t target = irq_last_consumed_rts_target();
-        if (target < 0x8000)
+        if (target < 0x8000 &&
+            !(mapper_get_type() == 40 && target >= 0x6000))
             break;
         if (!call_by_address(target))
             break;
@@ -889,8 +892,10 @@ void runtime_call_irq_handler(void) {
 static void maybe_deliver_irq(void) {
     if (g_cpu.I)              return;   /* IRQ masked */
     if (s_in_irq)             return;   /* no re-entry while a handler runs */
-    if (s_vblank_depth != 0)  return;   /* defer during the NMI frame driver */
-    if (!apu_irq_asserted())  return;   /* no source asserting the line */
+    if (s_vblank_depth != 0 && mapper_get_type() != 40)
+        return;                         /* defer during the NMI frame driver */
+    if (!apu_irq_asserted() && !mapper_irq_asserted())
+        return;                         /* no source asserting the line */
 
     runtime_call_irq_handler();
 }
@@ -912,7 +917,13 @@ void nes_cpu_instruction_boundary(uint16_t cpu_pc, int cycles) {
 
 void nes_instruction_boundary(uint16_t gen_pc, int cycles) {
     uint16_t cpu_pc = gen_pc;
-    if (gen_pc >= 0x8000)
+    /* Only the 8KB-window mappers compile physical bank layouts whose
+     * generated PC must be projected through the live CPU window. Other
+     * mappers (notably GxROM's 32KB window) already use the real CPU address;
+     * folding their $C000-$FFFF half through g_code_window_base corrupts the
+     * interrupted continuation recorded at a frame boundary. */
+    int mapper = mapper_get_type();
+    if ((mapper == 4 || mapper == 40) && gen_pc >= 0x8000)
         cpu_pc = (uint16_t)(g_code_window_base | (gen_pc & 0x1FFF));
     nes_cpu_instruction_boundary(cpu_pc, cycles);
 }
@@ -1538,6 +1549,8 @@ void nes_write(uint16_t addr, uint8_t val) {
         return;
     }
     if (addr >= 0x6000 && addr <= 0x7FFF) {
+        /* Mapper 40 maps PRG ROM into this window; writes are not SRAM. */
+        if (mapper_get_type() == 40) return;
         uint8_t *slot = &g_sram[addr - 0x6000];
         if (s_ww_state != 0) wram_write_watch(addr, *slot, val);
         if (*slot != val) {
@@ -3118,6 +3131,19 @@ int      runtime_scroll_from_t_valid(void) { return s_scroll_2005_complete; }
 int runtime_get_visible_frame_start(uint8_t *ctrl, uint8_t *sx,
                                     uint8_t *sy, uint16_t *t,
                                     uint64_t *frame) {
+    static int s_enabled = -1;
+    if (s_enabled < 0) {
+#ifndef NESRECOMP_VISIBLE_FRAME_START_DEFAULT
+#define NESRECOMP_VISIBLE_FRAME_START_DEFAULT 0
+#endif
+        s_enabled = NESRECOMP_VISIBLE_FRAME_START_DEFAULT ? 1 : 0;
+        const char *e = getenv("NESRECOMP_VISIBLE_FRAME_START");
+        if (e && *e)
+            s_enabled = (*e != '0') ? 1 : 0;
+    }
+    if (!s_enabled)
+        return 0;
+
     int fresh = s_visible_frame_valid &&
                 (s_visible_frame_frame == g_frame_count ||
                  s_visible_frame_frame + 1 == g_frame_count);

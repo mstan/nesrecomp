@@ -23,6 +23,37 @@ describe("function discovery", () => {
     expect(result.dispatchEntries).toContain("C000");
   });
 
+  it("validates GxROM upper-half entries against their paired bank", () => {
+    const rom = new RomBuilder({ mapper: 66, prgBanks: 4 })
+      .bank(1)
+      .org(0xd4da)
+      .pha()
+      .ldaAbs(0x2002)
+      .rts()
+      // GxROM window 0 vectors live in its paired upper bank.
+      .poke(0xfffa, 0xda)
+      .poke(0xfffb, 0xd4)
+      .poke(0xfffc, 0xda)
+      .poke(0xfffd, 0xd4)
+      .poke(0xfffe, 0xda)
+      .poke(0xffff, 0xd4)
+      .bank(3)
+      .org(0xc000)
+      .rts()
+      .vectors(0xc000, 0xc000, 0xc000)
+      .writeTemp("gxrom_upper_half.nes");
+
+    const result = recompile(
+      rom,
+      `[game]\noutput_prefix = "gxrom-upper"\n`
+    );
+    expect(result.dispatchEntries).toContain("D4DA");
+    expect(result.fullC).toContain("/* $D4DA: 48 */");
+    expect(result.fullC).not.toContain(
+      "nes_interp_force_generated(0xD4DA, 1)"
+    );
+  });
+
   it("discovers JSR targets", () => {
     // RESET calls two subroutines via JSR
     const rom = new RomBuilder()
@@ -204,6 +235,549 @@ describe("function discovery", () => {
 });
 
 describe("code generation", () => {
+  it("keeps call-leading pointer targets independent from covering control-flow bodies", () => {
+    const rom = new RomBuilder()
+      .org(0xc000)
+      // Keep a forward target pending while the structural scanner crosses
+      // the otherwise terminating RTS and reaches $C040.
+      .bne(0xc070)
+      .pha()
+      .rts()
+      .org(0xc040)
+      .jsr(0xc080)
+      .rts()
+      .org(0xc070)
+      .rts()
+      .org(0xc080)
+      .rts()
+      // A ROM pointer is independent evidence that $C040 is callable.
+      .org(0xc200)
+      .word(0xc040)
+      .vectors(0xc000, 0xc000, 0xc000)
+      .writeTemp("independent_pointer_target.nes");
+
+    const result = recompile(rom);
+    const directBody = result.fullC.match(
+      /void func_C040\(void\) \{[\s\S]*?^\}/m
+    );
+
+    expect(directBody).not.toBeNull();
+    expect(directBody![0]).toContain("/* $C040: 20 */");
+    expect(directBody![0]).not.toContain("func_C000_body");
+    expect(directBody![0]).not.toContain("call_by_address_tail");
+  });
+
+  it("keeps direct control-flow entries native when inline data fails weak decode validation", () => {
+    const rom = new RomBuilder({ mapper: 4, prgBanks: 4 })
+      .bank(3)
+      .org(0xc000)
+      .lda(0x06).sta(0x8000)
+      .lda(0x04).sta(0x8001)
+      .jsr(0x8160)
+      .rts()
+      .bank(2)
+      .org(0x8160)
+      .lda(0x00)
+      .jsr(0x8b00)
+      // The low byte of this valid table target is an illegal opcode when
+      // misread as linear code. Direct control-flow evidence must take
+      // precedence over the weak-entry decode heuristic.
+      .word(0x8202)
+      .word(0x0000)
+      .org(0x8202)
+      .rts()
+      .org(0x8b00)
+      .emit([
+        0x0a, 0xa8, 0x68, 0x85, 0x04, 0x68, 0x85, 0x05,
+        0xc8, 0xb1, 0x04, 0x85, 0x06, 0xc8, 0xb1, 0x04,
+        0x85, 0x07, 0x6c, 0x06, 0x00
+      ])
+      .bank(3)
+      .vectors(0xc000, 0xc000, 0xc000)
+      .writeTemp("control_entry_with_inline_data.nes");
+
+    const result = recompile(
+      rom,
+      `[game]\noutput_prefix = "control-inline-data"\npush_all_jsr = true\n\n[[inline_dispatch]]\naddr = 0x8B00\n`
+    );
+
+    expect(result.fullC).toContain("void func_8160_b2(void)");
+    expect(result.fullC).toContain("inline_dispatch $8B00: 1 entries");
+    expect(result.fullC).not.toContain(
+      "nes_interp_force_generated(0x8160, 2)"
+    );
+  });
+
+  it("keeps configured trampoline callers native across inline operands", () => {
+    const rom = new RomBuilder({ mapper: 4, prgBanks: 4 })
+      .bank(3)
+      .org(0xc000)
+      .lda(0x06).sta(0x8000)
+      .lda(0x00).sta(0x8001)
+      .jsr(0x8281)
+      .rts()
+      .org(0xf424)
+      .rts()
+      .org(0xf46d)
+      .rts()
+      .bank(0)
+      .org(0x8281)
+      .ldaAbs(0x0487)
+      .emit([0xf0, 0x08]) // BEQ $828E
+      .lda(0x05)
+      .jsr(0xf424)
+      // Bank plus little-endian target consumed by the configured
+      // trampoline. The leading $02 is illegal if decoded linearly.
+      .emit([0x02, 0x03, 0x81])
+      .rts()
+      .bank(2)
+      .org(0x8103)
+      .rts()
+      .bank(3)
+      .vectors(0xc000, 0xc000, 0xc000)
+      .writeTemp("control_entry_with_trampoline_payload.nes");
+
+    const result = recompile(
+      rom,
+      `[game]\noutput_prefix = "control-trampoline-data"\npush_all_jsr = true\n\n[[trampoline]]\naddr = 0xF424\ninline_bytes = 3\nbank_reg = "A"\naddr_adjust = 0\nbs_fn_addr = 0xF46D\nbank_save_addr = 0xBFFF\n`
+    );
+
+    expect(result.fullC).toContain("void func_8281_b0(void)");
+    expect(result.fullC).toContain(
+      "trampoline $F424 dispatch: bank=2 addr=$8103"
+    );
+    expect(result.fullC).not.toContain(
+      "nes_interp_force_generated(0x8281, 0)"
+    );
+  });
+
+  it("promotes a valid secondary when its false-positive owner is not native", () => {
+    const rom = new RomBuilder({ mapper: 4, prgBanks: 4 })
+      .bank(3)
+      .org(0xc000)
+      .lda(0x06).sta(0x8000)
+      .lda(0x02).sta(0x8001)
+      .jsr(0x8100)
+      .rts()
+      .bank(1)
+      .org(0x8100)
+      .emit([0xd0, 0x5e]) // BNE $8160
+      // The structural walk can cross this byte while a forward branch is
+      // pending, but the native-entry validator correctly rejects it.
+      .emit([0x02])
+      .emit(new Array(0x5d).fill(0xea))
+      .org(0x8120)
+      .emit([
+        0xad, 0x24, 0x04, // LDA $0424
+        0x0a, 0x0a,       // ASL; ASL
+        0x18,             // CLC
+        0x6d, 0x24, 0x04, // ADC $0424
+      ])
+      .rts()
+      .org(0x8130)
+      .lda(0x01).sta(0x0000).lda(0x02).sta(0x0001).rts()
+      .org(0x8140)
+      .lda(0x03).sta(0x0002).lda(0x04).sta(0x0003).rts()
+      .org(0x8150)
+      .lda(0x05).sta(0x0004).lda(0x06).sta(0x0005).rts()
+      .org(0x8160)
+      .rts()
+      // Weak pointer evidence makes $8120 a secondary of the covering
+      // false-positive body instead of an independently forced entry.
+      .org(0xb000)
+      .emit(new Array(16).fill(0xea))
+      .word(0x8120).word(0x8130).word(0x8140).word(0x8150)
+      .emit(new Array(16).fill(0xea))
+      .bank(3)
+      .vectors(0xc000, 0xc000, 0xc000)
+      .writeTemp("orphaned_valid_secondary.nes");
+
+    const result = recompile(
+      rom,
+      `[game]\noutput_prefix = "orphaned-secondary"\npush_all_jsr = false\n`
+    );
+
+    expect(result.fullC).toContain(
+      "nes_interp_force_generated(0x8100, 1)"
+    );
+    expect(result.fullC).toContain("void func_8120_b1(void)");
+    expect(result.fullC).toContain("/* $8120: AD */");
+    expect(result.fullC).not.toContain(
+      "nes_interp_force_generated(0x8120, 1)"
+    );
+  });
+
+  it("lowers a fixed-bank scheduler handoff to coroutine_yield", () => {
+    const rom = new RomBuilder()
+      .org(0xc000)
+      .emit([0xba, 0x96, 0x82, 0x4c, 0x10, 0xc0])
+      .org(0xc010)
+      .emit([0xa2, 0xff, 0x9a])
+      .rts()
+      .vectors(0xc000, 0xc000, 0xc000)
+      .writeTemp("fixed_bank_scheduler_handoff.nes");
+
+    const result = recompile(rom);
+    expect(result.fullC).toContain("coroutine_yield(); return;");
+    expect(result.fullC).not.toContain("call_by_address_tail(0xC010, -1)");
+  });
+
+  it("assigns merge-range aliases only to their canonical body", () => {
+    const rom = new RomBuilder()
+      .org(0xc000)
+      .jsr(0xc010)
+      .jsr(0xc020)
+      .bne(0xc020)
+      .rts()
+      .org(0xc010)
+      .jsr(0xc022)
+      .bne(0xc020)
+      .rts()
+      .org(0xc020)
+      .nop()
+      .nop()
+      .lda(0x42)
+      .rts()
+      .vectors(0xc000, 0xc000, 0xc000)
+      .writeTemp("merge_range_alias_owner.nes");
+
+    const result = recompile(
+      rom,
+      `[game]\noutput_prefix = "merge-range-owner"\n\n[[merge_range]]\nbank = 0\naddr_lo = 0xC020\naddr_hi = 0xC022\n`
+    );
+
+    expect(result.fullC.match(/void func_C022\(void\)/g)).toHaveLength(1);
+    expect(result.fullC).toMatch(
+      /void func_C022\(void\) \{[\s\S]*?func_C020_body\(2\)/
+    );
+  });
+
+  it("publishes explicit labels inside private merge ranges", () => {
+    const rom = new RomBuilder({ mapper: 4, prgBanks: 4 })
+      .bank(3)
+      .org(0xc000)
+      .jsr(0x8000)
+      .jsr(0x8002)
+      .rts()
+      .bank(0)
+      .org(0x8000)
+      .nop()
+      .nop()
+      .lda(0x42)
+      .rts()
+      .vectors(0xc000, 0xc000, 0xc000)
+      .writeTemp("private_merge_range_explicit_label.nes");
+
+    const result = recompile(
+      rom,
+      `[game]\noutput_prefix = "private-range-label"\n\n[[merge_range]]\nbank = 0\naddr_lo = 0x8000\naddr_hi = 0x8002\npublic = false\n\n[[extra_label]]\nbank = 0\naddr = 0x8002\n`
+    );
+
+    expect(result.dispatchEntries).toContain("8002");
+    expect(result.fullC.match(/void func_8002_b0\(void\)/g)).toHaveLength(1);
+    expect(result.fullC).toMatch(
+      /void func_8002_b0\(void\) \{[\s\S]*?func_8000_b0_body\([0-9]+\)/
+    );
+  });
+
+  it("publishes private merge-range labels after a terminating jump", () => {
+    const rom = new RomBuilder({ mapper: 4, prgBanks: 4 })
+      .bank(3)
+      .org(0xc000)
+      .jsr(0x8000)
+      .jsr(0x8003)
+      .rts()
+      .bank(0)
+      .org(0x8000)
+      .jmp(0x8100)
+      .org(0x8003)
+      .lda(0x42)
+      .rts()
+      .org(0x8100)
+      .rts()
+      .vectors(0xc000, 0xc000, 0xc000)
+      .writeTemp("private_merge_range_label_after_jmp.nes");
+
+    const result = recompile(
+      rom,
+      `[game]\noutput_prefix = "private-range-label-jmp"\n\n[[merge_range]]\nbank = 0\naddr_lo = 0x8000\naddr_hi = 0x8003\npublic = false\n\n[[extra_label]]\nbank = 0\naddr = 0x8003\n`
+    );
+
+    expect(result.dispatchEntries).toContain("8003");
+    expect(result.fullC).toMatch(
+      /void func_8003_b0\(void\) \{[\s\S]*?func_8000_b0_body\([0-9]+\)/
+    );
+  });
+
+  it("prioritizes manual contracts before auto secondaries", () => {
+    const rom = new RomBuilder()
+      .org(0xc000)
+      .jsr(0xc020)
+      .rts()
+      .org(0xc020)
+      .nop()
+      .nop()
+      .rts()
+      .vectors(0xc000, 0xc000, 0xc000)
+      .writeTemp("manual_contract_before_auto_secondaries.nes");
+
+    const result = recompile(
+      rom,
+      `[game]\noutput_prefix = "manual-priority"\n\n[functions]\nfixed = [0xC022]\n`
+    );
+
+    const wrapper = result.fullC.match(
+      /void func_C022\(void\) \{[\s\S]*?^\}/m
+    );
+    expect(wrapper).not.toBeNull();
+    expect(wrapper![0]).toContain("func_C020_body(1)");
+    expect(wrapper![0]).not.toContain("nes_interp_dispatch_bank");
+  });
+
+  it("does not assign skipped post-JMP bytes to an enclosing body", () => {
+    const rom = new RomBuilder()
+      .org(0xc000)
+      .bne(0xc014)
+      .jmp(0xc020)
+      .emit(new Array(0x0f).fill(0xea))
+      .rts()
+      .org(0xc020)
+      .rts()
+      .vectors(0xc000, 0xc000, 0xc000)
+      .writeTemp("manual_entry_after_jmp.nes");
+
+    const result = recompile(
+      rom,
+      `[game]\noutput_prefix = "manual-after-jmp"\n\n[functions]\nfixed = [0xC008]\n`
+    );
+
+    const directBody = result.fullC.match(
+      /void func_C008\(void\) \{[\s\S]*?^\}/m
+    );
+    expect(directBody).not.toBeNull();
+    expect(directBody![0]).toContain("label_C008");
+    expect(directBody![0]).not.toContain("nes_interp_dispatch_bank");
+    expect(directBody![0]).not.toMatch(/func_[0-9A-F]+_body\(/);
+  });
+
+  it("charges only the taken and page-cross branch cycle deltas", () => {
+    const rom = new RomBuilder()
+      .org(0xc000)
+      .jsr(0xc020)
+      .jsr(0xc0f0)
+      .rts()
+      .org(0xc020)
+      .bne(0xc028)
+      .emit(new Array(6).fill(0xea))
+      .rts()
+      .org(0xc0f0)
+      .emit(new Array(13).fill(0xea))
+      .bne(0xc105)
+      .emit(new Array(6).fill(0xea))
+      .rts()
+      .vectors(0xc000, 0xc000, 0xc000)
+      .writeTemp("branch_cycle_deltas.nes");
+
+    const result = recompile(rom);
+
+    expect(result.fullC).toMatch(
+      /\$C020: D0 \*\/ nes_instruction_boundary\(0xC020, 2\); if \(!g_cpu\.Z\) \{ maybe_trigger_vblank\(1\); goto label_C028; \}/
+    );
+    expect(result.fullC).toMatch(
+      /\$C0FD: D0 \*\/ nes_instruction_boundary\(0xC0FD, 2\); if \(!g_cpu\.Z\) \{ maybe_trigger_vblank\(2\); goto label_C105; \}/
+    );
+  });
+
+  it("dispatches backward branches whose local label was never emitted", () => {
+    const rom = new RomBuilder()
+      .org(0xc000)
+      .bne(0xc003)
+      .jsr(0xc100)
+      .jmp(0xc100)
+      .org(0xc008)
+      .emit(new Array(0x18).fill(0xea))
+      .org(0xc020)
+      .bne(0xc008)
+      .rts()
+      .org(0xc100)
+      .rts()
+      .vectors(0xc000, 0xc000, 0xc000)
+      .writeTemp("unemitted_backward_branch_label.nes");
+
+    const result = recompile(
+      rom,
+      `[game]\noutput_prefix = "unemitted-backward"\n\n[[extra_label]]\nbank = 0\naddr = 0xC020\n`
+    );
+
+    expect(result.fullC).toMatch(
+      /\$C020: D0 \*\/ nes_instruction_boundary\(0xC020, 2\); if \(!g_cpu\.Z\) \{ maybe_trigger_vblank\(1\); call_by_address\(0xC008\); return; \}/
+    );
+  });
+
+  it("publishes nested manual entries from the ultimate emitted body", () => {
+    const rom = new RomBuilder()
+      .org(0xc000)
+      .emit(new Array(0x20).fill(0xea))
+      .rts()
+      .vectors(0xc000, 0xc000, 0xc000)
+      .writeTemp("nested_manual_entries.nes");
+
+    const result = recompile(
+      rom,
+      `[game]\noutput_prefix = "nested-manual"\n\n[functions]\nfixed = [0xC008, 0xC010]\n`
+    );
+
+    expect(result.dispatchEntries).toContain("C008");
+    expect(result.dispatchEntries).toContain("C010");
+    expect(result.fullC).toContain("void func_C008(void)");
+    expect(result.fullC).toContain("void func_C010(void)");
+  });
+
+  it("publishes automatic secondaries owned by a wrapper-only manual entry", () => {
+    const rom = new RomBuilder()
+      .org(0xc000)
+      .bne(0xc020)
+      .emit(new Array(13).fill(0xea))
+      .rts()
+      .org(0xc010)
+      .lda(0x00)
+      .emit([0xf0, 0xfb])
+      .emit(new Array(12).fill(0xea))
+      .org(0xc020)
+      .rts()
+      .org(0xe000)
+      .jsr(0xc00f)
+      .rts()
+      .poke(0xe100, 0x00)
+      .poke(0xe101, 0xc0)
+      .vectors(0xe000, 0xe000, 0xe000)
+      .writeTemp("nested_auto_secondary_owner.nes");
+
+    const result = recompile(
+      rom,
+      `[game]\noutput_prefix = "nested-auto-owner"\n\n[functions]\nfixed = [0xC010]\n`
+    );
+
+    expect(result.dispatchEntries).toContain("C00F");
+    expect(result.fullC).toContain("void func_C00F(void)");
+    expect(result.fullC).not.toContain(
+      "nes_interp_dispatch_bank(0xC00F, 0xC00F"
+    );
+  });
+
+  it("dispatches an adjacent two-PHA indirect-call continuation across function bodies", () => {
+    const rom = new RomBuilder()
+      .org(0xc000)
+      .emit([0xa9, 0xc0, 0x48, 0xa9, 0x10, 0x48, 0x6c, 0x00, 0x00])
+      .org(0xc011)
+      .rts()
+      .vectors(0xc000, 0xc000, 0xc000)
+      .writeTemp("two_pha_indirect_continuation.nes");
+
+    const result = recompile(rom);
+
+    expect(result.fullC).toContain("call_by_address_tail(0xC011, 0)");
+    expect(result.fullC).not.toContain("goto label_C011");
+  });
+
+  it("publishes a branch target that overlaps the fallthrough instruction", () => {
+    const rom = new RomBuilder()
+      .org(0xc000)
+      .emit([0x90, 0x02, 0xad, 0x00, 0x60, 0x60])
+      .vectors(0xc000, 0xc000, 0xc000)
+      .writeTemp("overlapping_branch_target.nes");
+
+    const result = recompile(rom);
+
+    expect(result.dispatchEntries).toContain("C004");
+    expect(result.fullC).toContain("void func_C004(void)");
+  });
+
+  it("keeps nested manual entries standalone when the final owner cannot publish them", () => {
+    const rom = new RomBuilder()
+      .org(0xc000)
+      .emit(new Array(0x800).fill(0xea))
+      .org(0xc800)
+      .bne(0xc803)
+      .rts()
+      .rts()
+      .vectors(0xc000, 0xc000, 0xc000)
+      .writeTemp("nested_manual_beyond_owner_cap.nes");
+
+    const result = recompile(
+      rom,
+      `[game]\noutput_prefix = "nested-manual-cap"\n\n[functions]\nfixed = [0xC7FF, 0xC803]\n`
+    );
+
+    expect(result.dispatchEntries).toContain("C7FF");
+    expect(result.dispatchEntries).toContain("C803");
+    expect(result.fullC).toContain("void func_C803(void) {");
+  });
+
+  it("keeps a manual bare RTS independent from an enclosing PHA dispatch", () => {
+    const rom = new RomBuilder()
+      .org(0xc000)
+      .emit([0x48, 0x48])
+      .rts()
+      .vectors(0xc000, 0xc000, 0xc000)
+      .writeTemp("manual_bare_rts.nes");
+
+    const result = recompile(
+      rom,
+      `[game]\noutput_prefix = "manual-bare-rts"\n\n[functions]\nfixed = [0xC002]\n`
+    );
+
+    const parentBody = result.fullC.match(/void func_C000_body\(int _entry\) \{[\s\S]*?\n\}/);
+    const directBody = result.fullC.match(/void func_C002\(void\) \{[\s\S]*?\n\}/);
+    expect(parentBody).not.toBeNull();
+    expect(parentBody![0]).toContain("call_by_address_tail");
+    expect(directBody).not.toBeNull();
+    expect(directBody![0]).not.toContain("call_by_address_tail");
+  });
+
+  it("keeps a control-flow bare RTS independent from an enclosing PHA dispatch", () => {
+    const rom = new RomBuilder()
+      .org(0xc000)
+      .emit([0x48, 0x48])
+      .rts()
+      .org(0xc100)
+      .jsr(0xc000)
+      .jmp(0xc002)
+      .vectors(0xc100, 0xc100, 0xc100)
+      .writeTemp("control_bare_rts.nes");
+
+    const result = recompile(rom);
+    const directBody = result.fullC.match(
+      /void func_C002\(void\) \{[\s\S]*?^\}/m
+    );
+
+    expect(directBody).not.toBeNull();
+    expect(directBody![0]).toContain("/* $C002: 60 */");
+    expect(directBody![0]).not.toContain("func_C000_body");
+    expect(directBody![0]).not.toContain("call_by_address_tail");
+  });
+
+  it("does not inherit unmatched PHA state through a manual entry", () => {
+    const rom = new RomBuilder()
+      .org(0xc000)
+      .emit([0x48, 0x48, 0xd0, 0x06, 0xea, 0xea, 0xea, 0xea])
+      .emit([0xa4, 0x00, 0x60])
+      .vectors(0xc000, 0xc000, 0xc000)
+      .writeTemp("manual_entry_pha_state.nes");
+
+    const result = recompile(
+      rom,
+      `[game]\noutput_prefix = "manual-entry-pha"\n\n[functions]\nfixed = [0xC004, 0xC008]\n`
+    );
+
+    const outerBody = result.fullC.match(/void func_C000(?:_body\(int _entry\)|\(void\)) \{[\s\S]*?\n\}/);
+    const directBody = result.fullC.match(/void func_C008(?:_body\(int _entry\)|\(void\)) \{[\s\S]*?\n\}/);
+    expect(outerBody).not.toBeNull();
+    expect(outerBody![0]).toContain("call_by_address_tail");
+    expect(directBody).not.toBeNull();
+    expect(directBody![0]).not.toContain("call_by_address_tail");
+  });
+
   it("resumes a configured pushed continuation after a direct JMP", () => {
     // Some games implement a callback as:
     //   push (continuation - 1); JMP callback
@@ -663,7 +1237,10 @@ describe("code generation", () => {
 
     const restore = result.fullC.indexOf("g_code_window_base = _nmi_saved_wb;");
     const postNmi = result.fullC.indexOf("runtime_begin_post_nmi();");
-    expect(result.fullC).toContain("runtime_note_interrupt_entry();");
+    // The runner now installs and records the hardware interrupt frame before
+    // calling func_NMI, so generated NMI wrappers must not record it twice.
+    expect(result.fullC).toContain("The runner pushes the 6502 NMI hardware frame.");
+    expect(result.fullC).not.toContain("runtime_note_interrupt_entry();");
     expect(restore).toBeGreaterThan(-1);
     expect(postNmi).toBeGreaterThan(restore);
   });
