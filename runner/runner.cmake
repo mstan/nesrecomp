@@ -123,15 +123,18 @@ endif()
 
 # Generated functions can optionally maintain a diagnostic shadow call stack.
 # Some older game projects define RECOMP_STACK_TRACKING unconditionally even
-# for production builds. Default it to the trace policy and explicitly undefine
-# the macro when disabled so trace-off Release builds do not retain two
-# out-of-line diagnostic calls at every generated function boundary. Projects
-# that need stack tracking without the TCP trace server can opt back in with
-# -DNESRECOMP_ENABLE_STACK_TRACKING=ON.
+# for production builds. Make the shared option authoritative in both
+# directions: define the macro when enabled, and explicitly undefine it when
+# disabled so trace-off Release builds do not retain two out-of-line diagnostic
+# calls at every generated function boundary. Projects can therefore request
+# stack tracking without the TCP trace server even if their own CMakeLists does
+# not know about the implementation macro.
 option(NESRECOMP_ENABLE_STACK_TRACKING
     "Track generated function entries/exits for diagnostics"
     ${NESRECOMP_ENABLE_TRACE})
-if(NOT NESRECOMP_ENABLE_STACK_TRACKING)
+if(NESRECOMP_ENABLE_STACK_TRACKING)
+    add_compile_definitions(RECOMP_STACK_TRACKING)
+else()
     if(MSVC)
         add_compile_options(/URECOMP_STACK_TRACKING)
     else()
