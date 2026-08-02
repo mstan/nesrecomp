@@ -129,6 +129,24 @@ static void run_guest_execution(void) {
 }
 static int         s_smoke_hash_frames[SMOKE_MAX_HASHES];
 static int         s_smoke_hash_count = 0;
+
+/* ---- Uncapped benchmark mode (--benchmark N) ----
+ * Runs the same fully-rendered headless frame path as --smoke, but avoids
+ * periodic framebuffer hashing and times only the requested post-warmup
+ * frames. This deliberately excludes SDL presentation, audio, pacing, and
+ * process startup. */
+static int         s_benchmark_frames = 0;
+static int         s_benchmark_warmup = 300;
+static const char *s_benchmark_output = NULL;
+static Uint64      s_benchmark_start = 0;
+
+#ifndef NESRECOMP_BENCH_BUILD_ID
+#define NESRECOMP_BENCH_BUILD_ID __DATE__ " " __TIME__
+#endif
+
+static int headless_run_active(void) {
+    return s_smoke_frames > 0 || s_benchmark_frames > 0;
+}
 #ifdef NESRECOMP_NET
 static jmp_buf s_netplay_return;
 static int s_netplay_return_ready;
@@ -667,6 +685,35 @@ static void smoke_write_results(void) {
     if (s_smoke_output && f != stdout) fclose(f);
 }
 
+static void benchmark_write_results(Uint64 end_counter) {
+    Uint64 frequency = SDL_GetPerformanceFrequency();
+    double elapsed = frequency && end_counter >= s_benchmark_start
+        ? (double)(end_counter - s_benchmark_start) / (double)frequency
+        : 0.0;
+    double ms_per_frame = s_benchmark_frames > 0
+        ? elapsed * 1000.0 / (double)s_benchmark_frames : 0.0;
+    double fps = elapsed > 0.0
+        ? (double)s_benchmark_frames / elapsed : 0.0;
+    uint32_t final_crc = crc32_compute(
+        (const uint8_t *)s_framebuf,
+        (size_t)g_render_width * 240 * sizeof(uint32_t));
+
+    FILE *f = s_benchmark_output ? fopen(s_benchmark_output, "w") : stdout;
+    if (!f) f = stdout;
+    fprintf(f, "{\n");
+    fprintf(f, "  \"build_id\": \"%s\",\n", NESRECOMP_BENCH_BUILD_ID);
+    fprintf(f, "  \"warmup_frames\": %d,\n", s_benchmark_warmup);
+    fprintf(f, "  \"measured_frames\": %d,\n", s_benchmark_frames);
+    fprintf(f, "  \"elapsed_seconds\": %.9f,\n", elapsed);
+    fprintf(f, "  \"ms_per_frame\": %.6f,\n", ms_per_frame);
+    fprintf(f, "  \"fps\": %.3f,\n", fps);
+    fprintf(f, "  \"render_width\": %d,\n", g_render_width);
+    fprintf(f, "  \"final_frame_crc32\": \"%08x\",\n", final_crc);
+    fprintf(f, "  \"dispatch_miss_count\": %u\n", g_miss_count_any);
+    fprintf(f, "}\n");
+    if (s_benchmark_output && f != stdout) fclose(f);
+}
+
 /* ---- VBlank callback (called from ppu_read_reg when $2002 bit7 fires) ---- */
 void nes_vblank_callback(void) {
     static uint64_t s_cb_count = 0;
@@ -705,8 +752,8 @@ void nes_vblank_callback(void) {
         printf("[VBlank] callback #%llu frame=%llu\n",
                (unsigned long long)s_cb_count, (unsigned long long)g_frame_count);
 
-    /* In smoke mode, skip all SDL input/event handling */
-    if (s_smoke_frames) goto smoke_skip_input;
+    /* In headless modes, skip all SDL input/event handling. */
+    if (headless_run_active()) goto smoke_skip_input;
 
     /* Handle SDL events */
     SDL_Event ev;
@@ -814,7 +861,7 @@ void nes_vblank_callback(void) {
 
 smoke_skip_input:
 
-    if (s_smoke_frames) {
+    if (headless_run_active()) {
         int sp = script_get_buttons();
         if (sp >= 0) g_controller1_buttons = (uint8_t)sp;
         int tcp_btn = debug_server_get_input_override();
@@ -1023,7 +1070,7 @@ smoke_skip_input:
 
     /* Generate one frame of audio after NMI (APU registers now up-to-date).
      * Skip in turbo mode — queued audio would pile up faster than it drains. */
-    if (s_audio_dev && !turbo_active() && !s_smoke_frames) {
+    if (s_audio_dev && !turbo_active() && !headless_run_active()) {
         static int s_synth_mode = -2;            /* -2 = not yet queried */
         static uint64_t s_synth_pos = 0;
         if (s_synth_mode == -2) s_synth_mode = recomp_audio_synth_mode();
@@ -1217,6 +1264,34 @@ smoke_skip_input:
         }
         finish_frame_callback();
         return; /* skip all SDL rendering/pacing */
+    }
+
+    /* Benchmark: use the fully-rendered headless path above, but time only
+     * post-warmup frames and calculate one final CRC outside the timed range. */
+    if (s_benchmark_frames) {
+        int ec = script_check_exit();
+        if (ec >= 0) {
+            fprintf(stderr,
+                    "[Benchmark] input script exited before completion "
+                    "(frame=%llu, code=%d)\n",
+                    (unsigned long long)g_frame_count, ec);
+            exit(ec ? ec : 2);
+        }
+
+        g_frame_count++;
+        if ((int)g_frame_count == s_benchmark_warmup)
+            s_benchmark_start = SDL_GetPerformanceCounter();
+
+        if ((int)g_frame_count >=
+            s_benchmark_warmup + s_benchmark_frames) {
+            Uint64 end_counter = SDL_GetPerformanceCounter();
+            extern int g_nes_expected_exit;
+            g_nes_expected_exit = 1;
+            benchmark_write_results(end_counter);
+            nesrecomp_expect_process_exit();
+            exit(0);
+        }
+        return;
     }
 
     /* OAM debug window — updated every 6 frames to avoid flicker/lag */
@@ -1455,6 +1530,9 @@ int nesrecomp_runner_run(int argc, char *argv[]) {
         else if (strcmp(argv[i], "--smoke")     == 0 && i+1 < argc) s_smoke_frames   = atoi(argv[++i]);
         else if (strcmp(argv[i], "--smoke-interval") == 0 && i+1 < argc) s_smoke_interval = atoi(argv[++i]);
         else if (strcmp(argv[i], "--smoke-output")   == 0 && i+1 < argc) s_smoke_output   = argv[++i];
+        else if (strcmp(argv[i], "--benchmark") == 0 && i+1 < argc) s_benchmark_frames = atoi(argv[++i]);
+        else if (strcmp(argv[i], "--benchmark-warmup") == 0 && i+1 < argc) s_benchmark_warmup = atoi(argv[++i]);
+        else if (strcmp(argv[i], "--benchmark-output") == 0 && i+1 < argc) s_benchmark_output = argv[++i];
         else {
             /* Offer remaining args to the game-specific handler */
             const char *val = (i+1 < argc && argv[i+1][0] != '-') ? argv[i+1] : NULL;
@@ -1509,16 +1587,28 @@ int nesrecomp_runner_run(int argc, char *argv[]) {
      * registers the framebuffer. No-op (per-frame renderer) unless set. */
     ppu_dot_init(s_framebuf);
 
-    /* In smoke mode, skip all SDL initialization — run headless */
-    if (s_smoke_frames) {
-        printf("[Smoke] Headless mode: running %d frames, hashing every %d\n",
-               s_smoke_frames, s_smoke_interval);
+    if (s_benchmark_frames < 0 || s_benchmark_warmup < 0) {
+        fprintf(stderr, "[Benchmark] frame counts must be non-negative\n");
+        exit(2);
+    }
+
+    /* In smoke/benchmark mode, skip all SDL initialization and run headless. */
+    if (headless_run_active()) {
+        if (s_benchmark_frames) {
+            printf("[Benchmark] Headless mode: warmup=%d measured=%d\n",
+                   s_benchmark_warmup, s_benchmark_frames);
+            if (s_benchmark_warmup == 0)
+                s_benchmark_start = SDL_GetPerformanceCounter();
+        } else {
+            printf("[Smoke] Headless mode: running %d frames, hashing every %d\n",
+                   s_smoke_frames, s_smoke_interval);
+        }
         memset(s_framebuf, 0, sizeof(s_framebuf));
         run_guest_execution();
-        fprintf(stderr, "[Smoke] game_run_main returned unexpectedly at frame %llu\n",
+        fprintf(stderr, "[Headless] game_run_main returned unexpectedly at frame %llu\n",
                 (unsigned long long)g_frame_count);
         nes_dump_dispatch_ring();
-        smoke_write_results();
+        if (s_smoke_frames) smoke_write_results();
         exit(1);
     }
 
