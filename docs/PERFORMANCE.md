@@ -77,6 +77,9 @@ Each result is five order-balanced baseline/candidate pairs.
   retained for its Xbox-relevant memory reduction, not as a claimed speed win.
   Stack-only/ring-free medians were 843.447/861.898 FPS (+2.19%) but paired
   signals were mixed. BSS fell by 1,578,048 bytes and text by 6,012 bytes.
+- A header-inline internal-RAM read fast path was rejected. It preserved all
+  correctness checkpoints but reduced median throughput by 1.47% and enlarged
+  the executable from 74,424,037 to 86,188,934 bytes (15.81%).
 - Both experiments preserved the final benchmark CRC (`fa267494`) and zero
   dispatch misses. The retained stack change also matched six smoke CRC
   checkpoints through frame 500.
@@ -92,7 +95,8 @@ Each result is five order-balanced baseline/candidate pairs.
       retaining an explicit diagnostic opt-in.
 - [x] Compile post-mortem event-ring writes and storage out of production
       builds while retaining an explicit diagnostic opt-in.
-- [ ] Measure inline common bus paths before changing generated code.
+- [x] Measure an inline common read path (rejected: slower and excessive code
+      growth).
 - [ ] Measure PPU work by rendering mode and pursue algorithmic reductions.
 - [ ] Audit generated per-instruction hooks and dynamic dispatch boundaries.
 - [ ] Validate the retained set on the Xbox toolchain and report code size,
