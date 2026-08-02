@@ -73,6 +73,10 @@ Each result is five order-balanced baseline/candidate pairs.
   Baseline/candidate medians were 733.627/764.196 FPS, a 4.17% improvement;
   all five paired signals were non-negative. The executable shrank from
   75,886,183 to 74,430,404 bytes (1.92%).
+- Compiling post-mortem dispatch and frame-event rings out of production was
+  retained for its Xbox-relevant memory reduction, not as a claimed speed win.
+  Stack-only/ring-free medians were 843.447/861.898 FPS (+2.19%) but paired
+  signals were mixed. BSS fell by 1,578,048 bytes and text by 6,012 bytes.
 - Both experiments preserved the final benchmark CRC (`fa267494`) and zero
   dispatch misses. The retained stack change also matched six smoke CRC
   checkpoints through frame 500.
@@ -86,7 +90,8 @@ Each result is five order-balanced baseline/candidate pairs.
 - [x] Measure nonlinear APU mixer memoization (rejected: below retention gate).
 - [x] Strip shadow-stack tracking from trace-off production hot paths while
       retaining an explicit diagnostic opt-in.
-- [ ] Measure compiling post-mortem event-ring writes out of production builds.
+- [x] Compile post-mortem event-ring writes and storage out of production
+      builds while retaining an explicit diagnostic opt-in.
 - [ ] Measure inline common bus paths before changing generated code.
 - [ ] Measure PPU work by rendering mode and pursue algorithmic reductions.
 - [ ] Audit generated per-instruction hooks and dynamic dispatch boundaries.

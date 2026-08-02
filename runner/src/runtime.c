@@ -2464,6 +2464,11 @@ void runtime_prepare_guest_resume(uint16_t pc, int tick_charged) {
     s_skip_next_boundary_tick = tick_charged ? 1 : 0;
 }
 
+#ifndef NESRECOMP_POSTMORTEM_RINGS
+#define NESRECOMP_POSTMORTEM_RINGS 1
+#endif
+
+#if NESRECOMP_POSTMORTEM_RINGS
 /* Always-on ring of the last dispatches (addr, caller_bank, S, depth, kind)
  * for post-mortem attribution — dumped by launcher.c's unexpected-exit
  * handler. Kind: 'C'=call (JSR), 'T'=tail (JMP), 'D'=deferred lap. */
@@ -2522,6 +2527,13 @@ static void dring_push(uint16_t addr, int cb, char kind) {
     s_dring_head++;
     dispatch_trace_maybe(addr, cb, kind);
 }
+#else
+static inline void dring_push(uint16_t addr, int cb, char kind) {
+    (void)addr;
+    (void)cb;
+    (void)kind;
+}
+#endif
 
 /* Context markers from the runner (NMI enter/exit etc.) so the dispatch ring
  * shows which dispatches ran inside which handler invocation. */
@@ -2548,7 +2560,8 @@ void nes_trace_indirect_jump(uint16_t pc, uint16_t target) {
     }
 }
 
-/* ---- Always-on frame-event ring (see nes_runtime.h for the event map) ----
+#if NESRECOMP_POSTMORTEM_RINGS
+/* ---- Frame-event ring (see nes_runtime.h for the event map) ----
  * Sized for ~10k frames of steady-state events so a scripted run's whole
  * history is retained; eviction keeps memory bounded at ~1.5MB. */
 #define FRING_N 65536
@@ -2605,6 +2618,19 @@ void nes_fring_init_dump(void) {
     const char *e = getenv("NESRECOMP_FRING_DUMP");
     if (e && *e) { s_fring_dump_path = e; atexit(fring_dump_atexit); }
 }
+#else
+void nes_fring_set_dma_page(uint8_t page) { (void)page; }
+uint16_t nes_fring_shadow_digest(void) { return 0; }
+void nes_fring_push(char kind, uint16_t aux) { (void)kind; (void)aux; }
+int nes_fring_last(int n, NesFrameEvt *dst) { (void)n; (void)dst; return 0; }
+void nes_fring_init_dump(void) {
+    const char *e = getenv("NESRECOMP_FRING_DUMP");
+    if (e && *e)
+        fprintf(stderr,
+                "[runtime] NESRECOMP_FRING_DUMP requires "
+                "NESRECOMP_ENABLE_POSTMORTEM_RINGS=ON\n");
+}
+#endif
 
 static void write_dispatch_ring(FILE *out, uint32_t limit) {
     uint32_t n = s_dring_head < DISPATCH_RING_N ? s_dring_head : DISPATCH_RING_N;
@@ -2617,10 +2643,15 @@ static void write_dispatch_ring(FILE *out, uint32_t limit) {
 }
 
 void nes_dump_dispatch_ring(void) {
+#if NESRECOMP_POSTMORTEM_RINGS
     uint32_t n = s_dring_head < DISPATCH_RING_N ? s_dring_head : DISPATCH_RING_N;
     printf("[EXIT] last %u dispatches (oldest first; kind C=jsr T=tail D=driven-lap):\n", n);
     write_dispatch_ring(stdout, 0);
     fflush(stdout);
+#else
+    printf("[EXIT] dispatch ring disabled in this production build\n");
+    fflush(stdout);
+#endif
 }
 
 void nes_write_runtime_fault(const char *reason) {
