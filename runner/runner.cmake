@@ -111,6 +111,24 @@ else()
     add_compile_definitions(NESRECOMP_TRACE=0)
 endif()
 
+# Generated functions can optionally maintain a diagnostic shadow call stack.
+# Some older game projects define RECOMP_STACK_TRACKING unconditionally even
+# for production builds. Default it to the trace policy and explicitly undefine
+# the macro when disabled so trace-off Release builds do not retain two
+# out-of-line diagnostic calls at every generated function boundary. Projects
+# that need stack tracking without the TCP trace server can opt back in with
+# -DNESRECOMP_ENABLE_STACK_TRACKING=ON.
+option(NESRECOMP_ENABLE_STACK_TRACKING
+    "Track generated function entries/exits for diagnostics"
+    ${NESRECOMP_ENABLE_TRACE})
+if(NOT NESRECOMP_ENABLE_STACK_TRACKING)
+    if(MSVC)
+        add_compile_options(/URECOMP_STACK_TRACKING)
+    else()
+        add_compile_options(-URECOMP_STACK_TRACKING)
+    endif()
+endif()
+
 # The recompiled C in each game's generated/ is machine-generated and leans on
 # K&R-style implicit declarations (cross-bank func_XXXX calls without a prior
 # prototype). gcc warns; clang (and gcc 14+) make it a hard error by default,

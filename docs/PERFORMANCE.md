@@ -61,15 +61,32 @@ The useful patterns are:
 Call counts alone are not evidence: ndsrecomp rejected several high-coverage
 specializations that were flat in whole-workload timing.
 
+## NES results
+
+The first Release measurements use Super Mario Bros. 3, MinGW GCC 15.2,
+`NESRECOMP_ENABLE_TRACE=OFF`, 600 warmup frames, and 3,000 measured frames.
+Each result is five order-balanced baseline/candidate pairs.
+
+- Nonlinear APU mixer memoization was rejected. Baseline/candidate medians were
+  857.363/859.771 FPS, a 0.28% change with a negative pair.
+- Disabling generated shadow-stack tracking in trace-off builds was retained.
+  Baseline/candidate medians were 733.627/764.196 FPS, a 4.17% improvement;
+  all five paired signals were non-negative. The executable shrank from
+  75,886,183 to 74,430,404 bytes (1.92%).
+- Both experiments preserved the final benchmark CRC (`fa267494`) and zero
+  dispatch misses. The retained stack change also matched six smoke CRC
+  checkpoints through frame 500.
+
 ## NES burn-down
 
 - [x] Add an uncapped, deterministic, fully rendered benchmark mode.
-- [ ] Establish a quiet Release baseline with a representative title.
+- [x] Establish a quiet Release baseline with a representative title.
 - [ ] Attribute CPU time across APU, PPU, generated CPU/runtime, mapper, and
       dispatch work.
-- [ ] Avoid repeated nonlinear APU mixer work when channel levels are unchanged.
-- [ ] Strip stack tracking and post-mortem event-ring writes from trace-off
-      production hot paths; retain diagnostic builds.
+- [x] Measure nonlinear APU mixer memoization (rejected: below retention gate).
+- [x] Strip shadow-stack tracking from trace-off production hot paths while
+      retaining an explicit diagnostic opt-in.
+- [ ] Measure compiling post-mortem event-ring writes out of production builds.
 - [ ] Measure inline common bus paths before changing generated code.
 - [ ] Measure PPU work by rendering mode and pursue algorithmic reductions.
 - [ ] Audit generated per-instruction hooks and dynamic dispatch boundaries.
