@@ -145,9 +145,10 @@ Each result is five order-balanced baseline/candidate pairs.
 - [x] Reduce per-frame PPU background work from per-pixel state lookup to
       per-tile-span fetches (retained: +21.89% paired median).
 - [ ] Audit generated per-instruction hooks and dynamic dispatch boundaries.
-- [ ] Run every title with a public repository through its attract/demo path
-      and deterministic basic input fuzzing; record non-public titles as
-      skipped.
+- [x] Run every locally runnable title with a public repository through its
+      attract/demo path and deterministic basic input fuzzing. Fourteen titles
+      passed; Mother 1 built but is explicitly blocked on its absent
+      user-supplied ROM. See `docs/PUBLIC_TITLE_PERF_VALIDATION.md`.
 - [ ] Validate the retained set on the Xbox toolchain and report code size,
       static memory, uncapped throughput, and worst representative frame cost.
 
