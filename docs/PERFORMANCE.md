@@ -80,9 +80,27 @@ Each result is five order-balanced baseline/candidate pairs.
 - A header-inline internal-RAM read fast path was rejected. It preserved all
   correctness checkpoints but reduced median throughput by 1.47% and enlarged
   the executable from 74,424,037 to 86,188,934 bytes (15.81%).
-- Both experiments preserved the final benchmark CRC (`fa267494`) and zero
-  dispatch misses. The retained stack change also matched six smoke CRC
-  checkpoints through frame 500.
+- Conservative sharing of context-independent, weakly-discovered overlapping
+  function bodies was also rejected. A bounded bank-13 probe kept all 1,183
+  public wrappers while reducing that bank's generated C from 49,008,519 to
+  47,727,663 bytes (2.61%) and the complete executable from 74,424,037 to
+  73,782,577 bytes (0.86%). Eight order-balanced pairs were throughput-neutral
+  (+0.27% paired median, 902.44 versus 901.60 FPS).
+- Generalizing the same structurally safe proof to every bank reduced all
+  generated C from 307,788,719 to 303,865,755 bytes (1.27%) and the executable
+  from 74,424,037 to 69,124,798 bytes (7.12%). However, all five balanced pairs
+  regressed: the paired median was -5.25%, and raw baseline/candidate medians
+  were 747.50/725.60 FPS (-2.93%). Shared entry wrappers add a native
+  wrapper-to-body boundary, and static discovery evidence does not identify
+  whether an indirect entry is hot. The change was therefore not retained
+  despite its size win.
+- An unconstrained version demonstrated the larger opportunity but was
+  rejected: bank-13 generated C fell 28.08% and the executable fell 8.02%,
+  but jump/return lowering can depend on the canonical body and therefore was
+  not structurally safe to generalize.
+- All ownership variants preserved the final benchmark CRC (`fa267494`), zero
+  dispatch misses, and six smoke CRC checkpoints through frame 500. The
+  earlier retained stack change passed the same gates.
 
 ## NES burn-down
 
@@ -97,6 +115,13 @@ Each result is five order-balanced baseline/candidate pairs.
       builds while retaining an explicit diagnostic opt-in.
 - [x] Measure an inline common read path (rejected: slower and excessive code
       growth).
+- [x] Measure sharing context-independent weak-entry bodies while preserving
+      every public wrapper (rejected: all-bank throughput regression).
+- [ ] Represent jump/return context per block so the remaining overlapping
+      generated regions can be shared without changing native semantics.
+- [ ] If Xbox executable size becomes limiting, measure profile-guided cold
+      weak-entry sharing or compiler basic-block outlining; do not infer
+      hotness from static discovery evidence.
 - [ ] Measure PPU work by rendering mode and pursue algorithmic reductions.
 - [ ] Audit generated per-instruction hooks and dynamic dispatch boundaries.
 - [ ] Validate the retained set on the Xbox toolchain and report code size,
