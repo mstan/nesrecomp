@@ -20,6 +20,10 @@ the emulated machine.
   the median. Longer runs are preferred when scheduler noise is visible.
 - Compare uncapped throughput (`fps` or `ms_per_frame`), not performance while
   paced to the console's refresh rate.
+- Add `--benchmark-breakdown` to an uncapped run when attribution is needed.
+  It reports guest-between-callback, NMI, PPU, sprite-prediction, post-render,
+  and residual callback time. Normal benchmark runs execute no phase-counter
+  calls.
 - Reject a local optimization that does not produce a repeatable material
   result. The default retention gate is at least a 3% median improvement with
   no adverse lower-envelope signal. A smaller result needs an independently
@@ -101,13 +105,29 @@ Each result is five order-balanced baseline/candidate pairs.
 - All ownership variants preserved the final benchmark CRC (`fa267494`), zero
   dispatch misses, and six smoke CRC checkpoints through frame 500. The
   earlier retained stack change passed the same gates.
+- Opt-in phase attribution showed where SMB3's uncapped time was going before
+  renderer work: 49.35% in guest work between frame callbacks, 8.68% in NMI,
+  and 41.89% (0.598 ms/frame median) in the per-frame PPU compositor. All
+  remaining measured callback phases together were below 0.1%.
+- Fetching background nametable, attribute, palette, and CHR state once per
+  8-pixel tile span was retained. The old loop redundantly performed those
+  constant lookups for every pixel. Five order-balanced pairs were all
+  positive: paired median throughput improved 21.89%, with raw
+  baseline/candidate medians of 806.56/972.09 FPS (+20.52%). PPU time fell to
+  0.258 ms/frame (about 57% lower), the executable size was unchanged, the
+  final CRC remained `fa267494`, and all smoke hashes and dispatch checks
+  matched.
+- Skipping the now-redundant initial framebuffer fill was rejected. An early
+  five-pair batch was positive, but a second batch had an adverse
+  lower-envelope signal and all three end-to-end pairs were negative. The
+  cache-sensitive result was not stable enough to retain.
 
 ## NES burn-down
 
 - [x] Add an uncapped, deterministic, fully rendered benchmark mode.
 - [x] Establish a quiet Release baseline with a representative title.
-- [ ] Attribute CPU time across APU, PPU, generated CPU/runtime, mapper, and
-      dispatch work.
+- [x] Attribute uncapped frame time with opt-in phase counters (SMB3:
+      guest-between-callbacks 49.35%, NMI 8.68%, PPU 41.89%).
 - [x] Measure nonlinear APU mixer memoization (rejected: below retention gate).
 - [x] Strip shadow-stack tracking from trace-off production hot paths while
       retaining an explicit diagnostic opt-in.
@@ -122,8 +142,12 @@ Each result is five order-balanced baseline/candidate pairs.
 - [ ] If Xbox executable size becomes limiting, measure profile-guided cold
       weak-entry sharing or compiler basic-block outlining; do not infer
       hotness from static discovery evidence.
-- [ ] Measure PPU work by rendering mode and pursue algorithmic reductions.
+- [x] Reduce per-frame PPU background work from per-pixel state lookup to
+      per-tile-span fetches (retained: +21.89% paired median).
 - [ ] Audit generated per-instruction hooks and dynamic dispatch boundaries.
+- [ ] Run every title with a public repository through its attract/demo path
+      and deterministic basic input fuzzing; record non-public titles as
+      skipped.
 - [ ] Validate the retained set on the Xbox toolchain and report code size,
       static memory, uncapped throughput, and worst representative frame cost.
 

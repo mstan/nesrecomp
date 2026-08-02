@@ -139,6 +139,13 @@ static int         s_benchmark_frames = 0;
 static int         s_benchmark_warmup = 300;
 static const char *s_benchmark_output = NULL;
 static Uint64      s_benchmark_start = 0;
+static int         s_benchmark_breakdown = 0;
+static Uint64      s_benchmark_callback_ticks = 0;
+static Uint64      s_benchmark_nmi_ticks = 0;
+static Uint64      s_benchmark_post_nmi_ticks = 0;
+static Uint64      s_benchmark_sprite0_ticks = 0;
+static Uint64      s_benchmark_ppu_ticks = 0;
+static Uint64      s_benchmark_post_render_ticks = 0;
 
 #ifndef NESRECOMP_BENCH_BUILD_ID
 #define NESRECOMP_BENCH_BUILD_ID __DATE__ " " __TIME__
@@ -146,6 +153,15 @@ static Uint64      s_benchmark_start = 0;
 
 static int headless_run_active(void) {
     return s_smoke_frames > 0 || s_benchmark_frames > 0;
+}
+
+static void benchmark_breakdown_reset(void) {
+    s_benchmark_callback_ticks = 0;
+    s_benchmark_nmi_ticks = 0;
+    s_benchmark_post_nmi_ticks = 0;
+    s_benchmark_sprite0_ticks = 0;
+    s_benchmark_ppu_ticks = 0;
+    s_benchmark_post_render_ticks = 0;
 }
 #ifdef NESRECOMP_NET
 static jmp_buf s_netplay_return;
@@ -687,8 +703,10 @@ static void smoke_write_results(void) {
 
 static void benchmark_write_results(Uint64 end_counter) {
     Uint64 frequency = SDL_GetPerformanceFrequency();
+    Uint64 elapsed_ticks = end_counter >= s_benchmark_start
+        ? end_counter - s_benchmark_start : 0;
     double elapsed = frequency && end_counter >= s_benchmark_start
-        ? (double)(end_counter - s_benchmark_start) / (double)frequency
+        ? (double)elapsed_ticks / (double)frequency
         : 0.0;
     double ms_per_frame = s_benchmark_frames > 0
         ? elapsed * 1000.0 / (double)s_benchmark_frames : 0.0;
@@ -709,7 +727,39 @@ static void benchmark_write_results(Uint64 end_counter) {
     fprintf(f, "  \"fps\": %.3f,\n", fps);
     fprintf(f, "  \"render_width\": %d,\n", g_render_width);
     fprintf(f, "  \"final_frame_crc32\": \"%08x\",\n", final_crc);
-    fprintf(f, "  \"dispatch_miss_count\": %u\n", g_miss_count_any);
+    fprintf(f, "  \"dispatch_miss_count\": %u%s\n",
+            g_miss_count_any, s_benchmark_breakdown ? "," : "");
+    if (s_benchmark_breakdown) {
+        Uint64 known_callback_ticks =
+            s_benchmark_nmi_ticks +
+            s_benchmark_post_nmi_ticks +
+            s_benchmark_sprite0_ticks +
+            s_benchmark_ppu_ticks +
+            s_benchmark_post_render_ticks;
+        Uint64 callback_other_ticks =
+            s_benchmark_callback_ticks > known_callback_ticks
+                ? s_benchmark_callback_ticks - known_callback_ticks : 0;
+        Uint64 guest_ticks = elapsed_ticks > s_benchmark_callback_ticks
+            ? elapsed_ticks - s_benchmark_callback_ticks : 0;
+#define BENCHMARK_PHASE_JSON(name, ticks, comma) \
+        fprintf(f, "    \"" name "_ms_per_frame\": %.6f,\n", \
+                frequency && s_benchmark_frames > 0 \
+                    ? (double)(ticks) * 1000.0 / \
+                      ((double)frequency * (double)s_benchmark_frames) : 0.0); \
+        fprintf(f, "    \"" name "_percent\": %.3f%s\n", \
+                elapsed_ticks ? (double)(ticks) * 100.0 / (double)elapsed_ticks : 0.0, \
+                comma)
+        fprintf(f, "  \"breakdown\": {\n");
+        BENCHMARK_PHASE_JSON("guest_between_callbacks", guest_ticks, ",");
+        BENCHMARK_PHASE_JSON("nmi", s_benchmark_nmi_ticks, ",");
+        BENCHMARK_PHASE_JSON("post_nmi", s_benchmark_post_nmi_ticks, ",");
+        BENCHMARK_PHASE_JSON("ppu_render", s_benchmark_ppu_ticks, ",");
+        BENCHMARK_PHASE_JSON("sprite0_predict", s_benchmark_sprite0_ticks, ",");
+        BENCHMARK_PHASE_JSON("post_render", s_benchmark_post_render_ticks, ",");
+        BENCHMARK_PHASE_JSON("callback_other", callback_other_ticks, "");
+        fprintf(f, "  }\n");
+#undef BENCHMARK_PHASE_JSON
+    }
     fprintf(f, "}\n");
     if (s_benchmark_output && f != stdout) fclose(f);
 }
@@ -717,6 +767,13 @@ static void benchmark_write_results(Uint64 end_counter) {
 /* ---- VBlank callback (called from ppu_read_reg when $2002 bit7 fires) ---- */
 void nes_vblank_callback(void) {
     static uint64_t s_cb_count = 0;
+    int benchmark_measure_callback =
+        s_benchmark_breakdown &&
+        s_benchmark_start != 0 &&
+        runtime_get_vblank_depth() <= 1;
+    Uint64 benchmark_callback_start = benchmark_measure_callback
+        ? SDL_GetPerformanceCounter() : 0;
+    Uint64 benchmark_phase_start;
     int pre_nmi_rendered = 0;
     int pre_nmi_render_irq = 0;
     runtime_begin_frame_callback();
@@ -1010,7 +1067,12 @@ smoke_skip_input:
             nes_dring_mark('N', (uint16_t)runtime_get_vblank_depth());
             nes_fring_push('T', (uint16_t)runtime_get_vblank_depth());
         }
+        benchmark_phase_start = benchmark_measure_callback
+            ? SDL_GetPerformanceCounter() : 0;
         game_run_nmi();
+        if (benchmark_measure_callback)
+            s_benchmark_nmi_ticks +=
+                SDL_GetPerformanceCounter() - benchmark_phase_start;
         if (nmi_will_run) {
             nes_dring_mark('n', (uint16_t)runtime_get_vblank_depth());
             runtime_set_vblank_firing(0);
@@ -1038,7 +1100,12 @@ smoke_skip_input:
         return;
     }
 
+    benchmark_phase_start = benchmark_measure_callback
+        ? SDL_GetPerformanceCounter() : 0;
     game_post_nmi(g_frame_count);
+    if (benchmark_measure_callback)
+        s_benchmark_post_nmi_ticks +=
+            SDL_GetPerformanceCounter() - benchmark_phase_start;
 
     /* Record frame state to ring buffer for TCP timeseries queries */
     debug_server_record_frame();
@@ -1159,7 +1226,12 @@ smoke_skip_input:
      * CPU cycle position so games whose hit-detect spin-waits poll $2002
      * mid-frame (Gumshoe-style zappers) see the bit flip when the beam
      * would actually have reached sprite 0. */
+    benchmark_phase_start = benchmark_measure_callback
+        ? SDL_GetPerformanceCounter() : 0;
     g_predicted_spr0_scanline = ppu_predict_spr0_hit_scanline();
+    if (benchmark_measure_callback)
+        s_benchmark_sprite0_ticks +=
+            SDL_GetPerformanceCounter() - benchmark_phase_start;
 
     /* Render PPU to framebuffer.
      * Dot-PPU mode (default): the frame was painted incrementally into the back
@@ -1173,7 +1245,12 @@ smoke_skip_input:
         int old_disable_render_irq = g_disable_render_irq;
         if (pre_nmi_rendered && !pre_nmi_render_irq)
             g_disable_render_irq = 1;
+        benchmark_phase_start = benchmark_measure_callback
+            ? SDL_GetPerformanceCounter() : 0;
         ppu_render_frame(s_framebuf);
+        if (benchmark_measure_callback)
+            s_benchmark_ppu_ticks +=
+                SDL_GetPerformanceCounter() - benchmark_phase_start;
         g_disable_render_irq = old_disable_render_irq;
     }
 
@@ -1181,7 +1258,12 @@ smoke_skip_input:
     runtime_set_zapper_framebuf(s_framebuf);
 
     /* Game-specific post-render (e.g. widescreen margin sprites) */
+    benchmark_phase_start = benchmark_measure_callback
+        ? SDL_GetPerformanceCounter() : 0;
     game_post_render(s_framebuf);
+    if (benchmark_measure_callback)
+        s_benchmark_post_render_ticks +=
+            SDL_GetPerformanceCounter() - benchmark_phase_start;
 
     /* Per-frame PNG dump (env-gated debug tap): NESRECOMP_FRAME_DUMP=<prefix>
      * dumps every frame in [NESRECOMP_FRAME_DUMP_LO, _HI] as <prefix><NNNN>.png
@@ -1279,18 +1361,26 @@ smoke_skip_input:
         }
 
         g_frame_count++;
-        if ((int)g_frame_count == s_benchmark_warmup)
+        if ((int)g_frame_count == s_benchmark_warmup) {
+            benchmark_breakdown_reset();
             s_benchmark_start = SDL_GetPerformanceCounter();
+        }
 
         if ((int)g_frame_count >=
             s_benchmark_warmup + s_benchmark_frames) {
             Uint64 end_counter = SDL_GetPerformanceCounter();
+            if (benchmark_measure_callback)
+                s_benchmark_callback_ticks +=
+                    end_counter - benchmark_callback_start;
             extern int g_nes_expected_exit;
             g_nes_expected_exit = 1;
             benchmark_write_results(end_counter);
             nesrecomp_expect_process_exit();
             exit(0);
         }
+        if (benchmark_measure_callback)
+            s_benchmark_callback_ticks +=
+                SDL_GetPerformanceCounter() - benchmark_callback_start;
         return;
     }
 
@@ -1533,6 +1623,7 @@ int nesrecomp_runner_run(int argc, char *argv[]) {
         else if (strcmp(argv[i], "--benchmark") == 0 && i+1 < argc) s_benchmark_frames = atoi(argv[++i]);
         else if (strcmp(argv[i], "--benchmark-warmup") == 0 && i+1 < argc) s_benchmark_warmup = atoi(argv[++i]);
         else if (strcmp(argv[i], "--benchmark-output") == 0 && i+1 < argc) s_benchmark_output = argv[++i];
+        else if (strcmp(argv[i], "--benchmark-breakdown") == 0) s_benchmark_breakdown = 1;
         else {
             /* Offer remaining args to the game-specific handler */
             const char *val = (i+1 < argc && argv[i+1][0] != '-') ? argv[i+1] : NULL;

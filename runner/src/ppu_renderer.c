@@ -746,12 +746,41 @@ void ppu_render_frame(uint32_t *framebuf) {
                 g_render_post_irq_phys_nt = nt_row; /* store nt_row; phys_nt computed per-pixel */
             }
 
-            for (int sx = -ws_eff_l; sx < 256 + ws_eff_r; sx++) {
-                int nt_x      = (origin_x + sx) & 0x1FF;  /* 9-bit wrap (512px nametable) */
-                int tile_x    = nt_x / 8;
-                int pixel_col = nt_x % 8;
-                int nt_col    = (tile_x >= 32) ? 1 : 0;
-                int local_tx  = tile_x % 32;
+            /*
+             * Fetch background state once per CHR tile span, not once per
+             * pixel. Nametable, attribute, palette, and pattern bytes are
+             * constant until the next 8-pixel boundary; only the CHR bit and
+             * destination X advance inside the span. The first/last spans may
+             * be partial because fine-X scroll and widescreen margins are not
+             * necessarily tile-aligned.
+             *
+             * IRQ-driven state changes still occur between scanlines above,
+             * exactly where the per-pixel loop observed them.
+             */
+            uint32_t bg_palettes[4][4];
+            uint32_t row_bg =
+                g_nes_palette[g_ppu_pal[0] & 0x3F];
+            for (int p = 0; p < 4; p++) {
+                bg_palettes[p][0] = row_bg;
+                for (int c = 1; c < 4; c++) {
+                    uint8_t nes_color =
+                        g_ppu_pal[(p * 4 + c) & 0x1F] & 0x3F;
+                    bg_palettes[p][c] = g_nes_palette[nes_color];
+                }
+            }
+
+            int sx = -ws_eff_l;
+            int sx_end = 256 + ws_eff_r;
+            uint32_t *frame_row = framebuf + (size_t)sy * g_render_width;
+            while (sx < sx_end) {
+                int nt_x = (origin_x + sx) & 0x1FF;  /* 9-bit wrap */
+                int pixel_col = nt_x & 7;
+                int span = 8 - pixel_col;
+                if (span > sx_end - sx) span = sx_end - sx;
+
+                int tile_x   = nt_x >> 3;
+                int nt_col   = tile_x >> 5;
+                int local_tx = tile_x & 31;
 
                 /* Resolve virtual NT to physical NT using cached mirroring mode */
                 int virt_nt = nt_row * 2 + nt_col;
@@ -765,44 +794,66 @@ void ppu_render_frame(uint32_t *framebuf) {
                 }
                 int nt_off = phys_nt * 0x400;
 
-                uint8_t tile_id = g_ppu_nt[(nt_off + local_ty * 32 + local_tx) & 0x0FFF];
+                uint8_t tile_id =
+                    g_ppu_nt[(nt_off + local_ty * 32 + local_tx) & 0x0FFF];
+                int attr_bx = local_tx >> 2;
+                int attr_by = local_ty >> 2;
+                uint8_t attr =
+                    g_ppu_nt[(nt_off + 0x3C0 + attr_by * 8 + attr_bx) & 0x0FFF];
+                int sub_x = (local_tx >> 1) & 1;
+                int sub_y = (local_ty >> 1) & 1;
+                int pal_base =
+                    (attr >> ((sub_y * 2 + sub_x) * 2)) & 0x03;
 
-                int attr_bx = local_tx / 4, attr_by = local_ty / 4;
-                uint8_t attr = g_ppu_nt[(nt_off + 0x3C0 + attr_by * 8 + attr_bx) & 0x0FFF];
-                int sub_x = (local_tx / 2) & 1, sub_y = (local_ty / 2) & 1;
-                int pal_base = (attr >> ((sub_y * 2 + sub_x) * 2)) & 0x03;
-
-                int bit = 7 - pixel_col;
                 int chr_off = chr_base + tile_id * 16 + tile_row;
-                int color_idx = ((bg_chr_src[chr_off] >> bit) & 1) |
-                                (((bg_chr_src[chr_off + 8] >> bit) & 1) << 1);
-                int fb_x = sx + g_widescreen_left;
-                /* PPUMASK bit 1: clip leftmost 8 BG pixels to background color */
-                if (sx >= 0 && sx < 8 && !(g_ppumask & 0x02)) {
-                    framebuf[sy * g_render_width + fb_x] = bg;
-                } else {
-                    uint32_t bgc = bg_color(pal_base, color_idx);
-                    framebuf[sy * g_render_width + fb_x] = bgc;
-                    if (s_bg_opaque_width == g_render_width &&
-                        fb_x >= 0 && fb_x < g_render_width) {
-                        s_bg_opaque_snapshot[(size_t)sy * g_render_width +
-                                             fb_x] = color_idx != 0;
-                    }
-                    if (g_hp && fb_x >= 0 && fb_x < g_render_width) {
-                        HdPixel *hp = &g_hp[sy * g_render_width + fb_x];
-                        hp->bg_has   = 1;
-                        hp->bg_index = (int32_t)((chr_base >> 4) + tile_id);
-                        hp->bg_t16   = &bg_chr_src[chr_base + tile_id * 16];
-                        hp->bg_p0 = g_ppu_pal[0] & 0x3F;
-                        hp->bg_p1 = g_ppu_pal[(pal_base * 4 + 1) & 0x1F] & 0x3F;
-                        hp->bg_p2 = g_ppu_pal[(pal_base * 4 + 2) & 0x1F] & 0x3F;
-                        hp->bg_p3 = g_ppu_pal[(pal_base * 4 + 3) & 0x1F] & 0x3F;
-                        hp->bg_ox = (uint8_t)pixel_col;
-                        hp->bg_oy = (uint8_t)tile_row;
-                        hp->bg_argb  = bgc;   /* original BG color (fallback) */
-                        hp->backdrop = bg;    /* transparent HD BG -> backdrop */
+                uint8_t chr_lo = bg_chr_src[chr_off];
+                uint8_t chr_hi = bg_chr_src[chr_off + 8];
+                const uint32_t *colors = bg_palettes[pal_base];
+
+                for (int i = 0; i < span; i++) {
+                    int tile_pixel = pixel_col + i;
+                    int bit = 7 - tile_pixel;
+                    int color_idx = ((chr_lo >> bit) & 1) |
+                                    (((chr_hi >> bit) & 1) << 1);
+                    int screen_x = sx + i;
+                    int fb_x = screen_x + g_widescreen_left;
+
+                    /* PPUMASK bit 1: clip leftmost 8 BG pixels to background */
+                    if (screen_x >= 0 && screen_x < 8 &&
+                        !(g_ppumask & 0x02)) {
+                        frame_row[fb_x] = bg;
+                    } else {
+                        uint32_t bgc = colors[color_idx];
+                        frame_row[fb_x] = bgc;
+                        if (s_bg_opaque_width == g_render_width &&
+                            fb_x >= 0 && fb_x < g_render_width) {
+                            s_bg_opaque_snapshot[(size_t)sy * g_render_width +
+                                                 fb_x] = color_idx != 0;
+                        }
+                        if (g_hp && fb_x >= 0 && fb_x < g_render_width) {
+                            HdPixel *hp =
+                                &g_hp[(size_t)sy * g_render_width + fb_x];
+                            hp->bg_has   = 1;
+                            hp->bg_index =
+                                (int32_t)((chr_base >> 4) + tile_id);
+                            hp->bg_t16 =
+                                &bg_chr_src[chr_base + tile_id * 16];
+                            hp->bg_p0 = g_ppu_pal[0] & 0x3F;
+                            hp->bg_p1 =
+                                g_ppu_pal[(pal_base * 4 + 1) & 0x1F] & 0x3F;
+                            hp->bg_p2 =
+                                g_ppu_pal[(pal_base * 4 + 2) & 0x1F] & 0x3F;
+                            hp->bg_p3 =
+                                g_ppu_pal[(pal_base * 4 + 3) & 0x1F] & 0x3F;
+                            hp->bg_ox = (uint8_t)tile_pixel;
+                            hp->bg_oy = (uint8_t)tile_row;
+                            hp->bg_argb = bgc;
+                            hp->backdrop = bg;
+                        }
                     }
                 }
+
+                sx += span;
             }
 
             /* Canonical-mode per-scanline advance (only when active). */
