@@ -9,6 +9,16 @@
 
 set(NESRECOMP_RUNNER_ROOT ${CMAKE_CURRENT_LIST_DIR})
 
+# launcher.c uses DbgHelp for native Windows crash backtraces.  Game projects
+# include runner.cmake before creating their executable, so a directory-scoped
+# link dependency keeps older titles from each having to know about this runner
+# implementation detail.  The MSVC pragma in launcher.c covers that toolchain;
+# this also supplies the import library, at the correct end-of-link position,
+# for MinGW.
+if(WIN32)
+    link_libraries(dbghelp)
+endif()
+
 set(NESRECOMP_RUNNER_SOURCES
     ${NESRECOMP_RUNNER_ROOT}/src/main_runner.c
     ${NESRECOMP_RUNNER_ROOT}/src/runtime.c
