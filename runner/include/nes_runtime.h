@@ -24,6 +24,7 @@ extern int          g_chr_is_rom;      /* 1 = CHR ROM (ignore $2007 writes to $0
 extern uint8_t      g_ppu_oam[0x100];  /* 64 sprites x 4 bytes */
 extern uint8_t      g_ppu_pal[0x20];   /* Palette $3F00-$3F1F */
 extern uint8_t      g_ppu_nt[0x1000];  /* Nametable RAM $2000-$2FFF */
+extern const uint32_t g_nes_palette[64]; /* Renderer ARGB8888 system palette */
 
 /* ---- Memory Interface ---- */
 uint8_t  nes_read(uint16_t addr);

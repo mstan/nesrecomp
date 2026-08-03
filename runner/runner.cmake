@@ -41,6 +41,9 @@ set(NESRECOMP_RUNNER_SOURCES
     ${NESRECOMP_RUNNER_ROOT}/src/audio_shadow.c
     ${NESRECOMP_RUNNER_ROOT}/src/apu_shadow.c
     ${NESRECOMP_RUNNER_ROOT}/src/color_lut.c
+    # Optional game-authored 3D presentation layer. It is inert unless a
+    # game calls nes_voxel_render() from game_post_render().
+    ${NESRECOMP_RUNNER_ROOT}/src/voxel_renderer.c
 )
 
 set(NESRECOMP_RUNNER_INCLUDE_DIRS
