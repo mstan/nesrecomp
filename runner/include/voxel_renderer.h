@@ -63,6 +63,9 @@ typedef struct NesVoxelScene {
      * instead of vertically foreshortening. depth_bias pulls cards slightly
      * camera-ward to keep feet from z-fighting with their ground tile. */
     int sprite_face_camera_pitch;
+    /* Preserve the configured sprite dimensions in output pixels while the
+     * card's foot remains perspective-anchored to the world. */
+    int sprite_constant_screen_size;
     float sprite_depth_bias;
     float sprite_world_offset_x;
     float sprite_world_offset_z;

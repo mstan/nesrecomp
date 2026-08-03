@@ -459,8 +459,6 @@ static void render_sprites(const RenderContext *ctx) {
             ground = s->sprite_ground(min_x, min_y, max_x, max_y,
                                       ground, s->user);
         if (ground < 0.0f) ground = 0.0f;
-        card_width = (max_x - min_x) * sprite_scale;
-        card_height = (max_y - min_y) * sprite_scale;
         center = vec3(center_x + s->sprite_world_offset_x,
                       ground + 0.2f,
                       foot_z + s->sprite_world_offset_z);
@@ -469,6 +467,16 @@ static void render_sprites(const RenderContext *ctx) {
                 ctx->eye.x - center.x, 0.0f, ctx->eye.z - center.z));
             center.x += camera_pull.x * s->sprite_depth_bias;
             center.z += camera_pull.z * s->sprite_depth_bias;
+        }
+        card_width = (max_x - min_x) * sprite_scale;
+        card_height = (max_y - min_y) * sprite_scale;
+        if (s->sprite_constant_screen_size) {
+            float depth = vec3_dot(vec3_sub(center, ctx->eye), ctx->forward);
+            float world_units_per_pixel = depth / ctx->focal;
+            if (world_units_per_pixel > 0.0f) {
+                card_width *= world_units_per_pixel;
+                card_height *= world_units_per_pixel;
+            }
         }
         card_up = s->sprite_face_camera_pitch
             ? ctx->up : vec3(0.0f, 1.0f, 0.0f);
