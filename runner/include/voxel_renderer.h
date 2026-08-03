@@ -14,6 +14,9 @@ typedef float (*NesVoxelTileHeightFn)(uint8_t tile, int tile_x, int tile_y,
 typedef void (*NesVoxelTilePixelsFn)(uint32_t *pixels, int pixel_stride,
                                      uint8_t tile, int tile_x, int tile_y,
                                      void *user);
+typedef int (*NesVoxelTileBillboardFn)(uint8_t tile, int tile_x, int tile_y,
+                                      int *tile_columns, int *tile_rows,
+                                      void *user);
 typedef int (*NesVoxelSpriteOverlayFn)(int min_x, int min_y,
                                        int max_x, int max_y, void *user);
 typedef float (*NesVoxelSpriteGroundFn)(int min_x, int min_y,
@@ -21,6 +24,8 @@ typedef float (*NesVoxelSpriteGroundFn)(int min_x, int min_y,
                                         float sampled_ground, void *user);
 typedef float (*NesVoxelSpriteShadowFn)(int min_x, int min_y,
                                         int max_x, int max_y, void *user);
+typedef int (*NesVoxelSpriteMaxHeightFn)(const int *oam_indices,
+                                         int oam_count, void *user);
 
 typedef struct NesVoxelScene {
     uint32_t *framebuffer;
@@ -44,6 +49,17 @@ typedef struct NesVoxelScene {
     /* Optional source for generated or offscreen room textures. When absent,
      * the compositor samples the already-rendered flat framebuffer. */
     NesVoxelTilePixelsFn tile_pixels;
+    /* Optional background decoration policy. Return 1 at a grouped
+     * decoration's top-left tile, -1 for its remaining member tiles, and 0
+     * for ordinary terrain. The renderer replaces member footprints with
+     * nearby ground and assembles the original tiles into one alpha-tested,
+     * camera-facing card. */
+    NesVoxelTileBillboardFn tile_billboard;
+    float tile_billboard_scale;
+    /* Optional contact shadow beneath every generated tile billboard.
+     * Opacity <= 0 disables it. */
+    float tile_billboard_shadow_scale;
+    float tile_billboard_shadow_opacity;
     void *user;
 
     /* Camera controls. Yaw orbits around the vertical axis; roll rotates the
@@ -68,11 +84,18 @@ typedef struct NesVoxelScene {
     /* Preserve the configured sprite dimensions in output pixels while the
      * card's foot remains perspective-anchored to the world. */
     int sprite_constant_screen_size;
+    /* Clip reconstructed OAM cards to the native rectangle represented by
+     * this scene. This prevents pieces hidden beyond a room boundary from
+     * reappearing as a full or elongated 3D card. */
+    int clip_sprites_to_source;
     float sprite_depth_bias;
     float sprite_world_offset_x;
     float sprite_world_offset_z;
     /* Optional game policy for actor ground placement. */
     NesVoxelSpriteGroundFn sprite_ground;
+    /* Optional cap for assembled cards such as a player sprite whose
+     * transition-only OAM pieces must not form one elongated metasprite. */
+    NesVoxelSpriteMaxHeightFn sprite_max_height;
     /* Optional game policy for pixel-art contact shadows. The callback returns
      * an opacity multiplier; zero suppresses the shadow for flat effects and
      * other OAM pieces that are not standing actors. */

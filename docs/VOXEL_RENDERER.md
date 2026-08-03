@@ -63,6 +63,31 @@ The renderer chooses an uncontaminated occurrence of a repeated tile when an
 OAM sprite overlaps its source pixels. This avoids stamping the original flat
 sprite into the terrain texture before drawing the upright sprite card.
 
+## Opt-in cards and shadows
+
+Zero-initialize `NesVoxelScene` and enable only the policies a game needs.
+All of the following are opt-in and leave existing profiles unchanged:
+
+- `tile_billboard` can replace a grouped background decoration with one
+  alpha-tested camera-facing card. Return `1` at the group's top-left tile,
+  `-1` for its remaining member tiles, and `0` for ordinary terrain. The
+  callback supplies the group width and height in tiles.
+- `tile_billboard_scale`, `tile_billboard_shadow_scale`, and
+  `tile_billboard_shadow_opacity` control those generated decoration cards.
+  An opacity of zero disables their contact shadows.
+- `sprite_constant_screen_size` keeps OAM cards pixel-stable under
+  perspective. `clip_sprites_to_source` prevents OAM outside the native room
+  rectangle from reappearing in 3D.
+- `sprite_max_height` lets a game cap a particular assembled metasprite when
+  transition-only OAM pieces would otherwise create an elongated card.
+- `sprite_ground`, `sprite_shadow`, and `sprite_overlay` remain per-game
+  policy callbacks. Shadow scale and opacity are configured independently.
+
+The engine owns assembly, alpha testing, depth sorting, and contact-shadow
+rendering. A game profile owns tile/object identification because CHR and OAM
+layouts are game-specific. Zelda, for example, identifies its 2x2 tree
+metatiles as billboard groups without placing Zelda tile IDs in nesrecomp.
+
 ## Current scope
 
 This is a compact native counterpart to the render-pipeline ideas in
@@ -71,6 +96,7 @@ for [Gen1Recomp](https://github.com/bryanthaboi/gen1recomp). It is not a port
 of that LÖVE/Lua implementation.
 
 The current renderer provides the reusable foundation: perspective camera,
-textured geometry, depth buffering, OAM billboards, and HUD preservation.
-Per-game authored shape profiles, shadows, post-processing/tilt-shift, free
-camera, and GPU acceleration are natural follow-up layers.
+textured geometry, depth buffering, background and OAM billboards, contact
+shadows, and HUD preservation. Per-game authored shape profiles,
+post-processing/tilt-shift, free camera, and GPU acceleration are natural
+follow-up layers.

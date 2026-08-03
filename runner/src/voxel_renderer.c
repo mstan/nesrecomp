@@ -19,6 +19,7 @@
 #define VOXEL_MAX_TILE_ROWS    60
 #define VOXEL_MAX_TILES (VOXEL_MAX_TILE_COLUMNS * VOXEL_MAX_TILE_ROWS)
 #define VOXEL_CUSTOM_TILE_SIZE 8
+#define VOXEL_MAX_BILLBOARD_SIZE 32
 #define VOXEL_PI 3.14159265358979323846f
 
 enum {
@@ -62,6 +63,10 @@ static uint32_t
                          VOXEL_CUSTOM_TILE_SIZE * VOXEL_CUSTOM_TILE_SIZE];
 
 extern const uint32_t g_nes_palette[64];
+
+static void draw_card_shadow(const RenderContext *ctx, float center_x,
+                             float ground, float foot_z, float card_width,
+                             float scale, float opacity);
 
 static Vec3 vec3(float x, float y, float z) {
     Vec3 v = { x, y, z };
@@ -409,11 +414,67 @@ static Texture tile_side_texture(const Texture *top, int edge,
     return texture;
 }
 
+static int tile_billboard_info(const NesVoxelScene *s, int tx, int ty,
+                               int *columns, int *rows) {
+    int result;
+    if (!s->tile_billboard) return 0;
+    *columns = 1;
+    *rows = 1;
+    result = s->tile_billboard(
+        scene_tile(s, tx, ty), tx, ty, columns, rows, s->user);
+    if (result > 0 &&
+        (*columns <= 0 || *rows <= 0 ||
+         tx + *columns > s->tile_columns ||
+         ty + *rows > s->tile_rows ||
+         *columns * s->tile_size > VOXEL_MAX_BILLBOARD_SIZE ||
+         *rows * s->tile_size > VOXEL_MAX_BILLBOARD_SIZE))
+        return 0;
+    return result;
+}
+
+static Texture billboard_ground_texture(const NesVoxelScene *s) {
+    unsigned counts[256] = {0};
+    int representative_x[256];
+    int representative_y[256];
+    int common = -1;
+    memset(representative_x, -1, sizeof(representative_x));
+    memset(representative_y, -1, sizeof(representative_y));
+    for (int y = 0; y < s->tile_rows; y++) {
+        for (int x = 0; x < s->tile_columns; x++) {
+            int columns, rows;
+            uint8_t tile;
+            if (tile_billboard_info(s, x, y, &columns, &rows) != 0)
+                continue;
+            if (fabsf(scene_height(s, x, y)) > 0.01f)
+                continue;
+            tile = scene_tile(s, x, y);
+            counts[tile]++;
+            if (representative_x[tile] < 0) {
+                representative_x[tile] = x;
+                representative_y[tile] = y;
+            }
+            if (common < 0 || counts[tile] > counts[common])
+                common = tile;
+        }
+    }
+    /* The modal walkable tile is the room's base floor. Local nearest-tile
+     * selection can accidentally copy a decorative but walkable shrub or
+     * doorway into a removed tree footprint. */
+    if (common >= 0)
+        return tile_texture(
+            s, representative_x[common], representative_y[common], 1.0f);
+    return tile_texture(s, 0, 0, 1.0f);
+}
+
 static void render_terrain(const RenderContext *ctx) {
     const NesVoxelScene *s = ctx->scene;
     float ts = (float)s->tile_size;
+    Texture billboard_ground =
+        s->tile_billboard ? billboard_ground_texture(s)
+                          : tile_texture(s, 0, 0, 1.0f);
     for (int ty = 0; ty < s->tile_rows; ty++) {
         for (int tx = 0; tx < s->tile_columns; tx++) {
+            int billboard_columns, billboard_rows;
             float x0 = tx * ts, x1 = x0 + ts;
             float z0 = ty * ts, z1 = z0 + ts;
             float h = scene_height(s, tx, ty);
@@ -422,6 +483,14 @@ static void render_terrain(const RenderContext *ctx) {
             float west = scene_height(s, tx - 1, ty);
             float east = scene_height(s, tx + 1, ty);
             Texture top = tile_texture(s, tx, ty, h < 0.0f ? 0.86f : 1.0f);
+
+            if (tile_billboard_info(
+                    s, tx, ty, &billboard_columns, &billboard_rows) != 0) {
+                draw_quad(ctx, vec3(x0, 0.0f, z0), vec3(x1, 0.0f, z0),
+                          vec3(x1, 0.0f, z1), vec3(x0, 0.0f, z1),
+                          &billboard_ground);
+                continue;
+            }
 
             draw_quad(ctx, vec3(x0, h, z0), vec3(x1, h, z0),
                       vec3(x1, h, z1), vec3(x0, h, z1), &top);
@@ -460,6 +529,106 @@ static void render_terrain(const RenderContext *ctx) {
                               vec3(x1, east, z0), vec3(x1, east, z1),
                               &east_side);
             }
+        }
+    }
+}
+
+static void render_tile_billboards(const RenderContext *ctx) {
+    const NesVoxelScene *s = ctx->scene;
+    Vec3 horizontal_right =
+        vec3_normalize(vec3(ctx->right.x, 0.0f, ctx->right.z));
+    float ts = (float)s->tile_size;
+    float scale =
+        s->tile_billboard_scale > 0.0f ? s->tile_billboard_scale : 1.0f;
+    Texture ground = billboard_ground_texture(s);
+    uint32_t transparent =
+        g_nes_palette[g_ppu_pal[0] & 0x3F];
+
+    if (!s->tile_billboard) return;
+    for (int ty = 0; ty < s->tile_rows; ty++) {
+        for (int tx = 0; tx < s->tile_columns; tx++) {
+            int columns, rows;
+            int width, height;
+            uint32_t pixels[VOXEL_MAX_BILLBOARD_SIZE *
+                            VOXEL_MAX_BILLBOARD_SIZE];
+            Texture texture;
+            float card_width, card_height;
+            float center_x, foot_z;
+            Vec3 center, left_bottom, right_bottom, right_top, left_top;
+
+            if (tile_billboard_info(s, tx, ty, &columns, &rows) <= 0)
+                continue;
+            width = columns * s->tile_size;
+            height = rows * s->tile_size;
+            memset(pixels, 0, sizeof(pixels));
+            for (int group_y = 0; group_y < rows; group_y++) {
+                for (int group_x = 0; group_x < columns; group_x++) {
+                    Texture source =
+                        tile_texture(s, tx + group_x, ty + group_y, 1.0f);
+                    for (int py = 0; py < s->tile_size; py++) {
+                        for (int px = 0; px < s->tile_size; px++) {
+                            uint32_t color =
+                                source.pixels[py * source.stride + px];
+                            int matches_ground = 0;
+                            for (int ground_y = 0;
+                                 ground_y < ground.height && !matches_ground;
+                                 ground_y++) {
+                                for (int ground_x = 0;
+                                     ground_x < ground.width; ground_x++) {
+                                    if (color == ground.pixels[
+                                            ground_y * ground.stride +
+                                            ground_x]) {
+                                        matches_ground = 1;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (color == transparent || matches_ground)
+                                color &= 0x00FFFFFFu;
+                            pixels[(group_y * s->tile_size + py) *
+                                       VOXEL_MAX_BILLBOARD_SIZE +
+                                   group_x * s->tile_size + px] = color;
+                        }
+                    }
+                }
+            }
+
+            center_x = (tx + columns * 0.5f) * ts;
+            foot_z = (ty + rows) * ts;
+            center = vec3(center_x, 0.12f, foot_z);
+            card_width = width * scale;
+            card_height = height * scale;
+            if (s->tile_billboard_shadow_opacity > 0.0f) {
+                float shadow_scale =
+                    s->tile_billboard_shadow_scale > 0.0f
+                        ? s->tile_billboard_shadow_scale : 0.68f;
+                draw_card_shadow(
+                    ctx, center_x, 0.0f, foot_z, card_width, shadow_scale,
+                    s->tile_billboard_shadow_opacity);
+            }
+            left_bottom = vec3_sub(
+                center, vec3_scale(horizontal_right, card_width * 0.5f));
+            right_bottom = vec3(
+                center.x + horizontal_right.x * card_width * 0.5f,
+                center.y,
+                center.z + horizontal_right.z * card_width * 0.5f);
+            right_top = vec3(
+                right_bottom.x + ctx->up.x * card_height,
+                right_bottom.y + ctx->up.y * card_height,
+                right_bottom.z + ctx->up.z * card_height);
+            left_top = vec3(
+                left_bottom.x + ctx->up.x * card_height,
+                left_bottom.y + ctx->up.y * card_height,
+                left_bottom.z + ctx->up.z * card_height);
+            texture.pixels = pixels;
+            texture.width = width;
+            texture.height = height;
+            texture.stride = VOXEL_MAX_BILLBOARD_SIZE;
+            texture.shade = 1.0f;
+            texture.alpha_test = 1;
+            texture.overlay = 0;
+            draw_quad(ctx, left_top, right_top, right_bottom, left_bottom,
+                      &texture);
         }
     }
 }
@@ -508,9 +677,9 @@ static int sprites_connect(int ax, int ay, int ah, int ai,
     return abs(ai - bi) <= 4 && near_x && near_y;
 }
 
-static void draw_sprite_shadow(const RenderContext *ctx, float center_x,
-                               float ground, float foot_z, float card_width,
-                               float scale, float opacity) {
+static void draw_card_shadow(const RenderContext *ctx, float center_x,
+                             float ground, float foot_z, float card_width,
+                             float scale, float opacity) {
     uint32_t pixels[8 * 8];
     Texture texture;
     float half_width = card_width * scale * 0.5f;
@@ -566,6 +735,7 @@ static void render_sprites(const RenderContext *ctx) {
     for (int i = 63; i >= 0; i--) {
         int members[16], member_count = 0;
         int min_x, min_y, max_x, max_y;
+        int source_min_x, source_min_y;
         uint32_t pixels[32 * 32];
         uint32_t decoded[8 * 16];
         float foot_z, ground, center_x, card_width, card_height;
@@ -612,6 +782,8 @@ static void render_sprites(const RenderContext *ctx) {
             }
         }
 
+        source_min_x = min_x;
+        source_min_y = min_y;
         memset(pixels, 0, sizeof(pixels));
         /* Higher OAM priority (lower index) wins where pieces overlap. */
         for (int index = 63; index >= 0; index--) {
@@ -627,6 +799,21 @@ static void render_sprites(const RenderContext *ctx) {
                     if (decoded[y * 8 + x] >> 24)
                         pixels[(sy + y) * 32 + sx + x] =
                             decoded[y * 8 + x];
+        }
+
+        if (s->sprite_max_height) {
+            int max_height =
+                s->sprite_max_height(members, member_count, s->user);
+            if (max_height > 0 && max_y - min_y > max_height)
+                min_y = max_y - max_height;
+        }
+        if (s->clip_sprites_to_source) {
+            if (min_x < 0) min_x = 0;
+            if (min_y < s->source_y) min_y = s->source_y;
+            if (max_x > s->source_width) max_x = s->source_width;
+            if (max_y > s->source_y + s->source_height)
+                max_y = s->source_y + s->source_height;
+            if (min_x >= max_x || min_y >= max_y) continue;
         }
 
         foot_z = (float)(max_y - s->source_y);
@@ -666,7 +853,7 @@ static void render_sprites(const RenderContext *ctx) {
                 ? s->sprite_shadow_scale : 0.62f;
             float shadow_opacity = s->sprite_shadow_opacity > 0.0f
                 ? s->sprite_shadow_opacity : 0.38f;
-            draw_sprite_shadow(
+            draw_card_shadow(
                 ctx, center_x + s->sprite_world_offset_x, ground,
                 foot_z + s->sprite_world_offset_z, card_width, shadow_scale,
                 shadow_opacity * shadow_strength);
@@ -687,7 +874,8 @@ static void render_sprites(const RenderContext *ctx) {
             left_bottom.x + card_up.x * card_height,
             left_bottom.y + card_up.y * card_height,
             left_bottom.z + card_up.z * card_height);
-        texture.pixels = pixels;
+        texture.pixels =
+            pixels + (min_y - source_min_y) * 32 + (min_x - source_min_x);
         texture.width = max_x - min_x;
         texture.height = max_y - min_y;
         texture.stride = 32;
@@ -776,6 +964,7 @@ int nes_voxel_render(const NesVoxelScene *s) {
     ctx.scene = s;
 
     render_terrain(&ctx);
+    render_tile_billboards(&ctx);
     if (s->draw_oam_sprites) render_sprites(&ctx);
 
     if (s->preserve_top_rows > 0) {
