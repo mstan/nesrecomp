@@ -63,6 +63,27 @@ The renderer chooses an uncontaminated occurrence of a repeated tile when an
 OAM sprite overlaps its source pixels. This avoids stamping the original flat
 sprite into the terrain texture before drawing the upright sprite card.
 
+## Screen-grid adapter
+
+Side-scrolling games often stream nametables without retaining a convenient
+world-tile array. `voxel_screen_profile.h` provides an optional adapter for
+those games. It divides a selected part of the final native framebuffer into
+8x8 cells, masks pixels covered by live OAM, and reports color/material
+statistics through `NesVoxelScreenSample`.
+
+The game supplies two semantic callbacks:
+
+- `visible` keeps title, menu, dialogue, and other authored 2D screens native.
+- `height` decides whether a sampled cell is flat decoration, shallow relief,
+  or solid collision/architecture geometry.
+
+The adapter owns the repeated presentation mechanics: widescreen allocation,
+camera easing and numpad controls, OAM metasprite cards, native-room clipping,
+contact shadows, HUD preservation, and clean tile reconstruction underneath
+sprites. It remains dormant until the game explicitly enables and calls it.
+This keeps game-specific material policy out of the engine while avoiding a
+copy of the camera/OAM plumbing in every side-scrolling profile.
+
 ## Opt-in cards and shadows
 
 Zero-initialize `NesVoxelScene` and enable only the policies a game needs.
