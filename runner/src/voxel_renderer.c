@@ -32,6 +32,7 @@ typedef struct Texture {
     int width, height, stride;
     float shade;
     int alpha_test;
+    int overlay;
 } Texture;
 
 typedef struct RenderContext {
@@ -165,7 +166,7 @@ static void draw_triangle(const RenderContext *ctx,
             inv_depth = w0 * a->inv_depth + w1 * b->inv_depth +
                         w2 * c->inv_depth;
             pos = y * s->output_width + x;
-            if (inv_depth <= s_depth[pos]) continue;
+            if (!texture->overlay && inv_depth <= s_depth[pos]) continue;
 
             u = (w0 * a->u * a->inv_depth +
                  w1 * b->u * b->inv_depth +
@@ -182,7 +183,7 @@ static void draw_triangle(const RenderContext *ctx,
             color = texture->pixels[ty * texture->stride + tx];
             if (texture->alpha_test && (color >> 24) == 0) continue;
             s->framebuffer[pos] = shade_color(color, texture->shade);
-            s_depth[pos] = inv_depth;
+            if (!texture->overlay) s_depth[pos] = inv_depth;
         }
     }
 }
@@ -255,6 +256,7 @@ static Texture tile_texture(const NesVoxelScene *s, int tx, int ty, float shade)
     texture.stride = s->output_width;
     texture.shade = shade;
     texture.alpha_test = 0;
+    texture.overlay = 0;
     return texture;
 }
 
@@ -356,6 +358,7 @@ static void render_sprites(const RenderContext *ctx) {
         uint32_t pixels[32 * 32];
         uint32_t decoded[8 * 16];
         float foot_z, ground, center_x, card_width, card_height;
+        Vec3 card_up;
         Vec3 center, left_bottom, right_bottom, right_top, left_top;
         Texture texture;
         if (!active[i] || used[i]) continue;
@@ -423,22 +426,36 @@ static void render_sprites(const RenderContext *ctx) {
         card_width = (max_x - min_x) * sprite_scale;
         card_height = (max_y - min_y) * sprite_scale;
         center = vec3(center_x, ground + 0.2f, foot_z);
+        if (s->sprite_depth_bias > 0.0f) {
+            Vec3 camera_pull = vec3_normalize(vec3(
+                ctx->eye.x - center.x, 0.0f, ctx->eye.z - center.z));
+            center.x += camera_pull.x * s->sprite_depth_bias;
+            center.z += camera_pull.z * s->sprite_depth_bias;
+        }
+        card_up = s->sprite_face_camera_pitch
+            ? ctx->up : vec3(0.0f, 1.0f, 0.0f);
         left_bottom = vec3_sub(
             center, vec3_scale(horizontal_right, card_width * 0.5f));
         right_bottom = vec3(
             center.x + horizontal_right.x * card_width * 0.5f,
             center.y,
             center.z + horizontal_right.z * card_width * 0.5f);
-        right_top = vec3(right_bottom.x, right_bottom.y + card_height,
-                         right_bottom.z);
-        left_top = vec3(left_bottom.x, left_bottom.y + card_height,
-                        left_bottom.z);
+        right_top = vec3(
+            right_bottom.x + card_up.x * card_height,
+            right_bottom.y + card_up.y * card_height,
+            right_bottom.z + card_up.z * card_height);
+        left_top = vec3(
+            left_bottom.x + card_up.x * card_height,
+            left_bottom.y + card_up.y * card_height,
+            left_bottom.z + card_up.z * card_height);
         texture.pixels = pixels;
         texture.width = max_x - min_x;
         texture.height = max_y - min_y;
         texture.stride = 32;
         texture.shade = 1.0f;
         texture.alpha_test = 1;
+        texture.overlay = s->sprite_overlay &&
+            s->sprite_overlay(min_x, min_y, max_x, max_y, s->user);
         draw_quad(ctx, left_top, right_top, right_bottom, left_bottom, &texture);
     }
 }

@@ -5,6 +5,7 @@
 #include "nes_runtime.h"
 #include "savestate.h"
 #include "save_ram.h"
+#include <SDL.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -28,6 +29,24 @@ static uint8_t parse_button(const char *name) {
     return 0;
 }
 
+static SDL_Scancode parse_host_key(const char *name) {
+    static const struct {
+        const char *name;
+        SDL_Scancode scancode;
+    } keys[] = {
+        {"KP0", SDL_SCANCODE_KP_0}, {"KP1", SDL_SCANCODE_KP_1},
+        {"KP2", SDL_SCANCODE_KP_2}, {"KP3", SDL_SCANCODE_KP_3},
+        {"KP4", SDL_SCANCODE_KP_4}, {"KP5", SDL_SCANCODE_KP_5},
+        {"KP6", SDL_SCANCODE_KP_6}, {"KP7", SDL_SCANCODE_KP_7},
+        {"KP8", SDL_SCANCODE_KP_8}, {"KP9", SDL_SCANCODE_KP_9},
+        {"KP_PLUS", SDL_SCANCODE_KP_PLUS},
+        {"KP_MINUS", SDL_SCANCODE_KP_MINUS},
+    };
+    for (unsigned i = 0; i < sizeof(keys) / sizeof(keys[0]); i++)
+        if (strcmp(name, keys[i].name) == 0) return keys[i].scancode;
+    return SDL_SCANCODE_UNKNOWN;
+}
+
 /* ---- Command types ---- */
 typedef enum {
     CMD_WAIT, CMD_HOLD, CMD_RELEASE,
@@ -38,13 +57,14 @@ typedef enum {
     CMD_DUMP_RAM,
     CMD_SAVE_STATE, CMD_LOAD_STATE,
     CMD_TRIGGER, CMD_TRIGGER_OFF,
+    CMD_KEY_TAP,
 } CmdType;
 
 typedef struct {
     CmdType type;
     int     iarg;          /* WAIT: frames; EXIT: code; WAIT_RAM8/ASSERT_RAM8: addr */
     uint8_t barg;          /* HOLD/RELEASE: button mask; WAIT/ASSERT_RAM8: expected value */
-    char    sarg[128];     /* SCREENSHOT: filename; LOG/ASSERT: message */
+    char    sarg[128];     /* filename, message, state path, or host key name */
 } Cmd;
 
 #define MAX_CMDS 4096
@@ -157,6 +177,11 @@ int script_load(const char *path) {
             }
         } else if (strcmp(tok, "TRIGGER_OFF") == 0) {
             c.type = CMD_TRIGGER_OFF;
+        } else if (strcmp(tok, "KEY_TAP") == 0 && n >= 2) {
+            for (char *p = arg1; *p; p++)
+                *p = (char)toupper((unsigned char)*p);
+            c.type = CMD_KEY_TAP;
+            snprintf(c.sarg, sizeof(c.sarg), "%s", arg1);
         } else {
             fprintf(stderr, "[Script] Unknown command: %s\n", tok);
             continue;
@@ -303,6 +328,25 @@ void script_tick(uint64_t frame, const uint8_t *ram) {
                 s_trigger_override = 0;
                 printf("[Script] TRIGGER_OFF\n");
                 break;
+            case CMD_KEY_TAP: {
+                SDL_Scancode scancode = parse_host_key(c->sarg);
+                SDL_Event key_event;
+                if (scancode == SDL_SCANCODE_UNKNOWN) {
+                    fprintf(stderr, "[Script] Unknown host key: %s\n", c->sarg);
+                    break;
+                }
+                memset(&key_event, 0, sizeof(key_event));
+                key_event.type = SDL_KEYDOWN;
+                key_event.key.state = SDL_PRESSED;
+                key_event.key.keysym.scancode = scancode;
+                key_event.key.keysym.sym = SDL_GetKeyFromScancode(scancode);
+                SDL_PushEvent(&key_event);
+                key_event.type = SDL_KEYUP;
+                key_event.key.state = SDL_RELEASED;
+                SDL_PushEvent(&key_event);
+                printf("[Script] KEY_TAP %s\n", c->sarg);
+                break;
+            }
             default: break;
         }
         s_cmd_cursor++;

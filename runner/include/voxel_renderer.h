@@ -11,6 +11,8 @@
 
 typedef float (*NesVoxelTileHeightFn)(uint8_t tile, int tile_x, int tile_y,
                                       void *user);
+typedef int (*NesVoxelSpriteOverlayFn)(int min_x, int min_y,
+                                       int max_x, int max_y, void *user);
 
 typedef struct NesVoxelScene {
     uint32_t *framebuffer;
@@ -43,6 +45,14 @@ typedef struct NesVoxelScene {
     /* OAM metasprites are assembled into coherent camera-facing cards.
      * Values <= 0 use 1.0. */
     float sprite_scale;
+    /* Pitch-facing cards preserve pixel-art proportions under a high camera
+     * instead of vertically foreshortening. depth_bias pulls cards slightly
+     * camera-ward to keep feet from z-fighting with their ground tile. */
+    int sprite_face_camera_pitch;
+    float sprite_depth_bias;
+    /* Optional game policy for actors that must remain readable when a low
+     * camera puts foreground terrain between the actor and the camera. */
+    NesVoxelSpriteOverlayFn sprite_overlay;
     int draw_oam_sprites;
     int preserve_top_rows;
     int extend_preserved_rows;

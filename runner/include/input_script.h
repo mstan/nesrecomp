@@ -7,6 +7,7 @@
  *   RELEASE <BUTTON>
  *   TURBO ON|OFF           # toggle fast-forward (skip 60Hz delay)
  *   SCREENSHOT [filename]  # save to C:/temp/filename (default: nes_script_NNN.png)
+ *   KEY_TAP KP8            # enqueue one host keyboard down/up pair
  *   LOG <message>
  *   EXIT [code]
  *   WAIT_RAM8 <hex_addr> <hex_value>    # block until g_ram[addr]==value (30s timeout)
