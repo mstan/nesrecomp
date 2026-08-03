@@ -21,6 +21,13 @@
 #define VOXEL_CUSTOM_TILE_SIZE 8
 #define VOXEL_PI 3.14159265358979323846f
 
+enum {
+    TILE_EDGE_NORTH,
+    TILE_EDGE_SOUTH,
+    TILE_EDGE_WEST,
+    TILE_EDGE_EAST
+};
+
 typedef struct Vec3 {
     float x, y, z;
 } Vec3;
@@ -292,6 +299,97 @@ static Texture tile_texture(const NesVoxelScene *s, int tx, int ty, float shade)
     return texture;
 }
 
+static unsigned color_luma(uint32_t color) {
+    unsigned r = (color >> 16) & 0xFF;
+    unsigned g = (color >> 8) & 0xFF;
+    unsigned b = color & 0xFF;
+    return r * 54u + g * 183u + b * 19u;
+}
+
+static uint32_t tile_side_color(const Texture *top) {
+    uint32_t colors[64];
+    uint8_t counts[64];
+    uint32_t background =
+        g_nes_palette[g_ppu_pal[0] & 0x3F];
+    int unique_count = 0;
+    int common = 0;
+    int candidate = -1;
+
+    memset(counts, 0, sizeof(counts));
+    for (int y = 0; y < top->height; y++) {
+        for (int x = 0; x < top->width; x++) {
+            uint32_t color = top->pixels[y * top->stride + x];
+            int found = -1;
+            for (int i = 0; i < unique_count; i++) {
+                if (colors[i] == color) {
+                    found = i;
+                    break;
+                }
+            }
+            if (found < 0 && unique_count < 64) {
+                found = unique_count++;
+                colors[found] = color;
+            }
+            if (found >= 0 && counts[found] < 255) counts[found]++;
+        }
+    }
+    if (unique_count == 0) return 0xFF000000u;
+    for (int i = 1; i < unique_count; i++) {
+        if (counts[i] > counts[common]) common = i;
+    }
+    /* Prefer a dark material tone over the already-composited universal
+     * background or black outline. This becomes the replacement color for
+     * bright ground pixels that do not belong on a vertical face. */
+    for (int i = 0; i < unique_count; i++) {
+        unsigned luma = color_luma(colors[i]);
+        if (colors[i] == background || luma < 4096u) continue;
+        if (candidate < 0 || luma < color_luma(colors[candidate]) ||
+            (luma == color_luma(colors[candidate]) &&
+             counts[i] > counts[candidate]))
+            candidate = i;
+    }
+    if (candidate < 0) {
+        for (int i = 0; i < unique_count; i++) {
+            if (colors[i] != background &&
+                (candidate < 0 || counts[i] > counts[candidate]))
+                candidate = i;
+        }
+    }
+    return colors[candidate >= 0 ? candidate : common];
+}
+
+static Texture tile_side_texture(const Texture *top, int edge,
+                                 uint32_t material, uint32_t *pixels,
+                                 float shade) {
+    Texture texture;
+    unsigned material_luma = color_luma(material);
+    unsigned bright_limit = material_luma + material_luma / 2u;
+    for (int i = 0; i < top->width; i++) {
+        int x = i;
+        int y = 0;
+        uint32_t color;
+        if (edge == TILE_EDGE_SOUTH) {
+            y = top->height - 1;
+        } else if (edge == TILE_EDGE_WEST) {
+            x = 0;
+            y = i < top->height ? i : top->height - 1;
+        } else if (edge == TILE_EDGE_EAST) {
+            x = top->width - 1;
+            y = i < top->height ? i : top->height - 1;
+        }
+        color = top->pixels[y * top->stride + x];
+        pixels[i] = color_luma(color) > bright_limit ? material : color;
+    }
+    texture.pixels = pixels;
+    texture.width = top->width;
+    texture.height = 1;
+    texture.stride = top->width;
+    texture.shade = shade;
+    texture.alpha_test = 0;
+    texture.overlay = 0;
+    return texture;
+}
+
 static void render_terrain(const RenderContext *ctx) {
     const NesVoxelScene *s = ctx->scene;
     float ts = (float)s->tile_size;
@@ -305,23 +403,44 @@ static void render_terrain(const RenderContext *ctx) {
             float west = scene_height(s, tx - 1, ty);
             float east = scene_height(s, tx + 1, ty);
             Texture top = tile_texture(s, tx, ty, h < 0.0f ? 0.86f : 1.0f);
-            Texture side_a = tile_texture(s, tx, ty, 0.62f);
-            Texture side_b = tile_texture(s, tx, ty, 0.76f);
 
             draw_quad(ctx, vec3(x0, h, z0), vec3(x1, h, z0),
                       vec3(x1, h, z1), vec3(x0, h, z1), &top);
-            if (h > north)
-                draw_quad(ctx, vec3(x1, h, z0), vec3(x0, h, z0),
-                          vec3(x0, north, z0), vec3(x1, north, z0), &side_a);
-            if (h > south)
-                draw_quad(ctx, vec3(x0, h, z1), vec3(x1, h, z1),
-                          vec3(x1, south, z1), vec3(x0, south, z1), &side_b);
-            if (h > west)
-                draw_quad(ctx, vec3(x0, h, z0), vec3(x0, h, z1),
-                          vec3(x0, west, z1), vec3(x0, west, z0), &side_a);
-            if (h > east)
-                draw_quad(ctx, vec3(x1, h, z1), vec3(x1, h, z0),
-                          vec3(x1, east, z0), vec3(x1, east, z1), &side_b);
+            if (h > north || h > south || h > west || h > east) {
+                uint32_t side_color = tile_side_color(&top);
+                uint32_t north_pixels[VOXEL_MAX_WIDTH];
+                uint32_t south_pixels[VOXEL_MAX_WIDTH];
+                uint32_t west_pixels[VOXEL_MAX_WIDTH];
+                uint32_t east_pixels[VOXEL_MAX_WIDTH];
+                Texture north_side = tile_side_texture(
+                    &top, TILE_EDGE_NORTH, side_color,
+                    north_pixels, 0.62f);
+                Texture south_side = tile_side_texture(
+                    &top, TILE_EDGE_SOUTH, side_color,
+                    south_pixels, 0.76f);
+                Texture west_side = tile_side_texture(
+                    &top, TILE_EDGE_WEST, side_color,
+                    west_pixels, 0.62f);
+                Texture east_side = tile_side_texture(
+                    &top, TILE_EDGE_EAST, side_color,
+                    east_pixels, 0.76f);
+                if (h > north)
+                    draw_quad(ctx, vec3(x1, h, z0), vec3(x0, h, z0),
+                              vec3(x0, north, z0), vec3(x1, north, z0),
+                              &north_side);
+                if (h > south)
+                    draw_quad(ctx, vec3(x0, h, z1), vec3(x1, h, z1),
+                              vec3(x1, south, z1), vec3(x0, south, z1),
+                              &south_side);
+                if (h > west)
+                    draw_quad(ctx, vec3(x0, h, z0), vec3(x0, h, z1),
+                              vec3(x0, west, z1), vec3(x0, west, z0),
+                              &west_side);
+                if (h > east)
+                    draw_quad(ctx, vec3(x1, h, z1), vec3(x1, h, z0),
+                              vec3(x1, east, z0), vec3(x1, east, z1),
+                              &east_side);
+            }
         }
     }
 }
