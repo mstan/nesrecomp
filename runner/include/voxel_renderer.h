@@ -11,8 +11,14 @@
 
 typedef float (*NesVoxelTileHeightFn)(uint8_t tile, int tile_x, int tile_y,
                                       void *user);
+typedef void (*NesVoxelTilePixelsFn)(uint32_t *pixels, int pixel_stride,
+                                     uint8_t tile, int tile_x, int tile_y,
+                                     void *user);
 typedef int (*NesVoxelSpriteOverlayFn)(int min_x, int min_y,
                                        int max_x, int max_y, void *user);
+typedef float (*NesVoxelSpriteGroundFn)(int min_x, int min_y,
+                                        int max_x, int max_y,
+                                        float sampled_ground, void *user);
 
 typedef struct NesVoxelScene {
     uint32_t *framebuffer;
@@ -33,6 +39,9 @@ typedef struct NesVoxelScene {
     int tile_size;
 
     NesVoxelTileHeightFn tile_height;
+    /* Optional source for generated or offscreen room textures. When absent,
+     * the compositor samples the already-rendered flat framebuffer. */
+    NesVoxelTilePixelsFn tile_pixels;
     void *user;
 
     /* Camera controls. Yaw orbits around the vertical axis; roll rotates the
@@ -41,6 +50,11 @@ typedef struct NesVoxelScene {
     float yaw_degrees;
     float roll_degrees;
     float camera_distance;
+    /* Optional world-space camera target. This lets a game present adjacent
+     * cached rooms during its native scrolling transition. */
+    int use_camera_target;
+    float camera_target_x;
+    float camera_target_z;
 
     /* OAM metasprites are assembled into coherent camera-facing cards.
      * Values <= 0 use 1.0. */
@@ -50,6 +64,10 @@ typedef struct NesVoxelScene {
      * camera-ward to keep feet from z-fighting with their ground tile. */
     int sprite_face_camera_pitch;
     float sprite_depth_bias;
+    float sprite_world_offset_x;
+    float sprite_world_offset_z;
+    /* Optional game policy for actor ground placement. */
+    NesVoxelSpriteGroundFn sprite_ground;
     /* Optional game policy for actors that must remain readable when a low
      * camera puts foreground terrain between the actor and the camera. */
     NesVoxelSpriteOverlayFn sprite_overlay;

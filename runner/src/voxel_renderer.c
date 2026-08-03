@@ -15,6 +15,10 @@
 
 #define VOXEL_MAX_WIDTH  512
 #define VOXEL_MAX_HEIGHT 240
+#define VOXEL_MAX_TILE_COLUMNS 64
+#define VOXEL_MAX_TILE_ROWS    60
+#define VOXEL_MAX_TILES (VOXEL_MAX_TILE_COLUMNS * VOXEL_MAX_TILE_ROWS)
+#define VOXEL_CUSTOM_TILE_SIZE 8
 #define VOXEL_PI 3.14159265358979323846f
 
 typedef struct Vec3 {
@@ -44,8 +48,11 @@ typedef struct RenderContext {
 
 static uint32_t s_source[VOXEL_MAX_WIDTH * VOXEL_MAX_HEIGHT];
 static float s_depth[VOXEL_MAX_WIDTH * VOXEL_MAX_HEIGHT];
-static uint8_t s_contaminated[32 * 30];
+static uint8_t s_contaminated[VOXEL_MAX_TILES];
 static int16_t s_representative[256];
+static uint32_t
+    s_custom_tile_pixels[VOXEL_MAX_TILES *
+                         VOXEL_CUSTOM_TILE_SIZE * VOXEL_CUSTOM_TILE_SIZE];
 
 extern const uint32_t g_nes_palette[64];
 
@@ -210,6 +217,19 @@ static int rects_overlap(int ax, int ay, int aw, int ah,
 static void find_clean_tile_sources(const NesVoxelScene *s) {
     int sprite_height = (g_ppuctrl & 0x20) ? 16 : 8;
     int count = s->tile_columns * s->tile_rows;
+    if (s->tile_pixels) {
+        for (int ty = 0; ty < s->tile_rows; ty++) {
+            for (int tx = 0; tx < s->tile_columns; tx++) {
+                int index = ty * s->tile_columns + tx;
+                s->tile_pixels(
+                    s_custom_tile_pixels +
+                        index * VOXEL_CUSTOM_TILE_SIZE * VOXEL_CUSTOM_TILE_SIZE,
+                    VOXEL_CUSTOM_TILE_SIZE, scene_tile(s, tx, ty), tx, ty,
+                    s->user);
+            }
+        }
+        return;
+    }
     memset(s_contaminated, 0, (size_t)count);
     for (int ty = 0; ty < s->tile_rows; ty++) {
         for (int tx = 0; tx < s->tile_columns; tx++) {
@@ -246,6 +266,18 @@ static Texture tile_texture(const NesVoxelScene *s, int tx, int ty, float shade)
     uint8_t tile = scene_tile(s, tx, ty);
     int sx, sy;
     Texture texture;
+    if (s->tile_pixels) {
+        texture.pixels =
+            s_custom_tile_pixels +
+            index * VOXEL_CUSTOM_TILE_SIZE * VOXEL_CUSTOM_TILE_SIZE;
+        texture.width = s->tile_size;
+        texture.height = s->tile_size;
+        texture.stride = VOXEL_CUSTOM_TILE_SIZE;
+        texture.shade = shade;
+        texture.alpha_test = 0;
+        texture.overlay = 0;
+        return texture;
+    }
     if (s_contaminated[index] && s_representative[tile] >= 0)
         source_index = s_representative[tile];
     sx = (source_index % s->tile_columns) * s->tile_size + s->source_x;
@@ -420,12 +452,18 @@ static void render_sprites(const RenderContext *ctx) {
         foot_z = (float)(max_y - s->source_y);
         if (foot_z < 0.0f || foot_z >= s->source_height) continue;
         center_x = (min_x + max_x) * 0.5f;
-        ground = scene_height(s, (int)center_x / s->tile_size,
-                              (int)foot_z / s->tile_size);
+        ground = scene_height(
+            s, (int)(center_x + s->sprite_world_offset_x) / s->tile_size,
+            (int)(foot_z + s->sprite_world_offset_z) / s->tile_size);
+        if (s->sprite_ground)
+            ground = s->sprite_ground(min_x, min_y, max_x, max_y,
+                                      ground, s->user);
         if (ground < 0.0f) ground = 0.0f;
         card_width = (max_x - min_x) * sprite_scale;
         card_height = (max_y - min_y) * sprite_scale;
-        center = vec3(center_x, ground + 0.2f, foot_z);
+        center = vec3(center_x + s->sprite_world_offset_x,
+                      ground + 0.2f,
+                      foot_z + s->sprite_world_offset_z);
         if (s->sprite_depth_bias > 0.0f) {
             Vec3 camera_pull = vec3_normalize(vec3(
                 ctx->eye.x - center.x, 0.0f, ctx->eye.z - center.z));
@@ -465,9 +503,12 @@ static int validate_scene(const NesVoxelScene *s) {
     if (s->output_width <= 0 || s->output_width > VOXEL_MAX_WIDTH ||
         s->output_height <= 0 || s->output_height > VOXEL_MAX_HEIGHT)
         return 0;
-    if (s->tile_columns <= 0 || s->tile_columns > 32 ||
-        s->tile_rows <= 0 || s->tile_rows > 30 ||
+    if (s->tile_columns <= 0 ||
+        s->tile_columns > VOXEL_MAX_TILE_COLUMNS ||
+        s->tile_rows <= 0 || s->tile_rows > VOXEL_MAX_TILE_ROWS ||
         s->tile_size <= 0)
+        return 0;
+    if (s->tile_pixels && s->tile_size > VOXEL_CUSTOM_TILE_SIZE)
         return 0;
     if (s->source_x < 0 || s->source_y < 0 ||
         s->source_x + s->source_width > s->output_width ||
@@ -498,8 +539,13 @@ int nes_voxel_render(const NesVoxelScene *s) {
             s->framebuffer[y * s->output_width + x] = color;
     }
 
-    target = vec3(s->source_width * 0.5f, 2.0f,
-                  s->source_height * 0.5f);
+    target = vec3(s->use_camera_target
+                      ? s->camera_target_x
+                      : s->source_width * 0.5f,
+                  2.0f,
+                  s->use_camera_target
+                      ? s->camera_target_z
+                      : s->source_height * 0.5f);
     elevation = s->elevation_degrees * VOXEL_PI / 180.0f;
     yaw = s->yaw_degrees * VOXEL_PI / 180.0f;
     roll = s->roll_degrees * VOXEL_PI / 180.0f;
