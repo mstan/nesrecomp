@@ -44,6 +44,7 @@ set(NESRECOMP_RUNNER_SOURCES
     # Optional game-authored 3D presentation layer. It is inert unless a
     # game calls nes_voxel_render() from game_post_render().
     ${NESRECOMP_RUNNER_ROOT}/src/voxel_renderer.c
+    ${NESRECOMP_RUNNER_ROOT}/src/voxel_screen_profile.c
 )
 
 set(NESRECOMP_RUNNER_INCLUDE_DIRS
