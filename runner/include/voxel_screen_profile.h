@@ -32,6 +32,22 @@ typedef int (*NesVoxelScreenVisibleFn)(const uint32_t *framebuffer,
                                        int stride, void *user);
 typedef float (*NesVoxelScreenHeightFn)(
     const NesVoxelScreenSample *sample, void *user);
+typedef struct NesVoxelScreenCamera {
+    int enabled;
+    float eye_x;
+    float eye_y;
+    float eye_z;
+    float look_at_x;
+    float look_at_y;
+    float look_at_z;
+    float focal_scale;
+    float center_y;
+} NesVoxelScreenCamera;
+typedef void (*NesVoxelScreenCameraFn)(
+    NesVoxelScreenCamera *camera, float pitch, float yaw, float roll,
+    float zoom_percent, void *user);
+typedef int (*NesVoxelScreenSpriteVisibleFn)(
+    int min_x, int min_y, int max_x, int max_y, void *user);
 
 typedef struct NesVoxelScreenProfile {
     const char *name;
@@ -52,6 +68,10 @@ typedef struct NesVoxelScreenProfile {
     NesVoxelScreenVisibleFn visible;
     NesVoxelScreenHeightFn height;
     void *user;
+    /* Optional dynamic camera and OAM-component filter. With both NULL the
+     * adapter follows its existing orbit-camera behavior exactly. */
+    NesVoxelScreenCameraFn camera;
+    NesVoxelScreenSpriteVisibleFn sprite_visible;
 } NesVoxelScreenProfile;
 
 typedef struct NesVoxelScreenState {

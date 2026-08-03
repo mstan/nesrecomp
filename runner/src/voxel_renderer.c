@@ -782,6 +782,10 @@ static void render_sprites(const RenderContext *ctx) {
             }
         }
 
+        if (s->sprite_visible &&
+            !s->sprite_visible(min_x, min_y, max_x, max_y, s->user))
+            continue;
+
         source_min_x = min_x;
         source_min_y = min_y;
         memset(pixels, 0, sizeof(pixels));
@@ -928,21 +932,28 @@ int nes_voxel_render(const NesVoxelScene *s) {
             s->framebuffer[y * s->output_width + x] = color;
     }
 
-    target = vec3(s->use_camera_target
-                      ? s->camera_target_x
-                      : s->source_width * 0.5f,
-                  2.0f,
-                  s->use_camera_target
-                      ? s->camera_target_z
-                      : s->source_height * 0.5f);
-    elevation = s->elevation_degrees * VOXEL_PI / 180.0f;
-    yaw = s->yaw_degrees * VOXEL_PI / 180.0f;
     roll = s->roll_degrees * VOXEL_PI / 180.0f;
-    distance = s->camera_distance > 1.0f ? s->camera_distance : 285.0f;
-    horizontal_distance = cosf(elevation) * distance;
-    ctx.eye = vec3(target.x + sinf(yaw) * horizontal_distance,
-                   target.y + sinf(elevation) * distance,
-                   target.z + cosf(yaw) * horizontal_distance);
+    if (s->use_camera_pose) {
+        ctx.eye = vec3(s->camera_eye_x, s->camera_eye_y, s->camera_eye_z);
+        target = vec3(s->camera_look_at_x, s->camera_look_at_y,
+                      s->camera_look_at_z);
+    } else {
+        target = vec3(s->use_camera_target
+                          ? s->camera_target_x
+                          : s->source_width * 0.5f,
+                      2.0f,
+                      s->use_camera_target
+                          ? s->camera_target_z
+                          : s->source_height * 0.5f);
+        elevation = s->elevation_degrees * VOXEL_PI / 180.0f;
+        yaw = s->yaw_degrees * VOXEL_PI / 180.0f;
+        distance = s->camera_distance > 1.0f
+            ? s->camera_distance : 285.0f;
+        horizontal_distance = cosf(elevation) * distance;
+        ctx.eye = vec3(target.x + sinf(yaw) * horizontal_distance,
+                       target.y + sinf(elevation) * distance,
+                       target.z + cosf(yaw) * horizontal_distance);
+    }
     ctx.forward = vec3_normalize(vec3_sub(target, ctx.eye));
     ctx.right = vec3_normalize(vec3_cross(ctx.forward, vec3(0.0f, 1.0f, 0.0f)));
     ctx.up = vec3_normalize(vec3_cross(ctx.right, ctx.forward));
@@ -958,9 +969,12 @@ int nes_voxel_render(const NesVoxelScene *s) {
             base_up.y * cosf(roll) - base_right.y * sinf(roll),
             base_up.z * cosf(roll) - base_right.z * sinf(roll)));
     }
-    ctx.focal = s->output_width * 0.92f;
+    ctx.focal = s->output_width *
+        (s->camera_focal_scale > 0.05f ? s->camera_focal_scale : 0.92f);
     ctx.center_x = s->output_width * 0.5f;
-    ctx.center_y = s->output_height * 0.59f;
+    ctx.center_y = s->output_height *
+        (s->camera_center_y > 0.05f && s->camera_center_y < 0.95f
+             ? s->camera_center_y : 0.59f);
     ctx.scene = s;
 
     render_terrain(&ctx);

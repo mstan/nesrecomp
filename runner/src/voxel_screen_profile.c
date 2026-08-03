@@ -314,6 +314,7 @@ void nes_voxel_screen_post_render(NesVoxelScreenState *state,
                                   const NesVoxelScreenProfile *profile,
                                   uint32_t *framebuffer) {
     NesVoxelScene scene;
+    NesVoxelScreenCamera camera;
     int rows;
     if (!state || !profile || !framebuffer ||
         !state->enabled || !state->view_enabled)
@@ -332,6 +333,7 @@ void nes_voxel_screen_post_render(NesVoxelScreenState *state,
     state->active_profile = profile;
     sample_grid(state, profile, framebuffer);
     memset(&scene, 0, sizeof(scene));
+    memset(&camera, 0, sizeof(camera));
     scene.framebuffer = framebuffer;
     scene.output_width = g_render_width;
     scene.output_height = SCREEN_HEIGHT;
@@ -352,6 +354,22 @@ void nes_voxel_screen_post_render(NesVoxelScreenState *state,
     scene.roll_degrees = state->render_roll;
     scene.camera_distance =
         300.0f * 100.0f / state->render_zoom_percent;
+    if (profile->camera) {
+        profile->camera(&camera, state->render_pitch, state->render_yaw,
+                        state->render_roll, state->render_zoom_percent,
+                        profile->user);
+        if (camera.enabled) {
+            scene.use_camera_pose = 1;
+            scene.camera_eye_x = camera.eye_x;
+            scene.camera_eye_y = camera.eye_y;
+            scene.camera_eye_z = camera.eye_z;
+            scene.camera_look_at_x = camera.look_at_x;
+            scene.camera_look_at_y = camera.look_at_y;
+            scene.camera_look_at_z = camera.look_at_z;
+            scene.camera_focal_scale = camera.focal_scale;
+            scene.camera_center_y = camera.center_y;
+        }
+    }
     scene.sprite_scale =
         state->render_sprite_scale_percent / 100.0f;
     scene.sprite_face_camera_pitch = 1;
@@ -359,6 +377,7 @@ void nes_voxel_screen_post_render(NesVoxelScreenState *state,
     scene.clip_sprites_to_source = 1;
     scene.sprite_depth_bias = 1.0f;
     scene.sprite_shadow = screen_sprite_shadow;
+    scene.sprite_visible = profile->sprite_visible;
     scene.sprite_shadow_scale = 0.60f;
     scene.sprite_shadow_opacity = 0.32f;
     scene.draw_oam_sprites = 1;

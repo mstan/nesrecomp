@@ -101,8 +101,17 @@ All of the following are opt-in and leave existing profiles unchanged:
   rectangle from reappearing in 3D.
 - `sprite_max_height` lets a game cap a particular assembled metasprite when
   transition-only OAM pieces would otherwise create an elongated card.
+- `sprite_visible` can suppress a complete assembled metasprite. This is
+  useful for first-person profiles that hide the player body but retain
+  enemies, projectiles, and effects.
 - `sprite_ground`, `sprite_shadow`, and `sprite_overlay` remain per-game
   policy callbacks. Shadow scale and opacity are configured independently.
+
+`use_camera_pose` switches from the default orbit camera to an explicit
+eye/look-at pose. `camera_focal_scale` and normalized `camera_center_y` tune
+that view without changing the default projection. The screen-grid adapter
+exposes the same path through its optional dynamic `camera` callback; profiles
+that leave it unset continue to use the existing eased orbit camera.
 
 The engine owns assembly, alpha testing, depth sorting, and contact-shadow
 rendering. A game profile owns tile/object identification because CHR and OAM

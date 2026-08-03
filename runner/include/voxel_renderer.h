@@ -19,6 +19,8 @@ typedef int (*NesVoxelTileBillboardFn)(uint8_t tile, int tile_x, int tile_y,
                                       void *user);
 typedef int (*NesVoxelSpriteOverlayFn)(int min_x, int min_y,
                                        int max_x, int max_y, void *user);
+typedef int (*NesVoxelSpriteVisibleFn)(int min_x, int min_y,
+                                       int max_x, int max_y, void *user);
 typedef float (*NesVoxelSpriteGroundFn)(int min_x, int min_y,
                                         int max_x, int max_y,
                                         float sampled_ground, void *user);
@@ -73,6 +75,18 @@ typedef struct NesVoxelScene {
     int use_camera_target;
     float camera_target_x;
     float camera_target_z;
+    /* Optional explicit eye/look-at pose. This is intended for first-person
+     * or rail-camera profiles; the ordinary orbit camera remains the default.
+     * focal_scale is relative to output width and center_y is normalized. */
+    int use_camera_pose;
+    float camera_eye_x;
+    float camera_eye_y;
+    float camera_eye_z;
+    float camera_look_at_x;
+    float camera_look_at_y;
+    float camera_look_at_z;
+    float camera_focal_scale;
+    float camera_center_y;
 
     /* OAM metasprites are assembled into coherent camera-facing cards.
      * Values <= 0 use 1.0. */
@@ -96,6 +110,10 @@ typedef struct NesVoxelScene {
     /* Optional cap for assembled cards such as a player sprite whose
      * transition-only OAM pieces must not form one elongated metasprite. */
     NesVoxelSpriteMaxHeightFn sprite_max_height;
+    /* Optional component filter, evaluated after OAM pieces are assembled
+     * into one metasprite. A first-person profile can use this to suppress
+     * the player body while retaining enemies and effects. */
+    NesVoxelSpriteVisibleFn sprite_visible;
     /* Optional game policy for pixel-art contact shadows. The callback returns
      * an opacity multiplier; zero suppresses the shadow for flat effects and
      * other OAM pieces that are not standing actors. */
