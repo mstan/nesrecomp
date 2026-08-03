@@ -26,6 +26,11 @@ void controller_handle_event(const SDL_Event *ev);
  * A=0x80 B=0x40 SELECT=0x20 START=0x10 UP=0x08 DOWN=0x04 LEFT=0x02 RIGHT=0x01. */
 uint8_t controller_read_player(int player);
 
+/* True when an SDL controller instance belongs to the requested NES port.
+ * Camera mods use this to keep direct right-stick events on the same device
+ * selected for ordinary movement and buttons. */
+int controller_instance_is_player(SDL_JoystickID instance_id, int player);
+
 /* Number of controllers currently connected. */
 int controller_count(void);
 

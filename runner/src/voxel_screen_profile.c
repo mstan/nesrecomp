@@ -1,4 +1,6 @@
 #include "voxel_screen_profile.h"
+#include "config.h"
+#include "controller.h"
 #include "keybinds.h"
 
 #include "nes_runtime.h"
@@ -21,6 +23,16 @@ static float ease_value(float current, float target) {
     float delta = target - current;
     if (delta > -0.05f && delta < 0.05f) return target;
     return current + delta * 0.25f;
+}
+
+static float camera_stick_curve(float value) {
+    const float deadzone = 0.18f;
+    float magnitude = value < 0.0f ? -value : value;
+    float scaled;
+    if (magnitude <= deadzone) return 0.0f;
+    scaled = (magnitude - deadzone) / (1.0f - deadzone);
+    scaled *= scaled;
+    return value < 0.0f ? -scaled : scaled;
 }
 
 static void build_sprite_mask(NesVoxelScreenState *state) {
@@ -231,9 +243,32 @@ void nes_voxel_screen_handle_event(NesVoxelScreenState *state,
     int changed = 0;
     int action;
     SDL_Scancode key;
-    if (!state || !state->enabled || !event ||
-        event->type != SDL_KEYDOWN)
+    if (!state || !state->enabled || !event)
         return;
+    if (event->type == SDL_CONTROLLERAXISMOTION &&
+        g_nes_config.player_src[0] == 2 &&
+        controller_instance_is_player(event->caxis.which, 1)) {
+        float value = event->caxis.value < 0
+            ? (float)event->caxis.value / 32768.0f
+            : (float)event->caxis.value / 32767.0f;
+        /* Custom first-person profiles own their camera response so they can
+         * map stick range to game-specific gestures (for example SMB's true
+         * straight-up view). Dioramas get the shared orbit control here. */
+        if (!state->active_profile ||
+            !state->active_profile->camera) {
+            if (event->caxis.axis == SDL_CONTROLLER_AXIS_RIGHTX)
+                state->camera_stick_x = value;
+            else if (event->caxis.axis == SDL_CONTROLLER_AXIS_RIGHTY)
+                state->camera_stick_y = value;
+        }
+        return;
+    }
+    if (event->type == SDL_CONTROLLERDEVICEREMOVED) {
+        state->camera_stick_x = 0.0f;
+        state->camera_stick_y = 0.0f;
+        return;
+    }
+    if (event->type != SDL_KEYDOWN) return;
     key = event->key.keysym.scancode;
     action = keybinds_camera_action_for_scancode(key);
     if (event->key.repeat &&
@@ -300,7 +335,27 @@ void nes_voxel_screen_handle_event(NesVoxelScreenState *state,
 
 void nes_voxel_screen_update(NesVoxelScreenState *state,
                              const NesVoxelScreenProfile *profile) {
+    int whole;
     if (!state || !profile || !state->enabled) return;
+    /* Right-stick look is the shared gamepad default for every screen-profile
+     * camera. Preserve sub-degree motion so gentle deflection remains smooth
+     * even though the public camera settings use integer degrees. */
+    state->camera_yaw_remainder +=
+        camera_stick_curve(state->camera_stick_x) * 2.5f;
+    whole = (int)state->camera_yaw_remainder;
+    if (whole != 0) {
+        state->yaw += whole;
+        while (state->yaw > 180) state->yaw -= 360;
+        while (state->yaw < -180) state->yaw += 360;
+        state->camera_yaw_remainder -= (float)whole;
+    }
+    state->camera_pitch_remainder -=
+        camera_stick_curve(state->camera_stick_y) * 2.0f;
+    whole = (int)state->camera_pitch_remainder;
+    if (whole != 0) {
+        state->pitch = clamp_int(state->pitch + whole, 5, 85);
+        state->camera_pitch_remainder -= (float)whole;
+    }
     state->render_pitch =
         ease_value(state->render_pitch, (float)state->pitch);
     state->render_yaw =

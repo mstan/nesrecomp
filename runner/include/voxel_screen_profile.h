@@ -109,6 +109,10 @@ typedef struct NesVoxelScreenState {
     float render_roll;
     float render_zoom_percent;
     float render_sprite_scale_percent;
+    float camera_stick_x;
+    float camera_stick_y;
+    float camera_yaw_remainder;
+    float camera_pitch_remainder;
     int grid_offset_x;
 } NesVoxelScreenState;
 

@@ -113,6 +113,12 @@ uint8_t controller_read_player(int player) {
     return b;
 }
 
+int controller_instance_is_player(SDL_JoystickID instance_id, int player) {
+    int slot = player - 1;
+    return slot >= 0 && slot < MAX_PADS && s_pads[slot] &&
+           s_pad_ids[slot] == instance_id;
+}
+
 int controller_count(void) { return s_count; }
 
 void controller_shutdown(void) {
