@@ -96,6 +96,24 @@ port was contributed by [**Nat Budin (@nbudin)**](https://github.com/nbudin) in
 
 Mappers 0, 1, 4, and 66 cover roughly 78% of the licensed NES library.
 
+### Voxel 3D presentation
+
+NESRecomp includes an opt-in, presentation-only Voxel 3D renderer for game
+projects that can describe their live tile map and sprites. It reconstructs
+solid tile geometry, camera-facing sprite cards, depth sorting, contact
+shadows, HUD preservation, and adjustable pitch, yaw, roll, zoom, and sprite
+scale. The software scene compositor consumes the normal NES frame and game
+metadata; it does not patch the player's ROM or change save data.
+
+[The Legend of Zelda](https://github.com/mstan/LegendOfZeldaNESRecomp) uses the
+renderer as an orbitable tabletop diorama, while
+[Super Mario Bros.](https://github.com/mstan/SuperMarioBrosNESRecomp) uses it
+as a forward-facing first-person experiment. Games opt in through trusted mod
+packages, so ordinary builds and launches remain on the stock rendering path
+unless the player enables Voxel 3D. See
+[`docs/VOXEL_RENDERER.md`](docs/VOXEL_RENDERER.md) for the host API and
+[`docs/MOD_PACKAGES.md`](docs/MOD_PACKAGES.md) for package integration.
+
 ### Text Override System
 
 NESRecomp includes a runtime text replacement system that allows modifying in-game

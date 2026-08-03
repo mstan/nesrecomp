@@ -66,6 +66,7 @@ id = "widescreen"
 name = "Widescreen"
 description = "Enables the game's surveyed widescreen implementation."
 group = "Display"
+exclusive_group = "display-mode"
 default_enabled = false
 
 [[plugin]]
@@ -89,6 +90,12 @@ step = 8
 
 Supported types are `boolean`, `choice`, and bounded `integer`. Trusted plugins
 may read integer values with `nes_mod_get_option_int`.
+
+Features with the same non-empty `exclusive_group` are mutually exclusive.
+Enabling one in the launcher automatically disables the other selected feature
+in that group, even when the features come from different packages. Validation
+also rejects a hand-edited state file that enables more than one, so the
+runtime can never activate incompatible presentation modes together.
 
 ## Plugin registration
 

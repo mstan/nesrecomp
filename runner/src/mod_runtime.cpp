@@ -59,6 +59,7 @@ struct Feature {
     std::string name;
     std::string description;
     std::string group = "General";
+    std::string exclusive_group;
     bool default_enabled = false;
     std::vector<std::string> plugins;
 };
@@ -429,6 +430,9 @@ bool read_manifest(const fs::path& path, Package& out, std::string* error) {
                 else if (key == "name") parsed = string_field(feature->name);
                 else if (key == "description") parsed = string_field(feature->description);
                 else if (key == "group") parsed = string_field(feature->group);
+                else if (key == "exclusive_group") {
+                    parsed = string_field(feature->exclusive_group);
+                }
                 else if (key == "default_enabled") {
                     parsed = parse_bool(value, bool_value);
                     if (parsed) feature->default_enabled = bool_value;
@@ -505,6 +509,8 @@ bool read_manifest(const fs::path& path, Package& out, std::string* error) {
     }
     for (const Feature& item : out.features) {
         if (!valid_id(item.id) || item.name.empty() ||
+            (!item.exclusive_group.empty() &&
+             !valid_id(item.exclusive_group)) ||
             !feature_ids.insert(item.id).second) {
             set_error(error, "manifest has an invalid or duplicate feature");
             return false;
@@ -585,6 +591,8 @@ bool target_matches(const Package& package, const Runtime& runtime) {
 Validation validate(Runtime& runtime) {
     Validation result;
     std::map<std::string, ResolvedPlugin> claimed;
+    std::map<std::string, std::pair<std::string, std::string>>
+        claimed_exclusive_groups;
     for (const auto& [id, versions] : runtime.packages) {
         (void)versions;
         const Package* package = selected_package(runtime, id);
@@ -599,6 +607,29 @@ Validation validate(Runtime& runtime) {
                     "This feature does not support the selected stock ROM."
                 });
                 continue;
+            }
+            if (!feature.exclusive_group.empty()) {
+                const auto prior = claimed_exclusive_groups.find(
+                    feature.exclusive_group);
+                if (prior != claimed_exclusive_groups.end()) {
+                    result.ok = false;
+                    result.diagnostics.push_back({
+                        package->id, feature.id,
+                        prior->second.first, prior->second.second,
+                        "exclusive-group:" + feature.exclusive_group,
+                        "Only one feature in this exclusive group may be enabled."
+                    });
+                    result.diagnostics.push_back({
+                        prior->second.first, prior->second.second,
+                        package->id, feature.id,
+                        "exclusive-group:" + feature.exclusive_group,
+                        "Only one feature in this exclusive group may be enabled."
+                    });
+                } else {
+                    claimed_exclusive_groups.emplace(
+                        feature.exclusive_group,
+                        std::make_pair(package->id, feature.id));
+                }
             }
             for (const std::string& plugin_id : feature.plugins) {
                 const auto registered = registered_plugins().find(plugin_id);
@@ -1621,7 +1652,23 @@ int provider_feature_enable(void*, const char* package_id,
                             const char* feature_id, int enabled) {
     if (!package_id || !feature_id) return 0;
     const Package* package = selected_package(state(), package_id);
-    if (!package || !find_feature(*package, feature_id)) return 0;
+    const Feature* feature =
+        package ? find_feature(*package, feature_id) : nullptr;
+    if (!package || !feature) return 0;
+    if (enabled && !feature->exclusive_group.empty()) {
+        for (const FeatureRef& other : selected_features(state())) {
+            if (other.package->id == package->id &&
+                other.feature->id == feature->id)
+                continue;
+            if (other.feature->exclusive_group != feature->exclusive_group)
+                continue;
+            FeatureSelection& other_selection =
+                package_selection(state(), *other.package)
+                    .features[other.feature->id];
+            other_selection.enabled = false;
+            other_selection.has_enabled = true;
+        }
+    }
     FeatureSelection& selection =
         package_selection(state(), *package).features[feature_id];
     selection.enabled = enabled != 0;
