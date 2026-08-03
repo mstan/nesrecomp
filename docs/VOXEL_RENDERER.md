@@ -113,6 +113,12 @@ that view without changing the default projection. The screen-grid adapter
 exposes the same path through its optional dynamic `camera` callback; profiles
 that leave it unset continue to use the existing eased orbit camera.
 
+`NES_VOXEL_LAYOUT_SIDE` is an additional opt-in geometry layout for
+side-scrollers. It rotates the sampled screen plane upright: screen X remains
+world X, screen Y becomes world height, and the semantic height callback
+controls block depth. Empty cells become sky instead of a horizontal painted
+floor. The default `NES_VOXEL_LAYOUT_FLOOR` path is unchanged.
+
 The engine owns assembly, alpha testing, depth sorting, and contact-shadow
 rendering. A game profile owns tile/object identification because CHR and OAM
 layouts are game-specific. Zelda, for example, identifies its 2x2 tree

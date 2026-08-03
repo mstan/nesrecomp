@@ -11,6 +11,7 @@
 
 #include <stdint.h>
 #include <SDL.h>
+#include "voxel_renderer.h"
 
 #define NES_VOXEL_SCREEN_MAX_TILES (32 * 30)
 
@@ -72,6 +73,7 @@ typedef struct NesVoxelScreenProfile {
      * adapter follows its existing orbit-camera behavior exactly. */
     NesVoxelScreenCameraFn camera;
     NesVoxelScreenSpriteVisibleFn sprite_visible;
+    int terrain_layout;
 } NesVoxelScreenProfile;
 
 typedef struct NesVoxelScreenState {

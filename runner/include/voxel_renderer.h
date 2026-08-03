@@ -29,6 +29,14 @@ typedef float (*NesVoxelSpriteShadowFn)(int min_x, int min_y,
 typedef int (*NesVoxelSpriteMaxHeightFn)(const int *oam_indices,
                                          int oam_count, void *user);
 
+enum {
+    NES_VOXEL_LAYOUT_FLOOR = 0,
+    /* Rotate the sampled screen plane upright: screen X remains world X,
+     * screen Y becomes world height, and positive tile height becomes depth.
+     * This is useful for player-forward views of side-scrolling games. */
+    NES_VOXEL_LAYOUT_SIDE = 1
+};
+
 typedef struct NesVoxelScene {
     uint32_t *framebuffer;
     int output_width;
@@ -48,6 +56,7 @@ typedef struct NesVoxelScene {
     int tile_size;
 
     NesVoxelTileHeightFn tile_height;
+    int terrain_layout;
     /* Optional source for generated or offscreen room textures. When absent,
      * the compositor samples the already-rendered flat framebuffer. */
     NesVoxelTilePixelsFn tile_pixels;

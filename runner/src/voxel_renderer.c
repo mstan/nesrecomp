@@ -533,6 +533,61 @@ static void render_terrain(const RenderContext *ctx) {
     }
 }
 
+static void render_side_terrain(const RenderContext *ctx) {
+    const NesVoxelScene *s = ctx->scene;
+    float ts = (float)s->tile_size;
+    for (int ty = 0; ty < s->tile_rows; ty++) {
+        for (int tx = 0; tx < s->tile_columns; tx++) {
+            float semantic_depth = scene_height(s, tx, ty);
+            float depth, z0, z1;
+            float x0, x1, y0, y1;
+            float north, south, west, east;
+            Texture face, dim_face, side_face;
+            if (semantic_depth <= 0.01f) continue;
+
+            depth = semantic_depth > ts ? semantic_depth : ts;
+            z0 = -depth * 0.5f;
+            z1 = depth * 0.5f;
+            x0 = tx * ts;
+            x1 = x0 + ts;
+            y1 = s->source_height - ty * ts;
+            y0 = y1 - ts;
+            north = scene_height(s, tx, ty - 1);
+            south = scene_height(s, tx, ty + 1);
+            west = scene_height(s, tx - 1, ty);
+            east = scene_height(s, tx + 1, ty);
+            face = tile_texture(s, tx, ty, 1.0f);
+            dim_face = face;
+            dim_face.shade = 0.72f;
+            side_face = face;
+            side_face.shade = 0.84f;
+
+            /* Faces perpendicular to level travel retain the complete source
+             * tile, making blocks and question tiles readable from ahead. */
+            if (west <= 0.01f)
+                draw_quad(ctx, vec3(x0, y1, z1), vec3(x0, y1, z0),
+                          vec3(x0, y0, z0), vec3(x0, y0, z1), &face);
+            if (east <= 0.01f)
+                draw_quad(ctx, vec3(x1, y1, z0), vec3(x1, y1, z1),
+                          vec3(x1, y0, z1), vec3(x1, y0, z0), &face);
+
+            if (north <= 0.01f)
+                draw_quad(ctx, vec3(x0, y1, z0), vec3(x1, y1, z0),
+                          vec3(x1, y1, z1), vec3(x0, y1, z1), &side_face);
+            if (south <= 0.01f)
+                draw_quad(ctx, vec3(x0, y0, z1), vec3(x1, y0, z1),
+                          vec3(x1, y0, z0), vec3(x0, y0, z0), &dim_face);
+
+            /* The front/back thickness faces keep isolated blocks legible
+             * when the user turns their head off the level axis. */
+            draw_quad(ctx, vec3(x0, y1, z0), vec3(x0, y0, z0),
+                      vec3(x1, y0, z0), vec3(x1, y1, z0), &side_face);
+            draw_quad(ctx, vec3(x1, y1, z1), vec3(x1, y0, z1),
+                      vec3(x0, y0, z1), vec3(x0, y1, z1), &dim_face);
+        }
+    }
+}
+
 static void render_tile_billboards(const RenderContext *ctx) {
     const NesVoxelScene *s = ctx->scene;
     Vec3 horizontal_right =
@@ -820,19 +875,27 @@ static void render_sprites(const RenderContext *ctx) {
             if (min_x >= max_x || min_y >= max_y) continue;
         }
 
-        foot_z = (float)(max_y - s->source_y);
-        if (foot_z < 0.0f || foot_z >= s->source_height) continue;
         center_x = (min_x + max_x) * 0.5f;
-        ground = scene_height(
-            s, (int)(center_x + s->sprite_world_offset_x) / s->tile_size,
-            (int)(foot_z + s->sprite_world_offset_z) / s->tile_size);
-        if (s->sprite_ground)
-            ground = s->sprite_ground(min_x, min_y, max_x, max_y,
-                                      ground, s->user);
-        if (ground < 0.0f) ground = 0.0f;
-        center = vec3(center_x + s->sprite_world_offset_x,
-                      ground + 0.2f,
-                      foot_z + s->sprite_world_offset_z);
+        if (s->terrain_layout == NES_VOXEL_LAYOUT_SIDE) {
+            foot_z = 0.0f;
+            ground = (float)(s->source_y + s->source_height - max_y);
+            center = vec3(center_x + s->sprite_world_offset_x,
+                          ground + 0.2f,
+                          s->sprite_world_offset_z);
+        } else {
+            foot_z = (float)(max_y - s->source_y);
+            if (foot_z < 0.0f || foot_z >= s->source_height) continue;
+            ground = scene_height(
+                s, (int)(center_x + s->sprite_world_offset_x) / s->tile_size,
+                (int)(foot_z + s->sprite_world_offset_z) / s->tile_size);
+            if (s->sprite_ground)
+                ground = s->sprite_ground(min_x, min_y, max_x, max_y,
+                                          ground, s->user);
+            if (ground < 0.0f) ground = 0.0f;
+            center = vec3(center_x + s->sprite_world_offset_x,
+                          ground + 0.2f,
+                          foot_z + s->sprite_world_offset_z);
+        }
         if (s->sprite_depth_bias > 0.0f) {
             Vec3 camera_pull = vec3_normalize(vec3(
                 ctx->eye.x - center.x, 0.0f, ctx->eye.z - center.z));
@@ -977,8 +1040,12 @@ int nes_voxel_render(const NesVoxelScene *s) {
              ? s->camera_center_y : 0.59f);
     ctx.scene = s;
 
-    render_terrain(&ctx);
-    render_tile_billboards(&ctx);
+    if (s->terrain_layout == NES_VOXEL_LAYOUT_SIDE)
+        render_side_terrain(&ctx);
+    else {
+        render_terrain(&ctx);
+        render_tile_billboards(&ctx);
+    }
     if (s->draw_oam_sprites) render_sprites(&ctx);
 
     if (s->preserve_top_rows > 0) {

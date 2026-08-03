@@ -347,6 +347,7 @@ void nes_voxel_screen_post_render(NesVoxelScreenState *state,
     scene.tile_stride = 32;
     scene.tile_size = TILE_SIZE;
     scene.tile_height = screen_tile_height;
+    scene.terrain_layout = profile->terrain_layout;
     scene.tile_pixels = screen_tile_pixels;
     scene.user = state;
     scene.elevation_degrees = state->render_pitch;
