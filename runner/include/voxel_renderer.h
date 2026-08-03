@@ -104,6 +104,9 @@ typedef struct NesVoxelScene {
     /* OAM metasprites are assembled into coherent camera-facing cards.
      * Values <= 0 use 1.0. */
     float sprite_scale;
+    /* Maximum assembled metasprite width in source pixels. Values <= 0 keep
+     * the renderer's historical 32-pixel limit. */
+    int sprite_group_max_width;
     /* Pitch-facing cards preserve pixel-art proportions under a high camera
      * instead of vertically foreshortening. depth_bias pulls cards slightly
      * camera-ward to keep feet from z-fighting with their ground tile. */

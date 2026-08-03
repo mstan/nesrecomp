@@ -831,6 +831,8 @@ static void render_sprites(const RenderContext *ctx) {
     uint8_t active[64] = {0};
     uint8_t used[64] = {0};
     float sprite_scale = s->sprite_scale > 0.0f ? s->sprite_scale : 1.0f;
+    int group_max_width =
+        s->sprite_group_max_width > 0 ? s->sprite_group_max_width : 32;
 
     for (int i = 0; i < 64; i++) {
         int sy = g_ppu_oam[i * 4] + 1;
@@ -876,7 +878,7 @@ static void render_sprites(const RenderContext *ctx) {
                 next_max_x = bx + 8 > max_x ? bx + 8 : max_x;
                 next_max_y = by + sprite_height > max_y
                     ? by + sprite_height : max_y;
-                if (next_max_x - next_min_x > 32 ||
+                if (next_max_x - next_min_x > group_max_width ||
                     next_max_y - next_min_y > 32)
                     continue;
                 min_x = next_min_x;

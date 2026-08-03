@@ -385,6 +385,7 @@ void nes_voxel_screen_post_render(NesVoxelScreenState *state,
     }
     scene.sprite_scale =
         state->render_sprite_scale_percent / 100.0f;
+    scene.sprite_group_max_width = profile->sprite_group_max_width;
     scene.sprite_face_camera_pitch = 1;
     scene.sprite_constant_screen_size =
         profile->terrain_layout == NES_VOXEL_LAYOUT_SIDE ? 0 : 1;

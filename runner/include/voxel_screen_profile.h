@@ -79,6 +79,9 @@ typedef struct NesVoxelScreenProfile {
     /* Optional live pixel offset for aligning grouped cells to a scrolling
      * game's metatile grid. Values outside the native screen are clipped. */
     NesVoxelScreenGridOffsetFn grid_offset_x;
+    /* Optional OAM component-width cap. Zero keeps the renderer's 32-pixel
+     * default; side-scrollers can use 16 to keep adjacent actors separate. */
+    int sprite_group_max_width;
 } NesVoxelScreenProfile;
 
 typedef struct NesVoxelScreenState {
