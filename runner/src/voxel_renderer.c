@@ -10,6 +10,7 @@
 
 #include <math.h>
 #include <stddef.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define VOXEL_MAX_WIDTH  512
@@ -325,38 +326,119 @@ static void decode_sprite(uint32_t *pixels, int sprite_index, int sprite_height)
     }
 }
 
+static int sprites_connect(int ax, int ay, int ah, int ai,
+                           int bx, int by, int bh, int bi) {
+    int near_x = ax <= bx + 9 && bx <= ax + 9;
+    int near_y = ay <= by + bh + 1 && by <= ay + ah + 1;
+    /* Consecutive OAM entries are how NES games normally describe one
+     * metasprite. The index bound avoids gluing unrelated actors together
+     * merely because they overlap during combat. */
+    return abs(ai - bi) <= 4 && near_x && near_y;
+}
+
 static void render_sprites(const RenderContext *ctx) {
     const NesVoxelScene *s = ctx->scene;
     int sprite_height = (g_ppuctrl & 0x20) ? 16 : 8;
     Vec3 horizontal_right = vec3_normalize(vec3(ctx->right.x, 0.0f, ctx->right.z));
-    uint32_t pixels[8 * 16];
-    Texture texture = { pixels, 8, sprite_height, 8, 1.0f, 1 };
+    uint8_t active[64] = {0};
+    uint8_t used[64] = {0};
+    float sprite_scale = s->sprite_scale > 0.0f ? s->sprite_scale : 1.0f;
 
-    for (int i = 63; i >= 0; i--) {
+    for (int i = 0; i < 64; i++) {
         int sy = g_ppu_oam[i * 4] + 1;
-        int sx = g_ppu_oam[i * 4 + 3];
-        float foot_z, ground, center_x;
+        active[i] = g_ppu_oam[i * 4] < 0xEF &&
+                    sy + sprite_height > s->source_y &&
+                    sy < s->source_y + s->source_height;
+    }
+    for (int i = 63; i >= 0; i--) {
+        int members[16], member_count = 0;
+        int min_x, min_y, max_x, max_y;
+        uint32_t pixels[32 * 32];
+        uint32_t decoded[8 * 16];
+        float foot_z, ground, center_x, card_width, card_height;
         Vec3 center, left_bottom, right_bottom, right_top, left_top;
-        if (g_ppu_oam[i * 4] >= 0xEF) continue;
-        if (sy + sprite_height <= s->source_y ||
-            sy >= s->source_y + s->source_height)
-            continue;
+        Texture texture;
+        if (!active[i] || used[i]) continue;
 
-        foot_z = (float)(sy + sprite_height - s->source_y);
+        members[member_count++] = i;
+        used[i] = 1;
+        min_x = g_ppu_oam[i * 4 + 3];
+        min_y = g_ppu_oam[i * 4] + 1;
+        max_x = min_x + 8;
+        max_y = min_y + sprite_height;
+
+        /* Grow one connected component of nearby, consecutive OAM pieces. */
+        for (int cursor = 0; cursor < member_count; cursor++) {
+            int a = members[cursor];
+            int ax = g_ppu_oam[a * 4 + 3];
+            int ay = g_ppu_oam[a * 4] + 1;
+            for (int j = 63; j >= 0 && member_count < 16; j--) {
+                int bx, by, next_min_x, next_min_y, next_max_x, next_max_y;
+                if (!active[j] || used[j]) continue;
+                bx = g_ppu_oam[j * 4 + 3];
+                by = g_ppu_oam[j * 4] + 1;
+                if (!sprites_connect(ax, ay, sprite_height, a,
+                                     bx, by, sprite_height, j))
+                    continue;
+                next_min_x = bx < min_x ? bx : min_x;
+                next_min_y = by < min_y ? by : min_y;
+                next_max_x = bx + 8 > max_x ? bx + 8 : max_x;
+                next_max_y = by + sprite_height > max_y
+                    ? by + sprite_height : max_y;
+                if (next_max_x - next_min_x > 32 ||
+                    next_max_y - next_min_y > 32)
+                    continue;
+                min_x = next_min_x;
+                min_y = next_min_y;
+                max_x = next_max_x;
+                max_y = next_max_y;
+                used[j] = 1;
+                members[member_count++] = j;
+            }
+        }
+
+        memset(pixels, 0, sizeof(pixels));
+        /* Higher OAM priority (lower index) wins where pieces overlap. */
+        for (int index = 63; index >= 0; index--) {
+            int belongs = 0;
+            for (int pass = 0; pass < member_count; pass++)
+                if (members[pass] == index) belongs = 1;
+            if (!belongs) continue;
+            int sx = g_ppu_oam[index * 4 + 3] - min_x;
+            int sy = g_ppu_oam[index * 4] + 1 - min_y;
+            decode_sprite(decoded, index, sprite_height);
+            for (int y = 0; y < sprite_height; y++)
+                for (int x = 0; x < 8; x++)
+                    if (decoded[y * 8 + x] >> 24)
+                        pixels[(sy + y) * 32 + sx + x] =
+                            decoded[y * 8 + x];
+        }
+
+        foot_z = (float)(max_y - s->source_y);
         if (foot_z < 0.0f || foot_z >= s->source_height) continue;
-        center_x = sx + 4.0f;
-        ground = scene_height(s, sx / s->tile_size,
+        center_x = (min_x + max_x) * 0.5f;
+        ground = scene_height(s, (int)center_x / s->tile_size,
                               (int)foot_z / s->tile_size);
         if (ground < 0.0f) ground = 0.0f;
+        card_width = (max_x - min_x) * sprite_scale;
+        card_height = (max_y - min_y) * sprite_scale;
         center = vec3(center_x, ground + 0.2f, foot_z);
-        left_bottom = vec3_sub(center, vec3_scale(horizontal_right, 4.0f));
-        right_bottom = vec3(center.x + horizontal_right.x * 4.0f,
-                            center.y, center.z + horizontal_right.z * 4.0f);
-        right_top = vec3(right_bottom.x, right_bottom.y + sprite_height,
+        left_bottom = vec3_sub(
+            center, vec3_scale(horizontal_right, card_width * 0.5f));
+        right_bottom = vec3(
+            center.x + horizontal_right.x * card_width * 0.5f,
+            center.y,
+            center.z + horizontal_right.z * card_width * 0.5f);
+        right_top = vec3(right_bottom.x, right_bottom.y + card_height,
                          right_bottom.z);
-        left_top = vec3(left_bottom.x, left_bottom.y + sprite_height,
+        left_top = vec3(left_bottom.x, left_bottom.y + card_height,
                         left_bottom.z);
-        decode_sprite(pixels, i, sprite_height);
+        texture.pixels = pixels;
+        texture.width = max_x - min_x;
+        texture.height = max_y - min_y;
+        texture.stride = 32;
+        texture.shade = 1.0f;
+        texture.alpha_test = 1;
         draw_quad(ctx, left_top, right_top, right_bottom, left_bottom, &texture);
     }
 }
@@ -380,7 +462,7 @@ static int validate_scene(const NesVoxelScene *s) {
 int nes_voxel_render(const NesVoxelScene *s) {
     RenderContext ctx;
     Vec3 target;
-    float elevation, yaw, horizontal_distance, distance;
+    float elevation, yaw, roll, horizontal_distance, distance;
     uint32_t sky_top, sky_bottom;
 
     if (!validate_scene(s)) return 0;
@@ -402,8 +484,9 @@ int nes_voxel_render(const NesVoxelScene *s) {
     target = vec3(s->source_width * 0.5f, 2.0f,
                   s->source_height * 0.5f);
     elevation = s->elevation_degrees * VOXEL_PI / 180.0f;
-    yaw = -18.0f * VOXEL_PI / 180.0f;
-    distance = 285.0f;
+    yaw = s->yaw_degrees * VOXEL_PI / 180.0f;
+    roll = s->roll_degrees * VOXEL_PI / 180.0f;
+    distance = s->camera_distance > 1.0f ? s->camera_distance : 285.0f;
     horizontal_distance = cosf(elevation) * distance;
     ctx.eye = vec3(target.x + sinf(yaw) * horizontal_distance,
                    target.y + sinf(elevation) * distance,
@@ -411,6 +494,18 @@ int nes_voxel_render(const NesVoxelScene *s) {
     ctx.forward = vec3_normalize(vec3_sub(target, ctx.eye));
     ctx.right = vec3_normalize(vec3_cross(ctx.forward, vec3(0.0f, 1.0f, 0.0f)));
     ctx.up = vec3_normalize(vec3_cross(ctx.right, ctx.forward));
+    if (fabsf(roll) > 0.0001f) {
+        Vec3 base_right = ctx.right;
+        Vec3 base_up = ctx.up;
+        ctx.right = vec3_normalize(vec3(
+            base_right.x * cosf(roll) + base_up.x * sinf(roll),
+            base_right.y * cosf(roll) + base_up.y * sinf(roll),
+            base_right.z * cosf(roll) + base_up.z * sinf(roll)));
+        ctx.up = vec3_normalize(vec3(
+            base_up.x * cosf(roll) - base_right.x * sinf(roll),
+            base_up.y * cosf(roll) - base_right.y * sinf(roll),
+            base_up.z * cosf(roll) - base_right.z * sinf(roll)));
+    }
     ctx.focal = s->output_width * 0.92f;
     ctx.center_x = s->output_width * 0.5f;
     ctx.center_y = s->output_height * 0.59f;

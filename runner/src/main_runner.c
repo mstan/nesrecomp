@@ -711,6 +711,10 @@ void nes_vblank_callback(void) {
     SDL_Event ev;
     while (SDL_PollEvent(&ev)) {
         controller_handle_event(&ev);  /* gamepad hotplug */
+#ifdef NESRECOMP_GAME_SDL_EVENT_HOOK
+        extern void NESRECOMP_GAME_SDL_EVENT_HOOK(const SDL_Event *event);
+        NESRECOMP_GAME_SDL_EVENT_HOOK(&ev);
+#endif
         if (ev.type == SDL_QUIT) {
             fprintf(stderr, "[RunnerExit] SDL_QUIT during frame input at frame %llu\n",
                     (unsigned long long)g_frame_count);

@@ -51,6 +51,29 @@ set(NESRECOMP_RUNNER_INCLUDE_DIRS
     ${NESRECOMP_RUNNER_ROOT}/../recompiler/src   # cpu6502_decoder.h (shared decode table)
 )
 
+# Schema-driven mod packages and trusted static plugins. This is deliberately
+# opt-in: ordinary games do not compile the loader, expose a Mods navigation
+# item, create a mods directory, or change runtime behavior. An opting-in game
+# owns its recomp-ui pin, package catalog, and linked plugin implementations.
+option(NESRECOMP_ENABLE_MODS
+    "Build the NES mod package loader and trusted-plugin runtime"
+    OFF)
+if(NESRECOMP_ENABLE_MODS)
+    list(APPEND NESRECOMP_RUNNER_SOURCES
+        ${NESRECOMP_RUNNER_ROOT}/src/mod_runtime.cpp
+    )
+    set(CMAKE_CXX_STANDARD 17)
+    set(CMAKE_CXX_STANDARD_REQUIRED ON)
+    add_compile_definitions(NESRECOMP_ENABLE_MODS=1)
+    # recomp-ui requires both its compile-time gate and a non-null provider.
+    set(RECOMP_UI_ENABLE_MODS ON CACHE BOOL
+        "Enable recomp-ui Mods view for this NES mod-enabled game" FORCE)
+    message(STATUS
+        "NES mods: package loader + trusted static plugins enabled")
+else()
+    add_compile_definitions(NESRECOMP_ENABLE_MODS=0)
+endif()
+
 # ---- Prod vs debug: TCP debug server + observability rings ----
 # The TCP debug server (debug_server.c: socket listener, 36000-frame ring buffer,
 # JSON command protocol) is a developer-only feature. It is OFF by default so a

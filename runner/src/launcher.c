@@ -26,6 +26,12 @@
 #include "crc32.h"
 #include "nes_runtime.h"
 #include "config.h"
+#if NESRECOMP_ENABLE_MODS
+#include "mod_runtime.h"
+#if !defined(NESRECOMP_GAME_ID) || !defined(NESRECOMP_GAME_ROM_CRC32)
+#error "NES mod-enabled games must define NESRECOMP_GAME_ID and NESRECOMP_GAME_ROM_CRC32"
+#endif
+#endif
 #ifdef RECOMP_LAUNCHER
 /* The shared recomp-ui Dear ImGui launcher. recomp_ui.cmake defines
  * RECOMP_LAUNCHER and adds its public headers to the include path. */
@@ -347,6 +353,19 @@ int main(int argc, char *argv[]) {
     static char rom_path[512];
     uint32_t expected_crc = game_get_expected_crc32();
 
+#if NESRECOMP_ENABLE_MODS
+    {
+        char mods_root[600];
+        snprintf(mods_root, sizeof(mods_root), "%smods", g_exe_dir);
+        if (!nes_mod_runtime_initialize_c(
+                mods_root, NESRECOMP_GAME_ID, NESRECOMP_GAME_ROM_CRC32)) {
+            fprintf(stderr, "[Mods] Cannot initialize catalog: %s\n",
+                    nes_mod_runtime_last_error_c());
+            return 1;
+        }
+    }
+#endif
+
     /* Settings live in config.ini next to the exe (created with defaults if
      * absent). The shared launcher edits them; the runner honors them. */
     config_load(config_path());
@@ -463,6 +482,9 @@ reopen_recomp_launcher:
             gi.netplay = nes_launcher_netplay_callbacks(game_get_name(), "dev");
 #  endif
 #endif
+#if NESRECOMP_ENABLE_MODS
+            gi.mods = nes_mod_runtime_launcher_provider_c();
+#endif
             char win_title[96];
             snprintf(win_title, sizeof(win_title), "%s - Launcher",
                      gi.name ? gi.name : "NES");
@@ -556,6 +578,15 @@ reopen_recomp_launcher:
     for (int i = extra_start; i < argc && new_argc < 63; i++)
         new_argv[new_argc++] = argv[i];
     new_argv[new_argc] = NULL;
+
+#if NESRECOMP_ENABLE_MODS
+    if (!nes_mod_runtime_commit_c(rom_path)) {
+        fprintf(stderr, "[Mods] Cannot launch: %s\n",
+                nes_mod_runtime_last_error_c());
+        return 1;
+    }
+    nes_mod_runtime_activate_plugins_c();
+#endif
 
     if (nesrecomp_runner_run(new_argc, new_argv)) {
 #if defined(RECOMP_LAUNCHER) && defined(NESRECOMP_NET)

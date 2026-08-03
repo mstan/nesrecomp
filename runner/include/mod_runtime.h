@@ -1,0 +1,103 @@
+#pragma once
+
+#include <stdint.h>
+
+#ifdef __cplusplus
+#include <filesystem>
+#include <string>
+
+#if defined(RECOMP_LAUNCHER)
+#include "recomp_launcher.h"
+#endif
+
+namespace NESRecomp {
+
+/*
+ * Initialize the package catalog rooted at <exe>/mods for one verified game.
+ * The ROM digest is the canonical lowercase CRC32 of the payload after the
+ * 16-byte iNES header.
+ */
+bool mod_runtime_initialize(const std::filesystem::path& root,
+                            const std::string& game_id,
+                            const std::string& rom_crc32,
+                            std::string* error = nullptr);
+
+/*
+ * Resolve staged feature selections, validate the selected stock ROM, persist
+ * state, and prepare the trusted-plugin activation plan.
+ */
+bool mod_runtime_commit(const std::filesystem::path& rom_path = {},
+                        std::string* error = nullptr);
+
+/* Invoke the trusted, statically linked plugins selected by the committed plan. */
+void mod_runtime_activate_plugins();
+
+#if defined(RECOMP_LAUNCHER)
+const ::RecompLauncherCModProvider* mod_runtime_launcher_provider();
+#endif
+
+}  // namespace NESRecomp
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef void (*NESModActivationCallback)(void);
+
+struct RecompLauncherCModProvider;
+
+int nes_mod_runtime_initialize_c(const char* root,
+                                 const char* game_id,
+                                 const char* rom_crc32);
+int nes_mod_runtime_commit_c(const char* rom_path);
+void nes_mod_runtime_activate_plugins_c(void);
+const struct RecompLauncherCModProvider*
+nes_mod_runtime_launcher_provider_c(void);
+const char* nes_mod_runtime_last_error_c(void);
+
+/*
+ * Register a trusted implementation. A .nesmod archive may select only this
+ * stable id; archives never provide native code, symbols, or library paths.
+ */
+int nes_mod_register_activation_plugin(const char* id,
+                                       NESModActivationCallback callback);
+
+/*
+ * Register game-owned stock policy. Reset callbacks run before active plugins,
+ * so disabling a feature reliably restores stock behavior every launch.
+ */
+int nes_mod_register_reset_callback(NESModActivationCallback callback);
+
+/* Read a persisted option for an active trusted plugin. Returns fallback when
+ * the package, feature, option, or integer value is unavailable. */
+int nes_mod_get_option_int(const char* package_id,
+                           const char* feature_id,
+                           const char* option_id,
+                           int fallback);
+
+#if defined(_MSC_VER)
+#pragma section(".CRT$XCU", read)
+#if defined(_M_IX86)
+#define NES_MOD_LINKER_PREFIX "_"
+#else
+#define NES_MOD_LINKER_PREFIX ""
+#endif
+#define NES_MOD_CONSTRUCTOR(name)                                           \
+    static void __cdecl name(void);                                         \
+    __pragma(comment(linker, "/include:" NES_MOD_LINKER_PREFIX               \
+                     #name "_constructor"))                                  \
+    __declspec(allocate(".CRT$XCU"))                                        \
+    void (__cdecl* name##_constructor)(void) = name;                        \
+    static void __cdecl name(void)
+#elif defined(__GNUC__) || defined(__clang__)
+#define NES_MOD_CONSTRUCTOR(name)                                           \
+    static void name(void) __attribute__((constructor));                    \
+    static void name(void)
+#else
+#error "NES mod plugin registration needs a supported constructor mechanism"
+#endif
+
+#ifdef __cplusplus
+}
+#endif

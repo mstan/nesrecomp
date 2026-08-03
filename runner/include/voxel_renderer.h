@@ -33,8 +33,16 @@ typedef struct NesVoxelScene {
     NesVoxelTileHeightFn tile_height;
     void *user;
 
-    /* Camera elevation in degrees.  A small fixed yaw exposes side faces. */
+    /* Camera controls. Yaw orbits around the vertical axis; roll rotates the
+     * camera plane. distance <= 0 uses the renderer default. */
     float elevation_degrees;
+    float yaw_degrees;
+    float roll_degrees;
+    float camera_distance;
+
+    /* OAM metasprites are assembled into coherent camera-facing cards.
+     * Values <= 0 use 1.0. */
+    float sprite_scale;
     int draw_oam_sprites;
     int preserve_top_rows;
     int extend_preserved_rows;
