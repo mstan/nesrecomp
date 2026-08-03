@@ -124,6 +124,9 @@ block and assembles their source pixels into one face texture. For example, a
 value of `2` turns SMB's four 8×8 cells into a real 16×16×16 metatile cube.
 Upright-layout OAM cards use world scale rather than constant screen size, so
 actors preserve their size relative to grouped blocks and grow with proximity.
+For pixel-scrolling games, the screen adapter's optional `grid_offset_x`
+callback aligns those groups to the live world/metatile origin; partial cells
+outside the native viewport are clipped rather than contaminating a group.
 
 The engine owns assembly, alpha testing, depth sorting, and contact-shadow
 rendering. A game profile owns tile/object identification because CHR and OAM

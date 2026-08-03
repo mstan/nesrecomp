@@ -475,7 +475,8 @@ static void render_terrain(const RenderContext *ctx) {
     for (int ty = 0; ty < s->tile_rows; ty++) {
         for (int tx = 0; tx < s->tile_columns; tx++) {
             int billboard_columns, billboard_rows;
-            float x0 = tx * ts, x1 = x0 + ts;
+            float x0 = s->terrain_offset_x + tx * ts;
+            float x1 = x0 + ts;
             float z0 = ty * ts, z1 = z0 + ts;
             float h = scene_height(s, tx, ty);
             float north = scene_height(s, tx, ty - 1);
@@ -597,7 +598,7 @@ static void render_side_terrain(const RenderContext *ctx) {
             depth = group * ts;
             z0 = -depth * 0.5f;
             z1 = depth * 0.5f;
-            x0 = tx * ts;
+            x0 = s->terrain_offset_x + tx * ts;
             x1 = x0 + group * ts;
             y1 = s->source_height - ty * ts;
             y0 = y1 - group * ts;

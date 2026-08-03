@@ -63,9 +63,11 @@ static void sample_grid(NesVoxelScreenState *state,
             for (int py = 0; py < TILE_SIZE; py++) {
                 int sy = sample.screen_y + py;
                 for (int px = 0; px < TILE_SIZE; px++) {
-                    int sx = tx * TILE_SIZE + px;
+                    int sx = state->grid_offset_x +
+                             tx * TILE_SIZE + px;
                     uint32_t color;
                     unsigned r, g, b, sum;
+                    if (sx < 0 || sx >= SCREEN_WIDTH) continue;
                     if (state->sprite_mask[sy * SCREEN_WIDTH + sx])
                         continue;
                     color = framebuffer[sy * g_render_width + source_x + sx];
@@ -112,10 +114,12 @@ static uint32_t common_unmasked_color(const NesVoxelScreenState *state,
     memset(counts, 0, sizeof(counts));
     for (int py = 0; py < TILE_SIZE; py++) {
         for (int px = 0; px < TILE_SIZE; px++) {
-            int sx = tile_x * TILE_SIZE + px;
+            int sx = state->grid_offset_x +
+                     tile_x * TILE_SIZE + px;
             int sy = base_y + py;
             uint32_t color;
             int found = -1;
+            if (sx < 0 || sx >= SCREEN_WIDTH) continue;
             if (state->sprite_mask[sy * SCREEN_WIDTH + sx]) continue;
             color = state->flat_framebuffer[
                 sy * g_render_width + source_x + sx];
@@ -150,9 +154,11 @@ static void screen_tile_pixels(uint32_t *pixels, int stride, uint8_t tile,
     (void)tile;
     for (int py = 0; py < TILE_SIZE; py++) {
         for (int px = 0; px < TILE_SIZE; px++) {
-            int sx = tile_x * TILE_SIZE + px;
+            int sx = state->grid_offset_x +
+                     tile_x * TILE_SIZE + px;
             int sy = base_y + py;
-            if (tile_y < profile->blank_source_rows ||
+            if (sx < 0 || sx >= SCREEN_WIDTH ||
+                tile_y < profile->blank_source_rows ||
                 state->sprite_mask[sy * SCREEN_WIDTH + sx]) {
                 pixels[py * stride + px] = replacement;
             } else {
@@ -331,6 +337,10 @@ void nes_voxel_screen_post_render(NesVoxelScreenState *state,
 
     state->flat_framebuffer = framebuffer;
     state->active_profile = profile;
+    state->grid_offset_x =
+        profile->grid_offset_x ? profile->grid_offset_x(profile->user) : 0;
+    state->grid_offset_x =
+        clamp_int(state->grid_offset_x, -31, 31);
     sample_grid(state, profile, framebuffer);
     memset(&scene, 0, sizeof(scene));
     memset(&camera, 0, sizeof(camera));
@@ -349,6 +359,7 @@ void nes_voxel_screen_post_render(NesVoxelScreenState *state,
     scene.tile_height = screen_tile_height;
     scene.terrain_layout = profile->terrain_layout;
     scene.side_group_tiles = profile->side_group_tiles;
+    scene.terrain_offset_x = (float)state->grid_offset_x;
     scene.tile_pixels = screen_tile_pixels;
     scene.user = state;
     scene.elevation_degrees = state->render_pitch;

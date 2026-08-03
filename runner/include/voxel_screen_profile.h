@@ -49,6 +49,7 @@ typedef void (*NesVoxelScreenCameraFn)(
     float zoom_percent, void *user);
 typedef int (*NesVoxelScreenSpriteVisibleFn)(
     int min_x, int min_y, int max_x, int max_y, void *user);
+typedef int (*NesVoxelScreenGridOffsetFn)(void *user);
 
 typedef struct NesVoxelScreenProfile {
     const char *name;
@@ -75,6 +76,9 @@ typedef struct NesVoxelScreenProfile {
     NesVoxelScreenSpriteVisibleFn sprite_visible;
     int terrain_layout;
     int side_group_tiles;
+    /* Optional live pixel offset for aligning grouped cells to a scrolling
+     * game's metatile grid. Values outside the native screen are clipped. */
+    NesVoxelScreenGridOffsetFn grid_offset_x;
 } NesVoxelScreenProfile;
 
 typedef struct NesVoxelScreenState {
@@ -102,6 +106,7 @@ typedef struct NesVoxelScreenState {
     float render_roll;
     float render_zoom_percent;
     float render_sprite_scale_percent;
+    int grid_offset_x;
 } NesVoxelScreenState;
 
 void nes_voxel_screen_set_enabled(NesVoxelScreenState *state, int enabled);
