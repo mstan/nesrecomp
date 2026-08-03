@@ -1,4 +1,5 @@
 #include "voxel_screen_profile.h"
+#include "keybinds.h"
 
 #include "nes_runtime.h"
 #include "voxel_renderer.h"
@@ -228,52 +229,54 @@ void nes_voxel_screen_init(NesVoxelScreenState *state,
 void nes_voxel_screen_handle_event(NesVoxelScreenState *state,
                                    const SDL_Event *event) {
     int changed = 0;
+    int action;
     SDL_Scancode key;
     if (!state || !state->enabled || !event ||
         event->type != SDL_KEYDOWN)
         return;
     key = event->key.keysym.scancode;
+    action = keybinds_camera_action_for_scancode(key);
     if (event->key.repeat &&
-        (key == SDL_SCANCODE_KP_0 || key == SDL_SCANCODE_KP_5))
+        (action == NES_CAMERA_TOGGLE || action == NES_CAMERA_RESET))
         return;
-    switch (key) {
-        case SDL_SCANCODE_KP_0:
+    switch (action) {
+        case NES_CAMERA_TOGGLE:
             state->view_enabled = !state->view_enabled; changed = 1; break;
-        case SDL_SCANCODE_KP_8:
+        case NES_CAMERA_LOOK_UP:
             state->pitch = clamp_int(state->pitch + 5, 5, 85);
             changed = 1; break;
-        case SDL_SCANCODE_KP_2:
+        case NES_CAMERA_LOOK_DOWN:
             state->pitch = clamp_int(state->pitch - 5, 5, 85);
             changed = 1; break;
-        case SDL_SCANCODE_KP_4:
+        case NES_CAMERA_LOOK_LEFT:
             state->yaw = clamp_int(state->yaw - 5, -180, 180);
             changed = 1; break;
-        case SDL_SCANCODE_KP_6:
+        case NES_CAMERA_LOOK_RIGHT:
             state->yaw = clamp_int(state->yaw + 5, -180, 180);
             changed = 1; break;
-        case SDL_SCANCODE_KP_7:
+        case NES_CAMERA_ROLL_LEFT:
             state->roll = clamp_int(state->roll - 5, -45, 45);
             changed = 1; break;
-        case SDL_SCANCODE_KP_9:
+        case NES_CAMERA_ROLL_RIGHT:
             state->roll = clamp_int(state->roll + 5, -45, 45);
             changed = 1; break;
-        case SDL_SCANCODE_KP_PLUS:
+        case NES_CAMERA_ZOOM_IN:
             state->zoom_percent =
                 clamp_int(state->zoom_percent + 5, 50, 200);
             changed = 1; break;
-        case SDL_SCANCODE_KP_MINUS:
+        case NES_CAMERA_ZOOM_OUT:
             state->zoom_percent =
                 clamp_int(state->zoom_percent - 5, 50, 200);
             changed = 1; break;
-        case SDL_SCANCODE_KP_1:
+        case NES_CAMERA_SPRITE_SMALLER:
             state->sprite_scale_percent =
                 clamp_int(state->sprite_scale_percent - 10, 75, 250);
             changed = 1; break;
-        case SDL_SCANCODE_KP_3:
+        case NES_CAMERA_SPRITE_LARGER:
             state->sprite_scale_percent =
                 clamp_int(state->sprite_scale_percent + 10, 75, 250);
             changed = 1; break;
-        case SDL_SCANCODE_KP_5:
+        case NES_CAMERA_RESET:
             state->pitch = state->default_pitch;
             state->yaw = state->default_yaw;
             state->roll = state->default_roll;

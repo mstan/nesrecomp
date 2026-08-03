@@ -63,6 +63,20 @@ static KeyBinds s_binds = {
         .deadzone = 16000,
         .analog_dpad = 1,
     },
+    .camera = {
+        [NES_CAMERA_LOOK_UP] = SDL_SCANCODE_KP_8,
+        [NES_CAMERA_LOOK_DOWN] = SDL_SCANCODE_KP_2,
+        [NES_CAMERA_LOOK_LEFT] = SDL_SCANCODE_KP_4,
+        [NES_CAMERA_LOOK_RIGHT] = SDL_SCANCODE_KP_6,
+        [NES_CAMERA_ROLL_LEFT] = SDL_SCANCODE_KP_7,
+        [NES_CAMERA_ROLL_RIGHT] = SDL_SCANCODE_KP_9,
+        [NES_CAMERA_ZOOM_IN] = SDL_SCANCODE_KP_PLUS,
+        [NES_CAMERA_ZOOM_OUT] = SDL_SCANCODE_KP_MINUS,
+        [NES_CAMERA_SPRITE_SMALLER] = SDL_SCANCODE_KP_1,
+        [NES_CAMERA_SPRITE_LARGER] = SDL_SCANCODE_KP_3,
+        [NES_CAMERA_RESET] = SDL_SCANCODE_KP_5,
+        [NES_CAMERA_TOGGLE] = SDL_SCANCODE_KP_0,
+    },
 };
 
 /* ── Button name mapping ──────────────────────────────────────────────────── */
@@ -82,6 +96,27 @@ static const ButtonDef s_buttons[] = {
     { "left",   offsetof(PlayerBinds, left) },
     { "right",  offsetof(PlayerBinds, right) },
     { NULL, 0 }
+};
+
+typedef struct {
+    const char *name;
+    NesCameraBindAction action;
+} CameraDef;
+
+static const CameraDef s_camera_buttons[] = {
+    { "look_up", NES_CAMERA_LOOK_UP },
+    { "look_down", NES_CAMERA_LOOK_DOWN },
+    { "look_left", NES_CAMERA_LOOK_LEFT },
+    { "look_right", NES_CAMERA_LOOK_RIGHT },
+    { "roll_left", NES_CAMERA_ROLL_LEFT },
+    { "roll_right", NES_CAMERA_ROLL_RIGHT },
+    { "zoom_in", NES_CAMERA_ZOOM_IN },
+    { "zoom_out", NES_CAMERA_ZOOM_OUT },
+    { "sprite_smaller", NES_CAMERA_SPRITE_SMALLER },
+    { "sprite_larger", NES_CAMERA_SPRITE_LARGER },
+    { "reset", NES_CAMERA_RESET },
+    { "toggle", NES_CAMERA_TOGGLE },
+    { NULL, NES_CAMERA_BIND_COUNT },
 };
 
 /* ── INI parsing helpers ──────────────────────────────────────────────────── */
@@ -190,6 +225,15 @@ static void write_pad(FILE *f, const char *section, const GamepadBinds *gb) {
     fprintf(f, "\n");
 }
 
+static void write_camera(FILE *f) {
+    fprintf(f, "[camera]\n");
+    fprintf(f, "# Optional Voxel/3D camera keys. Gamepad look defaults to the right stick.\n");
+    for (const CameraDef *def = s_camera_buttons; def->name; def++)
+        fprintf(f, "%s = %s\n", def->name,
+                scancode_to_name(s_binds.camera[def->action]));
+    fprintf(f, "\n");
+}
+
 static void write_defaults(const char *path) {
     FILE *f = fopen(path, "w");
     if (!f) return;
@@ -198,6 +242,7 @@ static void write_defaults(const char *path) {
     fprintf(f, "# Common keys: Z, X, Backslash, Return, Up, Down, Left, Right\n");
     fprintf(f, "# Tab and F1-F12 are reserved runtime hotkeys.\n\n");
     write_player(f, "player1", &s_binds.p1);
+    write_camera(f);
     fprintf(f, "[zapper]\n");
     fprintf(f, "# Mouse as the Zapper light gun (default on for Zapper games):\n");
     fprintf(f, "# left click = trigger, mouse position = aim.  Set false to disable.\n");
@@ -223,6 +268,7 @@ static void load_ini(const char *path) {
     PlayerBinds *current = NULL;
     GamepadBinds *cur_pad = NULL;
     int in_zapper = 0;
+    int in_camera = 0;
     char line[256];
     while (fgets(line, sizeof(line), f)) {
         trim(line);
@@ -234,12 +280,14 @@ static void load_ini(const char *path) {
             if (end) *end = '\0';
             char *section = line + 1;
             in_zapper = 0;
+            in_camera = 0;
             current = NULL;
             cur_pad = NULL;
             if (strcmp(section, "player1") == 0) current = &s_binds.p1;
             /* Legacy [player2] keyboard sections are intentionally ignored.
              * P2 is now assigned explicitly to a gamepad or netplay peer. */
             else if (strcmp(section, "zapper") == 0) in_zapper = 1;
+            else if (strcmp(section, "camera") == 0) in_camera = 1;
             else if (strcmp(section, "gamepad1") == 0) cur_pad = &s_binds.pad1;
             else if (strcmp(section, "gamepad2") == 0) cur_pad = &s_binds.pad2;
             continue;
@@ -263,6 +311,22 @@ static void load_ini(const char *path) {
                 s_binds.zapper.mouse_enabled = bval;
             else if (strcmp(key, "crosshair") == 0)
                 s_binds.zapper.crosshair = bval;
+            continue;
+        }
+
+        if (in_camera) {
+            for (const CameraDef *def = s_camera_buttons;
+                 def->name; def++) {
+                if (strcmp(key, def->name) == 0) {
+                    SDL_Scancode sc = name_to_scancode(val);
+                    /* "None" is an intentional unbind. */
+                    if (sc != SDL_SCANCODE_UNKNOWN ||
+                        strcmp(val, "None") == 0 ||
+                        strcmp(val, "none") == 0)
+                        s_binds.camera[def->action] = sc;
+                    break;
+                }
+            }
             continue;
         }
 
@@ -360,4 +424,18 @@ int keybinds_zapper_mouse(void) {
 
 int keybinds_zapper_crosshair(void) {
     return s_binds.zapper.crosshair;
+}
+
+SDL_Scancode keybinds_camera_key(NesCameraBindAction action) {
+    if (action < 0 || action >= NES_CAMERA_BIND_COUNT)
+        return SDL_SCANCODE_UNKNOWN;
+    return s_binds.camera[action];
+}
+
+int keybinds_camera_action_for_scancode(SDL_Scancode scancode) {
+    if (scancode == SDL_SCANCODE_UNKNOWN) return -1;
+    for (int action = 0; action < NES_CAMERA_BIND_COUNT; action++) {
+        if (s_binds.camera[action] == scancode) return action;
+    }
+    return -1;
 }

@@ -23,11 +23,28 @@ typedef struct {
     int      analog_dpad;  /* 1 = left analog stick also drives the d-pad */
 } GamepadBinds;
 
+typedef enum {
+    NES_CAMERA_LOOK_UP = 0,
+    NES_CAMERA_LOOK_DOWN,
+    NES_CAMERA_LOOK_LEFT,
+    NES_CAMERA_LOOK_RIGHT,
+    NES_CAMERA_ROLL_LEFT,
+    NES_CAMERA_ROLL_RIGHT,
+    NES_CAMERA_ZOOM_IN,
+    NES_CAMERA_ZOOM_OUT,
+    NES_CAMERA_SPRITE_SMALLER,
+    NES_CAMERA_SPRITE_LARGER,
+    NES_CAMERA_RESET,
+    NES_CAMERA_TOGGLE,
+    NES_CAMERA_BIND_COUNT
+} NesCameraBindAction;
+
 typedef struct {
     PlayerBinds  p1;
     ZapperBinds  zapper;
     GamepadBinds pad1;
     GamepadBinds pad2;
+    SDL_Scancode camera[NES_CAMERA_BIND_COUNT];
 } KeyBinds;
 
 /* Initialize keybinds from INI file next to exe. Generates defaults if missing. */
@@ -48,3 +65,9 @@ int keybinds_zapper_mouse(void);
 
 /* Returns 1 if the Zapper crosshair should be drawn */
 int keybinds_zapper_crosshair(void);
+
+/* Optional Voxel/3D camera keys. The launcher exposes these only while an
+ * enabled mod advertises camera controls, but the runner always keeps stable
+ * defaults so older keybinds.ini files remain immediately usable. */
+SDL_Scancode keybinds_camera_key(NesCameraBindAction action);
+int keybinds_camera_action_for_scancode(SDL_Scancode scancode);

@@ -61,6 +61,7 @@ struct Feature {
     std::string group = "General";
     std::string exclusive_group;
     bool default_enabled = false;
+    bool camera_controls = false;
     std::vector<std::string> plugins;
 };
 
@@ -436,6 +437,10 @@ bool read_manifest(const fs::path& path, Package& out, std::string* error) {
                 else if (key == "default_enabled") {
                     parsed = parse_bool(value, bool_value);
                     if (parsed) feature->default_enabled = bool_value;
+                }
+                else if (key == "camera_controls") {
+                    parsed = parse_bool(value, bool_value);
+                    if (parsed) feature->camera_controls = bool_value;
                 } else known = false;
                 break;
             case Section::Option:
@@ -1584,6 +1589,7 @@ int provider_feature_get(void*, int index,
     copy_text(out->description, feature.description);
     copy_text(out->group, feature.group);
     out->enabled = feature_enabled(state(), package, feature);
+    out->camera_controls = feature.camera_controls ? 1 : 0;
     out->option_count = (int)std::count_if(
         package.options.begin(), package.options.end(),
         [&](const Option& option) {
