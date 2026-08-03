@@ -57,6 +57,9 @@ typedef struct NesVoxelScene {
 
     NesVoxelTileHeightFn tile_height;
     int terrain_layout;
+    /* Upright layouts can group adjacent source cells into one block. A
+     * value of 2 turns four 8x8 SMB cells into one 16x16x16 metatile cube. */
+    int side_group_tiles;
     /* Optional source for generated or offscreen room textures. When absent,
      * the compositor samples the already-rendered flat framebuffer. */
     NesVoxelTilePixelsFn tile_pixels;

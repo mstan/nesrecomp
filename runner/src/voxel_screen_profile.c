@@ -348,6 +348,7 @@ void nes_voxel_screen_post_render(NesVoxelScreenState *state,
     scene.tile_size = TILE_SIZE;
     scene.tile_height = screen_tile_height;
     scene.terrain_layout = profile->terrain_layout;
+    scene.side_group_tiles = profile->side_group_tiles;
     scene.tile_pixels = screen_tile_pixels;
     scene.user = state;
     scene.elevation_degrees = state->render_pitch;
@@ -374,7 +375,8 @@ void nes_voxel_screen_post_render(NesVoxelScreenState *state,
     scene.sprite_scale =
         state->render_sprite_scale_percent / 100.0f;
     scene.sprite_face_camera_pitch = 1;
-    scene.sprite_constant_screen_size = 1;
+    scene.sprite_constant_screen_size =
+        profile->terrain_layout == NES_VOXEL_LAYOUT_SIDE ? 0 : 1;
     scene.clip_sprites_to_source = 1;
     scene.sprite_depth_bias = 1.0f;
     scene.sprite_shadow = screen_sprite_shadow;

@@ -119,6 +119,12 @@ world X, screen Y becomes world height, and the semantic height callback
 controls block depth. Empty cells become sky instead of a horizontal painted
 floor. The default `NES_VOXEL_LAYOUT_FLOOR` path is unchanged.
 
+`side_group_tiles` optionally combines adjacent sampled cells into one upright
+block and assembles their source pixels into one face texture. For example, a
+value of `2` turns SMB's four 8×8 cells into a real 16×16×16 metatile cube.
+Upright-layout OAM cards use world scale rather than constant screen size, so
+actors preserve their size relative to grouped blocks and grow with proximity.
+
 The engine owns assembly, alpha testing, depth sorting, and contact-shadow
 rendering. A game profile owns tile/object identification because CHR and OAM
 layouts are game-specific. Zelda, for example, identifies its 2x2 tree

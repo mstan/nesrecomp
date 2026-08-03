@@ -74,6 +74,7 @@ typedef struct NesVoxelScreenProfile {
     NesVoxelScreenCameraFn camera;
     NesVoxelScreenSpriteVisibleFn sprite_visible;
     int terrain_layout;
+    int side_group_tiles;
 } NesVoxelScreenProfile;
 
 typedef struct NesVoxelScreenState {

@@ -533,30 +533,80 @@ static void render_terrain(const RenderContext *ctx) {
     }
 }
 
+static float side_group_depth(const NesVoxelScene *s,
+                              int tx, int ty, int group) {
+    float depth = 0.0f;
+    for (int gy = 0; gy < group && ty + gy < s->tile_rows; gy++) {
+        for (int gx = 0; gx < group && tx + gx < s->tile_columns; gx++) {
+            float cell = scene_height(s, tx + gx, ty + gy);
+            if (cell > depth) depth = cell;
+        }
+    }
+    return depth;
+}
+
+static Texture side_group_texture(const NesVoxelScene *s,
+                                  int tx, int ty, int group,
+                                  uint32_t *pixels) {
+    Texture result;
+    int cells_x = group;
+    int cells_y = group;
+    int width, height;
+    if (tx + cells_x > s->tile_columns) cells_x = s->tile_columns - tx;
+    if (ty + cells_y > s->tile_rows) cells_y = s->tile_rows - ty;
+    width = cells_x * s->tile_size;
+    height = cells_y * s->tile_size;
+    memset(pixels, 0, (size_t)width * height * sizeof(uint32_t));
+    for (int gy = 0; gy < cells_y; gy++) {
+        for (int gx = 0; gx < cells_x; gx++) {
+            Texture cell = tile_texture(s, tx + gx, ty + gy, 1.0f);
+            for (int py = 0; py < s->tile_size; py++) {
+                for (int px = 0; px < s->tile_size; px++) {
+                    pixels[(gy * s->tile_size + py) * width +
+                           gx * s->tile_size + px] =
+                        cell.pixels[py * cell.stride + px];
+                }
+            }
+        }
+    }
+    result.pixels = pixels;
+    result.width = width;
+    result.height = height;
+    result.stride = width;
+    result.shade = 1.0f;
+    result.alpha_test = 0;
+    result.overlay = 0;
+    return result;
+}
+
 static void render_side_terrain(const RenderContext *ctx) {
     const NesVoxelScene *s = ctx->scene;
     float ts = (float)s->tile_size;
-    for (int ty = 0; ty < s->tile_rows; ty++) {
-        for (int tx = 0; tx < s->tile_columns; tx++) {
-            float semantic_depth = scene_height(s, tx, ty);
+    int group = s->side_group_tiles > 0 ? s->side_group_tiles : 1;
+    if (group > 4) group = 4;
+    for (int ty = 0; ty < s->tile_rows; ty += group) {
+        for (int tx = 0; tx < s->tile_columns; tx += group) {
+            float semantic_depth = side_group_depth(s, tx, ty, group);
             float depth, z0, z1;
             float x0, x1, y0, y1;
             float north, south, west, east;
             Texture face, dim_face, side_face;
+            uint32_t group_pixels[32 * 32];
             if (semantic_depth <= 0.01f) continue;
 
-            depth = semantic_depth > ts ? semantic_depth : ts;
+            depth = group * ts;
             z0 = -depth * 0.5f;
             z1 = depth * 0.5f;
             x0 = tx * ts;
-            x1 = x0 + ts;
+            x1 = x0 + group * ts;
             y1 = s->source_height - ty * ts;
-            y0 = y1 - ts;
-            north = scene_height(s, tx, ty - 1);
-            south = scene_height(s, tx, ty + 1);
-            west = scene_height(s, tx - 1, ty);
-            east = scene_height(s, tx + 1, ty);
-            face = tile_texture(s, tx, ty, 1.0f);
+            y0 = y1 - group * ts;
+            north = side_group_depth(s, tx, ty - group, group);
+            south = side_group_depth(s, tx, ty + group, group);
+            west = side_group_depth(s, tx - group, ty, group);
+            east = side_group_depth(s, tx + group, ty, group);
+            face = side_group_texture(
+                s, tx, ty, group, group_pixels);
             dim_face = face;
             dim_face.shade = 0.72f;
             side_face = face;
