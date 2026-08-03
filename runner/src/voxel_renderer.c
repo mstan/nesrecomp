@@ -104,6 +104,7 @@ static float scene_height(const NesVoxelScene *s, int x, int y) {
 }
 
 static uint32_t shade_color(uint32_t color, float shade) {
+    unsigned a = color >> 24;
     unsigned r = (color >> 16) & 0xFF;
     unsigned g = (color >> 8) & 0xFF;
     unsigned b = color & 0xFF;
@@ -113,6 +114,21 @@ static uint32_t shade_color(uint32_t color, float shade) {
     if (r > 255) r = 255;
     if (g > 255) g = 255;
     if (b > 255) b = 255;
+    return (a << 24) | (r << 16) | (g << 8) | b;
+}
+
+static uint32_t blend_over(uint32_t destination, uint32_t source) {
+    unsigned a = source >> 24;
+    unsigned inv = 255 - a;
+    unsigned sr = (source >> 16) & 0xFF;
+    unsigned sg = (source >> 8) & 0xFF;
+    unsigned sb = source & 0xFF;
+    unsigned dr = (destination >> 16) & 0xFF;
+    unsigned dg = (destination >> 8) & 0xFF;
+    unsigned db = destination & 0xFF;
+    unsigned r = (sr * a + dr * inv + 127) / 255;
+    unsigned g = (sg * a + dg * inv + 127) / 255;
+    unsigned b = (sb * a + db * inv + 127) / 255;
     return 0xFF000000u | (r << 16) | (g << 8) | b;
 }
 
@@ -196,7 +212,10 @@ static void draw_triangle(const RenderContext *ctx,
             if (ty >= texture->height) ty = texture->height - 1;
             color = texture->pixels[ty * texture->stride + tx];
             if (texture->alpha_test && (color >> 24) == 0) continue;
-            s->framebuffer[pos] = shade_color(color, texture->shade);
+            color = shade_color(color, texture->shade);
+            s->framebuffer[pos] = (color >> 24) < 0xFF
+                ? blend_over(s->framebuffer[pos], color)
+                : color;
             if (!texture->overlay) s_depth[pos] = inv_depth;
         }
     }
@@ -489,6 +508,47 @@ static int sprites_connect(int ax, int ay, int ah, int ai,
     return abs(ai - bi) <= 4 && near_x && near_y;
 }
 
+static void draw_sprite_shadow(const RenderContext *ctx, float center_x,
+                               float ground, float foot_z, float card_width,
+                               float scale, float opacity) {
+    uint32_t pixels[8 * 8];
+    Texture texture;
+    float half_width = card_width * scale * 0.5f;
+    float half_depth = half_width * 0.34f;
+    unsigned max_alpha;
+
+    if (half_width <= 0.0f || opacity <= 0.0f) return;
+    if (opacity > 1.0f) opacity = 1.0f;
+    max_alpha = (unsigned)(opacity * 255.0f + 0.5f);
+    for (int y = 0; y < 8; y++) {
+        for (int x = 0; x < 8; x++) {
+            float dx = ((x + 0.5f) - 4.0f) / 4.0f;
+            float dz = ((y + 0.5f) - 4.0f) / 4.0f;
+            float distance = dx * dx + dz * dz;
+            float strength = distance < 1.0f ? 1.0f - distance : 0.0f;
+            unsigned alpha = (unsigned)(max_alpha * strength);
+            pixels[y * 8 + x] = alpha << 24;
+        }
+    }
+    texture.pixels = pixels;
+    texture.width = 8;
+    texture.height = 8;
+    texture.stride = 8;
+    texture.shade = 1.0f;
+    texture.alpha_test = 1;
+    texture.overlay = 0;
+    draw_quad(ctx,
+              vec3(center_x - half_width, ground + 0.08f,
+                   foot_z - half_depth),
+              vec3(center_x + half_width, ground + 0.08f,
+                   foot_z - half_depth),
+              vec3(center_x + half_width, ground + 0.08f,
+                   foot_z + half_depth),
+              vec3(center_x - half_width, ground + 0.08f,
+                   foot_z + half_depth),
+              &texture);
+}
+
 static void render_sprites(const RenderContext *ctx) {
     const NesVoxelScene *s = ctx->scene;
     int sprite_height = (g_ppuctrl & 0x20) ? 16 : 8;
@@ -509,6 +569,7 @@ static void render_sprites(const RenderContext *ctx) {
         uint32_t pixels[32 * 32];
         uint32_t decoded[8 * 16];
         float foot_z, ground, center_x, card_width, card_height;
+        float shadow_strength;
         Vec3 card_up;
         Vec3 center, left_bottom, right_bottom, right_top, left_top;
         Texture texture;
@@ -596,6 +657,19 @@ static void render_sprites(const RenderContext *ctx) {
                 card_width *= world_units_per_pixel;
                 card_height *= world_units_per_pixel;
             }
+        }
+        shadow_strength = s->sprite_shadow
+            ? s->sprite_shadow(min_x, min_y, max_x, max_y, s->user)
+            : 0.0f;
+        if (shadow_strength > 0.0f) {
+            float shadow_scale = s->sprite_shadow_scale > 0.0f
+                ? s->sprite_shadow_scale : 0.62f;
+            float shadow_opacity = s->sprite_shadow_opacity > 0.0f
+                ? s->sprite_shadow_opacity : 0.38f;
+            draw_sprite_shadow(
+                ctx, center_x + s->sprite_world_offset_x, ground,
+                foot_z + s->sprite_world_offset_z, card_width, shadow_scale,
+                shadow_opacity * shadow_strength);
         }
         card_up = s->sprite_face_camera_pitch
             ? ctx->up : vec3(0.0f, 1.0f, 0.0f);

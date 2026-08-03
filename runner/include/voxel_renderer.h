@@ -19,6 +19,8 @@ typedef int (*NesVoxelSpriteOverlayFn)(int min_x, int min_y,
 typedef float (*NesVoxelSpriteGroundFn)(int min_x, int min_y,
                                         int max_x, int max_y,
                                         float sampled_ground, void *user);
+typedef float (*NesVoxelSpriteShadowFn)(int min_x, int min_y,
+                                        int max_x, int max_y, void *user);
 
 typedef struct NesVoxelScene {
     uint32_t *framebuffer;
@@ -71,6 +73,12 @@ typedef struct NesVoxelScene {
     float sprite_world_offset_z;
     /* Optional game policy for actor ground placement. */
     NesVoxelSpriteGroundFn sprite_ground;
+    /* Optional game policy for pixel-art contact shadows. The callback returns
+     * an opacity multiplier; zero suppresses the shadow for flat effects and
+     * other OAM pieces that are not standing actors. */
+    NesVoxelSpriteShadowFn sprite_shadow;
+    float sprite_shadow_scale;
+    float sprite_shadow_opacity;
     /* Optional game policy for actors that must remain readable when a low
      * camera puts foreground terrain between the actor and the camera. */
     NesVoxelSpriteOverlayFn sprite_overlay;
