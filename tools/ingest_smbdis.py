@@ -34,10 +34,22 @@ DKC2 disassembly.
 Idempotent: the generated block is delimited, so re-running replaces it rather
 than appending.  Hand-added entries outside the block are preserved.
 
+Overloaded addresses
+--------------------
+SMB reuses zero page across object types, so one address often carries several
+names: ``$0033`` is ``PlayerFacingDir`` to the player code and
+``BulletBill_CannonVar`` to the enemy code.  Both are correct; which applies
+depends on the subsystem running.
+
+**Every** name is emitted, because they are all aliases of a single constant
+and any of them should resolve.  The first line for an address is the one the
+disassembly references most, and single-name consumers (inline comments) use
+that one.
+
 Usage
 -----
     python tools/ingest_smbdis.py \\
-        --disasm ../SuperMarioBrosRecomp/_smbdis \\
+        --disasm ../SuperMarioBrosRecomp/smb-disassembly \\
         --symbols ../SuperMarioBrosRecomp/symbols.sym
     python tools/ingest_smbdis.py ... --dry-run
 """
@@ -81,12 +93,11 @@ def parse_equates(asm_path: Path) -> tuple[list[tuple[int, str]], str]:
 def count_references(text: str, names: set[str]) -> dict[str, int]:
     """How often each equate name is actually used in the disassembly.
 
-    SMB reuses zero page aggressively: $0033 is PlayerFacingDir in the player
-    code and BulletBill_CannonVar in the enemy code, and both are equally
-    "correct". The symbol table can only carry one name per address, so pick
-    the one the disassembly leans on most rather than whichever sorts first —
+    All names for an overloaded address are emitted, but the FIRST one is
+    what single-name consumers (inline comments) show, so its choice matters:
     alphabetical order would label $0033 BulletBill_CannonVar and quietly make
-    every player-facing comment wrong.
+    every player-facing comment wrong. Reference count picks the name the
+    disassembly actually leans on.
     """
     counts = {n: 0 for n in names}
     for m in re.finditer(r"(?<![A-Za-z0-9_])([A-Za-z_][A-Za-z0-9_]*)", text):
@@ -171,16 +182,16 @@ def main() -> int:
     sym_text = sym_path.read_text(encoding="utf-8")
     claimed = existing_addresses(sym_text)
 
-    # Group names per address, then pick a canonical by how heavily the
-    # disassembly actually uses each one. The losers are kept as comments so
-    # the overload stays visible instead of silently disappearing.
+    # Group names per address, then order each group by how heavily the
+    # disassembly uses each name. All of them are emitted; the ordering only
+    # decides which one represents the address where just one name fits.
     by_addr: dict[int, list[str]] = {}
     for addr, name in equates:
         by_addr.setdefault(addr, []).append(name)
 
     refs = count_references(asm_text, {n for _, n in equates})
 
-    rows: list[tuple[int, str, list[str]]] = []
+    rows: list[tuple[int, list[str]]] = []
     aliases = 0
     collisions = 0
     for addr in sorted(by_addr):
@@ -189,7 +200,7 @@ def main() -> int:
             continue
         names = sorted(set(by_addr[addr]))
         names.sort(key=lambda n: (-refs.get(n, 0), n))
-        rows.append((addr, names[0], names[1:]))
+        rows.append((addr, names))
         aliases += len(names) - 1
 
     block = [
@@ -197,27 +208,31 @@ def main() -> int:
         "# Names and addresses lifted from threecreepio/smb-disassembly",
         "# (ca65 port of doppelganger's disassembly). Regenerate with:",
         "#   python nesrecomp/tools/ingest_smbdis.py \\",
-        "#       --disasm _smbdis --symbols symbols.sym",
+        "#       --disasm smb-disassembly --symbols symbols.sym",
         "#",
-        "# One name per address, because that is all the table can hold. SMB",
-        "# overloads zero page across object types, so where several names",
-        "# share a slot the most-referenced one wins and the rest follow on an",
-        "# 'alias:' comment. An alias is not a worse name — it is the same",
-        "# byte read by different code.",
+        "# SMB overloads zero page across object types: $0033 is",
+        "# PlayerFacingDir to the player code and BulletBill_CannonVar to the",
+        "# enemy code. Both names are equally correct; which one applies",
+        "# depends on the subsystem running, not on the address.",
+        "#",
+        "# EVERY name is listed, because they are all aliases of one constant",
+        "# and any of them should resolve. The first line for an address is",
+        "# the one the disassembly references most, and is what single-name",
+        "# consumers (inline comments) use; the rest follow immediately.",
         "# Do not hand-edit inside this block; edits are overwritten.",
         "",
     ]
-    for addr, name, alts in rows:
-        block.append(f"{addr:04X} {name} ram")
-        if alts:
-            block.append(f"#   alias: {', '.join(alts)}")
+    for addr, names in rows:
+        for name in names:
+            block.append(f"{addr:04X} {name} ram")
     block += ["", END, ""]
 
     new_text = strip_block(sym_text) + "\n" + "\n".join(block)
 
     print(f"equates parsed        : {len(equates)}")
     print(f"unique RAM addresses  : {len(rows)}")
-    print(f"aliased names kept as comments: {aliases}")
+    print(f"additional alias names: {aliases}")
+    print(f"symbol lines written  : {sum(len(n) for _, n in rows)}")
     print(f"skipped (already set) : {collisions}")
 
     if args.dry_run:

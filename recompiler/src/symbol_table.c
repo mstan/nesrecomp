@@ -77,6 +77,7 @@ bool symbol_table_load(SymbolTable *st, const char *path) {
         st->entries[st->count].name = sym_strndup(name_start, name_len);
         if (!st->entries[st->count].name) break;
         st->entries[st->count].kind = kind;
+        st->entries[st->count].ord  = st->count;
         st->count++;
     }
 
@@ -94,45 +95,48 @@ void symbol_table_free(SymbolTable *st) {
 }
 
 static int sym_cmp(const void *a, const void *b) {
-    uint16_t aa = ((const SymbolEntry *)a)->addr;
-    uint16_t bb = ((const SymbolEntry *)b)->addr;
-    return (aa > bb) - (aa < bb);
+    const SymbolEntry *ea = (const SymbolEntry *)a;
+    const SymbolEntry *eb = (const SymbolEntry *)b;
+    if (ea->addr != eb->addr) return (ea->addr > eb->addr) - (ea->addr < eb->addr);
+    /* qsort is not stable, so tie-break explicitly: an address with several
+     * names must keep the .sym file's ordering, because the first name is the
+     * one shown wherever only one fits. */
+    return (ea->ord > eb->ord) - (ea->ord < eb->ord);
+}
+
+/* Index of the FIRST entry for addr, or -1. */
+static int sym_first_index(SymbolTable *st, uint16_t addr) {
+    if (!st || st->count == 0) return -1;
+    if (!st->sorted) {
+        qsort(st->entries, (size_t)st->count, sizeof(SymbolEntry), sym_cmp);
+        st->sorted = true;
+    }
+    int lo = 0, hi = st->count - 1, found = -1;
+    while (lo <= hi) {
+        int mid = (lo + hi) / 2;
+        uint16_t ma = st->entries[mid].addr;
+        if (ma == addr) { found = mid; hi = mid - 1; }   /* keep going left */
+        else if (ma < addr) lo = mid + 1;
+        else hi = mid - 1;
+    }
+    return found;
 }
 
 const char *symbol_lookup(SymbolTable *st, uint16_t addr) {
-    if (!st || st->count == 0) return NULL;
-
-    /* Sort on first lookup */
-    if (!st->sorted) {
-        qsort(st->entries, (size_t)st->count, sizeof(SymbolEntry), sym_cmp);
-        st->sorted = true;
-    }
-
-    /* Binary search */
-    int lo = 0, hi = st->count - 1;
-    while (lo <= hi) {
-        int mid = (lo + hi) / 2;
-        uint16_t ma = st->entries[mid].addr;
-        if (ma == addr) return st->entries[mid].name;
-        if (ma < addr) lo = mid + 1;
-        else hi = mid - 1;
-    }
-    return NULL;
+    int i = sym_first_index(st, addr);
+    return i < 0 ? NULL : st->entries[i].name;
 }
 
 SymbolKind symbol_kind(SymbolTable *st, uint16_t addr) {
-    if (!st || st->count == 0) return SYM_KIND_OTHER;
-    if (!st->sorted) {
-        qsort(st->entries, (size_t)st->count, sizeof(SymbolEntry), sym_cmp);
-        st->sorted = true;
-    }
-    int lo = 0, hi = st->count - 1;
-    while (lo <= hi) {
-        int mid = (lo + hi) / 2;
-        uint16_t ma = st->entries[mid].addr;
-        if (ma == addr) return st->entries[mid].kind;
-        if (ma < addr) lo = mid + 1;
-        else hi = mid - 1;
-    }
-    return SYM_KIND_OTHER;
+    int i = sym_first_index(st, addr);
+    return i < 0 ? SYM_KIND_OTHER : st->entries[i].kind;
+}
+
+int symbol_names(SymbolTable *st, uint16_t addr, const char **out, int max) {
+    int i = sym_first_index(st, addr);
+    if (i < 0) return 0;
+    int n = 0;
+    for (; i < st->count && st->entries[i].addr == addr; i++, n++)
+        if (out && n < max) out[n] = st->entries[i].name;
+    return n;
 }

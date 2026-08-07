@@ -298,17 +298,61 @@ static void emit_symbol_aliases(FILE *f, const EmittedWrapper *wrappers, int wra
      * the game's authoritative disassembly via the .sym file, and are emitted
      * only for entries explicitly typed `ram`, so nothing is inferred from the
      * address alone.
+     *
+     * EVERY name is emitted, including several for one address. Games reuse
+     * scratch RAM across subsystems, so a byte genuinely has more than one
+     * correct name and which applies depends on the code running, not on the
+     * address. They are all aliases of the same constant, so defining them all
+     * costs nothing and means whichever name a reader reaches for resolves —
+     * far better than picking a winner and making the others look wrong.
+     * Overloads are annotated so the context-dependence stays visible.
      */
     int ram_count = 0;
     for (int i = 0; i < st->count; i++)
         if (st->entries[i].kind == SYM_KIND_RAM) ram_count++;
     if (ram_count == 0) return;
 
-    fprintf(f, "/* RAM/MMIO symbol addresses (from .sym file) */\n");
+    fprintf(f, "/* RAM/MMIO symbol addresses (from .sym file).\n"
+               " * Several names on one address are aliases of the same byte,\n"
+               " * used by different subsystems — not duplicates to pick from. */\n");
     for (int i = 0; i < st->count; i++) {
         const SymbolEntry *e = &st->entries[i];
         if (e->kind != SYM_KIND_RAM) continue;
-        fprintf(f, "#define %s 0x%04X\n", e->name, e->addr);
+
+        /* A function name must keep meaning the function: generated code
+         * calls it. Report the clash rather than letting the later #define
+         * silently retarget every existing call site. */
+        bool shadows_func = false;
+        for (int j = 0; j < st->count; j++) {
+            if (st->entries[j].kind != SYM_KIND_FUNC) continue;
+            if (strcmp(st->entries[j].name, e->name) != 0) continue;
+            shadows_func = true;
+            break;
+        }
+        if (shadows_func) {
+            fprintf(f, "/* SKIPPED: %s 0x%04X — name already denotes a "
+                       "function */\n", e->name, e->addr);
+            fprintf(stderr, "[codegen] WARNING: RAM symbol '%s' (0x%04X) "
+                            "collides with a function of the same name; the "
+                            "RAM define was skipped\n", e->name, e->addr);
+            continue;
+        }
+
+        const char *names[8];
+        int n = symbol_names(st, e->addr, names, 8);
+        fprintf(f, "#define %s 0x%04X", e->name, e->addr);
+        if (n > 1) {
+            /* Name the siblings inline, so reading one define tells you the
+             * byte is context-dependent without going back to the .sym. */
+            fprintf(f, "  /* also:");
+            for (int k = 0; k < n && k < 8; k++) {
+                if (strcmp(names[k], e->name) == 0) continue;
+                fprintf(f, " %s", names[k]);
+            }
+            if (n > 8) fprintf(f, " ...");
+            fprintf(f, " */");
+        }
+        fprintf(f, "\n");
     }
     fprintf(f, "\n");
 }

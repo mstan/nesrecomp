@@ -13,6 +13,12 @@
  *   D67A OffscreenBoundsCheck func
  *   071D ScreenRight_X_Pos ram
  *   C998 EraseEnemyObject
+ *
+ * An address MAY appear more than once. Games reuse scratch RAM across
+ * subsystems, so one byte legitimately has several names and none of them is
+ * the "real" one — SMB's $0033 is PlayerFacingDir to the player code and
+ * BulletBill_CannonVar to the enemy code. All names are kept; the FIRST one
+ * in file order represents the address wherever only one name fits.
  */
 #pragma once
 #include <stdint.h>
@@ -28,6 +34,9 @@ typedef struct {
     uint16_t   addr;
     char      *name;   /* heap-allocated, owned by the table */
     SymbolKind kind;
+    int        ord;    /* original file order; ties are broken on this so an
+                        * address with several names keeps the file's own
+                        * priority instead of qsort's arbitrary one */
 } SymbolEntry;
 
 typedef struct {
@@ -45,8 +54,17 @@ bool symbol_table_load(SymbolTable *st, const char *path);
 void symbol_table_free(SymbolTable *st);
 
 /* Look up a symbol name by address. Returns NULL if not found.
+ * When an address has several names this returns the first in file order.
  * Uses binary search after first call triggers sort. */
 const char *symbol_lookup(SymbolTable *st, uint16_t addr);
 
-/* Kind for an address, or SYM_KIND_OTHER when unknown. */
+/* Kind of the first symbol at an address, or SYM_KIND_OTHER when unknown. */
 SymbolKind symbol_kind(SymbolTable *st, uint16_t addr);
+
+/*
+ * Collect every name at an address, in file order, into `out`.
+ * Returns how many names exist (which may exceed `max`; only `max` are
+ * written). Use this instead of symbol_lookup wherever showing one name out
+ * of several would present a context-dependent guess as a fact.
+ */
+int symbol_names(SymbolTable *st, uint16_t addr, const char **out, int max);
