@@ -13,6 +13,7 @@
 #include "interp.h"
 #include "recomp_stack.h"
 #include "save_ram.h"
+#include "foreign_controller.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -430,6 +431,7 @@ void runtime_init(void) {
     load_dispatch_miss_policy_from_env();
     load_brk_policy_from_env();
     nes_fring_init_dump();
+    nes_foreign_trace_init_dump();
     fallback_telemetry_init();
 }
 

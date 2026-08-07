@@ -18,6 +18,7 @@
 #include "input_script.h"
 #include "interp.h"
 #include "save_ram.h"
+#include "foreign_controller.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -796,6 +797,51 @@ static void handle_fring(int id, const char *json)
             "%s{\"k\":\"%c\",\"cyc\":%llu,\"ops\":%u,\"bud\":%u,\"d\":%u,\"aux\":\"0x%04X\"}",
             i ? "," : "", ev[i].kind, (unsigned long long)ev[i].cyc,
             ev[i].ops, ev[i].budget, ev[i].depth, ev[i].aux);
+    }
+    pos += sprintf(buf + pos, "]}");
+    send_line(buf);
+    free(buf);
+    free(ev);
+}
+
+/* Always-on foreign-controller movement ring. Same contract as `fring`:
+ * capture runs from power-on, this only QUERIES a window of that history. */
+static void handle_ftring(int id, const char *json)
+{
+    int n = json_get_int(json, "n", 64);
+    if (n < 1) n = 1;
+    if (n > 512) n = 512;
+    ForeignTraceEntry *ev =
+        (ForeignTraceEntry *)malloc((size_t)n * sizeof *ev);
+    if (!ev) { send_err(id, "alloc failed"); return; }
+    int got = nes_foreign_trace_last(n, ev);
+    char *buf = (char *)malloc((size_t)got * 320 + 256);
+    if (!buf) { free(ev); send_err(id, "alloc failed"); return; }
+    const ForeignController *ctl = nes_foreign_active();
+    int pos = snprintf(buf, 256,
+        "{\"id\":%d,\"ok\":true,\"controller\":\"%s\",\"retained\":%d,"
+        "\"count\":%d,\"ticks\":[",
+        id, ctl && ctl->id ? ctl->id : "", nes_foreign_trace_count(), got);
+    for (int i = 0; i < got; i++) {
+        const ForeignTraceEntry *e = &ev[i];
+        const char *name = "";
+        if (ctl && ctl->state_name) {
+            const char *resolved = ctl->state_name(e->state);
+            if (resolved) name = resolved;
+        }
+        pos += sprintf(buf + pos,
+            "%s{\"f\":%llu,\"own\":%u,\"st\":%d,\"stn\":\"%s\",\"btn\":%d,"
+            "\"sx\":%.4f,\"sy\":%.4f,\"x\":%.4f,\"y\":%.4f,"
+            "\"vx\":%.4f,\"vy\":%.4f,\"rdx\":%.4f,\"rdy\":%.4f,"
+            "\"adx\":%.4f,\"ady\":%.4f,\"gnd\":%u,\"ff\":%u,"
+            "\"cf\":\"0x%08X\",\"nx\":%d,\"ny\":%d}",
+            i ? "," : "", (unsigned long long)e->frame, e->ownership,
+            e->state, name, e->raw_buttons, e->stick_x, e->stick_y,
+            e->x, e->y, e->vx, e->vy,
+            e->requested_dx, e->requested_dy,
+            e->resolved_dx, e->resolved_dy,
+            e->grounded, e->fast_fall, e->collision_flags,
+            e->native_x, e->native_y);
     }
     pos += sprintf(buf + pos, "]}");
     send_line(buf);
@@ -1698,6 +1744,7 @@ static const CmdEntry s_commands[] = {
     { "interpreter_stats", "interpreter fallback enablement, work, handoffs, and watchdog counters",       handle_interpreter_stats },
     { "runtime_faults",    "BRK and unhandled-dispatch policy counters with last BRK location",            handle_runtime_faults },
     { "fring",             "frame-event ring: VBlank fires + $4014 OAM DMA with phase digests",           handle_fring },
+    { "ftring",            "foreign-controller movement ring: per-tick input, state, velocity, collision", handle_ftring },
 #ifdef RECOMP_STACK_TRACKING
     { "call_stack",        "current recompile-stack (function-name shadow stack); main loops never pop", handle_call_stack },
 #endif

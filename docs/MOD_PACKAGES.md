@@ -89,13 +89,64 @@ step = 8
 ```
 
 Supported types are `boolean`, `choice`, and bounded `integer`. Trusted plugins
-may read integer values with `nes_mod_get_option_int`.
+may read integer values with `nes_mod_get_option_int`, and any option's
+committed value as a string with `nes_mod_option_value`:
+
+```c
+char character[64];
+if (!nes_mod_option_value(package, feature, "character",
+                          character, sizeof character))
+    snprintf(character, sizeof character, "captain-falcon");  /* own default */
+```
+
+It writes a NUL-terminated value and returns 1. On failure — plan not
+committed, ids unresolved, or the value too long for the buffer — it returns 0
+and sets `out[0] = '\0'`, so a caller applies its own default instead of
+treating an empty string as a selection.
 
 Features with the same non-empty `exclusive_group` are mutually exclusive.
 Enabling one in the launcher automatically disables the other selected feature
 in that group, even when the features come from different packages. Validation
 also rejects a hand-edited state file that enables more than one, so the
 runtime can never activate incompatible presentation modes together.
+
+## Conditional plugin activation
+
+A `[[plugin]]` may be conditioned on one of its own feature's option values, so
+one feature can offer several implementations instead of degenerating into one
+pseudo-feature per value:
+
+```toml
+[[option]]
+feature = "smash64-player"
+id = "character"
+label = "Character"
+type = "choice"
+default = "captain-falcon"
+
+[[option.choice]]
+value = "captain-falcon"
+label = "Captain Falcon"
+
+[[plugin]]
+feature = "smash64-player"
+id = "example.captain-falcon"
+when_option = "character"
+when_value = "captain-falcon"
+```
+
+`when_option` and `when_value` must both be present or both absent. The
+referenced option must belong to the same feature, and the value must be one of
+its declared choices — both are checked when the manifest loads, so a typo is a
+package diagnostic rather than a feature that silently does nothing.
+
+Unselected variants are skipped before the duplicate-plugin check, so sibling
+implementations of one choice never collide with each other. A plugin without a
+condition activates whenever its feature is enabled, which is the historical
+behaviour and is unchanged.
+
+Prefer conditions when the choice merely selects *which* implementation runs,
+and `nes_mod_option_value` when a plugin must act on the value itself.
 
 ## Plugin registration
 

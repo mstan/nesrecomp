@@ -54,6 +54,19 @@ struct Option {
     std::vector<Choice> choices;
 };
 
+/*
+ * A trusted plugin selected by a feature, optionally conditioned on one of
+ * that feature's option values.  Without a condition the plugin activates
+ * whenever the feature is enabled (the historical format 1 behavior).  With
+ * one, the feature can offer several implementations and let a choice option
+ * pick between them, instead of forcing one pseudo-feature per value.
+ */
+struct PluginRef {
+    std::string id;
+    std::string when_option;
+    std::string when_value;
+};
+
 struct Feature {
     std::string id;
     std::string name;
@@ -62,7 +75,7 @@ struct Feature {
     std::string exclusive_group;
     bool default_enabled = false;
     bool camera_controls = false;
-    std::vector<std::string> plugins;
+    std::vector<PluginRef> plugins;
 };
 
 struct Target {
@@ -314,9 +327,13 @@ bool read_manifest(const fs::path& path, Package& out, std::string* error) {
     Choice* choice = nullptr;
     std::string plugin_feature;
     std::string plugin_id;
+    std::string plugin_when_option;
+    std::string plugin_when_value;
 
     auto finish_plugin = [&]() -> bool {
-        if (plugin_feature.empty() && plugin_id.empty()) return true;
+        if (plugin_feature.empty() && plugin_id.empty() &&
+            plugin_when_option.empty() && plugin_when_value.empty())
+            return true;
         Feature* owner = nullptr;
         for (Feature& candidate : out.features) {
             if (candidate.id == plugin_feature) {
@@ -328,9 +345,18 @@ bool read_manifest(const fs::path& path, Package& out, std::string* error) {
             set_error(error, "plugin has an invalid feature or id");
             return false;
         }
-        owner->plugins.push_back(plugin_id);
+        /* A condition needs both halves; one alone is always a mistake. */
+        if (plugin_when_option.empty() != plugin_when_value.empty()) {
+            set_error(error, "plugin condition requires both when_option "
+                             "and when_value");
+            return false;
+        }
+        owner->plugins.push_back(
+            PluginRef{plugin_id, plugin_when_option, plugin_when_value});
         plugin_feature.clear();
         plugin_id.clear();
+        plugin_when_option.clear();
+        plugin_when_value.clear();
         return true;
     };
 
@@ -488,6 +514,10 @@ bool read_manifest(const fs::path& path, Package& out, std::string* error) {
             case Section::Plugin:
                 if (key == "feature") parsed = string_field(plugin_feature);
                 else if (key == "id") parsed = string_field(plugin_id);
+                else if (key == "when_option")
+                    parsed = string_field(plugin_when_option);
+                else if (key == "when_value")
+                    parsed = string_field(plugin_when_value);
                 else known = false;
                 break;
         }
@@ -539,6 +569,29 @@ bool read_manifest(const fs::path& path, Package& out, std::string* error) {
                          }))) {
             set_error(error, "choice option has no valid choices");
             return false;
+        }
+    }
+    /*
+     * Plugin conditions are resolved against declared options at load time,
+     * not at activation, so a typo in when_option/when_value surfaces as a
+     * manifest diagnostic instead of a feature that silently does nothing.
+     */
+    for (const Feature& item : out.features) {
+        for (const PluginRef& plugin : item.plugins) {
+            if (plugin.when_option.empty()) continue;
+            const Option* conditioned =
+                find_option(out, item.id, plugin.when_option);
+            if (!conditioned) {
+                set_error(error, "plugin condition references unknown option '" +
+                                 plugin.when_option + "'");
+                return false;
+            }
+            if (!validate_option_value(*conditioned, plugin.when_value,
+                                       error)) {
+                if (error && error->empty())
+                    *error = "plugin condition has an invalid option value";
+                return false;
+            }
         }
     }
     return true;
@@ -636,7 +689,21 @@ Validation validate(Runtime& runtime) {
                         std::make_pair(package->id, feature.id));
                 }
             }
-            for (const std::string& plugin_id : feature.plugins) {
+            for (const PluginRef& plugin : feature.plugins) {
+                /*
+                 * Skip variants the player did not select.  This runs before
+                 * the duplicate-claim check below so sibling variants of one
+                 * choice option never collide with each other.
+                 */
+                if (!plugin.when_option.empty()) {
+                    const Option* conditioned =
+                        find_option(*package, feature.id, plugin.when_option);
+                    if (!conditioned) continue;
+                    if (option_value(runtime, *package, feature,
+                                     *conditioned) != plugin.when_value)
+                        continue;
+                }
+                const std::string& plugin_id = plugin.id;
                 const auto registered = registered_plugins().find(plugin_id);
                 if (registered == registered_plugins().end() ||
                     !registered->second.activation) {
@@ -1891,6 +1958,30 @@ extern "C" int nes_mod_get_option_int(
         parsed < INT32_MIN || parsed > INT32_MAX)
         return fallback;
     return (int)parsed;
+}
+
+extern "C" int nes_mod_option_value(
+    const char* package_id, const char* feature_id,
+    const char* option_id, char* out, uint32_t out_size) {
+    if (!out || out_size == 0) return 0;
+    out[0] = '\0';
+    if (!package_id || !feature_id || !option_id) return 0;
+    NESRecomp::Runtime& runtime = NESRecomp::state();
+    const NESRecomp::Package* package =
+        NESRecomp::selected_package(runtime, package_id);
+    if (!package) return 0;
+    const NESRecomp::Feature* feature =
+        NESRecomp::find_feature(*package, feature_id);
+    const NESRecomp::Option* option =
+        NESRecomp::find_option(*package, feature_id, option_id);
+    if (!feature || !option) return 0;
+    const std::string value =
+        NESRecomp::option_value(runtime, *package, *feature, *option);
+    /* Truncation is a failure, not a shortened selection: the caller must be
+     * able to fall back to its own default rather than act on a partial id. */
+    if (value.size() + 1 > (size_t)out_size) return 0;
+    std::memcpy(out, value.c_str(), value.size() + 1);
+    return 1;
 }
 
 extern "C" int nes_mod_runtime_initialize_c(

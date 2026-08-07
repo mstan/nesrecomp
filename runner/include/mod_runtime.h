@@ -76,6 +76,33 @@ int nes_mod_get_option_int(const char* package_id,
                            const char* option_id,
                            int fallback);
 
+/*
+ * Read the committed value of one of this package's declared options, as the
+ * player left it in the launcher (or the manifest default when untouched).
+ * Writes a NUL-terminated string into `out` and returns 1; returns 0 with
+ * out[0] = '\0' when the plan is not committed, the ids do not resolve, or the
+ * value does not fit — the caller then applies its own default rather than
+ * treating an empty string as a selection.
+ *
+ * Why this exists: the manifest schema already carries typed, validated,
+ * launcher-rendered, persisted options ([[option]] boolean/choice/integer),
+ * and nes_mod_get_option_int can read the integer ones, but a choice value had
+ * no accessor at all — so a parameterised feature had to be modelled as one
+ * feature per value. This closes that gap: one feature, one option, the plugin
+ * reads what was chosen. Mirrors psx_mod_option_value in psxrecomp.
+ *
+ * Prefer when_option/when_value on [[plugin]] when the choice merely selects
+ * which implementation runs; use this when the plugin must act on the value.
+ *
+ * Ids are passed explicitly because registration is by plugin id alone and the
+ * activation callback carries no package/feature context.
+ */
+int nes_mod_option_value(const char* package_id,
+                         const char* feature_id,
+                         const char* option_id,
+                         char* out,
+                         uint32_t out_size);
+
 #if defined(_MSC_VER)
 #pragma section(".CRT$XCU", read)
 #if defined(_M_IX86)

@@ -45,6 +45,10 @@ set(NESRECOMP_RUNNER_SOURCES
     # game calls nes_voxel_render() from game_post_render().
     ${NESRECOMP_RUNNER_ROOT}/src/voxel_renderer.c
     ${NESRECOMP_RUNNER_ROOT}/src/voxel_screen_profile.c
+    # Host-side movement controllers imported from another game, plus the
+    # always-on movement trace ring. Inert unless a game registers and selects
+    # a controller. See docs/FOREIGN_CONTROLLER.md.
+    ${NESRECOMP_RUNNER_ROOT}/src/foreign_controller.c
 )
 
 set(NESRECOMP_RUNNER_INCLUDE_DIRS
