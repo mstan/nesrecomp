@@ -55,6 +55,15 @@ bool symbol_table_load(SymbolTable *st, const char *path) {
         /* Validate name is a valid C identifier */
         if (!isalpha((unsigned char)name_start[0]) && name_start[0] != '_') continue;
 
+        /* Optional type field after the name: func, ram, label. */
+        SymbolKind kind = SYM_KIND_OTHER;
+        {
+            const char *t = p;
+            while (*t == ' ' || *t == '\t') t++;
+            if (strncmp(t, "func", 4) == 0) kind = SYM_KIND_FUNC;
+            else if (strncmp(t, "ram", 3) == 0) kind = SYM_KIND_RAM;
+        }
+
         /* Grow array if needed */
         if (st->count >= st->cap) {
             int newcap = st->cap ? st->cap * 2 : 128;
@@ -67,6 +76,7 @@ bool symbol_table_load(SymbolTable *st, const char *path) {
         st->entries[st->count].addr = (uint16_t)addr;
         st->entries[st->count].name = sym_strndup(name_start, name_len);
         if (!st->entries[st->count].name) break;
+        st->entries[st->count].kind = kind;
         st->count++;
     }
 
@@ -108,4 +118,21 @@ const char *symbol_lookup(SymbolTable *st, uint16_t addr) {
         else hi = mid - 1;
     }
     return NULL;
+}
+
+SymbolKind symbol_kind(SymbolTable *st, uint16_t addr) {
+    if (!st || st->count == 0) return SYM_KIND_OTHER;
+    if (!st->sorted) {
+        qsort(st->entries, (size_t)st->count, sizeof(SymbolEntry), sym_cmp);
+        st->sorted = true;
+    }
+    int lo = 0, hi = st->count - 1;
+    while (lo <= hi) {
+        int mid = (lo + hi) / 2;
+        uint16_t ma = st->entries[mid].addr;
+        if (ma == addr) return st->entries[mid].kind;
+        if (ma < addr) lo = mid + 1;
+        else hi = mid - 1;
+    }
+    return SYM_KIND_OTHER;
 }

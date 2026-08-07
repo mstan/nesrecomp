@@ -290,6 +290,27 @@ static void emit_symbol_aliases(FILE *f, const EmittedWrapper *wrappers, int wra
         fprintf(f, "#define %s %s\n", name, nm);
     }
     fprintf(f, "\n");
+
+    /*
+     * RAM / MMIO names, so game-side code can say g_ram[Player_X_Position]
+     * instead of g_ram[0x0086]. A bare literal is a guess wearing the costume
+     * of a fact — it reviews as fine and is wrong in silence. These come from
+     * the game's authoritative disassembly via the .sym file, and are emitted
+     * only for entries explicitly typed `ram`, so nothing is inferred from the
+     * address alone.
+     */
+    int ram_count = 0;
+    for (int i = 0; i < st->count; i++)
+        if (st->entries[i].kind == SYM_KIND_RAM) ram_count++;
+    if (ram_count == 0) return;
+
+    fprintf(f, "/* RAM/MMIO symbol addresses (from .sym file) */\n");
+    for (int i = 0; i < st->count; i++) {
+        const SymbolEntry *e = &st->entries[i];
+        if (e->kind != SYM_KIND_RAM) continue;
+        fprintf(f, "#define %s 0x%04X\n", e->name, e->addr);
+    }
+    fprintf(f, "\n");
 }
 
 /* Forward-declare every multi-entry function's `_body` (external since bank

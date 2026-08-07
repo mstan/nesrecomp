@@ -18,9 +18,16 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+typedef enum {
+    SYM_KIND_OTHER = 0,  /* no type given, or an unrecognized one */
+    SYM_KIND_FUNC,
+    SYM_KIND_RAM,        /* RAM / MMIO address, not a code entry */
+} SymbolKind;
+
 typedef struct {
-    uint16_t addr;
-    char    *name;   /* heap-allocated, owned by the table */
+    uint16_t   addr;
+    char      *name;   /* heap-allocated, owned by the table */
+    SymbolKind kind;
 } SymbolEntry;
 
 typedef struct {
@@ -40,3 +47,6 @@ void symbol_table_free(SymbolTable *st);
 /* Look up a symbol name by address. Returns NULL if not found.
  * Uses binary search after first call triggers sort. */
 const char *symbol_lookup(SymbolTable *st, uint16_t addr);
+
+/* Kind for an address, or SYM_KIND_OTHER when unknown. */
+SymbolKind symbol_kind(SymbolTable *st, uint16_t addr);
