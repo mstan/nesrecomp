@@ -122,6 +122,38 @@ transition rather than a gap.
 
 ---
 
+## There is exactly ONE fighter instance, and it lives behind the ABI
+
+Read this before the next section, because the next section says "own your
+state" and that is easy to over-apply.
+
+`nes_foreign_tick()` drives the controller you selected, against the engine's
+single `ForeignState`. A host that *also* keeps its own private fighter and
+drives it directly ends up with **two independent fighters**: the private one
+moves the player, the registry's one gets ticked by `nes_foreign_tick` with
+state nobody maintains, and **the trace ring records the registry's**.
+
+That happened. SMB1's adapter kept a private fighter; the registry's copy never
+had `grounded` set, so it fell forever. A recorded playtest showed `FALL` for
+5758 of 7993 frames while the fighter actually moving the player was dashing and
+running at 6 px/frame. Every trace read in that period described a ghost.
+
+A ring that answers confidently and wrongly about the thing it exists to observe
+is worse than no ring.
+
+So:
+
+- **The fighter's storage belongs to the controller**, in its own translation
+  unit, and there is one of it.
+- **Drive it only through `nes_foreign_tick` / `nes_foreign_resolve`.** Do not
+  call a controller's `tick` or `resolve` directly, and do not keep a parallel
+  instance in the host.
+- **Feed host truth in through `nes_foreign_state()`** before ticking — most
+  importantly `grounded`, which only the host knows.
+- The state the host keeps per the next section is *adapter* state — scale
+  constants, ownership, the last velocity written to the guest — not a second
+  copy of the fighter.
+
 ## Own your state; do not contend for guest bytes
 
 The controller's state lives host-side, and that is a rule, not a convenience.
