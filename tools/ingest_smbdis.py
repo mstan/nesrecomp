@@ -34,17 +34,22 @@ DKC2 disassembly.
 Idempotent: the generated block is delimited, so re-running replaces it rather
 than appending.  Hand-added entries outside the block are preserved.
 
-Overloaded addresses
---------------------
-SMB reuses zero page across object types, so one address often carries several
-names: ``$0033`` is ``PlayerFacingDir`` to the player code and
-``BulletBill_CannonVar`` to the enemy code.  Both are correct; which applies
-depends on the subsystem running.
+Addresses versus constants
+--------------------------
+``Name = $XX`` is the same syntax whether $XX is a memory location or a plain
+constant, and this file has both.  ``PlayerFacingDir = $33`` is zero-page RAM;
+``BulletBill_CannonVar = $33`` is the *enemy id* $33, declared beside
+``Bowser = $2d``.  They share a number and nothing else, so they are emitted
+as different types (``ram`` and ``const``) and are not aliases.
+See :func:`classify` for how they are told apart.
 
-**Every** name is emitted, because they are all aliases of a single constant
-and any of them should resolve.  The first line for an address is the one the
-disassembly references most, and single-name consumers (inline comments) use
-that one.
+Genuine aliases
+---------------
+Within one kind, several names on one address really are the same thing:
+``Player_X_Position`` is ``SprObject_X_Position`` slot 0.  Every name is
+emitted, because they are aliases of one constant and any of them should
+resolve.  The first for an address is the one the disassembly references most,
+which is what single-name consumers (inline comments) show.
 
 Usage
 -----
@@ -75,10 +80,13 @@ END = "# --- END auto-ingested RAM symbols ---"
 RAM_LIMIT = 0x8000
 
 
-def parse_equates(asm_path: Path) -> tuple[list[tuple[int, str]], str]:
+def parse_equates(asm_path: Path):
+    """Returns (entries, lines, decl_line) for equates below RAM_LIMIT."""
     out: list[tuple[int, str]] = []
+    decl_line: dict[str, int] = {}
     text = asm_path.read_text(encoding="utf-8", errors="replace")
-    for line in text.splitlines():
+    lines = text.splitlines()
+    for i, line in enumerate(lines, 1):
         m = EQUATE_RE.match(line)
         if not m:
             continue
@@ -87,27 +95,83 @@ def parse_equates(asm_path: Path) -> tuple[list[tuple[int, str]], str]:
         if addr >= RAM_LIMIT:
             continue
         out.append((addr, name))
-    return out, text
+        decl_line.setdefault(name, i)
+    return out, lines, decl_line
 
 
-def count_references(text: str, names: set[str]) -> dict[str, int]:
-    """How often each equate name is actually used in the disassembly.
+DATA_DIRECTIVE_RE = re.compile(r"^\s*\.(byte|word|dbyt|db|dw)\b", re.IGNORECASE)
 
-    All names for an overloaded address are emitted, but the FIRST one is
-    what single-name consumers (inline comments) show, so its choice matters:
-    alphabetical order would label $0033 BulletBill_CannonVar and quietly make
-    every player-facing comment wrong. Reference count picks the name the
-    disassembly actually leans on.
+
+def classify(lines: list[str], decl_line: dict[str, int],
+             names: set[str]) -> tuple[dict[str, str], dict[str, int]]:
+    """Split equates into ADDRESS (memory) and VALUE (plain constant).
+
+    ``Name = $33`` is syntactically identical whether $33 is a zero-page
+    address or an object-type id, and SMB's file has both: PlayerFacingDir is
+    RAM at $0033, while BulletBill_CannonVar is the *enemy id* $33, declared
+    beside Bowser = $2d and VineObject = $2f. Emitting the second as a RAM
+    address is worse than omitting it — it is a confident mislabel.
+
+    Usage settles it:
+      * a bare name in an instruction operand (``sta Foo``, ``lda Foo,x``)
+        can only be an address;
+      * ``#Foo`` is an immediate, so a value;
+      * a bare name inside ``.byte``/``.word`` is a table entry, so a value.
+
+    An address may also appear in a pointer table, so a single bare operand
+    use outranks any number of data-table appearances. Names never referenced
+    at all inherit from their neighbours, because the file groups equates into
+    a RAM block and a constants block.
     """
-    counts = {n: 0 for n in names}
-    for m in re.finditer(r"(?<![A-Za-z0-9_])([A-Za-z_][A-Za-z0-9_]*)", text):
-        n = m.group(1)
-        if n in counts:
-            counts[n] += 1
-    # Discount the defining `Name = $XXXX` line itself.
-    for n in counts:
-        counts[n] = max(0, counts[n] - 1)
-    return counts
+    imm: dict[str, int] = {n: 0 for n in names}
+    addr: dict[str, int] = {n: 0 for n in names}
+    data: dict[str, int] = {n: 0 for n in names}
+    refs: dict[str, int] = {n: 0 for n in names}
+
+    for i, raw in enumerate(lines, 1):
+        line = raw.split(";", 1)[0]
+        is_data = bool(DATA_DIRECTIVE_RE.match(line))
+        for m in re.finditer(r"(#?)(?<![A-Za-z0-9_.])([A-Za-z_][A-Za-z0-9_]*)",
+                             line):
+            n = m.group(2)
+            if n not in names:
+                continue
+            if i == decl_line.get(n):
+                continue  # the defining line itself
+            refs[n] += 1
+            if m.group(1) == "#":
+                imm[n] += 1
+            elif is_data:
+                data[n] += 1
+            else:
+                addr[n] += 1
+
+    kind: dict[str, str] = {}
+    for n in names:
+        if addr[n]:
+            kind[n] = "ADDRESS"
+        elif imm[n] or data[n]:
+            kind[n] = "VALUE"
+        else:
+            kind[n] = "UNKNOWN"
+
+    # Unreferenced names inherit the classification of the nearest classified
+    # equate by declaration line — the file keeps RAM and constants in
+    # separate blocks, so a neighbour is a reliable witness.
+    ordered = sorted(names, key=lambda n: decl_line[n])
+    for idx, n in enumerate(ordered):
+        if kind[n] != "UNKNOWN":
+            continue
+        for step in range(1, len(ordered)):
+            for j in (idx - step, idx + step):
+                if 0 <= j < len(ordered) and kind[ordered[j]] != "UNKNOWN":
+                    kind[n] = kind[ordered[j]]
+                    break
+            if kind[n] != "UNKNOWN":
+                break
+        if kind[n] == "UNKNOWN":
+            kind[n] = "ADDRESS"
+    return kind, refs
 
 
 def existing_addresses(sym_text: str) -> set[int]:
@@ -173,7 +237,7 @@ def main() -> int:
         print(f"error: {sym_path} not found", file=sys.stderr)
         return 2
 
-    equates, asm_text = parse_equates(asm)
+    equates, asm_lines, decl_line = parse_equates(asm)
     if not equates:
         print("error: no equates parsed — the disassembly's format may have "
               "changed", file=sys.stderr)
@@ -182,26 +246,36 @@ def main() -> int:
     sym_text = sym_path.read_text(encoding="utf-8")
     claimed = existing_addresses(sym_text)
 
-    # Group names per address, then order each group by how heavily the
-    # disassembly uses each name. All of them are emitted; the ordering only
-    # decides which one represents the address where just one name fits.
-    by_addr: dict[int, list[str]] = {}
-    for addr, name in equates:
-        by_addr.setdefault(addr, []).append(name)
+    all_names = {n for _, n in equates}
+    kind, refs = classify(asm_lines, decl_line, all_names)
 
-    refs = count_references(asm_text, {n for _, n in equates})
+    # ADDRESS equates name a memory location; VALUE equates are plain
+    # constants (object/enemy ids) that merely happen to be small numbers.
+    # They go in separate blocks with separate types, because calling an
+    # enemy id a RAM address is a confident mislabel, not a harmless one.
+    addr_by: dict[int, list[str]] = {}
+    const_by: dict[int, list[str]] = {}
+    for value, name in equates:
+        target = addr_by if kind[name] == "ADDRESS" else const_by
+        target.setdefault(value, []).append(name)
+
+    def order(names: list[str]) -> list[str]:
+        uniq = sorted(set(names))
+        uniq.sort(key=lambda n: (-refs.get(n, 0), n))
+        return uniq
 
     rows: list[tuple[int, list[str]]] = []
     aliases = 0
     collisions = 0
-    for addr in sorted(by_addr):
-        if addr in claimed:
+    for value in sorted(addr_by):
+        if value in claimed:
             collisions += 1
             continue
-        names = sorted(set(by_addr[addr]))
-        names.sort(key=lambda n: (-refs.get(n, 0), n))
-        rows.append((addr, names))
+        names = order(addr_by[value])
+        rows.append((value, names))
         aliases += len(names) - 1
+
+    const_rows = [(v, order(const_by[v])) for v in sorted(const_by)]
 
     block = [
         BEGIN,
@@ -210,29 +284,38 @@ def main() -> int:
         "#   python nesrecomp/tools/ingest_smbdis.py \\",
         "#       --disasm smb-disassembly --symbols symbols.sym",
         "#",
-        "# SMB overloads zero page across object types: $0033 is",
-        "# PlayerFacingDir to the player code and BulletBill_CannonVar to the",
-        "# enemy code. Both names are equally correct; which one applies",
-        "# depends on the subsystem running, not on the address.",
+        "# `ram` entries name a memory location. `const` entries are plain",
+        "# constants -- object and enemy ids -- that merely happen to be small",
+        "# numbers. The disassembly declares both as `Name = $XX`, so they are",
+        "# told apart by use: a bare instruction operand is an address, while",
+        "# `#Name` or a .byte table entry is a value. $0033 is BOTH:",
+        "# PlayerFacingDir is zero-page RAM, BulletBill_CannonVar is enemy id",
+        "# $33. They are unrelated and are NOT aliases of each other.",
         "#",
-        "# EVERY name is listed, because they are all aliases of one constant",
-        "# and any of them should resolve. The first line for an address is",
-        "# the one the disassembly references most, and is what single-name",
-        "# consumers (inline comments) use; the rest follow immediately.",
+        "# Within one kind, several names on one address ARE aliases of the",
+        "# same byte -- Player_X_Position is SprObject_X_Position slot 0. All",
+        "# are listed; the first is the one the disassembly references most,",
+        "# and is what single-name consumers (inline comments) use.",
         "# Do not hand-edit inside this block; edits are overwritten.",
         "",
     ]
-    for addr, names in rows:
+    for value, names in rows:
         for name in names:
-            block.append(f"{addr:04X} {name} ram")
+            block.append(f"{value:04X} {name} ram")
+    if const_rows:
+        block += ["", "# Object / enemy type ids -- VALUES, not addresses.", ""]
+        for value, names in const_rows:
+            for name in names:
+                block.append(f"{value:04X} {name} const")
     block += ["", END, ""]
 
     new_text = strip_block(sym_text) + "\n" + "\n".join(block)
 
     print(f"equates parsed        : {len(equates)}")
-    print(f"unique RAM addresses  : {len(rows)}")
-    print(f"additional alias names: {aliases}")
-    print(f"symbol lines written  : {sum(len(n) for _, n in rows)}")
+    print(f"RAM addresses         : {len(rows)}  "
+          f"({sum(len(n) for _, n in rows)} names, {aliases} aliases)")
+    print(f"value constants       : {len(const_rows)}  "
+          f"({sum(len(n) for _, n in const_rows)} names)")
     print(f"skipped (already set) : {collisions}")
 
     if args.dry_run:

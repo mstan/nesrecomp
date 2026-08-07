@@ -62,6 +62,7 @@ bool symbol_table_load(SymbolTable *st, const char *path) {
             while (*t == ' ' || *t == '\t') t++;
             if (strncmp(t, "func", 4) == 0) kind = SYM_KIND_FUNC;
             else if (strncmp(t, "ram", 3) == 0) kind = SYM_KIND_RAM;
+            else if (strncmp(t, "const", 5) == 0) kind = SYM_KIND_CONST;
         }
 
         /* Grow array if needed */
@@ -132,11 +133,15 @@ SymbolKind symbol_kind(SymbolTable *st, uint16_t addr) {
     return i < 0 ? SYM_KIND_OTHER : st->entries[i].kind;
 }
 
-int symbol_names(SymbolTable *st, uint16_t addr, const char **out, int max) {
+int symbol_names(SymbolTable *st, uint16_t addr, SymbolKind kind,
+                 const char **out, int max) {
     int i = sym_first_index(st, addr);
     if (i < 0) return 0;
     int n = 0;
-    for (; i < st->count && st->entries[i].addr == addr; i++, n++)
+    for (; i < st->count && st->entries[i].addr == addr; i++) {
+        if (kind != SYM_KIND_OTHER && st->entries[i].kind != kind) continue;
         if (out && n < max) out[n] = st->entries[i].name;
+        n++;
+    }
     return n;
 }

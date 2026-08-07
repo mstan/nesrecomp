@@ -272,6 +272,62 @@ static void emit_forward_decls(FILE *f, const EmittedWrapper *wrappers, int wrap
     fprintf(f, "\n");
 }
 
+/* Emit `#define <name> 0x<value>` for every .sym entry of one kind.
+ *
+ * Several names on one number, within a kind, are genuine aliases of the same
+ * thing (Player_X_Position is SprObject_X_Position slot 0). All are emitted —
+ * they are aliases of one constant, so defining them all costs nothing and
+ * whichever a reader reaches for resolves — and each is annotated with its
+ * siblings so the sharing stays visible rather than looking like a duplicate.
+ *
+ * A name that already denotes a function is skipped and reported: generated
+ * code calls functions by those names, and a later #define would silently
+ * retarget every call site. */
+static void emit_data_symbols(FILE *f, SymbolTable *st, SymbolKind kind,
+                              const char *title, const char *note) {
+    int total = 0;
+    for (int i = 0; i < st->count; i++)
+        if (st->entries[i].kind == kind) total++;
+    if (total == 0) return;
+
+    fprintf(f, "/* %s (from .sym file).\n * %s */\n", title, note);
+    for (int i = 0; i < st->count; i++) {
+        const SymbolEntry *e = &st->entries[i];
+        if (e->kind != kind) continue;
+
+        bool shadows_func = false;
+        for (int j = 0; j < st->count; j++) {
+            if (st->entries[j].kind != SYM_KIND_FUNC) continue;
+            if (strcmp(st->entries[j].name, e->name) != 0) continue;
+            shadows_func = true;
+            break;
+        }
+        if (shadows_func) {
+            fprintf(f, "/* SKIPPED: %s 0x%04X -- name already denotes a "
+                       "function */\n", e->name, e->addr);
+            fprintf(stderr, "[codegen] WARNING: symbol '%s' (0x%04X) collides "
+                            "with a function of the same name; the data "
+                            "define was skipped\n", e->name, e->addr);
+            continue;
+        }
+
+        const char *names[8];
+        int n = symbol_names(st, e->addr, kind, names, 8);
+        fprintf(f, "#define %s 0x%04X", e->name, e->addr);
+        if (n > 1) {
+            fprintf(f, "  /* also:");
+            for (int k = 0; k < n && k < 8; k++) {
+                if (strcmp(names[k], e->name) == 0) continue;
+                fprintf(f, " %s", names[k]);
+            }
+            if (n > 8) fprintf(f, " ...");
+            fprintf(f, " */");
+        }
+        fprintf(f, "\n");
+    }
+    fprintf(f, "\n");
+}
+
 /* Emit symbol-name aliases (from a .sym file) as #defines mapping the
  * human-readable name to the generated func_XXXX identifier. Writes nothing
  * if no symbol table was supplied. Shared by the <prefix>_full_decls.h
@@ -292,69 +348,24 @@ static void emit_symbol_aliases(FILE *f, const EmittedWrapper *wrappers, int wra
     fprintf(f, "\n");
 
     /*
-     * RAM / MMIO names, so game-side code can say g_ram[Player_X_Position]
-     * instead of g_ram[0x0086]. A bare literal is a guess wearing the costume
-     * of a fact — it reviews as fine and is wrong in silence. These come from
-     * the game's authoritative disassembly via the .sym file, and are emitted
-     * only for entries explicitly typed `ram`, so nothing is inferred from the
-     * address alone.
+     * Names from the .sym file that denote data rather than code.
      *
-     * EVERY name is emitted, including several for one address. Games reuse
-     * scratch RAM across subsystems, so a byte genuinely has more than one
-     * correct name and which applies depends on the code running, not on the
-     * address. They are all aliases of the same constant, so defining them all
-     * costs nothing and means whichever name a reader reaches for resolves —
-     * far better than picking a winner and making the others look wrong.
-     * Overloads are annotated so the context-dependence stays visible.
+     * Two kinds, and keeping them apart is the point. `ram` is a memory
+     * location, so game code can say g_ram[Player_X_Position] instead of
+     * g_ram[0x0086] -- a bare literal is a guess wearing the costume of a
+     * fact. `const` is a plain value, typically an object or enemy id.
+     *
+     * Assembly declares both as `Name = $33`, and SMB has exactly that clash:
+     * $0033 is PlayerFacingDir in zero page AND enemy id $33
+     * (BulletBill_CannonVar). They share a number and nothing else, so they
+     * are emitted separately and never described as aliases of each other.
      */
-    int ram_count = 0;
-    for (int i = 0; i < st->count; i++)
-        if (st->entries[i].kind == SYM_KIND_RAM) ram_count++;
-    if (ram_count == 0) return;
-
-    fprintf(f, "/* RAM/MMIO symbol addresses (from .sym file).\n"
-               " * Several names on one address are aliases of the same byte,\n"
-               " * used by different subsystems — not duplicates to pick from. */\n");
-    for (int i = 0; i < st->count; i++) {
-        const SymbolEntry *e = &st->entries[i];
-        if (e->kind != SYM_KIND_RAM) continue;
-
-        /* A function name must keep meaning the function: generated code
-         * calls it. Report the clash rather than letting the later #define
-         * silently retarget every existing call site. */
-        bool shadows_func = false;
-        for (int j = 0; j < st->count; j++) {
-            if (st->entries[j].kind != SYM_KIND_FUNC) continue;
-            if (strcmp(st->entries[j].name, e->name) != 0) continue;
-            shadows_func = true;
-            break;
-        }
-        if (shadows_func) {
-            fprintf(f, "/* SKIPPED: %s 0x%04X — name already denotes a "
-                       "function */\n", e->name, e->addr);
-            fprintf(stderr, "[codegen] WARNING: RAM symbol '%s' (0x%04X) "
-                            "collides with a function of the same name; the "
-                            "RAM define was skipped\n", e->name, e->addr);
-            continue;
-        }
-
-        const char *names[8];
-        int n = symbol_names(st, e->addr, names, 8);
-        fprintf(f, "#define %s 0x%04X", e->name, e->addr);
-        if (n > 1) {
-            /* Name the siblings inline, so reading one define tells you the
-             * byte is context-dependent without going back to the .sym. */
-            fprintf(f, "  /* also:");
-            for (int k = 0; k < n && k < 8; k++) {
-                if (strcmp(names[k], e->name) == 0) continue;
-                fprintf(f, " %s", names[k]);
-            }
-            if (n > 8) fprintf(f, " ...");
-            fprintf(f, " */");
-        }
-        fprintf(f, "\n");
-    }
-    fprintf(f, "\n");
+    emit_data_symbols(f, st, SYM_KIND_RAM, "RAM/MMIO symbol addresses",
+                      "Several names on one address are aliases of the same "
+                      "byte,\n * used by different subsystems.");
+    emit_data_symbols(f, st, SYM_KIND_CONST,
+                      "Object/type id constants -- VALUES, not addresses",
+                      "These are ids compared against, not memory to read.");
 }
 
 /* Forward-declare every multi-entry function's `_body` (external since bank
