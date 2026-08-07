@@ -122,6 +122,34 @@ transition rather than a gap.
 
 ---
 
+## Own your state; do not contend for guest bytes
+
+The controller's state lives host-side, and that is a rule, not a convenience.
+
+An imported movement model needs variables the host game never had — a dash
+timer, a jumpsquat counter, subpixel position, high-precision velocity. There
+is always a temptation to find somewhere in guest RAM to keep them. Don't.
+
+NES games pack their scratch RAM hard, and a byte that looks free usually is
+not. Worse, the same byte is often reachable under several names: in SMB
+`$0086` is `Player_X_Position` *and* `SprObject_X_Position` (the player is
+object slot 0), and `$0034` is a plain variable *and* an indexed array base
+that collide at index 0. Renaming cannot separate them — there is one byte,
+and the coupling is in the ROM.
+
+So:
+
+- **New state the controller invents lives in `ForeignState`.** It costs
+  nothing, it is full precision, and it cannot collide with anything.
+- **Write a guest byte only when the game must observe it** — position for
+  collision and camera, facing for rendering. Document each one.
+- **Scope those writes in time, not in space.** Taking over a routine with
+  `[[mod_function_hook]]` puts the write inside the window where the game's
+  own code expects that meaning; whatever else shares the byte writes it
+  before reading it, exactly as it already does in the unmodified game.
+- **Relocating a guest variable is a last resort**, and means hooking its
+  consumer rather than hunting for free RAM.
+
 ## Coordinates and scale
 
 Keep the authoritative position host-side at full precision, and project into
