@@ -1,5 +1,6 @@
 build/
 build_recomp/
+build_recomp_falcon/
 build-recompiler*/
 _build*/
 generated/

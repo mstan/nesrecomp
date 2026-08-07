@@ -355,6 +355,18 @@ static bool game_config_load_toml(GameConfig *cfg, const char *path) {
         cfg->replace_funcs[idx].addr = toml_hex(t, "addr");
     }
 
+    /* [[mod_function_hook]] — narrowly selected function entries that
+     * dispatch trusted, statically linked mod callbacks. Empty by default,
+     * so a project that does not opt in emits no callback and no overhead. */
+    toml_array_t *mfh = toml_array_in(root, "mod_function_hook");
+    if (mfh) for (int i = 0; i < toml_array_nelem(mfh) && cfg->mod_function_hook_count < GAME_CFG_MAX_EXTRA_FUNCS; i++) {
+        toml_table_t *t = toml_table_at(mfh, i);
+        if (!t) continue;
+        int idx = cfg->mod_function_hook_count++;
+        cfg->mod_function_hooks[idx].bank = toml_int_or(t, "bank", -1);
+        cfg->mod_function_hooks[idx].addr = toml_hex(t, "addr");
+    }
+
     /* [[data_region]] */
     toml_array_t *dr = toml_array_in(root, "data_region");
     if (dr) for (int i = 0; i < toml_array_nelem(dr) && cfg->data_region_count < GAME_CFG_MAX_DATA_REGIONS; i++) {

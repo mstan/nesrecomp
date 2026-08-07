@@ -49,6 +49,11 @@ set(NESRECOMP_RUNNER_SOURCES
     # always-on movement trace ring. Inert unless a game registers and selects
     # a controller. See docs/FOREIGN_CONTROLLER.md.
     ${NESRECOMP_RUNNER_ROOT}/src/foreign_controller.c
+    # Trusted mod callbacks at recompiled 6502 function entries. Always
+    # compiled, because generated code for an opted-in title calls into it
+    # whether or not the mod package runtime is built.
+    # See docs/MOD_PACKAGES.md and runner/include/mod_function_hooks.h.
+    ${NESRECOMP_RUNNER_ROOT}/src/mod_function_hooks.c
 )
 
 set(NESRECOMP_RUNNER_INCLUDE_DIRS

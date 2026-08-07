@@ -170,6 +170,60 @@ NES_MOD_CONSTRUCTOR(register_display_mods) {
 }
 ```
 
+## Function-entry hooks
+
+An activation plugin can flip a global switch, but some mods need to take over
+a specific guest subroutine *while enabled* and leave it untouched otherwise.
+`replace_func` in `game.toml` cannot express that — it is a compile-time
+substitution that makes codegen drop the original body, so there is nothing to
+fall back to.
+
+A game opts specific entries in:
+
+```toml
+[[mod_function_hook]]
+addr = 0xB0E9           # PlayerCtrlRoutine
+# bank = 0              # optional; omitted means any bank
+```
+
+Codegen then emits, as the first statement of that entry:
+
+```c
+void func_B0E9_b0(void) { /* PlayerCtrlRoutine */
+    if (nes_mod_function_entry(0xB0E9u)) return;  /* trusted opt-in game-mod hook */
+    ...
+```
+
+Nonzero skips the original body; zero runs it unchanged. The check precedes
+the stack-tracking push, so a handling mod owns the whole call including its
+frame and needs no push/pop bookkeeping.
+
+Register the implementation like any other trusted plugin — archives still
+select behavior only by stable id, never by supplying native code:
+
+```c
+#include "mod_function_hooks.h"
+
+static int take_over_player(uint16_t addr) { (void)addr; ...; return 1; }
+
+NES_MOD_CONSTRUCTOR(register_hooks) {
+    nes_mod_register_function_entry_plugin(
+        "example.player-control", 0xB0E9, take_over_player);
+}
+/* Hooks start disabled. Activation plugins enable, reset callbacks disable: */
+nes_mod_set_function_hook_enabled("example.player-control", 1);
+nes_mod_disable_all_function_hooks();
+```
+
+Empty by default: a title that declares no hooks emits no callback and its
+generated code is byte-identical. A declared hook that matches no emitted
+entry is reported by codegen (`[[mod_function_hook]] ... matched no emitted
+function entry`) rather than silently never firing — worth heeding, since the
+6502 address alone does not tell you which bank the entry landed in.
+
+This is intentionally narrow. It is not a general per-instruction mod
+dispatcher.
+
 Mod-enabled game targets must define string literals for
 `NESRECOMP_GAME_ID` and `NESRECOMP_GAME_ROM_CRC32`. On Play, the runtime
 revalidates the selected stock ROM, resolves enabled features, rejects missing

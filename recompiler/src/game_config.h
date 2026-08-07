@@ -300,6 +300,20 @@ typedef struct {
     ExtraFunc        replace_funcs[GAME_CFG_MAX_EXTRA_FUNCS];  /* body provided by extras.c */
     int              replace_func_count;
 
+    /* [[mod_function_hook]]: function entries that dispatch trusted,
+     * statically linked mod callbacks. Unlike replace_func, which is a
+     * compile-time substitution that drops the original body entirely, this
+     * KEEPS the original and lets a mod decide per call whether to run it —
+     * which is what a launcher-toggleable mod needs. Codegen emits
+     *     if (nes_mod_function_entry(0xADDR)) return;
+     * as the first statement of the entry. Empty by default, so a project
+     * that does not opt in emits no callback and no overhead.
+     * Usage in game.toml:  [[mod_function_hook]]
+     *                      addr = 0xB0E9
+     *                      bank = 0        # optional; default = fixed bank */
+    ExtraFunc        mod_function_hooks[GAME_CFG_MAX_EXTRA_FUNCS];
+    int              mod_function_hook_count;
+
     uint16_t         stack_bail_funcs[GAME_CFG_MAX_STACK_BAIL_FUNCS];
     int              stack_bail_func_count;
 
