@@ -303,9 +303,18 @@ typedef struct {
     double   resolved_dx;
     double   resolved_dy;
 
-    /* Host-imposed vertical velocity, 0 when the host imposed none. A bounce
-     * that fails to happen is invisible in every other column: the controller's
-     * own vy simply carries on as though nothing occurred. */
+    /*
+     * Host-imposed vertical velocity, and whether there was one at all.
+     *
+     * The flag is not redundant with the value. A host stopping a jump dead
+     * imposes exactly ZERO, which is the single most interesting case and is
+     * indistinguishable from "no impulse" if only the number is recorded. That
+     * cost a misread already: SMB1 bumping a block writes Player_Y_Speed = 0,
+     * and the row looked like the bump had been ignored when it had in fact
+     * been applied.
+     */
+    uint8_t  has_imposed_vy;
+    uint8_t  pad2[7];
     double   imposed_vy;
 
     uint32_t collision_flags;
