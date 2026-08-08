@@ -240,6 +240,31 @@ static void draw_quad(const RenderContext *ctx, Vec3 a, Vec3 b, Vec3 c, Vec3 d,
     draw_triangle(ctx, &pa, &pc, &pd, texture);
 }
 
+/* Shared by nes_voxel_render() and the mesh API: build a camera basis from
+ * an eye position and a look-at target, with an optional roll about the
+ * forward axis. Factored out so the two entry points cannot compute the
+ * basis differently by accident. */
+static void build_camera_basis(RenderContext *ctx, Vec3 eye, Vec3 target,
+                               float roll_degrees) {
+    float roll = roll_degrees * VOXEL_PI / 180.0f;
+    ctx->eye = eye;
+    ctx->forward = vec3_normalize(vec3_sub(target, eye));
+    ctx->right = vec3_normalize(vec3_cross(ctx->forward, vec3(0.0f, 1.0f, 0.0f)));
+    ctx->up = vec3_normalize(vec3_cross(ctx->right, ctx->forward));
+    if (fabsf(roll) > 0.0001f) {
+        Vec3 base_right = ctx->right;
+        Vec3 base_up = ctx->up;
+        ctx->right = vec3_normalize(vec3(
+            base_right.x * cosf(roll) + base_up.x * sinf(roll),
+            base_right.y * cosf(roll) + base_up.y * sinf(roll),
+            base_right.z * cosf(roll) + base_up.z * sinf(roll)));
+        ctx->up = vec3_normalize(vec3(
+            base_up.x * cosf(roll) - base_right.x * sinf(roll),
+            base_up.y * cosf(roll) - base_right.y * sinf(roll),
+            base_up.z * cosf(roll) - base_right.z * sinf(roll)));
+    }
+}
+
 static int rects_overlap(int ax, int ay, int aw, int ah,
                          int bx, int by, int bw, int bh) {
     return ax < bx + bw && bx < ax + aw && ay < by + bh && by < ay + ah;
@@ -1028,8 +1053,8 @@ static int validate_scene(const NesVoxelScene *s) {
 
 int nes_voxel_render(const NesVoxelScene *s) {
     RenderContext ctx;
-    Vec3 target;
-    float elevation, yaw, roll, horizontal_distance, distance;
+    Vec3 eye, target;
+    float elevation, yaw, horizontal_distance, distance;
     uint32_t sky_top, sky_bottom;
 
     if (!validate_scene(s)) return 0;
@@ -1048,9 +1073,8 @@ int nes_voxel_render(const NesVoxelScene *s) {
             s->framebuffer[y * s->output_width + x] = color;
     }
 
-    roll = s->roll_degrees * VOXEL_PI / 180.0f;
     if (s->use_camera_pose) {
-        ctx.eye = vec3(s->camera_eye_x, s->camera_eye_y, s->camera_eye_z);
+        eye = vec3(s->camera_eye_x, s->camera_eye_y, s->camera_eye_z);
         target = vec3(s->camera_look_at_x, s->camera_look_at_y,
                       s->camera_look_at_z);
     } else {
@@ -1066,25 +1090,11 @@ int nes_voxel_render(const NesVoxelScene *s) {
         distance = s->camera_distance > 1.0f
             ? s->camera_distance : 285.0f;
         horizontal_distance = cosf(elevation) * distance;
-        ctx.eye = vec3(target.x + sinf(yaw) * horizontal_distance,
-                       target.y + sinf(elevation) * distance,
-                       target.z + cosf(yaw) * horizontal_distance);
+        eye = vec3(target.x + sinf(yaw) * horizontal_distance,
+                  target.y + sinf(elevation) * distance,
+                  target.z + cosf(yaw) * horizontal_distance);
     }
-    ctx.forward = vec3_normalize(vec3_sub(target, ctx.eye));
-    ctx.right = vec3_normalize(vec3_cross(ctx.forward, vec3(0.0f, 1.0f, 0.0f)));
-    ctx.up = vec3_normalize(vec3_cross(ctx.right, ctx.forward));
-    if (fabsf(roll) > 0.0001f) {
-        Vec3 base_right = ctx.right;
-        Vec3 base_up = ctx.up;
-        ctx.right = vec3_normalize(vec3(
-            base_right.x * cosf(roll) + base_up.x * sinf(roll),
-            base_right.y * cosf(roll) + base_up.y * sinf(roll),
-            base_right.z * cosf(roll) + base_up.z * sinf(roll)));
-        ctx.up = vec3_normalize(vec3(
-            base_up.x * cosf(roll) - base_right.x * sinf(roll),
-            base_up.y * cosf(roll) - base_right.y * sinf(roll),
-            base_up.z * cosf(roll) - base_right.z * sinf(roll)));
-    }
+    build_camera_basis(&ctx, eye, target, s->roll_degrees);
     ctx.focal = s->output_width *
         (s->camera_focal_scale > 0.05f ? s->camera_focal_scale : 0.92f);
     ctx.center_x = s->output_width * 0.5f;
@@ -1116,4 +1126,79 @@ int nes_voxel_render(const NesVoxelScene *s) {
         }
     }
     return 1;
+}
+
+/* ---------------------------------------------------------------------
+ * Immediate-mode mesh API (see voxel_renderer.h). One session's worth of
+ * state; draw calls land directly in the caller's framebuffer via the same
+ * project_vertex/draw_triangle used by the scene compositor above, sharing
+ * s_depth for the per-pixel z-test.
+ *
+ * s_mesh_scene carries only the three fields draw_triangle() actually reads
+ * (framebuffer, output_width, output_height) -- it is not a real
+ * NesVoxelScene and every other field is left zeroed. */
+static RenderContext s_mesh_ctx;
+static NesVoxelScene s_mesh_scene;
+static Texture s_mesh_texture;
+static int s_mesh_active = 0;
+
+int nes_voxel_mesh_begin(uint32_t *framebuffer, int output_width,
+                         int output_height, const NesVoxelCamera *camera) {
+    s_mesh_active = 0;
+    if (!framebuffer || !camera) return 0;
+    if (output_width <= 0 || output_width > VOXEL_MAX_WIDTH ||
+        output_height <= 0 || output_height > VOXEL_MAX_HEIGHT)
+        return 0;
+
+    memset(&s_mesh_scene, 0, sizeof(s_mesh_scene));
+    s_mesh_scene.framebuffer = framebuffer;
+    s_mesh_scene.output_width = output_width;
+    s_mesh_scene.output_height = output_height;
+    s_mesh_ctx.scene = &s_mesh_scene;
+
+    memset(s_depth, 0, (size_t)output_width * output_height * sizeof(float));
+
+    build_camera_basis(&s_mesh_ctx,
+                       vec3(camera->eye_x, camera->eye_y, camera->eye_z),
+                       vec3(camera->look_at_x, camera->look_at_y,
+                            camera->look_at_z),
+                       0.0f);
+    s_mesh_ctx.focal = output_width *
+        (camera->focal_scale > 0.05f ? camera->focal_scale : 0.92f);
+    s_mesh_ctx.center_x = output_width * 0.5f;
+    s_mesh_ctx.center_y = output_height *
+        (camera->center_y > 0.05f && camera->center_y < 0.95f
+             ? camera->center_y : 0.59f);
+
+    memset(&s_mesh_texture, 0, sizeof(s_mesh_texture));
+    s_mesh_active = 1;
+    return 1;
+}
+
+void nes_voxel_mesh_bind_texture(const uint32_t *pixels, int width,
+                                 int height, int stride, float shade,
+                                 int alpha_test) {
+    if (!s_mesh_active) return;
+    s_mesh_texture.pixels = pixels;
+    s_mesh_texture.width = width;
+    s_mesh_texture.height = height;
+    s_mesh_texture.stride = stride;
+    s_mesh_texture.shade = shade;
+    s_mesh_texture.alpha_test = alpha_test;
+    s_mesh_texture.overlay = 0;
+}
+
+void nes_voxel_mesh_triangle(NesVoxelMeshVertex a, NesVoxelMeshVertex b,
+                             NesVoxelMeshVertex c) {
+    ProjectedVertex pa, pb, pc;
+    if (!s_mesh_active || !s_mesh_texture.pixels) return;
+    if (!project_vertex(&s_mesh_ctx, vec3(a.x, a.y, a.z), a.u, a.v, &pa) ||
+        !project_vertex(&s_mesh_ctx, vec3(b.x, b.y, b.z), b.u, b.v, &pb) ||
+        !project_vertex(&s_mesh_ctx, vec3(c.x, c.y, c.z), c.u, c.v, &pc))
+        return;
+    draw_triangle(&s_mesh_ctx, &pa, &pb, &pc, &s_mesh_texture);
+}
+
+void nes_voxel_mesh_end(void) {
+    s_mesh_active = 0;
 }

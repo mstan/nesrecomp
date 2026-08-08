@@ -59,6 +59,41 @@ occlusion.
 before copying the original centered pixels. This lets widescreen game
 profiles extend a solid status-bar field without stretching its pixel art.
 
+## Immediate-mode mesh API
+
+For a caller that wants to place an arbitrary textured mesh instead of (or
+alongside, in separate sessions -- see below) a tile grid, `voxel_renderer.h`
+also exposes the same projection/rasterization as a small immediate-mode API:
+
+```c
+static const NesVoxelMeshVertex cube[] = { /* ... 8 verts, u/v per face ... */ };
+
+void game_post_render(uint32_t *framebuffer) {
+    NesVoxelCamera camera = {
+        .eye_x = 40.0f, .eye_y = 60.0f, .eye_z = -160.0f,
+        .look_at_x = 0.0f, .look_at_y = 12.0f, .look_at_z = 0.0f,
+        .focal_scale = 0.6f, .center_y = 0.5f,
+    };
+    if (!nes_voxel_mesh_begin(framebuffer, g_render_width, 240, &camera))
+        return;
+    nes_voxel_mesh_bind_texture(face_pixels, 8, 8, 8, 1.0f, 0);
+    nes_voxel_mesh_triangle(v0, v1, v2);
+    nes_voxel_mesh_triangle(v0, v2, v3);
+    nes_voxel_mesh_end();
+}
+```
+
+There is no tile grid or OAM here, so world space means whatever the caller's
+vertex data and camera pose agree on -- the one fixed rule is right-handed
+with +Y up. A caller replacing a screen-space sprite typically picks world X
+= screen column and places its object's ground plane at world Y = 0, with
+depth (world Z) centered on 0 purely to give the mesh volume.
+
+`nes_voxel_mesh_begin()` clears the shared depth buffer for its own session;
+it does not depth-test against a `nes_voxel_render()` scene from earlier in
+the same `game_post_render()` call. Combining a tile/sprite scene and a mesh
+in one depth pass is not implemented -- no current caller needs it.
+
 The renderer chooses an uncontaminated occurrence of a repeated tile when an
 OAM sprite overlaps its source pixels. This avoids stamping the original flat
 sprite into the terrain texture before drawing the upright sprite card.

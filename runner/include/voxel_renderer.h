@@ -150,3 +150,81 @@ typedef struct NesVoxelScene {
 
 /* Returns 1 when a scene was rendered, 0 when the descriptor was invalid. */
 int nes_voxel_render(const NesVoxelScene *scene);
+
+/*
+ * ---------------------------------------------------------------------
+ * Immediate-mode mesh API
+ *
+ * A thin wrapper around the same projection/rasterization used above
+ * (project_vertex/draw_triangle), for callers that want to place an
+ * arbitrary textured mesh in the scene instead of a tile grid and OAM
+ * cards. Intended for a game_post_render() that draws a hand-authored
+ * model -- e.g. a presentation-only 3D actor standing in for a 2D sprite
+ * -- with no engine knowledge of what the mesh represents.
+ *
+ * Coordinate convention (independent of NesVoxelScene's tile grid, since
+ * a mesh-only caller has no tile grid at all): the caller defines what
+ * world X/Y/Z mean. The one fixed rule is right-handed with +Y up, matching
+ * every Vec3 already used by NesVoxelScene's terrain/sprite code. A caller
+ * placing a mesh at a screen position typically chooses world X = screen
+ * column, world Y = height in pixels above a caller-chosen ground
+ * reference (positive up), world Z = depth around that same reference
+ * (0 at the object, camera at POSITIVE Z looking toward negative Z) --
+ * this is a convention of the caller's camera and vertex data, not
+ * something this API enforces.
+ *
+ * Handedness trap: the basis is right = cross(forward, world-up), so a
+ * camera looking along +Z gets right = (-1,0,0) and the whole scene
+ * renders mirrored about the view center (measured, not theoretical).
+ * Overlay-style cameras that want screen-aligned world X must sit at
+ * +Z and look toward -Z, as above.
+ *
+ * One session per call to nes_voxel_mesh_begin(); call it again (or call
+ * nes_voxel_render() again) to start a new session. The depth buffer is
+ * cleared at the start of the session, independent of any nes_voxel_render()
+ * scene rendered earlier in the same game_post_render() -- meshes do not
+ * currently depth-test against a tile/sprite scene from the same frame.
+ * A combined terrain-plus-mesh session sharing one depth pass is future
+ * work, not needed by any caller today.
+ */
+typedef struct NesVoxelCamera {
+    float eye_x, eye_y, eye_z;
+    float look_at_x, look_at_y, look_at_z;
+    /* Relative to output width, as NesVoxelScene::camera_focal_scale.
+     * <= 0.05 uses the same 0.92 default. */
+    float focal_scale;
+    /* Normalized, as NesVoxelScene::camera_center_y. Outside (0.05, 0.95)
+     * uses the same 0.59 default. */
+    float center_y;
+} NesVoxelCamera;
+
+typedef struct NesVoxelMeshVertex {
+    float x, y, z;  /* world space; see the coordinate convention above */
+    float u, v;     /* texel coordinates into the currently bound texture */
+} NesVoxelMeshVertex;
+
+/* Begin a mesh session into framebuffer (output_width x output_height,
+ * ARGB8888), clears the shared depth buffer, and builds the camera basis
+ * from an explicit eye/look-at pose (no orbit/yaw/elevation parameters --
+ * a caller wanting an orbiting camera computes eye_x/y/z itself).
+ * Returns 0 (does nothing else) when framebuffer/camera is NULL or the
+ * dimensions exceed the renderer's fixed-size buffers. */
+int nes_voxel_mesh_begin(uint32_t *framebuffer, int output_width,
+                         int output_height, const NesVoxelCamera *camera);
+
+/* Bind a flat ARGB8888 texture for triangles submitted after this call.
+ * shade multiplies RGB (as Texture::shade); alpha_test nonzero skips fully
+ * transparent texels (as OAM sprite cards do). No-op outside a session. */
+void nes_voxel_mesh_bind_texture(const uint32_t *pixels, int width,
+                                 int height, int stride, float shade,
+                                 int alpha_test);
+
+/* Submit one triangle in the currently bound texture. No-op outside a
+ * session or before any texture is bound. */
+void nes_voxel_mesh_triangle(NesVoxelMeshVertex a, NesVoxelMeshVertex b,
+                             NesVoxelMeshVertex c);
+
+/* End the session. Draw calls are immediate (already landed in the
+ * framebuffer), so this only clears the active flag; reserved so a future
+ * batched implementation has a defined flush point without an ABI break. */
+void nes_voxel_mesh_end(void);

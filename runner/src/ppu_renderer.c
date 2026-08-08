@@ -18,6 +18,17 @@ extern void save_png(const char *path, int w, int h, const void *rgb, int stride
 int g_disable_render_irq = 0;
 extern uint16_t g_ppuaddr;  /* PPU address register (runtime.c) */
 
+/* Optional per-slot OAM suppression, installed by ppu_renderer_set_sprite_suppress().
+ * NULL by default, so a game/mod that never calls the setter draws every slot
+ * exactly as before. */
+static PpuSpriteSuppressFn s_sprite_suppress_fn   = NULL;
+static void               *s_sprite_suppress_user = NULL;
+
+void ppu_renderer_set_sprite_suppress(PpuSpriteSuppressFn fn, void *user) {
+    s_sprite_suppress_fn   = fn;
+    s_sprite_suppress_user = user;
+}
+
 /* Render-IRQ diagnostic: track last IRQ fire during rendering */
 int      g_render_irq_fired    = 0;   /* 1 if IRQ fired during last render */
 int      g_render_irq_scanline = -1;  /* scanline where IRQ fired */
@@ -896,6 +907,9 @@ render_sprites:
                                      : (int)render_oam[s * 4 + 3];
 
         if (spr_y >= 0xEF) continue; /* off-screen */
+        if (s_sprite_suppress_fn &&
+            s_sprite_suppress_fn(s, spr_x, spr_y + 1, s_sprite_suppress_user))
+            continue; /* mod-owned replacement is drawing this slot instead */
 
         int flip_h   = (spr_attr >> 6) & 1;
         int flip_v   = (spr_attr >> 7) & 1;

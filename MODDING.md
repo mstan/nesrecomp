@@ -174,3 +174,35 @@ void game_on_frame(uint64_t frame_count) {
 
 Hot reload is supported: save the JSON file and changes appear in-game
 within ~1 second.
+
+---
+
+## Sprite Suppression Hook
+
+A game/mod that draws its own replacement for specific OAM entries (e.g. a
+host-rendered 3D actor standing in for a sprite) needs the original sprite
+to stop drawing underneath it. `ppu_render_frame()` checks one optional
+predicate, once per OAM slot, before drawing it:
+
+```c
+#include "nes_runtime.h"
+
+static int suppress_player_sprite(int oam_slot, int x, int y, void *user) {
+    (void)oam_slot; (void)user;
+    return my_mod_active() && bbox_is_player(x, y);
+}
+
+void game_on_init(void) {
+    ppu_renderer_set_sprite_suppress(suppress_player_sprite, NULL);
+}
+```
+
+`x`/`y` are the sprite's screen-space draw position (OAM X, OAM Y + 1). The
+predicate should self-gate on whatever activation state the replacement
+needs (as the example above does): the renderer holds the pointer for the
+process lifetime and does not reset it between frames or on mod
+enable/disable, so a predicate that always returns nonzero once registered
+would suppress that sprite permanently, mod on or off.
+
+`NULL` (the default) draws every slot exactly as before -- a game that never
+calls the setter has unchanged rendering behavior.

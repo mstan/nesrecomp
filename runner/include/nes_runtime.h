@@ -236,6 +236,20 @@ void ppu_render_frame(uint32_t *framebuf);
  * buf must be 256*256 ARGB8888 pixels. */
 void ppu_render_oam_debug(uint32_t *buf);
 
+/* Optional per-frame OAM suppression predicate, checked once per sprite slot
+ * before ppu_render_frame draws it. oam_slot is 0-63; x/y are the sprite's
+ * screen-space draw position (OAM X, OAM Y + 1). Nonzero skips the whole
+ * slot for every row. NULL (the default) draws every slot -- unchanged
+ * behavior for every game that never calls the setter. */
+typedef int (*PpuSpriteSuppressFn)(int oam_slot, int x, int y, void *user);
+
+/* Install (or clear, with fn = NULL) the suppression predicate. The renderer
+ * only holds the pointer; it does not own its lifetime and does not reset it
+ * between frames -- a caller that wants suppression scoped to one frame or
+ * one mod's active state must clear it itself, or make the predicate
+ * self-gate (as game_smash64_active() does for the SMB1 Falcon replacement). */
+void ppu_renderer_set_sprite_suppress(PpuSpriteSuppressFn fn, void *user);
+
 /* ---- Mapper Interface ---- */
 void mapper_write(uint16_t addr, uint8_t val);
 void mapper_init(const uint8_t *prg_data, int prg_banks,
