@@ -815,7 +815,10 @@ static void handle_ftring(int id, const char *json)
         (ForeignTraceEntry *)malloc((size_t)n * sizeof *ev);
     if (!ev) { send_err(id, "alloc failed"); return; }
     int got = nes_foreign_trace_last(n, ev);
-    char *buf = (char *)malloc((size_t)got * 320 + 256);
+    /* Per-row budget, not a guess: the widest row is ~280 chars with modest
+     * coordinates, and every %.4f grows with magnitude. Keep headroom -- this
+     * is a fixed-size sprintf target with no bound. */
+    char *buf = (char *)malloc((size_t)got * 384 + 256);
     if (!buf) { free(ev); send_err(id, "alloc failed"); return; }
     const ForeignController *ctl = nes_foreign_active();
     int pos = snprintf(buf, 256,
@@ -834,7 +837,7 @@ static void handle_ftring(int id, const char *json)
             "\"sx\":%.4f,\"sy\":%.4f,\"x\":%.4f,\"y\":%.4f,"
             "\"vx\":%.4f,\"vy\":%.4f,\"rdx\":%.4f,\"rdy\":%.4f,"
             "\"adx\":%.4f,\"ady\":%.4f,\"gnd\":%u,\"ff\":%u,"
-            "\"air\":%u,\"hw\":%u,\"hc\":%u,\"hf\":%u,"
+            "\"air\":%u,\"jp\":%u,\"hw\":%u,\"hc\":%u,\"hf\":%u,"
             "\"cf\":\"0x%08X\",\"nx\":%d,\"ny\":%d}",
             i ? "," : "", (unsigned long long)e->frame, e->ownership,
             e->state, name, e->raw_buttons, e->stick_x, e->stick_y,
@@ -842,7 +845,8 @@ static void handle_ftring(int id, const char *json)
             e->requested_dx, e->requested_dy,
             e->resolved_dx, e->resolved_dy,
             e->grounded, e->fast_fall,
-            e->air_cause, e->hit_wall, e->hit_ceiling, e->hit_floor,
+            e->air_cause, e->jump_phase,
+            e->hit_wall, e->hit_ceiling, e->hit_floor,
             e->collision_flags,
             e->native_x, e->native_y);
     }

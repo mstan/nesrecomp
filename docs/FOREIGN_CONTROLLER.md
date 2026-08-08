@@ -200,6 +200,66 @@ Both of these were found the hard way in SMB1: without the first, walking off a
 ledge launched the player upward; without the second, the jump did not happen at
 all.
 
+## …except for the jumpsquat, where the controller takes "when" back
+
+The arrangement above has a hard limit, and it is worth naming because it looks
+like a working system right up until you notice what is missing.
+
+If the host launches on the button's **rising edge**, the controller is told
+"you are airborne" one tick later and can only supply a single jump velocity.
+But most fighting-game jumps are not one velocity — the height is decided by
+what the button does *during* the jumpsquat: released early is a short hop, held
+through is a full hop. A rising-edge host gives that window nowhere to exist, so
+every jump comes out full height, and the short-hop branch of the ported code is
+unreachable rather than merely unused.
+
+Worse, adopting the host's launch usually *replaces* an in-progress squat: the
+controller enters its jumpsquat on the same tick the host fires, then the
+reconciliation branch above overwrites it on the next.
+
+So for this one decision the controller announces and the host defers:
+
+```c
+/* controller, every tick */
+state->jump_phase = in_jumpsquat ? FOREIGN_JUMP_CHARGING
+                  : leaving_ground_this_tick ? FOREIGN_JUMP_LAUNCH
+                                             : FOREIGN_JUMP_NONE;
+```
+
+```c
+/* host adapter, inside a function hook so the write is scoped in time */
+switch (fs->jump_phase) {
+    case FOREIGN_JUMP_CHARGING: guest_button &= ~JUMP_BIT; break;  /* withhold */
+    case FOREIGN_JUMP_LAUNCH:   guest_button |=  JUMP_BIT; break;  /* fire now */
+    case FOREIGN_JUMP_NONE:     break;                             /* untouched */
+}
+```
+
+Three things about this that are easy to get wrong:
+
+- **LAUNCH must *set* the button, not merely stop masking.** A short hop means
+  the player has already released it. If the host only stops suppressing, the
+  short hop produces no jump at all — the failure is silent and looks like the
+  physics being wrong.
+- **Withhold the button; do not consume the input.** Masking the byte the host
+  reads leaves its own edge detection intact, so it sees a clean rising edge on
+  the LAUNCH tick. Cancelling or rewriting the host's jump routine does not.
+- **Find the host's other readers of that byte first.** Whatever else reads the
+  jump button between the mask and the end of the frame now sees it masked too.
+  In SMB1 that is five more routines, two of which (a jumpspring bounce and a
+  swim stroke) genuinely needed gating off. Enumerate them; do not assume.
+
+The cost is real and should be surfaced, not hidden: the jump now happens
+`jumpsquat_length` frames after the press. That is authentic to the source game
+and alien to the host's, so it belongs to the character, never to the runner.
+
+`nes_foreign_tick()` clears `jump_phase` to `NONE` on any tick it does not drive
+the controller, so a squat interrupted by a scripted sequence cannot leave the
+host suppressing its own jump button forever.
+
+An adapter that ignores `jump_phase` entirely keeps the rising-edge behaviour
+described in the previous section.
+
 ## Own your state; do not contend for guest bytes
 
 The controller's state lives host-side, and that is a rule, not a convenience.
@@ -292,8 +352,9 @@ try to reproduce the event.
 
 Each row carries frame, ownership, state (with the controller's own name),
 buttons, stick x/y, position, velocity, requested delta, resolved delta,
-grounded, fast-fall, air cause, the host's `hit_wall` / `hit_ceiling` /
-`hit_floor` verdict, host-defined collision flags, and the native coordinates
+grounded, fast-fall, air cause, jump phase, the host's `hit_wall` /
+`hit_ceiling` / `hit_floor` verdict, host-defined collision flags, and the
+native coordinates
 that were written back — so one row shows both what the controller intended and
 what the game actually saw.
 

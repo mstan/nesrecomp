@@ -167,7 +167,7 @@ int nes_foreign_trace_write_csv(const char *path) {
     if (!f) return 0;
     fprintf(f, "frame,ownership,state,state_name,buttons,stick_x,stick_y,"
                "x,y,vx,vy,req_dx,req_dy,res_dx,res_dy,grounded,fast_fall,"
-               "air_cause,hit_wall,hit_ceiling,hit_floor,"
+               "air_cause,jump_phase,hit_wall,hit_ceiling,hit_floor,"
                "collision_flags,native_x,native_y\n");
     const uint32_t n = s_ftring_head < FTRING_N ? s_ftring_head : FTRING_N;
     for (uint32_t i = 0; i < n; i++) {
@@ -180,14 +180,15 @@ int nes_foreign_trace_write_csv(const char *path) {
         fprintf(f,
                 "%llu,%u,%d,%s,0x%02X,%.4f,%.4f,"
                 "%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%u,%u,"
-                "%u,%u,%u,%u,0x%08X,%d,%d\n",
+                "%u,%u,%u,%u,%u,0x%08X,%d,%d\n",
                 (unsigned long long)e->frame, e->ownership, e->state, name,
                 (unsigned)(e->raw_buttons & 0xFF), e->stick_x, e->stick_y,
                 e->x, e->y, e->vx, e->vy,
                 e->requested_dx, e->requested_dy,
                 e->resolved_dx, e->resolved_dy,
                 e->grounded, e->fast_fall,
-                e->air_cause, e->hit_wall, e->hit_ceiling, e->hit_floor,
+                e->air_cause, e->jump_phase,
+                e->hit_wall, e->hit_ceiling, e->hit_floor,
                 e->collision_flags,
                 e->native_x, e->native_y);
     }
@@ -227,6 +228,15 @@ int nes_foreign_tick(uint64_t frame, const ForeignInput *input,
         s_active->tick(&s_state, input, &local);
         s_state.state = local.state;
         if (out) *out = local;
+    } else {
+        /*
+         * The controller is not ticking, so it cannot retract a jump phase it
+         * published earlier. Clear it here rather than leaving the host to
+         * defer to a jumpsquat that will never end: ownership can drop to
+         * SCRIPTED mid-squat (a pipe, a death, a powerup) and a stale CHARGING
+         * would go on suppressing the host's jump button indefinitely.
+         */
+        s_state.jump_phase = FOREIGN_JUMP_NONE;
     }
 
     /* A row is recorded every tick, including while the host game owns the
@@ -241,6 +251,9 @@ int nes_foreign_tick(uint64_t frame, const ForeignInput *input,
     entry.state        = s_state.state;
     entry.grounded     = (uint8_t)(s_state.grounded ? 1 : 0);
     entry.air_cause    = (uint8_t)s_state.air_cause;
+    /* Post-tick, so a LAUNCH row is the row the controller left the ground on
+     * -- which is the row the host fired its trigger on. */
+    entry.jump_phase   = (uint8_t)s_state.jump_phase;
     entry.fast_fall    = (uint8_t)(s_state.fast_fall ? 1 : 0);
     entry.x            = s_state.x;
     entry.y            = s_state.y;

@@ -84,6 +84,38 @@ typedef enum {
     FOREIGN_AIR_FELL = 2,     /* host reports airborne with no impulse */
 } ForeignAirCause;
 
+/*
+ * Jumpsquat handshake -- the one place the controller takes "when" back.
+ *
+ * air_cause above covers the normal division of labour: the host keeps its jump
+ * trigger and the controller supplies the physics. But a fighter with a
+ * jumpsquat (Smash's KneeBend, and most fighting games) decides jump HEIGHT
+ * from what the button does DURING the squat -- released early is a short hop,
+ * held is a full hop. A host that launches on the button's rising edge gives
+ * that window no room to exist, so the fighter can only ever full-hop.
+ *
+ * So the controller announces the window and the host defers to it:
+ *
+ *   CHARGING  the controller is in jumpsquat. The host must WITHHOLD its own
+ *             jump trigger -- suppress the button, do not cancel the input.
+ *   LAUNCH    the controller is leaving the ground on THIS tick. The host must
+ *             fire its jump now, presenting the button even if the player has
+ *             already let go (a short hop is exactly that case).
+ *   NONE      no jump being prepared; the host's trigger behaves normally.
+ *
+ * The host still owns HOW: which byte carries the button, when in its frame it
+ * is safe to write, and which of its own routines must not see the change.
+ * Scope that write in time via a function hook, as with any other guest byte.
+ *
+ * A host that ignores this field keeps M3 behaviour -- full hops only -- so it
+ * is additive for existing adapters.
+ */
+typedef enum {
+    FOREIGN_JUMP_NONE = 0,
+    FOREIGN_JUMP_CHARGING = 1,
+    FOREIGN_JUMP_LAUNCH = 2,
+} ForeignJumpPhase;
+
 typedef struct {
     ForeignMoveState state;
     unsigned         state_frame;  /* ticks spent in `state` */
@@ -100,6 +132,11 @@ typedef struct {
 
     /* Host-written, controller-read. See ForeignAirCause. */
     ForeignAirCause air_cause;
+
+    /* Controller-written, host-read. See ForeignJumpPhase. Publish it every
+     * tick, including the ticks it is NONE, so the host never acts on a stale
+     * LAUNCH. */
+    ForeignJumpPhase jump_phase;
 } ForeignState;
 
 /* What the controller wants to happen this tick, before host collision. */
@@ -223,7 +260,14 @@ typedef struct {
     uint8_t  hit_ceiling;
     uint8_t  hit_floor;
     uint8_t  air_cause;   /* ForeignAirCause at tick time */
-    uint8_t  pad[2];
+    /*
+     * ForeignJumpPhase after the tick. A jumpsquat is invisible in `state`
+     * alone once the host is deferring to it -- CHARGING rows and a plain
+     * grounded row look identical -- and the whole question a short-hop
+     * investigation asks is "did the window open, and how long was it".
+     */
+    uint8_t  jump_phase;
+    uint8_t  pad[1];
 
     double   x;
     double   y;
