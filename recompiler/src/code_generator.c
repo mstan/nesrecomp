@@ -338,12 +338,70 @@ static void emit_symbol_aliases(FILE *f, const EmittedWrapper *wrappers, int wra
     fprintf(f, "/* Symbol aliases (from .sym file) */\n");
     for (int i = 0; i < wrapper_count; i++) {
         uint16_t addr = wrappers[i].addr;
-        int bank = wrappers[i].bank;
         const char *name = symbol_lookup(st, addr);
         if (!name) continue;
-        char nm[32];
-        format_func_name(nm, sizeof nm, addr, bank, fixed_bank);
-        fprintf(f, "#define %s %s\n", name, nm);
+
+        /* Every wrapper standalone-emitted at this address is handled
+         * together the first time we see the address; a later wrapper
+         * with the same addr (different bank) is folded in below, so
+         * skip it here to avoid re-emitting the same alias(es). */
+        bool seen_earlier = false;
+        for (int j = 0; j < i; j++) {
+            if (wrappers[j].addr == addr) { seen_earlier = true; break; }
+        }
+        if (seen_earlier) continue;
+
+        /* Collect every distinct bank this address is standalone-emitted
+         * in. On banked mappers (MMC1/MMC3/...) the same 6502 address can
+         * legitimately hold DIFFERENT code per bank, so a name keyed on
+         * address alone is ambiguous whenever more than one bank shows up
+         * here -- see beads-2dw.1.5 (PowerUpObjHandler / SetAnimSpd
+         * colliding #defines on SMB, one silently overwriting the other
+         * via C4005 macro redefinition). */
+        int banks[64];
+        int bank_count = 0;
+        for (int j = i; j < wrapper_count; j++) {
+            if (wrappers[j].addr != addr) continue;
+            bool dup = false;
+            for (int k = 0; k < bank_count; k++) {
+                if (banks[k] == wrappers[j].bank) { dup = true; break; }
+            }
+            if (!dup && bank_count < 64) banks[bank_count++] = wrappers[j].bank;
+        }
+
+        if (bank_count <= 1) {
+            char nm[32];
+            format_func_name(nm, sizeof nm, addr, banks[0], fixed_bank);
+            fprintf(f, "#define %s %s\n", name, nm);
+            continue;
+        }
+
+        /* Collision: this address is standalone-emitted in more than one
+         * bank. Emitting a single unsuffixed alias would silently pick
+         * whichever bank's #define happened to be textually last (the
+         * exact failure this exists to prevent), so emit bank-qualified
+         * names only -- a symbolic call site must disambiguate, which
+         * turns a silently-wrong call into a compile error instead. */
+        fprintf(f, "/* %s: 0x%04X is standalone-emitted in %d banks (",
+               name, addr, bank_count);
+        for (int k = 0; k < bank_count; k++)
+            fprintf(f, "%sb%d", k ? "," : "", banks[k]);
+        fprintf(f, ") -- no unsuffixed alias emitted; use ");
+        for (int k = 0; k < bank_count; k++) {
+            if (k) fprintf(f, " or ");
+            fprintf(f, "%s__b%d", name, banks[k]);
+        }
+        fprintf(f, " explicitly */\n");
+        for (int k = 0; k < bank_count; k++) {
+            char nm[32];
+            format_func_name(nm, sizeof nm, addr, banks[k], fixed_bank);
+            fprintf(f, "#define %s__b%d %s\n", name, banks[k], nm);
+        }
+        fprintf(stderr, "[codegen] WARNING: symbol '%s' (0x%04X) is "
+                        "standalone-emitted in %d banks; skipped the "
+                        "unsuffixed #define (would collide) -- use "
+                        "%s__bN explicitly\n",
+                        name, addr, bank_count, name);
     }
     fprintf(f, "\n");
 
