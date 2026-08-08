@@ -291,7 +291,14 @@ typedef struct {
      * investigation asks is "did the window open, and how long was it".
      */
     uint8_t  jump_phase;
-    uint8_t  pad[1];
+    /*
+     * Set for exactly the one row where the host reseeded the controller on
+     * an ownership edge (scripted sequence handing back to FOREIGN). The
+     * question a stale-state bug asks is "did the reseed actually fire, or
+     * did a frozen velocity leak through" -- without this column the two are
+     * indistinguishable from a zero-velocity first row.
+     */
+    uint8_t  reseeded;
 
     double   x;
     double   y;
@@ -329,6 +336,11 @@ void nes_foreign_trace_push(const ForeignTraceEntry *entry);
 /* Record the host coordinates written back for this tick, so a trace row
  * carries both the controller's intent and what the game actually saw. */
 void nes_foreign_trace_note_native(int32_t native_x, int32_t native_y);
+
+/* Mark this tick's row as an ownership-edge reseed (see ForeignTraceEntry
+ * .reseeded). Called by the host adapter on the frame it re-selects the
+ * controller. */
+void nes_foreign_trace_note_reseed(void);
 
 /* Copy the newest `n` entries, oldest-first. Pass n <= 0 for everything
  * retained. Returns the number copied. */

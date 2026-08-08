@@ -837,7 +837,7 @@ static void handle_ftring(int id, const char *json)
             "\"sx\":%.4f,\"sy\":%.4f,\"x\":%.4f,\"y\":%.4f,"
             "\"vx\":%.4f,\"vy\":%.4f,\"rdx\":%.4f,\"rdy\":%.4f,"
             "\"adx\":%.4f,\"ady\":%.4f,\"gnd\":%u,\"ff\":%u,"
-            "\"air\":%u,\"jp\":%u,\"hw\":%u,\"hc\":%u,\"hf\":%u,"
+            "\"air\":%u,\"jp\":%u,\"rs\":%u,\"hw\":%u,\"hc\":%u,\"hf\":%u,"
             "\"imp\":%u,\"ivy\":%.4f,\"cf\":\"0x%08X\",\"nx\":%d,\"ny\":%d}",
             i ? "," : "", (unsigned long long)e->frame, e->ownership,
             e->state, name, e->raw_buttons, e->stick_x, e->stick_y,
@@ -845,7 +845,7 @@ static void handle_ftring(int id, const char *json)
             e->requested_dx, e->requested_dy,
             e->resolved_dx, e->resolved_dy,
             e->grounded, e->fast_fall,
-            e->air_cause, e->jump_phase,
+            e->air_cause, e->jump_phase, e->reseeded,
             e->hit_wall, e->hit_ceiling, e->hit_floor,
             e->has_imposed_vy, e->imposed_vy, e->collision_flags,
             e->native_x, e->native_y);
