@@ -64,6 +64,26 @@ typedef enum {
  */
 typedef int ForeignMoveState;
 
+/*
+ * Why the character is off the ground, as host truth.
+ *
+ * A host that keeps its own jump trigger and its own ledge detection -- which
+ * is the normal case, because those decisions are tangled up with the host's
+ * level scripting -- can only report `grounded = 0`. That is ambiguous: a
+ * launched jump wants an upward impulse and a walked-off ledge must not get
+ * one, and a controller cannot tell them apart from `grounded` alone. Guessing
+ * from the input is wrong too, since the host acts on the pad a frame after the
+ * controller sees it.
+ *
+ * So the host says which. The controller reads this when it notices `grounded`
+ * has gone to 0 without its own state machine having initiated the departure.
+ */
+typedef enum {
+    FOREIGN_AIR_NONE = 0,     /* grounded, or the controller's own departure */
+    FOREIGN_AIR_LAUNCHED = 1, /* host started a jump: apply jump velocity */
+    FOREIGN_AIR_FELL = 2,     /* host reports airborne with no impulse */
+} ForeignAirCause;
+
 typedef struct {
     ForeignMoveState state;
     unsigned         state_frame;  /* ticks spent in `state` */
@@ -77,6 +97,9 @@ typedef struct {
 
     int grounded;
     int fast_fall;
+
+    /* Host-written, controller-read. See ForeignAirCause. */
+    ForeignAirCause air_cause;
 } ForeignState;
 
 /* What the controller wants to happen this tick, before host collision. */
@@ -188,7 +211,19 @@ typedef struct {
     uint8_t  ownership;
     uint8_t  grounded;
     uint8_t  fast_fall;
-    uint8_t  pad;
+
+    /*
+     * What the host's collision actually said, straight from the
+     * ForeignCollisionResult. Without these a row can show a controller
+     * insisting it is rising while the host pins it against a ceiling, and the
+     * ring looks like it agrees with the controller. Measured on SMB1's 1-1
+     * brick row before the adapter fed the refusal back.
+     */
+    uint8_t  hit_wall;
+    uint8_t  hit_ceiling;
+    uint8_t  hit_floor;
+    uint8_t  air_cause;   /* ForeignAirCause at tick time */
+    uint8_t  pad[2];
 
     double   x;
     double   y;

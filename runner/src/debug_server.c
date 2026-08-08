@@ -834,13 +834,16 @@ static void handle_ftring(int id, const char *json)
             "\"sx\":%.4f,\"sy\":%.4f,\"x\":%.4f,\"y\":%.4f,"
             "\"vx\":%.4f,\"vy\":%.4f,\"rdx\":%.4f,\"rdy\":%.4f,"
             "\"adx\":%.4f,\"ady\":%.4f,\"gnd\":%u,\"ff\":%u,"
+            "\"air\":%u,\"hw\":%u,\"hc\":%u,\"hf\":%u,"
             "\"cf\":\"0x%08X\",\"nx\":%d,\"ny\":%d}",
             i ? "," : "", (unsigned long long)e->frame, e->ownership,
             e->state, name, e->raw_buttons, e->stick_x, e->stick_y,
             e->x, e->y, e->vx, e->vy,
             e->requested_dx, e->requested_dy,
             e->resolved_dx, e->resolved_dy,
-            e->grounded, e->fast_fall, e->collision_flags,
+            e->grounded, e->fast_fall,
+            e->air_cause, e->hit_wall, e->hit_ceiling, e->hit_floor,
+            e->collision_flags,
             e->native_x, e->native_y);
     }
     pos += sprintf(buf + pos, "]}");

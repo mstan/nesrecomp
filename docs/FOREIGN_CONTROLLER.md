@@ -154,6 +154,52 @@ So:
   constants, ownership, the last velocity written to the guest — not a second
   copy of the fighter.
 
+## The host owns "when"; say *why* you left the ground
+
+Most host games keep their own jump trigger and their own ledge detection —
+those decisions are tangled up with level scripting, and prising them out is
+rarely worth it. The controller then supplies the *physics* of a jump the host
+decided to start.
+
+That works, with two rules.
+
+**Say why.** `grounded = 0` is ambiguous: a launched jump wants an upward
+impulse and a walked-off ledge must not get one. Write `state->air_cause` before
+ticking:
+
+```c
+fs->grounded  = host_is_on_ground();
+fs->air_cause = host_launched_a_jump() ? FOREIGN_AIR_LAUNCHED
+              : host_is_airborne()     ? FOREIGN_AIR_FELL
+                                       : FOREIGN_AIR_NONE;
+```
+
+Do not try to infer it from the pad. The controller sees input a frame before
+the host acts on it, so on the launch frame the button edge has already passed.
+
+The controller reads it only when it notices `grounded` went to 0 without its
+own state machine having caused it, and adopts the transition:
+
+```c
+if (!f->grounded && !is_air_state(f->state)) {
+    if (f->host_air_cause == FOREIGN_AIR_LAUNCHED) enter_jump(f, in);
+    else                                           enter_fall(f);
+} else if (f->grounded && is_air_state(f->state)) {
+    enter_landing(f);
+}
+```
+
+**Give the host the handoff frame.** The host decides mid-frame; the controller
+ticked at the start of it. On that one frame the controller has no jump velocity
+yet, so integrating its zero moves the character zero pixels — and a host that
+then re-runs its own ground check will conclude nothing happened and cancel the
+jump. Let the host's original routine run for that single frame and take over
+from the next one.
+
+Both of these were found the hard way in SMB1: without the first, walking off a
+ledge launched the player upward; without the second, the jump did not happen at
+all.
+
 ## Own your state; do not contend for guest bytes
 
 The controller's state lives host-side, and that is a rule, not a convenience.
@@ -246,9 +292,14 @@ try to reproduce the event.
 
 Each row carries frame, ownership, state (with the controller's own name),
 buttons, stick x/y, position, velocity, requested delta, resolved delta,
-grounded, fast-fall, collision flags, and the native coordinates that were
-written back — so one row shows both what the controller intended and what the
-game actually saw.
+grounded, fast-fall, air cause, the host's `hit_wall` / `hit_ceiling` /
+`hit_floor` verdict, host-defined collision flags, and the native coordinates
+that were written back — so one row shows both what the controller intended and
+what the game actually saw.
+
+The collision booleans are there because a row without them lies by omission: a
+controller insisting it is rising while the host pins it under a ceiling looks,
+in the ring, like the host agreeing. That happened on SMB1's 1-1 brick row.
 
 Compiled into Release. If an investigation needs a field that is not here,
 **add the field**. Do not work around a missing field with a one-shot

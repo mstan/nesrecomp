@@ -167,6 +167,7 @@ int nes_foreign_trace_write_csv(const char *path) {
     if (!f) return 0;
     fprintf(f, "frame,ownership,state,state_name,buttons,stick_x,stick_y,"
                "x,y,vx,vy,req_dx,req_dy,res_dx,res_dy,grounded,fast_fall,"
+               "air_cause,hit_wall,hit_ceiling,hit_floor,"
                "collision_flags,native_x,native_y\n");
     const uint32_t n = s_ftring_head < FTRING_N ? s_ftring_head : FTRING_N;
     for (uint32_t i = 0; i < n; i++) {
@@ -178,13 +179,16 @@ int nes_foreign_trace_write_csv(const char *path) {
         }
         fprintf(f,
                 "%llu,%u,%d,%s,0x%02X,%.4f,%.4f,"
-                "%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%u,%u,0x%08X,%d,%d\n",
+                "%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%u,%u,"
+                "%u,%u,%u,%u,0x%08X,%d,%d\n",
                 (unsigned long long)e->frame, e->ownership, e->state, name,
                 (unsigned)(e->raw_buttons & 0xFF), e->stick_x, e->stick_y,
                 e->x, e->y, e->vx, e->vy,
                 e->requested_dx, e->requested_dy,
                 e->resolved_dx, e->resolved_dy,
-                e->grounded, e->fast_fall, e->collision_flags,
+                e->grounded, e->fast_fall,
+                e->air_cause, e->hit_wall, e->hit_ceiling, e->hit_floor,
+                e->collision_flags,
                 e->native_x, e->native_y);
     }
     fclose(f);
@@ -236,6 +240,7 @@ int nes_foreign_tick(uint64_t frame, const ForeignInput *input,
     entry.stick_y      = input->stick_y;
     entry.state        = s_state.state;
     entry.grounded     = (uint8_t)(s_state.grounded ? 1 : 0);
+    entry.air_cause    = (uint8_t)s_state.air_cause;
     entry.fast_fall    = (uint8_t)(s_state.fast_fall ? 1 : 0);
     entry.x            = s_state.x;
     entry.y            = s_state.y;
@@ -258,6 +263,9 @@ void nes_foreign_resolve(const ForeignCollisionResult *hit) {
     e->resolved_dy     = hit->actual_dy;
     e->collision_flags = hit->flags;
     e->grounded        = (uint8_t)(hit->grounded ? 1 : 0);
+    e->hit_wall        = (uint8_t)(hit->hit_wall ? 1 : 0);
+    e->hit_ceiling     = (uint8_t)(hit->hit_ceiling ? 1 : 0);
+    e->hit_floor       = (uint8_t)(hit->hit_floor ? 1 : 0);
     /* Post-resolve position, so one row is self-consistent. */
     e->x  = s_state.x;
     e->y  = s_state.y;
