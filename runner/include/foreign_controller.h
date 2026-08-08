@@ -156,6 +156,30 @@ typedef struct {
     int      hit_ceiling;
     int      hit_floor;
     int      hit_wall;
+
+    /*
+     * The host IMPOSED a vertical velocity of its own this tick.
+     *
+     * Blocking a move is not the only thing a host game does to a character's
+     * vertical motion. It also launches: a stomp bounce off an enemy, a spring,
+     * a shattered block, a ceiling that kills the jump. Host games typically
+     * signal all of these by writing their own vertical-velocity variable and
+     * expecting their own integrator to pick it up next frame.
+     *
+     * A controller that has taken over vertical integration never reads that
+     * variable back, so every one of those events is discarded SILENTLY -- the
+     * character sails through the ceiling and does not bounce off anything.
+     * Position readback cannot substitute: a host killing a jump usually only
+     * changes the velocity, leaving the position exactly where the controller
+     * put it, so a position diff sees nothing at all.
+     *
+     * `imposed_vy` is in the controller's own units and sign convention. The
+     * adapter converts from the host's representation, as with every other
+     * quantity crossing this boundary.
+     */
+    int      has_imposed_vy;
+    double   imposed_vy;
+
     uint32_t flags;      /* host-defined, recorded in the trace ring */
 } ForeignCollisionResult;
 
@@ -278,6 +302,11 @@ typedef struct {
     double   requested_dy;
     double   resolved_dx;
     double   resolved_dy;
+
+    /* Host-imposed vertical velocity, 0 when the host imposed none. A bounce
+     * that fails to happen is invisible in every other column: the controller's
+     * own vy simply carries on as though nothing occurred. */
+    double   imposed_vy;
 
     uint32_t collision_flags;
     int32_t  native_x;   /* host game's own coordinates, post-sync */

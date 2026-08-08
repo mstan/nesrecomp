@@ -168,7 +168,7 @@ int nes_foreign_trace_write_csv(const char *path) {
     fprintf(f, "frame,ownership,state,state_name,buttons,stick_x,stick_y,"
                "x,y,vx,vy,req_dx,req_dy,res_dx,res_dy,grounded,fast_fall,"
                "air_cause,jump_phase,hit_wall,hit_ceiling,hit_floor,"
-               "collision_flags,native_x,native_y\n");
+               "imposed_vy,collision_flags,native_x,native_y\n");
     const uint32_t n = s_ftring_head < FTRING_N ? s_ftring_head : FTRING_N;
     for (uint32_t i = 0; i < n; i++) {
         const ForeignTraceEntry *e = &s_ftring[(s_ftring_head - n + i) % FTRING_N];
@@ -180,7 +180,7 @@ int nes_foreign_trace_write_csv(const char *path) {
         fprintf(f,
                 "%llu,%u,%d,%s,0x%02X,%.4f,%.4f,"
                 "%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%u,%u,"
-                "%u,%u,%u,%u,%u,0x%08X,%d,%d\n",
+                "%u,%u,%u,%u,%u,%.6f,0x%08X,%d,%d\n",
                 (unsigned long long)e->frame, e->ownership, e->state, name,
                 (unsigned)(e->raw_buttons & 0xFF), e->stick_x, e->stick_y,
                 e->x, e->y, e->vx, e->vy,
@@ -189,7 +189,7 @@ int nes_foreign_trace_write_csv(const char *path) {
                 e->grounded, e->fast_fall,
                 e->air_cause, e->jump_phase,
                 e->hit_wall, e->hit_ceiling, e->hit_floor,
-                e->collision_flags,
+                e->imposed_vy, e->collision_flags,
                 e->native_x, e->native_y);
     }
     fclose(f);
@@ -274,6 +274,7 @@ void nes_foreign_resolve(const ForeignCollisionResult *hit) {
     ForeignTraceEntry *e = &s_ftring[(s_ftring_head - 1) % FTRING_N];
     e->resolved_dx     = hit->actual_dx;
     e->resolved_dy     = hit->actual_dy;
+    e->imposed_vy      = hit->has_imposed_vy ? hit->imposed_vy : 0.0;
     e->collision_flags = hit->flags;
     e->grounded        = (uint8_t)(hit->grounded ? 1 : 0);
     e->hit_wall        = (uint8_t)(hit->hit_wall ? 1 : 0);
