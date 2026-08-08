@@ -139,6 +139,24 @@ typedef struct {
     ForeignJumpPhase jump_phase;
 } ForeignState;
 
+/* A controller-owned attack volume, expressed in the controller's source
+ * units. offset_y is measured upward from the fighter's feet; offset_x is
+ * facing-relative. The host performs the one source-to-world conversion and
+ * maps a hit to its own native gameplay consequences. */
+typedef struct {
+    double   offset_x;
+    double   offset_y;
+    double   width;
+    double   height;
+    double   knockback_x;
+    double   knockback_y;
+    int      damage;
+    uint32_t flags;
+    int      active;
+} ForeignAttackHitbox;
+
+#define FOREIGN_ATTACK_BREAK_BLOCKS 0x00000001u
+
 /* What the controller wants to happen this tick, before host collision. */
 typedef struct {
     double           requested_dx;
@@ -146,6 +164,7 @@ typedef struct {
     double           vx;
     double           vy;
     ForeignMoveState state;
+    ForeignAttackHitbox attack;
 } ForeignMoveResult;
 
 /* What the host's collision actually permitted. Fed straight back in. */
@@ -341,6 +360,9 @@ void nes_foreign_trace_note_native(int32_t native_x, int32_t native_y);
  * .reseeded). Called by the host adapter on the frame it re-selects the
  * controller. */
 void nes_foreign_trace_note_reseed(void);
+
+/* OR host-specific consequence bits into the newest trace row. */
+void nes_foreign_trace_note_flags(uint32_t flags);
 
 /* Copy the newest `n` entries, oldest-first. Pass n <= 0 for everything
  * retained. Returns the number copied. */

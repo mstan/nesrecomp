@@ -153,6 +153,11 @@ void nes_foreign_trace_note_reseed(void) {
     s_ftring[(s_ftring_head - 1) % FTRING_N].reseeded = 1;
 }
 
+void nes_foreign_trace_note_flags(uint32_t flags) {
+    if (s_ftring_head == 0) return;
+    s_ftring[(s_ftring_head - 1) % FTRING_N].collision_flags |= flags;
+}
+
 int nes_foreign_trace_count(void) {
     return (int)(s_ftring_head < FTRING_N ? s_ftring_head : FTRING_N);
 }

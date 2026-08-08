@@ -101,6 +101,21 @@ Sign conventions must come from the source you are porting, not from this
 example. The engine assumes only that `+y` is *down*, matching NES screen
 coordinates, and only inside `nes_foreign_sweep`.
 
+### Attacks
+
+A controller may publish one source-space `ForeignAttackHitbox` in its move
+result. `offset_x` is facing-relative, `offset_y` is upward from the fighter's
+feet, and width/height remain in the controller's source units. The host owns
+the one scale conversion, overlap against its objects, and the native gameplay
+consequence; a controller must never inspect or rewrite enemy slots itself.
+
+Set `FOREIGN_ATTACK_BREAK_BLOCKS` only for moves whose source behavior should
+interact with breakable terrain. The flag is permission, not a request to
+destroy arbitrary tiles: the host still decides which of its metatiles are
+breakable and routes the result through its native block logic. `damage` and
+knockback are portable metadata; hosts without damage/knockback systems may map
+an accepted hit directly to their own defeat or stun routine.
+
 ---
 
 ## Ownership
