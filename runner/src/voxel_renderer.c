@@ -13,8 +13,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define VOXEL_MAX_WIDTH  512
-#define VOXEL_MAX_HEIGHT 240
+/* Native scenes currently top out at 512x240.  The immediate mesh path also
+ * permits a bounded 2x presentation surface so a caller can supersample one
+ * overlay without filtering the underlying NES framebuffer. */
+#define VOXEL_MAX_WIDTH  1024
+#define VOXEL_MAX_HEIGHT 480
 #define VOXEL_MAX_TILE_COLUMNS 64
 #define VOXEL_MAX_TILE_ROWS    60
 #define VOXEL_MAX_TILES (VOXEL_MAX_TILE_COLUMNS * VOXEL_MAX_TILE_ROWS)
