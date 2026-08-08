@@ -206,3 +206,41 @@ would suppress that sprite permanently, mod on or off.
 
 `NULL` (the default) draws every slot exactly as before -- a game that never
 calls the setter has unchanged rendering behavior.
+
+---
+
+## Mod save-state extensions (`mod_savestate`)
+
+`runner/src/savestate.c` owns a fixed-layout save-state struct: CPU, work
+RAM, CHR RAM, PPU state, mapper state, frame counter. A mod that carries its
+own architectural state -- e.g. a replacement player controller with fields
+that do not live in guest RAM -- has nowhere to put it without savestate.c
+knowing about that specific mod.
+
+`mod_savestate.h` fixes that with a small id-keyed registry, the save-state
+analog of `mod_function_hooks.h`:
+
+```c
+#include "mod_savestate.h"
+
+static int player_get(uint8_t *buf, int cap) { /* serialize, return bytes written or -1 */ }
+static int player_set(const uint8_t *buf, int len) { /* restore, return 1 on success */ }
+
+NES_MOD_CONSTRUCTOR(register_player_savestate) {
+    nes_mod_register_savestate_hook("example.player-control", player_get, player_set);
+}
+```
+
+On save, savestate.c calls every registered hook's `get` and appends the
+result to the file as an id-keyed record; a hook that reports its state does
+not fit (`-1`) is omitted from that save with a warning rather than failing
+it. On load, each record's `set` is looked up by id and called only after
+NES RAM/CPU/PPU state has already been restored, so a hook sees the same
+post-load world a `game_post_nmi()` callback would. A record whose id has no
+registered hook (mod disabled or uninstalled since the save was made) is
+skipped with a stderr warning -- never a load failure.
+
+This is version-gated (save-state format version 6): a file written by an
+older runner has no mod section at all, and loads exactly as before with no
+hooks called. Loading such a file with mods registered simply leaves their
+state at whatever it already was -- there is nothing to restore.

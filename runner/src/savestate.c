@@ -3,7 +3,9 @@
  *
  * State saved:
  *   CPU registers, work RAM, CHR RAM, PPU OAM, palette, nametable RAM,
- *   PPU registers, mapper (MMC1) registers, frame counter.
+ *   PPU registers, mapper (MMC1) registers, frame counter, plus a trailing
+ *   id-keyed mod section (version 6+; see mod_savestate.h) for architectural
+ *   state mods keep outside guest RAM.
  *
  * Format: raw binary with 4-byte magic "NSSR" + 1-byte version.
  */
@@ -12,15 +14,20 @@
 #include "mapper.h"
 #include "apu.h"
 #include "save_ram.h"
+#include "mod_savestate.h"
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
 
 #define SS_MAGIC   "NSSR"
-#define SS_VERSION 5
+#define SS_VERSION 6
+#define SS_VERSION_LEGACY_5 5  /* fixed struct unchanged; only the trailing mod section is new */
 #define SS_VERSION_LEGACY 4
 #define SS_APU_BLOB_CAP 256
 #define SS_RUNTIME_BLOB_CAP 256
+/* On-disk id field width for a mod savestate record; must match
+ * NES_MOD_SAVESTATE_ID_CAP in mod_savestate.c. */
+#define SS_MOD_ID_CAP 64
 
 /* PPU internals exposed from runtime.c */
 extern uint16_t g_ppuaddr;
@@ -150,6 +157,46 @@ int savestate_save(const char *path) {
     }
 
     fwrite(&ss, 1, sizeof(ss), f);
+
+    /* Mod section (version 6+): id-keyed records from mod_savestate.c.
+     * Streamed rather than folded into the fixed struct above, since the
+     * record count is dynamic. A hook whose get() reports it does not fit is
+     * excluded from the file with a warning rather than failing the save. */
+    {
+        enum { SS_MOD_MAX_RECORDS = 32 };
+        char    ids[SS_MOD_MAX_RECORDS][SS_MOD_ID_CAP];
+        uint8_t blobs[SS_MOD_MAX_RECORDS][NES_MOD_SAVESTATE_BLOB_CAP];
+        int     lens[SS_MOD_MAX_RECORDS];
+        int     n = 0;
+
+        int hook_total = nes_mod_savestate_hook_count();
+        for (int i = 0; i < hook_total && n < SS_MOD_MAX_RECORDS; i++) {
+            const char *id = nes_mod_savestate_hook_id_at(i);
+            NESModSavestateGet get = nes_mod_savestate_hook_get_at(i);
+            if (!id || !get) continue;
+            int len = get(blobs[n], NES_MOD_SAVESTATE_BLOB_CAP);
+            if (len < 0) {
+                fprintf(stderr,
+                        "[SaveState] Mod hook '%s' state does not fit; omitted from save\n",
+                        id);
+                continue;
+            }
+            strncpy(ids[n], id, SS_MOD_ID_CAP - 1);
+            ids[n][SS_MOD_ID_CAP - 1] = '\0';
+            lens[n] = len;
+            n++;
+        }
+
+        uint16_t mod_count = (uint16_t)n;
+        fwrite(&mod_count, sizeof(mod_count), 1, f);
+        for (int i = 0; i < n; i++) {
+            uint16_t len = (uint16_t)lens[i];
+            fwrite(ids[i], 1, SS_MOD_ID_CAP, f);
+            fwrite(&len, sizeof(len), 1, f);
+            fwrite(blobs[i], 1, len, f);
+        }
+    }
+
     fclose(f);
 
     printf("[SaveState] Saved to %s (frame %llu)\n", path,
@@ -174,7 +221,7 @@ int savestate_load(const char *path) {
         fclose(f); return 0;
     }
     if (fread(&ver, 1, 1, f) != 1 ||
-        (ver != SS_VERSION && ver != SS_VERSION_LEGACY)) {
+        (ver != SS_VERSION && ver != SS_VERSION_LEGACY_5 && ver != SS_VERSION_LEGACY)) {
         fprintf(stderr, "[SaveState] Version mismatch in %s\n", path);
         fclose(f); return 0;
     }
@@ -187,6 +234,49 @@ int savestate_load(const char *path) {
     if (fread(&ss, 1, state_size, f) != state_size) {
         fprintf(stderr, "[SaveState] Truncated data in %s\n", path);
         fclose(f); return 0;
+    }
+
+    /* Mod section (version 6+ only). A version-5 or -4 file has no such
+     * section; hooks are simply not called, matching pre-existing behavior.
+     * Records are read here but restored later, after NES RAM/CPU/PPU state
+     * is applied below, per the get/set contract in mod_savestate.h. */
+    enum { SS_MOD_MAX_RECORDS = 32 };
+    char    mod_ids[SS_MOD_MAX_RECORDS][SS_MOD_ID_CAP];
+    uint8_t mod_blobs[SS_MOD_MAX_RECORDS][NES_MOD_SAVESTATE_BLOB_CAP];
+    int     mod_lens[SS_MOD_MAX_RECORDS];
+    int     mod_n = 0;
+    if (ver == SS_VERSION) {
+        uint16_t mod_count = 0;
+        if (fread(&mod_count, sizeof(mod_count), 1, f) != 1) {
+            fprintf(stderr, "[SaveState] Truncated mod section in %s\n", path);
+            fclose(f); return 0;
+        }
+        for (uint16_t i = 0; i < mod_count; i++) {
+            char id[SS_MOD_ID_CAP];
+            uint16_t len = 0;
+            if (fread(id, 1, SS_MOD_ID_CAP, f) != SS_MOD_ID_CAP ||
+                fread(&len, sizeof(len), 1, f) != 1 ||
+                len > NES_MOD_SAVESTATE_BLOB_CAP) {
+                fprintf(stderr, "[SaveState] Truncated mod record in %s\n", path);
+                fclose(f); return 0;
+            }
+            id[SS_MOD_ID_CAP - 1] = '\0';  /* defend against a corrupt unterminated id */
+            uint8_t blob[NES_MOD_SAVESTATE_BLOB_CAP];
+            if (len > 0 && fread(blob, 1, len, f) != len) {
+                fprintf(stderr, "[SaveState] Truncated mod record in %s\n", path);
+                fclose(f); return 0;
+            }
+            if (mod_n < SS_MOD_MAX_RECORDS) {
+                memcpy(mod_ids[mod_n], id, SS_MOD_ID_CAP);
+                memcpy(mod_blobs[mod_n], blob, len);
+                mod_lens[mod_n] = len;
+                mod_n++;
+            } else {
+                fprintf(stderr,
+                        "[SaveState] Too many mod records in %s; '%s' dropped\n",
+                        path, id);
+            }
+        }
     }
     fclose(f);
 
@@ -259,6 +349,26 @@ int savestate_load(const char *path) {
         fprintf(stderr,
                 "[SaveState] Migrating version-4 state with current continuation $%04X\n",
                 legacy_resume_pc);
+    }
+
+    /* Mod section restore. Deliberately last: NES RAM/CPU/PPU state above is
+     * fully applied first, so a hook's set() sees the same post-load world a
+     * game_post_nmi() callback would. Unknown ids are a stderr warning, not a
+     * load failure — a save made with a mod that is no longer registered
+     * (disabled, uninstalled) must still load the rest of the state. */
+    for (int i = 0; i < mod_n; i++) {
+        NESModSavestateSet set = nes_mod_savestate_hook_find_set(mod_ids[i]);
+        if (!set) {
+            fprintf(stderr,
+                    "[SaveState] No mod hook registered for '%s'; state skipped\n",
+                    mod_ids[i]);
+            continue;
+        }
+        if (!set(mod_blobs[i], mod_lens[i])) {
+            fprintf(stderr,
+                    "[SaveState] Mod hook '%s' rejected its saved state\n",
+                    mod_ids[i]);
+        }
     }
 
     printf("[SaveState] Loaded from %s (frame %llu%s)\n", path,

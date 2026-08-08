@@ -54,6 +54,10 @@ set(NESRECOMP_RUNNER_SOURCES
     # whether or not the mod package runtime is built.
     # See docs/MOD_PACKAGES.md and runner/include/mod_function_hooks.h.
     ${NESRECOMP_RUNNER_ROOT}/src/mod_function_hooks.c
+    # Id-keyed per-mod save-state extension registry. Always compiled for the
+    # same reason as mod_function_hooks.c above; savestate.c calls into it
+    # unconditionally. See MODDING.md and runner/include/mod_savestate.h.
+    ${NESRECOMP_RUNNER_ROOT}/src/mod_savestate.c
 )
 
 set(NESRECOMP_RUNNER_INCLUDE_DIRS
