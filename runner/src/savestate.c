@@ -15,6 +15,7 @@
 #include "apu.h"
 #include "save_ram.h"
 #include "mod_savestate.h"
+#include "mod_audio.h"
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
@@ -338,6 +339,11 @@ int savestate_load(const char *path) {
 
     /* Frame count */
     g_frame_count = ss.frame_count;
+
+    /* PCM overlay cursors are host delivery state, like the audio bridge, not
+     * emulated state. Keeping them would let a pre-load voice continue over a
+     * rewound world and duplicate any cue the restored fighter reaches. */
+    nes_mod_audio_stop_all();
 
     if (ss.resume_pc_valid) {
         runtime_request_guest_resume(ss.resume_pc, ss.resume_tick_charged != 0);

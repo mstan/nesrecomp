@@ -157,6 +157,21 @@ typedef struct {
 
 #define FOREIGN_ATTACK_BREAK_BLOCKS 0x00000001u
 
+/* Controller-defined, one-tick audio cues. The engine treats `cue` as opaque;
+ * the host adapter maps it to a locally registered PCM clip. A fixed small
+ * array keeps the ABI allocation-free while permitting a voice and move SFX
+ * on the same source motion-command frame. */
+#define FOREIGN_AUDIO_EVENT_CAPACITY 4
+typedef struct {
+    uint32_t cue;
+    int      gain_percent;
+} ForeignAudioEvent;
+
+typedef struct {
+    ForeignAudioEvent events[FOREIGN_AUDIO_EVENT_CAPACITY];
+    uint32_t count;
+} ForeignAudioEvents;
+
 /* What the controller wants to happen this tick, before host collision. */
 typedef struct {
     double           requested_dx;
@@ -165,6 +180,7 @@ typedef struct {
     double           vy;
     ForeignMoveState state;
     ForeignAttackHitbox attack;
+    ForeignAudioEvents audio;
 } ForeignMoveResult;
 
 /* What the host's collision actually permitted. Fed straight back in. */

@@ -116,6 +116,15 @@ breakable and routes the result through its native block logic. `damage` and
 knockback are portable metadata; hosts without damage/knockback systems may map
 an accepted hit directly to their own defeat or stun routine.
 
+### Audio cues
+
+`ForeignMoveResult.audio` is a bounded list of one-tick, controller-defined
+cue ids. Emit a cue only on the source motion-command frame. The host adapter
+maps the opaque id to an optional local PCM clip, chooses gain, and mixes it;
+the controller never loads files or opens an audio device. Multiple events can
+share a frame so a voice and an impact sound remain synchronized. A missing
+host mapping is deliberately a silent no-op.
+
 ---
 
 ## Ownership

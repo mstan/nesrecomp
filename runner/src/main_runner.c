@@ -28,6 +28,7 @@
 #include "nes_runtime.h"
 #include "input_script.h"
 #include "savestate.h"
+#include "mod_audio.h"
 #include "logger.h"
 #include "apu.h"
 #include "mapper.h"
@@ -1048,6 +1049,11 @@ smoke_skip_input:
                                                        AUDIO_SAMPLES_PER_FRAME, 44100.0, 1);
             }
         }
+
+        /* Trusted mods share the NES device and clock-domain bridge. Mix on
+         * the producer thread before launcher volume so APU and overlays obey
+         * the same user setting and the callback remains game-agnostic. */
+        nes_mod_audio_mix(s_audio_frame, AUDIO_SAMPLES_PER_FRAME);
 
         /* Apply the launcher volume (0..100) as a linear scale. */
         int vol = g_nes_config.volume;

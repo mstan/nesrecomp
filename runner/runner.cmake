@@ -16,6 +16,9 @@ set(NESRECOMP_RUNNER_SOURCES
     ${NESRECOMP_RUNNER_ROOT}/src/ppu_renderer.c
     ${NESRECOMP_RUNNER_ROOT}/src/ppu_dot.c
     ${NESRECOMP_RUNNER_ROOT}/src/apu.c
+    # Mono PCM one-shots registered by trusted game mods. Mixed into the same
+    # producer frame as the APU, before launcher volume and the audio bridge.
+    ${NESRECOMP_RUNNER_ROOT}/src/mod_audio.c
     ${NESRECOMP_RUNNER_ROOT}/src/mapper.c
     ${NESRECOMP_RUNNER_ROOT}/src/logger.c
     ${NESRECOMP_RUNNER_ROOT}/src/input_script.c
