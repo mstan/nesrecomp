@@ -83,6 +83,17 @@ struct Target {
     std::string rom_crc32;
 };
 
+struct ExternalRom {
+    std::string feature_id;
+    std::string id;
+    std::string label;
+    std::string description;
+    std::string format;
+    std::string identity;
+    std::string normalized_sha1;
+    uint64_t size = 0;
+};
+
 struct Package {
     uint32_t format_version = 0;
     std::string id;
@@ -95,6 +106,7 @@ struct Package {
     std::vector<Target> targets;
     std::vector<Feature> features;
     std::vector<Option> options;
+    std::vector<ExternalRom> external_roms;
 };
 
 struct FeatureSelection {
@@ -106,6 +118,7 @@ struct FeatureSelection {
 struct PackageSelection {
     std::string version;
     std::map<std::string, FeatureSelection> features;
+    std::map<std::string, std::string> resources;
 };
 
 struct Diagnostic {
@@ -134,6 +147,19 @@ struct RegisteredPlugin {
     NESModActivationCallback activation = nullptr;
 };
 
+struct ResourceVerdict {
+    bool verified = false;
+    std::string status = "Not selected";
+};
+
+struct ResourceCache {
+    std::string path;
+    uintmax_t size = 0;
+    fs::file_time_type modified{};
+    ResourceVerdict verdict;
+    bool populated = false;
+};
+
 std::map<std::string, RegisteredPlugin>& registered_plugins() {
     static std::map<std::string, RegisteredPlugin> value;
     return value;
@@ -152,6 +178,7 @@ struct Runtime {
     std::map<std::string, PackageSelection> selections;
     Validation validation;
     Validation committed;
+    std::map<std::string, ResourceCache> resource_cache;
     std::string error;
     bool initialized = false;
 };
@@ -160,6 +187,15 @@ Runtime& state() {
     static Runtime value;
     return value;
 }
+
+ResourceVerdict verify_external_rom(Runtime& runtime,
+                                    const Package& package,
+                                    const ExternalRom& resource,
+                                    bool force);
+
+bool feature_resources_valid(Runtime& runtime, const Package& package,
+                             const Feature& feature, bool force,
+                             std::vector<Diagnostic>* diagnostics);
 
 void set_error(std::string* out, const std::string& value) {
     if (out) *out = value;
@@ -260,6 +296,13 @@ bool valid_crc32(const std::string& value) {
         });
 }
 
+bool valid_sha1(const std::string& value) {
+    return value.size() == 40 &&
+        std::all_of(value.begin(), value.end(), [](unsigned char c) {
+            return std::isdigit(c) || (c >= 'a' && c <= 'f');
+        });
+}
+
 const Feature* find_feature(const Package& package,
                             const std::string& feature_id) {
     const auto it = std::find_if(
@@ -319,12 +362,14 @@ bool read_manifest(const fs::path& path, Package& out, std::string* error) {
         Option,
         Choice,
         Plugin,
+        ExternalRom,
     };
     Section section = Section::Package;
     Target* target = nullptr;
     Feature* feature = nullptr;
     Option* option = nullptr;
     Choice* choice = nullptr;
+    ExternalRom* external_rom = nullptr;
     std::string plugin_feature;
     std::string plugin_id;
     std::string plugin_when_option;
@@ -375,6 +420,7 @@ bool read_manifest(const fs::path& path, Package& out, std::string* error) {
             feature = nullptr;
             option = nullptr;
             choice = nullptr;
+            external_rom = nullptr;
             if (name == "target") {
                 section = Section::Target;
                 out.targets.emplace_back();
@@ -398,6 +444,10 @@ bool read_manifest(const fs::path& path, Package& out, std::string* error) {
                 choice = &option->choices.back();
             } else if (name == "plugin") {
                 section = Section::Plugin;
+            } else if (name == "external_rom") {
+                section = Section::ExternalRom;
+                out.external_roms.emplace_back();
+                external_rom = &out.external_roms.back();
             } else {
                 set_error(error, "unsupported manifest section [[" + name + "]]");
                 return false;
@@ -520,6 +570,28 @@ bool read_manifest(const fs::path& path, Package& out, std::string* error) {
                     parsed = string_field(plugin_when_value);
                 else known = false;
                 break;
+            case Section::ExternalRom:
+                external_rom = out.external_roms.empty()
+                    ? nullptr : &out.external_roms.back();
+                if (!external_rom) parsed = false;
+                else if (key == "feature")
+                    parsed = string_field(external_rom->feature_id);
+                else if (key == "id") parsed = string_field(external_rom->id);
+                else if (key == "label")
+                    parsed = string_field(external_rom->label);
+                else if (key == "description")
+                    parsed = string_field(external_rom->description);
+                else if (key == "format")
+                    parsed = string_field(external_rom->format);
+                else if (key == "identity")
+                    parsed = string_field(external_rom->identity);
+                else if (key == "normalized_sha1")
+                    parsed = string_field(external_rom->normalized_sha1);
+                else if (key == "size") {
+                    parsed = parse_int(value, int_value) && int_value > 0;
+                    if (parsed) external_rom->size = (uint64_t)int_value;
+                } else known = false;
+                break;
         }
         if (!known || !parsed) {
             set_error(error, "invalid or unsupported manifest field '" + key +
@@ -548,6 +620,20 @@ bool read_manifest(const fs::path& path, Package& out, std::string* error) {
              !valid_id(item.exclusive_group)) ||
             !feature_ids.insert(item.id).second) {
             set_error(error, "manifest has an invalid or duplicate feature");
+            return false;
+        }
+    }
+    /* State and provider callbacks address owner resources at package scope,
+     * so their ids must be package-wide unique rather than merely unique
+     * within one feature. This also makes cache/state keys unambiguous. */
+    std::set<std::string> resource_ids;
+    for (const ExternalRom& item : out.external_roms) {
+        if (!find_feature(out, item.feature_id) || !valid_id(item.id) ||
+            item.label.empty() || item.identity.empty() || item.size == 0 ||
+            (item.format != "raw" && item.format != "n64") ||
+            !valid_sha1(item.normalized_sha1) ||
+            !resource_ids.insert(item.id).second) {
+            set_error(error, "manifest has an invalid external ROM resource");
             return false;
         }
     }
@@ -657,6 +743,11 @@ Validation validate(Runtime& runtime) {
         if (!package) continue;
         for (const Feature& feature : package->features) {
             if (!feature_enabled(runtime, *package, feature)) continue;
+            if (!feature_resources_valid(runtime, *package, feature, false,
+                                         &result.diagnostics)) {
+                result.ok = false;
+                continue;
+            }
             if (!target_matches(*package, runtime)) {
                 result.ok = false;
                 result.diagnostics.push_back({
@@ -795,10 +886,11 @@ bool load_state(Runtime& runtime, std::string* error) {
         set_error(error, "cannot read mod state");
         return false;
     }
-    enum class Section { Root, Package, Feature, Values };
+    enum class Section { Root, Package, Feature, Values, Resource };
     Section section = Section::Root;
     std::string current_package;
     std::string current_feature;
+    std::string current_resource;
     std::string raw;
     while (std::getline(file, raw)) {
         const std::string line = trim(strip_comment(raw));
@@ -807,12 +899,21 @@ bool load_state(Runtime& runtime, std::string* error) {
             section = Section::Package;
             current_package.clear();
             current_feature.clear();
+            current_resource.clear();
             continue;
         }
         if (line == "[[feature]]") {
             section = Section::Feature;
             current_package.clear();
             current_feature.clear();
+            current_resource.clear();
+            continue;
+        }
+        if (line == "[[resource]]") {
+            section = Section::Resource;
+            current_package.clear();
+            current_feature.clear();
+            current_resource.clear();
             continue;
         }
         if (line == "[feature.values]") {
@@ -848,6 +949,19 @@ bool load_state(Runtime& runtime, std::string* error) {
                     runtime.selections[current_package].features[current_feature];
                 selection.enabled = enabled;
                 selection.has_enabled = true;
+            }
+            continue;
+        }
+        if (section == Section::Resource) {
+            if (key == "package_id" && parse_string(value, current_package)) {
+                runtime.selections[current_package];
+            } else if (key == "id" && !current_package.empty() &&
+                       parse_string(value, current_resource)) {
+                runtime.selections[current_package].resources[current_resource];
+            } else if (key == "path" && !current_package.empty() &&
+                       !current_resource.empty() && parse_string(value, parsed)) {
+                runtime.selections[current_package]
+                    .resources[current_resource] = parsed;
             }
             continue;
         }
@@ -900,6 +1014,12 @@ bool save_state(Runtime& runtime, std::string* error) {
                     file << key << " = " << quote_toml(value) << "\n";
             }
         }
+        for (const auto& [resource_id, path] : selection.resources) {
+            if (path.empty()) continue;
+            file << "\n[[resource]]\npackage_id = " << quote_toml(package_id)
+                 << "\nid = " << quote_toml(resource_id)
+                 << "\npath = " << quote_toml(path) << "\n";
+        }
     }
     file.close();
     if (!file) {
@@ -939,6 +1059,169 @@ bool read_file(const fs::path& path, std::vector<uint8_t>& out,
         return false;
     }
     return true;
+}
+
+uint32_t rol32(uint32_t value, unsigned bits) {
+    return (value << bits) | (value >> (32 - bits));
+}
+
+std::string sha1_hex(const std::vector<uint8_t>& input) {
+    uint32_t h[5] = {0x67452301u, 0xEFCDAB89u, 0x98BADCFEu,
+                     0x10325476u, 0xC3D2E1F0u};
+    std::vector<uint8_t> data = input;
+    const uint64_t bits = (uint64_t)data.size() * 8u;
+    data.push_back(0x80);
+    while ((data.size() % 64) != 56) data.push_back(0);
+    for (int shift = 56; shift >= 0; shift -= 8)
+        data.push_back((uint8_t)(bits >> shift));
+    for (size_t block = 0; block < data.size(); block += 64) {
+        uint32_t w[80] = {};
+        for (int i = 0; i < 16; ++i) {
+            const size_t p = block + (size_t)i * 4;
+            w[i] = ((uint32_t)data[p] << 24) |
+                   ((uint32_t)data[p + 1] << 16) |
+                   ((uint32_t)data[p + 2] << 8) | data[p + 3];
+        }
+        for (int i = 16; i < 80; ++i)
+            w[i] = rol32(w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16], 1);
+        uint32_t a = h[0], b = h[1], c = h[2], d = h[3], e = h[4];
+        for (int i = 0; i < 80; ++i) {
+            uint32_t f, k;
+            if (i < 20) { f = (b & c) | ((~b) & d); k = 0x5A827999u; }
+            else if (i < 40) { f = b ^ c ^ d; k = 0x6ED9EBA1u; }
+            else if (i < 60) {
+                f = (b & c) | (b & d) | (c & d); k = 0x8F1BBCDCu;
+            } else { f = b ^ c ^ d; k = 0xCA62C1D6u; }
+            const uint32_t temp = rol32(a, 5) + f + e + k + w[i];
+            e = d; d = c; c = rol32(b, 30); b = a; a = temp;
+        }
+        h[0] += a; h[1] += b; h[2] += c; h[3] += d; h[4] += e;
+    }
+    char out[41];
+    std::snprintf(out, sizeof(out), "%08x%08x%08x%08x%08x",
+                  h[0], h[1], h[2], h[3], h[4]);
+    return out;
+}
+
+ResourceVerdict verify_external_rom(Runtime& runtime,
+                                    const Package& package,
+                                    const ExternalRom& resource,
+                                    bool force) {
+    PackageSelection& selection = package_selection(runtime, package);
+    const auto selected = selection.resources.find(resource.id);
+    const std::string path = selected == selection.resources.end()
+        ? std::string() : selected->second;
+    ResourceVerdict result;
+    if (path.empty()) {
+        result.status = "Not selected — required before enabling";
+        return result;
+    }
+    std::error_code ec;
+    const fs::path file_path(path);
+    const uintmax_t size = fs::file_size(file_path, ec);
+    if (ec) {
+        result.status = "Cannot read selected file";
+        return result;
+    }
+    const fs::file_time_type modified = fs::last_write_time(file_path, ec);
+    if (ec) {
+        result.status = "Cannot inspect selected file";
+        return result;
+    }
+    /* A resource id can be reused by a later package version with a different
+     * supported ROM revision. Bind the cache to the manifest identity as well
+     * as the selected path metadata, so version selection cannot reuse a
+     * verdict computed under an older whitelist. */
+    const std::string cache_key = package.id + ":" + package.version + ":" +
+        resource.id + ":" + resource.normalized_sha1;
+    ResourceCache& cache = runtime.resource_cache[cache_key];
+    if (!force && cache.populated && cache.path == path &&
+        cache.size == size && cache.modified == modified)
+        return cache.verdict;
+
+    if (size != resource.size) {
+        result.status = "Wrong size — expected " +
+            std::to_string(resource.size) + " bytes";
+    } else {
+        std::vector<uint8_t> bytes;
+        std::string error;
+        if (!read_file(file_path, bytes, &error) ||
+            (resource.format == "n64" && bytes.size() < 4)) {
+            result.status = "Cannot read selected file";
+        } else {
+            if (resource.format == "n64") {
+                const uint32_t magic = ((uint32_t)bytes[0] << 24) |
+                                       ((uint32_t)bytes[1] << 16) |
+                                       ((uint32_t)bytes[2] << 8) | bytes[3];
+                if (magic == 0x37804012u) {
+                    for (size_t i = 0; i + 1 < bytes.size(); i += 2)
+                        std::swap(bytes[i], bytes[i + 1]);
+                } else if (magic == 0x40123780u) {
+                    for (size_t i = 0; i + 3 < bytes.size(); i += 4) {
+                        std::swap(bytes[i], bytes[i + 3]);
+                        std::swap(bytes[i + 1], bytes[i + 2]);
+                    }
+                } else if (magic != 0x80371240u) {
+                    result.status = "Unrecognized N64 ROM byte order";
+                }
+            }
+            if (result.status == "Not selected") result.status.clear();
+            if (result.status.empty()) {
+                const std::string digest = sha1_hex(bytes);
+                if (digest == resource.normalized_sha1) {
+                    result.verified = true;
+                    result.status = "Verified — " + resource.identity;
+                } else {
+                    result.status = "Checksum mismatch — unsupported ROM revision";
+                }
+            }
+        }
+    }
+    cache.path = path;
+    cache.size = size;
+    cache.modified = modified;
+    cache.verdict = result;
+    cache.populated = true;
+    return result;
+}
+
+bool feature_resources_valid(Runtime& runtime, const Package& package,
+                             const Feature& feature, bool force,
+                             std::vector<Diagnostic>* diagnostics) {
+    bool valid = true;
+    for (const ExternalRom& resource : package.external_roms) {
+        if (resource.feature_id != feature.id) continue;
+        const ResourceVerdict verdict =
+            verify_external_rom(runtime, package, resource, force);
+        if (verdict.verified) continue;
+        valid = false;
+        if (diagnostics) {
+            diagnostics->push_back({
+                package.id, feature.id, {}, {},
+                "external-rom:" + resource.id,
+                resource.label + ": " + verdict.status
+            });
+        }
+    }
+    return valid;
+}
+
+void disable_invalid_persisted_features(Runtime& runtime) {
+    for (const auto& [id, versions] : runtime.packages) {
+        (void)versions;
+        const Package* package = selected_package(runtime, id);
+        if (!package) continue;
+        for (const Feature& feature : package->features) {
+            if (!feature_enabled(runtime, *package, feature)) continue;
+            if (feature_resources_valid(runtime, *package, feature, true,
+                                        nullptr))
+                continue;
+            FeatureSelection& selection =
+                package_selection(runtime, *package).features[feature.id];
+            selection.enabled = false;
+            selection.has_enabled = true;
+        }
+    }
 }
 
 uint16_t le16(const uint8_t* p) {
@@ -1461,7 +1744,9 @@ int provider_package_get(void*, int index,
     out->removable = 1;
     out->option_count = 0;
     for (const Feature& feature : package.features) {
-        if (feature_enabled(state(), package, feature)) out->enabled = 1;
+        if (feature_enabled(state(), package, feature) &&
+            feature_resources_valid(state(), package, feature, false, nullptr))
+            out->enabled = 1;
         out->option_count += (int)std::count_if(
             package.options.begin(), package.options.end(),
             [&](const Option& option) {
@@ -1569,6 +1854,18 @@ int provider_enable(void*, const char* package_id, int enabled) {
     if (!package_id) return 0;
     const Package* package = selected_package(state(), package_id);
     if (!package) return 0;
+    if (enabled) {
+        for (const Feature& feature : package->features) {
+            std::vector<Diagnostic> diagnostics;
+            if (!feature_resources_valid(state(), *package, feature, true,
+                                         &diagnostics)) {
+                state().error = diagnostics.empty()
+                    ? "Select and verify this feature's required owner ROM."
+                    : diagnostics.front().message;
+                return 0;
+            }
+        }
+    }
     for (const Feature& feature : package->features) {
         FeatureSelection& selection =
             package_selection(state(), *package).features[feature.id];
@@ -1655,7 +1952,8 @@ int provider_feature_get(void*, int index,
     copy_text(out->author, package.author);
     copy_text(out->description, feature.description);
     copy_text(out->group, feature.group);
-    out->enabled = feature_enabled(state(), package, feature);
+    out->enabled = feature_enabled(state(), package, feature) &&
+        feature_resources_valid(state(), package, feature, false, nullptr);
     out->camera_controls = feature.camera_controls ? 1 : 0;
     out->option_count = (int)std::count_if(
         package.options.begin(), package.options.end(),
@@ -1728,6 +2026,16 @@ int provider_feature_enable(void*, const char* package_id,
     const Feature* feature =
         package ? find_feature(*package, feature_id) : nullptr;
     if (!package || !feature) return 0;
+    if (enabled) {
+        std::vector<Diagnostic> diagnostics;
+        if (!feature_resources_valid(state(), *package, *feature, true,
+                                     &diagnostics)) {
+            state().error = diagnostics.empty()
+                ? "Select and verify this feature's required owner ROM."
+                : diagnostics.front().message;
+            return 0;
+        }
+    }
     if (enabled && !feature->exclusive_group.empty()) {
         for (const FeatureRef& other : selected_features(state())) {
             if (other.package->id == package->id &&
@@ -1747,6 +2055,81 @@ int provider_feature_enable(void*, const char* package_id,
     selection.enabled = enabled != 0;
     selection.has_enabled = true;
     refresh_validation();
+    state().error.clear();
+    return 1;
+}
+
+int provider_feature_resource_count(void*, const char* package_id,
+                                    const char* feature_id) {
+    if (!package_id || !feature_id) return 0;
+    const Package* package = selected_package(state(), package_id);
+    if (!package || !find_feature(*package, feature_id)) return 0;
+    return (int)std::count_if(
+        package->external_roms.begin(), package->external_roms.end(),
+        [&](const ExternalRom& resource) {
+            return resource.feature_id == feature_id;
+        });
+}
+
+int provider_feature_resource_get(
+    void*, const char* package_id, const char* feature_id, int index,
+    RecompLauncherCModResource* out) {
+    if (!package_id || !feature_id || !out || index < 0) return 0;
+    const Package* package = selected_package(state(), package_id);
+    if (!package || !find_feature(*package, feature_id)) return 0;
+    for (const ExternalRom& resource : package->external_roms) {
+        if (resource.feature_id != feature_id) continue;
+        if (index-- != 0) continue;
+        std::memset(out, 0, sizeof(*out));
+        copy_text(out->id, resource.id);
+        copy_text(out->label, resource.label);
+        copy_text(out->description, resource.description);
+        const PackageSelection& selection =
+            state().selections[package->id];
+        const auto path = selection.resources.find(resource.id);
+        if (path != selection.resources.end()) copy_text(out->path, path->second);
+        const ResourceVerdict verdict =
+            verify_external_rom(state(), *package, resource, false);
+        copy_text(out->status, verdict.status);
+        if (resource.format == "n64") {
+            copy_text(out->file_patterns, "*.z64,*.v64,*.n64");
+            copy_text(out->file_description, "Nintendo 64 ROM images");
+        } else {
+            copy_text(out->file_patterns, "*.*");
+            copy_text(out->file_description, "ROM images");
+        }
+        out->required = 1;
+        out->verified = verdict.verified ? 1 : 0;
+        return 1;
+    }
+    return 0;
+}
+
+int provider_feature_resource_set_path(
+    void*, const char* package_id, const char* feature_id,
+    const char* resource_id, const char* path) {
+    if (!package_id || !feature_id || !resource_id || !path) return 0;
+    const Package* package = selected_package(state(), package_id);
+    if (!package || !find_feature(*package, feature_id)) return 0;
+    const auto resource = std::find_if(
+        package->external_roms.begin(), package->external_roms.end(),
+        [&](const ExternalRom& candidate) {
+            return candidate.feature_id == feature_id &&
+                   candidate.id == resource_id;
+        });
+    if (resource == package->external_roms.end()) return 0;
+    package_selection(state(), *package).resources[resource->id] = path;
+    /* The full cache key also includes version/hash. Clearing all entries is
+     * cheap (owner ROMs are only verified on interaction/commit) and removes
+     * stale verdicts for previous selections of this resource. */
+    state().resource_cache.clear();
+    const ResourceVerdict verdict =
+        verify_external_rom(state(), *package, *resource, true);
+    refresh_validation();
+    if (!verdict.verified) {
+        state().error = resource->label + ": " + verdict.status;
+        return 0;
+    }
     state().error.clear();
     return 1;
 }
@@ -1833,6 +2216,9 @@ RecompLauncherCModProvider provider = {
     ".nesmod",
     "NESRecomp mod package (.nesmod)",
     provider_commit_netplay,
+    provider_feature_resource_count,
+    provider_feature_resource_get,
+    provider_feature_resource_set_path,
 };
 #endif
 
@@ -1856,6 +2242,10 @@ bool mod_runtime_initialize(const fs::path& root,
         set_error(error, runtime.error);
         return false;
     }
+    /* A legacy/manual state file cannot keep a feature effectively enabled
+     * without its newly declared owner ROM. Preserve the path, but fail closed
+     * to a disabled selection until the user verifies and enables it again. */
+    disable_invalid_persisted_features(runtime);
     runtime.validation = validate(runtime);
     runtime.initialized = true;
     runtime.error.clear();
@@ -1865,6 +2255,7 @@ bool mod_runtime_initialize(const fs::path& root,
 bool mod_runtime_commit(const fs::path& rom_path, std::string* error) {
     Runtime& runtime = state();
     if (!runtime.initialized) return true;
+    runtime.committed = {};
     if (!rom_path.empty()) {
         std::string digest;
         if (!crc32_file(rom_path, digest, &runtime.error)) {
@@ -1878,6 +2269,9 @@ bool mod_runtime_commit(const fs::path& rom_path, std::string* error) {
             return false;
         }
     }
+    /* Re-open and re-hash owner resources at PLAY. Cached UI validation is not
+     * an activation authority: files can be deleted or replaced meanwhile. */
+    runtime.resource_cache.clear();
     runtime.validation = validate(runtime);
     if (!runtime.validation.ok) {
         for (const Diagnostic& diagnostic : runtime.validation.diagnostics) {

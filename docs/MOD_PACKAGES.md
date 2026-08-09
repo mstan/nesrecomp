@@ -44,6 +44,40 @@ mods/
 
 Built-in features should default to disabled.
 
+## Required owner ROMs
+
+A feature may require a second, user-owned source ROM without treating that
+ROM as package content or as the game image being launched:
+
+```toml
+[[external_rom]]
+feature = "smash64-player"
+id = "smash-64-us-v1"
+label = "Super Smash Bros. 64 ROM"
+description = "Select a legally owned USA v1.0 dump."
+format = "n64"
+identity = "Super Smash Bros. (USA), NTSC-U v1.0 (NALE)"
+size = 16777216
+normalized_sha1 = "e2929e10fccc0aa84e5776227e798abc07cedabf"
+```
+
+Resource IDs are unique across their whole package because persisted paths
+and provider callbacks address them at package scope. `format = "n64"` gives
+the launcher `.z64`/`.v64`/`.n64` filters and tells the runtime to detect N64
+byte order from the magic and normalize the bytes in memory. `format = "raw"`
+hashes the selected file without a byte-order transform and uses a generic ROM
+picker. The runtime compares the normalized SHA-1 and exact size declared by
+the package, then displays the manifest's `identity` as the verified revision.
+SHA-1 is used as a ROM-revision identity, not as a security primitive. The
+selected path is stored in `mods/state.toml`; the ROM is never copied into or
+packaged with the mod.
+
+Required owner ROMs are fail-closed at every activation boundary. A missing,
+changed, or unsupported file prevents both package-level and feature-level
+enable operations, invalidates a hand-edited or legacy enabled state, and is
+reopened and rehashed when PLAY commits the activation plan. UI status alone
+is never activation authority.
+
 ## Manifest format 1
 
 ```toml
