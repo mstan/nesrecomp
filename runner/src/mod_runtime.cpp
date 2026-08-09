@@ -178,9 +178,14 @@ struct Runtime {
     std::map<std::string, PackageSelection> selections;
     Validation validation;
     Validation committed;
+    /* Immutable owner-ROM paths that passed final PLAY-time validation. Do
+     * not consult staged selections from a plugin API: the UI may have changed
+     * them after the last successful commit. */
+    std::map<std::string, std::string> committed_external_rom_paths;
     std::map<std::string, ResourceCache> resource_cache;
     std::string error;
     bool initialized = false;
+    bool commit_succeeded = false;
 };
 
 Runtime& state() {
@@ -196,6 +201,17 @@ ResourceVerdict verify_external_rom(Runtime& runtime,
 bool feature_resources_valid(Runtime& runtime, const Package& package,
                              const Feature& feature, bool force,
                              std::vector<Diagnostic>* diagnostics);
+
+std::string external_rom_key(const std::string& package_id,
+                             const std::string& feature_id,
+                             const std::string& resource_id) {
+    /* Manifest ids cannot contain ':'; avoid ambiguous compound keys. */
+    return package_id + ":" + feature_id + ":" + resource_id;
+}
+
+bool snapshot_committed_external_rom_paths(Runtime& runtime,
+                                           const Validation& plan,
+                                           std::string* error);
 
 void set_error(std::string* out, const std::string& value) {
     if (out) *out = value;
@@ -836,6 +852,51 @@ Validation validate(Runtime& runtime) {
         result.plugins.push_back(plugin);
     }
     return result;
+}
+
+/* The UI's resource cache is deliberately not an authority at PLAY. Snapshot
+ * only resources owned by features that resolved to a trusted activation
+ * callback, and force the final hash now. This gives plugins a stable,
+ * committed path without exposing staged or unrelated owner-ROM selections. */
+bool snapshot_committed_external_rom_paths(Runtime& runtime,
+                                           const Validation& plan,
+                                           std::string* error) {
+    std::map<std::string, std::string> snapshot;
+    std::set<std::pair<std::string, std::string>> seen_features;
+    for (const ResolvedPlugin& plugin : plan.plugins) {
+        const auto feature_key =
+            std::make_pair(plugin.package_id, plugin.feature_id);
+        if (!seen_features.insert(feature_key).second) continue;
+        const Package* package = selected_package(runtime, plugin.package_id);
+        if (!package) {
+            set_error(error, "Committed plugin package is unavailable.");
+            return false;
+        }
+        const Feature* feature = find_feature(*package, plugin.feature_id);
+        if (!feature || !feature_enabled(runtime, *package, *feature)) {
+            set_error(error, "Committed plugin feature is unavailable.");
+            return false;
+        }
+        const PackageSelection& selection = package_selection(runtime, *package);
+        for (const ExternalRom& resource : package->external_roms) {
+            if (resource.feature_id != feature->id) continue;
+            const ResourceVerdict verdict =
+                verify_external_rom(runtime, *package, resource, true);
+            if (!verdict.verified) {
+                set_error(error, resource.label + ": " + verdict.status);
+                return false;
+            }
+            const auto path = selection.resources.find(resource.id);
+            if (path == selection.resources.end() || path->second.empty()) {
+                set_error(error, resource.label + ": Not selected");
+                return false;
+            }
+            snapshot.emplace(external_rom_key(package->id, feature->id,
+                                               resource.id), path->second);
+        }
+    }
+    runtime.committed_external_rom_paths = std::move(snapshot);
+    return true;
 }
 
 bool scan(Runtime& runtime, std::string* error) {
@@ -1924,6 +1985,8 @@ int provider_commit_netplay(void*, const char* image_path) {
     /* Netplay is deliberately vanilla without overwriting the user's saved
      * offline selections. The next ordinary commit rebuilds this plan. */
     runtime.committed = {};
+    runtime.committed_external_rom_paths.clear();
+    runtime.commit_succeeded = false;
     runtime.error.clear();
     return 1;
 }
@@ -2256,6 +2319,8 @@ bool mod_runtime_commit(const fs::path& rom_path, std::string* error) {
     Runtime& runtime = state();
     if (!runtime.initialized) return true;
     runtime.committed = {};
+    runtime.committed_external_rom_paths.clear();
+    runtime.commit_succeeded = false;
     if (!rom_path.empty()) {
         std::string digest;
         if (!crc32_file(rom_path, digest, &runtime.error)) {
@@ -2285,11 +2350,18 @@ bool mod_runtime_commit(const fs::path& rom_path, std::string* error) {
         set_error(error, runtime.error);
         return false;
     }
+    if (!snapshot_committed_external_rom_paths(runtime, runtime.validation,
+                                               &runtime.error)) {
+        set_error(error, runtime.error);
+        return false;
+    }
     if (!save_state(runtime, &runtime.error)) {
+        runtime.committed_external_rom_paths.clear();
         set_error(error, runtime.error);
         return false;
     }
     runtime.committed = runtime.validation;
+    runtime.commit_succeeded = true;
     runtime.error.clear();
     return true;
 }
@@ -2376,6 +2448,17 @@ extern "C" int nes_mod_option_value(
     if (value.size() + 1 > (size_t)out_size) return 0;
     std::memcpy(out, value.c_str(), value.size() + 1);
     return 1;
+}
+
+extern "C" const char* nes_mod_external_rom_path(
+    const char* package_id, const char* feature_id, const char* resource_id) {
+    if (!package_id || !feature_id || !resource_id) return nullptr;
+    NESRecomp::Runtime& runtime = NESRecomp::state();
+    if (!runtime.initialized || !runtime.commit_succeeded) return nullptr;
+    const auto path = runtime.committed_external_rom_paths.find(
+        NESRecomp::external_rom_key(package_id, feature_id, resource_id));
+    return path == runtime.committed_external_rom_paths.end()
+        ? nullptr : path->second.c_str();
 }
 
 extern "C" int nes_mod_runtime_initialize_c(

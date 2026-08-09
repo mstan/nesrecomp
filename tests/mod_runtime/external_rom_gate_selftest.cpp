@@ -21,8 +21,16 @@ constexpr const char* kSha1 = "606e809392c9f1363cfd83b2f80aa66b5bd0e990";
 
 int failures;
 int activations;
+fs::path expected_activation_path;
+bool activation_saw_committed_path;
 
-void activate_test_plugin() { ++activations; }
+void activate_test_plugin() {
+    ++activations;
+    const char* path = nes_mod_external_rom_path(
+        kPackageId, kFeatureId, "source-rom");
+    activation_saw_committed_path =
+        path && fs::path(path) == expected_activation_path;
+}
 
 void expect(bool condition, const std::string& message) {
     if (condition) return;
@@ -74,11 +82,12 @@ void write_catalog(const fs::path& root, const fs::path& resource_path,
             << "name = \"Second synthetic fighter\"\n"
             << "default_enabled = false\n\n";
     }
-    auto external_rom = [&](const char* feature, const char* identity) {
+    auto external_rom = [&](const char* feature, const char* id,
+                            const char* identity) {
         manifest
             << "[[external_rom]]\n"
             << "feature = \"" << feature << "\"\n"
-            << "id = \"source-rom\"\n"
+            << "id = \"" << id << "\"\n"
             << "label = \"Synthetic source ROM\"\n"
             << "description = \"Generated test data.\"\n"
             << "format = \"" << format << "\"\n"
@@ -86,9 +95,17 @@ void write_catalog(const fs::path& root, const fs::path& resource_path,
             << "size = " << kRomSize << "\n"
             << "normalized_sha1 = \"" << kSha1 << "\"\n\n";
     };
-    external_rom(kFeatureId, "Synthetic canonical N64 image");
+    external_rom(kFeatureId, "source-rom", "Synthetic canonical N64 image");
+    manifest
+        << "[[feature]]\n"
+        << "id = \"inactive-fighter\"\n"
+        << "name = \"Inactive synthetic fighter\"\n"
+        << "default_enabled = false\n\n";
+    external_rom("inactive-fighter", "uncommitted-source",
+                 "Uncommitted synthetic source ROM");
     if (duplicate_resource_id)
-        external_rom("second-fighter", "Duplicate package-scoped id");
+        external_rom("second-fighter", "source-rom",
+                     "Duplicate package-scoped id");
     manifest
         << "[[plugin]]\n"
         << "feature = \"" << kFeatureId << "\"\n"
@@ -109,6 +126,10 @@ void write_catalog(const fs::path& root, const fs::path& resource_path,
         << "[[resource]]\n"
         << "package_id = \"" << kPackageId << "\"\n"
         << "id = \"source-rom\"\n"
+        << "path = " << toml_string(resource_path.string()) << "\n\n"
+        << "[[resource]]\n"
+        << "package_id = \"" << kPackageId << "\"\n"
+        << "id = \"uncommitted-source\"\n"
         << "path = " << toml_string(resource_path.string()) << "\n";
     expect(static_cast<bool>(state), "write synthetic state");
 }
@@ -125,12 +146,32 @@ void expect_valid_activation(const fs::path& base, const std::string& name,
     write_catalog(root, resource, format);
     std::string error;
     activations = 0;
+    activation_saw_committed_path = false;
+    expected_activation_path = resource;
     expect(initialize(root, error), name + " initializes: " + error);
+    expect(nes_mod_external_rom_path(
+               kPackageId, kFeatureId, "source-rom") == nullptr,
+           name + " does not expose an owner ROM before commit");
     error.clear();
     expect(NESRecomp::mod_runtime_commit({}, &error),
            name + " commits: " + error);
+    const char* committed_path = nes_mod_external_rom_path(
+        kPackageId, kFeatureId, "source-rom");
+    expect(committed_path && fs::path(committed_path) == resource,
+           name + " exposes exactly its committed verified owner ROM path");
+    expect(nes_mod_external_rom_path(
+               kPackageId, "other-feature", "source-rom") == nullptr,
+           name + " cannot expose an unrelated feature resource");
+    expect(nes_mod_external_rom_path(
+               "other-package", kFeatureId, "source-rom") == nullptr,
+           name + " cannot expose an unrelated package resource");
+    expect(nes_mod_external_rom_path(
+               kPackageId, "inactive-fighter", "uncommitted-source") == nullptr,
+           name + " cannot expose a selected but uncommitted feature resource");
     NESRecomp::mod_runtime_activate_plugins();
     expect(activations == 1, name + " activates exactly one plugin");
+    expect(activation_saw_committed_path,
+           name + " exposes the path to its trusted activation callback");
 }
 
 void expect_invalid_resource(const fs::path& base, const std::string& name,
@@ -220,6 +261,9 @@ int main() {
         error.clear();
         expect(!NESRecomp::mod_runtime_commit({}, &error),
                "TOCTOU changed file fails recommit");
+        expect(nes_mod_external_rom_path(
+                   kPackageId, kFeatureId, "source-rom") == nullptr,
+               "failed recommit clears the previously exposed owner ROM path");
         NESRecomp::mod_runtime_activate_plugins();
         expect(activations == 0,
                "failed recommit clears the previously committed plugin plan");

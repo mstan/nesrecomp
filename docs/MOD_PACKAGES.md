@@ -78,6 +78,24 @@ enable operations, invalidates a hand-edited or legacy enabled state, and is
 reopened and rehashed when PLAY commits the activation plan. UI status alone
 is never activation authority.
 
+An activated, trusted game plugin may obtain the selected owner-ROM *path*
+after that successful PLAY commit:
+
+```c
+const char* source = nes_mod_external_rom_path(
+    "com.example.smash64", "smash64-player", "smash-64-us-v1");
+if (!source) return;  /* no committed, verified resource for this feature */
+```
+
+`nes_mod_external_rom_path` returns `NULL` before a successful commit, for an
+inactive feature, and for any package/feature/resource outside the committed
+activation plan. It returns a runtime-owned path snapshot, not a pending
+launcher selection, so a later UI edit cannot change what an already committed
+plugin reads. The pointer remains valid until the next initialize or commit.
+It exposes no ROM bytes; trusted game code is responsible for opening the
+user-owned file. Native plugins are intentionally trusted code, so this is an
+activation-scope gate rather than a sandbox between plugins.
+
 ## Manifest format 1
 
 ```toml

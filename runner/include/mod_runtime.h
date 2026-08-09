@@ -103,6 +103,22 @@ int nes_mod_option_value(const char* package_id,
                          char* out,
                          uint32_t out_size);
 
+/*
+ * Return the path selected for a required external ROM, but only when that
+ * exact package/feature/resource is part of the successfully committed
+ * trusted-plugin plan. The resource is revalidated at commit time; pending
+ * launcher selections and resources belonging to inactive features are never
+ * exposed. Returns NULL before a successful commit or when the ids do not
+ * name a committed resource. The returned storage belongs to the runtime and
+ * remains valid until the next runtime initialize/commit operation.
+ *
+ * This exposes a path only. Plugins open the owner-supplied file themselves;
+ * the mod runtime never supplies ROM bytes.
+ */
+const char* nes_mod_external_rom_path(const char* package_id,
+                                      const char* feature_id,
+                                      const char* resource_id);
+
 #if defined(_MSC_VER)
 #pragma section(".CRT$XCU", read)
 #if defined(_M_IX86)
