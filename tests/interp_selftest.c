@@ -38,6 +38,7 @@ uint16_t     g_rti_source = 0;
 int          g_rti_bank = -1;
 
 static int s_native_calls = 0;
+static int s_native_self_loop_calls = 0;
 static int s_miss_count = 0;
 static int s_mapper_type = 0;
 static uint16_t s_resume_pc = 0;
@@ -115,6 +116,14 @@ int call_by_address(uint16_t a) {
     }
     if (a == 0x0720) {            /* native tail unwind: no RTS/RTI sidecar */
         s_native_calls++;
+        s_resume_pc = 0x0730;
+        s_resume_tick_charged = 1;
+        return 1;
+    }
+    if (a == 0x8740) {            /* generated permanent frame-driver loop */
+        s_native_self_loop_calls++;
+        /* A real generated self-loop never returns. Model its next frame
+         * callback abandoning this host stack and publishing a continuation. */
         s_resume_pc = 0x0730;
         s_resume_tick_charged = 1;
         return 1;
@@ -287,6 +296,19 @@ int main(void) {
       nes_interp_get_stats(&stats);
       CHECK(stats.native_resume_reentries > 0,
             "T4g native resume re-entry counted"); }
+
+    printf("[T4h] save-state continuation hands a generated self-loop native\n");
+    fresh();
+    s_native_self_loop_calls = 0;
+    { uint8_t loop[] = {0x4C,0x40,0x87}; /* $8740: JMP $8740 */
+      uint8_t resumed[] = {0xA9,0x7B, 0x85,0x1B, 0x00};
+      load(0x0740, loop, sizeof loop); load(0x0730, resumed, sizeof resumed); }
+    r = nes_interp_resume(0x8740);
+    CHECK(r == 1,             "T4h continuation handled");
+    CHECK(s_native_self_loop_calls == 1,
+          "T4h generated self-loop invoked natively once");
+    CHECK(g_ram[0x1B] == 0x7B,
+          "T4h native frame callback continuation recovered");
 
     printf("[T5] SBC with carry (no borrow)\n");
     fresh();

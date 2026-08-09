@@ -235,11 +235,7 @@ extern int call_by_address(uint16_t addr);
 /* Probe + dispatch a control-transfer target.
  * Returns 1 if the target was covered and executed natively; 0 on miss
  * (caller interprets the target inline). */
-static int interp_dispatch_target(uint16_t target, int is_tail) {
-    if (!interp_native_handoff_allowed(is_tail)) {
-        s_stats.native_handoffs_suppressed++;
-        return 0;
-    }
+static int interp_probe_native_target(uint16_t target) {
     nes_dring_mark('P', target);   /* interp probe (pre-dispatch) */
     g_rts_target = 0;
     g_rti_target = 0;
@@ -251,6 +247,14 @@ static int interp_dispatch_target(uint16_t target, int is_tail) {
     s_probe_armed = 0;
     if (hit) s_stats.native_handoffs++;
     return hit;
+}
+
+static int interp_dispatch_target(uint16_t target, int is_tail) {
+    if (!interp_native_handoff_allowed(is_tail)) {
+        s_stats.native_handoffs_suppressed++;
+        return 0;
+    }
+    return interp_probe_native_target(target);
 }
 
 static NesInterpExit make_exit(NesInterpExitKind kind, uint16_t entry,
@@ -514,7 +518,23 @@ static NesInterpExit interp_run_ex(uint16_t entry, int stop_on_stack_lift,
             case MN_JMP: {
                 uint16_t target = (e->addr_mode == AM_IND)
                                   ? nes_read16_jmpbug(abs16) : abs16;
-                if (interp_dispatch_target(target, 1)) {
+                /* A save-state can capture the PC at a ROM's permanent
+                 * frame-driver loop (SMB1 $8057 is `JMP $8057`). Safe
+                 * handoff normally keeps JMP tails inside the interpreter,
+                 * because a returning native tail can discard an interpreted
+                 * ancestor. A direct self-loop at the explicit resume entry
+                 * has no such ancestor or return path. If that exact address
+                 * is generated, hand it back to native execution so a long-
+                 * lived game does not consume the per-run interpreter budget
+                 * and terminate at the watchdog cap. Misses remain in the
+                 * interpreter, including RAM loops and non-entry loops. */
+                int resume_self_loop =
+                    !stop_on_stack_lift && e->addr_mode == AM_ABS &&
+                    entry >= 0x8000 && ipc == entry && target == entry;
+                int native_hit = resume_self_loop
+                    ? interp_probe_native_target(target)
+                    : interp_dispatch_target(target, 1);
+                if (native_hit) {
                     /* A native tail target may RTS/RTI into an interpreted
                      * ancestor. Resume it while still below this run's stack
                      * floor; otherwise the floor check returns to native. */
