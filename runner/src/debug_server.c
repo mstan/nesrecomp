@@ -818,7 +818,7 @@ static void handle_ftring(int id, const char *json)
     /* Per-row budget, not a guess: the widest row is ~280 chars with modest
      * coordinates, and every %.4f grows with magnitude. Keep headroom -- this
      * is a fixed-size sprintf target with no bound. */
-    char *buf = (char *)malloc((size_t)got * 384 + 256);
+    char *buf = (char *)malloc((size_t)got * 416 + 256);
     if (!buf) { free(ev); send_err(id, "alloc failed"); return; }
     const ForeignController *ctl = nes_foreign_active();
     int pos = snprintf(buf, 256,
@@ -838,7 +838,8 @@ static void handle_ftring(int id, const char *json)
             "\"vx\":%.4f,\"vy\":%.4f,\"rdx\":%.4f,\"rdy\":%.4f,"
             "\"adx\":%.4f,\"ady\":%.4f,\"gnd\":%u,\"ff\":%u,"
             "\"air\":%u,\"jp\":%u,\"rs\":%u,\"hw\":%u,\"hc\":%u,\"hf\":%u,"
-            "\"imp\":%u,\"ivy\":%.4f,\"cf\":\"0x%08X\",\"nx\":%d,\"ny\":%d}",
+            "\"contact\":%u,\"imp\":%u,\"ivy\":%.4f,\"cf\":\"0x%08X\","
+            "\"nx\":%d,\"ny\":%d}",
             i ? "," : "", (unsigned long long)e->frame, e->ownership,
             e->state, name, e->raw_buttons, e->stick_x, e->stick_y,
             e->x, e->y, e->vx, e->vy,
@@ -847,7 +848,8 @@ static void handle_ftring(int id, const char *json)
             e->grounded, e->fast_fall,
             e->air_cause, e->jump_phase, e->reseeded,
             e->hit_wall, e->hit_ceiling, e->hit_floor,
-            e->has_imposed_vy, e->imposed_vy, e->collision_flags,
+            e->attack_connected, e->has_imposed_vy, e->imposed_vy,
+            e->collision_flags,
             e->native_x, e->native_y);
     }
     pos += sprintf(buf + pos, "]}");

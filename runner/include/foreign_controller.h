@@ -156,6 +156,7 @@ typedef struct {
 } ForeignAttackHitbox;
 
 #define FOREIGN_ATTACK_BREAK_BLOCKS 0x00000001u
+#define FOREIGN_ATTACK_CONTACT_ONLY 0x00000002u
 
 /* Controller-defined, one-tick audio cues. The engine treats `cue` as opaque;
  * the host adapter maps it to a locally registered PCM clip. A fixed small
@@ -197,6 +198,12 @@ typedef struct {
     int      hit_ceiling;
     int      hit_floor;
     int      hit_wall;
+
+    /* One-shot confirmation that a FOREIGN_ATTACK_CONTACT_ONLY volume
+     * connected with one host-supported target. The host owns target
+     * eligibility and consequences; the controller owns the follow-up state
+     * (for example, a catch/throw presentation). */
+    int      attack_connected;
 
     /*
      * The host IMPOSED a vertical velocity of its own this tick.
@@ -324,6 +331,7 @@ typedef struct {
     uint8_t  hit_wall;
     uint8_t  hit_ceiling;
     uint8_t  hit_floor;
+    uint8_t  attack_connected;
     uint8_t  air_cause;   /* ForeignAirCause at tick time */
     /*
      * ForeignJumpPhase after the tick. A jumpsquat is invisible in `state`
