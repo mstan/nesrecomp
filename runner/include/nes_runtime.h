@@ -250,6 +250,24 @@ typedef int (*PpuSpriteSuppressFn)(int oam_slot, int x, int y, void *user);
  * self-gate (as game_smash64_active() does for the SMB1 Falcon replacement). */
 void ppu_renderer_set_sprite_suppress(PpuSpriteSuppressFn fn, void *user);
 
+/* Shared predicate query for alternate renderers. Hardware-visible sprite
+ * evaluation remains untouched; this only gates final sprite presentation. */
+int ppu_renderer_sprite_suppressed(int oam_slot, int x, int y);
+
+/* Returns nonzero when the most recently rendered NES background pixel at
+ * framebuffer-space x/y was opaque for sprite-priority purposes. This exact
+ * coverage snapshot includes scanline splits, IRQ scroll/CHR changes,
+ * widescreen margins, and PPUMASK clipping. It lets post-render replacements
+ * honor the same behind-background rule as the OAM sprite they replace. */
+int ppu_renderer_background_opaque(int framebuffer_x, int y);
+
+/* Publish a completed renderer's exact background-opacity frame. The input is
+ * copied, so incremental renderers may immediately reuse their back buffer.
+ * This keeps post-render sprite-priority consumers coherent across both the
+ * per-frame and opt-in Dot-PPU renderers. */
+void ppu_renderer_set_background_opaque_frame(const uint8_t *pixels,
+                                              int width, int height);
+
 /* ---- Mapper Interface ---- */
 void mapper_write(uint16_t addr, uint8_t val);
 void mapper_init(const uint8_t *prg_data, int prg_banks,

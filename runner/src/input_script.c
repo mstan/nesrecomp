@@ -53,7 +53,7 @@ typedef enum {
     CMD_TURBO_ON, CMD_TURBO_OFF,
     CMD_SCREENSHOT, CMD_LOG, CMD_EXIT,
     CMD_WAIT_RAM8, CMD_ASSERT_RAM8,
-    CMD_WRITE_RAM8, CMD_WRITE_SRAM8,
+    CMD_WRITE_RAM8, CMD_WRITE_SRAM8, CMD_WRITE_PPU8,
     CMD_DUMP_RAM,
     CMD_SAVE_STATE, CMD_LOAD_STATE,
     CMD_TRIGGER, CMD_TRIGGER_OFF,
@@ -159,6 +159,10 @@ int script_load(const char *path) {
         } else if (strcmp(tok, "WRITE_SRAM8") == 0 && n >= 3) {
             c.type = CMD_WRITE_SRAM8;
             c.iarg = (int)strtol(arg1, NULL, 16) & 0x1FFF;
+            c.barg = (uint8_t)strtol(arg2, NULL, 16);
+        } else if (strcmp(tok, "WRITE_PPU8") == 0 && n >= 3) {
+            c.type = CMD_WRITE_PPU8;
+            c.iarg = (int)strtol(arg1, NULL, 16) & 0x0FFF;
             c.barg = (uint8_t)strtol(arg2, NULL, 16);
         } else if (strcmp(tok, "SAVE_STATE") == 0 && n >= 2) {
             c.type = CMD_SAVE_STATE;
@@ -304,6 +308,10 @@ void script_tick(uint64_t frame, const uint8_t *ram) {
                     save_ram_mark_dirty();
                 }
                 printf("[Script] WRITE_SRAM8 $%04X=%02X\n", 0x6000 + c->iarg, c->barg);
+                break;
+            case CMD_WRITE_PPU8:
+                g_ppu_nt[c->iarg & 0x0FFF] = c->barg;
+                printf("[Script] WRITE_PPU8 $%03X=%02X\n", c->iarg, c->barg);
                 break;
             case CMD_DUMP_RAM: {
                 int start = c->iarg & 0x7FF;

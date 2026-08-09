@@ -72,6 +72,21 @@ static inline uint32_t dot_bg_color(int pal_base, int color_idx) {
  * sprite pass of the SAME scanline for sprite-0 hit and behind-BG priority.
  * 1 = opaque BG pixel. Pillarbox margins stay 0 (transparent). */
 static uint8_t s_bg_opaque[DOT_MAXW];
+static uint8_t s_bg_opaque_back[DOT_MAXW * VISIBLE_LINES];
+static uint8_t s_sprite_suppressed[64];
+static int s_sprite_suppression_ready;
+
+static void dot_capture_sprite_suppression(void) {
+    for (int s = 0; s < 64; s++) {
+        uint8_t spr_y = g_ppu_oam[s * 4 + 0];
+        int spr_x = g_ws_oam_sidecar ? (int)g_oam_x16[s]
+                                     : (int)g_ppu_oam[s * 4 + 3];
+        s_sprite_suppressed[s] =
+            spr_y < 0xEF && ppu_renderer_sprite_suppressed(
+                s, spr_x, (int)spr_y + 1);
+    }
+    s_sprite_suppression_ready = 1;
+}
 
 /* Fire the MMC3 scanline IRQ via the NMI push convention (PCH/PCL placeholders
  * + P), matching service_mmc3_scanline_irq / maybe_deliver_irq. The handler may
@@ -243,6 +258,8 @@ static void dot_render_scanline(int sy, uint32_t *target, int snapshot) {
          * OAM byte on the vanilla screen); vanilla uses the 8-bit OAM X. */
         int     spr_x    = g_ws_oam_sidecar ? (int)g_oam_x16[s]
                                             : (int)g_ppu_oam[s * 4 + 3];
+        if (!snapshot && s_sprite_suppression_ready && s_sprite_suppressed[s])
+            continue;
         int flip_h   = (spr_attr >> 6) & 1;
         int flip_v   = (spr_attr >> 7) & 1;
         int priority = (spr_attr >> 5) & 1;  /* 1 = behind BG */
@@ -295,7 +312,11 @@ static void dot_render_scanline(int sy, uint32_t *target, int snapshot) {
 /* Paint one visible scanline and clock its MMC3 A12 edge. The line's fetches
  * generate the edge, so IRQ handler writes apply to later scanlines. */
 static void dot_step_scanline(void) {
+    if (s_next_visible == 0)
+        dot_capture_sprite_suppression();
     dot_render_scanline(s_next_visible, s_back, 0);
+    memcpy(s_bg_opaque_back + (size_t)s_next_visible * g_render_width,
+           s_bg_opaque, (size_t)g_render_width);
     dot_clock_mmc3();
     s_next_visible++;
 }
@@ -379,10 +400,13 @@ void ppu_dot_frame_boundary(void) {
         s_busy = 0;
         /* Publish the completed frame for presentation (only the active width). */
         memcpy(s_fb, s_back, (size_t)g_render_width * VISIBLE_LINES * sizeof(uint32_t));
+        ppu_renderer_set_background_opaque_frame(
+            s_bg_opaque_back, g_render_width, VISIBLE_LINES);
     }
 
     /* Arm the next frame's visible region. */
     s_next_visible   = 0;
+    s_sprite_suppression_ready = 0;
     s_prerender_done = 0;
     s_v_init         = 0;
     s_abs_nt_y       = -1;

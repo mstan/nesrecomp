@@ -23,10 +23,39 @@ extern uint16_t g_ppuaddr;  /* PPU address register (runtime.c) */
  * exactly as before. */
 static PpuSpriteSuppressFn s_sprite_suppress_fn   = NULL;
 static void               *s_sprite_suppress_user = NULL;
+static uint8_t            *s_bg_opaque_snapshot   = NULL;
+static size_t              s_bg_opaque_capacity   = 0;
+static int                 s_bg_opaque_width      = 0;
+
+static int prepare_bg_opaque_snapshot(int width) {
+    size_t needed;
+    uint8_t *grown;
+    if (width <= 0) {
+        s_bg_opaque_width = 0;
+        return 0;
+    }
+    needed = (size_t)width * 240u;
+    if (s_bg_opaque_capacity < needed) {
+        grown = (uint8_t *)realloc(s_bg_opaque_snapshot, needed);
+        if (!grown) {
+            s_bg_opaque_width = 0;
+            return 0;
+        }
+        s_bg_opaque_snapshot = grown;
+        s_bg_opaque_capacity = needed;
+    }
+    s_bg_opaque_width = width;
+    return 1;
+}
 
 void ppu_renderer_set_sprite_suppress(PpuSpriteSuppressFn fn, void *user) {
     s_sprite_suppress_fn   = fn;
     s_sprite_suppress_user = user;
+}
+
+int ppu_renderer_sprite_suppressed(int oam_slot, int x, int y) {
+    return s_sprite_suppress_fn &&
+           s_sprite_suppress_fn(oam_slot, x, y, s_sprite_suppress_user);
 }
 
 /* Render-IRQ diagnostic: track last IRQ fire during rendering */
@@ -300,6 +329,21 @@ static int bg_color_idx_at(int sx, int sy) {
          | (((g_chr_ram[chr_off + 8] >> bit) & 1) << 1);
 }
 
+int ppu_renderer_background_opaque(int framebuffer_x, int y) {
+    if (!s_bg_opaque_snapshot || framebuffer_x < 0 ||
+        framebuffer_x >= s_bg_opaque_width || y < 0 || y >= 240)
+        return 0;
+    return s_bg_opaque_snapshot[(size_t)y * s_bg_opaque_width +
+                                framebuffer_x] != 0;
+}
+
+void ppu_renderer_set_background_opaque_frame(const uint8_t *pixels,
+                                              int width, int height) {
+    if (!pixels || height != 240 || !prepare_bg_opaque_snapshot(width))
+        return;
+    memcpy(s_bg_opaque_snapshot, pixels, (size_t)width * 240u);
+}
+
 /* Predict the scanline at which sprite 0 first hits BG this frame, by
  * scanning sprite 0's vertical span against the BG.  Returns 240 if no
  * hit will occur (rendering disabled, sprite off-screen, no overlap).
@@ -434,6 +478,13 @@ void ppu_render_frame(uint32_t *framebuf) {
 #endif
         return;
     }
+
+    /* Record the exact background coverage painted below, after all of this
+     * frame's scroll splits, mirroring, CHR-bank changes, clipping, and
+     * widescreen projection. Post-render replacements can then honor sprite
+     * priority without reimplementing a second, subtly different PPU. */
+    if (prepare_bg_opaque_snapshot(g_render_width))
+        memset(s_bg_opaque_snapshot, 0, (size_t)g_render_width * 240u);
 
     /* HD texture pack: per-pixel record of the visible tile, consumed by the
      * upscaler after this pass. Cleared here (not on the disabled-render early
@@ -732,6 +783,11 @@ void ppu_render_frame(uint32_t *framebuf) {
                 } else {
                     uint32_t bgc = bg_color(pal_base, color_idx);
                     framebuf[sy * g_render_width + fb_x] = bgc;
+                    if (s_bg_opaque_width == g_render_width &&
+                        fb_x >= 0 && fb_x < g_render_width) {
+                        s_bg_opaque_snapshot[(size_t)sy * g_render_width +
+                                             fb_x] = color_idx != 0;
+                    }
                     if (g_hp && fb_x >= 0 && fb_x < g_render_width) {
                         HdPixel *hp = &g_hp[sy * g_render_width + fb_x];
                         hp->bg_has   = 1;
@@ -907,8 +963,7 @@ render_sprites:
                                      : (int)render_oam[s * 4 + 3];
 
         if (spr_y >= 0xEF) continue; /* off-screen */
-        if (s_sprite_suppress_fn &&
-            s_sprite_suppress_fn(s, spr_x, spr_y + 1, s_sprite_suppress_user))
+        if (ppu_renderer_sprite_suppressed(s, spr_x, spr_y + 1))
             continue; /* mod-owned replacement is drawing this slot instead */
 
         int flip_h   = (spr_attr >> 6) & 1;
