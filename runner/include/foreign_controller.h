@@ -44,7 +44,8 @@ typedef struct {
     int   jump_pressed; /* rising edge this tick */
     int   jump_held;
     int   down_pressed; /* rising edge this tick */
-    int   attack_pressed;
+    int   attack_pressed;  /* primary/normal attack rising edge */
+    int   special_pressed; /* special attack rising edge */
     int   raw_buttons;  /* host pad bits, for the trace ring only */
 } ForeignInput;
 
