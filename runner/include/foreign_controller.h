@@ -179,6 +179,12 @@ typedef struct {
     double           vx;
     double           vy;
     ForeignMoveState state;
+    /* One-tick controller request to enter the host's ordinary airborne
+     * state. This covers authored moves that leave the floor without the
+     * host's jump trigger (wall rebounds, recovery moves). The host performs
+     * its own native state write; the controller must not hold this high to
+     * suppress a later real landing. */
+    int              force_airborne;
     ForeignAttackHitbox attack;
     ForeignAudioEvents audio;
 } ForeignMoveResult;
