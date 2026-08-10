@@ -11,6 +11,7 @@ static int alpha_get_calls;
 static int alpha_set_calls;
 static int beta_get_calls;
 static int beta_set_calls;
+static uint32_t resolved_feedback_count;
 
 #define CHECK(expr) do { \
     if (!(expr)) { \
@@ -37,11 +38,12 @@ static void tick(ForeignState *state, const ForeignInput *input,
                  ForeignMoveResult *out) {
     (void)input;
     out->state = state->state;
+    out->actions.count = FOREIGN_ACTION_EVENT_CAPACITY + 7;
 }
 
 static void resolve(ForeignState *state, const ForeignCollisionResult *hit) {
     (void)state;
-    (void)hit;
+    resolved_feedback_count = hit->action_feedback.count;
 }
 
 static int get_alpha(const ForeignState *state, uint8_t *buf, int cap) {
@@ -117,6 +119,10 @@ int main(void) {
     uint8_t record[512];
     uint8_t bad[512];
     ForeignState saved_alpha, beta_before, alpha_before;
+    ForeignInput input;
+    ForeignMoveResult move;
+    ForeignCollisionResult hit;
+    ForeignTraceEntry trace;
     int length;
 
     CHECK(nes_foreign_register(&legacy));
@@ -215,6 +221,22 @@ int main(void) {
     CHECK(nes_foreign_select(NULL));
     CHECK(nes_foreign_serialize_active(record, (int)sizeof(record)) == 0);
     CHECK(!nes_foreign_deserialize_active(record, length));
+
+    /* A broken controller/host cannot make either fixed action array appear
+     * larger than the ABI storage presented to the other side. */
+    CHECK(nes_foreign_select("alpha"));
+    nes_foreign_set_ownership(FOREIGN_OWNERSHIP_FOREIGN);
+    memset(&input, 0, sizeof(input));
+    memset(&move, 0, sizeof(move));
+    CHECK(nes_foreign_tick(77, &input, &move));
+    CHECK(move.actions.count == FOREIGN_ACTION_EVENT_CAPACITY);
+    memset(&hit, 0, sizeof(hit));
+    hit.action_feedback.count = FOREIGN_ACTION_FEEDBACK_CAPACITY + 9;
+    nes_foreign_resolve(&hit);
+    CHECK(resolved_feedback_count == FOREIGN_ACTION_FEEDBACK_CAPACITY);
+    CHECK(nes_foreign_trace_last(1, &trace) == 1);
+    CHECK(trace.action_event_count == FOREIGN_ACTION_EVENT_CAPACITY);
+    CHECK(trace.action_feedback_count == FOREIGN_ACTION_FEEDBACK_CAPACITY);
 
     if (failures) {
         fprintf(stderr, "%d foreign-controller selftest failure(s)\n", failures);

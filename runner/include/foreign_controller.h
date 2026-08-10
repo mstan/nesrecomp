@@ -174,6 +174,60 @@ typedef struct {
     uint32_t count;
 } ForeignAudioEvents;
 
+/* Persistent actions outlive the tick that creates them. Controllers emit
+ * bounded commands; the host owns storage, terrain/target collision and
+ * native consequences. `kind` is opaque to the engine. */
+#define FOREIGN_ACTION_EVENT_CAPACITY 4
+typedef enum {
+    FOREIGN_ACTION_NONE = 0,
+    FOREIGN_ACTION_SPAWN = 1,
+    FOREIGN_ACTION_CANCEL = 2,
+    FOREIGN_ACTION_CANCEL_ALL = 3,
+} ForeignActionCommand;
+
+#define FOREIGN_ACTION_HOSTILE          0x00000001u
+#define FOREIGN_ACTION_FOLLOW_SURFACES  0x00000002u
+#define FOREIGN_ACTION_SELF_CONTACT     0x00000004u
+#define FOREIGN_ACTION_DESTROY_ON_SOLID 0x00000008u
+
+typedef struct {
+    uint32_t instance_id;
+    uint32_t kind;
+    uint32_t command; /* ForeignActionCommand */
+    uint32_t flags;
+    double   offset_x;
+    double   offset_y;
+    double   velocity_x;
+    double   velocity_y;
+    double   width;
+    double   height;
+    int      damage;
+    uint32_t lifetime_ticks;
+} ForeignActionEvent;
+
+typedef struct {
+    ForeignActionEvent events[FOREIGN_ACTION_EVENT_CAPACITY];
+    uint32_t count;
+} ForeignActionEvents;
+
+#define FOREIGN_ACTION_FEEDBACK_CAPACITY 4
+#define FOREIGN_ACTION_HIT_TARGET  0x00000001u
+#define FOREIGN_ACTION_HIT_SELF    0x00000002u
+#define FOREIGN_ACTION_HIT_WALL    0x00000004u
+#define FOREIGN_ACTION_HIT_FLOOR   0x00000008u
+#define FOREIGN_ACTION_HIT_CEILING 0x00000010u
+#define FOREIGN_ACTION_EXPIRED     0x00000020u
+
+typedef struct {
+    uint32_t instance_id;
+    uint32_t flags;
+} ForeignActionFeedbackEvent;
+
+typedef struct {
+    ForeignActionFeedbackEvent events[FOREIGN_ACTION_FEEDBACK_CAPACITY];
+    uint32_t count;
+} ForeignActionFeedback;
+
 /* What the controller wants to happen this tick, before host collision. */
 typedef struct {
     double           requested_dx;
@@ -189,6 +243,7 @@ typedef struct {
     int              force_airborne;
     ForeignAttackHitbox attack;
     ForeignAudioEvents audio;
+    ForeignActionEvents actions;
 } ForeignMoveResult;
 
 /* What the host's collision actually permitted. Fed straight back in. */
@@ -205,6 +260,7 @@ typedef struct {
      * eligibility and consequences; the controller owns the follow-up state
      * (for example, a catch/throw presentation). */
     int      attack_connected;
+    ForeignActionFeedback action_feedback;
 
     /*
      * The host IMPOSED a vertical velocity of its own this tick.
@@ -397,6 +453,8 @@ typedef struct {
      * indistinguishable from a zero-velocity first row.
      */
     uint8_t  reseeded;
+    uint8_t  action_event_count;
+    uint8_t  action_feedback_count;
 
     double   x;
     double   y;
@@ -419,7 +477,7 @@ typedef struct {
      * been applied.
      */
     uint8_t  has_imposed_vy;
-    uint8_t  pad2[7];
+    uint8_t  pad2[5];
     double   imposed_vy;
 
     uint32_t collision_flags;

@@ -334,7 +334,8 @@ int nes_foreign_trace_write_csv(const char *path) {
     fprintf(f, "frame,ownership,state,state_name,buttons,stick_x,stick_y,"
                "x,y,vx,vy,req_dx,req_dy,res_dx,res_dy,grounded,fast_fall,"
                "air_cause,jump_phase,reseeded,hit_wall,hit_ceiling,hit_floor,"
-               "attack_connected,imposed,imposed_vy,collision_flags,"
+               "attack_connected,action_events,action_feedback,imposed,"
+               "imposed_vy,collision_flags,"
                "native_x,native_y\n");
     const uint32_t n = s_ftring_head < FTRING_N ? s_ftring_head : FTRING_N;
     for (uint32_t i = 0; i < n; i++) {
@@ -347,7 +348,7 @@ int nes_foreign_trace_write_csv(const char *path) {
         fprintf(f,
                 "%llu,%u,%d,%s,0x%02X,%.4f,%.4f,"
                 "%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%u,%u,"
-                "%u,%u,%u,%u,%u,%u,%u,%u,%.6f,0x%08X,%d,%d\n",
+                "%u,%u,%u,%u,%u,%u,%u,%u,%u,%u,%.6f,0x%08X,%d,%d\n",
                 (unsigned long long)e->frame, e->ownership, e->state, name,
                 (unsigned)(e->raw_buttons & 0xFF), e->stick_x, e->stick_y,
                 e->x, e->y, e->vx, e->vy,
@@ -356,7 +357,8 @@ int nes_foreign_trace_write_csv(const char *path) {
                 e->grounded, e->fast_fall,
                 e->air_cause, e->jump_phase, e->reseeded,
                 e->hit_wall, e->hit_ceiling, e->hit_floor,
-                e->attack_connected, e->has_imposed_vy, e->imposed_vy,
+                e->attack_connected, e->action_event_count,
+                e->action_feedback_count, e->has_imposed_vy, e->imposed_vy,
                 e->collision_flags,
                 e->native_x, e->native_y);
     }
@@ -394,6 +396,8 @@ int nes_foreign_tick(uint64_t frame, const ForeignInput *input,
     if (driving) {
         local.state = s_state.state;
         s_active->tick(&s_state, input, &local);
+        if (local.actions.count > FOREIGN_ACTION_EVENT_CAPACITY)
+            local.actions.count = FOREIGN_ACTION_EVENT_CAPACITY;
         s_state.state = local.state;
         if (out) *out = local;
     } else {
@@ -429,27 +433,33 @@ int nes_foreign_tick(uint64_t frame, const ForeignInput *input,
     entry.vy           = s_state.vy;
     entry.requested_dx = local.requested_dx;
     entry.requested_dy = local.requested_dy;
+    entry.action_event_count = (uint8_t)local.actions.count;
     nes_foreign_trace_push(&entry);
 
     return driving;
 }
 
 void nes_foreign_resolve(const ForeignCollisionResult *hit) {
+    ForeignCollisionResult bounded;
     if (!hit) return;
-    if (s_active && s_active->resolve) s_active->resolve(&s_state, hit);
+    bounded = *hit;
+    if (bounded.action_feedback.count > FOREIGN_ACTION_FEEDBACK_CAPACITY)
+        bounded.action_feedback.count = FOREIGN_ACTION_FEEDBACK_CAPACITY;
+    if (s_active && s_active->resolve) s_active->resolve(&s_state, &bounded);
 
     if (s_ftring_head == 0) return;
     ForeignTraceEntry *e = &s_ftring[(s_ftring_head - 1) % FTRING_N];
-    e->resolved_dx     = hit->actual_dx;
-    e->resolved_dy     = hit->actual_dy;
-    e->has_imposed_vy  = (uint8_t)(hit->has_imposed_vy ? 1 : 0);
-    e->imposed_vy      = hit->has_imposed_vy ? hit->imposed_vy : 0.0;
-    e->collision_flags = hit->flags;
-    e->grounded        = (uint8_t)(hit->grounded ? 1 : 0);
-    e->hit_wall        = (uint8_t)(hit->hit_wall ? 1 : 0);
-    e->hit_ceiling     = (uint8_t)(hit->hit_ceiling ? 1 : 0);
-    e->hit_floor       = (uint8_t)(hit->hit_floor ? 1 : 0);
-    e->attack_connected = (uint8_t)(hit->attack_connected ? 1 : 0);
+    e->resolved_dx     = bounded.actual_dx;
+    e->resolved_dy     = bounded.actual_dy;
+    e->has_imposed_vy  = (uint8_t)(bounded.has_imposed_vy ? 1 : 0);
+    e->imposed_vy      = bounded.has_imposed_vy ? bounded.imposed_vy : 0.0;
+    e->collision_flags = bounded.flags;
+    e->grounded        = (uint8_t)(bounded.grounded ? 1 : 0);
+    e->hit_wall        = (uint8_t)(bounded.hit_wall ? 1 : 0);
+    e->hit_ceiling     = (uint8_t)(bounded.hit_ceiling ? 1 : 0);
+    e->hit_floor       = (uint8_t)(bounded.hit_floor ? 1 : 0);
+    e->attack_connected = (uint8_t)(bounded.attack_connected ? 1 : 0);
+    e->action_feedback_count = (uint8_t)bounded.action_feedback.count;
     /* Post-resolve position, so one row is self-consistent. */
     e->x  = s_state.x;
     e->y  = s_state.y;
