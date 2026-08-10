@@ -48,6 +48,7 @@ typedef struct Texture {
     float shade;
     int alpha_test;
     int overlay;
+    int bilinear;
 } Texture;
 
 typedef struct RenderContext {
@@ -126,18 +127,28 @@ static uint32_t shade_color(uint32_t color, float shade) {
 }
 
 static uint32_t blend_over(uint32_t destination, uint32_t source) {
-    unsigned a = source >> 24;
-    unsigned inv = 255 - a;
+    unsigned sa = source >> 24;
+    unsigned da = destination >> 24;
+    unsigned inv = 255 - sa;
     unsigned sr = (source >> 16) & 0xFF;
     unsigned sg = (source >> 8) & 0xFF;
     unsigned sb = source & 0xFF;
     unsigned dr = (destination >> 16) & 0xFF;
     unsigned dg = (destination >> 8) & 0xFF;
     unsigned db = destination & 0xFF;
-    unsigned r = (sr * a + dr * inv + 127) / 255;
-    unsigned g = (sg * a + dg * inv + 127) / 255;
-    unsigned b = (sb * a + db * inv + 127) / 255;
-    return 0xFF000000u | (r << 16) | (g << 8) | b;
+    unsigned oa = sa + (da * inv + 127) / 255;
+    unsigned denominator;
+    unsigned r, g, b;
+    /* The mesh target is normally the opaque NES frame, but Falcon's SSAA
+     * path intentionally begins transparent.  Preserve straight alpha there:
+     * forcing an alpha-card opaque preblends it over black and turns a valid
+     * source XLU field into a dark rectangle before the outer resolve. */
+    if (!oa) return 0u;
+    denominator = oa * 255u;
+    r = (sr * sa * 255u + dr * da * inv + denominator / 2u) / denominator;
+    g = (sg * sa * 255u + dg * da * inv + denominator / 2u) / denominator;
+    b = (sb * sa * 255u + db * da * inv + denominator / 2u) / denominator;
+    return (oa << 24) | (r << 16) | (g << 8) | b;
 }
 
 static uint32_t lerp_color(uint32_t a, uint32_t b, float t) {
@@ -164,6 +175,38 @@ static int project_vertex(const RenderContext *ctx, Vec3 world, float u, float v
 
 static float edge(float ax, float ay, float bx, float by, float px, float py) {
     return (px - ax) * (by - ay) - (py - ay) * (bx - ax);
+}
+
+static uint32_t sample_texture_bilinear(const Texture *texture, float u,
+                                        float v) {
+    float fx = u - 0.5f, fy = v - 0.5f;
+    int x0 = (int)floorf(fx), y0 = (int)floorf(fy);
+    float tx = fx - (float)x0, ty = fy - (float)y0;
+    int x1, y1;
+    uint32_t p00, p10, p01, p11;
+    unsigned channel, output[4];
+    if (x0 < 0) { x0 = 0; tx = 0.0f; }
+    if (y0 < 0) { y0 = 0; ty = 0.0f; }
+    x1 = x0 + 1;
+    y1 = y0 + 1;
+    if (x0 >= texture->width) { x0 = texture->width - 1; tx = 0.0f; }
+    if (y0 >= texture->height) { y0 = texture->height - 1; ty = 0.0f; }
+    if (x1 >= texture->width) x1 = texture->width - 1;
+    if (y1 >= texture->height) y1 = texture->height - 1;
+    p00 = texture->pixels[y0 * texture->stride + x0];
+    p10 = texture->pixels[y0 * texture->stride + x1];
+    p01 = texture->pixels[y1 * texture->stride + x0];
+    p11 = texture->pixels[y1 * texture->stride + x1];
+    for (channel = 0; channel < 4; ++channel) {
+        const unsigned shift = (3u - channel) * 8u;
+        const float top = (float)((p00 >> shift) & 0xFFu) * (1.0f - tx) +
+                          (float)((p10 >> shift) & 0xFFu) * tx;
+        const float bottom = (float)((p01 >> shift) & 0xFFu) * (1.0f - tx) +
+                             (float)((p11 >> shift) & 0xFFu) * tx;
+        output[channel] = (unsigned)(top * (1.0f - ty) + bottom * ty + 0.5f);
+    }
+    return (output[0] << 24) | (output[1] << 16) |
+           (output[2] << 8) | output[3];
 }
 
 static void draw_triangle(const RenderContext *ctx,
@@ -212,13 +255,17 @@ static void draw_triangle(const RenderContext *ctx,
             v = (w0 * a->v * a->inv_depth +
                  w1 * b->v * b->inv_depth +
                  w2 * c->v * c->inv_depth) / inv_depth;
-            tx = (int)floorf(u);
-            ty = (int)floorf(v);
-            if (tx < 0) tx = 0;
-            if (ty < 0) ty = 0;
-            if (tx >= texture->width) tx = texture->width - 1;
-            if (ty >= texture->height) ty = texture->height - 1;
-            color = texture->pixels[ty * texture->stride + tx];
+            if (texture->bilinear) {
+                color = sample_texture_bilinear(texture, u, v);
+            } else {
+                tx = (int)floorf(u);
+                ty = (int)floorf(v);
+                if (tx < 0) tx = 0;
+                if (ty < 0) ty = 0;
+                if (tx >= texture->width) tx = texture->width - 1;
+                if (ty >= texture->height) ty = texture->height - 1;
+                color = texture->pixels[ty * texture->stride + tx];
+            }
             if (texture->alpha_test && (color >> 24) == 0) continue;
             color = shade_color(color, texture->shade);
             s->framebuffer[pos] = (color >> 24) < 0xFF
@@ -335,6 +382,7 @@ static Texture tile_texture(const NesVoxelScene *s, int tx, int ty, float shade)
         texture.shade = shade;
         texture.alpha_test = 0;
         texture.overlay = 0;
+        texture.bilinear = 0;
         return texture;
     }
     if (s_contaminated[index] && s_representative[tile] >= 0)
@@ -348,6 +396,7 @@ static Texture tile_texture(const NesVoxelScene *s, int tx, int ty, float shade)
     texture.shade = shade;
     texture.alpha_test = 0;
     texture.overlay = 0;
+    texture.bilinear = 0;
     return texture;
 }
 
@@ -439,6 +488,7 @@ static Texture tile_side_texture(const Texture *top, int edge,
     texture.shade = shade;
     texture.alpha_test = 0;
     texture.overlay = 0;
+    texture.bilinear = 0;
     return texture;
 }
 
@@ -605,6 +655,7 @@ static Texture side_group_texture(const NesVoxelScene *s,
     result.shade = 1.0f;
     result.alpha_test = 0;
     result.overlay = 0;
+    result.bilinear = 0;
     return result;
 }
 
@@ -761,6 +812,7 @@ static void render_tile_billboards(const RenderContext *ctx) {
             texture.shade = 1.0f;
             texture.alpha_test = 1;
             texture.overlay = 0;
+            texture.bilinear = 0;
             draw_quad(ctx, left_top, right_top, right_bottom, left_bottom,
                       &texture);
         }
@@ -1031,6 +1083,7 @@ static void render_sprites(const RenderContext *ctx) {
         texture.alpha_test = 1;
         texture.overlay = s->sprite_overlay &&
             s->sprite_overlay(min_x, min_y, max_x, max_y, s->user);
+        texture.bilinear = 0;
         draw_quad(ctx, left_top, right_top, right_bottom, left_bottom, &texture);
     }
 }
@@ -1189,6 +1242,15 @@ void nes_voxel_mesh_bind_texture(const uint32_t *pixels, int width,
     s_mesh_texture.shade = shade;
     s_mesh_texture.alpha_test = alpha_test;
     s_mesh_texture.overlay = 0;
+    s_mesh_texture.bilinear = 0;
+}
+
+void nes_voxel_mesh_bind_texture_bilinear(const uint32_t *pixels, int width,
+                                          int height, int stride, float shade,
+                                          int alpha_test) {
+    nes_voxel_mesh_bind_texture(pixels, width, height, stride, shade,
+                                alpha_test);
+    if (s_mesh_active) s_mesh_texture.bilinear = 1;
 }
 
 void nes_voxel_mesh_triangle(NesVoxelMeshVertex a, NesVoxelMeshVertex b,

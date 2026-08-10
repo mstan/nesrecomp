@@ -219,6 +219,13 @@ void nes_voxel_mesh_bind_texture(const uint32_t *pixels, int width,
                                  int height, int stride, float shade,
                                  int alpha_test);
 
+/* Bind one immediate mesh card with bilinear ARGB sampling. Existing callers
+ * retain nearest sampling; use this only for source effects whose RDP path
+ * explicitly enables BILERP. */
+void nes_voxel_mesh_bind_texture_bilinear(const uint32_t *pixels, int width,
+                                          int height, int stride, float shade,
+                                          int alpha_test);
+
 /* Submit one triangle in the currently bound texture. No-op outside a
  * session or before any texture is bound. */
 void nes_voxel_mesh_triangle(NesVoxelMeshVertex a, NesVoxelMeshVertex b,
