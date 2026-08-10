@@ -82,6 +82,8 @@ static bool game_config_load_toml(GameConfig *cfg, const char *path) {
         if (dps.ok) cfg->disable_ptr_scan = dps.u.b;
         toml_datum_t ds = toml_bool_in(game, "disable_secondary");
         if (ds.ok) cfg->disable_secondary = ds.u.b;
+        toml_datum_t df = toml_bool_in(game, "deduplicate_functions");
+        if (df.ok) cfg->deduplicate_functions = df.u.b;
         toml_datum_t sf = toml_string_in(game, "symbol_file");
         if (sf.ok) { strncpy(cfg->symbol_file, sf.u.s, sizeof(cfg->symbol_file) - 1); free(sf.u.s); }
     }
@@ -353,6 +355,31 @@ static bool game_config_load_toml(GameConfig *cfg, const char *path) {
         int idx = cfg->replace_func_count++;
         cfg->replace_funcs[idx].bank = toml_int_or(t, "bank", -1);
         cfg->replace_funcs[idx].addr = toml_hex(t, "addr");
+        toml_datum_t scope = toml_string_in(t, "scope");
+        if (scope.ok) {
+            if (strcmp(scope.u.s, "member") == 0) {
+                cfg->replace_funcs[idx].replace_group = false;
+            } else if (strcmp(scope.u.s, "group") == 0) {
+                cfg->replace_funcs[idx].replace_group = true;
+            } else {
+                fprintf(stderr, "[GameConfig] replace_func scope must be 'member' or 'group'\n");
+                free(scope.u.s);
+                toml_free(root);
+                return false;
+            }
+            free(scope.u.s);
+        }
+    }
+
+    /* [[dedup_exclude]]: keep one otherwise equivalent bank identity independent. */
+    toml_array_t *dex = toml_array_in(root, "dedup_exclude");
+    if (dex) for (int i = 0; i < toml_array_nelem(dex) &&
+                  cfg->dedup_exclude_count < GAME_CFG_MAX_DEDUP_EXCLUDES; i++) {
+        toml_table_t *t = toml_table_at(dex, i);
+        if (!t) continue;
+        int idx = cfg->dedup_exclude_count++;
+        cfg->dedup_excludes[idx].bank = toml_int_or(t, "bank", -1);
+        cfg->dedup_excludes[idx].addr = toml_hex(t, "addr");
     }
 
     /* [[mod_function_hook]] — narrowly selected function entries that
@@ -376,6 +403,15 @@ static bool game_config_load_toml(GameConfig *cfg, const char *path) {
         cfg->data_regions[idx].bank  = toml_int_or(t, "bank", -1);
         cfg->data_regions[idx].start = toml_hex(t, "start");
         cfg->data_regions[idx].end   = toml_hex(t, "end");
+    }
+
+    for (int i = 0; i < cfg->replace_func_count; i++) {
+        if (cfg->replace_funcs[i].replace_group && !cfg->deduplicate_functions) {
+            fprintf(stderr, "[GameConfig] replace_func scope='group' requires "
+                            "[game].deduplicate_functions = true\n");
+            toml_free(root);
+            return false;
+        }
     }
 
     toml_free(root);

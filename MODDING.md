@@ -7,6 +7,51 @@ The NESRecomp runner provides game-agnostic systems for overriding text
 and tile graphics at runtime.  Games built on NESRecomp inherit these
 capabilities automatically.
 
+## Shared cross-bank functions
+
+Games can opt into conservative generated-function sharing:
+
+```toml
+[game]
+deduplicate_functions = true
+```
+
+NESRecomp shares a body only when the generated C is exactly equal after
+substituting the function's own symbol. Bank constants, callee identities,
+mapper context, fallback calls, annotations, and every other emitted byte must
+still match. Each original `func_AAAA_bN` symbol remains available as a thin
+wrapper, and `generated/<prefix>_function_groups.json` records the proof hash,
+representative, members, and estimated reduction.
+
+To replace one bank identity without changing its siblings, use the existing
+replacement directive (the default scope is `member`):
+
+```toml
+[[replace_func]]
+bank = 3
+addr = 0x8123
+scope = "member"
+```
+
+To provide one C implementation for the whole proven group, select any group
+member as its external representative:
+
+```toml
+[[replace_func]]
+bank = 3
+addr = 0x8123
+scope = "group"
+```
+
+`scope = "group"` fails generation if the address is not part of a proven
+group. To keep an unmodified generated member independent, use:
+
+```toml
+[[dedup_exclude]]
+bank = 3
+addr = 0x8123
+```
+
 ---
 
 ## Tile Override System (`override_chr`)

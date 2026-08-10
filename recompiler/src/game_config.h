@@ -25,6 +25,7 @@
 #define GAME_CFG_MAX_MERGE_RANGES    16
 #define GAME_CFG_MAX_STACK_BAIL_FUNCS 16
 #define GAME_CFG_MAX_INDIRECT_CONTINUATIONS 16
+#define GAME_CFG_MAX_DEDUP_EXCLUDES 4096
 
 /*
  * Trampoline: a JSR whose operand address is a known bank-switch dispatch
@@ -93,6 +94,12 @@ typedef struct {
     uint16_t addr;
     int      bank;   /* -1 for fixed bank */
 } ExtraFunc;
+
+typedef struct {
+    uint16_t addr;
+    int      bank;          /* -1 for fixed bank */
+    bool     replace_group; /* false: one identity; true: its proven group */
+} ReplaceFunc;
 
 /*
  * Inline indexed dispatch: JSR to a routine that pops the return address to
@@ -297,7 +304,7 @@ typedef struct {
     IndirectContinuation indirect_continuations[GAME_CFG_MAX_INDIRECT_CONTINUATIONS];
     int              indirect_continuation_count;
 
-    ExtraFunc        replace_funcs[GAME_CFG_MAX_EXTRA_FUNCS];  /* body provided by extras.c */
+    ReplaceFunc      replace_funcs[GAME_CFG_MAX_EXTRA_FUNCS];  /* body provided by extras.c */
     int              replace_func_count;
 
     /* [[mod_function_hook]]: function entries that dispatch trusted,
@@ -314,6 +321,9 @@ typedef struct {
     ExtraFunc        mod_function_hooks[GAME_CFG_MAX_EXTRA_FUNCS];
     int              mod_function_hook_count;
 
+    ExtraFunc        dedup_excludes[GAME_CFG_MAX_DEDUP_EXCLUDES];
+    int              dedup_exclude_count;
+
     uint16_t         stack_bail_funcs[GAME_CFG_MAX_STACK_BAIL_FUNCS];
     int              stack_bail_func_count;
 
@@ -328,6 +338,7 @@ typedef struct {
     bool             push_all_jsr;  /* emit 6502 stack push/pop on every JSR/RTS */
     bool             disable_ptr_scan; /* skip switchable→fixed ROM pointer scan */
     bool             disable_secondary; /* skip secondary entry classification */
+    bool             deduplicate_functions; /* exact generated-body sharing, opt-in */
 } GameConfig;
 
 /* Initialize to empty (no dispatch tables, prefix derived from ROM name) */

@@ -10,6 +10,7 @@ add_executable(NESRecomp
     src/cpu6502_decoder.c
     src/function_finder.c
     src/code_generator.c
+    src/function_dedup.c
     src/annotations.c
     src/symbol_table.c
     src/game_config.c

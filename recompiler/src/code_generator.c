@@ -14,6 +14,7 @@
 #include "annotations.h"
 #include "cpu6502_decoder.h"
 #include "coverage.h"
+#include "function_dedup.h"
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -71,6 +72,11 @@ static FunctionIndexKey *g_codegen_function_index = NULL;
 static int g_codegen_function_index_count = 0;
 static int8_t *g_codegen_native_eligibility = NULL;
 static SymbolTable *g_symtab = NULL;
+
+static int is_sram_sourced(const GameConfig *cfg, int bank, uint16_t addr);
+static int is_yield_func(uint16_t addr);
+static bool should_emit_native_body(const NESRom *rom, const GameConfig *cfg,
+                                    const FunctionEntry *entry);
 
 static void wrapper_list_add(EmittedWrapper *wrappers, int *count, int max_count,
                              uint16_t addr, int bank);
@@ -789,6 +795,45 @@ static void emit_mod_function_hook(FILE *f, const GameConfig *cfg,
     if (!mod_function_hook_matches(cfg, fixed_bank, addr, bank)) return;
     fprintf(f, "    if (nes_mod_function_entry(0x%04Xu)) return;"
                "  /* trusted opt-in game-mod hook */\n", addr);
+}
+
+static bool replace_func_matches_member(const GameConfig *cfg, int fixed_bank,
+                                        uint16_t addr, int bank) {
+    for (int i = 0; i < cfg->replace_func_count; i++) {
+        int rb = (cfg->replace_funcs[i].bank < 0) ? fixed_bank : cfg->replace_funcs[i].bank;
+        if (!cfg->replace_funcs[i].replace_group && rb == bank &&
+            cfg->replace_funcs[i].addr == addr)
+            return true;
+    }
+    return false;
+}
+
+static bool dedup_excluded(const GameConfig *cfg, int fixed_bank,
+                           uint16_t addr, int bank) {
+    for (int i = 0; i < cfg->dedup_exclude_count; i++) {
+        int eb = (cfg->dedup_excludes[i].bank < 0) ? fixed_bank : cfg->dedup_excludes[i].bank;
+        if (eb == bank && cfg->dedup_excludes[i].addr == addr) return true;
+    }
+    return false;
+}
+
+static bool dedup_entry_eligible(const NESRom *rom, const GameConfig *cfg,
+                                 const FunctionEntry *entry) {
+    int fixed_bank = rom->prg_banks - 1;
+    if (entry->kind != FUNCTION_KIND_STANDALONE) return false;
+    if (!should_emit_native_body(rom, cfg, entry)) return false;
+    if (replace_func_matches_member(cfg, fixed_bank, entry->addr, entry->bank)) return false;
+    if (dedup_excluded(cfg, fixed_bank, entry->addr, entry->bank)) return false;
+    if (is_sram_sourced(cfg, entry->bank, entry->addr)) return false;
+    if (is_yield_func(entry->addr)) return false;
+    if (entry->addr == rom->reset_vector || entry->addr == rom->nmi_vector ||
+        entry->addr == rom->irq_vector) return false;
+    for (int i = 0; i < g_codegen_alias_count; i++) {
+        if (g_codegen_aliases[i].owner_addr == entry->addr &&
+            g_codegen_aliases[i].owner_bank == entry->bank)
+            return false;
+    }
+    return true;
 }
 
 static bool entry_source_is_curated(const FunctionEntry *entry) {
@@ -3415,7 +3460,7 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
 
     /* Skip functions marked as replace_func — their bodies are provided
      * by custom C implementations in extras.c. */
-    if (replace_func_matches(cfg, fixed_bank, pc, bank)) return;
+    if (replace_func_matches_member(cfg, fixed_bank, pc, bank)) return;
     if (!should_emit_native_body(rom, cfg, fe)) return;
 
     /* Function-level annotation (appears before the signature) */
@@ -4572,7 +4617,17 @@ bool codegen_emit(const NESRom *rom, const FunctionList *funcs,
 
             coverage_record_emitted_function(entry->bank, entry->addr);
             long before = ftell(f_part);
+            bool dedup_marked = cfg->deduplicate_functions &&
+                                dedup_entry_eligible(rom, cfg, entry);
+            if (dedup_marked) {
+                char nm[32];
+                format_func_name(nm, sizeof nm, entry->addr, entry->bank, fixed_bank);
+                fprintf(f_part, "/* NESRECOMP_DEDUP_BEGIN %s %d %04X */\n",
+                        nm, entry->bank, entry->addr);
+            }
             emit_function(f_part, rom, entry, funcs, at, cfg);
+            if (dedup_marked)
+                fprintf(f_part, "/* NESRECOMP_DEDUP_END */\n");
             long after = ftell(f_part);
             if (after > before) bytes_in_part += (after - before);
 
@@ -4611,6 +4666,44 @@ bool codegen_emit(const NESRom *rom, const FunctionList *funcs,
      * compiles them and defines NESRECOMP_SPLIT_PARTS_EXTERNAL. For existing
      * games that still compile only <prefix>_full.c, textually include the
      * generated parts here so the split remains backward-compatible. */
+    char dedup_manifest[600];
+    {
+        size_t base_len = strlen(base_noext);
+        if (base_len >= 5 && strcmp(base_noext + base_len - 5, "_full") == 0)
+            base_len -= 5;
+        snprintf(dedup_manifest, sizeof dedup_manifest, "%.*s_function_groups.json",
+                 (int)base_len, base_noext);
+    }
+    if (cfg->deduplicate_functions) {
+        const char **dedup_paths = part_count
+            ? (const char **)malloc((size_t)part_count * sizeof(*dedup_paths))
+            : NULL;
+        if (part_count && !dedup_paths) {
+            fclose(f_full);
+            free(parts);
+            free(body_owners);
+            free(aliases);
+            free(actual_wrappers);
+            free(wrappers);
+            return false;
+        }
+        for (int pi = 0; pi < part_count; pi++) dedup_paths[pi] = parts[pi].path;
+        bool dedup_ok = function_dedup_run(dedup_paths, part_count, cfg, fixed_bank,
+                                           dedup_manifest);
+        free(dedup_paths);
+        if (!dedup_ok) {
+            fclose(f_full);
+            free(parts);
+            free(body_owners);
+            free(aliases);
+            free(actual_wrappers);
+            free(wrappers);
+            return false;
+        }
+    } else {
+        remove(dedup_manifest);
+    }
+
     printf("[NESRecomp] full.c split: %d standalone bank part TU(s) (%d bank(s) sub-sharded "
           "across multiple TUs)\n", part_count, sub_shard_banks);
     fprintf(f_full, "#ifndef NESRECOMP_SPLIT_PARTS_EXTERNAL\n");
