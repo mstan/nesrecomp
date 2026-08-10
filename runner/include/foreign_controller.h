@@ -234,6 +234,27 @@ typedef struct {
 
 /* ----------------------------------------------------------- controller -- */
 
+/*
+ * Optional controller-private save-state payload.
+ *
+ * The engine owns ForeignState and serializes it together with the selected
+ * controller id. A controller may additionally serialize state it keeps
+ * outside ForeignState (for example, a source game's full fighter struct).
+ *
+ * `get_private_state` writes at most `capacity` bytes and returns that byte
+ * count, or -1 on failure. A zero-length payload is valid.
+ * `set_private_state` receives exactly the byte count emitted by the getter
+ * and returns nonzero only after it has accepted the whole payload.
+ * Implementations must validate before mutating their private state: the
+ * engine can keep ForeignState transactional, but cannot roll back
+ * controller-owned globals.
+ *
+ */
+typedef int (*ForeignControllerPrivateStateGet)(const ForeignState *state,
+                                                uint8_t *buf, int capacity);
+typedef int (*ForeignControllerPrivateStateSet)(ForeignState *state,
+                                                const uint8_t *buf, int length);
+
 typedef struct ForeignController {
     /* Stable id, matching the trusted-plugin id that selects this character. */
     const char *id;
@@ -263,6 +284,15 @@ typedef struct ForeignController {
  */
 int nes_foreign_register(const ForeignController *controller);
 
+/* Associate optional private save-state callbacks with an already registered
+ * controller id. Both callbacks are required. Re-registering the same id
+ * updates its callbacks, matching nes_foreign_register's development reload
+ * behavior. Keeping this outside ForeignController preserves old positional
+ * controller initializers even in builds that treat missing fields as errors. */
+int nes_foreign_register_private_state(const char *controller_id,
+                                       ForeignControllerPrivateStateGet get,
+                                       ForeignControllerPrivateStateSet set);
+
 /* Select the active controller by id, or NULL to deactivate. Returns 1 when
  * the id resolved. Selecting a controller also resets its state. */
 int nes_foreign_select(const char *id);
@@ -272,6 +302,24 @@ const ForeignController *nes_foreign_active(void);
 
 /* Mutable state of the active controller, or NULL when none is selected. */
 ForeignState *nes_foreign_state(void);
+
+/*
+ * Versioned active-controller snapshot for one host-owned save-state record.
+ *
+ * The payload includes the active controller's stable id, the engine-owned
+ * ForeignState, and its optional private payload. Deserialization never
+ * changes the current selection: it succeeds only when the record id matches
+ * the controller already selected by the current mod configuration. This
+ * prevents a save made as one roster character from being applied to another.
+ *
+ * serialize returns 0 when no controller is selected, a positive byte count
+ * on success, or -1 if the supplied buffer is too small or a private callback
+ * rejects serialization. deserialize returns 1 only on a fully validated,
+ * identity-matching restore; malformed, truncated, unknown-version, and
+ * mismatched-controller records return 0 without changing ForeignState.
+ */
+int nes_foreign_serialize_active(uint8_t *buf, int capacity);
+int nes_foreign_deserialize_active(const uint8_t *buf, int length);
 
 /* Ownership is host policy: the adapter raises it for ordinary controllable
  * play and lowers it for scripted sequences. Defaults to NATIVE. */

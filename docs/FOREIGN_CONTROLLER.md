@@ -416,6 +416,20 @@ must keep its per-frame model or it is no longer that game's movement.
 
 Save states are a real hazard here, because the controller's authoritative
 state lives outside NES RAM. Restoring RAM while leaving host state from a
-different frame produces a character that is in two places at once. Serialize
-the controller state alongside the save, or reconstruct only at safe
-synchronization points and document the limitation.
+different frame produces a character that is in two places at once.
+
+Use `nes_foreign_serialize_active()` and
+`nes_foreign_deserialize_active()` from one host save-state record. The engine
+snapshot carries the current controller id, its `ForeignState`, and optional
+controller-private bytes. Restore is deliberately **non-selecting**: it works
+only when the host has already selected the same controller id from its current
+mod configuration. A Falcon record therefore cannot silently overwrite a
+Pikachu session. Malformed, truncated, version-mismatched, and
+controller-mismatched records are rejected without changing `ForeignState`.
+
+Register a matched `get_private_state`/`set_private_state` pair with
+`nes_foreign_register_private_state(controller_id, ...)` only when a controller
+has state beyond `ForeignState`; both callbacks must validate the complete
+private payload before mutating their own storage. Existing six-field
+`ForeignController` initializers remain valid and serialize only the common
+engine state.

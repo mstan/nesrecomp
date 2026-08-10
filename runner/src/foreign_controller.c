@@ -8,6 +8,7 @@
  */
 #include "foreign_controller.h"
 
+#include <limits.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -18,13 +19,53 @@
 /* ---------------------------------------------------------------------- */
 
 #define FOREIGN_MAX_CONTROLLERS 16
+#define FOREIGN_SERIALIZE_VERSION 1u
+
+/* Payload layout (all multi-byte lengths are little-endian):
+ *   u8 version, u8 id_length, u16 foreign_state_length, u16 private_length,
+ *   u8 flags,
+ *   id bytes (not NUL terminated), raw ForeignState, private bytes.
+ *
+ * The raw state is deliberately length-tagged. Save states are local native
+ * snapshots rather than a cross-architecture interchange format; a build
+ * whose ForeignState layout changed must reject rather than memcpy it. */
+#define FOREIGN_SERIALIZE_HEADER_SIZE 7u
+#define FOREIGN_SERIALIZE_PRIVATE_PRESENT 0x01u
 
 static const ForeignController *s_controllers[FOREIGN_MAX_CONTROLLERS];
 static int                      s_controller_count = 0;
 
+typedef struct ForeignPrivateStateHooks {
+    const char *controller_id;
+    ForeignControllerPrivateStateGet get;
+    ForeignControllerPrivateStateSet set;
+} ForeignPrivateStateHooks;
+
+static ForeignPrivateStateHooks s_private_states[FOREIGN_MAX_CONTROLLERS];
+static int                      s_private_state_count = 0;
+
 static const ForeignController *s_active = NULL;
 static ForeignState             s_state;
 static ForeignOwnership         s_ownership = FOREIGN_OWNERSHIP_NATIVE;
+
+static int controller_index(const char *id) {
+    int i;
+    if (!id || !id[0]) return -1;
+    for (i = 0; i < s_controller_count; i++) {
+        if (strcmp(s_controllers[i]->id, id) == 0) return i;
+    }
+    return -1;
+}
+
+static const ForeignPrivateStateHooks *private_hooks_for_active(void) {
+    int i;
+    if (!s_active) return NULL;
+    for (i = 0; i < s_private_state_count; i++) {
+        if (strcmp(s_private_states[i].controller_id, s_active->id) == 0)
+            return &s_private_states[i];
+    }
+    return NULL;
+}
 
 int nes_foreign_register(const ForeignController *controller) {
     if (!controller || !controller->id || !controller->id[0]) return 0;
@@ -37,6 +78,30 @@ int nes_foreign_register(const ForeignController *controller) {
     }
     if (s_controller_count >= FOREIGN_MAX_CONTROLLERS) return 0;
     s_controllers[s_controller_count++] = controller;
+    return 1;
+}
+
+int nes_foreign_register_private_state(const char *controller_id,
+                                       ForeignControllerPrivateStateGet get,
+                                       ForeignControllerPrivateStateSet set) {
+    int i, index;
+    index = controller_index(controller_id);
+    if (index < 0 || !get || !set) return 0;
+    for (i = 0; i < s_private_state_count; i++) {
+        if (strcmp(s_private_states[i].controller_id, controller_id) != 0)
+            continue;
+        s_private_states[i].get = get;
+        s_private_states[i].set = set;
+        return 1;
+    }
+    if (s_private_state_count >= FOREIGN_MAX_CONTROLLERS) return 0;
+    /* Keep the registered controller's stable id pointer, not a caller-owned
+     * temporary spelling that merely compared equal during registration. */
+    s_private_states[s_private_state_count].controller_id =
+        s_controllers[index]->id;
+    s_private_states[s_private_state_count].get = get;
+    s_private_states[s_private_state_count].set = set;
+    s_private_state_count++;
     return 1;
 }
 
@@ -60,6 +125,97 @@ int nes_foreign_select(const char *id) {
 const ForeignController *nes_foreign_active(void) { return s_active; }
 
 ForeignState *nes_foreign_state(void) { return s_active ? &s_state : NULL; }
+
+static void write_u16le(uint8_t *dst, unsigned value) {
+    dst[0] = (uint8_t)(value & 0xffu);
+    dst[1] = (uint8_t)((value >> 8) & 0xffu);
+}
+
+static unsigned read_u16le(const uint8_t *src) {
+    return (unsigned)src[0] | ((unsigned)src[1] << 8);
+}
+
+int nes_foreign_serialize_active(uint8_t *buf, int capacity) {
+    const ForeignPrivateStateHooks *private_hooks;
+    size_t id_length;
+    int private_length = 0;
+    size_t header_and_id;
+    size_t total;
+
+    if (!s_active) return 0;
+    if (!buf || capacity < 0) return -1;
+    id_length = strlen(s_active->id);
+    if (id_length == 0 || id_length > 255u || sizeof(ForeignState) > 65535u)
+        return -1;
+    header_and_id = FOREIGN_SERIALIZE_HEADER_SIZE + id_length;
+    if (header_and_id > (size_t)capacity ||
+        sizeof(ForeignState) > (size_t)capacity - header_and_id)
+        return -1;
+
+    private_hooks = private_hooks_for_active();
+    if (private_hooks) {
+        const size_t private_capacity =
+            (size_t)capacity - header_and_id - sizeof(ForeignState);
+        private_length = private_hooks->get(
+            &s_state, buf + header_and_id + sizeof(ForeignState),
+            private_capacity > (size_t)INT_MAX ? INT_MAX : (int)private_capacity);
+        if (private_length < 0 || (size_t)private_length > private_capacity ||
+            private_length > 65535)
+            return -1;
+    }
+
+    total = header_and_id + sizeof(ForeignState) + (size_t)private_length;
+    buf[0] = FOREIGN_SERIALIZE_VERSION;
+    buf[1] = (uint8_t)id_length;
+    write_u16le(buf + 2, (unsigned)sizeof(ForeignState));
+    write_u16le(buf + 4, (unsigned)private_length);
+    buf[6] = private_hooks ? FOREIGN_SERIALIZE_PRIVATE_PRESENT : 0u;
+    memcpy(buf + FOREIGN_SERIALIZE_HEADER_SIZE, s_active->id, id_length);
+    memcpy(buf + header_and_id, &s_state, sizeof(s_state));
+    return (int)total;
+}
+
+int nes_foreign_deserialize_active(const uint8_t *buf, int length) {
+    const ForeignPrivateStateHooks *private_hooks;
+    unsigned id_length, state_length, private_length, flags;
+    size_t header_and_id, total;
+    ForeignState restored;
+
+    if (!s_active || !buf || length < (int)FOREIGN_SERIALIZE_HEADER_SIZE)
+        return 0;
+    if (buf[0] != FOREIGN_SERIALIZE_VERSION) return 0;
+    id_length = buf[1];
+    state_length = read_u16le(buf + 2);
+    private_length = read_u16le(buf + 4);
+    flags = buf[6];
+    if (id_length == 0 || state_length != sizeof(ForeignState) ||
+        (flags & ~FOREIGN_SERIALIZE_PRIVATE_PRESENT) != 0u)
+        return 0;
+    header_and_id = FOREIGN_SERIALIZE_HEADER_SIZE + (size_t)id_length;
+    if (header_and_id > (size_t)length ||
+        (size_t)state_length > (size_t)length - header_and_id ||
+        (size_t)private_length > (size_t)length - header_and_id -
+                                  (size_t)state_length)
+        return 0;
+    total = header_and_id + (size_t)state_length + (size_t)private_length;
+    if (total != (size_t)length) return 0;
+    if (strlen(s_active->id) != id_length ||
+        memcmp(buf + FOREIGN_SERIALIZE_HEADER_SIZE, s_active->id, id_length) != 0)
+        return 0;
+    private_hooks = private_hooks_for_active();
+    if (((flags & FOREIGN_SERIALIZE_PRIVATE_PRESENT) != 0u) !=
+        (private_hooks != NULL))
+        return 0;
+
+    memcpy(&restored, buf + header_and_id, sizeof(restored));
+    if (private_hooks &&
+        !private_hooks->set(&restored,
+                            buf + header_and_id + state_length,
+                            (int)private_length))
+        return 0;
+    s_state = restored;
+    return 1;
+}
 
 void nes_foreign_set_ownership(ForeignOwnership ownership) {
     s_ownership = ownership;
