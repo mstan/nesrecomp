@@ -33,6 +33,16 @@ void nes_mod_audio_unregister(NESModAudioClip clip);
 /* Starts a one-shot. gain_percent is clamped to 0..200. Returns 1 on success. */
 int nes_mod_audio_play(NESModAudioClip clip, int gain_percent);
 
+/* Starts (or updates) the one persistent loop associated with `clip`.
+ * Calling this repeatedly is deliberately idempotent: a host can reconcile
+ * serialized gameplay state every tick without creating duplicate loops.
+ * The loop starts at sample zero when it did not already exist. */
+int nes_mod_audio_play_loop(NESModAudioClip clip, int gain_percent);
+
+/* Stops the persistent loop for `clip`, leaving one-shots of the same clip
+ * alone. This is safe for an invalid or already-stopped handle. */
+void nes_mod_audio_stop_loop(NESModAudioClip clip);
+
 /* Stops every overlay voice without unregistering clips. Save-state loads use
  * this to discard host delivery state instead of replaying a stale call. */
 void nes_mod_audio_stop_all(void);

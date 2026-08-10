@@ -16,6 +16,7 @@ typedef struct ModAudioVoice {
     NESModAudioClip clip;
     uint32_t position;
     int gain_percent;
+    int looping;
 } ModAudioVoice;
 
 static ModAudioClipSlot s_clips[MOD_AUDIO_MAX_CLIPS];
@@ -85,7 +86,47 @@ int nes_mod_audio_play(NESModAudioClip clip, int gain_percent)
     s_voices[i].clip = clip;
     s_voices[i].position = 0;
     s_voices[i].gain_percent = gain_percent;
+    s_voices[i].looping = 0;
     return 1;
+}
+
+int nes_mod_audio_play_loop(NESModAudioClip clip, int gain_percent)
+{
+    int i;
+    if (!clip_slot(clip)) return 0;
+    if (gain_percent < 0) gain_percent = 0;
+    if (gain_percent > 200) gain_percent = 200;
+
+    /* There is exactly one persistent voice per clip. A state-reconciliation
+     * caller can therefore invoke this every emulation frame, including the
+     * first frame after a savestate reload, without audibly restarting it. */
+    for (i = 0; i < MOD_AUDIO_MAX_VOICES; ++i) {
+        if (s_voices[i].clip == clip && s_voices[i].looping) {
+            s_voices[i].gain_percent = gain_percent;
+            return 1;
+        }
+    }
+    for (i = 0; i < MOD_AUDIO_MAX_VOICES; ++i) {
+        if (s_voices[i].clip == NES_MOD_AUDIO_CLIP_INVALID) break;
+    }
+    if (i == MOD_AUDIO_MAX_VOICES) {
+        i = (int)s_replace_cursor;
+        s_replace_cursor = (s_replace_cursor + 1u) % MOD_AUDIO_MAX_VOICES;
+    }
+    s_voices[i].clip = clip;
+    s_voices[i].position = 0;
+    s_voices[i].gain_percent = gain_percent;
+    s_voices[i].looping = 1;
+    return 1;
+}
+
+void nes_mod_audio_stop_loop(NESModAudioClip clip)
+{
+    int i;
+    for (i = 0; i < MOD_AUDIO_MAX_VOICES; ++i) {
+        if (s_voices[i].clip == clip && s_voices[i].looping)
+            memset(&s_voices[i], 0, sizeof(s_voices[i]));
+    }
 }
 
 void nes_mod_audio_stop_all(void)
@@ -112,8 +153,12 @@ void nes_mod_audio_mix(int16_t *dst, int frame_count)
             }
             mixed += ((int)slot->samples[voice->position++] *
                       voice->gain_percent) / 100;
-            if (voice->position >= slot->frame_count)
-                memset(voice, 0, sizeof(*voice));
+            if (voice->position >= slot->frame_count) {
+                if (voice->looping)
+                    voice->position = 0;
+                else
+                    memset(voice, 0, sizeof(*voice));
+            }
         }
         if (mixed > 32767) mixed = 32767;
         if (mixed < -32768) mixed = -32768;
