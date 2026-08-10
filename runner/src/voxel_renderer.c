@@ -61,6 +61,7 @@ typedef struct RenderContext {
 
 static uint32_t s_source[VOXEL_MAX_WIDTH * VOXEL_MAX_HEIGHT];
 static float s_depth[VOXEL_MAX_WIDTH * VOXEL_MAX_HEIGHT];
+static uint8_t s_overlay_coverage[VOXEL_MAX_WIDTH * VOXEL_MAX_HEIGHT];
 static uint8_t s_contaminated[VOXEL_MAX_TILES];
 static int16_t s_representative[256];
 static uint32_t
@@ -270,11 +271,13 @@ static void draw_triangle(const RenderContext *ctx,
             if (texture->alpha_test &&
                 (color >> 24) <= (unsigned)texture->alpha_cutoff)
                 continue;
+            if (texture->overlay && s_overlay_coverage[pos]) continue;
             color = shade_color(color, texture->shade);
             s->framebuffer[pos] = (color >> 24) < 0xFF
                 ? blend_over(s->framebuffer[pos], color)
                 : color;
-            if (!texture->overlay) s_depth[pos] = inv_depth;
+            if (texture->overlay) s_overlay_coverage[pos] = 1;
+            else s_depth[pos] = inv_depth;
         }
     }
 }
@@ -1267,6 +1270,9 @@ void nes_voxel_mesh_bind_texture_bilinear_overlay(
     if (!s_mesh_active) return;
     s_mesh_texture.overlay = 1;
     s_mesh_texture.alpha_cutoff = alpha_cutoff > 0 ? alpha_cutoff : 0;
+    memset(s_overlay_coverage, 0,
+           (size_t)s_mesh_ctx.scene->output_width *
+               s_mesh_ctx.scene->output_height * sizeof(s_overlay_coverage[0]));
 }
 
 void nes_voxel_mesh_triangle(NesVoxelMeshVertex a, NesVoxelMeshVertex b,
