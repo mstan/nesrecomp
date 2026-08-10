@@ -66,7 +66,12 @@ and provider callbacks address them at package scope. `format = "n64"` gives
 the launcher `.z64`/`.v64`/`.n64` filters and tells the runtime to detect N64
 byte order from the magic and normalize the bytes in memory. `format = "raw"`
 hashes the selected file without a byte-order transform and uses a generic ROM
-picker. The runtime compares the normalized SHA-1 and exact size declared by
+picker. `format = "nes"` accepts either a headerless cartridge payload or an
+iNES 1.0/2.0 `.nes` image without a trainer. The 16-byte iNES header is removed
+before verification, and `size` describes the normalized PRG+CHR payload; this
+lets equivalent iNES 1.0 and 2.0 headers identify the same cartridge revision.
+`normalized_sha1` may be one string or an array of explicitly supported
+revision hashes. The runtime compares the normalized SHA-1 and exact size declared by
 the package, then displays the manifest's `identity` as the verified revision.
 SHA-1 is used as a ROM-revision identity, not as a security primitive. The
 selected path is stored in `mods/state.toml`; the ROM is never copied into or
