@@ -49,6 +49,7 @@ typedef struct Texture {
     int alpha_test;
     int overlay;
     int bilinear;
+    int alpha_cutoff;
 } Texture;
 
 typedef struct RenderContext {
@@ -266,7 +267,9 @@ static void draw_triangle(const RenderContext *ctx,
                 if (ty >= texture->height) ty = texture->height - 1;
                 color = texture->pixels[ty * texture->stride + tx];
             }
-            if (texture->alpha_test && (color >> 24) == 0) continue;
+            if (texture->alpha_test &&
+                (color >> 24) <= (unsigned)texture->alpha_cutoff)
+                continue;
             color = shade_color(color, texture->shade);
             s->framebuffer[pos] = (color >> 24) < 0xFF
                 ? blend_over(s->framebuffer[pos], color)
@@ -371,7 +374,7 @@ static Texture tile_texture(const NesVoxelScene *s, int tx, int ty, float shade)
     int source_index = index;
     uint8_t tile = scene_tile(s, tx, ty);
     int sx, sy;
-    Texture texture;
+    Texture texture = {0};
     if (s->tile_pixels) {
         texture.pixels =
             s_custom_tile_pixels +
@@ -462,7 +465,7 @@ static uint32_t tile_side_color(const Texture *top) {
 static Texture tile_side_texture(const Texture *top, int edge,
                                  uint32_t material, uint32_t *pixels,
                                  float shade) {
-    Texture texture;
+    Texture texture = {0};
     unsigned material_luma = color_luma(material);
     unsigned bright_limit = material_luma + material_luma / 2u;
     for (int i = 0; i < top->width; i++) {
@@ -627,7 +630,7 @@ static float side_group_depth(const NesVoxelScene *s,
 static Texture side_group_texture(const NesVoxelScene *s,
                                   int tx, int ty, int group,
                                   uint32_t *pixels) {
-    Texture result;
+    Texture result = {0};
     int cells_x = group;
     int cells_y = group;
     int width, height;
@@ -736,7 +739,7 @@ static void render_tile_billboards(const RenderContext *ctx) {
             int width, height;
             uint32_t pixels[VOXEL_MAX_BILLBOARD_SIZE *
                             VOXEL_MAX_BILLBOARD_SIZE];
-            Texture texture;
+            Texture texture = {0};
             float card_width, card_height;
             float center_x, foot_z;
             Vec3 center, left_bottom, right_bottom, right_top, left_top;
@@ -867,7 +870,7 @@ static void draw_card_shadow(const RenderContext *ctx, float center_x,
                              float ground, float foot_z, float card_width,
                              float scale, float opacity) {
     uint32_t pixels[8 * 8];
-    Texture texture;
+    Texture texture = {0};
     float half_width = card_width * scale * 0.5f;
     float half_depth = half_width * 0.34f;
     unsigned max_alpha;
@@ -892,6 +895,8 @@ static void draw_card_shadow(const RenderContext *ctx, float center_x,
     texture.shade = 1.0f;
     texture.alpha_test = 1;
     texture.overlay = 0;
+    texture.bilinear = 0;
+    texture.alpha_cutoff = 0;
     draw_quad(ctx,
               vec3(center_x - half_width, ground + 0.08f,
                    foot_z - half_depth),
@@ -930,7 +935,7 @@ static void render_sprites(const RenderContext *ctx) {
         float shadow_strength;
         Vec3 card_up;
         Vec3 center, left_bottom, right_bottom, right_top, left_top;
-        Texture texture;
+        Texture texture = {0};
         if (!active[i] || used[i]) continue;
 
         members[member_count++] = i;
@@ -1243,6 +1248,7 @@ void nes_voxel_mesh_bind_texture(const uint32_t *pixels, int width,
     s_mesh_texture.alpha_test = alpha_test;
     s_mesh_texture.overlay = 0;
     s_mesh_texture.bilinear = 0;
+    s_mesh_texture.alpha_cutoff = 0;
 }
 
 void nes_voxel_mesh_bind_texture_bilinear(const uint32_t *pixels, int width,
@@ -1251,6 +1257,16 @@ void nes_voxel_mesh_bind_texture_bilinear(const uint32_t *pixels, int width,
     nes_voxel_mesh_bind_texture(pixels, width, height, stride, shade,
                                 alpha_test);
     if (s_mesh_active) s_mesh_texture.bilinear = 1;
+}
+
+void nes_voxel_mesh_bind_texture_bilinear_overlay(
+    const uint32_t *pixels, int width, int height, int stride, float shade,
+    int alpha_cutoff) {
+    nes_voxel_mesh_bind_texture_bilinear(pixels, width, height, stride, shade,
+                                         1);
+    if (!s_mesh_active) return;
+    s_mesh_texture.overlay = 1;
+    s_mesh_texture.alpha_cutoff = alpha_cutoff > 0 ? alpha_cutoff : 0;
 }
 
 void nes_voxel_mesh_triangle(NesVoxelMeshVertex a, NesVoxelMeshVertex b,

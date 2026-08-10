@@ -226,6 +226,12 @@ void nes_voxel_mesh_bind_texture_bilinear(const uint32_t *pixels, int width,
                                           int height, int stride, float shade,
                                           int alpha_test);
 
+/* Bilinear translucent overlay with no depth test/write. Alpha comparison is
+ * applied after filtering, matching texture-rectangle XLU particles. */
+void nes_voxel_mesh_bind_texture_bilinear_overlay(
+    const uint32_t *pixels, int width, int height, int stride, float shade,
+    int alpha_cutoff);
+
 /* Submit one triangle in the currently bound texture. No-op outside a
  * session or before any texture is bound. */
 void nes_voxel_mesh_triangle(NesVoxelMeshVertex a, NesVoxelMeshVertex b,
