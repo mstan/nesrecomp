@@ -37,7 +37,7 @@ NESModAudioClip nes_mod_audio_register_pcm_s16_mono(
     int i;
 
     if (!samples || frame_count == 0 ||
-        frame_count > (uint32_t)(SIZE_MAX / sizeof(*samples)))
+        (size_t)frame_count > SIZE_MAX / sizeof(*samples))
         return NES_MOD_AUDIO_CLIP_INVALID;
 
     for (i = 0; i < MOD_AUDIO_MAX_CLIPS; ++i) {
