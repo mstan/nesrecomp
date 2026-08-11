@@ -2632,6 +2632,7 @@ void nes_fring_init_dump(void) {
 }
 #endif
 
+#if NESRECOMP_POSTMORTEM_RINGS
 static void write_dispatch_ring(FILE *out, uint32_t limit) {
     uint32_t n = s_dring_head < DISPATCH_RING_N ? s_dring_head : DISPATCH_RING_N;
     if (limit > 0 && n > limit) n = limit;
@@ -2641,6 +2642,12 @@ static void write_dispatch_ring(FILE *out, uint32_t limit) {
                 e->kind, e->addr, e->cb, e->s, e->depth, e->wb);
     }
 }
+#else
+static void write_dispatch_ring(FILE *out, uint32_t limit) {
+    (void)limit;
+    fprintf(out, "  dispatch ring disabled in this production build\n");
+}
+#endif
 
 void nes_dump_dispatch_ring(void) {
 #if NESRECOMP_POSTMORTEM_RINGS
