@@ -189,16 +189,28 @@ typedef enum {
 #define FOREIGN_ACTION_FOLLOW_SURFACES  0x00000002u
 #define FOREIGN_ACTION_SELF_CONTACT     0x00000004u
 #define FOREIGN_ACTION_DESTROY_ON_SOLID 0x00000008u
+/* Begin as a free-moving action, then adopt `surface_velocity` on the first
+ * accepted terrain contact. FOLLOW_SURFACES still owns the line traversal;
+ * this flag only models projectiles whose air and attached speeds differ. */
+#define FOREIGN_ACTION_SURFACE_SPEED     0x00000010u
 
 typedef struct {
     uint32_t instance_id;
     uint32_t kind;
     uint32_t command; /* ForeignActionCommand */
     uint32_t flags;
+    /* Source-model attachment identity. Zero means the authored root. Hosts
+     * without a skeleton resolver use offset_x/y as a deterministic fallback
+     * while presentation can still bind the first visible frame to the exact
+     * joint. The id is opaque to the engine. */
+    uint32_t source_joint;
     double   offset_x;
     double   offset_y;
     double   velocity_x;
     double   velocity_y;
+    /* Source units/tick after the first surface-line attachment. Ignored
+     * unless FOREIGN_ACTION_SURFACE_SPEED is set. */
+    double   surface_velocity;
     double   width;
     double   height;
     int      damage;
