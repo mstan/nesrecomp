@@ -2,6 +2,7 @@
  * input_script.c — NES input script playback and recording
  */
 #include "input_script.h"
+#include "foreign_controller.h"
 #include "nes_runtime.h"
 #include "savestate.h"
 #include "save_ram.h"
@@ -52,7 +53,7 @@ typedef enum {
     CMD_WAIT, CMD_HOLD, CMD_RELEASE,
     CMD_TURBO_ON, CMD_TURBO_OFF,
     CMD_SCREENSHOT, CMD_LOG, CMD_EXIT,
-    CMD_WAIT_RAM8, CMD_ASSERT_RAM8,
+    CMD_WAIT_RAM8, CMD_WAIT_FOREIGN_STATE, CMD_ASSERT_RAM8,
     CMD_WRITE_RAM8, CMD_WRITE_SRAM8, CMD_WRITE_PPU8,
     CMD_DUMP_RAM,
     CMD_SAVE_STATE, CMD_LOAD_STATE,
@@ -62,8 +63,8 @@ typedef enum {
 
 typedef struct {
     CmdType type;
-    int     iarg;          /* WAIT: frames; EXIT: code; WAIT_RAM8/ASSERT_RAM8: addr */
-    uint8_t barg;          /* HOLD/RELEASE: button mask; WAIT/ASSERT_RAM8: expected value */
+    int     iarg;          /* WAIT: frames; EXIT: code; RAM commands: addr; foreign wait: frame */
+    uint8_t barg;          /* buttons/value; foreign wait: optional-frame-present */
     char    sarg[128];     /* filename, message, state path, or host key name */
 } Cmd;
 
@@ -80,9 +81,9 @@ static char   s_shot_pending[128] = {0};
 static int    s_auto_shot_num = 1;
 static char   s_shot_prefix[32] = {0};
 
-/* For WAIT_RAM8 timeout */
-static uint64_t s_wait_ram_start_frame = 0;
-#define WAIT_RAM_TIMEOUT_FRAMES (30 * 60)  /* 30 seconds at 60fps */
+/* For bounded predicate waits (RAM and foreign-controller state). */
+static uint64_t s_wait_predicate_start_frame = UINT64_MAX;
+#define WAIT_PREDICATE_TIMEOUT_FRAMES (30 * 60)  /* 30 seconds at 60fps */
 
 static void trim(char *s) {
     char *p = s + strlen(s) - 1;
@@ -136,6 +137,20 @@ int script_load(const char *path) {
             c.type = CMD_WAIT_RAM8;
             c.iarg = (int)strtol(arg1, NULL, 16) & 0x7FF;
             c.barg = (uint8_t)strtol(arg2, NULL, 16);
+        } else if (strcmp(tok, "WAIT_FOREIGN_STATE") == 0 && n >= 2) {
+            char *end = NULL;
+            c.type = CMD_WAIT_FOREIGN_STATE;
+            strncpy(c.sarg, arg1, sizeof(c.sarg)-1);
+            if (n >= 3) {
+                long state_frame = strtol(arg2, &end, 0);
+                if (end == arg2 || *end != '\0' || state_frame < 0 ||
+                    state_frame > 0x7FFFFFFFL) {
+                    fprintf(stderr, "[Script] Invalid foreign state frame: %s\n", arg2);
+                    continue;
+                }
+                c.iarg = (int)state_frame;
+                c.barg = 1;
+            }
         } else if (strcmp(tok, "ASSERT_RAM8") == 0 && n >= 3) {
             c.type = CMD_ASSERT_RAM8;
             c.iarg = (int)strtol(arg1, NULL, 16) & 0x7FF;
@@ -197,6 +212,7 @@ int script_load(const char *path) {
     s_loaded = 1;
     s_cmd_cursor = 0;
     s_wait_left  = 0;
+    s_wait_predicate_start_frame = UINT64_MAX;
     s_exit_code  = -1;
     s_buttons_held = 0;
     return 1;
@@ -222,19 +238,53 @@ void script_tick(uint64_t frame, const uint8_t *ram) {
         }
 
         if (c->type == CMD_WAIT_RAM8) {
-            if (s_wait_ram_start_frame == 0) s_wait_ram_start_frame = frame;
+            if (s_wait_predicate_start_frame == UINT64_MAX)
+                s_wait_predicate_start_frame = frame;
             uint8_t actual = ram[c->iarg & 0x7FF];
             if (actual == c->barg) {
                 printf("[Script] WAIT_RAM8 $%03X==%02X satisfied at frame %llu\n",
                        c->iarg, c->barg, (unsigned long long)frame);
-                s_wait_ram_start_frame = 0;
+                s_wait_predicate_start_frame = UINT64_MAX;
                 s_cmd_cursor++;
                 continue;
             }
-            if (frame - s_wait_ram_start_frame > WAIT_RAM_TIMEOUT_FRAMES) {
+            if (frame - s_wait_predicate_start_frame > WAIT_PREDICATE_TIMEOUT_FRAMES) {
                 fprintf(stderr, "[Script] WAIT_RAM8 $%03X==%02X TIMEOUT (got %02X)\n",
                         c->iarg, c->barg, actual);
-                s_wait_ram_start_frame = 0;
+                s_wait_predicate_start_frame = UINT64_MAX;
+                s_cmd_cursor++;
+            }
+            return;
+        }
+
+        if (c->type == CMD_WAIT_FOREIGN_STATE) {
+            const ForeignController *controller = nes_foreign_active();
+            ForeignState *foreign = nes_foreign_state();
+            const char *actual_name = NULL;
+            int matches = 0;
+
+            if (s_wait_predicate_start_frame == UINT64_MAX)
+                s_wait_predicate_start_frame = frame;
+            if (controller && foreign && controller->state_name)
+                actual_name = controller->state_name(foreign->state);
+            matches = actual_name && strcmp(actual_name, c->sarg) == 0 &&
+                      (!c->barg || foreign->state_frame == (unsigned)c->iarg);
+            if (matches) {
+                printf("[Script] WAIT_FOREIGN_STATE %s%s satisfied at frame %llu"
+                       " (state_frame=%u)\n",
+                       c->sarg, c->barg ? " with exact frame" : "",
+                       (unsigned long long)frame, foreign->state_frame);
+                s_wait_predicate_start_frame = UINT64_MAX;
+                s_cmd_cursor++;
+                continue;
+            }
+            if (frame - s_wait_predicate_start_frame > WAIT_PREDICATE_TIMEOUT_FRAMES) {
+                fprintf(stderr, "[Script] WAIT_FOREIGN_STATE %s%s TIMEOUT"
+                        " (got %s frame %u)\n",
+                        c->sarg, c->barg ? " with exact frame" : "",
+                        actual_name ? actual_name : "<inactive>",
+                        foreign ? foreign->state_frame : 0u);
+                s_wait_predicate_start_frame = UINT64_MAX;
                 s_cmd_cursor++;
             }
             return;
@@ -280,7 +330,14 @@ void script_tick(uint64_t frame, const uint8_t *ram) {
                 printf("[Script] LOAD_STATE %s at frame %llu\n",
                        c->sarg, (unsigned long long)frame);
                 savestate_load(c->sarg);
-                break;
+                /* Loading rewinds the runner's frame counter. Do not arm a
+                 * following predicate against this tick's stale pre-load
+                 * `frame`, because unsigned timeout arithmetic would fire on
+                 * the very next restored frame. Resume command processing on
+                 * that next frame instead. */
+                s_wait_predicate_start_frame = UINT64_MAX;
+                s_cmd_cursor++;
+                return;
             case CMD_EXIT:
                 printf("[Script] EXIT %d at frame %llu\n",
                        c->iarg, (unsigned long long)frame);

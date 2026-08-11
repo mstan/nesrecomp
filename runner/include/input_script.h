@@ -11,6 +11,8 @@
  *   LOG <message>
  *   EXIT [code]
  *   WAIT_RAM8 <hex_addr> <hex_value>    # block until g_ram[addr]==value (30s timeout)
+ *   WAIT_FOREIGN_STATE <state> [frame]  # block until active controller reports state
+ *                                        # and optional exact public frame (30s timeout)
  *   ASSERT_RAM8 <hex_addr> <hex_value> [msg]
  */
 #pragma once
