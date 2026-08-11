@@ -232,6 +232,11 @@ void nes_voxel_mesh_bind_texture_bilinear_overlay(
     const uint32_t *pixels, int width, int height, int stride, float shade,
     int alpha_cutoff);
 
+/* Apply a straight-alpha RGB overlay to subsequently bound immediate mesh
+ * textures. rgba==0 disables it. This is for material-color animation, not
+ * a replacement particle system. */
+void nes_voxel_mesh_set_color_overlay(uint32_t rgba);
+
 /* Submit one triangle in the currently bound texture. No-op outside a
  * session or before any texture is bound. */
 void nes_voxel_mesh_triangle(NesVoxelMeshVertex a, NesVoxelMeshVertex b,

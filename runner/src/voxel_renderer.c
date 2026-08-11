@@ -50,6 +50,7 @@ typedef struct Texture {
     int overlay;
     int bilinear;
     int alpha_cutoff;
+    uint32_t color_overlay;
 } Texture;
 
 typedef struct RenderContext {
@@ -126,6 +127,20 @@ static uint32_t shade_color(uint32_t color, float shade) {
     if (g > 255) g = 255;
     if (b > 255) b = 255;
     return (a << 24) | (r << 16) | (g << 8) | b;
+}
+
+static uint32_t overlay_color(uint32_t color, uint32_t overlay) {
+    unsigned alpha = overlay >> 24;
+    unsigned inverse;
+    unsigned r, g, b;
+    if (!alpha) return color;
+    inverse = 255u - alpha;
+    r = (((color >> 16) & 0xFFu) * inverse +
+         ((overlay >> 16) & 0xFFu) * alpha + 127u) / 255u;
+    g = (((color >> 8) & 0xFFu) * inverse +
+         ((overlay >> 8) & 0xFFu) * alpha + 127u) / 255u;
+    b = ((color & 0xFFu) * inverse + (overlay & 0xFFu) * alpha + 127u) / 255u;
+    return (color & 0xFF000000u) | (r << 16) | (g << 8) | b;
 }
 
 static uint32_t blend_over(uint32_t destination, uint32_t source) {
@@ -272,6 +287,7 @@ static void draw_triangle(const RenderContext *ctx,
                 (color >> 24) <= (unsigned)texture->alpha_cutoff)
                 continue;
             if (texture->overlay && s_overlay_coverage[pos]) continue;
+            color = overlay_color(color, texture->color_overlay);
             color = shade_color(color, texture->shade);
             s->framebuffer[pos] = (color >> 24) < 0xFF
                 ? blend_over(s->framebuffer[pos], color)
@@ -1205,6 +1221,7 @@ static RenderContext s_mesh_ctx;
 static NesVoxelScene s_mesh_scene;
 static Texture s_mesh_texture;
 static int s_mesh_active = 0;
+static uint32_t s_mesh_color_overlay = 0;
 
 int nes_voxel_mesh_begin(uint32_t *framebuffer, int output_width,
                          int output_height, const NesVoxelCamera *camera) {
@@ -1235,6 +1252,7 @@ int nes_voxel_mesh_begin(uint32_t *framebuffer, int output_width,
              ? camera->center_y : 0.59f);
 
     memset(&s_mesh_texture, 0, sizeof(s_mesh_texture));
+    s_mesh_color_overlay = 0;
     s_mesh_active = 1;
     return 1;
 }
@@ -1252,6 +1270,7 @@ void nes_voxel_mesh_bind_texture(const uint32_t *pixels, int width,
     s_mesh_texture.overlay = 0;
     s_mesh_texture.bilinear = 0;
     s_mesh_texture.alpha_cutoff = 0;
+    s_mesh_texture.color_overlay = s_mesh_color_overlay;
 }
 
 void nes_voxel_mesh_bind_texture_bilinear(const uint32_t *pixels, int width,
@@ -1273,6 +1292,11 @@ void nes_voxel_mesh_bind_texture_bilinear_overlay(
     memset(s_overlay_coverage, 0,
            (size_t)s_mesh_ctx.scene->output_width *
                s_mesh_ctx.scene->output_height * sizeof(s_overlay_coverage[0]));
+}
+
+void nes_voxel_mesh_set_color_overlay(uint32_t rgba) {
+    s_mesh_color_overlay = rgba;
+    if (s_mesh_active) s_mesh_texture.color_overlay = rgba;
 }
 
 void nes_voxel_mesh_triangle(NesVoxelMeshVertex a, NesVoxelMeshVertex b,
