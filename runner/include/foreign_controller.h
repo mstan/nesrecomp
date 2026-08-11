@@ -193,6 +193,10 @@ typedef enum {
  * accepted terrain contact. FOLLOW_SURFACES still owns the line traversal;
  * this flag only models projectiles whose air and attached speeds differ. */
 #define FOREIGN_ACTION_SURFACE_SPEED     0x00000010u
+/* Report the first native target contact, but keep the action alive. The host
+ * still latches target_consumed so a persistent action cannot repeatedly
+ * apply native damage through the single-target adapter channel. */
+#define FOREIGN_ACTION_PERSIST_AFTER_TARGET 0x00000020u
 
 typedef struct {
     uint32_t instance_id;
