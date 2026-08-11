@@ -90,7 +90,7 @@ struct ExternalRom {
     std::string description;
     std::string format;
     std::string identity;
-    std::string normalized_sha1;
+    std::vector<std::string> normalized_sha1s;
     uint64_t size = 0;
 };
 
@@ -267,6 +267,40 @@ bool parse_string(const std::string& text, std::string& out) {
         }
     }
     return true;
+}
+
+bool parse_string_array(const std::string& text,
+                        std::vector<std::string>& out) {
+    const std::string value = trim(text);
+    if (value.size() < 2 || value.front() != '[' || value.back() != ']')
+        return false;
+    out.clear();
+    size_t start = 1;
+    bool quoted = false;
+    bool escape = false;
+    for (size_t i = 1; i < value.size() - 1; ++i) {
+        const char c = value[i];
+        if (escape) {
+            escape = false;
+            continue;
+        }
+        if (quoted && c == '\\') {
+            escape = true;
+            continue;
+        }
+        if (c == '"') quoted = !quoted;
+        if (c != ',' || quoted) continue;
+        std::string item;
+        if (!parse_string(value.substr(start, i - start), item)) return false;
+        out.push_back(std::move(item));
+        start = i + 1;
+    }
+    if (quoted || escape) return false;
+    std::string item;
+    if (!parse_string(value.substr(start, value.size() - 1 - start), item))
+        return false;
+    out.push_back(std::move(item));
+    return !out.empty();
 }
 
 bool parse_bool(const std::string& text, bool& out) {
@@ -601,8 +635,17 @@ bool read_manifest(const fs::path& path, Package& out, std::string* error) {
                     parsed = string_field(external_rom->format);
                 else if (key == "identity")
                     parsed = string_field(external_rom->identity);
-                else if (key == "normalized_sha1")
-                    parsed = string_field(external_rom->normalized_sha1);
+                else if (key == "normalized_sha1") {
+                    std::vector<std::string> hashes;
+                    if (parse_string(value, string_value)) {
+                        hashes.push_back(string_value);
+                        parsed = true;
+                    } else {
+                        parsed = parse_string_array(value, hashes);
+                    }
+                    if (parsed)
+                        external_rom->normalized_sha1s = std::move(hashes);
+                }
                 else if (key == "size") {
                     parsed = parse_int(value, int_value) && int_value > 0;
                     if (parsed) external_rom->size = (uint64_t)int_value;
@@ -644,10 +687,17 @@ bool read_manifest(const fs::path& path, Package& out, std::string* error) {
      * within one feature. This also makes cache/state keys unambiguous. */
     std::set<std::string> resource_ids;
     for (const ExternalRom& item : out.external_roms) {
+        const bool hashes_valid = !item.normalized_sha1s.empty() &&
+            std::all_of(item.normalized_sha1s.begin(),
+                        item.normalized_sha1s.end(), valid_sha1) &&
+            std::set<std::string>(item.normalized_sha1s.begin(),
+                                  item.normalized_sha1s.end()).size() ==
+                item.normalized_sha1s.size();
         if (!find_feature(out, item.feature_id) || !valid_id(item.id) ||
             item.label.empty() || item.identity.empty() || item.size == 0 ||
-            (item.format != "raw" && item.format != "n64") ||
-            !valid_sha1(item.normalized_sha1) ||
+            (item.format != "raw" && item.format != "n64" &&
+             item.format != "nes") ||
+            !hashes_valid ||
             !resource_ids.insert(item.id).second) {
             set_error(error, "manifest has an invalid external ROM resource");
             return false;
@@ -1193,14 +1243,16 @@ ResourceVerdict verify_external_rom(Runtime& runtime,
      * supported ROM revision. Bind the cache to the manifest identity as well
      * as the selected path metadata, so version selection cannot reuse a
      * verdict computed under an older whitelist. */
-    const std::string cache_key = package.id + ":" + package.version + ":" +
-        resource.id + ":" + resource.normalized_sha1;
+    std::string cache_key = package.id + ":" + package.version + ":" +
+        resource.id;
+    for (const std::string& hash : resource.normalized_sha1s)
+        cache_key += ":" + hash;
     ResourceCache& cache = runtime.resource_cache[cache_key];
     if (!force && cache.populated && cache.path == path &&
         cache.size == size && cache.modified == modified)
         return cache.verdict;
 
-    if (size != resource.size) {
+    if (resource.format != "nes" && size != resource.size) {
         result.status = "Wrong size — expected " +
             std::to_string(resource.size) + " bytes";
     } else {
@@ -1210,6 +1262,10 @@ ResourceVerdict verify_external_rom(Runtime& runtime,
             (resource.format == "n64" && bytes.size() < 4)) {
             result.status = "Cannot read selected file";
         } else {
+            /* ResourceVerdict's UI default is "Not selected". From this
+             * point the file is readable, so an empty status means no format
+             * validation error and lets each normalizer compose checks. */
+            result.status.clear();
             if (resource.format == "n64") {
                 const uint32_t magic = ((uint32_t)bytes[0] << 24) |
                                        ((uint32_t)bytes[1] << 16) |
@@ -1225,11 +1281,55 @@ ResourceVerdict verify_external_rom(Runtime& runtime,
                 } else if (magic != 0x80371240u) {
                     result.status = "Unrecognized N64 ROM byte order";
                 }
+            } else if (resource.format == "nes") {
+                /* Hash NES cartridge payloads independently of the container
+                 * header. This accepts canonical iNES 1.0/2.0 dumps and a
+                 * headerless payload while rejecting trainers, truncated
+                 * images, trailing copier data, and NES 2.0 exponent sizes.
+                 * The manifest's size is the normalized PRG+CHR byte count. */
+                if (bytes.size() >= 16 && bytes[0] == 'N' && bytes[1] == 'E' &&
+                    bytes[2] == 'S' && bytes[3] == 0x1A) {
+                    if (bytes[6] & 0x04) {
+                        result.status = "Trainer-bearing NES ROMs are unsupported";
+                    } else {
+                        uint32_t prg_units = bytes[4];
+                        uint32_t chr_units = bytes[5];
+                        const bool nes2 = (bytes[7] & 0x0C) == 0x08;
+                        if (nes2) {
+                            const uint8_t prg_hi = bytes[9] & 0x0F;
+                            const uint8_t chr_hi = bytes[9] >> 4;
+                            if (prg_hi == 0x0F || chr_hi == 0x0F) {
+                                result.status =
+                                    "NES 2.0 exponent-sized ROMs are unsupported";
+                            } else {
+                                prg_units |= (uint32_t)prg_hi << 8;
+                                chr_units |= (uint32_t)chr_hi << 8;
+                            }
+                        }
+                        if (result.status.empty()) {
+                            const uint64_t payload_size =
+                                (uint64_t)prg_units * 16384u +
+                                (uint64_t)chr_units * 8192u;
+                            if (payload_size != resource.size) {
+                                result.status = "Wrong normalized NES size — expected " +
+                                    std::to_string(resource.size) + " bytes";
+                            } else if (bytes.size() != 16u + payload_size) {
+                                result.status = "Malformed or truncated NES ROM image";
+                            } else {
+                                bytes.erase(bytes.begin(), bytes.begin() + 16);
+                            }
+                        }
+                    }
+                } else if (bytes.size() != resource.size) {
+                    result.status = "Wrong normalized NES size — expected " +
+                        std::to_string(resource.size) + " bytes";
+                }
             }
-            if (result.status == "Not selected") result.status.clear();
             if (result.status.empty()) {
                 const std::string digest = sha1_hex(bytes);
-                if (digest == resource.normalized_sha1) {
+                if (std::find(resource.normalized_sha1s.begin(),
+                              resource.normalized_sha1s.end(), digest) !=
+                    resource.normalized_sha1s.end()) {
                     result.verified = true;
                     result.status = "Verified — " + resource.identity;
                 } else {
@@ -2157,6 +2257,9 @@ int provider_feature_resource_get(
         if (resource.format == "n64") {
             copy_text(out->file_patterns, "*.z64,*.v64,*.n64");
             copy_text(out->file_description, "Nintendo 64 ROM images");
+        } else if (resource.format == "nes") {
+            copy_text(out->file_patterns, "*.nes");
+            copy_text(out->file_description, "Nintendo Entertainment System ROM images");
         } else {
             copy_text(out->file_patterns, "*.*");
             copy_text(out->file_description, "ROM images");

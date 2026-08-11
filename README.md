@@ -241,7 +241,7 @@ sections are summarized below.
 
 | Section | Purpose |
 |---------|---------|
-| `[game]` | Output prefix, symbol file path, and recompiler flags (`push_all_jsr`, `disable_ptr_scan`, ...) |
+| `[game]` | Output prefix, symbol file path, and recompiler flags (`push_all_jsr`, `disable_ptr_scan`, `deduplicate_functions`, ...) |
 | `[mapper] bank_switch = [...]` | Addresses of MMC1/mapper bank-switch routines |
 | `[[inline_dispatch]] addr` | Indexed dispatch via inline address table after JSR |
 | `[[inline_pointer]] addr, zp = [lo, hi], call` | JSR reads 2 inline bytes into zero page; `call` also invokes the resulting target |
@@ -256,6 +256,32 @@ sections are summarized below.
 Numeric values may be given in hex (`0xC000`) or decimal. Address-only directives
 are TOML arrays of tables; per-bank lists under `[functions]` and
 `[force_interp]` accept plain integer arrays.
+
+### Optional Cross-Bank Function Deduplication
+
+Banked games can opt into a conservative post-processing pass that shares
+identical generated function bodies:
+
+```toml
+[game]
+deduplicate_functions = true
+```
+
+The pass is disabled by default because its benefit depends on the game. It
+merges functions only when their generated C is byte-for-byte equal after
+normalizing the function's own symbol; bank constants, callees, mapper state,
+fallback behavior, and all other emitted code must still match. The lowest
+bank/address is retained as the shared implementation, while every original
+public function symbol remains available through a thin forwarding wrapper.
+
+Each run writes `generated/<prefix>_function_groups.json` with the proof hash,
+representative, group members, and estimated duplicate body bytes. Review this
+manifest and compare generated-source or build sizes before enabling the option
+for a game: some titles save substantially, while titles without proven groups
+may see no reduction. `[[dedup_exclude]]` can keep a member independent, and
+`[[replace_func]] scope = "group"` can replace an entire proven group. See
+[`MODDING.md`](MODDING.md#shared-cross-bank-functions) for those directives and
+external replacement examples.
 
 ### Function Discovery: Table-Run Scanner
 

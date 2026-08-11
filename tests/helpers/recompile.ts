@@ -6,13 +6,15 @@ import { existsSync, readFileSync, writeFileSync, mkdtempSync } from "fs";
 import { join, dirname, resolve } from "path";
 import { tmpdir } from "os";
 
-const NESRECOMP_EXE = [
-  resolve(import.meta.dirname, "../../build/recompiler/Release/NESRecomp.exe"),
-  resolve(import.meta.dirname, "../../build_recompiler_vs/Release/NESRecomp.exe"),
-].find(existsSync) ?? resolve(
-  import.meta.dirname,
-  "../../build/recompiler/Release/NESRecomp.exe"
-);
+const NESRECOMP_EXE = process.env.NESRECOMP_EXE
+  ? resolve(process.env.NESRECOMP_EXE)
+  : ([
+      resolve(import.meta.dirname, "../../build/recompiler/Release/NESRecomp.exe"),
+      resolve(import.meta.dirname, "../../build_recompiler_vs/Release/NESRecomp.exe"),
+    ].find(existsSync) ?? resolve(
+      import.meta.dirname,
+      "../../build/recompiler/Release/NESRecomp.exe"
+    ));
 
 export interface RecompResult {
   functionCount: number;

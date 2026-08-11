@@ -9,6 +9,16 @@
 
 set(NESRECOMP_RUNNER_ROOT ${CMAKE_CURRENT_LIST_DIR})
 
+# launcher.c uses DbgHelp for native Windows crash backtraces.  Game projects
+# include runner.cmake before creating their executable, so a directory-scoped
+# link dependency keeps older titles from each having to know about this runner
+# implementation detail.  The MSVC pragma in launcher.c covers that toolchain;
+# this also supplies the import library, at the correct end-of-link position,
+# for MinGW.
+if(WIN32)
+    link_libraries(dbghelp)
+endif()
+
 set(NESRECOMP_RUNNER_SOURCES
     ${NESRECOMP_RUNNER_ROOT}/src/main_runner.c
     ${NESRECOMP_RUNNER_ROOT}/src/runtime.c
@@ -110,6 +120,45 @@ else()
     list(APPEND NESRECOMP_RUNNER_SOURCES ${NESRECOMP_RUNNER_ROOT}/src/debug_server_stub.c)
     add_compile_definitions(NESRECOMP_TRACE=0)
 endif()
+
+# Generated functions can optionally maintain a diagnostic shadow call stack.
+# Some older game projects define RECOMP_STACK_TRACKING unconditionally even
+# for production builds. Make the shared option authoritative in both
+# directions: define the macro when enabled, and explicitly undefine it when
+# disabled so trace-off Release builds do not retain two out-of-line diagnostic
+# calls at every generated function boundary. Projects can therefore request
+# stack tracking without the TCP trace server even if their own CMakeLists does
+# not know about the implementation macro.
+option(NESRECOMP_ENABLE_STACK_TRACKING
+    "Track generated function entries/exits for diagnostics"
+    ${NESRECOMP_ENABLE_TRACE})
+if(NESRECOMP_ENABLE_STACK_TRACKING)
+    add_compile_definitions(RECOMP_STACK_TRACKING)
+else()
+    if(MSVC)
+        add_compile_options(/URECOMP_STACK_TRACKING)
+    else()
+        add_compile_options(-URECOMP_STACK_TRACKING)
+    endif()
+endif()
+
+# Recent-dispatch and frame-event rings are useful post-mortem diagnostics, but
+# production builds should not pay their hot-path writes or reserve the large
+# frame ring. Compile the policy into runtime.c only so toggling it does not
+# invalidate every generated translation unit. It may be enabled independently
+# of the TCP trace server for a diagnostic Release build.
+option(NESRECOMP_ENABLE_POSTMORTEM_RINGS
+    "Capture recent dispatches and frame events for post-mortem diagnostics"
+    ${NESRECOMP_ENABLE_TRACE})
+if(NESRECOMP_ENABLE_POSTMORTEM_RINGS)
+    set(_NESRECOMP_POSTMORTEM_RINGS 1)
+else()
+    set(_NESRECOMP_POSTMORTEM_RINGS 0)
+endif()
+set_property(SOURCE ${NESRECOMP_RUNNER_ROOT}/src/runtime.c APPEND PROPERTY
+    COMPILE_DEFINITIONS
+    NESRECOMP_POSTMORTEM_RINGS=${_NESRECOMP_POSTMORTEM_RINGS})
+unset(_NESRECOMP_POSTMORTEM_RINGS)
 
 # The recompiled C in each game's generated/ is machine-generated and leans on
 # K&R-style implicit declarations (cross-bank func_XXXX calls without a prior

@@ -18,6 +18,7 @@ constexpr const char* kPackageId = "test.external-rom";
 constexpr const char* kFeatureId = "fighter";
 constexpr const char* kPluginId = "test.external-rom.plugin";
 constexpr const char* kSha1 = "606e809392c9f1363cfd83b2f80aa66b5bd0e990";
+constexpr const char* kSmallSha1 = "67dfd19f3eb3649d6f3f6631e44d0bd36b8d8d19";
 
 int failures;
 int activations;
@@ -57,7 +58,10 @@ void write_bytes(const fs::path& path, const std::vector<uint8_t>& bytes) {
 
 void write_catalog(const fs::path& root, const fs::path& resource_path,
                    const std::string& format = "n64",
-                   bool duplicate_resource_id = false) {
+                   bool duplicate_resource_id = false,
+                   size_t resource_size = kRomSize,
+                   const char* normalized_sha1 = kSha1,
+                   const char* alternate_normalized_sha1 = nullptr) {
     const fs::path package =
         root / "packages" / kPackageId / "1.0.0";
     fs::create_directories(package);
@@ -92,8 +96,14 @@ void write_catalog(const fs::path& root, const fs::path& resource_path,
             << "description = \"Generated test data.\"\n"
             << "format = \"" << format << "\"\n"
             << "identity = \"" << identity << "\"\n"
-            << "size = " << kRomSize << "\n"
-            << "normalized_sha1 = \"" << kSha1 << "\"\n\n";
+            << "size = " << resource_size << "\n";
+        if (alternate_normalized_sha1) {
+            manifest << "normalized_sha1 = [\"" << normalized_sha1
+                     << "\", \"" << alternate_normalized_sha1 << "\"]\n\n";
+        } else {
+            manifest << "normalized_sha1 = \"" << normalized_sha1
+                     << "\"\n\n";
+        }
     };
     external_rom(kFeatureId, "source-rom", "Synthetic canonical N64 image");
     manifest
@@ -141,9 +151,13 @@ bool initialize(const fs::path& root, std::string& error) {
 
 void expect_valid_activation(const fs::path& base, const std::string& name,
                              const fs::path& resource,
-                             const std::string& format = "n64") {
+                             const std::string& format = "n64",
+                             size_t resource_size = kRomSize,
+                             const char* normalized_sha1 = kSha1,
+                             const char* alternate_normalized_sha1 = nullptr) {
     const fs::path root = base / name;
-    write_catalog(root, resource, format);
+    write_catalog(root, resource, format, false, resource_size,
+                  normalized_sha1, alternate_normalized_sha1);
     std::string error;
     activations = 0;
     activation_saw_committed_path = false;
@@ -175,9 +189,14 @@ void expect_valid_activation(const fs::path& base, const std::string& name,
 }
 
 void expect_invalid_resource(const fs::path& base, const std::string& name,
-                             const fs::path& resource) {
+                             const fs::path& resource,
+                             const std::string& format = "n64",
+                             size_t resource_size = kRomSize,
+                             const char* normalized_sha1 = kSha1,
+                             const char* alternate_normalized_sha1 = nullptr) {
     const fs::path root = base / name;
-    write_catalog(root, resource);
+    write_catalog(root, resource, format, false, resource_size,
+                  normalized_sha1, alternate_normalized_sha1);
     std::string error;
     activations = 0;
     expect(initialize(root, error),
@@ -225,6 +244,27 @@ int main() {
     const fs::path n64 = base / "valid.n64";
     write_bytes(n64, reordered);
 
+    std::vector<uint8_t> ines(16 + bytes.size(), 0);
+    ines[0] = 'N'; ines[1] = 'E'; ines[2] = 'S'; ines[3] = 0x1A;
+    /* NES 2.0: 1024 * 16 KiB PRG, no CHR. */
+    ines[7] = 0x08;
+    ines[9] = 0x04;
+    std::copy(bytes.begin(), bytes.end(), ines.begin() + 16);
+    const fs::path nes = base / "valid.nes";
+    write_bytes(nes, ines);
+
+    std::vector<uint8_t> small_bytes(128u * 1024u, 0);
+    std::vector<uint8_t> ines1(16 + small_bytes.size(), 0);
+    ines1[0] = 'N'; ines1[1] = 'E'; ines1[2] = 'S'; ines1[3] = 0x1A;
+    ines1[4] = 8;  /* Metroid-shaped iNES 1.0: 8 * 16 KiB PRG. */
+    std::copy(small_bytes.begin(), small_bytes.end(), ines1.begin() + 16);
+    const fs::path nes1 = base / "valid-ines1.nes";
+    write_bytes(nes1, ines1);
+    std::vector<uint8_t> trainer_nes = ines1;
+    trainer_nes[6] |= 0x04;
+    const fs::path trainer = base / "trainer.nes";
+    write_bytes(trainer, trainer_nes);
+
     std::vector<uint8_t> wrong = bytes;
     wrong[4096] ^= 1;
     const fs::path wrong_path = base / "wrong.z64";
@@ -235,6 +275,14 @@ int main() {
     expect_valid_activation(base, "v64", v64);
     expect_valid_activation(base, "n64", n64);
     expect_valid_activation(base, "raw", z64, "raw");
+    expect_valid_activation(base, "nes-headered", nes, "nes");
+    expect_valid_activation(base, "nes-headerless", z64, "nes");
+    expect_valid_activation(base, "nes-ines1", nes1, "nes",
+                            small_bytes.size(), kSmallSha1);
+    expect_valid_activation(base, "nes-alternate-revision", nes1, "nes",
+                            small_bytes.size(), kSha1, kSmallSha1);
+    expect_invalid_resource(base, "nes-trainer", trainer, "nes",
+                            small_bytes.size(), kSmallSha1);
     expect_invalid_resource(base, "missing", missing);
     expect_invalid_resource(base, "wrong", wrong_path);
 

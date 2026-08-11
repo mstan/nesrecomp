@@ -145,6 +145,26 @@ cmake --build build_debug
 KirbysAdventureRecomp.exe "<rom>" --smoke 120 --smoke-interval 30 *> smoke.log
 ```
 
+## Uncapped performance benchmark
+
+The shared runner provides a finite, headless throughput mode:
+
+```powershell
+GameRecomp.exe "<rom>" --benchmark 1200 --benchmark-warmup 300 `
+  --benchmark-output benchmark.json
+```
+
+The warm-up is excluded from timing. The measured path still executes the
+normal recompiled CPU, mapper, PPU, and final framebuffer rendering, but skips
+SDL presentation, audio, frame pacing, periodic smoke hashes, and process
+startup. The output reports elapsed time, milliseconds per frame, uncapped
+FPS, the final framebuffer CRC, and dispatch misses.
+
+Use Release builds with `NESRECOMP_ENABLE_TRACE=OFF`. Alternate baseline and
+candidate runs on an otherwise quiet machine, discard the first run for each
+binary, and compare medians. Use `--smoke` separately for interval hashes and
+correctness gates.
+
 After committing `recompiler/src`, bump `KirbysAdventureNESRecomp/nesrecomp.pin`
 `sha` to the new worktree HEAD or the CMake pin check fails the build.
 
