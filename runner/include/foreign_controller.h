@@ -199,22 +199,21 @@ typedef struct {
     uint32_t kind;
     uint32_t command; /* ForeignActionCommand */
     uint32_t flags;
-    /* Source-model attachment identity. Zero means the authored root. Hosts
-     * without a skeleton resolver use offset_x/y as a deterministic fallback
-     * while presentation can still bind the first visible frame to the exact
-     * joint. The id is opaque to the engine. */
-    uint32_t source_joint;
     double   offset_x;
     double   offset_y;
     double   velocity_x;
     double   velocity_y;
-    /* Source units/tick after the first surface-line attachment. Ignored
-     * unless FOREIGN_ACTION_SURFACE_SPEED is set. */
-    double   surface_velocity;
     double   width;
     double   height;
     int      damage;
     uint32_t lifetime_ticks;
+    /* Appended fields preserve every legacy member offset in this public ABI.
+     * Source-model attachment identity is opaque to the engine. Zero means
+     * the authored root; a nonzero joint must be resolved or fail closed. */
+    uint32_t source_joint;
+    /* Source units/tick after the first surface-line attachment. Ignored
+     * unless FOREIGN_ACTION_SURFACE_SPEED is set. */
+    double   surface_velocity;
 } ForeignActionEvent;
 
 typedef struct {
