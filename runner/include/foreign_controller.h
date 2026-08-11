@@ -197,6 +197,10 @@ typedef enum {
  * still latches target_consumed so a persistent action cannot repeatedly
  * apply native damage through the single-target adapter channel. */
 #define FOREIGN_ACTION_PERSIST_AFTER_TARGET 0x00000020u
+/* velocity_x is already in host-facing screen coordinates. Do not multiply it
+ * by fighter facing again. Used by controllers that author projectile facing
+ * in their own source state and pass a signed velocity through the bridge. */
+#define FOREIGN_ACTION_ORIENTED_VELOCITY    0x00000040u
 
 typedef struct {
     uint32_t instance_id;
