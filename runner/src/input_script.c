@@ -2,6 +2,7 @@
  * input_script.c — NES input script playback and recording
  */
 #include "input_script.h"
+#include "debug_server.h"
 #include "foreign_controller.h"
 #include "nes_runtime.h"
 #include "savestate.h"
@@ -58,7 +59,7 @@ typedef enum {
     CMD_DUMP_RAM,
     CMD_SAVE_STATE, CMD_LOAD_STATE,
     CMD_TRIGGER, CMD_TRIGGER_OFF,
-    CMD_KEY_TAP,
+    CMD_KEY_TAP, CMD_DEBUG_PAUSE,
 } CmdType;
 
 typedef struct {
@@ -201,6 +202,9 @@ int script_load(const char *path) {
                 *p = (char)toupper((unsigned char)*p);
             c.type = CMD_KEY_TAP;
             snprintf(c.sarg, sizeof(c.sarg), "%s", arg1);
+        } else if (strcmp(tok, "DEBUG_PAUSE") == 0) {
+            c.type = CMD_DEBUG_PAUSE;
+            if (n >= 2) strncpy(c.sarg, arg1, sizeof(c.sarg)-1);
         } else {
             fprintf(stderr, "[Script] Unknown command: %s\n", tok);
             continue;
@@ -320,6 +324,11 @@ void script_tick(uint64_t frame, const uint8_t *ram) {
             }
             case CMD_LOG:
                 printf("[Script] %s\n", c->sarg);
+                break;
+            case CMD_DEBUG_PAUSE:
+                printf("[Script] DEBUG_PAUSE %s at frame %llu\n",
+                       c->sarg, (unsigned long long)frame);
+                debug_server_request_pause(c->sarg[0] ? c->sarg : "input script");
                 break;
             case CMD_SAVE_STATE:
                 printf("[Script] SAVE_STATE %s at frame %llu\n",
