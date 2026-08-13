@@ -732,11 +732,14 @@ int nes_interp_force_bank(uint16_t cpu_addr, uint16_t gen_addr, int bank) {
     interp_lazy_init();
 
     /* A forced wrapper can be reached by the covered-ness probe from an
-     * already-running interpreter island. Decline that probe without nesting:
-     * the owner island will continue at cpu_addr itself. */
+     * already-running interpreter island. The generated wrapper is void, so
+     * the dispatcher cannot propagate a "miss" answer back to the probe.
+     * Execute the forced island here so the caller observes the real RTS/RTI
+     * sidecar state instead of treating an unpopped JSR as native success. */
     if (s_probe_armed && cpu_addr == s_probe_addr) {
         s_probe_armed = 0;
-        return 0;
+        return interp_exit_handled(
+            interp_run_ex(cpu_addr, 1, NES_INTERP_HANDOFF_ISLAND, 0));
     }
 
     if (interp_exit_handled(

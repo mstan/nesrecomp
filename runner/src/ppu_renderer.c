@@ -24,12 +24,14 @@ extern uint16_t g_ppuaddr;  /* PPU address register (runtime.c) */
 static PpuSpriteSuppressFn s_sprite_suppress_fn   = NULL;
 static void               *s_sprite_suppress_user = NULL;
 static uint8_t            *s_bg_opaque_snapshot   = NULL;
+static uint32_t           *s_bg_color_snapshot    = NULL;
 static size_t              s_bg_opaque_capacity   = 0;
 static int                 s_bg_opaque_width      = 0;
 
 static int prepare_bg_opaque_snapshot(int width) {
     size_t needed;
     uint8_t *grown;
+    uint32_t *grown_colors;
     if (width <= 0) {
         s_bg_opaque_width = 0;
         return 0;
@@ -44,6 +46,13 @@ static int prepare_bg_opaque_snapshot(int width) {
         s_bg_opaque_snapshot = grown;
         s_bg_opaque_capacity = needed;
     }
+    grown_colors = (uint32_t *)realloc(s_bg_color_snapshot,
+                                       needed * sizeof(uint32_t));
+    if (!grown_colors) {
+        s_bg_opaque_width = 0;
+        return 0;
+    }
+    s_bg_color_snapshot = grown_colors;
     s_bg_opaque_width = width;
     return 1;
 }
@@ -536,6 +545,10 @@ void ppu_render_frame(uint32_t *framebuf) {
     } else {
         for (int i = 0; i < g_render_width * 240; i++) framebuf[i] = bg;
     }
+    if (s_bg_opaque_width == g_render_width && s_bg_color_snapshot) {
+        memcpy(s_bg_color_snapshot, framebuf,
+               (size_t)g_render_width * 240u * sizeof(uint32_t));
+    }
 
     /* Only render if BG rendering is enabled ($2001 bit 3) */
     if (!(g_ppumask & 0x08)) goto render_sprites;
@@ -822,13 +835,20 @@ void ppu_render_frame(uint32_t *framebuf) {
                     if (screen_x >= 0 && screen_x < 8 &&
                         !(g_ppumask & 0x02)) {
                         frame_row[fb_x] = bg;
+                        if (s_bg_opaque_width == g_render_width &&
+                            fb_x >= 0 && fb_x < g_render_width) {
+                            size_t off = (size_t)sy * g_render_width + fb_x;
+                            s_bg_opaque_snapshot[off] = 0;
+                            s_bg_color_snapshot[off] = bg;
+                        }
                     } else {
                         uint32_t bgc = colors[color_idx];
                         frame_row[fb_x] = bgc;
                         if (s_bg_opaque_width == g_render_width &&
                             fb_x >= 0 && fb_x < g_render_width) {
-                            s_bg_opaque_snapshot[(size_t)sy * g_render_width +
-                                                 fb_x] = color_idx != 0;
+                            size_t off = (size_t)sy * g_render_width + fb_x;
+                            s_bg_opaque_snapshot[off] = color_idx != 0;
+                            s_bg_color_snapshot[off] = bgc;
                         }
                         if (g_hp && fb_x >= 0 && fb_x < g_render_width) {
                             HdPixel *hp =
@@ -1087,13 +1107,26 @@ render_sprites:
                  *   - No hit at x=255 (per NES spec).
                  *   - Obeys BG/sprite leftmost-8 clip (the px<8 gate above already
                  *     filters sprite side; BG clip is PPUMASK bit 1). */
+                int bg_opaque =
+                    s_bg_opaque_width == g_render_width &&
+                    fb_x >= 0 && fb_x < g_render_width &&
+                    s_bg_opaque_snapshot[(size_t)py * g_render_width + fb_x];
                 if (s == 0 && px >= 0 && px < 255 && (row_mask & 0x18) == 0x18) {
                     int bg_clipped = (px < 8 && !(row_mask & 0x02));
-                    if (!bg_clipped && framebuf[py * g_render_width + fb_x] != bg)
+                    if (!bg_clipped && bg_opaque)
                         g_ppustatus |= 0x40;
                 }
                 /* Priority=1: sprite behind BG — only draw where BG is transparent */
-                if (priority && framebuf[py * g_render_width + fb_x] != bg) continue;
+                if (priority && bg_opaque) {
+                    size_t off = (size_t)py * g_render_width + fb_x;
+                    if (s_bg_color_snapshot)
+                        framebuf[off] = s_bg_color_snapshot[off];
+                    if (g_hp && fb_x >= 0 && fb_x < g_render_width) {
+                        HdPixel *hp = &g_hp[off];
+                        hp->sp_has = 0;
+                    }
+                    continue;
+                }
                 uint8_t nes_color = g_ppu_pal[(spr_pal * 4 + color_idx) & 0x1F] & 0x3F;
                 uint32_t spc = g_nes_palette[nes_color];
                 framebuf[py * g_render_width + fb_x] = spc;
