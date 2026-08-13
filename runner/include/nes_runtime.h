@@ -498,6 +498,14 @@ int      runtime_scroll_from_t_valid(void);
 int      runtime_get_visible_frame_start(uint8_t *ctrl, uint8_t *sx,
                                          uint8_t *sy, uint16_t *t,
                                          uint64_t *frame);
+void     runtime_record_irq_scanline(int scanline);
+void     runtime_get_irq_scanlines(int *out, int *count, uint64_t *frame);
+int      runtime_get_mapper_irq_split(int *scanline,
+                                      uint8_t *ctrl_before, uint8_t *mask_before,
+                                      uint8_t *sx_before, uint8_t *sy_before,
+                                      uint8_t *ctrl_after, uint8_t *mask_after,
+                                      uint8_t *sx_after, uint8_t *sy_after,
+                                      uint64_t *frame);
 void     runtime_get_latch_state(uint8_t *ppuaddr_latch, uint8_t *scroll_latch);
 void     runtime_set_latch_state(uint8_t ppuaddr_latch, uint8_t scroll_latch);
 extern uint8_t g_oamaddr;

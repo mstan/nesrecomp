@@ -522,6 +522,22 @@ void ppu_render_frame(uint32_t *framebuf) {
                                                             &render_start_sy,
                                                             &render_start_t,
                                                             &render_start_frame);
+    int mapper_irq_split_scanline = -1;
+    uint8_t mapper_irq_ctrl_before = 0, mapper_irq_mask_before = 0;
+    uint8_t mapper_irq_sx_before = 0, mapper_irq_sy_before = 0;
+    uint8_t mapper_irq_ctrl_after = 0, mapper_irq_mask_after = 0;
+    uint8_t mapper_irq_sx_after = 0, mapper_irq_sy_after = 0;
+    int mapper_irq_split_active =
+        runtime_get_mapper_irq_split(&mapper_irq_split_scanline,
+                                     &mapper_irq_ctrl_before,
+                                     &mapper_irq_mask_before,
+                                     &mapper_irq_sx_before,
+                                     &mapper_irq_sy_before,
+                                     &mapper_irq_ctrl_after,
+                                     &mapper_irq_mask_after,
+                                     &mapper_irq_sx_after,
+                                     &mapper_irq_sy_after,
+                                     NULL);
 
     /* Effective widescreen margins this frame: clamp the per-frame values
      * to the configured framebuffer margins; -1 = follow configured.
@@ -678,16 +694,36 @@ void ppu_render_frame(uint32_t *framebuf) {
         service_mmc3_scanline_irq(-1);
 
         for (int sy = 0; sy < 240; sy++) {
-            /* Choose scroll source for this scanline.
-             * When split_y==240 (no sprite-0 split), use main game scroll for
-             * all scanlines — the HUD values are stale (0,0) from VBlank reset. */
+            /* Choose scroll source for this scanline. Mapper 40's CPU-clocked
+             * IRQ runs in the runtime, not this row-by-row MMC3 render path,
+             * so use the captured pre/post IRQ scroll when present. */
             int use_hud = (split_y < 240 && sy < split_y);
-            uint8_t live_ppuctrl = (!g_render_irq_fired && have_render_start)
-                                       ? render_start_ctrl : g_ppuctrl;
-            int live_scroll_x = (!g_render_irq_fired && have_render_start)
-                                    ? render_start_sx : g_ppuscroll_x;
-            int live_scroll_y = (!g_render_irq_fired && have_render_start)
-                                    ? render_start_sy : g_ppuscroll_y;
+            int after_mapper_irq = mapper_irq_split_active &&
+                                   sy >= mapper_irq_split_scanline + 1;
+            uint8_t live_ppuctrl;
+            int live_scroll_x;
+            int live_scroll_y;
+            if (g_render_irq_fired) {
+                live_ppuctrl = g_ppuctrl;
+                live_scroll_x = g_ppuscroll_x;
+                live_scroll_y = g_ppuscroll_y;
+            } else if (after_mapper_irq) {
+                live_ppuctrl = mapper_irq_ctrl_after;
+                live_scroll_x = mapper_irq_sx_after;
+                live_scroll_y = mapper_irq_sy_after;
+            } else if (mapper_irq_split_active) {
+                live_ppuctrl = mapper_irq_ctrl_before;
+                live_scroll_x = mapper_irq_sx_before;
+                live_scroll_y = mapper_irq_sy_before;
+            } else if (have_render_start) {
+                live_ppuctrl = render_start_ctrl;
+                live_scroll_x = render_start_sx;
+                live_scroll_y = render_start_sy;
+            } else {
+                live_ppuctrl = g_ppuctrl;
+                live_scroll_x = g_ppuscroll_x;
+                live_scroll_y = g_ppuscroll_y;
+            }
             uint8_t ppuctrl_row = use_hud ? g_ppuctrl_hud  : live_ppuctrl;
             int     scroll_x    = use_hud ? g_ppuscroll_x_hud : live_scroll_x;
             int     scroll_y    = use_hud ? g_ppuscroll_y_hud : live_scroll_y;
@@ -697,7 +733,8 @@ void ppu_render_frame(uint32_t *framebuf) {
             const uint8_t *bg_chr_src = g_chr_ram;
 
             /* Capture post-IRQ rendering state on the scanline right after IRQ */
-            if (g_render_irq_fired && sy == g_render_irq_scanline + 1) {
+            if ((g_render_irq_fired && sy == g_render_irq_scanline + 1) ||
+                (mapper_irq_split_active && sy == mapper_irq_split_scanline + 1)) {
                 g_render_post_irq_ppuctrl_row = ppuctrl_row;
                 g_render_post_irq_chr_base = chr_base;
                 g_render_post_irq_use_hud = use_hud;
@@ -755,7 +792,8 @@ void ppu_render_frame(uint32_t *framebuf) {
             }
 
             /* Capture nt_row for post-IRQ diagnostic */
-            if (g_render_irq_fired && sy == g_render_irq_scanline + 1) {
+            if ((g_render_irq_fired && sy == g_render_irq_scanline + 1) ||
+                (mapper_irq_split_active && sy == mapper_irq_split_scanline + 1)) {
                 g_render_post_irq_phys_nt = nt_row; /* store nt_row; phys_nt computed per-pixel */
             }
 
@@ -1064,9 +1102,16 @@ render_sprites:
              * must therefore use the frame-start mask before the IRQ and the
              * live post-IRQ mask after it, otherwise playfield sprites draw
              * over the HUD/status bar. */
+            int sprite_after_mapper_irq = mapper_irq_split_active &&
+                                          py >= mapper_irq_split_scanline + 1;
             uint8_t row_mask =
                 (g_render_irq_fired && py >= g_render_irq_scanline + 1)
-                    ? g_ppumask : render_start_mask;
+                    ? g_ppumask
+                    : (sprite_after_mapper_irq
+                        ? mapper_irq_mask_after
+                        : (mapper_irq_split_active
+                            ? mapper_irq_mask_before
+                            : render_start_mask));
             if (!(row_mask & 0x10)) continue;
 
             /* For 8x16: rows 0-7 use top tile, rows 8-15 use bottom tile */

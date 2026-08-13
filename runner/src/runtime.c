@@ -144,6 +144,18 @@ static uint8_t  s_visible_frame_sx = 0, s_visible_frame_sy = 0;
 static uint16_t s_visible_frame_t = 0;
 static uint64_t s_visible_frame_frame = 0;
 
+static int      s_mapper_irq_split_active = 0;
+static int      s_mapper_irq_split_scanline = -1;
+static uint64_t s_mapper_irq_split_frame = 0;
+static uint8_t  s_mapper_irq_split_ctrl_before = 0;
+static uint8_t  s_mapper_irq_split_mask_before = 0;
+static uint8_t  s_mapper_irq_split_sx_before = 0;
+static uint8_t  s_mapper_irq_split_sy_before = 0;
+static uint8_t  s_mapper_irq_split_ctrl_after = 0;
+static uint8_t  s_mapper_irq_split_mask_after = 0;
+static uint8_t  s_mapper_irq_split_sx_after = 0;
+static uint8_t  s_mapper_irq_split_sy_after = 0;
+
 uint64_t g_frame_count = 0;
 
 /* ---- Controller state ---- */
@@ -865,6 +877,13 @@ void runtime_call_irq_handler(void) {
     uint8_t a_pre = g_cpu.A, x_pre = g_cpu.X, y_pre = g_cpu.Y;
     uint8_t n_pre = g_cpu.N, v_pre = g_cpu.V, d_pre = g_cpu.D;
     uint8_t i_pre = g_cpu.I, z_pre = g_cpu.Z, c_pre = g_cpu.C;
+    int capture_mapper_split = (mapper_get_type() == 40 && mapper_irq_asserted());
+    int split_scanline = scanline_from_cycles(s_ops_count);
+    uint8_t split_ctrl_before = g_ppuctrl;
+    uint8_t split_mask_before = g_ppumask;
+    uint8_t split_sx_before = g_ppuscroll_x;
+    uint8_t split_sy_before = g_ppuscroll_y;
+    uint64_t v_write_epoch_before = s_ppu_v_write_epoch;
 
     runtime_note_interrupt_entry();
 
@@ -885,6 +904,24 @@ void runtime_call_irq_handler(void) {
             break;
     }
     s_in_irq = 0;
+    if (capture_mapper_split) {
+        if (s_ppu_v_write_epoch != v_write_epoch_before)
+            runtime_sync_scroll_from_v();
+        if (split_scanline < -1) split_scanline = -1;
+        if (split_scanline > 239) split_scanline = 239;
+        s_mapper_irq_split_active = 1;
+        s_mapper_irq_split_scanline = split_scanline;
+        s_mapper_irq_split_frame = g_frame_count;
+        s_mapper_irq_split_ctrl_before = split_ctrl_before;
+        s_mapper_irq_split_mask_before = split_mask_before;
+        s_mapper_irq_split_sx_before = split_sx_before;
+        s_mapper_irq_split_sy_before = split_sy_before;
+        s_mapper_irq_split_ctrl_after = g_ppuctrl;
+        s_mapper_irq_split_mask_after = g_ppumask;
+        s_mapper_irq_split_sx_after = g_ppuscroll_x;
+        s_mapper_irq_split_sy_after = g_ppuscroll_y;
+        runtime_record_irq_scanline(split_scanline);
+    }
     g_cpu.S = s_pre;
     g_cpu.A = a_pre; g_cpu.X = x_pre; g_cpu.Y = y_pre;
     g_cpu.N = n_pre; g_cpu.V = v_pre; g_cpu.D = d_pre;
@@ -1109,6 +1146,7 @@ void maybe_trigger_vblank(int cycles) {
         g_spr0_split_active = 0;
         g_spr0_reads_ctr_legacy = 0;
         g_spr0_split_write_scanline = -1;
+        s_mapper_irq_split_active = 0;
         g_ppuscroll_x = 0;
         g_ppuscroll_y = 0;
         g_ppuscroll_x_hud = 0;
@@ -1187,6 +1225,8 @@ void maybe_fire_pending_vblank(void) {
 
     g_spr0_split_active = 0;
     g_spr0_reads_ctr_legacy = 0;
+    g_spr0_split_write_scanline = -1;
+    s_mapper_irq_split_active = 0;
     g_ppuscroll_x = 0;
     g_ppuscroll_y = 0;
     g_ppuscroll_x_hud = 0;
@@ -3248,6 +3288,27 @@ void runtime_get_irq_scanlines(int *out, int *count, uint64_t *frame) {
     *frame = s_irq_scanline_frame;
 }
 
+int runtime_get_mapper_irq_split(int *scanline,
+                                 uint8_t *ctrl_before, uint8_t *mask_before,
+                                 uint8_t *sx_before, uint8_t *sy_before,
+                                 uint8_t *ctrl_after, uint8_t *mask_after,
+                                 uint8_t *sx_after, uint8_t *sy_after,
+                                 uint64_t *frame) {
+    if (!s_mapper_irq_split_active || s_mapper_irq_split_frame != g_frame_count)
+        return 0;
+    if (scanline) *scanline = s_mapper_irq_split_scanline;
+    if (ctrl_before) *ctrl_before = s_mapper_irq_split_ctrl_before;
+    if (mask_before) *mask_before = s_mapper_irq_split_mask_before;
+    if (sx_before) *sx_before = s_mapper_irq_split_sx_before;
+    if (sy_before) *sy_before = s_mapper_irq_split_sy_before;
+    if (ctrl_after) *ctrl_after = s_mapper_irq_split_ctrl_after;
+    if (mask_after) *mask_after = s_mapper_irq_split_mask_after;
+    if (sx_after) *sx_after = s_mapper_irq_split_sx_after;
+    if (sy_after) *sy_after = s_mapper_irq_split_sy_after;
+    if (frame) *frame = s_mapper_irq_split_frame;
+    return 1;
+}
+
 /* ---- Scroll write trace accessors ---- */
 void runtime_get_scroll_trace(int *out_count, int *out_idx) {
     if (out_count) *out_count = s_scroll_trace_count;
@@ -3306,6 +3367,7 @@ void runtime_session_reset(void) {
     g_ppuscroll_x=g_ppuscroll_y=0;g_ppuaddr=0;g_ppuaddr_latch=0;g_ppudata_buf=0;
     g_ppuscroll_x_hud=g_ppuscroll_y_hud=g_ppuctrl_hud=0;
     g_spr0_split_active=0;g_spr0_reads_ctr_legacy=0;g_spr0_split_write_scanline=-1;
+    s_mapper_irq_split_active=0;s_mapper_irq_split_scanline=-1;s_mapper_irq_split_frame=0;
     s_ppu_t=0;s_ppu_fine_x=0;s_ppu_v_at_2006=0;s_ppu_v_write_epoch=0;
     s_scroll_2005_complete=0;s_visible_frame_valid=0;s_visible_frame_frame=0;
     g_controller1_buttons=g_controller2_buttons=0;s_ctrl1_shift=s_ctrl2_shift=0;s_ctrl1_strobe=false;
