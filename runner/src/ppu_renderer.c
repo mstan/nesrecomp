@@ -26,6 +26,7 @@ static void               *s_sprite_suppress_user = NULL;
 static uint8_t            *s_bg_opaque_snapshot   = NULL;
 static uint32_t           *s_bg_color_snapshot    = NULL;
 static size_t              s_bg_opaque_capacity   = 0;
+static size_t              s_bg_color_capacity    = 0;
 static int                 s_bg_opaque_width      = 0;
 
 static int prepare_bg_opaque_snapshot(int width) {
@@ -46,13 +47,16 @@ static int prepare_bg_opaque_snapshot(int width) {
         s_bg_opaque_snapshot = grown;
         s_bg_opaque_capacity = needed;
     }
-    grown_colors = (uint32_t *)realloc(s_bg_color_snapshot,
-                                       needed * sizeof(uint32_t));
-    if (!grown_colors) {
-        s_bg_opaque_width = 0;
-        return 0;
+    if (s_bg_color_capacity != needed) {
+        grown_colors = (uint32_t *)realloc(s_bg_color_snapshot,
+                                           needed * sizeof(uint32_t));
+        if (!grown_colors) {
+            s_bg_opaque_width = 0;
+            return 0;
+        }
+        s_bg_color_snapshot = grown_colors;
+        s_bg_color_capacity = needed;
     }
-    s_bg_color_snapshot = grown_colors;
     s_bg_opaque_width = width;
     return 1;
 }

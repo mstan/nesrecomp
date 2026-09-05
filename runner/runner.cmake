@@ -107,12 +107,17 @@ endif()
 # normal shipping build never opens a port or carries the ring. When OFF we
 # compile debug_server_stub.c, which provides no-op definitions of the same public
 # API so the runner + per-game extras.c still link. Opt in with
-# -DNESRECOMP_ENABLE_TRACE=ON (tools/build-linux.sh --config debug does this).
+# -DNESRECOMP_ENABLE_TRACE=ON for diagnostics/debug builds.
 # add_compile_definitions() is directory-scoped and applies to the game target,
 # which include()s this file before add_executable(), so every TU sees the flag.
-# Default ON preserves the prior always-on dev behavior; release builds pass
-# -DNESRECOMP_ENABLE_TRACE=OFF (tools/build-linux.sh --config prod) to strip it.
-option(NESRECOMP_ENABLE_TRACE "Build the TCP debug server / observability rings" ON)
+# Existing CMake caches retain their recorded values. For an already-configured
+# production build tree, pass all three OFF overrides:
+# -DNESRECOMP_ENABLE_TRACE=OFF
+# -DNESRECOMP_ENABLE_STACK_TRACKING=OFF
+# -DNESRECOMP_ENABLE_POSTMORTEM_RINGS=OFF
+# A fresh build tree picks up the production defaults automatically. The stack
+# and ring options remain independently overrideable for diagnostic builds.
+option(NESRECOMP_ENABLE_TRACE "Build the TCP debug server / observability rings" OFF)
 if(NESRECOMP_ENABLE_TRACE)
     list(APPEND NESRECOMP_RUNNER_SOURCES ${NESRECOMP_RUNNER_ROOT}/src/debug_server.c)
     add_compile_definitions(NESRECOMP_TRACE=1)

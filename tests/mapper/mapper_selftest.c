@@ -1,5 +1,6 @@
 #include "mapper.h"
 
+#undef NDEBUG
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>

@@ -64,6 +64,7 @@ typedef struct {
 
     uint16_t timer;       /* 11-bit period register */
     float    timer_acc;   /* fractional CPU-cycle accumulator */
+    float    timer_period;
     uint8_t  seq;         /* duty sequencer pos 0-7 */
 
     uint8_t  env_div;
@@ -83,6 +84,7 @@ typedef struct {
 
     uint16_t timer;       /* 11-bit */
     float    timer_acc;
+    float    timer_period;
     uint8_t  seq;         /* 0-31 */
 
     uint8_t  length;
@@ -96,6 +98,7 @@ typedef struct {
     bool     mode;
     uint8_t  period_idx;
     float    timer_acc;
+    float    timer_period;
     uint16_t lfsr;        /* 15-bit, initialised to 1 */
 
     uint8_t  env_div;
@@ -128,6 +131,7 @@ typedef struct {
     bool     silence;
     uint8_t  output;       /* 7-bit DAC level, 0-127  */
     float    timer_acc;    /* fractional CPU-cycle accumulator */
+    float    timer_period;
     bool     enabled;      /* $4015 bit 4             */
 } DMC;
 
@@ -178,7 +182,32 @@ static int     s_t0_cached = -1;      /* -1 unqueried; 0 off; 1 capturing */
 static float   s_t0_acc[APU_T0_CHANNELS];
 static int16_t s_t0_ring[APU_T0_CHANNELS][APU_RING_SIZE];
 static int16_t s_t0_frame[APU_T0_CHANNELS][APU_T0_FRAME_MAX];
+static int     s_timer_periods_ready;
 int recomp_audio_debug_enabled(void); /* impl lives in main_runner.c (recomp_audio_debug.h) */
+
+static void refresh_pulse_period(Pulse *p) {
+    p->timer_period = (float)((p->timer + 1) * 2);
+}
+
+static void refresh_triangle_period(void) {
+    s_tri.timer_period = (float)(s_tri.timer + 1);
+}
+
+static void refresh_noise_period(void) {
+    s_noise.timer_period = (float)NOISE_PERIOD[s_noise.period_idx];
+}
+
+static void refresh_dmc_period(void) {
+    s_dmc.timer_period = (float)DMC_RATE[s_dmc.rate_idx];
+}
+
+static void refresh_timer_periods(void) {
+    refresh_pulse_period(&s_p1);
+    refresh_pulse_period(&s_p2);
+    refresh_triangle_period();
+    refresh_noise_period();
+    refresh_dmc_period();
+}
 
 /* ---- Envelope ---- */
 static void tick_envelope(uint8_t *div, uint8_t *vol, bool *start,
@@ -228,6 +257,7 @@ static void tick_sweep(Pulse *p) {
     if (p->sweep_div == 0 && p->sweep_en && p->sweep_shift > 0
             && tgt <= 0x7FF && p->timer >= 8) {
         p->timer = tgt;
+        refresh_pulse_period(p);
     }
 
     if (p->sweep_div == 0 || p->sweep_reload) {
@@ -387,6 +417,8 @@ void apu_init(void) {
     s_fc_irq_inh = false;
     s_fc_irq_flag = false;
     s_fc_cycle_acc = 0;
+    refresh_timer_periods();
+    s_timer_periods_ready = 1;
 
     /* sample-accurate engine state (ring + integration accumulators) */
     s_ring_head = s_ring_tail = 0;
@@ -418,9 +450,11 @@ void apu_write(uint16_t addr, uint8_t val) {
         break;
     case 0x4002: case 0x4006:
         p->timer = (p->timer & 0x700) | val;
+        refresh_pulse_period(p);
         break;
     case 0x4003: case 0x4007:
         p->timer      = (p->timer & 0x00FF) | ((uint16_t)(val & 7) << 8);
+        refresh_pulse_period(p);
         if (p->enabled) p->length = LENGTH_TABLE[val >> 3];
         p->env_start  = true;
         p->seq        = 0;
@@ -433,9 +467,11 @@ void apu_write(uint16_t addr, uint8_t val) {
         break;
     case 0x400A:
         s_tri.timer = (s_tri.timer & 0x700) | val;
+        refresh_triangle_period();
         break;
     case 0x400B:
         s_tri.timer         = (s_tri.timer & 0x00FF) | ((uint16_t)(val & 7) << 8);
+        refresh_triangle_period();
         if (s_tri.enabled)  s_tri.length = LENGTH_TABLE[val >> 3];
         s_tri.linear_reload = true;
         break;
@@ -449,6 +485,7 @@ void apu_write(uint16_t addr, uint8_t val) {
     case 0x400E:
         s_noise.mode       = (val >> 7) & 1;
         s_noise.period_idx =  val & 0x0F;
+        refresh_noise_period();
         break;
     case 0x400F:
         if (s_noise.enabled) s_noise.length = LENGTH_TABLE[val >> 3];
@@ -460,6 +497,7 @@ void apu_write(uint16_t addr, uint8_t val) {
         s_dmc.irq_en   = (val >> 7) & 1;
         s_dmc.loop     = (val >> 6) & 1;
         s_dmc.rate_idx =  val & 0x0F;
+        refresh_dmc_period();
         if (!s_dmc.irq_en) s_dmc.irq_flag = false;  /* clearing IRQ enable clears the flag */
         break;
     case 0x4011:
@@ -553,19 +591,19 @@ static void ring_push(int16_t s) {
  * apu_generate oversample loop used, now driven per CPU cycle). */
 static void apu_step_channels(float dc) {
     s_p1.timer_acc += dc;
-    { float period = (float)((s_p1.timer + 1) * 2);
+    { float period = s_p1.timer_period;
       while (s_p1.timer_acc >= period) { s_p1.timer_acc -= period; s_p1.seq = (s_p1.seq + 1) & 7; } }
     s_p2.timer_acc += dc;
-    { float period = (float)((s_p2.timer + 1) * 2);
+    { float period = s_p2.timer_period;
       while (s_p2.timer_acc >= period) { s_p2.timer_acc -= period; s_p2.seq = (s_p2.seq + 1) & 7; } }
     s_tri.timer_acc += dc;
-    { float period = (float)(s_tri.timer + 1);
+    { float period = s_tri.timer_period;
       while (s_tri.timer_acc >= period) { s_tri.timer_acc -= period; s_tri.seq = (s_tri.seq + 1) & 31; } }
     s_noise.timer_acc += dc;
-    { float period = (float)NOISE_PERIOD[s_noise.period_idx];
+    { float period = s_noise.timer_period;
       while (s_noise.timer_acc >= period) { s_noise.timer_acc -= period; clock_noise(); } }
     s_dmc.timer_acc += dc;
-    { float period = (float)DMC_RATE[s_dmc.rate_idx];
+    { float period = s_dmc.timer_period;
       while (s_dmc.timer_acc >= period) { s_dmc.timer_acc -= period; dmc_clock(); } }
 }
 
@@ -596,6 +634,10 @@ static void advance_frame_seq(void) {
 }
 
 void apu_clock_cycles(int cpu_cycles) {
+    if (!s_timer_periods_ready) {
+        refresh_timer_periods();
+        s_timer_periods_ready = 1;
+    }
     if (s_shadow_cached < 0) s_shadow_cached = apu_shadow_enabled();
     if (s_t0_cached < 0)     s_t0_cached = recomp_audio_debug_enabled() ? 1 : 0;
     for (int c = 0; c < cpu_cycles; c++) {
@@ -809,6 +851,7 @@ int apu_set_state_blob(const uint8_t *buf, int len) {
     uint8_t flags;
     uint32_t u32;
     if (!buf || len <= 0) return 0;
+    s_timer_periods_ready = 0;
     if (!state_get_pulse(buf,len,&i,&s_p1) || !state_get_pulse(buf,len,&i,&s_p2)) return 0;
 
     if (!state_get_u8(buf,len,&i,&flags) ||
@@ -861,6 +904,8 @@ int apu_set_state_blob(const uint8_t *buf, int len) {
     s_fc_cycle_acc = (int)u32;
     if (!state_get_u32(buf,len,&i,&u32) || i != len) return 0;
     s_dmc_stall = (int)u32;
+    refresh_timer_periods();
+    s_timer_periods_ready = 1;
 
     /* Host delivery state is deliberately not serialized. Discard queued audio
      * from the abandoned timeline and begin a fresh integration window. */

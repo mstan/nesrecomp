@@ -81,6 +81,12 @@ static bool should_emit_native_body(const NESRom *rom, const GameConfig *cfg,
 static void wrapper_list_add(EmittedWrapper *wrappers, int *count, int max_count,
                              uint16_t addr, int bank);
 
+static const char *instruction_boundary_func(const NESRom *rom) {
+    return (rom->mapper == 4 || rom->mapper == 40)
+        ? "nes_instruction_boundary"
+        : "nes_cpu_instruction_boundary";
+}
+
 /* Called by emit_function_body_open() for every multi-entry function as it
  * emits the body's opening brace. Silently drops the record past capacity
  * (matches the pattern in wrapper_list_add) rather than aborting codegen —
@@ -2210,8 +2216,9 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
      * 6502, NMI is only sampled between instructions, never mid-instruction.
      * nes_read/nes_write now only increment the bus-op counter (bus_tick),
      * so VBlank can only fire here at the instruction boundary. */
-    fprintf(f, "    /* $%04X: %02X */ nes_instruction_boundary(0x%04X, %d); ",
-            pc, opcode, pc, e->cycles);
+    const char *insn_boundary = instruction_boundary_func(rom);
+    fprintf(f, "    /* $%04X: %02X */ %s(0x%04X, %d); ",
+            pc, opcode, insn_boundary, pc, e->cycles);
 
     if (e->mnemonic == MN_ILLEGAL) {
         fprintf(f, "/* ILLEGAL $%02X — skip %d */\n", opcode, e->size);
@@ -2423,7 +2430,7 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                     fprintf(f, "if (" cond_str ") { maybe_trigger_vblank(%d); call_by_address(0x%04X); return; }\n", _taken_cycles, _tgt); \
             } else if (_tgt <= pc) { \
                 /* Backward branch (loop) — emit VBlank trigger + watchdog check */ \
-                fprintf(f, "if (" cond_str ") {\n    nes_instruction_boundary(0x%04X, %d);\n#ifdef WATCHDOG_ENABLED\n    watchdog_check();\n#endif\n    goto label_%04X;\n    }\n", _tgt, _taken_cycles, _tgt); \
+                fprintf(f, "if (" cond_str ") {\n    %s(0x%04X, %d);\n#ifdef WATCHDOG_ENABLED\n    watchdog_check();\n#endif\n    goto label_%04X;\n    }\n", insn_boundary, _tgt, _taken_cycles, _tgt); \
             } else { \
                 fprintf(f, "if (" cond_str ") { maybe_trigger_vblank(%d); goto label_%04X; }\n", _taken_cycles, _tgt); \
             } \
@@ -2984,7 +2991,7 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                     } else if (abs16 == func_base && pc == func_base) {
                         /* JMP $self at function start: true idle spin (single-instr).
                          * while(1) polls VBlank without recursion. */
-                        fprintf(f, "while(1) { nes_instruction_boundary(0x%04X, 2); }\n", abs16);
+                        fprintf(f, "while(1) { %s(0x%04X, 2); }\n", insn_boundary, abs16);
                     } else if (abs16 == func_base) {
                         /* JMP to own entry from within body: loop-back. */
                         fprintf(f, "goto label_%04X;\n", abs16);
@@ -3068,10 +3075,10 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                         emit_call_target(f, rom, abs16, bank, fixed_bank, o);
                     } else if (abs16 == func_base && pc == func_base) {
                         /* JMP $self at function start: true idle spin. */
-                        fprintf(f, "while(1) { nes_instruction_boundary(0x%04X, 2); }\n", abs16);
+                        fprintf(f, "while(1) { %s(0x%04X, 2); }\n", insn_boundary, abs16);
                     } else if (abs16 == func_base || is_merge) {
                         /* JMP to own entry or merge partner: loop-back via goto. */
-                        fprintf(f, "nes_instruction_boundary(0x%04X, 2);\n    goto label_%04X;\n", abs16, abs16);
+                        fprintf(f, "%s(0x%04X, 2);\n    goto label_%04X;\n", insn_boundary, abs16, abs16);
                     } else {
                         /* Prefer in-body goto when the target address has already
                          * been emitted as a label in THIS function's body.  This
@@ -3091,7 +3098,7 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                             /* Same-gen-half in-body target (cross-half JMPs went
                              * dynamic above): caller and target share a window at
                              * runtime, so the goto is sound for any mapping. */
-                            fprintf(f, "nes_instruction_boundary(0x%04X, 2);\n    goto label_%04X;\n", abs16, abs16);
+                            fprintf(f, "%s(0x%04X, 2);\n    goto label_%04X;\n", insn_boundary, abs16, abs16);
                         } else {
                             /* push_jmp check for same-bank JMP */
                             bool need_jmp_push = push_jmp_matches(cfg, pc, abs16);

@@ -160,10 +160,13 @@ SDL presentation, audio, frame pacing, periodic smoke hashes, and process
 startup. The output reports elapsed time, milliseconds per frame, uncapped
 FPS, the final framebuffer CRC, and dispatch misses.
 
-Use Release builds with `NESRECOMP_ENABLE_TRACE=OFF`. Alternate baseline and
-candidate runs on an otherwise quiet machine, discard the first run for each
-binary, and compare medians. Use `--smoke` separately for interval hashes and
-correctness gates.
+Use Release builds from a fresh CMake tree, or explicitly configure existing
+trees with `NESRECOMP_ENABLE_TRACE=OFF`,
+`NESRECOMP_ENABLE_STACK_TRACKING=OFF`, and
+`NESRECOMP_ENABLE_POSTMORTEM_RINGS=OFF`. Alternate baseline and candidate runs
+on an otherwise quiet machine, discard the first run for each binary, and
+compare medians. Use `--smoke` separately for interval hashes and correctness
+gates.
 
 After committing `recompiler/src`, bump `KirbysAdventureNESRecomp/nesrecomp.pin`
 `sha` to the new worktree HEAD or the CMake pin check fails the build.

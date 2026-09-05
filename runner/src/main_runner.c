@@ -587,6 +587,7 @@ uint32_t *runner_get_framebuffer(void) {
 }
 
 /* ---- Debug trace log (C:/temp/debug_trace.txt) ---- */
+#if !defined(NESRECOMP_TRACE) || NESRECOMP_TRACE
 static FILE *s_debug_log = NULL;
 
 static void debug_log_open(void) {
@@ -635,6 +636,10 @@ static void debug_log_frame(uint64_t frame) {
     }
     fflush(s_debug_log);
 }
+#else
+static inline void debug_log_open(void) {}
+static inline void debug_log_frame(uint64_t frame) { (void)frame; }
+#endif
 
 /* ---- Zapper mouse → NES coordinate conversion ---- */
 static void zapper_mouse_to_nes(int mouse_x, int mouse_y) {
@@ -993,7 +998,8 @@ smoke_skip_input:
      * this bit during room transitions (while PPU rendering is disabled) to
      * prevent the NMI handler from running the sprite-0 spin-wait with
      * rendering off, which would loop forever. */
-    log_on_change("NMI_enable", (g_ppuctrl >> 7) & 1);
+    if (s_debug)
+        log_on_change("NMI_enable", (g_ppuctrl >> 7) & 1);
     game_on_frame(g_frame_count);
     save_ram_tick();   /* wall-time-throttled dirty SRAM flush; no-op when inactive */
 

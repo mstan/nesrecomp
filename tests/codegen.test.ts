@@ -598,10 +598,10 @@ describe("code generation", () => {
     const result = recompile(rom);
 
     expect(result.fullC).toMatch(
-      /\$C020: D0 \*\/ nes_instruction_boundary\(0xC020, 2\); if \(!g_cpu\.Z\) \{ maybe_trigger_vblank\(1\); goto label_C028; \}/
+      /\$C020: D0 \*\/ nes_cpu_instruction_boundary\(0xC020, 2\); if \(!g_cpu\.Z\) \{ maybe_trigger_vblank\(1\); goto label_C028; \}/
     );
     expect(result.fullC).toMatch(
-      /\$C0FD: D0 \*\/ nes_instruction_boundary\(0xC0FD, 2\); if \(!g_cpu\.Z\) \{ maybe_trigger_vblank\(2\); goto label_C105; \}/
+      /\$C0FD: D0 \*\/ nes_cpu_instruction_boundary\(0xC0FD, 2\); if \(!g_cpu\.Z\) \{ maybe_trigger_vblank\(2\); goto label_C105; \}/
     );
   });
 
@@ -627,7 +627,95 @@ describe("code generation", () => {
     );
 
     expect(result.fullC).toMatch(
-      /\$C020: D0 \*\/ nes_instruction_boundary\(0xC020, 2\); if \(!g_cpu\.Z\) \{ maybe_trigger_vblank\(1\); call_by_address\(0xC008\); return; \}/
+      /\$C020: D0 \*\/ nes_cpu_instruction_boundary\(0xC020, 2\); if \(!g_cpu\.Z\) \{ maybe_trigger_vblank\(1\); call_by_address\(0xC008\); return; \}/
+    );
+  });
+
+  it("uses direct CPU instruction boundaries for non-8KB-window mappers", () => {
+    for (const mapper of [0, 1, 66]) {
+      const builder = new RomBuilder({
+        mapper,
+        prgBanks: mapper === 0 ? 1 : 2,
+      });
+      if (mapper !== 0) builder.bank(mapper === 66 ? 1 : 1);
+      const rom = builder
+        .org(0xc000)
+        .nop()
+        .bne(0xc000)
+        .rts()
+        .org(0xc010)
+        .jmp(0xc010)
+        .vectors(0xc000, 0xc000, 0xc000)
+        .writeTemp(`direct_boundary_mapper${mapper}.nes`);
+
+      const result = recompile(
+        rom,
+        `[game]\noutput_prefix = "direct-boundary-m${mapper}"\n\n[functions]\nfixed = [0xC010]\n`
+      );
+
+      expect(result.fullC).toContain(
+        "/* $C000: EA */ nes_cpu_instruction_boundary(0xC000, 2);"
+      );
+      expect(result.fullC).toContain(
+        "nes_cpu_instruction_boundary(0xC000, 1);"
+      );
+      expect(result.fullC).toContain(
+        "while(1) { nes_cpu_instruction_boundary(0xC010, 2); }"
+      );
+      expect(result.fullC).not.toContain("nes_instruction_boundary(0xC000");
+      expect(result.fullC).not.toContain("nes_instruction_boundary(0xC010");
+    }
+  });
+
+  it("keeps projected instruction boundaries for 8KB-window mappers", () => {
+    const mmc3Rom = new RomBuilder({ mapper: 4, prgBanks: 4 })
+      .bank(3)
+      .org(0xc000)
+      .nop()
+      .bne(0xc000)
+      .rts()
+      .org(0xc010)
+      .jmp(0xc010)
+      .vectors(0xc000, 0xc000, 0xc000)
+      .writeTemp("projected_boundary_mapper4.nes");
+
+    const mmc3Result = recompile(
+      mmc3Rom,
+      `[game]\noutput_prefix = "projected-boundary-m4"\n\n[functions]\nfixed = [0xC010]\n`
+    );
+    expect(mmc3Result.fullC).toContain(
+      "/* $C000: EA */ nes_instruction_boundary(0xC000, 2);"
+    );
+    expect(mmc3Result.fullC).toContain(
+      "nes_instruction_boundary(0xC000, 1);"
+    );
+    expect(mmc3Result.fullC).toContain(
+      "while(1) { nes_instruction_boundary(0xC010, 2); }"
+    );
+
+    const mapper40Rom = new RomBuilder({ mapper: 40, prgBanks: 4 })
+      .bank8(7)
+      .org(0xa100)
+      .nop()
+      .bne(0xe100)
+      .rts()
+      .org(0xa110)
+      .jmp(0xa110)
+      .vectors(0xe100, 0xe100, 0xe100)
+      .writeTemp("projected_boundary_mapper40.nes");
+
+    const mapper40Result = recompile(
+      mapper40Rom,
+      `[game]\noutput_prefix = "projected-boundary-m40"\npush_all_jsr = true\n\n[functions]\nfixed = [0xA110]\n`
+    );
+    expect(mapper40Result.fullC).toContain(
+      "/* $A100: EA */ nes_instruction_boundary(0xA100, 2);"
+    );
+    expect(mapper40Result.fullC).toContain(
+      "nes_instruction_boundary(0xA100, 1);"
+    );
+    expect(mapper40Result.fullC).toContain(
+      "/* $A110: 4C */ nes_instruction_boundary(0xA110, 3); nes_cpu_instruction_boundary(0xA110, 2); call_by_address_tail(0xA110, -1); return;"
     );
   });
 

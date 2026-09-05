@@ -3,6 +3,8 @@
  * Suppresses duplicate output. Only prints first occurrence or on value change.
  */
 #include "logger.h"
+
+#if !defined(NESRECOMP_TRACE) || NESRECOMP_TRACE
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
@@ -44,3 +46,12 @@ void log_reset_frame(void) {
     /* Do nothing by default — labels persist across frames.
      * Override per-session if needed. */
 }
+#else
+void log_on_change(const char *label, uint32_t value) {
+    (void)label;
+    (void)value;
+}
+
+void log_reset_frame(void) {
+}
+#endif
