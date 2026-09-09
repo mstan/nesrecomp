@@ -4,6 +4,7 @@
 #include "keybinds.h"
 
 #include "nes_runtime.h"
+#include "nes_video.h"
 #include "voxel_renderer.h"
 
 #include <stdio.h>
@@ -226,9 +227,9 @@ void nes_voxel_screen_init(NesVoxelScreenState *state,
             profile->default_sprite_scale_percent);
     }
     if (!state->enabled) return;
-    g_widescreen_left = profile->output_margin;
-    g_widescreen_right = profile->output_margin;
-    g_render_width = SCREEN_WIDTH + profile->output_margin * 2;
+    /* Route through the video layer so the framebuffer/texture geometry
+     * follows (pre-window: applies immediately). */
+    nes_video_request_margins(profile->output_margin, profile->output_margin);
     g_ws_eff_left = 0;
     g_ws_eff_right = 0;
     printf("[Voxel] %s enabled: pitch=%d yaw=%d roll=%d zoom=%d%% "
