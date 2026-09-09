@@ -2041,6 +2041,63 @@ static bool return_adjust_func_matches(const GameConfig *cfg, uint16_t target) {
     return false;
 }
 
+/* JSR targets whose callee consumes the pushed return address as data
+ * (e.g. inline bytecode trampolines that PLA it into a pointer). The
+ * pushed 3-byte frame is gone when the callee returns, so the post-call
+ * S check must restore S instead of bailing. */
+static bool absorb_jsr_ret_matches(const GameConfig *cfg, uint16_t target) {
+    for (int i = 0; i < cfg->absorb_jsr_ret_count; i++) {
+        if (target == cfg->absorb_jsr_rets[i])
+            return true;
+    }
+    return false;
+}
+
+/* Is `addr` a genuine instruction START?  Decodes forward from `base` (a
+ * known instruction boundary, e.g. the function's first byte) and reports
+ * whether the linear stream lands exactly on `addr` before reaching `limit`.
+ * Guards pattern-matchers that read single bytes (e.g. "previous byte ==
+ * 0x48 means PHA") against matching an OPERAND — e.g. Tetris $9CA2 `INC $48`
+ * has operand $48 immediately before a plain RTS ($9CA4), which the 2-PHA
+ * RTS-as-JMP detector mistook for PHA and turned the RTS into a stack-pop
+ * dispatch, corrupting S and jumping to $80C1/$3501.  A misaligned decode
+ * (data tables, branch targets) yields false negatives only — those degrade
+ * to a plain RTS, which is always safe. */
+static bool is_insn_boundary_from(const NESRom *rom, int bank, uint16_t base,
+                                  uint16_t addr, uint16_t limit) {
+    if (addr < base || addr >= limit) return false;
+    uint16_t a = base;
+    while (a < limit) {
+        if (a == addr) return true;
+        uint8_t op = rom_read(rom, bank, a);
+        int sz = g_opcode_table[op].size;
+        if (sz <= 0 || sz > 3) return false;
+        uint16_t next = (uint16_t)(a + sz);
+        if (next <= a) return false;
+        a = next;
+    }
+    return false;
+}
+
+/* JSR targets whose callee leaves the pushed return address on the 6502
+ * stack (its RTS is a plain C return that never touches S). Same post-call
+ * S restore as absorb_jsr_ret, but no site+5 goto — execution continues at
+ * site+3 (the ordinary 3-byte JSR fall-through). */
+static bool restore_jsr_matches(const GameConfig *cfg, uint16_t target) {
+    for (int i = 0; i < cfg->restore_jsr_count; i++) {
+        if (target == cfg->restore_jsrs[i])
+            return true;
+    }
+    return false;
+}
+
+/* Inline-bytecode trampoline JSR sites (absorb_jsr_ret): the callee pops the
+ * JSR return as its script pointer and consumes the 2 ROM bytes after the
+ * JSR operand as inline script data, so on real hardware the interpreter's
+ * exit RTS resumes at site+5, not the ordinary fall-through site+3. The
+ * emitter handles this by returning 5 from emit_instruction so the next
+ * label lands at site+5 (see the MN_JSR absorb_jsr_ret case). */
+
 #define DUMMY_PUSH_PAIR \
     "g_ram[0x100+g_cpu.S]=0; g_cpu.S--; g_ram[0x100+g_cpu.S]=0; g_cpu.S--; "
 #define DUMMY_JSR_PRE \
@@ -2948,6 +3005,30 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                 if (is_yield_func(abs16)) {
                     /* Yield function: close the brace but skip the bail check */
                     fprintf(f, "}\n");
+                } else if (restore_jsr_matches(cfg, abs16)) {
+                    /* Callee leaves the pushed frame on the 6502 stack (its
+                     * RTS is a plain C return): restore S, no bail, and fall
+                     * through to site+3 like a normal 3-byte JSR. */
+                    fprintf(f, "if (g_cpu.S != _cbs) g_cpu.S = _cbs; }\n");
+                } else if (absorb_jsr_ret_matches(cfg, abs16)) {
+                    /* Callee consumed the pushed return address as data
+                     * (inline bytecode trampoline): restore S, no bail. */
+                    fprintf(f, "if (g_cpu.S != _cbs) g_cpu.S = _cbs; }\n");
+                    /* The interpreter's exit RTS resumes at site+5: it pops
+                     * the pushed return (site+2) and the callee consumed the
+                     * 2 inline data bytes after the operand. Falling through
+                     * to site+3 would execute script DATA as code (verified
+                     * on Tetris: $8217's site+3/4 are $17 $AD — script bytes,
+                     * not instructions). Return 5 so the emitter continues at
+                     * site+5 and emits its label there, making the goto valid.
+                     * Same consumption model as inline_pointer (also returns
+                     * 5). Non-trivial-bank mappers keep the old fall-through:
+                     * window boundaries could leave label_site5 unemitted. */
+                    if (rom->mapper != 4 && rom->mapper != 40) {
+                        fprintf(f, "nes_cpu_instruction_boundary(0x%04X, 1); goto label_%04X; return;\n",
+                                (uint16_t)(pc + 2), (uint16_t)(pc + 5));
+                        return 5;
+                    }
                 } else {
                     if (did_return_adjust_jsr) {
                         fprintf(f, "if (g_cpu.S == (uint8_t)(_cbs - 2) && g_rts_target != 0 && g_rts_target != _rp) { call_by_address((uint16_t)(g_rts_target + 1)); }\n");
@@ -3221,7 +3302,8 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                 rom_read(rom, bank, pc-1)  == 0x48 &&
                 rom_read(rom, bank, pc-5)  == 0x48 &&
                 rom_read(rom, bank, pc-9)  == 0x48 &&
-                rom_read(rom, bank, pc-12) == 0x48) {
+                rom_read(rom, bank, pc-12) == 0x48 &&
+                is_insn_boundary_from(rom, bank, func_base, pc, pc)) {
                 fprintf(f, "{ uint8_t _s4=g_cpu.S; g_cpu.S++; uint8_t _lo=g_ram[0x100+g_cpu.S]; g_cpu.S++; uint8_t _hi=g_ram[0x100+g_cpu.S]; call_by_address(((uint16_t)_hi<<8|_lo)+1); g_cpu.S=(uint8_t)(_s4+4); } goto label_%04X;\n    ", (uint16_t)(pc+1));
             /* Detect 2-PHA RTS-as-JMP: LDA hi/PHA / LDA lo/PHA / RTS.
              * Also detect "outer continuation" pattern: function starts with
@@ -3230,7 +3312,8 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
              * misses this because the PHAs are not at fixed offsets (computation
              * breaks the pc-9/pc-12 spacing).  After calling the inner handler,
              * we must also call the static outer continuation. */
-            } else if (pc >= 0x8001 && (pc - 1) >= func_base && rom_read(rom, bank, pc - 1) == 0x48 /* PHA */) {
+            } else if (pc >= 0x8001 && (pc - 1) >= func_base && rom_read(rom, bank, pc - 1) == 0x48 /* PHA */ &&
+                       is_insn_boundary_from(rom, bank, func_base, (uint16_t)(pc - 1), pc)) {
                 /* Check for outer continuation: scan backwards for LDA #hi/PHA/LDA #lo/PHA.
                  * Works both when the pattern is at func_base (original case) and when it
                  * starts at a branch-target block entry within the function (e.g., $BAD9
@@ -3642,7 +3725,8 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
                 rom_read(rom, bank, scan-1)  == 0x48 &&
                 rom_read(rom, bank, scan-5)  == 0x48 &&
                 rom_read(rom, bank, scan-9)  == 0x48 &&
-                rom_read(rom, bank, scan-12) == 0x48) {
+                rom_read(rom, bank, scan-12) == 0x48 &&
+                is_insn_boundary_from(rom, bank, pc, scan, scan)) {
                 uint16_t cont = scan + 1;
                 bool found = false;
                 for (int p = 0; p < ps_pending_count; p++)
@@ -3849,7 +3933,8 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
             rom_read(rom, bank, cursor-1)  == 0x48 &&
             rom_read(rom, bank, cursor-5)  == 0x48 &&
             rom_read(rom, bank, cursor-9)  == 0x48 &&
-            rom_read(rom, bank, cursor-12) == 0x48) {
+            rom_read(rom, bank, cursor-12) == 0x48 &&
+            is_insn_boundary_from(rom, bank, pc, cursor, cursor)) {
             uint16_t cont = cursor + 1;
             bool found = false;
             for (int p = 0; p < pending_count; p++)
@@ -3860,7 +3945,8 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
         /* If this RTS is a direct branch target, the PHA setup was bypassed —
          * emit a regular return instead of a 2-PHA dispatch. */
         if (e->mnemonic == MN_RTS && cursor >= 0x8001 &&
-            rom_read(rom, bank, cursor - 1) == 0x48) {
+            rom_read(rom, bank, cursor - 1) == 0x48 &&
+            is_insn_boundary_from(rom, bank, pc, (uint16_t)(cursor - 1), cursor)) {
             bool is_branch_tgt = false;
             for (int b = 0; b < branch_targets_count; b++)
                 if (branch_targets[b] == cursor) { is_branch_tgt = true; break; }

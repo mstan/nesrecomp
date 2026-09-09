@@ -442,6 +442,12 @@ extern uint64_t g_frame_count;
  * the fixed-frame-length (29781) error. See DIFFERENTIAL-COSIM-PROPOSAL Rung 1. */
 extern uint64_t g_nes_cycles;
 
+/* Guest CPU-cycle stamp of the last VBlank frame boundary (pre-handler).
+ * Delta between consecutive boundary stamps = the true, essentially-constant
+ * frame length — the value audio pacing should use to size its per-frame
+ * sample push. */
+extern uint64_t g_frame_boundary_cyc;
+
 /* Save the current native framebuffer as a PNG */
 void runner_screenshot(const char *path);
 

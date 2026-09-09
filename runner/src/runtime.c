@@ -405,6 +405,33 @@ void nes_brk_executed(uint16_t pc) {
                pc, g_current_bank, (unsigned long long)g_frame_count);
         fflush(stdout);
         last = key;
+        /* [BRKCTX] NESRECOMP_BRK_CTX: full CPU context on the first BRK at a
+         * site — regs, ZP dispatch/pointer vars, 6502 stack top bytes, and the
+         * recomp call stack (the guest call chain that led here). */
+        if (getenv("NESRECOMP_BRK_CTX")) {
+            fprintf(stderr,
+                    "[BRKCTX] f=%llu pc=%04X bank=%d A=%02X X=%02X Y=%02X S=%02X P=%c%c1%c%c%c%c "
+                    "ZP: 00=%02X 01=%02X 04=%02X 05=%02X BD=%02X C0=%02X 68=%02X 69=%02X F5=%02X FF=%02X\n",
+                    (unsigned long long)g_frame_count, pc, g_current_bank,
+                    g_cpu.A, g_cpu.X, g_cpu.Y, g_cpu.S,
+                    g_cpu.N ? 'N' : 'n', g_cpu.V ? 'V' : 'v', g_cpu.D ? 'D' : 'd',
+                    g_cpu.I ? 'I' : 'i', g_cpu.Z ? 'Z' : 'z', g_cpu.C ? 'C' : 'c',
+                    g_ram[0x00], g_ram[0x01], g_ram[0x04], g_ram[0x05],
+                    g_ram[0xBD], g_ram[0xC0], g_ram[0x68], g_ram[0x69],
+                    g_ram[0xF5], g_ram[0xFF]);
+            fprintf(stderr, "[BRKCTX] stack top (S=%02X):", g_cpu.S);
+            for (int i = 0; i < 16; i++)
+                fprintf(stderr, " %02X", g_ram[0x100 + ((uint8_t)(g_cpu.S + 1 + i))]);
+            fprintf(stderr, "\n[BRKCTX] recomp call chain:");
+            {
+                extern const char *g_recomp_stack[];
+                extern int g_recomp_stack_top;
+                for (int i = g_recomp_stack_top - 1; i >= 0; i--)
+                    fprintf(stderr, " %s", g_recomp_stack[i] ? g_recomp_stack[i] : "?");
+            }
+            fprintf(stderr, "\n");
+            fflush(stderr);
+        }
     }
 
     switch (g_brk_policy) {
@@ -945,11 +972,40 @@ static void set_guest_execution_point(uint16_t cpu_pc, int tick_charged) {
     s_guest_tick_charged = tick_charged ? 1 : 0;
 }
 
+/* [LOOP] trace state (NESRECOMP_TRACE_LOOP) */
+static unsigned     s_loop_iters   = 0;
+static uint16_t     s_loop_last_pc = 0;
+
 void nes_cpu_instruction_boundary(uint16_t cpu_pc, int cycles) {
     set_guest_execution_point(cpu_pc, 1);
     if (s_skip_next_boundary_tick && cpu_pc == s_guest_resume_pc) {
         s_skip_next_boundary_tick = 0;
         return;
+    }
+    /* [LOOP] per-frame main-loop iteration trace (env NESRECOMP_TRACE_LOOP).
+     * Key PCs in Tetris (USA): $8138 = inner screen-mode loop head, $8200 =
+     * title-screen init (mode 0), $8765 = play loop body, $819B = main-mode
+     * dispatch. Counted once per frame; emitted from the post-NMI hook. */
+    {
+        static int s_loop_state = -1;
+        if (s_loop_state < 0) s_loop_state = getenv("NESRECOMP_TRACE_LOOP") ? 1 : 0;
+        if (s_loop_state == 1) {
+            static uint64_t s_seen_frame = 0;
+            if (g_frame_count != s_seen_frame) {
+                if (s_seen_frame != 0)
+                    fprintf(stderr, "[LOOP] f=%llu iters=%u lastpc=%04X\n",
+                            (unsigned long long)s_seen_frame, s_loop_iters,
+                            s_loop_last_pc);
+                s_seen_frame = g_frame_count;
+                s_loop_iters = 0;
+            }
+            if (cpu_pc == 0x8138 || cpu_pc == 0x8200 || cpu_pc == 0x8765 ||
+                cpu_pc == 0x819B || cpu_pc == 0x823F || cpu_pc == 0x828D ||
+                cpu_pc == 0xA459) {
+                if (s_loop_iters < 2000000) s_loop_iters++;
+                s_loop_last_pc = cpu_pc;
+            }
+        }
     }
     maybe_trigger_vblank(cycles);
 }
@@ -1306,11 +1362,37 @@ static uint8_t s_ppu_io_latch = 0;
 
 static uint8_t nes_read_inner(uint16_t addr) {
     bus_tick();
-    if (addr <= 0x1FFF) return g_ram[addr & 0x07FF];
+    if (addr <= 0x1FFF) {
+        uint8_t v = g_ram[addr & 0x07FF];
+        /* [AA98R] NESRECOMP_TRACE_AA98: blob reads via LDA (ZP),Y from the
+         * interpreter loop PCs ($AAF7 control byte, $AACD data bytes, $AAA3
+         * address bytes, $AB15/$AB19 new-pointer fetch). Verifies the pointer
+         * ZP $00/$01 and the bytes the engine consumes. */
+        {
+            static int s_aa98r = -1;
+            if (s_aa98r < 0) s_aa98r = getenv("NESRECOMP_TRACE_AA98") ? 1 : 0;
+            if (s_aa98r == 1 && s_guest_pc_valid) {
+                uint16_t pc = s_guest_pc;
+                if (pc == 0xAACD || pc == 0xAAF7 || pc == 0xAAA3 ||
+                    pc == 0xAB15 || pc == 0xAB19 || pc == 0xAB2E || pc == 0xAB33)
+                    fprintf(stderr, "[AA98R] f=%llu pc=%04X ptr=%04X y=%02X a=%04X v=%02X\n",
+                            (unsigned long long)g_frame_count, pc,
+                            (uint16_t)(g_ram[0x00] | (g_ram[0x01] << 8)),
+                            g_cpu.Y, addr, v);
+            }
+        }
+        return v;
+    }
     if (addr >= 0x2000 && addr <= 0x3FFF) return ppu_read_reg(0x2000 + (addr & 7));
     if (addr >= 0x4000 && addr <= 0x401F) {
         if (addr == 0x4015) return apu_read_status();
         if (addr == 0x4016) {
+            if (getenv("NESRECOMP_TRACE_CTRL4016"))
+                fprintf(stderr, "[CTRL] f=%llu pc=%04X rd=%02X btn=%02X strobe=%d shift=%02X\n",
+                        (unsigned long long)g_frame_count, s_guest_pc,
+                        0x40 | (s_ctrl1_strobe ? (g_controller1_buttons >> 7)
+                                               : (s_ctrl1_shift >> 7) & 1),
+                        g_controller1_buttons, s_ctrl1_strobe, s_ctrl1_shift);
             if (s_ctrl1_strobe) return 0x40 | (g_controller1_buttons >> 7);
             uint8_t bit = (s_ctrl1_shift & 0x80) ? 1 : 0;
             /* Shift MSB-first; fill with 1s so reads past the 8 button bits
@@ -1547,7 +1629,33 @@ void nes_write(uint16_t addr, uint8_t val) {
         if (s_ww_state != 0) wram_write_watch(a, g_ram[a], val);
         g_ram[a] = val; return;
     }
-    if (addr >= 0x2000 && addr <= 0x3FFF) { ppu_write_reg(0x2000 + (addr & 7), val); return; }
+    if (addr >= 0x2000 && addr <= 0x3FFF) {
+        /* [AA98W] NESRECOMP_TRACE_AA98: PPU-register writes issued from the
+         * script engine's $AA9E-$AAE6 range (blob stream handler). Shows the
+         * value, the write-latch toggle, t/v address, and the ZP pointers the
+         * engine reads blobs through ($00/$01 stream, $05/$06 chunk). */
+        {
+            static int s_aa98 = -1;
+            if (s_aa98 < 0) s_aa98 = getenv("NESRECOMP_TRACE_AA98") ? 1 : 0;
+            if (s_aa98 == 1 && s_guest_pc_valid) {
+                uint16_t pc = s_guest_pc;
+                if (pc >= 0xAA9E && pc <= 0xAAE6)
+                    fprintf(stderr,
+                            "[AA98W] f=%llu pc=%04X reg=%04X val=%02X latch=%d t=%04X v=%04X "
+                            "ZP00=%02X%02X ZP05=%02X%02X A=%02X X=%02X Y=%02X S=%02X\n",
+                            (unsigned long long)g_frame_count, pc, addr, val,
+                            g_ppuaddr_latch, s_ppu_t, g_ppuaddr,
+                            g_ram[0x00], g_ram[0x01], g_ram[0x05], g_ram[0x06],
+                            g_cpu.A, g_cpu.X, g_cpu.Y, g_cpu.S);
+            }
+        }
+        if ((addr & 7) == 0 && getenv("NESRECOMP_TRACE_PPUCTRL")) {
+            fprintf(stderr, "[CTRL] cyc=%llu frame=%llu val=$%02X\n",
+                    (unsigned long long)g_nes_cycles,
+                    (unsigned long long)g_frame_count, val);
+        }
+        ppu_write_reg(0x2000 + (addr & 7), val); return;
+    }
     if (addr == 0x4014) {
         uint16_t src = (uint16_t)val << 8;
         for (int i = 0; i < 256; i++) g_ppu_oam[i] = nes_read(src + i);
@@ -1576,6 +1684,9 @@ void nes_write(uint16_t addr, uint8_t val) {
         return;
     }
     if (addr == 0x4016) {
+        if (getenv("NESRECOMP_TRACE_CTRL4016"))
+            fprintf(stderr, "[CTRLW] f=%llu pc=%04X val=%02X\n",
+                    (unsigned long long)g_frame_count, s_guest_pc, val);
         if (val & 1) {
             s_ctrl1_strobe = true;
         } else if (s_ctrl1_strobe) {
@@ -1679,7 +1790,14 @@ void ppu_write_reg(uint16_t reg, uint8_t val) {
                 s_visible_frame_frame = g_frame_count;
             }
             break;
-        case 0x2001: g_ppumask = val; break;
+        case 0x2001:
+            g_ppumask = val;
+            if (getenv("NESRECOMP_TRACE_PPUMASK"))
+                fprintf(stderr, "[MASK] f=%llu cyc=%llu val=$%02X depth=%d\n",
+                        (unsigned long long)g_frame_count,
+                        (unsigned long long)s_dbg_instrs_ticked, val,
+                        s_vblank_depth);
+            break;
         case 0x2003: g_oamaddr = val; break;
         case 0x2004:
             /* Direct OAM writes carry no draw context: plain X in the sidecar. */
@@ -1745,6 +1863,10 @@ void ppu_write_reg(uint16_t reg, uint8_t val) {
         case 0x2007: {
             uint16_t a = g_ppuaddr & 0x3FFF;
             if (a >= 0x3F00) {
+                if (getenv("NESRECOMP_TRACE_PAL"))
+                    fprintf(stderr, "[PAL] f=%llu a=$%04X v=$%02X depth=%d\n",
+                            (unsigned long long)g_frame_count, a, val,
+                            s_vblank_depth);
                 /* NES palette mirror: $3F10/$3F14/$3F18/$3F1C share storage
                  * with $3F00/$3F04/$3F08/$3F0C (transparent color slots). */
                 uint8_t idx = a & 0x1F;
@@ -2758,6 +2880,29 @@ int nes_dispatch_call(uint16_t addr, int caller_bank) {
     uint16_t save_wb = g_code_window_base;
     if (addr >= 0x8000 || (mapper_get_type() == 40 && addr >= 0x6000))
         g_code_window_base = addr & 0xE000;
+    if (addr == 0) {
+        uint8_t s_lo = g_ram[0x100 + (uint8_t)(g_cpu.S + 1)];
+        uint8_t s_hi = g_ram[0x100 + (uint8_t)(g_cpu.S + 2)];
+        uint16_t call_site = (uint16_t)(((uint16_t)s_hi << 8) | s_lo);
+        void *ret = _ReturnAddress();
+        uintptr_t base = (uintptr_t)GetModuleHandleW(NULL);
+        fprintf(stderr,
+                "[DISPATCH_ZERO] nes_dispatch_call(addr=0) caller_bank=%d "
+                "window=$%04X S=$%02X call_site_after_jsr=$%04X A=%02X X=%02X Y=%02X "
+                "ret=%p base=%p rva=%#llx\n",
+                caller_bank, g_code_window_base, g_cpu.S, call_site,
+                g_cpu.A, g_cpu.X, g_cpu.Y, ret, (void *)base,
+                (unsigned long long)((uintptr_t)ret - base));
+        void *frames[8] = {0};
+        unsigned short nf = CaptureStackBackTrace(0, 8, frames, NULL);
+        fprintf(stderr, "[DISPATCH_ZERO] stack (depth=%hu):", nf);
+        for (unsigned short i = 0; i < nf; i++) {
+            uintptr_t rva = (uintptr_t)frames[i] - base;
+            fprintf(stderr, " [%d] %p rva=%#llx", i, frames[i], (unsigned long long)rva);
+        }
+        fprintf(stderr, "\n");
+        fflush(stderr);
+    }
     g_nes_dispatch_depth++;
     int r = call_by_address_cb(addr, caller_bank);
     g_nes_dispatch_depth--;
@@ -2969,6 +3114,31 @@ void nes_record_dispatch_miss_bank(uint16_t addr, uint16_t cpu_addr, int bank) {
                "A=%02X X=%02X Y=%02X call_site=$%04X\n",
                addr, bank, cpu_addr, class_name,
                g_cpu.A, g_cpu.X, g_cpu.Y, call_site_pc);
+        /* [MISSCTX] NESRECOMP_BRK_CTX: full context on first dispatch miss —
+         * same field set as [BRKCTX] so RAM-entry / bad-pointer calls can be
+         * traced back to their caller chain. */
+        if (getenv("NESRECOMP_BRK_CTX")) {
+            fprintf(stderr,
+                    "[MISSCTX] f=%llu target=%04X call_site=%04X A=%02X X=%02X Y=%02X S=%02X "
+                    "ZP: 00=%02X 01=%02X 04=%02X 05=%02X BD=%02X C0=%02X 68=%02X 69=%02X FF=%02X\n",
+                    (unsigned long long)g_frame_count, addr, call_site_pc,
+                    g_cpu.A, g_cpu.X, g_cpu.Y, g_cpu.S,
+                    g_ram[0x00], g_ram[0x01], g_ram[0x04], g_ram[0x05],
+                    g_ram[0xBD], g_ram[0xC0], g_ram[0x68], g_ram[0x69],
+                    g_ram[0xFF]);
+            fprintf(stderr, "[MISSCTX] stack top (S=%02X):", g_cpu.S);
+            for (int i = 0; i < 16; i++)
+                fprintf(stderr, " %02X", g_ram[0x100 + ((uint8_t)(g_cpu.S + 1 + i))]);
+            fprintf(stderr, "\n[MISSCTX] recomp call chain:");
+            {
+                extern const char *g_recomp_stack[];
+                extern int g_recomp_stack_top;
+                for (int i = g_recomp_stack_top - 1; i >= 0; i--)
+                    fprintf(stderr, " %s", g_recomp_stack[i] ? g_recomp_stack[i] : "?");
+            }
+            fprintf(stderr, "\n");
+            fflush(stderr);
+        }
     }
     g_miss_count_any++;
     g_miss_last_addr  = addr;

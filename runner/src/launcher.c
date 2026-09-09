@@ -530,43 +530,61 @@ reopen_recomp_launcher:
         }
     }
 #endif
-
-    if (!gui_resolved)
-    if (argc >= 2 && argv[1][0] != '-') {
-        /* Backwards-compatible: ROM path given on command line */
-        strncpy(rom_path, argv[1], sizeof(rom_path) - 1);
-        /* Still verify CRC, but don't re-prompt on mismatch — just warn */
-        if (expected_crc != 0 && !verify_rom(rom_path, expected_crc)) {
-            fprintf(stderr, "[Launcher] Warning: CRC mismatch for '%s' — continuing anyway\n",
-                    rom_path);
+    if (!gui_resolved) {
+        /* Check for explicit --rom <path> or --rom=<path> flag first. */
+        const char *explicit_rom = NULL;
+        for (int i = 1; i < argc; i++) {
+            if (strcmp(argv[i], "--rom") == 0 && i + 1 < argc) {
+                explicit_rom = argv[i + 1];
+                break;
+            }
+            if (strncmp(argv[i], "--rom=", 6) == 0) {
+                explicit_rom = argv[i] + 6;
+                break;
+            }
         }
-    } else {
-        /* Try rom.cfg first */
-        rom_cfg_read(rom_path, sizeof(rom_path));
+        if (explicit_rom && explicit_rom[0] != '\0') {
+            strncpy(rom_path, explicit_rom, sizeof(rom_path) - 1);
+            /* Still verify CRC, but do not re-prompt on mismatch — just warn */
+            if (expected_crc != 0 && !verify_rom(rom_path, expected_crc)) {
+                fprintf(stderr, "[Launcher] Warning: CRC mismatch for '%s' — continuing anyway\n",
+                        rom_path);
+            }
+        } else if (argc >= 2 && argv[1][0] != '-') {
+            /* Backwards-compatible: ROM path given on command line */
+            strncpy(rom_path, argv[1], sizeof(rom_path) - 1);
+            /* Still verify CRC, but don't re-prompt on mismatch — just warn */
+            if (expected_crc != 0 && !verify_rom(rom_path, expected_crc)) {
+                fprintf(stderr, "[Launcher] Warning: CRC mismatch for '%s' — continuing anyway\n",
+                        rom_path);
+            }
+        } else {
+            /* Try rom.cfg first */
+            rom_cfg_read(rom_path, sizeof(rom_path));
 
-        int valid = 0;
-        while (!valid) {
-            if (rom_path[0] == '\0') {
-                /* No saved path — open picker */
-                if (!pick_rom_file(rom_path, sizeof(rom_path))) {
-                    fprintf(stderr, "[Launcher] No ROM selected — exiting.\n");
-                    return 1;
+            int valid = 0;
+            while (!valid) {
+                if (rom_path[0] == '\0') {
+                    /* No saved path — open picker */
+                    if (!pick_rom_file(rom_path, sizeof(rom_path))) {
+                        fprintf(stderr, "[Launcher] No ROM selected — exiting.\n");
+                        return 1;
+                    }
+                }
+
+                /* Verify the ROM */
+                if (verify_rom(rom_path, expected_crc)) {
+                    valid = 1;
+                } else {
+                    /* Wrong file — clear path and pick again */
+                    rom_path[0] = '\0';
                 }
             }
 
-            /* Verify the ROM */
-            if (verify_rom(rom_path, expected_crc)) {
-                valid = 1;
-            } else {
-                /* Wrong file — clear path and pick again */
-                rom_path[0] = '\0';
-            }
+            rom_cfg_write(rom_path);
+            printf("[Launcher] ROM: %s\n", rom_path);
         }
-
-        rom_cfg_write(rom_path);
-        printf("[Launcher] ROM: %s\n", rom_path);
     }
-
     /* Re-build argv so that argv[1] == rom_path for the runner.
      * If argv[1] was the ROM path, extra args start at index 2.
      * If argv[1] was a flag (starts with '-'), forward all args from index 1. */
@@ -575,8 +593,11 @@ reopen_recomp_launcher:
     int extra_start = (argc >= 2 && argv[1][0] != '-') ? 2 : 1;
     new_argv[new_argc++] = argv[0];
     new_argv[new_argc++] = rom_path;
-    for (int i = extra_start; i < argc && new_argc < 63; i++)
+    for (int i = extra_start; i < argc && new_argc < 63; i++) {
+        if (strcmp(argv[i], "--rom") == 0 && i + 1 < argc) { i++; continue; }
+        if (strncmp(argv[i], "--rom=", 6) == 0) continue;
         new_argv[new_argc++] = argv[i];
+    }
     new_argv[new_argc] = NULL;
 
 #if NESRECOMP_ENABLE_MODS

@@ -335,6 +335,20 @@ static bool game_config_load_toml(GameConfig *cfg, const char *path) {
         if (t) cfg->return_adjust_funcs[cfg->return_adjust_func_count++] = toml_hex(t, "addr");
     }
 
+    /* [[absorb_jsr_ret]] */
+    toml_array_t *ajr = toml_array_in(root, "absorb_jsr_ret");
+    if (ajr) for (int i = 0; i < toml_array_nelem(ajr) && cfg->absorb_jsr_ret_count < GAME_CFG_MAX_NOP_JSRS; i++) {
+        toml_table_t *t = toml_table_at(ajr, i);
+        if (t) cfg->absorb_jsr_rets[cfg->absorb_jsr_ret_count++] = toml_hex(t, "addr");
+    }
+
+    /* [[restore_jsr]] */
+    toml_array_t *rjs = toml_array_in(root, "restore_jsr");
+    if (rjs) for (int i = 0; i < toml_array_nelem(rjs) && cfg->restore_jsr_count < GAME_CFG_MAX_NOP_JSRS; i++) {
+        toml_table_t *t = toml_table_at(rjs, i);
+        if (t) cfg->restore_jsrs[cfg->restore_jsr_count++] = toml_hex(t, "addr");
+    }
+
     /* [[push_jmp]] — JMP targets that need a dummy push (bail-containing funcs).
      * Optional `source` field restricts the push to a specific JMP site PC. */
     toml_array_t *pjm = toml_array_in(root, "push_jmp");

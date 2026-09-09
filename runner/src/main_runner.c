@@ -107,6 +107,12 @@ static void finish_frame_callback(void) {
         longjmp(s_guest_resume_jmp, 1);
 }
 
+/* [STATE] trace aux state (NESRECOMP_TRACE_STATE) */
+static uint8_t s_state_pre33      = 0;   /* $33 before this frame's NMI */
+static int     s_state_nmi_en     = 0;   /* $2000 bit7 at frame boundary */
+static int     s_state_depth      = 0;   /* vblank depth at frame boundary */
+static int     s_state_shim_fired = 0;   /* legacy nested-NMI shim ran */
+
 static void run_guest_execution(void) {
     (void)setjmp(s_guest_resume_jmp);
     s_guest_resume_ready = 1;
@@ -152,7 +158,7 @@ static Uint64      s_benchmark_post_render_ticks = 0;
 #endif
 
 static int headless_run_active(void) {
-    return s_smoke_frames > 0 || s_benchmark_frames > 0;
+    return s_smoke_frames > 0 || s_benchmark_frames > 0 || s_script_path != NULL;
 }
 
 static void benchmark_breakdown_reset(void) {
@@ -523,7 +529,15 @@ static void watch_render_frame(void) {
 /* ---- Audio state ---- */
 static SDL_AudioDeviceID  s_audio_dev = 0;
 #define AUDIO_SAMPLES_PER_FRAME 735
+#define AUDIO_SOURCE_RATE        44100.0
 static int16_t            s_audio_frame[AUDIO_SAMPLES_PER_FRAME];
+/* Carry-accumulator sample push: the guest's true frame length (measured as
+ * the delta between consecutive VBlank boundary cycle stamps) converts into a
+ * fractional sample count at the APU source rate. Each frame pushes
+ * floor(carry + frame_len * rate / cpu_hz) samples and keeps the fraction, so
+ * the audio clock tracks the video clock with zero long-term drift instead of
+ * assuming a fixed 29780.5-cycle frame. */
+static double s_audio_sample_carry = 0.0;
 
 /* SDL audio callback (round-2): runs on the audio thread at the device's steady
  * cadence and pulls mono samples from the bridge. This is the consumer that the
@@ -898,7 +912,7 @@ void nes_vblank_callback(void) {
     }
 
     /* Update controllers from keyboard state via configurable keybinds */
-    {
+    if (!headless_run_active()) {
         const uint8_t *keys = SDL_GetKeyboardState(NULL);
         /* P1 may use keyboard or gamepad. P2 is an explicitly assigned gamepad
          * (or a netplay peer), never a second hidden keyboard layout. */
@@ -1009,6 +1023,13 @@ smoke_skip_input:
      * wall-clock frame regardless of NMI-enable.  game_run_nmi is
      * responsible for gating the game's actual NMI handler on
      * (g_ppuctrl & 0x80) and the nested-depth check internally. */
+    if (getenv("NESRECOMP_TRACE_STATE")) {
+        static uint64_t s_state_dbg_frame = 0;
+        s_state_pre33  = g_ram[0x33];
+        s_state_nmi_en = (g_ppuctrl >> 7) & 1;
+        s_state_depth  = runtime_get_vblank_depth();
+        s_state_dbg_frame = g_frame_count;
+    }
     if ((g_ppuctrl & 0x80) && runtime_get_vblank_depth() > 1) {
         if (g_nested_nmi_policy == NESTED_NMI_RUN_HANDLER) {
             /* Re-entrant-NMI game (e.g. SMB3): its handler is nested-safe by
@@ -1040,10 +1061,12 @@ smoke_skip_input:
         } else {
             /* Legacy: skip the handler (would corrupt mid-VRAM transfer
              * state), but still set $1A/$20 to resolve any spin-wait (SMB).
-             * Do NOT run game_run_nmi — nested NMIs should not advance
-             * oracle/frame cadence. */
+             * Tetris also waits on $33 set by its NMI handler, so mirror
+             * the vblank flag there too. */
             g_ram[0x1A] = 1;
             g_ram[0x20] = 1;
+            g_ram[0x33] = 1;
+            s_state_shim_fired = 1;
         }
     } else {
         /* Top-level frame boundary (or NMI-disabled frame): delegate to
@@ -1113,6 +1136,28 @@ smoke_skip_input:
         s_benchmark_post_nmi_ticks +=
             SDL_GetPerformanceCounter() - benchmark_phase_start;
 
+    /* [STATE] per-frame debug tap (env NESRECOMP_TRACE_STATE): post-NMI ZP
+     * snapshot for NMI-mode/palette-gate debugging ($BD = NMI mode, $BE/$A3
+     * gate the palette upload loops in func_94EE). */
+    if (getenv("NESRECOMP_TRACE_STATE")) {
+        fprintf(stderr,
+                "[STATE] f=%llu pre33=%02X nmiEn=%d depth=%d shim=%d "
+                "33=%02X 68=%02X 69=%02X BD=%02X BE=%02X "
+                "A3=%02X B9=%02X B0=%02X C0=%02X B1=%02X mask=%02X\n",
+                (unsigned long long)g_frame_count,
+                s_state_pre33, s_state_nmi_en, s_state_depth,
+                s_state_shim_fired,
+                g_ram[0x33], g_ram[0x68], g_ram[0x69], g_ram[0xBD],
+                g_ram[0xBE], g_ram[0xA3], g_ram[0xB9], g_ram[0xB0],
+                g_ram[0xC0], g_ram[0xB1], g_ppumask);
+        if (g_frame_count % 60 == 0) {
+            fprintf(stderr, "[PALDUMP] f=%llu pal:", (unsigned long long)g_frame_count);
+            for (int i = 0; i < 32; i++) fprintf(stderr, " %02X", g_ppu_pal[i]);
+            fprintf(stderr, "\n");
+        }
+        s_state_shim_fired = 0;
+    }
+
     /* Record frame state to ring buffer for TCP timeseries queries */
     debug_server_record_frame();
 
@@ -1142,20 +1187,45 @@ smoke_skip_input:
      * advances for NMI-disabled main-thread code such as the blargg APU tests.) */
 
     /* Generate one frame of audio after NMI (APU registers now up-to-date).
-     * Skip in turbo mode — queued audio would pile up faster than it drains. */
+     * Skip in turbo mode — queued audio would pile up faster than it drains.
+     *
+     * Carry-accumulator pacing: the guest's true frame length (delta of
+     * consecutive VBlank boundary cycle stamps) is converted to a fractional
+     * sample count at the APU source rate. Each frame pushes
+     * floor(carry + frame_cycles * rate / cpu_hz) samples and retains the
+     * fraction, so the pushed audio tracks the video clock exactly (long-term
+     * drift = 0) instead of a fixed 735 samples per nominal 29781-cycle frame.
+     * cpu_hz = 21477272.727 (master) / 12 = 1789772.727; NTSC APU rate 44100. */
     if (s_audio_dev && !turbo_active() && !headless_run_active()) {
+        static uint64_t s_last_boundary_cyc = 0;
+        static int      s_have_boundary = 0;
+        int push_n = AUDIO_SAMPLES_PER_FRAME;
+        if (s_have_boundary && g_frame_boundary_cyc > s_last_boundary_cyc) {
+            uint64_t delta = g_frame_boundary_cyc - s_last_boundary_cyc;
+            /* clamp to one-frame outliers (startup gaps, debugger stalls) */
+            if (delta >= 20000 && delta <= 45000) {
+                double want = s_audio_sample_carry
+                    + (double)delta * (AUDIO_SOURCE_RATE / 1789772.727);
+                push_n = (int)want;
+                if (push_n < 600)  push_n = 600;
+                if (push_n > 900)  push_n = 900;
+                s_audio_sample_carry = want - (double)push_n;
+            }
+        }
+        s_last_boundary_cyc = g_frame_boundary_cyc;
+        s_have_boundary = 1;
         static int s_synth_mode = -2;            /* -2 = not yet queried */
         static uint64_t s_synth_pos = 0;
         if (s_synth_mode == -2) s_synth_mode = recomp_audio_synth_mode();
         if (s_synth_mode != RAD_SYNTH_OFF)
             recomp_audio_synth_fill(s_synth_mode, s_audio_frame,
-                                    AUDIO_SAMPLES_PER_FRAME, 1, 44100.0, &s_synth_pos);
+                                    push_n, 1, AUDIO_SOURCE_RATE, &s_synth_pos);
         else
-            apu_generate(s_audio_frame, AUDIO_SAMPLES_PER_FRAME);
+            apu_generate(s_audio_frame, push_n);
 
         /* T1: raw emulator-rate PCM, before volume. */
         recomp_audio_debug_push_i16("t1_apu", s_audio_frame,
-                                    AUDIO_SAMPLES_PER_FRAME, 44100.0, 1);
+                                    push_n, AUDIO_SOURCE_RATE, 1);
 
         /* T0: per-channel raw DAC levels for the same 735-sample window
          * (pulse1/pulse2/triangle/noise/dmc), staged by apu_generate. NULL
@@ -1166,29 +1236,29 @@ smoke_skip_input:
             for (int t0c = 0; t0c < 5; t0c++) {
                 const int16_t *t0buf = apu_debug_t0(t0c);
                 if (t0buf) recomp_audio_debug_push_i16(t0_names[t0c], t0buf,
-                                                       AUDIO_SAMPLES_PER_FRAME, 44100.0, 1);
+                                                       push_n, AUDIO_SOURCE_RATE, 1);
             }
         }
 
         /* Trusted mods share the NES device and clock-domain bridge. Mix on
          * the producer thread before launcher volume so APU and overlays obey
          * the same user setting and the callback remains game-agnostic. */
-        nes_mod_audio_mix(s_audio_frame, AUDIO_SAMPLES_PER_FRAME);
+        nes_mod_audio_mix(s_audio_frame, push_n);
 
         /* Apply the launcher volume (0..100) as a linear scale. */
         int vol = g_nes_config.volume;
         if (vol < 100) {
             if (vol < 0) vol = 0;
-            for (int i = 0; i < AUDIO_SAMPLES_PER_FRAME; i++)
+            for (int i = 0; i < push_n; i++)
                 s_audio_frame[i] = (int16_t)((int)s_audio_frame[i] * vol / 100);
         }
         /* T2: what the bridge receives. */
         recomp_audio_debug_push_i16("t2_bridge_in", s_audio_frame,
-                                    AUDIO_SAMPLES_PER_FRAME, 44100.0, 1);
+                                    push_n, AUDIO_SOURCE_RATE, 1);
 
         if (s_bridge_ready) {
             SDL_LockMutex(s_audio_mtx);
-            rab_push(&s_bridge, s_audio_frame, AUDIO_SAMPLES_PER_FRAME);
+            rab_push(&s_bridge, s_audio_frame, push_n);
             double fill = rab_fill_ms(&s_bridge);
             rab_stats st; rab_get_stats(&s_bridge, &st);
             SDL_UnlockMutex(s_audio_mtx);
@@ -1199,9 +1269,11 @@ smoke_skip_input:
                                       (unsigned long long)st.stretch_frames,
                                       (unsigned long long)st.stretch_events);
         } else {
-            /* legacy fallback (bridge failed to init): old push path */
-            SDL_QueueAudio(s_audio_dev, s_audio_frame,
-                           AUDIO_SAMPLES_PER_FRAME * sizeof(int16_t));
+            /* legacy fallback (bridge failed to init): raw queue push, capped
+             * so a stalled consumer cannot accumulate an unbounded backlog. */
+            if (SDL_GetQueuedAudioSize(s_audio_dev) < (Uint32)(AUDIO_SOURCE_RATE * 0.15 * sizeof(int16_t)))
+                SDL_QueueAudio(s_audio_dev, s_audio_frame,
+                               push_n * sizeof(int16_t));
         }
     }
 
@@ -1254,6 +1326,17 @@ smoke_skip_input:
         benchmark_phase_start = benchmark_measure_callback
             ? SDL_GetPerformanceCounter() : 0;
         ppu_render_frame(s_framebuf);
+        { extern uint32_t g_ppu_render_calls, g_ppu_render_skipped;
+          extern uint8_t g_ppu_render_last_mask, g_ppu_render_last_pal0;
+          if (getenv("NESRECOMP_TRACE_RENDER")) {
+              extern uint8_t g_ppu_pal[0x20];
+              fprintf(stderr, "[RENDER] f=%llu mask=$%02X pal0=$%02X calls=%u skipped=%u pal:",
+                      (unsigned long long)g_frame_count,
+                      g_ppu_render_last_mask, g_ppu_render_last_pal0,
+                      g_ppu_render_calls, g_ppu_render_skipped);
+              for (int _i = 0; _i < 8; _i++) fprintf(stderr, " %02X", g_ppu_pal[_i]);
+              fprintf(stderr, "\n");
+          } }
         if (benchmark_measure_callback)
             s_benchmark_ppu_ticks +=
                 SDL_GetPerformanceCounter() - benchmark_phase_start;
@@ -1739,16 +1822,16 @@ int nesrecomp_runner_run(int argc, char *argv[]) {
             rc.channels    = 1;
             rc.source_rate = 44100.0;
             rc.host_rate   = (double)got.freq;
-            /* Tuned to the measured video-paced burst swing (~100 ms): a deep ring
-             * with a high target absorbs producer droughts so the device never
-             * starves. Latency cost ~90 ms is inaudible for these games. */
-            rc.target_ms   = 60.0;
+            /* Video-paced bursts (~100 ms swing) plus the carry-accumulator
+             * push variance need a moderately deep target; 40 ms holds the
+             * ring near its steady state without starving the callback. */
+            rc.target_ms   = 40.0;
             rc.ring_ms     = 250.0;
-            /* Allow up to +/-1.5% ratio correction so the controller can track a
+            /* Allow up to +/-3% ratio correction so the controller can track a
              * real producer/consumer clock mismatch and hold the fill at target
              * instead of drifting toward underrun/overflow. Only the steady-state
              * offset is continuous; for matched clocks it sits near 0. */
-            rc.max_correction = 0.015;
+            rc.max_correction = 0.03;
             /* Phase-1 boot pre-roll: prime the ring to ~200 ms before playback so
              * the cold-start hitch (JIT warm-up / first audio bursts) is concealed.
              * The added latency is irrelevant pre-gameplay; the servo drains the
