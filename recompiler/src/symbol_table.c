@@ -36,10 +36,19 @@ bool symbol_table_load(SymbolTable *st, const char *path) {
         /* Skip blank lines and comments */
         if (!*p || *p == '#' || *p == ';') continue;
 
-        /* Parse hex address */
+        /* Parse [BB:]XXXX -- optional hex PRG bank prefix, then address */
         char *end;
+        int bank = SYM_BANK_ANY;
         unsigned long addr = strtoul(p, &end, 16);
-        if (end == p || addr > 0xFFFF) continue;
+        if (end == p) continue;
+        if (*end == ':') {
+            if (addr > 0xFF) continue;
+            bank = (int)addr;
+            p = end + 1;
+            addr = strtoul(p, &end, 16);
+            if (end == p) continue;
+        }
+        if (addr > 0xFFFF) continue;
 
         /* Skip whitespace between address and name */
         p = end;
@@ -75,6 +84,7 @@ bool symbol_table_load(SymbolTable *st, const char *path) {
         }
 
         st->entries[st->count].addr = (uint16_t)addr;
+        st->entries[st->count].bank = bank;
         st->entries[st->count].name = sym_strndup(name_start, name_len);
         if (!st->entries[st->count].name) break;
         st->entries[st->count].kind = kind;
@@ -126,6 +136,17 @@ static int sym_first_index(SymbolTable *st, uint16_t addr) {
 const char *symbol_lookup(SymbolTable *st, uint16_t addr) {
     int i = sym_first_index(st, addr);
     return i < 0 ? NULL : st->entries[i].name;
+}
+
+const char *symbol_lookup_bank(SymbolTable *st, uint16_t addr, int bank) {
+    int i = sym_first_index(st, addr);
+    if (i < 0) return NULL;
+    const char *any = NULL;
+    for (; i < st->count && st->entries[i].addr == addr; i++) {
+        if (st->entries[i].bank == bank) return st->entries[i].name;
+        if (st->entries[i].bank == SYM_BANK_ANY && !any) any = st->entries[i].name;
+    }
+    return any;
 }
 
 SymbolKind symbol_kind(SymbolTable *st, uint16_t addr) {

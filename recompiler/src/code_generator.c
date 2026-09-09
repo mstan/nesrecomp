@@ -101,9 +101,9 @@ static void codegen_record_body_owner(uint16_t addr, int bank) {
 
 /* Emit a block comment with the symbol name for addr, if one exists.
  * Writes nothing if no symbol is found or the table is NULL. */
-static void emit_sym(FILE *f, uint16_t addr) {
+static void emit_sym(FILE *f, uint16_t addr, int bank) {
     if (!g_symtab) return;
-    const char *name = symbol_lookup(g_symtab, addr);
+    const char *name = symbol_lookup_bank(g_symtab, addr, bank);
     if (name) fprintf(f, " /* %s */", name);
 }
 
@@ -278,7 +278,7 @@ static void emit_forward_decls(FILE *f, const EmittedWrapper *wrappers, int wrap
         char nm[32];
         format_func_name(nm, sizeof nm, addr, bank, fixed);
         fprintf(f, "void %s(void);", nm);
-        emit_sym(f, addr);
+        emit_sym(f, addr, bank);
         fprintf(f, "\n");
     }
     fprintf(f, "\n");
@@ -350,8 +350,6 @@ static void emit_symbol_aliases(FILE *f, const EmittedWrapper *wrappers, int wra
     fprintf(f, "/* Symbol aliases (from .sym file) */\n");
     for (int i = 0; i < wrapper_count; i++) {
         uint16_t addr = wrappers[i].addr;
-        const char *name = symbol_lookup(st, addr);
-        if (!name) continue;
 
         /* Every wrapper standalone-emitted at this address is handled
          * together the first time we see the address; a later wrapper
@@ -381,39 +379,56 @@ static void emit_symbol_aliases(FILE *f, const EmittedWrapper *wrappers, int wra
             if (!dup && bank_count < 64) banks[bank_count++] = wrappers[j].bank;
         }
 
-        if (bank_count <= 1) {
-            char nm[32];
-            format_func_name(nm, sizeof nm, addr, banks[0], fixed_bank);
-            fprintf(f, "#define %s %s\n", name, nm);
-            continue;
+        /* Resolve the name per bank. A bank-scoped .sym (BB:XXXX entries,
+         * see symbol_table.h) names each bank's code independently; a
+         * bankless .sym yields the same name for every bank. */
+        const char *bank_names[64];
+        int named = 0;
+        for (int k = 0; k < bank_count; k++) {
+            bank_names[k] = symbol_lookup_bank(st, addr, banks[k]);
+            if (bank_names[k]) named++;
         }
+        if (named == 0) continue;
 
-        /* Collision: this address is standalone-emitted in more than one
-         * bank. Emitting a single unsuffixed alias would silently pick
-         * whichever bank's #define happened to be textually last (the
-         * exact failure this exists to prevent), so emit bank-qualified
-         * names only -- a symbolic call site must disambiguate, which
-         * turns a silently-wrong call into a compile error instead. */
-        fprintf(f, "/* %s: 0x%04X is standalone-emitted in %d banks (",
-               name, addr, bank_count);
-        for (int k = 0; k < bank_count; k++)
-            fprintf(f, "%sb%d", k ? "," : "", banks[k]);
-        fprintf(f, ") -- no unsuffixed alias emitted; use ");
+        /* One alias per (name, bank). A name that appears in exactly one
+         * bank is emitted unsuffixed. A name shared by several banks would
+         * be defined several times -- the last #define would silently win
+         * (the exact failure this exists to prevent), so every bank that
+         * shares it gets a bank-qualified alias instead and a symbolic call
+         * site must disambiguate, turning a silently-wrong call into a
+         * compile error. Banks without a name get no alias. */
+        bool any_shared = false;
         for (int k = 0; k < bank_count; k++) {
-            if (k) fprintf(f, " or ");
-            fprintf(f, "%s__b%d", name, banks[k]);
-        }
-        fprintf(f, " explicitly */\n");
-        for (int k = 0; k < bank_count; k++) {
+            if (!bank_names[k]) continue;
+            int uses = 0;
+            for (int j = 0; j < bank_count; j++)
+                if (bank_names[j] && strcmp(bank_names[j], bank_names[k]) == 0) uses++;
             char nm[32];
             format_func_name(nm, sizeof nm, addr, banks[k], fixed_bank);
-            fprintf(f, "#define %s__b%d %s\n", name, banks[k], nm);
+            if (uses <= 1) {
+                fprintf(f, "#define %s %s\n", bank_names[k], nm);
+                continue;
+            }
+            if (!any_shared) {
+                any_shared = true;
+                fprintf(f, "/* %s: 0x%04X is standalone-emitted in %d banks (",
+                        bank_names[k], addr, uses);
+                int first = 1;
+                for (int j = 0; j < bank_count; j++) {
+                    if (!bank_names[j] || strcmp(bank_names[j], bank_names[k]) != 0) continue;
+                    fprintf(f, "%sb%d", first ? "" : ",", banks[j]);
+                    first = 0;
+                }
+                fprintf(f, ") -- no unsuffixed alias emitted; use %s__bN explicitly */\n",
+                        bank_names[k]);
+                fprintf(stderr, "[codegen] WARNING: symbol '%s' (0x%04X) is "
+                                "standalone-emitted in %d banks; skipped the "
+                                "unsuffixed #define (would collide) -- use "
+                                "%s__bN explicitly\n",
+                                bank_names[k], addr, uses, bank_names[k]);
+            }
+            fprintf(f, "#define %s__b%d %s\n", bank_names[k], banks[k], nm);
         }
-        fprintf(stderr, "[codegen] WARNING: symbol '%s' (0x%04X) is "
-                        "standalone-emitted in %d banks; skipped the "
-                        "unsuffixed #define (would collide) -- use "
-                        "%s__bN explicitly\n",
-                        name, addr, bank_count, name);
     }
     fprintf(f, "\n");
 
@@ -3711,7 +3726,7 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
     int is_multi_entry = (secondary_count > 0);
 
     /* Emit function signature — for multi-entry, emit a static _body function */
-    const char *sym_name = g_symtab ? symbol_lookup(g_symtab, pc) : NULL;
+    const char *sym_name = g_symtab ? symbol_lookup_bank(g_symtab, pc, bank) : NULL;
     if (is_multi_entry) {
         emit_function_body_open(f, pc, bank, fixed_bank, sym_name);
         /* Capture entry S before the entry-dispatch switch so it is initialized
@@ -3769,7 +3784,7 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
             (cursor >= 0xC000 || (cursor & 0xE000) != (pc & 0xE000)))
             break;
         fprintf(f, "label_%04X:;", cursor);
-        emit_sym(f, cursor);
+        emit_sym(f, cursor, bank);
         fprintf(f, "\n");
         if (emitted_count < MAX_INSNS_PER_FUNC)
             emitted_addrs[emitted_count++] = cursor;
@@ -4001,7 +4016,7 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
         /* Secondary entry wrappers */
         for (int si = 0; si < secondary_count; si++) {
             uint16_t sa = secondary_addrs[si];
-            const char *sa_sym = g_symtab ? symbol_lookup(g_symtab, sa) : NULL;
+            const char *sa_sym = g_symtab ? symbol_lookup_bank(g_symtab, sa, bank) : NULL;
             if (si < public_secondary_count && suppress_merge_range_wrapper(cfg, bank, pc, sa))
                 continue;
             if (si < public_secondary_count && prefer_merge_range_wrapper(cfg, bank, pc, sa))
