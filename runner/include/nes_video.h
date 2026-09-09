@@ -9,8 +9,9 @@
  * 512-wide array.
  *
  * This module makes the width a runtime property so a game can follow the
- * window's aspect ("Fit": 4:3 .. 32:9) or switch presets (16:9 / 21:9 / 32:9)
- * while running, and so title/menu screens can drop back to 4:3 per frame.
+ * window's aspect ("Fit": 16:15 .. 32:9) or switch presets (16:9 / 21:9 /
+ * 32:9) while running, and so title/menu screens can drop back to the stock
+ * 256-wide picture per frame.
  *
  * Model
  *   - Geometry requests are queued (nes_video_request_*) and applied by the
@@ -28,9 +29,31 @@
  *     Asymmetric margins remain available for games that need them
  *     (nes_video_request_margins).
  *
- * Aspect math follows snesrecomp's SmCalculateViewport: the stock 256-wide
- * picture is 4:3 at 240 rows, so width = round_even(240 * aspect), and Fit
- * clamps the window aspect to [4:3, 32:9].
+ * Opt-in. Nothing here runs unless a game calls nes_video_set_aspect_mode():
+ * that and nes_video_on_window_resized() (which acts only once the mode is
+ * NES_ASPECT_FIT) are the sole callers of nes_video_width_for(). A game that
+ * only sets fixed margins -- g_widescreen_left/right or
+ * nes_video_request_width/_margins -- never touches the aspect math, so the
+ * widths below cannot change its geometry.
+ *
+ * Aspect math follows snesrecomp's SmCalculateViewport: with square pixels a
+ * 240-row picture of aspect A is round_even(240 * A) columns wide, and Fit
+ * clamps the window aspect to [16:15, 32:9].
+ *
+ *   STOCK 256 (explicit; 16:15)   16:9 426   21:9 560   32:9 854
+ *
+ * NOTE the pixel-shape trade-off. A real NES puts 256 columns into a 4:3
+ * raster with 8:7 non-square pixels; this module presents square pixels
+ * (logical g_render_width x 240 via SDL_RenderSetLogicalSize) throughout,
+ * under which 256x240 is 16:15 and a true 4:3 frame is 320 columns. So:
+ *   - STOCK is 256 -- the vanilla picture, letterbox/pillarbox handled by SDL.
+ *     It is slightly narrow-looking versus a CRT, which is the price of never
+ *     inventing picture the game did not draw.
+ *   - Fit's low clamp is 16:15, not 4:3, so a window at or below the vanilla
+ *     aspect gets exactly 256 columns rather than a picture narrower than the
+ *     game. A 4:3 window still yields 320, which genuinely fills it with
+ *     square pixels -- i.e. 32 columns per side of *extra* widescreen content,
+ *     not a stretched vanilla frame.
  */
 #pragma once
 #include <stdint.h>
@@ -42,12 +65,16 @@ extern "C" {
 /* Widest framebuffer the runner allocates: 32:9 at 240 rows is 853.3 px. */
 #define NES_MAX_RENDER_WIDTH 864
 
+/* Aspect of the vanilla 256x240 frame under square pixels: 16:15, not 4:3.
+ * Also the low clamp for NES_ASPECT_FIT. */
+#define NES_STOCK_ASPECT (256.0 / 240.0)
+
 typedef enum {
-    NES_ASPECT_STOCK = 0,   /* 4:3, the vanilla 256-wide picture */
+    NES_ASPECT_STOCK = 0,   /* the vanilla 256-wide picture (16:15 square-pixel) */
     NES_ASPECT_16_9,
     NES_ASPECT_21_9,
     NES_ASPECT_32_9,
-    NES_ASPECT_FIT,         /* follow the window drawable aspect, clamped 4:3..32:9 */
+    NES_ASPECT_FIT,         /* follow the window drawable aspect, clamped 16:15..32:9 */
     NES_ASPECT_COUNT
 } NesAspectMode;
 

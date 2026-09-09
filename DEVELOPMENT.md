@@ -5,6 +5,14 @@ Branch: `feat/kirby-mmc3-trampoline`. Game under bring-up: **Kirby's Adventure**
 during Kirby MMC3 boot-cascade debugging. The recompiler and runner are the source
 of truth; `generated/*` are build artifacts and are never hand-edited.
 
+**Reference docs.** Two capabilities have their own write-ups rather than log
+entries here: `docs/CUSTOM_RENDERER.md` — live-resizable render width
+(`nes_video`), the game-owned custom render hook
+(`ppu_renderer_set_custom_render` / `ppu_renderer_draw_sprites_wide`), the
+widescreen sprite-X sidecar, and the geometry invariants; and
+`docs/SYMBOLS.md` — pointing `game.toml` at a disassembly symbol table so
+generated code carries real names instead of `func_XXXX`.
+
 ---
 
 ## Session 2026-06-18 — MMC3 cross-8KB dispatch correctness
