@@ -201,6 +201,8 @@ int16_t g_ws_shadow_x16[64];
 int16_t g_ws_obj_true_rel  = 0;
 uint8_t g_ws_obj_rel8      = 0;
 uint8_t g_ws_obj_ctx_valid = 0;
+int     g_ws_obj_delta_min = -24;
+int     g_ws_obj_delta_max = 56;
 
 /* Width-sized pixel buffers. Allocated once (video_alloc_buffers) at the widest
  * supported framebuffer, NES_MAX_RENDER_WIDTH x 240, so a live aspect change

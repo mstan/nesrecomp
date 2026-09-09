@@ -7,6 +7,7 @@
 #include "nes_runtime.h"
 #include "mapper.h"
 #include "hdpack.h"
+#include "ppu_dot.h"   /* g_dot_ppu_on: custom renderer is per-frame-renderer only */
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>  /* getenv (debug taps) */

@@ -1417,7 +1417,7 @@ static void ws_sidecar_track(uint16_t a, uint8_t val) {
          * so unrelated writes (HUD/static sprites under a stale context)
          * fall back to vanilla placement. */
         int delta = (int8_t)(uint8_t)(val - g_ws_obj_rel8);
-        if (delta >= -24 && delta <= 56) {
+        if (delta >= g_ws_obj_delta_min && delta <= g_ws_obj_delta_max) {
             int w = (int)g_ws_obj_true_rel + delta;
             if (w >= -256 && w < 512) wide = (int16_t)w;
         }

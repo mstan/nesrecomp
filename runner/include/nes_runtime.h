@@ -474,6 +474,12 @@ extern int16_t g_ws_shadow_x16[64];  /* shadow-OAM-side sidecar ($0200 page) */
 extern int16_t g_ws_obj_true_rel;    /* context: true 16-bit screen X of current object */
 extern uint8_t g_ws_obj_rel8;        /* context: the 8-bit rel X the game computed */
 extern uint8_t g_ws_obj_ctx_valid;   /* context valid flag (game policy sets/clears) */
+/* Accepted per-sprite layout offset window (written byte minus rel8). Writes
+ * outside it record the plain byte, so HUD/static sprites written under a
+ * stale context keep vanilla placement. Defaults (-24..56) fit SMB's <=5-tile
+ * layouts; a game with wider object frames (Metroid bosses) widens it. */
+extern int     g_ws_obj_delta_min;
+extern int     g_ws_obj_delta_max;
 
 /* Frame counter incremented each VBlank */
 extern uint64_t g_frame_count;
