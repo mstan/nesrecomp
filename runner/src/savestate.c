@@ -4,10 +4,12 @@
  * State saved:
  *   CPU registers, work RAM, CHR RAM, PPU OAM, palette, nametable RAM,
  *   PPU registers, mapper (MMC1) registers, frame counter, plus a trailing
- *   id-keyed mod section (version 6+; see mod_savestate.h) for architectural
+ *   id-keyed mod section (see mod_savestate.h) for architectural
  *   state mods keep outside guest RAM.
  *
- * Format: raw binary with 4-byte magic "NSSR" + 1-byte version.
+ * V7: "NSSR", u8 version, u32 base size, base state, u16 mod count,
+ * then {64-byte id, u32 payload size, payload} records. Older versions are
+ * deliberately rejected. Savestates are build-specific, unlike game saves.
  */
 #include "savestate.h"
 #include "nes_runtime.h"
@@ -16,14 +18,12 @@
 #include "save_ram.h"
 #include "mod_savestate.h"
 #include "mod_audio.h"
-#include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define SS_MAGIC   "NSSR"
-#define SS_VERSION 6
-#define SS_VERSION_LEGACY_5 5  /* fixed struct unchanged; only the trailing mod section is new */
-#define SS_VERSION_LEGACY 4
+#define SS_VERSION 7
 #define SS_APU_BLOB_CAP 256
 #define SS_RUNTIME_BLOB_CAP 256
 /* On-disk id field width for a mod savestate record; must match
@@ -73,8 +73,7 @@ typedef struct {
     int32_t zapper_x, zapper_y, zapper_trigger;
     /* Misc */
     uint64_t frame_count;
-    /* Exact interrupted guest continuation. Version 5 appends these fields so
-     * version-4 files remain readable as a best-effort migration. */
+    /* Exact interrupted guest continuation. */
     uint16_t resume_pc;
     uint8_t resume_pc_valid;
     uint8_t resume_tick_charged;
@@ -92,6 +91,8 @@ int savestate_save(const char *path) {
     fwrite(SS_MAGIC, 1, 4, f);
     uint8_t ver = SS_VERSION;
     fwrite(&ver, 1, 1, f);
+    uint32_t base_size = sizeof(SaveStateData);
+    fwrite(&base_size, sizeof base_size, 1, f);
 
     SaveStateData ss;
     memset(&ss, 0, sizeof(ss));
@@ -159,46 +160,44 @@ int savestate_save(const char *path) {
 
     fwrite(&ss, 1, sizeof(ss), f);
 
-    /* Mod section (version 6+): id-keyed records from mod_savestate.c.
+    /* Mod section: id-keyed records from mod_savestate.c.
      * Streamed rather than folded into the fixed struct above, since the
-     * record count is dynamic. A hook whose get() reports it does not fit is
-     * excluded from the file with a warning rather than failing the save. */
+     * record count is dynamic. Missing architectural state would make a
+     * successful-looking save unusable, so serialization failures fail it. */
     {
         enum { SS_MOD_MAX_RECORDS = 32 };
-        char    ids[SS_MOD_MAX_RECORDS][SS_MOD_ID_CAP];
-        uint8_t blobs[SS_MOD_MAX_RECORDS][NES_MOD_SAVESTATE_BLOB_CAP];
-        int     lens[SS_MOD_MAX_RECORDS];
-        int     n = 0;
+        uint8_t *blob = (uint8_t *)malloc(NES_MOD_SAVESTATE_BLOB_CAP);
+        uint16_t mod_count = 0;
+        long count_pos = ftell(f);
+        if (!blob || count_pos < 0) { free(blob); fclose(f); return 0; }
+        fwrite(&mod_count, sizeof mod_count, 1, f);
 
         int hook_total = nes_mod_savestate_hook_count();
-        for (int i = 0; i < hook_total && n < SS_MOD_MAX_RECORDS; i++) {
+        for (int i = 0; i < hook_total && mod_count < SS_MOD_MAX_RECORDS; i++) {
             const char *id = nes_mod_savestate_hook_id_at(i);
             NESModSavestateGet get = nes_mod_savestate_hook_get_at(i);
             if (!id || !get) continue;
-            int len = get(blobs[n], NES_MOD_SAVESTATE_BLOB_CAP);
-            if (len < 0) {
+            int len = get(blob, NES_MOD_SAVESTATE_BLOB_CAP);
+            if (len < 0 || len > NES_MOD_SAVESTATE_BLOB_CAP) {
                 fprintf(stderr,
-                        "[SaveState] Mod hook '%s' state does not fit; omitted from save\n",
+                        "[SaveState] Mod hook '%s' state does not fit; save failed\n",
                         id);
-                continue;
+                free(blob); fclose(f); return 0;
             }
-            strncpy(ids[n], id, SS_MOD_ID_CAP - 1);
-            ids[n][SS_MOD_ID_CAP - 1] = '\0';
-            lens[n] = len;
-            n++;
+            char id_field[SS_MOD_ID_CAP] = {0};
+            uint32_t blob_len = (uint32_t)len;
+            strncpy(id_field, id, SS_MOD_ID_CAP - 1);
+            fwrite(id_field, 1, SS_MOD_ID_CAP, f);
+            fwrite(&blob_len, sizeof blob_len, 1, f);
+            fwrite(blob, 1, len, f);
+            mod_count++;
         }
-
-        uint16_t mod_count = (uint16_t)n;
-        fwrite(&mod_count, sizeof(mod_count), 1, f);
-        for (int i = 0; i < n; i++) {
-            uint16_t len = (uint16_t)lens[i];
-            fwrite(ids[i], 1, SS_MOD_ID_CAP, f);
-            fwrite(&len, sizeof(len), 1, f);
-            fwrite(blobs[i], 1, len, f);
-        }
+        free(blob);
+        if (ferror(f) || fseek(f, count_pos, SEEK_SET) != 0 ||
+            fwrite(&mod_count, sizeof mod_count, 1, f) != 1) { fclose(f); return 0; }
     }
 
-    fclose(f);
+    if (fclose(f) != 0) return 0;
 
     printf("[SaveState] Saved to %s (frame %llu)\n", path,
            (unsigned long long)g_frame_count);
@@ -206,11 +205,6 @@ int savestate_save(const char *path) {
 }
 
 int savestate_load(const char *path) {
-    uint16_t legacy_resume_pc = 0;
-    int legacy_tick_charged = 0;
-    int legacy_resume_valid =
-        runtime_get_savestate_resume(&legacy_resume_pc, &legacy_tick_charged);
-
     FILE *f = fopen(path, "rb");
     if (!f) { fprintf(stderr, "[SaveState] Cannot open: %s\n", path); return 0; }
 
@@ -221,70 +215,64 @@ int savestate_load(const char *path) {
         fprintf(stderr, "[SaveState] Bad magic in %s\n", path);
         fclose(f); return 0;
     }
-    if (fread(&ver, 1, 1, f) != 1 ||
-        (ver != SS_VERSION && ver != SS_VERSION_LEGACY_5 && ver != SS_VERSION_LEGACY)) {
+    if (fread(&ver, 1, 1, f) != 1 || ver != SS_VERSION) {
         fprintf(stderr, "[SaveState] Version mismatch in %s\n", path);
         fclose(f); return 0;
     }
 
     SaveStateData ss;
-    memset(&ss, 0, sizeof(ss));
-    size_t state_size = (ver == SS_VERSION_LEGACY)
-                      ? offsetof(SaveStateData, resume_pc)
-                      : sizeof(ss);
-    if (fread(&ss, 1, state_size, f) != state_size) {
+    uint32_t state_size = 0;
+    if (fread(&state_size, sizeof state_size, 1, f) != 1 || state_size != sizeof ss ||
+        fread(&ss, 1, sizeof ss, f) != sizeof ss) {
         fprintf(stderr, "[SaveState] Truncated data in %s\n", path);
         fclose(f); return 0;
     }
 
-    /* Mod section (version 6+ only). A version-5 or -4 file has no such
-     * section; hooks are simply not called, matching pre-existing behavior.
-     * Records are read here but restored later, after NES RAM/CPU/PPU state
+    /* Records are read here but restored later, after NES RAM/CPU/PPU state
      * is applied below, per the get/set contract in mod_savestate.h. */
     enum { SS_MOD_MAX_RECORDS = 32 };
     char    mod_ids[SS_MOD_MAX_RECORDS][SS_MOD_ID_CAP];
-    uint8_t mod_blobs[SS_MOD_MAX_RECORDS][NES_MOD_SAVESTATE_BLOB_CAP];
+    uint8_t *mod_blobs[SS_MOD_MAX_RECORDS] = {0};
     int     mod_lens[SS_MOD_MAX_RECORDS];
     int     mod_n = 0;
-    if (ver == SS_VERSION) {
+    {
         uint16_t mod_count = 0;
         if (fread(&mod_count, sizeof(mod_count), 1, f) != 1) {
             fprintf(stderr, "[SaveState] Truncated mod section in %s\n", path);
-            fclose(f); return 0;
+            goto mod_load_failed;
         }
+        if (mod_count > SS_MOD_MAX_RECORDS) goto mod_load_failed;
         for (uint16_t i = 0; i < mod_count; i++) {
             char id[SS_MOD_ID_CAP];
-            uint16_t len = 0;
+            uint32_t len = 0;
             if (fread(id, 1, SS_MOD_ID_CAP, f) != SS_MOD_ID_CAP ||
                 fread(&len, sizeof(len), 1, f) != 1 ||
                 len > NES_MOD_SAVESTATE_BLOB_CAP) {
                 fprintf(stderr, "[SaveState] Truncated mod record in %s\n", path);
-                fclose(f); return 0;
+                goto mod_load_failed;
             }
-            id[SS_MOD_ID_CAP - 1] = '\0';  /* defend against a corrupt unterminated id */
-            uint8_t blob[NES_MOD_SAVESTATE_BLOB_CAP];
+            if (!id[0] || !memchr(id, '\0', sizeof id)) goto mod_load_failed;
+            for (int j = 0; j < mod_n; j++)
+                if (!strcmp(id, mod_ids[j])) goto mod_load_failed;
+            uint8_t *blob = (uint8_t *)malloc(len ? len : 1);
+            if (!blob) goto mod_load_failed;
             if (len > 0 && fread(blob, 1, len, f) != len) {
                 fprintf(stderr, "[SaveState] Truncated mod record in %s\n", path);
-                fclose(f); return 0;
+                free(blob); goto mod_load_failed;
             }
-            if (mod_n < SS_MOD_MAX_RECORDS) {
-                memcpy(mod_ids[mod_n], id, SS_MOD_ID_CAP);
-                memcpy(mod_blobs[mod_n], blob, len);
-                mod_lens[mod_n] = len;
-                mod_n++;
-            } else {
-                fprintf(stderr,
-                        "[SaveState] Too many mod records in %s; '%s' dropped\n",
-                        path, id);
-            }
+            memcpy(mod_ids[mod_n], id, SS_MOD_ID_CAP);
+            mod_blobs[mod_n] = blob;
+            mod_lens[mod_n] = len;
+            mod_n++;
         }
     }
     fclose(f);
+    f = NULL;
 
     if (ss.runtime_blob_size == 0 || ss.runtime_blob_size > sizeof(ss.runtime_blob) ||
         ss.apu_blob_size == 0 || ss.apu_blob_size > sizeof(ss.apu_blob)) {
         fprintf(stderr, "[SaveState] Invalid subsystem state in %s\n", path);
-        return 0;
+        goto mod_load_failed;
     }
 
     /* CPU */
@@ -318,7 +306,7 @@ int savestate_load(const char *path) {
     if (!runtime_set_state_blob(ss.runtime_blob, ss.runtime_blob_size) ||
         !apu_set_state_blob(ss.apu_blob, ss.apu_blob_size)) {
         fprintf(stderr, "[SaveState] Could not restore subsystem state from %s\n", path);
-        return 0;
+        goto mod_load_failed;
     }
 
     g_controller1_buttons = ss.controller1_buttons;
@@ -347,14 +335,6 @@ int savestate_load(const char *path) {
 
     if (ss.resume_pc_valid) {
         runtime_request_guest_resume(ss.resume_pc, ss.resume_tick_charged != 0);
-    } else if (ver == SS_VERSION_LEGACY && legacy_resume_valid) {
-        /* Old states did not persist a PC. Loading at the same frame-boundary
-         * phase is common (keyboard slots), so discard the stale native stack
-         * using the current interrupted PC. New saves are exact. */
-        runtime_request_guest_resume(legacy_resume_pc, legacy_tick_charged);
-        fprintf(stderr,
-                "[SaveState] Migrating version-4 state with current continuation $%04X\n",
-                legacy_resume_pc);
     }
 
     /* Mod section restore. Deliberately last: NES RAM/CPU/PPU state above is
@@ -377,8 +357,12 @@ int savestate_load(const char *path) {
         }
     }
 
-    printf("[SaveState] Loaded from %s (frame %llu%s)\n", path,
-           (unsigned long long)g_frame_count,
-           ver == SS_VERSION_LEGACY ? ", legacy continuation" : "");
+    printf("[SaveState] Loaded from %s (frame %llu)\n", path,
+           (unsigned long long)g_frame_count);
+    for (int i = 0; i < mod_n; i++) free(mod_blobs[i]);
     return 1;
+mod_load_failed:
+    if (f) fclose(f);
+    for (int i = 0; i < mod_n; i++) free(mod_blobs[i]);
+    return 0;
 }

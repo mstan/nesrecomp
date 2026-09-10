@@ -370,6 +370,11 @@ uint64_t runtime_get_interrupt_epoch(void);
 void runtime_reset_vblank_depth(void);
 void runtime_begin_post_nmi(void);
 void runtime_end_post_nmi(void);
+/* Opt-in host work: execute bounded guest helpers without advancing emulated
+ * CPU/APU/mapper time or delivering interrupts. Nestable; callers still own
+ * all memory/register side effects. Balance before returning to guest code. */
+void runtime_begin_unclocked(void);
+void runtime_end_unclocked(void);
 /* Debug cadence counters: per wall-clock frame accounting. */
 uint32_t runtime_pop_nmi_fires(void);
 uint32_t runtime_pop_cycle_budget_used(void);
