@@ -27,6 +27,7 @@
 
 /* ---- Stubbed runtime (only what interp.c references) ---- */
 CPU6502State g_cpu;
+uint64_t     g_frame_count = 0;
 uint8_t      g_ram[0x0800];
 uint8_t      g_sram[0x2000];
 int          g_current_bank = 0;
@@ -44,6 +45,10 @@ static int s_mapper_type = 0;
 static uint16_t s_resume_pc = 0;
 static int s_resume_tick_charged = 0;
 static int s_resume_prepares = 0;
+static uint32_t s_boundary_steps = 0;
+static uint32_t s_test_frame_period = 0;
+static uint32_t s_test_stop_step = 0;
+static int s_test_nested_frames = 0;
 
 uint8_t nes_read(uint16_t a) {
     if (a < 0x2000)                return g_ram[a & 0x07FF];
@@ -63,7 +68,16 @@ uint16_t nes_read16_jmpbug(uint16_t a) {
 uint8_t mapper_peek_prg(uint16_t a) { return g_ram[a & 0x07FF]; } /* unused by RAM-resident tests */
 int mapper_get_type(void) { return s_mapper_type; }
 void maybe_trigger_vblank(int c) { (void)c; }
-void nes_cpu_instruction_boundary(uint16_t pc, int cycles) { (void)pc; (void)cycles; }
+void nes_cpu_instruction_boundary(uint16_t pc, int cycles) {
+    (void)pc; (void)cycles;
+    s_boundary_steps++;
+    if (s_test_frame_period && s_boundary_steps % s_test_frame_period == 0) {
+        nes_interp_frame_boundary();
+        if (!s_test_nested_frames) g_frame_count++;
+    }
+    if (s_test_stop_step && s_boundary_steps == s_test_stop_step)
+        g_ram[0x20] = 1; /* let the bounded test program reach BRK */
+}
 int  game_dispatch_override(uint16_t a) { (void)a; return 0; }
 void nes_record_dispatch_miss(uint16_t a) { (void)a; }
 void nes_record_dispatch_miss_bank(uint16_t gen_addr, uint16_t cpu_addr, int bank) {
@@ -156,6 +170,9 @@ static void fresh(void) {
     s_resume_pc = 0;
     s_resume_tick_charged = 0;
     s_resume_prepares = 0;
+    s_boundary_steps = s_test_frame_period = s_test_stop_step = 0;
+    s_test_nested_frames = 0;
+    g_frame_count = 0;
     nes_interp_set_enabled(1);
     nes_interp_set_native_handoff_mode(NES_INTERP_HANDOFF_ISLAND);
     nes_interp_reset_context();
@@ -397,6 +414,56 @@ int main(void) {
     CHECK(r == 1,              "T12 boundary step handled");
     CHECK(s_native_calls == 1, "T12 resumed through native tail target once");
     CHECK(g_ram[0x20] == 0x99, "T12 native tail target executed");
+
+    printf("[T13] explicit resume may span many healthy rendered frames\n");
+    fresh();
+    { uint8_t p[] = {0xA5,0x20, 0xF0,0xFC, 0x00}; /* LDA $20; BEQ loop; BRK */
+      load(0x0600, p, sizeof p); }
+    s_test_frame_period = 10000;
+    s_test_stop_step = 2100000;
+    { NesInterpStats before, after;
+      NesInterpExit exit;
+      nes_interp_get_stats(&before);
+      r = nes_interp_resume(0x0600);
+      nes_interp_get_stats(&after);
+      nes_interp_get_last_exit(&exit);
+      CHECK(r == 1 && exit.kind == NES_INTERP_EXIT_BRK,
+            "T13 continuation completes beyond old two-million instruction cap");
+      CHECK(s_boundary_steps > 2100000,
+            "T13 actually ran across 210 rendered frames");
+      CHECK(after.watchdog_trips == before.watchdog_trips,
+            "T13 healthy frame progress does not trip watchdog"); }
+
+    printf("[T14] explicit resume without frame progress still has a watchdog\n");
+    fresh();
+    { uint8_t p[] = {0xA5,0x20, 0xF0,0xFC, 0x00};
+      load(0x0600, p, sizeof p); }
+    { NesInterpStats before, after;
+      nes_interp_get_stats(&before);
+      r = nes_interp_resume(0x0600);
+      nes_interp_get_stats(&after);
+      CHECK(r == 0 && after.watchdog_trips == before.watchdog_trips + 1,
+            "T14 no-progress loop declines at watchdog");
+      CHECK(s_boundary_steps == 2000000, "T14 original no-progress limit retained"); }
+
+    printf("[T15] ordinary fallback retains its per-call limit across frames\n");
+    fresh();
+    { uint8_t p[] = {0xA5,0x20, 0xF0,0xFC, 0x00};
+      load(0x0600, p, sizeof p); }
+    s_test_frame_period = 10000;
+    r = nes_interp_dispatch(0x0600);
+    CHECK(r == 0 && s_boundary_steps == 2000000,
+          "T15 bounded fallback guard is not relaxed by frame callbacks");
+
+    printf("[T16] nested callbacks without presented frames do not renew resume\n");
+    fresh();
+    { uint8_t p[] = {0xA5,0x20, 0xF0,0xFC, 0x00};
+      load(0x0600, p, sizeof p); }
+    s_test_frame_period = 10000;
+    s_test_nested_frames = 1;
+    r = nes_interp_resume(0x0600);
+    CHECK(r == 0 && s_boundary_steps == 2000000,
+          "T16 nested NMI callbacks alone cannot keep a stuck resume alive");
 
     printf("\n==== interp self-test: %d checks, %d failures ====\n", g_checks, g_fails);
     return g_fails;
