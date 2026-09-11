@@ -283,6 +283,19 @@ typedef struct {
     uint16_t        return_adjust_funcs[GAME_CFG_MAX_NOP_JSRS]; /* JSR targets that rewrite their RTS operand */
     int             return_adjust_func_count;
 
+    /* JSR targets whose callee consumes the pushed return address as data
+     * (e.g. inline bytecode trampolines). At push_jsr sites for these targets
+     * the post-call S-mismatch bail is replaced with an S restore. */
+    uint16_t        absorb_jsr_rets[GAME_CFG_MAX_NOP_JSRS];
+    int             absorb_jsr_ret_count;
+
+    /* JSR targets whose callee leaves the pushed return address on the 6502
+     * stack (its RTS is a plain C return). At push_jsr sites for these
+     * targets the post-call S-mismatch bail is replaced with an S restore,
+     * and execution falls through to site+3 (no goto). */
+    uint16_t        restore_jsrs[GAME_CFG_MAX_NOP_JSRS];
+    int             restore_jsr_count;
+
     struct {
         uint16_t target;  /* JMP destination that needs the dummy push */
         uint16_t source;  /* 0 = match any JMP site; nonzero = only this JMP source PC */

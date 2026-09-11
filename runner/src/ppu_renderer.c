@@ -296,7 +296,7 @@ void ppu_render_oam_debug(uint32_t *buf) {
 
 /* Diagnostic counters for the title-screen first-divergence investigation.
  * Disabled by default — re-enable by setting RECOMP_RENDER_DIAG to 1. */
-#define RECOMP_RENDER_DIAG 0
+#define RECOMP_RENDER_DIAG 1
 #if RECOMP_RENDER_DIAG
 uint32_t g_ppu_render_calls   = 0;
 uint32_t g_ppu_render_skipped = 0;
