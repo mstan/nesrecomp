@@ -974,8 +974,11 @@ static void render_sprites(const RenderContext *ctx) {
                 if (!active[j] || used[j]) continue;
                 bx = g_ppu_oam[j * 4 + 3];
                 by = g_ppu_oam[j * 4] + 1;
-                if (!sprites_connect(ax, ay, sprite_height, a,
-                                     bx, by, sprite_height, j))
+                int connection = s->sprite_connect
+                    ? s->sprite_connect(a, j, s->user) : 0;
+                if (connection < 0 || (connection == 0 &&
+                    !sprites_connect(ax, ay, sprite_height, a,
+                                     bx, by, sprite_height, j)))
                     continue;
                 next_min_x = bx < min_x ? bx : min_x;
                 next_min_y = by < min_y ? by : min_y;
@@ -994,6 +997,10 @@ static void render_sprites(const RenderContext *ctx) {
             }
         }
 
+        if (s->sprite_members_visible &&
+            !s->sprite_members_visible(members, member_count,
+                                      min_x, min_y, max_x, max_y, s->user))
+            continue;
         if (s->sprite_visible &&
             !s->sprite_visible(min_x, min_y, max_x, max_y, s->user))
             continue;

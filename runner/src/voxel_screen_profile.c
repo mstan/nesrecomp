@@ -116,6 +116,21 @@ static float screen_tile_height(uint8_t tile, int x, int y, void *user) {
     return state->heights[y * 32 + x];
 }
 
+static int screen_sprite_connect(int first, int second, void *user) {
+    const NesVoxelScreenState *state = (const NesVoxelScreenState *)user;
+    const NesVoxelScreenProfile *profile = state->active_profile;
+    return profile->sprite_connect(first, second, profile->user);
+}
+
+static int screen_sprite_members_visible(const int *members, int count,
+                                         int x0, int y0, int x1, int y1,
+                                         void *user) {
+    const NesVoxelScreenState *state = (const NesVoxelScreenState *)user;
+    const NesVoxelScreenProfile *profile = state->active_profile;
+    return profile->sprite_members_visible(members, count, x0, y0, x1, y1,
+                                            profile->user);
+}
+
 static uint32_t common_unmasked_color(const NesVoxelScreenState *state,
                                       const NesVoxelScreenProfile *profile,
                                       int tile_x, int tile_y) {
@@ -452,6 +467,9 @@ void nes_voxel_screen_post_render(NesVoxelScreenState *state,
     scene.sprite_depth_bias = 1.0f;
     scene.sprite_shadow = screen_sprite_shadow;
     scene.sprite_visible = profile->sprite_visible;
+    scene.sprite_connect = profile->sprite_connect ? screen_sprite_connect : NULL;
+    scene.sprite_members_visible = profile->sprite_members_visible
+        ? screen_sprite_members_visible : NULL;
     scene.sprite_shadow_scale = 0.60f;
     scene.sprite_shadow_opacity = 0.32f;
     scene.draw_oam_sprites = 1;

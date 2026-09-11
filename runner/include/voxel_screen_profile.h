@@ -82,6 +82,9 @@ typedef struct NesVoxelScreenProfile {
     /* Optional OAM component-width cap. Zero keeps the renderer's 32-pixel
      * default; side-scrollers can use 16 to keep adjacent actors separate. */
     int sprite_group_max_width;
+    /* Optional per-piece grouping and completed-component visibility. */
+    NesVoxelSpriteConnectFn sprite_connect;
+    NesVoxelSpriteMembersVisibleFn sprite_members_visible;
 } NesVoxelScreenProfile;
 
 typedef struct NesVoxelScreenState {

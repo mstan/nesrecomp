@@ -139,6 +139,14 @@ All of the following are opt-in and leave existing profiles unchanged:
 - `sprite_visible` can suppress a complete assembled metasprite. This is
   useful for first-person profiles that hide the player body but retain
   enemies, projectiles, and effects.
+- `sprite_connect` receives two OAM indices: return negative to reject their
+  connection, zero for the normal proximity/index rule, or positive to join
+  them subject to the existing component size/count bounds.
+- `sprite_members_visible` receives a completed component's OAM indices and
+  bounds. Return zero to hide it. This runs before `sprite_visible`; both must
+  accept the component. Both callbacks are also available on
+  `NesVoxelScreenProfile`, receive the existing `user` pointer, and default to
+  NULL. They affect presentation only and must not modify OAM or guest state.
 - `sprite_ground`, `sprite_shadow`, and `sprite_overlay` remain per-game
   policy callbacks. Shadow scale and opacity are configured independently.
 

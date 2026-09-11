@@ -21,6 +21,13 @@ typedef int (*NesVoxelSpriteOverlayFn)(int min_x, int min_y,
                                        int max_x, int max_y, void *user);
 typedef int (*NesVoxelSpriteVisibleFn)(int min_x, int min_y,
                                        int max_x, int max_y, void *user);
+/* Negative rejects a pair, zero uses normal grouping, positive joins it.
+ * The renderer's component count and size limits still apply. */
+typedef int (*NesVoxelSpriteConnectFn)(int first_index, int second_index,
+                                       void *user);
+typedef int (*NesVoxelSpriteMembersVisibleFn)(
+    const int *members, int member_count,
+    int min_x, int min_y, int max_x, int max_y, void *user);
 typedef float (*NesVoxelSpriteGroundFn)(int min_x, int min_y,
                                         int max_x, int max_y,
                                         float sampled_ground, void *user);
@@ -146,6 +153,9 @@ typedef struct NesVoxelScene {
 
     uint32_t sky_top;
     uint32_t sky_bottom;
+    /* Optional OAM-aware grouping/filtering; NULL preserves normal policy. */
+    NesVoxelSpriteConnectFn sprite_connect;
+    NesVoxelSpriteMembersVisibleFn sprite_members_visible;
 } NesVoxelScene;
 
 /* Returns 1 when a scene was rendered, 0 when the descriptor was invalid. */
