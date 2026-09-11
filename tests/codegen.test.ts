@@ -6,6 +6,8 @@
  * correct output.
  */
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "fs";
+import { join } from "path";
 import { RomBuilder } from "./helpers/rom-builder.js";
 import { recompile } from "./helpers/recompile.js";
 
@@ -1490,5 +1492,68 @@ describe("branch handling", () => {
     expect(result.dispatchEntries).toContain("C000");
     // The generated code should contain a goto or loop construct
     expect(result.fullC).toContain("label_C002");
+  });
+});
+
+describe("symbol table", () => {
+  it("scopes .sym names to their PRG bank and keeps bankless names global", () => {
+    // Two different routines share $8160 in banks 1 and 2; a fixed-bank
+    // routine at $C010 is named without a bank. The .sym scopes each banked
+    // name with a BB: prefix, so neither bank borrows the other's name.
+    const rom = new RomBuilder({ mapper: 4, prgBanks: 4 })
+      .bank(3)
+      .org(0xc000)
+      .lda(0x06).sta(0x8000)
+      .lda(0x02).sta(0x8001)
+      .jsr(0x8160)
+      .lda(0x01).sta(0x8001)
+      .jsr(0x8160)
+      .jsr(0xc010)
+      .rts()
+      .org(0xc010)
+      .rts()
+      .bank(2)
+      .org(0x8160)
+      .lda(0x22)
+      .rts()
+      .bank(1)
+      .org(0x8160)
+      .lda(0x11)
+      .rts()
+      .bank(3)
+      .vectors(0xc000, 0xc000, 0xc000)
+      .writeTemp("banked_symbols.nes");
+
+    const result = recompile(
+      rom,
+      `[game]\noutput_prefix = "banked-symbols"\nsymbol_file = "banked.sym"\n\n[functions]\nbank1 = [0x8160]\nbank2 = [0x8160]\n`,
+      {
+        "banked.sym": [
+          "02:8160 BankTwoFn func",
+          "01:8160 BankOneFn func",
+          "C010 FixedFn func",
+          "0010 SomeVar ram",
+          "",
+        ].join("\n"),
+      }
+    );
+
+    const decls = readFileSync(
+      join(result.generatedDir, "banked-symbols_full_decls.h"),
+      "utf-8"
+    );
+    expect(decls).toContain("#define BankTwoFn func_8160_b2");
+    expect(decls).toContain("#define BankOneFn func_8160_b1");
+    expect(decls).toContain("#define FixedFn func_C010");
+    expect(decls).toContain("#define SomeVar 0x0010");
+    // No cross-bank leakage and no collision fallback for distinct names.
+    expect(decls).not.toContain("BankTwoFn func_8160_b1");
+    expect(decls).not.toContain("BankOneFn func_8160_b2");
+    expect(decls).not.toContain("__b1");
+
+    // Function comments follow the same bank scoping.
+    expect(result.fullC).toMatch(/void func_8160_b2\(void\) \{ \/\* BankTwoFn \*\//);
+    expect(result.fullC).toMatch(/void func_8160_b1\(void\) \{ \/\* BankOneFn \*\//);
+    expect(result.fullC).toMatch(/void func_C010\(void\) \{ \/\* FixedFn \*\//);
   });
 });

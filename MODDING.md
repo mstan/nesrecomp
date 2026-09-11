@@ -277,15 +277,17 @@ NES_MOD_CONSTRUCTOR(register_player_savestate) {
 ```
 
 On save, savestate.c calls every registered hook's `get` and appends the
-result to the file as an id-keyed record; a hook that reports its state does
-not fit (`-1`) is omitted from that save with a warning rather than failing
-it. On load, each record's `set` is looked up by id and called only after
+result to the file as an id-keyed record. Records have a 32-bit byte count
+and a 1 MiB allocation limit; buffers are allocated on the heap. A hook that
+reports its state does not fit (`-1`) fails the save. On load, each record's
+`set` is looked up by id and called only after
 NES RAM/CPU/PPU state has already been restored, so a hook sees the same
 post-load world a `game_post_nmi()` callback would. A record whose id has no
 registered hook (mod disabled or uninstalled since the save was made) is
 skipped with a stderr warning -- never a load failure.
 
-This is version-gated (save-state format version 6): a file written by an
-older runner has no mod section at all, and loads exactly as before with no
-hooks called. Loading such a file with mods registered simply leaves their
-state at whatever it already was -- there is nothing to restore.
+The current format is version 7: `NSSR`, a one-byte version, a 32-bit base
+state size, base state, a 16-bit record count, then records containing a
+64-byte id, 32-bit payload size and payload. Older versions are rejected.
+Savestates are build-specific snapshots, with no backwards-compatibility
+promise. Keep durable progress in the game's normal save/password system.

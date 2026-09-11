@@ -54,6 +54,11 @@ int  hdpack_load_from_config(int is_chr_ram_game, int native_w);
 
 void hdpack_unload(void);
 
+/* The framebuffer width changed (live aspect resize): re-size the per-pixel
+ * side channel to native_w x 240. Returns 0 on success, <0 if the pack had
+ * to be unloaded because the allocation failed. No-op when inactive. */
+int  hdpack_resize(int native_w);
+
 int  hdpack_active(void);    /* 1 if a pack is loaded */
 int  hdpack_scale(void);     /* upscale factor (1 when inactive) */
 

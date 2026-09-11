@@ -31,7 +31,8 @@ export interface RecompResult {
  */
 export function recompile(
   romPath: string,
-  tomlContent?: string
+  tomlContent?: string,
+  extraFiles?: Record<string, string>
 ): RecompResult {
   if (!existsSync(NESRECOMP_EXE)) {
     throw new Error(
@@ -48,6 +49,10 @@ export function recompile(
     const tomlPath = join(workDir, "game.toml");
     writeFileSync(tomlPath, tomlContent);
     args.push("--game", tomlPath);
+  }
+  // Side files resolved relative to game.toml (e.g. a symbol_file .sym).
+  for (const [name, content] of Object.entries(extraFiles ?? {})) {
+    writeFileSync(join(workDir, name), content);
   }
 
   const output = execFileSync(NESRECOMP_EXE, args, {

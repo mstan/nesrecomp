@@ -41,6 +41,7 @@
 #include "save_ram.h"
 #include "config.h"
 #include "hdpack.h"
+#include "nes_video.h"
 #include "ppu_dot.h"
 #include "interp.h"
 #ifdef NESRECOMP_NET
@@ -200,11 +201,18 @@ int16_t g_ws_shadow_x16[64];
 int16_t g_ws_obj_true_rel  = 0;
 uint8_t g_ws_obj_rel8      = 0;
 uint8_t g_ws_obj_ctx_valid = 0;
+int     g_ws_obj_delta_min = -24;
+int     g_ws_obj_delta_max = 56;
 
-static uint32_t           s_framebuf[512 * 240];  /* sized for max 512px width */
+/* Width-sized pixel buffers. Allocated once (video_alloc_buffers) at the widest
+ * supported framebuffer, NES_MAX_RENDER_WIDTH x 240, so a live aspect change
+ * (nes_video.h) never moves them: pointers already handed to the zapper probe
+ * and the dot-PPU stay valid; only the SDL textures are re-created. */
+#define VIDEO_BUF_BYTES ((size_t)NES_MAX_RENDER_WIDTH * 240u * sizeof(uint32_t))
+static uint32_t          *s_framebuf = NULL;
 /* Present-time color-LUT scratch (palette swap applied to a COPY only when an
  * alternate palette is opted in via NESRECOMP_PALETTE; default Raw = unused). */
-static uint32_t           s_present_buf[512 * 240];
+static uint32_t          *s_present_buf = NULL;
 
 /* On-demand render for Zapper light detection.  The game reads the light sensor
  * mid-frame (during func_NMI / the main loop), so we render the CURRENT PPU state
@@ -218,7 +226,65 @@ static uint32_t           s_present_buf[512 * 240];
  * main loop ~813 re-rendered s_framebuf, so live display was usually spared).
  * Rendering into s_zapper_snapbuf keeps the two paths symmetric and leaves the
  * display buffer untouched. */
-static uint32_t           s_zapper_snapbuf[512 * 240];
+static uint32_t          *s_zapper_snapbuf = NULL;
+
+static void video_alloc_buffers(void) {
+    if (s_framebuf) return;
+    s_framebuf       = (uint32_t *)calloc(1, VIDEO_BUF_BYTES);
+    s_present_buf    = (uint32_t *)calloc(1, VIDEO_BUF_BYTES);
+    s_zapper_snapbuf = (uint32_t *)calloc(1, VIDEO_BUF_BYTES);
+    if (!s_framebuf || !s_present_buf || !s_zapper_snapbuf) {
+        fprintf(stderr, "[Video] framebuffer allocation failed\n");
+        exit(1);
+    }
+}
+
+/* Apply a queued geometry change (nes_video.h). Called at exactly one point
+ * per frame -- after SDL_RenderPresent, before the next frame renders -- so
+ * g_render_width never changes while a frame is in flight. Pre-window
+ * requests were applied immediately by nes_video and never reach here. */
+static void video_apply_pending(void) {
+    int left, right;
+    if (!nes_video_take_pending(&left, &right)) return;
+    nes_video_commit(left, right);
+    /* Stale narrower/wider content would sit misaligned under the new
+     * geometry until the next real render (a rendering-off frame keeps the
+     * previous picture on purpose); start from black. */
+    memset(s_framebuf, 0, VIDEO_BUF_BYTES);
+    if (!s_renderer) return;
+    if (s_texture) SDL_DestroyTexture(s_texture);
+    s_texture = SDL_CreateTexture(s_renderer, SDL_PIXELFORMAT_ARGB8888,
+                                  SDL_TEXTUREACCESS_STREAMING, g_render_width, 240);
+    if (!s_texture) {
+        fprintf(stderr, "SDL_CreateTexture (resize): %s\n", SDL_GetError());
+        exit(1);
+    }
+    if (s_hd_texture && hdpack_active()) {
+        int hw = g_render_width * s_hd_scale, hh = 240 * s_hd_scale;
+        uint32_t *nb = (uint32_t *)realloc(s_hd_buf, (size_t)hw * hh * sizeof(uint32_t));
+        if (nb && hdpack_resize(g_render_width) == 0) {
+            s_hd_buf = nb;
+            SDL_DestroyTexture(s_hd_texture);
+            s_hd_texture = SDL_CreateTexture(s_renderer, SDL_PIXELFORMAT_ARGB8888,
+                                             SDL_TEXTUREACCESS_STREAMING, hw, hh);
+            SDL_RenderSetLogicalSize(s_renderer, hw, hh);
+        } else {
+            /* Pack side channel could not follow: drop to native output. */
+            if (nb) s_hd_buf = nb;
+            free(s_hd_buf); s_hd_buf = NULL;
+            SDL_DestroyTexture(s_hd_texture); s_hd_texture = NULL;
+            hdpack_unload();
+            s_hd_scale = 1;
+            SDL_RenderSetLogicalSize(s_renderer, g_render_width, 240);
+        }
+    } else {
+        SDL_RenderSetLogicalSize(s_renderer, g_render_width, 240);
+    }
+    printf("[Video] render width %d (%dL + 256 + %dR), aspect %s\n",
+           g_render_width, g_widescreen_left, g_widescreen_right,
+           nes_video_aspect_name(nes_video_aspect_mode()));
+}
+
 static void zapper_on_demand_render(void) {
     if (g_dot_ppu_on)
         ppu_dot_render_snapshot(s_zapper_snapbuf);
@@ -550,7 +616,7 @@ void save_png(const char *path, int w, int h, const void *rgb, int stride) {
 
 /* Save an ARGB8888 buffer as PNG. Callable from game code (emulated mode screenshots). */
 void runner_save_argb_png(const char *path, const uint32_t *argb, int w, int h) {
-    static uint8_t rgb[512 * 240 * 3];  /* max widescreen width */
+    static uint8_t rgb[NES_MAX_RENDER_WIDTH * 240 * 3];  /* max framebuffer width */
     int pixels = w * h;
     for (int i = 0; i < pixels; i++) {
         uint32_t px = argb[i];
@@ -835,6 +901,14 @@ void nes_vblank_callback(void) {
             fprintf(stderr, "[RunnerExit] SDL_WINDOWEVENT_CLOSE at frame %llu\n",
                     (unsigned long long)g_frame_count);
             exit(0);
+        }
+        if (ev.type == SDL_WINDOWEVENT &&
+            ev.window.event == SDL_WINDOWEVENT_SIZE_CHANGED && s_renderer) {
+            /* Live aspect ("Fit"): only queue the geometry change here; it is
+             * applied after this frame's present (video_apply_pending). */
+            int out_w = 0, out_h = 0;
+            SDL_GetRendererOutputSize(s_renderer, &out_w, &out_h);
+            nes_video_on_window_resized(out_w, out_h);
         }
         if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_ESCAPE) {
 #ifdef NESRECOMP_NET
@@ -1418,7 +1492,7 @@ smoke_skip_input:
     {
         char shot_path[256];
         if (script_wants_screenshot(shot_path, sizeof(shot_path))) {
-            if (s_hd_buf && hdpack_active()) {
+            if (s_hd_buf && hdpack_active() && !ppu_renderer_custom_render_active()) {
                 /* Capture the HD output so screenshots match what is displayed. */
                 int hw = g_render_width * s_hd_scale, hh = 240 * s_hd_scale;
                 hdpack_upscale(s_framebuf, g_render_width, s_hd_buf);
@@ -1435,7 +1509,7 @@ smoke_skip_input:
                     printf("[Shot] %s (HD %dx%d)\n", shot_path, hw, hh);
                 }
             } else {
-                static uint8_t rgb[512 * 240 * 3];  /* max native width */
+                static uint8_t rgb[NES_MAX_RENDER_WIDTH * 240 * 3];  /* max framebuffer width */
                 int npx = g_render_width * 240;
                 for (int i = 0; i < npx; i++) {
                     uint32_t px = s_framebuf[i];
@@ -1502,9 +1576,10 @@ smoke_skip_input:
             present = s_present_buf;
         }
         SDL_RenderClear(s_renderer);
-        if (s_hd_texture && hdpack_active()) {
+        if (s_hd_texture && hdpack_active() && !ppu_renderer_custom_render_active()) {
             /* HD pack active: upscale the native frame + per-pixel side channel
-             * into the HD buffer, present the HD texture. */
+             * into the HD buffer, present the HD texture. (A game-owned wide
+             * compositor bypasses the pack: its side channel is native-space.) */
             hdpack_upscale(present, g_render_width, s_hd_buf);
             SDL_UpdateTexture(s_hd_texture, NULL, s_hd_buf, g_render_width * s_hd_scale * 4);
             SDL_RenderCopy(s_renderer, s_hd_texture, NULL, NULL);
@@ -1514,6 +1589,10 @@ smoke_skip_input:
         }
         SDL_RenderPresent(s_renderer);
     }
+
+    /* Safe point for a queued geometry change: this frame is presented, the
+     * next one has not started rendering. */
+    video_apply_pending();
 
     pace_ntsc_frame();
     finish_frame_callback();
@@ -1616,6 +1695,7 @@ uint8_t *runner_get_prg_bank_rw(int bank_num) {
  * ROM discovery and CRC verification. argv[1] is guaranteed to be the ROM path.
  */
 int nesrecomp_runner_run(int argc, char *argv[]) {
+    video_alloc_buffers();
 
     /* Parse optional flags */
     for (int i = 2; i < argc; i++) {
@@ -1700,7 +1780,7 @@ int nesrecomp_runner_run(int argc, char *argv[]) {
             printf("[Smoke] Headless mode: running %d frames, hashing every %d\n",
                    s_smoke_frames, s_smoke_interval);
         }
-        memset(s_framebuf, 0, sizeof(s_framebuf));
+        memset(s_framebuf, 0, VIDEO_BUF_BYTES);
         run_guest_execution();
         fprintf(stderr, "[Headless] game_run_main returned unexpectedly at frame %llu\n",
                 (unsigned long long)g_frame_count);
@@ -1810,6 +1890,14 @@ int nesrecomp_runner_run(int argc, char *argv[]) {
         exit(1);
     }
     SDL_RenderSetLogicalSize(s_renderer, g_render_width, 240);
+    /* From here on geometry requests are queued and applied per frame
+     * (video_apply_pending); seed the Fit mode with the real drawable size. */
+    nes_video_mark_window_ready();
+    {
+        int out_w = 0, out_h = 0;
+        SDL_GetRendererOutputSize(s_renderer, &out_w, &out_h);
+        nes_video_on_window_resized(out_w, out_h);
+    }
 
     /* HD texture pack (Mesen HD Pack): opt-in via the NESRECOMP_HDPACK env var
      * or config.ini [Display] HdPackEnabled/HdPackDir. When a pack loads, present
@@ -1850,7 +1938,7 @@ int nesrecomp_runner_run(int argc, char *argv[]) {
         }
     }
 
-    memset(s_framebuf, 0, sizeof(s_framebuf));
+    memset(s_framebuf, 0, VIDEO_BUF_BYTES);
 
     /* Present-time palette LUT: default Raw (passthrough, byte-identical);
      * opt in via NESRECOMP_PALETTE={raw,2c02,fbx}. */

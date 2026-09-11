@@ -678,6 +678,23 @@ void hdpack_frame_begin(void) {
         memset(s_pixels, 0, (size_t)s_native_w * 240 * sizeof(HdPixel));
 }
 
+int hdpack_resize(int native_w) {
+    if (!s_active) return 0;
+    if (native_w <= 0) return -1;
+    if (native_w == s_native_w) return 0;
+    HdPixel *np = (HdPixel *)calloc((size_t)native_w * 240, sizeof(HdPixel));
+    if (!np) {
+        fprintf(stderr, "[HDPack] side channel realloc to %dx240 failed; pack unloaded\n",
+                native_w);
+        hdpack_unload();
+        return -1;
+    }
+    free(s_pixels);
+    s_pixels = np;
+    s_native_w = native_w;
+    return 0;
+}
+
 void hdpack_unload(void) {
     for (int i = 0; i < HD_NBUCKETS; i++) {
         HdAlias *a = s_alias_buckets[i];

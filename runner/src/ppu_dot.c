@@ -18,6 +18,7 @@
  */
 #include "nes_runtime.h"
 #include "ppu_dot.h"
+#include "nes_video.h"
 #include "mapper.h"
 #include <stdlib.h>
 #include <stdio.h>
@@ -39,7 +40,7 @@ extern uint16_t       g_ppuaddr;
 #define DOTS_PER_LINE   341
 #define VISIBLE_LINES   240
 #define VBLANK_PRE      21
-#define DOT_MAXW        512          /* max framebuffer width (matches s_framebuf) */
+#define DOT_MAXW        NES_MAX_RENDER_WIDTH /* max framebuffer width (matches the runner buffers) */
 
 static uint32_t *s_fb        = NULL;             /* presentation framebuffer */
 static uint32_t  s_back[DOT_MAXW * VISIBLE_LINES]; /* render target (double buffer) */

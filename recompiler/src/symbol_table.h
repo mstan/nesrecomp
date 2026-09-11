@@ -8,6 +8,12 @@
  *   # comment lines and blank lines are ignored
  *   XXXX SymbolName          (hex address, space, name)
  *   XXXX SymbolName func     (optional type: func, ram, const, label)
+ *   BB:XXXX SymbolName func  (optional hex PRG bank prefix: the name applies
+ *                             only to that 16 KB bank -- required on banked
+ *                             mappers where $8000-$BFFF holds different code
+ *                             per bank; a bankless entry applies to every
+ *                             bank, which is right for fixed-bank code, RAM
+ *                             and constants)
  *
  * Examples:
  *   D67A OffscreenBoundsCheck func
@@ -28,6 +34,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#define SYM_BANK_ANY (-1)
+
 typedef enum {
     SYM_KIND_OTHER = 0,  /* no type given, or an unrecognized one */
     SYM_KIND_FUNC,
@@ -37,6 +45,7 @@ typedef enum {
 
 typedef struct {
     uint16_t   addr;
+    int        bank;   /* PRG bank this name is scoped to, or SYM_BANK_ANY */
     char      *name;   /* heap-allocated, owned by the table */
     SymbolKind kind;
     int        ord;    /* original file order; ties are broken on this so an
@@ -62,6 +71,13 @@ void symbol_table_free(SymbolTable *st);
  * When an address has several names this returns the first in file order.
  * Uses binary search after first call triggers sort. */
 const char *symbol_lookup(SymbolTable *st, uint16_t addr);
+
+/* Bank-aware lookup. Prefers a name scoped to exactly `bank`; otherwise the
+ * first bankless (SYM_BANK_ANY) name at the address; NULL if only names
+ * scoped to OTHER banks exist -- a name from another bank's code must never
+ * be attached to this bank's function. With a bankless .sym (NROM games)
+ * this is identical to symbol_lookup(). */
+const char *symbol_lookup_bank(SymbolTable *st, uint16_t addr, int bank);
 
 /* Kind of the first symbol at an address, or SYM_KIND_OTHER when unknown. */
 SymbolKind symbol_kind(SymbolTable *st, uint16_t addr);

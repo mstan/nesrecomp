@@ -7,6 +7,7 @@
 #include "nes_runtime.h"
 #include "mapper.h"
 #include "hdpack.h"
+#include "ppu_dot.h"   /* g_dot_ppu_on: custom renderer is per-frame-renderer only */
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>  /* getenv (debug taps) */
@@ -23,6 +24,11 @@ extern uint16_t g_ppuaddr;  /* PPU address register (runtime.c) */
  * exactly as before. */
 static PpuSpriteSuppressFn s_sprite_suppress_fn   = NULL;
 static void               *s_sprite_suppress_user = NULL;
+/* Optional game-owned wide compositor (nes_runtime.h, NesCustomRenderFn).
+ * NULL by default: the render path below is then exactly the stock one. */
+static NesCustomRenderFn   s_custom_render_fn     = NULL;
+static void               *s_custom_render_user   = NULL;
+static uint32_t            s_native_scratch[256 * 240];
 static uint8_t            *s_bg_opaque_snapshot   = NULL;
 static uint32_t           *s_bg_color_snapshot    = NULL;
 static size_t              s_bg_opaque_capacity   = 0;
@@ -467,7 +473,7 @@ static void service_mmc3_scanline_irq(int reported_scanline) {
     }
 }
 
-void ppu_render_frame(uint32_t *framebuf) {
+static void render_frame_native(uint32_t *framebuf) {
     g_render_irq_fired = 0;
     g_render_irq_scanline = -1;
     g_render_irq_chr_changed = 0;
@@ -1212,4 +1218,111 @@ render_sprites:
             }
     }
 #endif
+}
+
+/* ---- Custom (game-owned) wide compositor ---------------------------------- */
+
+int ppu_renderer_set_custom_render(NesCustomRenderFn fn, void *user) {
+    if (fn && g_dot_ppu_on) {
+        fprintf(stderr, "[Render] custom renderer refused: the dot-PPU publishes "
+                        "incrementally (unset NESRECOMP_DOT_PPU)\n");
+        return 0;
+    }
+    s_custom_render_fn   = fn;
+    s_custom_render_user = user;
+    return 1;
+}
+
+int ppu_renderer_custom_render_active(void) {
+    return s_custom_render_fn != NULL && g_render_width > 256;
+}
+
+void ppu_render_frame(uint32_t *framebuf) {
+    if (!ppu_renderer_custom_render_active()) {
+        render_frame_native(framebuf);
+        return;
+    }
+
+    /* Stock pass at stock geometry. Every widescreen branch in the native
+     * renderer reduces to the vanilla path with margins 0, so sprite-0 hit,
+     * IRQ splits and the bg-opacity snapshot are those of a 256-wide frame.
+     * A rendering-disabled frame returns early and keeps the previous scratch
+     * content, mirroring the stock "CRT keeps the last picture" behavior. */
+    int save_w  = g_render_width, save_l = g_widescreen_left, save_r = g_widescreen_right;
+    int save_el = g_ws_eff_left, save_er = g_ws_eff_right;
+    g_render_width = 256; g_widescreen_left = 0; g_widescreen_right = 0;
+    g_ws_eff_left = -1;   g_ws_eff_right = -1;
+    render_frame_native(s_native_scratch);
+    g_render_width = save_w; g_widescreen_left = save_l; g_widescreen_right = save_r;
+    g_ws_eff_left = save_el; g_ws_eff_right = save_er;
+
+    for (int i = 0; i < g_render_width * 240; i++) framebuf[i] = 0xFF000000u;
+    if (s_custom_render_fn(framebuf, g_render_width, 240, g_widescreen_left,
+                           s_native_scratch, s_custom_render_user))
+        return;
+
+    /* Fallback: the stock frame centered in a black pillarbox. */
+    for (int y = 0; y < 240; y++)
+        memcpy(framebuf + (size_t)y * g_render_width + g_widescreen_left,
+               s_native_scratch + (size_t)y * 256, 256 * sizeof(uint32_t));
+}
+
+void ppu_renderer_draw_sprites_wide(uint32_t *out, int out_w, int native_x0,
+                                    const uint8_t *bg_opaque,
+                                    NesSpritePlaceFn place, void *user) {
+    if (!out || out_w <= 0) return;
+    if (!(g_ppumask & 0x10)) return;          /* sprites disabled this frame */
+
+    int spr_tall   = (g_ppuctrl & 0x20) != 0;
+    int spr_height = spr_tall ? 16 : 8;
+    int spr_chr_base = (g_ppuctrl & 0x08) ? 0x1000 : 0x0000;
+
+    for (int s = 63; s >= 0; s--) {           /* back-to-front: slot 0 on top */
+        uint8_t spr_y    = g_ppu_oam[s * 4 + 0];
+        uint8_t spr_tile = g_ppu_oam[s * 4 + 1];
+        uint8_t spr_attr = g_ppu_oam[s * 4 + 2];
+        int screen_x = g_ws_oam_sidecar ? (int)g_oam_x16[s] : (int)g_ppu_oam[s * 4 + 3];
+        if (spr_y >= 0xEF) continue;
+        if (ppu_renderer_sprite_suppressed(s, screen_x, spr_y + 1)) continue;
+
+        int dst_x = screen_x + native_x0;
+        if (place && !place(s, screen_x, spr_y + 1, &dst_x, user)) continue;
+
+        int flip_h   = (spr_attr >> 6) & 1;
+        int flip_v   = (spr_attr >> 7) & 1;
+        int priority = (spr_attr >> 5) & 1;
+        int spr_pal  = (spr_attr & 0x03) + 4;
+        int tile_base, tile_chr_base;
+        if (spr_tall) {
+            tile_chr_base = (spr_tile & 1) ? 0x1000 : 0x0000;
+            tile_base = spr_tile & 0xFE;
+        } else {
+            tile_chr_base = spr_chr_base;
+            tile_base = spr_tile;
+        }
+
+        for (int row = 0; row < spr_height; row++) {
+            int draw_row = flip_v ? (spr_height - 1 - row) : row;
+            int py = spr_y + 1 + row;
+            if (py < 0 || py >= 240) continue;
+            int tile_row = draw_row, tile_num = tile_base;
+            if (spr_tall && tile_row >= 8) { tile_num = tile_base + 1; tile_row -= 8; }
+            int chr_off = tile_chr_base + tile_num * 16 + tile_row;
+            uint8_t lo = g_chr_ram[chr_off], hi = g_chr_ram[chr_off + 8];
+            for (int bit = 7; bit >= 0; bit--) {
+                int chr_bit = flip_h ? (7 - bit) : bit;
+                int color_idx = ((lo >> chr_bit) & 1) | (((hi >> chr_bit) & 1) << 1);
+                if (color_idx == 0) continue;
+                int sx = screen_x + (7 - bit);        /* native-space column */
+                /* PPUMASK bit 2: leftmost 8 native columns clip sprites. */
+                if (sx >= 0 && sx < 8 && !(g_ppumask & 0x04)) continue;
+                int fx = dst_x + (7 - bit);
+                if (fx < 0 || fx >= out_w) continue;
+                size_t off = (size_t)py * out_w + fx;
+                if (priority && bg_opaque && bg_opaque[off]) continue;
+                uint8_t nes_color = g_ppu_pal[(spr_pal * 4 + color_idx) & 0x1F] & 0x3F;
+                out[off] = g_nes_palette[nes_color];
+            }
+        }
+    }
 }

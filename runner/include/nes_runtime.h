@@ -254,6 +254,50 @@ void ppu_renderer_set_sprite_suppress(PpuSpriteSuppressFn fn, void *user);
  * evaluation remains untouched; this only gates final sprite presentation. */
 int ppu_renderer_sprite_suppressed(int oam_slot, int x, int y);
 
+/* ---- Game-owned custom renderer (opt-in) -------------------------------
+ *
+ * A game may take over compositing of the wide framebuffer. When a hook is
+ * installed and the framebuffer is wider than 256, ppu_render_frame() first
+ * runs the stock renderer at stock geometry (256x240, all margins 0) into a
+ * private native buffer -- so sprite-0 hit, mapper IRQ splits, HD-pack side
+ * channel and the background-opacity snapshot all behave exactly as in a
+ * vanilla frame -- then pre-fills `out` black and calls the hook.
+ *
+ *   out       : out_w x out_h ARGB8888 framebuffer (== g_render_width x 240)
+ *   native_x0 : column in `out` where native column 0 sits (== g_widescreen_left)
+ *   native    : the 256x240 stock frame just rendered (read-only)
+ *   return    : nonzero if the hook painted `out`; 0 asks the engine to paste
+ *               the native frame centered at native_x0 (pillarboxed fallback,
+ *               e.g. for title screens the hook leaves alone)
+ *
+ * With no hook installed (the default) the render path is unchanged and
+ * byte-identical. The hook is not compatible with the dot-PPU renderer (which
+ * publishes incrementally); the setter refuses while g_dot_ppu_on is set.
+ * While a hook is installed, ppu_renderer_background_opaque() is in NATIVE
+ * (256-wide) coordinates and HD texture packs are bypassed for that frame. */
+typedef int (*NesCustomRenderFn)(uint32_t *out, int out_w, int out_h,
+                                 int native_x0, const uint32_t *native,
+                                 void *user);
+int  ppu_renderer_set_custom_render(NesCustomRenderFn fn, void *user); /* 1 ok, 0 refused */
+int  ppu_renderer_custom_render_active(void);
+
+/* Per-slot sprite placement for ppu_renderer_draw_sprites_wide(). Receives
+ * the slot, its unwrapped screen X (the widescreen sidecar when enabled,
+ * else the OAM byte) and OAM Y+1; writes the destination X in `out`
+ * coordinates. Return 0 to skip the slot. NULL = x + native_x0. */
+typedef int (*NesSpritePlaceFn)(int oam_slot, int screen_x, int screen_y,
+                                int *out_x, void *user);
+
+/* Draw the current OAM (as snapshotted by the most recent ppu_render_frame)
+ * into a wide framebuffer using the current CHR window, palette and PPUCTRL.
+ * bg_opaque (out_w x 240, 1 = opaque, may be NULL) drives behind-background
+ * priority. No PPU side effects (no sprite-0 hit, no IRQ service): it is a
+ * compositing helper for custom renderers, valid for frames without a
+ * mid-frame CHR/mask change (the stock pass keeps handling those). */
+void ppu_renderer_draw_sprites_wide(uint32_t *out, int out_w, int native_x0,
+                                    const uint8_t *bg_opaque,
+                                    NesSpritePlaceFn place, void *user);
+
 /* Returns nonzero when the most recently rendered NES background pixel at
  * framebuffer-space x/y was opaque for sprite-priority purposes. This exact
  * coverage snapshot includes scanline splits, IRQ scroll/CHR changes,
@@ -326,6 +370,11 @@ uint64_t runtime_get_interrupt_epoch(void);
 void runtime_reset_vblank_depth(void);
 void runtime_begin_post_nmi(void);
 void runtime_end_post_nmi(void);
+/* Opt-in host work: execute bounded guest helpers without advancing emulated
+ * CPU/APU/mapper time or delivering interrupts. Nestable; callers still own
+ * all memory/register side effects. Balance before returning to guest code. */
+void runtime_begin_unclocked(void);
+void runtime_end_unclocked(void);
 /* Debug cadence counters: per wall-clock frame accounting. */
 uint32_t runtime_pop_nmi_fires(void);
 uint32_t runtime_pop_cycle_budget_used(void);
@@ -430,6 +479,12 @@ extern int16_t g_ws_shadow_x16[64];  /* shadow-OAM-side sidecar ($0200 page) */
 extern int16_t g_ws_obj_true_rel;    /* context: true 16-bit screen X of current object */
 extern uint8_t g_ws_obj_rel8;        /* context: the 8-bit rel X the game computed */
 extern uint8_t g_ws_obj_ctx_valid;   /* context valid flag (game policy sets/clears) */
+/* Accepted per-sprite layout offset window (written byte minus rel8). Writes
+ * outside it record the plain byte, so HUD/static sprites written under a
+ * stale context keep vanilla placement. Defaults (-24..56) fit SMB's <=5-tile
+ * layouts; a game with wider object frames (Metroid bosses) widens it. */
+extern int     g_ws_obj_delta_min;
+extern int     g_ws_obj_delta_max;
 
 /* Frame counter incremented each VBlank */
 extern uint64_t g_frame_count;

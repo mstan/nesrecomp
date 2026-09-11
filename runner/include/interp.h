@@ -33,7 +33,8 @@ int nes_interp_dispatch(uint16_t addr);
 int nes_interp_interrupt(uint16_t addr);
 
 /* Resume an explicit stack continuation without treating initial stack lifts
- * as a return boundary. */
+ * as a return boundary. Its instruction watchdog renews when rendered frames
+ * progress; ordinary dispatch/interrupt calls retain a per-call cap. */
 int nes_interp_resume(uint16_t addr);
 /* Clear interpreter-only native bookkeeping after a non-local save-state
  * resume discarded the old C stack. */
@@ -92,7 +93,7 @@ int  nes_interp_is_enabled(void);
 typedef struct {
     uint64_t instrs_total;      /* interpreted instructions since process start */
     uint64_t runs;              /* top-level interp_run invocations */
-    uint64_t watchdog_trips;    /* runs that hit the per-run instruction cap */
+    uint64_t watchdog_trips;    /* runs that hit the call/no-progress instruction cap */
     uint64_t native_handoffs;   /* JSR/JMP handed off to recompiled code */
     uint64_t native_handoffs_suppressed; /* handoffs kept inside interp island */
     uint64_t native_resume_reentries; /* whole-program native escapes recovered */

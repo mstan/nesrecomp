@@ -31,7 +31,7 @@
 #include <string.h>
 
 /* ---- Tunables ---- */
-#define INTERP_STEP_CAP   2000000   /* per top-level run instruction cap (watchdog) */
+#define INTERP_STEP_CAP   2000000   /* per-call cap; explicit resume renews on frames */
 #define INTERP_MAX_DEPTH  64        /* nested interp_run guard (native callee misses) */
 
 /* ---- Config (lazily initialised on first dispatch) ---- */
@@ -293,15 +293,27 @@ static NesInterpExit interp_run_ex(uint16_t entry, int stop_on_stack_lift,
     const uint8_t S_floor = entry_s;
     uint16_t ipc = entry;
     long budget = INTERP_STEP_CAP;
+    uint64_t budget_frame = g_frame_count;
     uint32_t this_run = 0;
     NesInterpExit result =
         make_exit(NES_INTERP_EXIT_NATIVE_ESCAPE, entry, entry, entry_s);
 
     for (;;) {
+        /* An explicit save-state continuation owns the whole program and may
+         * legitimately stay here forever (Metroid's multi-instruction NMI
+         * wait loop). Cap instructions WITHOUT frame progress, not the total
+         * lifetime after loading. Ordinary fallback calls keep their original
+         * per-call guard, including calls nested inside a resumed program. */
+        if (!stop_on_stack_lift && budget_frame != g_frame_count) {
+            budget_frame = g_frame_count;
+            budget = INTERP_STEP_CAP;
+        }
         if (--budget < 0) {
             fprintf(stderr, "[interp] WATCHDOG: run from $%04X exceeded %d instrs "
-                            "(bank=%d, ipc=$%04X) — bailing\n",
-                    entry, INTERP_STEP_CAP, g_current_bank, ipc);
+                            "%s (bank=%d, ipc=$%04X) — bailing\n",
+                    entry, INTERP_STEP_CAP,
+                    stop_on_stack_lift ? "in one call" : "without frame progress",
+                    g_current_bank, ipc);
             s_stats.watchdog_trips++;
             interp_note_decline(entry, ipc, "interpreter watchdog");
             result = make_exit(NES_INTERP_EXIT_DECLINED, entry, ipc, entry_s);
@@ -318,7 +330,7 @@ static NesInterpExit interp_run_ex(uint16_t entry, int stop_on_stack_lift,
         nes_cpu_instruction_boundary(ipc, e->cycles);
         s_stats.instrs_total++;
         s_stats.instrs_this_frame++;
-        this_run++;
+        if (this_run < UINT32_MAX) this_run++;
 
         uint16_t next = (uint16_t)(ipc + e->size); /* default sequential advance */
 

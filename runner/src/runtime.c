@@ -473,6 +473,9 @@ static uint32_t s_ops_count = 0;
 static uint16_t s_guest_pc = 0;
 static int      s_guest_pc_valid = 0;
 static int      s_guest_tick_charged = 0;
+static unsigned s_unclocked_depth;
+static uint16_t s_unclocked_saved_pc;
+static int s_unclocked_saved_valid, s_unclocked_saved_charged;
 static uint16_t s_frame_resume_pc = 0;
 static int      s_frame_resume_valid = 0;
 static int      s_frame_resume_tick_charged = 0;
@@ -946,6 +949,7 @@ static void set_guest_execution_point(uint16_t cpu_pc, int tick_charged) {
 }
 
 void nes_cpu_instruction_boundary(uint16_t cpu_pc, int cycles) {
+    if (s_unclocked_depth) return;
     set_guest_execution_point(cpu_pc, 1);
     if (s_skip_next_boundary_tick && cpu_pc == s_guest_resume_pc) {
         s_skip_next_boundary_tick = 0;
@@ -1017,7 +1021,24 @@ int runtime_take_guest_resume(uint16_t *pc, int *tick_charged) {
     return 1;
 }
 
+void runtime_begin_unclocked(void) {
+    if (s_unclocked_depth++ == 0) {
+        s_unclocked_saved_pc = s_guest_pc;
+        s_unclocked_saved_valid = s_guest_pc_valid;
+        s_unclocked_saved_charged = s_guest_tick_charged;
+    }
+}
+
+void runtime_end_unclocked(void) {
+    if (s_unclocked_depth && --s_unclocked_depth == 0) {
+        s_guest_pc = s_unclocked_saved_pc;
+        s_guest_pc_valid = s_unclocked_saved_valid;
+        s_guest_tick_charged = s_unclocked_saved_charged;
+    }
+}
+
 void maybe_trigger_vblank(int cycles) {
+    if (s_unclocked_depth) return;
 
     /* Rung 2: one-time dot-clock init. Dot-accurate frame length is the DEFAULT
      * (SMB live-validated by the owner + co-sim-certified on SMB/MM3); set
@@ -1417,7 +1438,7 @@ static void ws_sidecar_track(uint16_t a, uint8_t val) {
          * so unrelated writes (HUD/static sprites under a stale context)
          * fall back to vanilla placement. */
         int delta = (int8_t)(uint8_t)(val - g_ws_obj_rel8);
-        if (delta >= -24 && delta <= 56) {
+        if (delta >= g_ws_obj_delta_min && delta <= g_ws_obj_delta_max) {
             int w = (int)g_ws_obj_true_rel + delta;
             if (w >= -256 && w < 512) wide = (int16_t)w;
         }

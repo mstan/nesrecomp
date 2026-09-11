@@ -21,6 +21,7 @@ endif()
 
 set(NESRECOMP_RUNNER_SOURCES
     ${NESRECOMP_RUNNER_ROOT}/src/main_runner.c
+    ${NESRECOMP_RUNNER_ROOT}/src/nes_video.c
     ${NESRECOMP_RUNNER_ROOT}/src/runtime.c
     ${NESRECOMP_RUNNER_ROOT}/src/recomp_stack.c
     ${NESRECOMP_RUNNER_ROOT}/src/ppu_renderer.c

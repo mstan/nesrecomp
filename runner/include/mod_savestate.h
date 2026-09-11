@@ -21,15 +21,15 @@
 extern "C" {
 #endif
 
-/* Maximum payload size a hook may hand to/receive from savestate.c. Matches
- * the on-disk record's blob capacity (see savestate.c). */
-#define NES_MOD_SAVESTATE_BLOB_CAP 512
+/* Allocation limit for an optional mod record. V7 stores a 32-bit length;
+ * buffers live on the heap and files contain only the bytes actually used. */
+#define NES_MOD_SAVESTATE_BLOB_CAP (1024 * 1024)
 
 /*
  * Serialize this mod's state into `buf` (capacity `cap`, always
  * NES_MOD_SAVESTATE_BLOB_CAP). Returns bytes written, or -1 if the state does
- * not fit in `cap`. Called during save; a -1 return excludes this mod's
- * record from the file rather than failing the whole save.
+ * not fit in `cap`. Called during save; a negative or oversized return
+ * fails the save rather than silently discarding architectural state.
  */
 typedef int (*NESModSavestateGet)(uint8_t *buf, int cap);
 
