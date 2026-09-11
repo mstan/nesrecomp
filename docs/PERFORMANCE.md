@@ -35,6 +35,22 @@ the emulated machine.
 - Profilers, counters, and diagnostic builds select candidates; they are not
   timing evidence.
 
+## Gameplay stutter diagnostics
+
+Fallback telemetry file logging is disabled by default. Set
+`NESRECOMP_FALLBACK_LOG` to an output path (for example,
+`fallback_telemetry.jsonl`) to record interpreter samples and dispatch
+discoveries. An unset/empty value, `0`, or `off` disables it. Relative paths
+resolve against the working directory. Interpreter counters and fault
+diagnostics remain available with file logging disabled.
+
+Telemetry opens and closes its output synchronously, including a sample every
+60 frames while interpreted code is active. Those writes can cause gameplay
+and audio stalls on Windows; leave the variable unset during normal play and
+timing measurements. Metroid idle comparisons reproduced 83–462 ms gaps with
+logging enabled, including with password saving disabled, and no recorded
+hitches in the same 20-second route with telemetry disabled and saving enabled.
+
 ## Correctness gates
 
 Every retained change must pass the gates relevant to the subsystem:

@@ -2193,11 +2193,11 @@ static MissSeenEntry *miss_seen_touch(int bank, uint16_t addr) {
     return NULL;
 }
 
-/* Append-only fallback telemetry. First discoveries are closed immediately;
- * periodic samples are one line per ~60 rendered frames, avoiding the severe
- * slowdown caused by fopen/fflush on every interpreted dispatch. */
+/* Opt-in fallback telemetry: even once-per-second synchronous file writes can
+ * stall gameplay/audio. Set NESRECOMP_FALLBACK_LOG to an output path to enable
+ * append-only discoveries and periodic samples for diagnosis. */
 static int s_fallback_log_initialized = 0;
-static int s_fallback_log_enabled = 1;
+static int s_fallback_log_enabled = 0;
 static char s_fallback_log_path[520];
 static long long s_fallback_session = 0;
 static unsigned s_fallback_period_frames = 0;
@@ -2341,15 +2341,12 @@ static void fallback_telemetry_init(void) {
     if (s_fallback_log_initialized) return;
     s_fallback_log_initialized = 1;
     const char *configured = getenv("NESRECOMP_FALLBACK_LOG");
-    if (configured && (!strcmp(configured, "0") || !strcmp(configured, "off"))) {
-        s_fallback_log_enabled = 0;
+    if (!configured || !*configured ||
+        !strcmp(configured, "0") || !strcmp(configured, "off")) {
         return;
     }
-    if (configured && *configured)
-        snprintf(s_fallback_log_path, sizeof(s_fallback_log_path), "%s", configured);
-    else
-        snprintf(s_fallback_log_path, sizeof(s_fallback_log_path),
-                 "%sfallback_telemetry.jsonl", g_exe_dir);
+    s_fallback_log_enabled = 1;
+    snprintf(s_fallback_log_path, sizeof(s_fallback_log_path), "%s", configured);
 
     s_fallback_session = (long long)time(NULL);
     nes_interp_get_stats(&s_fallback_last_stats);
