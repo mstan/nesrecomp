@@ -21,6 +21,7 @@
 #include "symbol_table.h"
 #include "game_config.h"
 #include "coverage.h"
+#include "cyc_codegen.h"
 
 static bool file_exists(const char *path) {
     FILE *f = fopen(path, "r");
@@ -359,6 +360,13 @@ static void print_usage(void) {
         "                         per-bank split files never collide (e.g. zelda_stock /\n"
         "                         zelda_hd).\n"
         "  --proposal-out <path>  Write a proposed game.toml based on auto-discovery.\n"
+        "  --cycle-accurate       Emit generated/<prefix>_cyc.c (per-CPU-cycle code for\n"
+        "                         runner/cyc) instead of the function-level output. Also\n"
+        "                         enabled by game.toml [game] cycle_accurate = true.\n"
+        "  --emit-cycle-interpreter <path>\n"
+        "                         Write the cycle-accurate 6502 interpreter generated\n"
+        "                         from the same templates (runner/cyc/cpu6502_interp.c)\n"
+        "                         and exit. No ROM needed.\n"
         "  --help, -h             Show this help message.\n"
         "\n"
         "Output:\n"
@@ -384,11 +392,16 @@ int main(int argc, char *argv[]) {
     const char *game_path = NULL;
     const char *proposal_out = NULL;
     const char *prefix_override = NULL;
+    bool cycle_accurate = false;
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
             print_usage();
             return 0;
+        } else if (strcmp(argv[i], "--cycle-accurate") == 0) {
+            cycle_accurate = true;
+        } else if (strcmp(argv[i], "--emit-cycle-interpreter") == 0 && i+1 < argc) {
+            return cyc_codegen_emit_interpreter(argv[++i]) ? 0 : 1;
         } else if (strcmp(argv[i], "--game") == 0 && i+1 < argc) {
             game_path = argv[++i];
         } else if (strcmp(argv[i], "--output-prefix") == 0 && i+1 < argc) {
@@ -468,6 +481,9 @@ int main(int argc, char *argv[]) {
         /* Replace spaces with underscores */
         for (char *p = output_prefix; *p; p++) if (*p == ' ') *p = '_';
     }
+
+    if (cycle_accurate || cfg.cycle_accurate)
+        return cyc_codegen_emit(&rom, &cfg, output_prefix) ? 0 : 1;
 
     /* Load annotations sidecar */
     AnnotationTable at = {0};
