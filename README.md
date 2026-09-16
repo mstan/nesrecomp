@@ -398,7 +398,31 @@ See [CLAUDE.md](CLAUDE.md) for detailed instructions. In short:
 4. Run `NESRecomp.exe <rom.nes> --game game.toml` to generate C code
 5. Build with CMake, linking against the runner library and SDL2
 
+## Cycle-Accurate Mode
+
+`--cycle-accurate` (or `[game] cycle_accurate = true`) is a separate output for
+programs that measure the hardware, such as test ROMs. It emits one block per
+ROM instruction with every CPU cycle's bus activity spelled out, against
+NESRecomp's own cycle-accurate 6502; the fallback interpreter is generated from
+the same templates. The CPU, PPU, APU, DMAs and mappers are NESRecomp's own
+(`runner/cyc/hw_*.c`), and TriCNES's complete machine is kept only as a test
+oracle. The runner is `runner/cyc`.
+
+Mappers 0, 1, 2, 3, 4, 7 and 66 are supported: a block is generated per
+(PRG bank, CPU address) pair and entered only while the cartridge has that bank
+mapped there, since the bytes a block folded to constants depend on it. A
+recompiled AccuracyCoin passes 144/144, and scripted playthroughs of Super Mario
+Bros. 3 (MMC3), Mega Man 2 (MMC1), Mega Man (UxROM) and Donkey Kong Original
+Edition (CNROM) run at 100% native; all of them match the oracle on every bus
+access at all four CPU/PPU alignments. AxROM and GxROM have not been run with a
+game yet. See [runner/cyc/README.md](runner/cyc/README.md); AccuracyCoin is set
+up as a test in `runner/cyc/tests/accuracycoin`.
+
 ## Acknowledgements
+
+- [**TriCNES**](https://github.com/100thCoin/TriCNES) by Chris Siebert (MIT) —
+  the PPU/APU model behind cycle-accurate mode and its reference oracle
+  (`runner/cyc/tric_core.cpp`).
 
 - [**Nat Budin (@nbudin)**](https://github.com/nbudin) — macOS / POSIX build
   support ([#10](https://github.com/mstan/nesrecomp/pull/10)): POSIX `ucontext`
