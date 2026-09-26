@@ -22,6 +22,7 @@ from bandai_fixtures import bandai_fixtures
 from mmc5_fixtures import mmc5_fixtures
 from mmc1_fixtures import mmc1_fixtures
 from mapper40_fixtures import mapper40_fixtures
+from namco108_probe import fixture as namco108_fixture
 
 
 def run(cmd, cwd, log, timeout=180):
@@ -87,6 +88,7 @@ def main():
     cases += list(mmc5_fixtures())
     cases += list(mmc1_fixtures())
     cases += list(mapper40_fixtures())
+    cases += [namco108_fixture()]
     cases = [case for case in cases if case[0].startswith(args.case_prefix)]
     if not cases:
         ap.error('no matching fixtures')
@@ -128,8 +130,14 @@ def main():
             for mode, exe, extra in [('native', native, []), ('interp', native, ['--interp-only']),
                                       ('standalone', interp, []), ('oracle', oracle, [])]:
                 trace = case / f'a{align}_{mode}.txt'
-                stdout = run([exe, case / f'{name}.nes', '--frames', frames, '--align', align,
-                              '--hash-out', trace] + extra, case, trace.with_suffix('.log'))
+                command = [exe, case / f'{name}.nes', '--frames', frames, '--align', align,
+                           '--hash-out', trace] + extra
+                if name == 'namco108_probe':
+                    command += ['--mem-frame', frames - 1, '--mem-out', trace.with_suffix('.mem')]
+                stdout = run(command, case, trace.with_suffix('.log'))
+                if name == 'namco108_probe':
+                    from namco108_probe import check_memory
+                    check_memory(trace.with_suffix('.mem'))
                 lines = trace.read_text().splitlines()
                 checked_lines = lines[-1:] if final_only else lines
                 if len(lines) != frames or any(expected not in line for line in checked_lines):

@@ -20,6 +20,9 @@ def nes2(case, sub=0, ram=0, chr_ram=0, four=False, exponent=False):
 
 
 def variant_fixtures():
+    name,image,seeds,expected=ppu_contract(206,128,64,[('cpu',0x6000,0x57),('cpu_read',0x6000,0x57)],'_popils_ines')
+    image=bytearray(image);image[6]|=2
+    yield 'namco_'+name,bytes(image),seeds,expected
     yield nes2(handoff('aladdin', 232, [(0x8000, 8), (0xc000, 1)], 18,
                       prg_kb=256, chr_kb=0), sub=1, chr_ram=7)
     yield nes2(handoff('namco_fixed', 206, [(0x8000, 6), (0x8001, 3)], 0,

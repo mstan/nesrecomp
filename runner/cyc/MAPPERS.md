@@ -41,7 +41,7 @@ models; it does not independently establish the mapper specification.
 | 87 | [J87](https://www.nesdev.org/wiki/INES_Mapper_087) | Fixed PRG; reversed CHR select bits; $6000-$7FFF decode. |
 | 79 | [NINA-003/006](https://www.nesdev.org/wiki/NINA-003-006) | 32 KiB PRG / 8 KiB CHR; partial $4100-$5FFF decode. |
 | 76 | [Namco 109](https://www.nesdev.org/wiki/INES_Mapper_076) | Two 8 KiB PRG windows; four 2 KiB CHR windows; fixed mirroring. |
-| 206 | [DxROM](https://www.nesdev.org/wiki/INES_Mapper_206) | Fixed MMC3-style orientation, no IRQ; four-screen memory and header-declared Popils WRAM; submapper 1 fixes 32 KiB PRG. Namco 108 spurious writes remain a separate chip-revision task. |
+| 206 | [DxROM](https://www.nesdev.org/wiki/INES_Mapper_206) | Fixed MMC3-style orientation, no IRQ; four-screen memory and Popils WRAM (including old battery-marked iNES); submapper 1 fixes 32 KiB PRG. [Namco 108 hardware diagnostic and evidence limits](NAMCO108_PROBE.md). |
 | 75 | [VRC1](https://www.nesdev.org/wiki/VRC1) | Three 8 KiB PRG windows; split CHR high/low bits; H/V control. Vs. System excluded. |
 | 71 | [Camerica](https://www.nesdev.org/wiki/INES_Mapper_071) | 16 KiB PRG; NES 2.0 submapper 0 fixes H/V, submapper 1 enables Fire Hawk mirroring at $8000-$9FFF. iNES retains the $9000 heuristic. |
 | 34 | [BNROM / NINA-001](https://www.nesdev.org/wiki/INES_Mapper_034) | Submapper 1 selects NINA, 2 selects BNROM; submapper 0/iNES uses CHR size. NINA WRAM writes also reach bank registers. BNROM has AND conflicts. |

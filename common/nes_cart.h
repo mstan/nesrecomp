@@ -64,7 +64,7 @@ static inline bool nes_cart_header(const uint8_t *h, size_t size, NesCartInfo *c
         bool wram = c->mapper == 1 || c->mapper == 155 || c->mapper == 4 || c->mapper == 5 ||
                     c->mapper == 10 || c->mapper == 21 || c->mapper == 23 || c->mapper == 25 || c->mapper == 73 ||
                     c->mapper == 24 || c->mapper == 26 || c->mapper == 85 ||
-                    (c->mapper == 34 && c->chr_size > 8192);
+                    (c->mapper == 34 && c->chr_size > 8192) || (c->mapper==206 && c->battery);
         uint32_t ram = h[8] ? (uint32_t)h[8] * 8192 : wram ? 8192 : 0;
         /* Legacy MMC5 headers cannot identify EKROM/ETROM/EWROM. A 64K
          * compatibility allocation covers both chip selects; NES 2.0 gives
