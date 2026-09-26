@@ -9583,6 +9583,7 @@ bool cyc_load_ines(const uint8_t *image, size_t size) {
             mapper != 4 && mapper != 7 && mapper != 66) return false;
     }
     switch (mapper) {   // the set hw_mapper.c implements
+    case 71: break;
     case 34: break;
     case 13: break;
     case 11: break;

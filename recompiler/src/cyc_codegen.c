@@ -503,6 +503,7 @@ static uint16_t pos_addr(const Pos *at) {
 static int fixed_bank_for(int mapper, uint32_t banks, uint32_t slot) {
     switch (mapper) {
     case 13: return (int)(slot & (banks - 1));
+    case 71: return slot >= 2 ? (int)(banks - 2 + slot - 2) : -1;
     case 0: case 3:  return (int)(slot & (banks - 1));            /* wired straight through */
     case 2:  return slot >= 2 ? (int)(banks - 2 + (slot - 2)) : -1;  /* last 16KB fixed */
     case 1:  return -1;
@@ -514,6 +515,7 @@ static int fixed_bank_for(int mapper, uint32_t banks, uint32_t slot) {
 /* The configuration a cold console comes up in; hw_mapper.c's reset paths. */
 static int power_on_bank_for(int mapper, uint32_t banks, uint32_t slot) {
     switch (mapper) {
+    case 71: return slot >= 2 ? (int)(banks - 2 + slot - 2) : (int)slot;
     case 1:  return slot >= 2 ? (int)(banks - 2 + (slot - 2)) : (int)slot;  /* mode 3 */
     case 2:  return slot >= 2 ? (int)(banks - 2 + (slot - 2)) : (int)slot;
     case 4:  return slot == 2 ? (int)(banks - 2) : slot == 3 ? (int)(banks - 1) : (int)slot;
@@ -1326,6 +1328,7 @@ static const char *mapper_name(int mapper) {
     case 11: return "Color Dreams";
     case 13: return "CPROM";
     case 34: return "BNROM / NINA-001";
+    case 71: return "Camerica";
     case 0:  return "NROM";
     case 1:  return "MMC1";
     case 2:  return "UxROM";

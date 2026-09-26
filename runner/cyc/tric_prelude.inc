@@ -280,6 +280,7 @@ inline void TricMapper::Reset() {
 
     switch (Cart.Mapper) {
     case 13: MapPRG32(0); MapCHR4(0, 0); MapCHR4(1, 0); Mirroring = TRIC_MIRROR_VERTICAL; break;
+    case 71: MapPRG16(0, 0); MapPRG16(1, -1); MapCHR8(0); break;
     case 1:
         Ctrl = 0x0C;   // PRG mode 3, the state a bit-7 write leaves
         MMC1Apply();
@@ -353,6 +354,11 @@ inline void TricMapper::StoreCPU(ushort Address, byte Input) {
     case 13:
         Latch = (byte)(Input & SnoopCPU(Address));
         MapCHR4(1, Latch % 4);
+        break;
+    case 71:
+        if (Address >= 0xc000) MapPRG16(0, Input % 16);
+        else if ((Address >> 12) == 9)
+            Mirroring = (Input & 16) ? TRIC_MIRROR_SCREEN_B : TRIC_MIRROR_SCREEN_A;
         break;
     case 1: MMC1Write(Address, Input); break;
     case 2: Latch = Input; MapPRG16(0, Input); break;

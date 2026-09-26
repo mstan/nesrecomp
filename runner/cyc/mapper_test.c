@@ -53,6 +53,24 @@ static void no_wram(void)
 }
 
 /* Per-board tests. */
+static void test_mapper71(void)
+{
+    cart(71, 256, 8);
+    prg_banks(0, 1, 30, 31);
+    hw_cart_cpu_write(0x8000, 0);
+    CHECK(hw_cart.mirroring == HW_MIRROR_HORIZONTAL);
+    hw_cart_cpu_write(0x9fff, 0x10);
+    CHECK(hw_cart.mirroring == HW_MIRROR_SCREEN_B);
+    hw_cart_cpu_write(0x9000, 0);
+    CHECK(hw_cart.mirroring == HW_MIRROR_SCREEN_A);
+    hw_cart_cpu_write(0xbfff, 3);
+    prg_banks(0, 1, 30, 31);
+    prg[0x7c000] = 0; /* no bus conflict */
+    hw_cart_cpu_write(0xffff, 0x13);
+    prg_banks(6, 7, 30, 31);
+    no_wram();
+}
+
 static void test_mapper34(void)
 {
     cart(34, 64, 64); /* CHR ROM identifies NINA-001. */
@@ -120,6 +138,7 @@ int main(void)
     chr_bank(0, 0, 8);
     no_wram();
     /* Run added board contracts. */
+    test_mapper71();
     test_mapper34();
     test_mapper13();
     test_mapper11();

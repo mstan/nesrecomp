@@ -392,6 +392,7 @@ static const struct {
     uint8_t     watch_ppu_addr;
     uint8_t     wram;            /* boards for this mapper carry work RAM */
 } MAPPERS[] = {
+    { 71, "Camerica", 0, 0 },
     { 34, "BNROM / NINA-001", 0, 0 },
     { 13, "CPROM", 0, 0 },
     { 11, "Color Dreams", 0, 0 },
@@ -438,6 +439,7 @@ void hw_cart_power_on(void)
 
     switch (hw_cart.mapper) {
     case 13: nrom_reset(); map_chr4(1, 0); hw_cart.mirroring = HW_MIRROR_VERTICAL; break;
+    case 71: uxrom_reset(); break;
     case 1:  mmc1_reset(); break;
     case 2:  uxrom_reset(); break;
     case 3:  cnrom_reset(); break;
@@ -478,6 +480,11 @@ void hw_cart_cpu_write(uint16_t addr, uint8_t value)
         value &= hw_cart_prg_read(addr);
         hw_cart.m.latch = value;
         map_chr4(1, value & 3);
+        break;
+    case 71: /* Camerica; see MAPPERS.md. */
+        if (addr >= 0xc000) map_prg16(0, value & 15);
+        else if (addr >= 0x9000 && addr < 0xa000)
+            hw_cart.mirroring = (value & 0x10) ? HW_MIRROR_SCREEN_B : HW_MIRROR_SCREEN_A;
         break;
     case 1:  mmc1_write(addr, value); break;
     case 2:  uxrom_write(value); break;
