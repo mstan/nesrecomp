@@ -9,7 +9,7 @@ HwMachine hw;
 HwCart hw_cart;
 HwPpu ppu;
 
-static uint8_t prg[0x80000], chr[0x40000];
+static uint8_t prg[0x80000], chr[0x80000];
 static unsigned checks;
 #define CHECK(x) do { ++checks; if (!(x)) { \
     fprintf(stderr, "%s:%d: %s\n", __FILE__, __LINE__, #x); exit(1); \
@@ -364,6 +364,8 @@ static void test_variants(void)
     }
 }
 
+#include "vrc_test.inc"
+
 int main(void)
 {
     cart(0, 32, 8);
@@ -389,6 +391,7 @@ int main(void)
     test_variants();
     test_mmc2_latches();
     test_mapper31();
+    test_vrc();
     printf("mapper contracts: %u checks passed\n", checks);
     return 0;
 }
