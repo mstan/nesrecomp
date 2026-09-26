@@ -8534,6 +8534,7 @@ void Store(byte Input, ushort Address)
             }
             OracleCheckAccess(Address); // NESRecomp
             if (cyc_trace_enabled) cyc_trace_access(Address, Input, true); // NESRecomp
+            if (Cart.Mapper==5 && Address<0x4020) Cart.MapperChip.MMC5Write(Address,Input);
             Cart.MapperChip.Connector_SetUpCPUAddressPins(Address);
             Cart.MapperChip.Connector_SetUpCPUDataPins(Input);
             // This is used whenever writing anywhere with the CPU
@@ -9580,6 +9581,7 @@ bool cyc_load_ines(const uint8_t *image, size_t size) {
     if (!nes_cart_image(image, size, &info) || !nes_cart_variant_supported(&info)) return false;
     int mapper = info.mapper;
     switch (mapper) {   // the set hw_mapper.c implements
+    case 5: break;
     case 16: case 159: case 153: case 157: break;
     case 85: break;
     case 24: case 26: break;
@@ -9643,11 +9645,11 @@ void cyc_power_on(uint8_t ppu_alignment) {
 }
 
 #include "../../common/nes_nvram.h"
-static NesNvram nvram_region(unsigned region) { return nes_nvram_region(&Cart.Info,Cart.MapperChip.WRAM,Cart.CHRROM,Cart.MapperChip.Eeprom,region); }
+static NesNvram nvram_region(unsigned region) { return nes_nvram_region(&Cart.Info,Cart.MapperChip.WRAM,Cart.CHRROM,Cart.MapperChip.Eeprom,Cart.MapperChip.ExRAM,region); }
 bool cyc_scan_barcode(const char *digits, unsigned cycles_per_module) {
     return Cart.Mapper==157 && nes_barcode_scan(&Cart.MapperChip.Barcode,digits,cycles_per_module,totalCycles);
 }
-size_t cyc_nvram_size(unsigned region) { NesNvram n=nvram_region(region); return n.size[0]+n.size[1]; }
+size_t cyc_nvram_size(unsigned region) { NesNvram n=nvram_region(region); return n.size[0]+n.size[1]+n.size[2]; }
 bool cyc_nvram_export(unsigned region, void *buffer, size_t size) {
     return nes_nvram_transfer(nvram_region(region),buffer,size,false);
 }
@@ -9754,6 +9756,7 @@ uint64_t cyc_mem_state_hash(void)
                         cyc_frame_index_buffer);
     for (unsigned chip=0;chip<2;++chip)
         for (unsigned i=0;i<Cart.MapperChip.Eeprom[chip].size;++i) h=cyc_trace_mix(h,Cart.MapperChip.Eeprom[chip].data[i]);
+    if (Cart.Mapper==5) for (unsigned i=0;i<1024;++i) h=cyc_trace_mix(h,Cart.MapperChip.ExRAM[i]);
     return h;
 }
 

@@ -1,6 +1,7 @@
 /* ROM-free cartridge contract tests. Expected mappings come from the board
  * documentation linked in MAPPERS.md, not from the oracle's bank tables. */
 #include "hw_internal.h"
+#include "hw.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -368,6 +369,7 @@ static void test_variants(void)
 #include "vrc6_test.inc"
 #include "vrc7_test.inc"
 #include "bandai_test.inc"
+#include "mmc5_test.inc"
 
 int main(void)
 {
@@ -398,6 +400,7 @@ int main(void)
     test_vrc6();
     test_vrc7();
     test_bandai();
+    test_mmc5();
     printf("mapper contracts: %u checks passed\n", checks);
     return 0;
 }

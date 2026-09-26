@@ -219,3 +219,51 @@ The enlarged fixture harness compiles its common runtime once as an object
 library, explicitly selects Release on single-configuration generators, and
 allows `--build-timeout` for slower machines. Generated game code still links
 into separate executables and runs all four execution modes.
+
+### MMC5 / ExROM (mapper 5)
+
+All four PRG modes support ROM and protected RAM in $6000-$DFFF. Tagged bank
+tables keep writable and open windows out of native ROM dispatch and ROM miss
+logs. Code in cartridge RAM uses the interpreter and may modify itself; returning
+to ROM resumes native execution. Writes to $5000+ leave compiled blocks before
+the next opcode. Folded ROM reads retain PCM and NMI-vector side effects.
+
+NES 2.0 metadata selects physical RAM geometry: no RAM, EKROM 8 KiB, ETROM's
+two 8 KiB chips, EWROM 32 KiB, two 32 KiB chips, or a single 128 KiB chip.
+Unpopulated chip selects read open bus. For mixed volatile/nonvolatile chips,
+chip 0 is the battery-backed chip, including 8+32 KiB configurations. Legacy
+iNES headers with no RAM count use a 64 KiB compatibility allocation because
+they cannot identify the board; specify NES 2.0 for exact holes and persistence.
+Battery-backed MMC5 saves append its internal 1 KiB ExRAM after PRG/CHR NVRAM;
+ExRAM survives machine power-on and is not counted in header RAM sizes.
+Mapper-specific four-screen and unknown submapper headers are rejected.
+
+CHR supports all four sizes, write-time 10-bit bank packing, upper-bank latches,
+8x8/8x16 bank-set selection and $2007 access. Nametables support both CIRAM
+pages, ExRAM and fill mode. Extended attributes and left/right vertical splits
+use actual PPU fetch sequences. The scanline IRQ detects three matching
+nametable reads and clocks on the following read; frame timeout samples the
+actual /RD pin, including during blanking. Fully decoded $2000/$2001 snoops,
+NMI-vector acknowledgement, multiplier, MMC5A timer and GPIO registers are
+implemented. GPIO has no external peripheral; undriven inputs resolve low.
+
+The audio model has two pulse channels and an 8-bit PCM DAC, with PCM updates
+from CPU reads (including opcodes and DMA) or direct writes, zero-sample IRQ,
+nonzero-sample acknowledgement, envelopes and length counters. Channel clocks
+run even when host audio is disabled. The oracle independently models board,
+IRQ, PCM and channel status; it does not synthesize expansion audio. Nominal
+audio gain and a 7,457-cycle envelope clock are used. Mixer component tolerances,
+analog capture matching, letterless MMC5 silicon and unused SL split wiring
+are not claimed. Undocumented low bits in mode-dependent CHR writes resolve
+to zero; registers without a specified startup value have deterministic defaults.
+
+References: [MMC5 registers and measured behavior](https://www.nesdev.org/wiki/MMC5),
+[ExROM wiring](https://www.nesdev.org/wiki/ExROM),
+[audio](https://www.nesdev.org/wiki/MMC5_audio), and
+[AWJ's hardware CHR tests and reference pictures](https://sourceforge.net/p/fceultra/bugs/787/).
+`tools/cyc/test_cyc_mmc5_public.py` checks all six published pictures, allowing
+only a consistent RGB palette conversion and the reference's overscan crop.
+ROM-free fixtures exercise bank handoffs, writable code, PCM/DMA, timer and
+scanline IRQs, CHR selection, split rendering and expansion tones at all four
+CPU/PPU alignments. The cartridge contracts enumerate all 65,536 multiplier
+inputs and RAM geometry; rendered PCM is checked separately.

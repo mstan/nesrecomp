@@ -24,6 +24,19 @@ int main(void)
     h[6]=4; CHECK(nes_cart_header(h,16,&c)); CHECK(c.data_offset==528);
     CHECK(!nes_cart_image(h,16,&c)); CHECK(!nes_cart_header(h,15,&c));
     h[0]=0; CHECK(!nes_cart_header(h,16,&c));
+    h[0]='N'; h[6]=0x50; h[8]=0;
+    CHECK(nes_cart_header(h,16,&c)); CHECK(c.prg_ram==65536);
+    CHECK(nes_cart_variant_supported(&c));
+    h[7]=8; h[10]=0;
+    CHECK(nes_cart_header(h,16,&c)); CHECK(c.prg_ram==0);
+    for (unsigned v=0;v<256;++v) {
+        h[10]=(uint8_t)v; CHECK(nes_cart_header(h,16,&c));
+        unsigned a=v&15,b=v>>4;
+        bool expected=a && b ? (a==7 || a==9) && (b==7 || b==9) :
+            (a+b==0 || (a+b>=7 && a+b<=11));
+        CHECK(nes_cart_variant_supported(&c)==expected);
+    }
+    h[10]=0; h[6]=0x58; CHECK(nes_cart_header(h,16,&c)); CHECK(!nes_cart_variant_supported(&c));
     puts("cartridge header contracts passed");
     return 0;
 }

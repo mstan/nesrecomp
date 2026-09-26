@@ -16,6 +16,7 @@
 // two models have to agree about when the PPU drives each address.
 
 #include "../../common/nes_cart.h"
+#include "mmc5_state.h"
 #include "../../common/nes_eeprom.h"
 #include "../../common/nes_barcode.h"
 
@@ -33,6 +34,7 @@ extern byte VRAM[0x1000];
 extern byte dataBus;
 extern ushort PPU_AddressBus;
 extern byte PPU_OctalLatch;
+extern bool PPU_READ;
 extern bool IRQ_LevelDetector;
 extern uint64_t totalCycles;
 
@@ -58,9 +60,11 @@ struct TricMapper {
     byte WRAM[0x20000];
     NesEeprom Eeprom[2];
     NesBarcode Barcode;
+    byte ExRAM[1024];
     uint WRAM_Length, WRAM_Bank;
     bool HasWRAM, WRAM_Readable, WRAM_Writable;
 
+    Mmc5State M5;
     byte Mirroring;
 
     // ---- MMC1 ----
@@ -80,6 +84,18 @@ struct TricMapper {
     int16_t IrqDivider;
     byte IrqMode;
 
+    uint MMC5RAM(unsigned Bank);
+    void MMC5Apply();
+    void MMC5ClearFrame();
+    void MMC5Reset();
+    void MMC5PCM(byte Value);
+    bool MMC5Read(ushort Address, byte &Value, bool SideEffects);
+    void MMC5Write(ushort Address, byte Input);
+    void MMC5Clock();
+    void MMC5PPURead(ushort Address);
+    unsigned MMC5CHR(ushort Address);
+    byte MMC5NT(ushort Address, bool Render);
+    void MMC5PPU();
     void Reset();
     void MapPRG4(uint Slot, int Bank);
     void MapPRG8(uint Slot, int Bank);
@@ -124,7 +140,8 @@ struct TricMapper {
     void VRCApply();
     void VRCWrite(ushort Address, byte Input);
     void CPUClockRise() {}
-    bool IRQ() { return IrqOut; }
+    bool IRQ() { return CartMapperIRQ(); }
+    bool CartMapperIRQ();
     bool CheckCIC() { return true; }
 
     void Connector_SetUpPPUAddressPins() {
@@ -184,6 +201,8 @@ inline void TricMapper::MapCHR1(uint Page, int Bank) {
 }
 
 inline bool TricMapper::VRC6Board() { return Cart.Mapper == 24 || Cart.Mapper == 26; }
+#include "tric_mmc5.inc"
+inline bool TricMapper::CartMapperIRQ() { return Cart.Mapper==5 ? (M5.irq_enable && M5.irq_pending) || (M5.pcm_irq && (M5.pcm_control&128)) || M5.timer_irq : IrqOut; }
 #include "tric_vrc.inc"
 #include "tric_vrc6.inc"
 #include "tric_vrc7.inc"
@@ -326,6 +345,7 @@ inline void TricMapper::Reset() {
     VrcLatch16 = VrcCounter16 = 0;
     IrqDivider = 341; IrqMode = 0;
     CPU_Drove = false;
+    if (!Cart.Info.battery && !Cart.Info.prg_nvram) memset(ExRAM,0,sizeof(ExRAM));
     WRAM_Length = Cart.Info.prg_ram + Cart.Info.prg_nvram;
     WRAM_Bank = 0;
     memset(WRAM, 0, Cart.Info.prg_nvram ? Cart.Info.prg_ram : sizeof(WRAM));
@@ -337,6 +357,7 @@ inline void TricMapper::Reset() {
     WRAM_Readable = WRAM_Writable = HasWRAM;
 
     switch (Cart.Mapper) {
+    case 5: MMC5Reset(); break;
     case 16: case 159: case 153: case 157: BandaiApply(); break;
     case 85: Reg[1]=1; Reg[2]=2; VRC7Apply(); break;
     case 24: case 26: Ctrl=0x20; VRC6Apply(); break;
@@ -390,6 +411,7 @@ inline void TricMapper::Reset() {
 
 inline void TricMapper::FetchCPU() {
     CPU_Drove = false;
+    if (Cart.Mapper==5) { CPU_Drove=MMC5Read(CPU_AddressIn,CPU_NonTiltData,true); return; }
     if (BandaiBoard() && CPU_AddressIn<0x8000) { CPU_Drove=BandaiRead(CPU_AddressIn,CPU_NonTiltData); return; }
     if (VRC24Board() && CPU_AddressIn >= 0x6000 && CPU_AddressIn < 0x8000) {
         if (VRC2Board() && !HasWRAM) {
@@ -411,6 +433,7 @@ inline void TricMapper::FetchCPU() {
 }
 
 inline byte TricMapper::SnoopCPU(ushort Address) {
+    if (Cart.Mapper==5) { byte v=dataBus; MMC5Read(Address,v,false); return v; }
     if (BandaiBoard() && Address<0x8000) { byte v=dataBus; BandaiRead(Address,v); return v; }
     if (VRC24Board() && Address >= 0x6000 && Address < 0x8000) {
         if (VRC2Board() && !HasWRAM) return Address < 0x7000 ? (dataBus & 0xfe) | Latch : dataBus;
@@ -422,6 +445,7 @@ inline byte TricMapper::SnoopCPU(ushort Address) {
 }
 
 inline void TricMapper::StoreCPU(ushort Address, byte Input) {
+    if (Cart.Mapper==5) { MMC5Write(Address,Input); return; }
     if (BandaiBoard()) { BandaiWrite(Address,Input); return; }
     if (VRC24Board() && Address >= 0x6000 && Address < 0x8000) {
         if (VRC2Board() && !HasWRAM) {
@@ -578,6 +602,7 @@ inline void TricMapper::StoreCPU(ushort Address, byte Input) {
 }
 
 inline int TricMapper::FetchPatternAddress(ushort Address) {
+    if (Cart.Mapper==5) return (int)MMC5CHR(Address);
     uint index = CHR_Off[(Address >> 10) & 7] | (Address & 0x3FF);
     return Cart.UsingCHRRAM ? index % Cart.CHRROM_Length : index;
 }
@@ -588,6 +613,7 @@ inline void TricMapper::PatternReadLatch(ushort Address) {
 }
 
 inline void TricMapper::PatternReadEnd(bool Reading) {
+    if (Cart.Mapper==5) { if (!Reading) M5.rd=0; return; }
     if (Reading || !PatternPending) return;
     PatternPending = false;
     ushort Address = PatternAddress;
@@ -603,6 +629,7 @@ inline void TricMapper::PatternReadEnd(bool Reading) {
 }
 
 inline byte TricMapper::SnoopPPU(ushort Address) {
+    if (Cart.Mapper==5 && Address>=8192) return MMC5NT(Address,false);
     if (Address < 0x2000) return Cart.CHRROM[FetchPatternAddress(Address)];
     if (VRC6Board()) {
         unsigned bank=VRC6Nametable((Address>>10)&3);
@@ -618,6 +645,7 @@ inline byte TricMapper::SnoopPPU(ushort Address) {
 }
 
 inline void TricMapper::AccessPPU() {
+    if (Cart.Mapper==5) { MMC5PPU(); return; }
     ushort Address = PPU_AddressIn;
     if (VRC6Board() && SeventyTwoPinConnector[64] && (Ctrl & 16)) {
         unsigned index=(VRC6Nametable((Address>>10)&3)*1024+(Address&1023))%(Cart.UsingCHRRAM ? Cart.CHRROM_Length : Cart.CHRPages*1024);
@@ -640,6 +668,7 @@ inline void TricMapper::AccessPPU() {
 }
 
 inline void TricMapper::Connector_CheckCIRAM() {
+    if (Cart.Mapper==5) { SeventyTwoPinConnector[56]=true; return; }
     SeventyTwoPinConnector[56] = (PPU_AddressBus & 0x2000) == 0;
     if (VRC6Board()) {
         if (Ctrl & 16) SeventyTwoPinConnector[56]=true;
