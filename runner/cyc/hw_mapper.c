@@ -460,6 +460,7 @@ static const struct {
     { 22, "VRC2a", 0, 0 },
     { 23, "VRC2b / VRC4e/f", 0, 1 },
     { 25, "VRC2c / VRC4b/d", 0, 1 },
+    { 73, "VRC3", 0, 1 },
     { 31, "NSF cartridge", 0, 0 },
     { 9, "MMC2", 0, 0 },
     { 10, "MMC4", 0, 1 },

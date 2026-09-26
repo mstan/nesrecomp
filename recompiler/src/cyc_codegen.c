@@ -1357,6 +1357,7 @@ static const char *mapper_name(int mapper) {
     case 23: return "VRC2b / VRC4e/f";
     case 25: return "VRC2c / VRC4b/d";
     case 22: return "VRC2a";
+    case 73: return "VRC3";
     case 31: return "NSF cartridge";
     case 9: return "MMC2";
     case 10: return "MMC4";
