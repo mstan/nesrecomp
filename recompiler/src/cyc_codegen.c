@@ -510,6 +510,7 @@ static int fixed_bank_for(int mapper, uint32_t banks, uint32_t slot) {
     case 87: return (int)(slot & (banks - 1));
     case 94: return slot >= 2 ? (int)(banks - 2 + slot - 2) : -1;
     case 180: return slot < 2 ? (int)slot : -1;
+    case 184: return (int)(slot & (banks - 1));
     case 0: case 3:  return (int)(slot & (banks - 1));            /* wired straight through */
     case 2:  return slot >= 2 ? (int)(banks - 2 + (slot - 2)) : -1;  /* last 16KB fixed */
     case 1:  return -1;
@@ -1352,6 +1353,7 @@ static const char *mapper_name(int mapper) {
     case 113: return "HES";
     case 140: return "Jaleco JF-11/14";
     case 180: return "Crazy Climber";
+    case 184: return "Sunsoft-1";
     case 0:  return "NROM";
     case 1:  return "MMC1";
     case 2:  return "UxROM";

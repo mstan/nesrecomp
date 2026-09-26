@@ -286,6 +286,7 @@ inline void TricMapper::Reset() {
     case 76: MapPRG16(0, 0); MapPRG16(1, -1); Reg[7] = 1; for (uint j = 0; j < 4; ++j) MapCHR2(j, 0); break;
     case 94: MapPRG16(0, 0); MapPRG16(1, -1); MapCHR8(0); break;
     case 180: MapPRG16(0, 0); MapPRG16(1, 0); MapCHR8(0); break;
+    case 184: MapPRG32(0); MapCHR4(0, 0); MapCHR4(1, 4); break;
     case 1:
         Ctrl = 0x0C;   // PRG mode 3, the state a bit-7 write leaves
         MMC1Apply();
@@ -364,6 +365,11 @@ inline void TricMapper::StoreCPU(ushort Address, byte Input) {
     if (Cart.Mapper == 140 && (Address & 0xe000) == 0x6000) {
         MapPRG32((Input / 16) % 4);
         MapCHR8(Input % 16);
+        return;
+    }
+    if (Cart.Mapper == 184 && Address / 0x2000 == 3) {
+        MapCHR4(0, Input % 8);
+        MapCHR4(1, 4 + (Input / 16) % 4);
         return;
     }
     if (Address >= 0x6000 && Address < 0x8000) {
