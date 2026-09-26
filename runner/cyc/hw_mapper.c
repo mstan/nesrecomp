@@ -451,6 +451,7 @@ void hw_cart_ppu_rd(bool reading)
 #include "hw_vrc.inc"
 #include "hw_vrc6.inc"
 #include "hw_vrc7.inc"
+#include "hw_bandai.inc"
 
 static const struct {
     int         mapper;
@@ -458,6 +459,10 @@ static const struct {
     uint8_t     watch_ppu_addr;
     uint8_t     wram;            /* boards for this mapper carry work RAM */
 } MAPPERS[] = {
+    { 157, "Bandai Datach", 1, 0 },
+    { 153, "Bandai BA-JUMP2", 1, 1 },
+    { 16, "Bandai FCG / LZ93D50", 0, 0 },
+    { 159, "Bandai LZ93D50 / X24C01", 0, 0 },
     { 85, "VRC7", 0, 1 },
     { 24, "VRC6a", 0, 1 },
     { 26, "VRC6b", 0, 1 },
@@ -500,6 +505,17 @@ static int mapper_index(int mapper)
     return -1;
 }
 
+/* PPU-driven A18 can change DURING an instruction or a DMA stall. Native
+ * constants are valid only while all four selected outputs agree. Re-enable
+ * native dispatch automatically after software makes the outer bank stable. */
+bool hw_prg_is_stable(void)
+{
+    if (hw_cart.mapper!=153 || hw_cart.prg_slots<=64) return true;
+    return !((hw_cart.m.reg[0]^hw_cart.m.reg[1])&1) &&
+           !((hw_cart.m.reg[0]^hw_cart.m.reg[2])&1) &&
+           !((hw_cart.m.reg[0]^hw_cart.m.reg[3])&1);
+}
+
 bool hw_cart_supports(int mapper) { return mapper_index(mapper) >= 0; }
 
 const char *hw_cart_mapper_name(int mapper)
@@ -515,7 +531,7 @@ void hw_cart_power_on(void)
     memset(hw_cart.chr_off, 0, sizeof(hw_cart.chr_off));
     int i = mapper_index(hw_cart.mapper);
     hw_cart.watch_ppu_addr = i >= 0 ? MAPPERS[i].watch_ppu_addr : 0;
-    hw_cart.watch_cpu = (vrc24_board() && !vrc2_board()) || hw_cart.mapper == 73 || vrc6_board() || hw_cart.mapper == 85;
+    hw_cart.watch_cpu = bandai_board() || (vrc24_board() && !vrc2_board()) || hw_cart.mapper == 73 || vrc6_board() || hw_cart.mapper == 85;
     hw_cart.mirroring = hw_cart.info.vertical ? HW_MIRROR_VERTICAL : HW_MIRROR_HORIZONTAL;
     hw_cart.wram_bank = 0;
     hw_cart.has_wram = hw_cart.info.prg_size ? hw_cart.wram_len != 0 : i >= 0 ? MAPPERS[i].wram : 0;
@@ -529,8 +545,12 @@ void hw_cart_power_on(void)
      * board would come up with its saved contents, which no run here has. */
     memset(hw_cart.wram, 0, hw_cart.info.prg_nvram ? hw_cart.info.prg_ram : sizeof(hw_cart.wram));
 
+    if (bandai_board() && hw_cart.mapper!=153) hw_cart.has_wram=hw_cart.wram_readable=hw_cart.wram_writable=0;
+    for (unsigned chip=0;chip<2;++chip) nes_eeprom_reset(&hw_cart.eeprom[chip]);
+    memset(&hw_cart.barcode,0,sizeof(hw_cart.barcode));
     vrc7_sound_reset(true);
     switch (hw_cart.mapper) {
+    case 16: case 159: case 153: case 157: bandai_apply(); break;
     case 85: hw_cart.m.reg[1]=1; hw_cart.m.reg[2]=2; hw_cart.m.irq_prescaler=341; vrc7_apply(); break;
     case 24: case 26:
         hw_cart.m.vrc6_audio.step[0] = hw_cart.m.vrc6_audio.step[1] = 15;
@@ -567,6 +587,7 @@ void hw_cart_power_on(void)
 
 void hw_cart_cpu_write(uint16_t addr, uint8_t value)
 {
+    if (bandai_board()) { bandai_write(addr,value); return; }
     if (vrc24_board() && addr >= 0x6000 && addr < 0x8000) {
         if (vrc2_board() && !hw_cart.has_wram) {
             if (addr < 0x7000) hw_cart.m.latch = value & 1;
@@ -712,6 +733,7 @@ void hw_cart_cpu_write(uint16_t addr, uint8_t value)
 
 bool hw_cart_cpu_read(uint16_t addr, uint8_t *value)
 {
+    if (bandai_board()) return bandai_read(addr,value);
     if (vrc24_board() && addr >= 0x6000 && addr < 0x8000) {
         if (vrc2_board() && !hw_cart.has_wram) {
             if (addr >= 0x7000) return false;
@@ -730,12 +752,14 @@ bool hw_cart_cpu_read(uint16_t addr, uint8_t *value)
 void hw_cart_ppu_addr_watched(uint16_t vbus)
 {
     if (hw_cart.mapper == 4) mmc3_ppu_addr(vbus);
+    else if (hw_cart.mapper==153 || hw_cart.mapper==157) bandai_ppu_addr(vbus);
 }
 
 bool hw_cart_irq(void) { return hw_cart.m.irq_out != 0; }
 
 void hw_cart_cpu_clock(void)
 {
+    if (bandai_board()) { bandai_clock(); return; }
     if (hw_cart.mapper==85) vrc7_audio_clock();
     if (vrc6_board()) vrc6_audio_clock();
     if (hw_cart.mapper == 73) vrc3_clock();
@@ -803,7 +827,7 @@ uint64_t hw_cart_state_hash(uint64_t h)
         acc = acc * 131 + hw_cart.m.pattern_pending;
         acc = acc * 131 + hw_cart.m.pattern_addr;
     }
-    if (vrc24_board() || hw_cart.mapper == 73 || vrc6_board() || hw_cart.mapper == 85) {
+    if (bandai_board() || vrc24_board() || hw_cart.mapper == 73 || vrc6_board() || hw_cart.mapper == 85) {
         for (unsigned i=0; i<8; ++i) acc = acc*131 + hw_cart.m.vrc_chr[i];
         acc = acc*131 + hw_cart.m.irq_latch16;
         acc = acc*131 + hw_cart.m.irq_counter16;
@@ -820,6 +844,15 @@ uint64_t hw_cart_state_hash(uint64_t h)
         acc=acc*131+a->control; acc=acc*131+a->accumulator;
     }
     if (hw_cart.mapper==85) acc=vrc7_sound_hash(acc);
+    if (bandai_board()) {
+        /* Chip padding starts zero and all fields have deterministic reset. */
+        const unsigned char *b=(const unsigned char *)hw_cart.eeprom;
+        for (unsigned i=0;i<sizeof(hw_cart.eeprom);++i) acc=acc*131+b[i];
+        if (hw_cart.mapper==157) {
+            b=(const unsigned char *)&hw_cart.barcode;
+            for (unsigned i=0;i<sizeof(hw_cart.barcode);++i) acc=acc*131+b[i];
+        }
+    }
     /* Work RAM is a memory a program can read back, so it is compared across
      * implementations in cyc_mem_hash, not here. */
     return cyc_trace_mix(h, acc);
@@ -840,7 +873,7 @@ void hw_cart_state_dump(void *file)
             fprintf(f,"cart.vrc6.ch%u %02X %02X %02X timer=%u step=%u\n",ch,
                     a->reg[ch][0],a->reg[ch][1],a->reg[ch][2],a->timer[ch],a->step[ch]);
     }
-    if (vrc24_board() || hw_cart.mapper == 73 || vrc6_board() || hw_cart.mapper == 85) {
+    if (bandai_board() || vrc24_board() || hw_cart.mapper == 73 || vrc6_board() || hw_cart.mapper == 85) {
         for (unsigned i=0; i<8; ++i) fprintf(f, "cart.vrc_chr[%u] %03X\n", i, hw_cart.m.vrc_chr[i]);
         fprintf(f, "cart.irq_latch16 %04X\ncart.irq_counter16 %04X\ncart.irq_prescaler %d\ncart.irq_mode %u\n",
                 hw_cart.m.irq_latch16, hw_cart.m.irq_counter16, hw_cart.m.irq_prescaler, hw_cart.m.irq_mode);

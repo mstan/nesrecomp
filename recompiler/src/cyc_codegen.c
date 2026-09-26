@@ -508,7 +508,7 @@ static int fixed_bank_for(int mapper, uint32_t banks, uint32_t slot) {
     unsigned slots;
     switch (mapper) {
     case 0: case 3: case 13: case 87: case 184: slots = 255; break; /* all PRG fixed */
-    case 2: case 10: case 22: case 73: case 71: case 76: case 94: case 206: slots = 240; break; /* last 16 KiB */
+    case 157: case 159: case 16: case 2: case 10: case 22: case 73: case 71: case 76: case 94: case 206: slots = 240; break; /* last 16 KiB */
     case 9: slots = 252; break;                                  /* last 24 KiB */
     case 85: case 24: case 26: case 4: case 21: case 23: case 25: case 75: slots = 192; break;         /* last 8 KiB */
     case 180: slots = 15; break;                                 /* first 16 KiB */
@@ -522,9 +522,10 @@ static int fixed_bank_for(int mapper, uint32_t banks, uint32_t slot) {
 /* The configuration a cold console comes up in; hw_mapper.c's reset paths. */
 static int power_on_bank8_for(int mapper, uint32_t banks, uint32_t slot) {
     switch (mapper) {
+    case 153: return (int)((slot>=2 ? slot+28 : slot) & (banks-1));
     case 85: return slot == 3 ? (int)(banks - 1) : (int)slot;
     case 24: case 26: return slot == 3 ? (int)(banks - 1) : slot < 2 ? (int)slot : 0;
-    case 21: case 22: case 23: case 25: case 73:
+    case 157: case 159: case 16: case 21: case 22: case 23: case 25: case 73:
         return slot >= 2 ? (int)(banks - 4 + slot) : (int)slot;
     case 9: return slot ? (int)(banks - 4 + slot) : 0;
     case 10: return slot >= 2 ? (int)(banks - 4 + slot) : (int)slot;
@@ -797,6 +798,7 @@ typedef enum { WR_NEVER, WR_MAYBE, WR_ALWAYS } WriteReach;
 static unsigned mapper_write_floor(int mapper) {
     switch (mapper) {
     /* Low-address register apertures are added with their boards. */
+    case 16: return 0x6000;
     case 34: return 0x7ffd;
     case 79: return 0x4100;
     case 31: return 0x5000;
@@ -1282,7 +1284,7 @@ static void emit_umbrella(const Program *p, const char *path, const char *prefix
         "    return v->bits ? v : 0;\n"
         "}\n\n"
         "bool cyc_native_has(uint16_t addr) {\n"
-        "    if (addr < 0x8000) return false;\n"
+        "    if (addr < 0x8000 || !hw_prg_is_stable()) return false;\n"
         "    unsigned k;\n"
         "    const CycNativeView *v = view_at(addr, &k);\n"
         "    return v && ((v->bits[k >> 3] >> (k & 7)) & 1);\n"
@@ -1294,7 +1296,7 @@ static void emit_umbrella(const Program *p, const char *path, const char *prefix
         "void cyc_native_run(void) {\n"
         "    while (!hw_frame_done && !cpu.jammed) {\n"
         "        uint16_t pc = cpu.pc;\n"
-        "        if (pc < 0x8000) return;\n"
+        "        if (pc < 0x8000 || !hw_prg_is_stable()) return;\n"
         "        unsigned k;\n"
         "        const CycNativeView *v = view_at(pc, &k);\n"
         "        if (!v || !((v->bits[k >> 3] >> (k & 7)) & 1)) return;\n"
@@ -1355,6 +1357,10 @@ bool cyc_codegen_emit_interpreter(const char *path) {
 /* The board names hw_mapper.c implements, for the message and the banner. */
 static const char *mapper_name(int mapper) {
     switch (mapper) {
+    case 159: return "Bandai LZ93D50 / X24C01";
+    case 157: return "Bandai Datach";
+    case 153: return "Bandai BA-JUMP2";
+    case 16: return "Bandai FCG / LZ93D50";
     case 85: return "VRC7";
     case 24: return "VRC6a";
     case 26: return "VRC6b";

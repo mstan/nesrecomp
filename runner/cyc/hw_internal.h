@@ -34,6 +34,8 @@
 
 #include "hw_mapper.h"
 #include "../../common/nes_cart.h"
+#include "../../common/nes_eeprom.h"
+#include "../../common/nes_barcode.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -97,6 +99,8 @@ typedef struct {
     uint32_t chr_off[8];        /* $0000, $0400, ... $1C00 */
 
     NesCartInfo info;
+    NesEeprom eeprom[2];
+    NesBarcode barcode;
     uint32_t wram_len, wram_bank;
     uint16_t mapper;            /* iNES mapper number */
     uint8_t  mirroring;         /* HwMirroring, as the cartridge drives CIRAM A10 */

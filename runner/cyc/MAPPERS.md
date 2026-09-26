@@ -61,7 +61,11 @@ and AxROM select no/AND bus conflicts. Generated programs now check cartridge
 metadata as well as PRG bytes: regenerate older cycle output when updating.
 Power-on mappings remain deterministic where hardware does not specify a state.
 NVRAM bytes survive machine power-on within a loaded cartridge; host save-file
-persistence is part of the EEPROM/persistence follow-up.
+persistence is available with `--save-file FILE`. Files contain raw PRG NVRAM
+followed by CHR NVRAM, or the cartridge's serial EEPROM bytes. Saves are opt-in
+so unattended regression runs start consistently. Invalid lengths fail before
+execution; successful exits flush a temporary file and atomically replace the
+save, including after the SDL host returns.
 
 Run the cartridge contracts with `ctest` in a `runner/cyc` build. Run execution
 checks with `tools/cyc/test_cyc_runtime.py`; every fixture runs compiled code, the
@@ -80,7 +84,7 @@ exactly at all four alignments. AccuracyCoin retains its existing alignment
 scores of 144/144, 143/144, 141/144 and 143/144; this change adds no new failures.
 
 The remaining draft stack includes MMC5,
-Bandai EEPROM, and extended board wiring.
+and extended board wiring.
 Each needs its missing hardware primitive and suitable regression ROMs before
 being added to the supported list. The legacy runner still needs separate work.
 
@@ -144,3 +148,74 @@ silent VRC7b/reset cases. The PCM harness measures the 440.601 Hz carrier and
 compares native/interpreter WAVs byte for byte. This is an FM model with nominal
 gain, not a bit-exact capture of the chip's serial DAC or cartridge analog mixer.
 Lagrange Point and Tiny Toon Adventures 2 remain commercial-game validation work.
+
+Bandai mapper 16 supports FCG-1/2 ($6000 registers, direct IRQ counter) and
+LZ93D50 ($8000 registers, reload latch). NES 2.0 submappers 4/5 choose those
+decodes; ambiguous submapper 0 accepts each in its corresponding window.
+Deprecated submappers 1/2/3 are rejected; use mapper 159/157/153 respectively.
+LZ93D50's Xicor X24C02 EEPROM uses an A0/A1 device command, MSB-first bytes,
+four-byte page wrapping, sequential reads, ACK polling, and a nominal 5 ms
+programming interval. Only committed bytes are exported; power interruption
+discards an unfinished write. D7 releases SDA for reads and D4 receives the
+open-drain result. EEPROM capacity comes from NES 2.0 PRG NVRAM (256 bytes) or
+the iNES battery bit. The bytes are not exposed as CPU work RAM.
+
+Sources: [mapper 16](https://www.nesdev.org/wiki/INES_Mapper_016),
+[FCG-2 PCB tracing](https://seesaawiki.jp/famicomcartridge/d/Bandai%20FCG-2),
+[LZ93D50 PCB tracing](https://seesaawiki.jp/famicomcartridge/d/Bandai%20LZ93D50%20standard),
+and the Xicor datasheets attached to the latter page (its two PDF labels are
+reversed; inspect the document title). These parts have four-byte pages,
+unlike many later 24Cxx devices. The EEPROM primitive is shared with the oracle;
+board and IRQ logic are independent. Direct transaction vectors check every
+address, sequential wrap, page rollover, NACK, and interrupted programming.
+Fourteen 6502 fixtures (224 executions) exercise banks, rendering, IRQs through
+DMA, and bit-banged serial traffic at all alignments. Save tests start separate
+processes to increment persisted bytes, verify PRG/CHR save layout, and reject
+truncated/oversized files without modifying them. Commercial Bandai games and
+physical EEPROM timing have not been compared yet.
+
+Mapper 159 uses the same LZ93D50 board with a 128-byte X24C01. Its command is
+the seven-bit word address followed by R/W, with no I2C device address. NES 2.0
+must declare 128-byte PRG NVRAM; iNES mapper 159 implies that chip. Byte order
+is MSB first, as verified by the PCB researcher using sequential reads; older
+emulators sometimes reverse both addresses and data. Mapper 159 has its own
+bank, IRQ, serial and process-restart fixtures. Low-window FCG writes also
+terminate compiled blocks, so switching $6008 cannot execute stale native code.
+
+Mapper 153 (BA-JUMP2/Famicom Jump II) has fixed 8 KiB CHR RAM and 8 KiB
+battery RAM, enabled by $800D bit 5. Cold battery RAM starts at $FF because
+this game does not tolerate an all-zero uninitialized save. The active PPU
+A11:A10 selects which of $8000-$8003 drives PRG A18, including in the otherwise
+fixed $C000 window. This follows the [measured PCB wiring](https://seesaawiki.jp/famicomcartridge/d/Bandai%20BA-JUMP2),
+rather than ORing four bank registers. With unequal A18 outputs, dispatch uses
+the interpreter so every opcode and operand sees changes during PPU clocks or
+DMA. Native dispatch resumes when the outputs agree. Its fixtures check both
+256 KiB halves from both CPU windows, PPU-controlled outer banks, WRAM gating,
+IRQ/DMA and persisted SRAM. Driving RAM and the unconnected SDA input together
+resolves D4 low; exact analog contention on that invalid setting is unspecified.
+
+Mapper 157 (Datach) has fixed 8 KiB CHR RAM, its own 256-byte X24C02, and an
+optional cartridge 128-byte X24C01. Header NVRAM describes only the latter.
+`--datach-save-file FILE` persists the main unit independently of cartridge
+`--save-file FILE`, so it can be shared between games. The clock from the active
+CHR register's bit 3 selects the external device; $800D bit 5 clocks the internal
+one, and both share a resolved open-drain SDA wire. PPU A11:A10 selection is
+modeled, so unequal clock registers can generate serial edges during rendering.
+
+The barcode API and headless `--barcode DIGITS --barcode-frame N` provide
+EAN-8, UPC-A or EAN-13 light/dark input, including checksum validation. Swipe
+speed is selectable with `--barcode-module-cycles N` (default 1000 CPU cycles).
+This models a chosen photodiode stimulus; actual swipe speed is user-dependent.
+The [Datach PCB tracing](https://seesaawiki.jp/famicomcartridge/d/Bandai%20Datach)
+and [mapper 157 register description](https://www.nesdev.org/wiki/INES_Mapper_157)
+define the serial and barcode bus wiring. GS1's General Specifications section
+5.2 defines the barcode symbols. The scanner contract checks a literal EAN-13
+waveform; 48 process runs check its 62 transitions at three speeds and every
+alignment. Runtime and oracle share the optical stimulus and EEPROM primitives,
+so these expectations are checked directly instead of claiming independent
+chip implementations. No commercial Datach game or physical reader was tested.
+
+The enlarged fixture harness compiles its common runtime once as an object
+library, explicitly selects Release on single-configuration generators, and
+allows `--build-timeout` for slower machines. Generated game code still links
+into separate executables and runs all four execution modes.

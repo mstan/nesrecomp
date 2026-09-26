@@ -38,6 +38,16 @@ uint32_t cyc_prg_hash(void);
 /* Which hardware implementation this is: "nesrecomp" or "tricnes". */
 const char *cyc_hw_name(void);
 
+/* Committed nonvolatile bytes, preserved by cyc_power_on. Region 0 is the
+ * cartridge; region 1 is Datach's shared 256-byte internal EEPROM.
+ * Import only between load/power-on and CPU execution. Length must match. */
+/* Datach EAN-8, UPC-A or EAN-13, including a valid check digit. The host
+ * chooses swipe speed in CPU cycles per module (1000 is a useful default). */
+bool cyc_scan_barcode(const char *digits, unsigned cycles_per_module);
+size_t cyc_nvram_size(unsigned region);
+bool cyc_nvram_export(unsigned region, void *buffer, size_t size);
+bool cyc_nvram_import(unsigned region, const void *buffer, size_t size);
+
 /* ---- host I/O ---- */
 
 /* The 2KB of CPU RAM. */

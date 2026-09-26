@@ -284,6 +284,9 @@ bool cyc_load_ines(const uint8_t *image, size_t size)
     hw_cart.chr_pages = chr_alloc / 1024;
     hw_cart.chr_ram = !info.chr_size;
     hw_cart.mapper = info.mapper;
+    if (info.mapper==153) memset(hw_cart.wram,255,8192);
+    nes_eeprom_init(&hw_cart.eeprom[0],info.mapper==157?256:(info.mapper==16 || info.mapper==159)?info.prg_nvram:0);
+    nes_eeprom_init(&hw_cart.eeprom[1],info.mapper==157?info.prg_nvram:0);
     hw_cart.wram_len = info.prg_ram + info.prg_nvram;
     hw_cart.mirroring = info.vertical ? HW_MIRROR_VERTICAL : HW_MIRROR_HORIZONTAL;
     hw_cart_power_on();
@@ -320,6 +323,19 @@ void cyc_power_on(uint8_t ppu_alignment)
     if (hw.align == 2) ppu_half_dot();
     clock_cpu_devices();
     hw.tick = 1;
+}
+
+#include "../../common/nes_nvram.h"
+static NesNvram nvram_region(unsigned region) { return nes_nvram_region(&hw_cart.info,hw_cart.wram,hw_cart.chr,hw_cart.eeprom,region); }
+bool cyc_scan_barcode(const char *digits, unsigned cycles_per_module) {
+    return hw_cart.mapper==157 && nes_barcode_scan(&hw_cart.barcode,digits,cycles_per_module,hw.cycles);
+}
+size_t cyc_nvram_size(unsigned region) { NesNvram n=nvram_region(region); return n.size[0]+n.size[1]; }
+bool cyc_nvram_export(unsigned region, void *buffer, size_t size) {
+    return nes_nvram_transfer(nvram_region(region),buffer,size,false);
+}
+bool cyc_nvram_import(unsigned region, const void *buffer, size_t size) {
+    return nes_nvram_transfer(nvram_region(region),(void *)buffer,size,true);
 }
 
 uint32_t cyc_prg_hash(void)
@@ -363,9 +379,12 @@ size_t cyc_audio_read(int16_t *out, size_t max) { return apu_audio_read(out, max
 
 uint64_t cyc_mem_state_hash(void)
 {
-    return cyc_mem_hash(hw.cycles, hw.ram, ppu.ciram, hw_cart.info.four_screen ? 4096 : 2048, ppu.oam, ppu.palette, hw_cart.chr_ram ? hw_cart.chr : NULL,
+    uint64_t h = cyc_mem_hash(hw.cycles, hw.ram, ppu.ciram, hw_cart.info.four_screen ? 4096 : 2048, ppu.oam, ppu.palette, hw_cart.chr_ram ? hw_cart.chr : NULL,
                         hw_cart.chr_len, hw_cart.has_wram ? hw_cart.wram : NULL, hw_cart.wram_len,
                         hw_frame_index);
+    for (unsigned chip=0;chip<2;++chip)
+        for (unsigned i=0;i<hw_cart.eeprom[chip].size;++i) h=cyc_trace_mix(h,hw_cart.eeprom[chip].data[i]);
+    return h;
 }
 
 void cyc_mem_state_dump(void *file)

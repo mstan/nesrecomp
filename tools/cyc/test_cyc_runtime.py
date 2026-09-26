@@ -18,11 +18,12 @@ from fineprg_fixtures import fineprg_fixtures
 from vrc_fixtures import vrc_fixtures
 from expansion_fixtures import expansion_fixtures
 from vrc7_fixtures import vrc7_fixtures
+from bandai_fixtures import bandai_fixtures
 
 
-def run(cmd, cwd, log):
+def run(cmd, cwd, log, timeout=180):
     p = subprocess.run([str(x) for x in cmd], cwd=cwd, capture_output=True, text=True,
-                       timeout=180, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+                       timeout=timeout, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
     Path(log).write_text(p.stdout + p.stderr)
     if p.returncode:
         raise RuntimeError(f'exit {p.returncode}: {cmd}; see {log}')
@@ -67,6 +68,7 @@ def main():
     ap.add_argument('--cmake', default='cmake')
     ap.add_argument('--generator')
     ap.add_argument('--config', default='Release')
+    ap.add_argument('--build-timeout', type=int, default=900)
     ap.add_argument('--case-prefix', default='', help='Run only fixtures with this name prefix')
     args = ap.parse_args()
     out = args.out.resolve()
@@ -74,8 +76,11 @@ def main():
     compiler, interp, oracle = (p.resolve() for p in (args.recompiler, args.interp, args.oracle))
     source = Path(__file__).resolve().parents[2] / 'runner/cyc'
     cmake = ['cmake_minimum_required(VERSION 3.20)', 'project(cyc_regressions C)',
-             'set(CMAKE_C_STANDARD 11)', f'include("{source.as_posix()}/cyc.cmake")']
-    cases = list(fixtures()) + list(mapper_fixtures()) + list(ppu_fixtures()) + list(variant_fixtures()) + list(latch_fixtures()) + list(fineprg_fixtures()) + list(vrc_fixtures()) + list(expansion_fixtures()) + list(vrc7_fixtures())
+             'set(CMAKE_C_STANDARD 11)', f'include("{source.as_posix()}/cyc.cmake")',
+             'add_library(cyc_regression_runtime OBJECT ${NESRECOMP_CYC_SOURCES})',
+             'target_include_directories(cyc_regression_runtime PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})',
+             'target_compile_definitions(cyc_regression_runtime PRIVATE _CRT_SECURE_NO_WARNINGS)']
+    cases = list(fixtures()) + list(mapper_fixtures()) + list(ppu_fixtures()) + list(variant_fixtures()) + list(latch_fixtures()) + list(fineprg_fixtures()) + list(vrc_fixtures()) + list(expansion_fixtures()) + list(vrc7_fixtures()) + list(bandai_fixtures())
     cases = [case for case in cases if case[0].startswith(args.case_prefix)]
     if not cases:
         ap.error('no matching fixtures')
@@ -88,20 +93,22 @@ def main():
                                       'cycle_accurate=true\ncycle_seed_file="seeds.txt"\n')
         run([compiler, f'{name}.nes', '--game', 'game.toml'], case, case / 'codegen.log')
         cmake += [f'file(GLOB {name}_GEN CONFIGURE_DEPENDS "{name}/generated/*_cyc*.c")',
-                  f'add_executable({name} ${{NESRECOMP_CYC_SOURCES}} ${{{name}_GEN}})',
+                  f'add_executable({name} $<TARGET_OBJECTS:cyc_regression_runtime> ${{{name}_GEN}})',
                   f'target_include_directories({name} PRIVATE ${{NESRECOMP_CYC_INCLUDE_DIRS}})',
                   f'target_link_libraries({name} PRIVATE ${{NESRECOMP_CYC_LIBRARIES}})',
                   f'target_compile_definitions({name} PRIVATE _CRT_SECURE_NO_WARNINGS)']
     (out / 'CMakeLists.txt').write_text('\n'.join(cmake))
-    command = [args.cmake, '-S', out, '-B', out / 'build']
+    command = [args.cmake, '-S', out, '-B', out / 'build', f'-DCMAKE_BUILD_TYPE={args.config}']
     if args.generator:
         command += ['-G', args.generator]
     run(command, out, out / 'configure.log')
     run([args.cmake, '--build', out / 'build', '--config', args.config, '--parallel', '4'],
-        out, out / 'build.log')
+        out, out / 'build.log', timeout=args.build_timeout)
     for name, _, _, expected in cases:
         final_only = expected.startswith('final:')
         expected = expected.removeprefix('final:')
+        mixed = expected.startswith('mixed:')
+        expected = expected.removeprefix('mixed:')
         frames = 6 if final_only else 3
         case = out / name
         suffix = '.exe' if hasattr(subprocess, 'CREATE_NO_WINDOW') else ''
@@ -119,7 +126,9 @@ def main():
                 checked_lines = lines[-1:] if final_only else lines
                 if len(lines) != frames or any(expected not in line for line in checked_lines):
                     raise AssertionError(f'{name}, {mode}, alignment {align}: wrong result in {trace}')
-                if mode == 'native' and '(100.0%)' not in stdout:
+                if mode == 'native' and mixed and 'interpreted: ROM' not in stdout:
+                    raise AssertionError(f'{name}: expected PPU-driven PRG interpreter fallback')
+                if mode == 'native' and not mixed and '(100.0%)' not in stdout:
                     raise AssertionError(f'{name}: regression did not exercise native code')
                 hashes[mode] = trace
             for mode in ('interp', 'standalone', 'oracle'):
