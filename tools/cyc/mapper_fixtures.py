@@ -43,4 +43,5 @@ def mapper_fixtures():
         yield handoff('mapper34_nina_' + mode, 34, [(0x7ffd, 1)], 4,
                       prg_kb=64, chr_kb=64, addressing=mode)
     yield handoff('mapper71', 71, [(0xc100, 3)], 6, chr_kb=0)
+    yield handoff('mapper75', 75, [(0x8123, 3)], 3, chr_kb=128)
     yield from ()
