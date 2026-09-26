@@ -363,6 +363,7 @@ static void print_usage(void) {
         "  --cycle-accurate       Emit generated/<prefix>_cyc.c (per-CPU-cycle code for\n"
         "                         runner/cyc) instead of the function-level output. Also\n"
         "                         enabled by game.toml [game] cycle_accurate = true.\n"
+        "  --cycle-seed-file <path> Override the cycle seed file from game.toml.\n"
         "  --emit-cycle-interpreter <path>\n"
         "                         Write the cycle-accurate 6502 interpreter generated\n"
         "                         from the same templates (runner/cyc/cpu6502_interp.c)\n"
@@ -392,6 +393,7 @@ int main(int argc, char *argv[]) {
     const char *game_path = NULL;
     const char *proposal_out = NULL;
     const char *prefix_override = NULL;
+    const char *cycle_seed_override = NULL;
     bool cycle_accurate = false;
 
     for (int i = 1; i < argc; i++) {
@@ -406,6 +408,8 @@ int main(int argc, char *argv[]) {
             game_path = argv[++i];
         } else if (strcmp(argv[i], "--output-prefix") == 0 && i+1 < argc) {
             prefix_override = argv[++i];
+        } else if (strcmp(argv[i], "--cycle-seed-file") == 0 && i+1 < argc) {
+            cycle_seed_override = argv[++i];
         } else if (strcmp(argv[i], "--proposal-out") == 0 && i+1 < argc) {
             proposal_out = argv[++i];
         } else if (!rom_path) {
@@ -482,6 +486,13 @@ int main(int argc, char *argv[]) {
         for (char *p = output_prefix; *p; p++) if (*p == ' ') *p = '_';
     }
 
+    if (cycle_seed_override) {
+        if (strlen(cycle_seed_override) >= sizeof(cfg.cycle_seed_file)) {
+            fprintf(stderr, "Error: cycle seed path is too long\n");
+            return 1;
+        }
+        strcpy(cfg.cycle_seed_file, cycle_seed_override);
+    }
     if (cycle_accurate || cfg.cycle_accurate)
         return cyc_codegen_emit(&rom, &cfg, output_prefix) ? 0 : 1;
 

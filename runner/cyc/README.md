@@ -13,7 +13,11 @@ implementations**. The run matches the TriCNES oracle on every bus access of
 every cycle and on every pixel, and its APU matches NES_MiSTer's HDL APU
 channel for channel (see [Verification](#verification)).
 
-The cycle runtime supports 22 mapper IDs; see [board coverage and limits](MAPPERS.md).
+The cycle runtime supports 34 mapper IDs; see [board coverage and limits](MAPPERS.md).
+Existing game checkouts can use the [cycle-project CMake integration](PROJECTS.md)
+to opt into this backend and its cartridge hardware.
+The [cartridge review packet](CARTRIDGE_REVIEW.md) links the draft PRs,
+reproduction commands and remaining hardware-validation requirements.
 **Super Mario Bros. 3** (MMC3, 256KB PRG) runs at 100.0% native
 and matches the oracle on every frame of a 3,000-frame scripted playthrough at
 all four CPU/PPU alignments, and Mesen's picture exactly on most frames.

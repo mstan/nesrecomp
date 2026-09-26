@@ -189,3 +189,6 @@ else()
 endif()
 
 include(${NESRECOMP_RUNNER_ROOT}/recomp_net.cmake)
+# Existing projects can opt into the cycle backend using
+# runner/cyc/project.cmake; see runner/cyc/PROJECTS.md for build integration
+# and the migration boundary for legacy enhancements.
