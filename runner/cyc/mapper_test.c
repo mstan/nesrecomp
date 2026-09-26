@@ -288,6 +288,29 @@ static void test_mapper11(void)
 }
 
 
+static void test_variants(void)
+{
+    /* SEROM connects CPU A14 directly to PRG ROM. */
+    cart(1, 32, 32);
+    hw_cart.info.submapper = 5;
+    hw_cart_power_on();
+    for (unsigned i = 0; i < 5; ++i) {
+        hw.cycles += 2;
+        hw_cart_cpu_write(0xe000, 1);
+    }
+    prg_banks(0, 1, 2, 3);
+    for (int mapper = 2; mapper <= 7; ++mapper) {
+        if (mapper != 2 && mapper != 3 && mapper != 7) continue;
+        for (unsigned sub = 1; sub <= 2; ++sub) {
+            cart(mapper, 128, 32);
+            hw_cart.info.submapper = sub;
+            prg[0x1000] = 0;
+            hw_cart_cpu_write(0x9000, 3);
+            CHECK(hw_cart.m.latch == (sub == 1 ? 3 : 0));
+        }
+    }
+}
+
 int main(void)
 {
     cart(0, 32, 8);
@@ -310,6 +333,7 @@ int main(void)
     test_mapper34();
     test_mapper13();
     test_mapper11();
+    test_variants();
     printf("mapper contracts: %u checks passed\n", checks);
     return 0;
 }

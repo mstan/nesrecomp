@@ -21,5 +21,6 @@ typedef struct {
 /* Provided by the generated umbrella file. */
 extern const char    *cyc_native_program_name;
 extern const uint32_t cyc_native_prg_hash;
+extern const uint32_t cyc_native_cart_hash;
 bool cyc_native_has(uint16_t addr);
 void cyc_native_run(void);

@@ -15,6 +15,8 @@
 // all for MMC3, whose IRQ counter clocks off rising edges of PPU A12, so the
 // two models have to agree about when the PPU drives each address.
 
+#include "../../common/nes_cart.h"
+
 typedef uint8_t  byte;
 typedef int8_t   sbyte;
 typedef uint16_t ushort;
@@ -25,7 +27,7 @@ typedef uint64_t ulong;
 
 extern bool SeventyTwoPinConnector[72];
 extern bool ConnectorPinFloating[72];
-extern byte VRAM[0x800];
+extern byte VRAM[0x1000];
 extern byte dataBus;
 extern ushort PPU_AddressBus;
 extern byte PPU_OctalLatch;
@@ -51,7 +53,8 @@ struct TricMapper {
     uint CHR_Off[8];
 
     // ---- work RAM at $6000-$7FFF ----
-    byte WRAM[0x2000];
+    byte WRAM[0x20000];
+    uint WRAM_Length, WRAM_Bank;
     bool HasWRAM, WRAM_Readable, WRAM_Writable;
 
     byte Mirroring;
@@ -117,6 +120,7 @@ struct TricMapper {
 };
 
 struct TricCartridge {
+    NesCartInfo Info;
     byte *PRGROM;
     int   PRGROM_Length;     // the image's own length
     int   PRGSlots;          // 8KB slots in the padded buffer, a power of two
@@ -158,6 +162,7 @@ inline void TricMapper::MMC1Apply() {
     case 2: MapPRG16(0, 0); MapPRG16(1, prg); break;
     default: MapPRG16(0, prg); MapPRG16(1, -1); break;
     }
+    if (Cart.Info.submapper == 5) MapPRG32(0);
     if (Ctrl & 0x10) {
         MapCHR4(0, Chr0 & 0x1F);
         MapCHR4(1, Chr1 & 0x1F);
@@ -201,6 +206,7 @@ inline void TricMapper::MMC3Apply() {
     }
     MapPRG8(1, Reg[7]);
     MapPRG8(3, -1);
+    if (Cart.Mapper == 206 && Cart.Info.submapper == 1) MapPRG32(0);
     uint big = (BankSelect & 0x80) ? 4u : 0u;
     uint small_ = big ^ 4u;
     MapCHR2(big / 2 + 0, Reg[0] >> 1);
@@ -272,10 +278,12 @@ inline void TricMapper::Reset() {
     A12LowCycle = 0;
     Latch = 0;
     CPU_Drove = false;
-    memset(WRAM, 0, sizeof(WRAM));
+    WRAM_Length = Cart.Info.prg_ram + Cart.Info.prg_nvram;
+    WRAM_Bank = 0;
+    memset(WRAM, 0, Cart.Info.prg_nvram ? Cart.Info.prg_ram : sizeof(WRAM));
 
     Mirroring = Cart.NametableHorizontalMirroring ? TRIC_MIRROR_HORIZONTAL : TRIC_MIRROR_VERTICAL;
-    HasWRAM = Cart.Mapper == 1 || Cart.Mapper == 4 || (Cart.Mapper == 34 && Cart.CHRPages > 8);
+    HasWRAM = WRAM_Length != 0;
     WRAM_Readable = WRAM_Writable = HasWRAM;
 
     switch (Cart.Mapper) {
@@ -322,23 +330,23 @@ inline void TricMapper::FetchCPU() {
         CPU_NonTiltData = Cart.PRGROM[PRG_Off[(CPU_AddressIn >> 13) & 3] | (CPU_AddressIn & 0x1FFF)];
         CPU_Drove = true;
     } else if (CPU_AddressIn >= 0x6000 && HasWRAM && WRAM_Readable) {
-        CPU_NonTiltData = WRAM[CPU_AddressIn & 0x1FFF];
+        CPU_NonTiltData = WRAM[(WRAM_Bank + (CPU_AddressIn & 0x1FFF)) % WRAM_Length];
         CPU_Drove = true;
     }
 }
 
 inline byte TricMapper::SnoopCPU(ushort Address) {
     if (Address >= 0x8000) return Cart.PRGROM[PRG_Off[(Address >> 13) & 3] | (Address & 0x1FFF)];
-    if (Address >= 0x6000 && HasWRAM && WRAM_Readable) return WRAM[Address & 0x1FFF];
+    if (Address >= 0x6000 && HasWRAM && WRAM_Readable) return WRAM[(WRAM_Bank + (Address & 0x1FFF)) % WRAM_Length];
     return dataBus;
 }
 
 inline void TricMapper::StoreCPU(ushort Address, byte Input) {
     if (Cart.Mapper == 34) {
-        if (Cart.CHRPages <= 8 && Address >= 0x8000) {
+        if (!nes_cart_nina(&Cart.Info) && Address >= 0x8000) {
             Latch = (byte)(Input & SnoopCPU(Address));
             MapPRG32(Latch);
-        } else if (Cart.CHRPages > 8) {
+        } else if (nes_cart_nina(&Cart.Info)) {
             switch (Address) {
             case 0x7ffd: MapPRG32(Input % 2); break;
             case 0x7ffe: MapCHR4(0, Input % 16); break;
@@ -374,10 +382,12 @@ inline void TricMapper::StoreCPU(ushort Address, byte Input) {
         return;
     }
     if (Address >= 0x6000 && Address < 0x8000) {
-        if (HasWRAM && WRAM_Writable) WRAM[Address & 0x1FFF] = Input;
+        if (HasWRAM && WRAM_Writable) WRAM[(WRAM_Bank + (Address & 0x1FFF)) % WRAM_Length] = Input;
         return;
     }
     if (Address < 0x8000) return;
+    if ((Cart.Mapper == 2 || Cart.Mapper == 3 || Cart.Mapper == 7) && Cart.Info.submapper == 2)
+        Input &= SnoopCPU(Address);
     switch (Cart.Mapper) {
     case 11:
         Input = (byte)(Input & SnoopCPU(Address));
@@ -391,7 +401,8 @@ inline void TricMapper::StoreCPU(ushort Address, byte Input) {
         break;
     case 71:
         if (Address >= 0xc000) MapPRG16(0, Input % 16);
-        else if ((Address >> 12) == 9)
+        else if ((!Cart.Info.nes2 && (Address >> 12) == 9) ||
+                 (Cart.Info.nes2 && Cart.Info.submapper == 1 && Address < 0xa000))
             Mirroring = (Input & 16) ? TRIC_MIRROR_SCREEN_B : TRIC_MIRROR_SCREEN_A;
         break;
     case 75:
@@ -435,7 +446,7 @@ inline void TricMapper::StoreCPU(ushort Address, byte Input) {
         break;
     case 232:
         if (Address >= 0xc000) PrgReg = Input % 4;
-        else Ctrl = (Input / 8) % 4;
+        else Ctrl = Cart.Info.submapper == 1 ? ((Input / 8) % 2) * 2 + (Input / 16) % 2 : (Input / 8) % 4;
         MapPRG16(0, Ctrl * 4 + PrgReg);
         MapPRG16(1, Ctrl * 4 + 3);
         break;
@@ -458,11 +469,13 @@ inline void TricMapper::StoreCPU(ushort Address, byte Input) {
 }
 
 inline int TricMapper::FetchPatternAddress(ushort Address) {
-    return (int)(CHR_Off[(Address >> 10) & 7] | (Address & 0x3FF));
+    uint index = CHR_Off[(Address >> 10) & 7] | (Address & 0x3FF);
+    return Cart.UsingCHRRAM ? index % Cart.CHRROM_Length : index;
 }
 
 inline byte TricMapper::SnoopPPU(ushort Address) {
     if (Address < 0x2000) return Cart.CHRROM[FetchPatternAddress(Address)];
+    if (Cart.AlternativeNametableArrangement) return VRAM[Address & 0xfff];
     ushort Addr = (ushort)(Address & 0x3FF);
     if (Mirroring == TRIC_MIRROR_HORIZONTAL) Addr |= (ushort)((Address & 0x800) ? 0x400 : 0);
     else if (Mirroring == TRIC_MIRROR_VERTICAL) Addr |= (ushort)((Address & 0x400) ? 0x400 : 0);

@@ -24,14 +24,14 @@ uint64_t cyc_trace_mix(uint64_t h, uint64_t v) {
     return h;
 }
 
-uint64_t cyc_mem_hash(uint64_t cycles, const uint8_t *ram, const uint8_t *ciram, const uint8_t *oam,
+uint64_t cyc_mem_hash(uint64_t cycles, const uint8_t *ram, const uint8_t *ciram, size_t ciram_len, const uint8_t *oam,
                       const uint8_t *palette, const uint8_t *chr_ram, size_t chr_ram_len,
                       const uint8_t *wram, size_t wram_len, const uint16_t *frame_index) {
     uint64_t h = cycles, acc = 0;
     for (int i = 0; i < 0x800; i++) acc = acc * 131 + ram[i];
     h = cyc_trace_mix(h, acc);
     acc = 0;
-    for (int i = 0; i < 0x800; i++) acc = acc * 131 + ciram[i];
+    for (size_t i = 0; i < ciram_len; i++) acc = acc * 131 + ciram[i];
     h = cyc_trace_mix(h, acc);
     acc = 0;
     for (int i = 0; i < 0x100; i++) acc = acc * 131 + oam[i];
@@ -60,13 +60,13 @@ static void dump_bytes(FILE *f, const char *name, const uint8_t *p, size_t n, ui
     }
 }
 
-void cyc_mem_dump(void *file, uint64_t cycles, const uint8_t *ram, const uint8_t *ciram, const uint8_t *oam,
+void cyc_mem_dump(void *file, uint64_t cycles, const uint8_t *ram, const uint8_t *ciram, size_t ciram_len, const uint8_t *oam,
                   const uint8_t *palette, const uint8_t *chr_ram, size_t chr_ram_len, const uint8_t *wram,
                   size_t wram_len, const uint16_t *frame_index) {
     FILE *f = (FILE *)file;
     fprintf(f, "cycles %llu\n", (unsigned long long)cycles);
     dump_bytes(f, "ram", ram, 0x800, 0xFF);
-    dump_bytes(f, "ciram", ciram, 0x800, 0xFF);
+    dump_bytes(f, "ciram", ciram, ciram_len, 0xFF);
     dump_bytes(f, "oam", oam, 0x100, 0xFF);
     dump_bytes(f, "palette", palette, 0x20, 0x3F);
     if (chr_ram) dump_bytes(f, "chr_ram", chr_ram, chr_ram_len, 0xFF);

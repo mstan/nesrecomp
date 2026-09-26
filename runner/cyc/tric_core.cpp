@@ -64,7 +64,7 @@ byte OAM2Address = 0;
 byte SpriteEvaluationTick = 0;
 bool OAMAddressOverflowedDuringSpriteEvaluation = false;
 byte RAM[0x800];
-byte VRAM[0x800];
+byte VRAM[0x1000];
 byte PaletteRAM[0x20];
 ushort programCounter = 0;
 byte opCode = 0;
@@ -1522,7 +1522,7 @@ byte FetchVideoMemory()
                 // We're reading from on-console VRAM, not the cartridge.
                 // NOTE: In theory you could trigger bus conflicts with this. I'm currently just assuming the bus is free.
                 ushort Address = (ushort)((PPU_AddressBus & 0x300) | PPU_OctalLatch);
-                Address |= (ushort)(SeventyTwoPinConnector[21] ? 0x400 : 0);
+                Address |= Cart.AlternativeNametableArrangement ? PPU_AddressBus & 0xc00 : (SeventyTwoPinConnector[21] ? 0x400 : 0);
                 t = VRAM[Address];
             }
 
@@ -1547,7 +1547,7 @@ void WriteVideoMemory(byte input)
                 // We're writing to on-console VRAM, not the cartridge.
                 // NOTE: In theory you could trigger bus conflicts with this. I'm currently just assuming the bus is free.
                 ushort Address = (ushort)((PPU_AddressBus & 0x300) | PPU_OctalLatch);
-                Address |= (ushort)(SeventyTwoPinConnector[21] ? 0x400 : 0);
+                Address |= Cart.AlternativeNametableArrangement ? PPU_AddressBus & 0xc00 : (SeventyTwoPinConnector[21] ? 0x400 : 0);
                 VRAM[Address] = input;
             }
             else
@@ -9556,9 +9556,9 @@ void cyc_cpu_state(CycCpuState *out)
 // way hw_machine.c loads it.
 static byte *tric_alloc_padded(const byte *src, size_t len, int *out_alloc) {
     uint32_t alloc = 1;
-    while (alloc < len) alloc <<= 1;
+    while (alloc < len || alloc < 8192) alloc <<= 1;
     byte *p = (byte *)calloc(1, alloc);
-    if (src) memcpy(p, src, len);
+    if (p && src) memcpy(p, src, len);
     *out_alloc = (int)alloc;
     return p;
 }
@@ -9575,13 +9575,9 @@ void TricMmc3TraceClock(byte counter, bool out, ushort vbus) {
 }
 
 bool cyc_load_ines(const uint8_t *image, size_t size) {
-    if (size < 16 || memcmp(image, "NES\x1A", 4) != 0) return false;
-    int mapper = (image[6] >> 4) | (image[7] & 0xF0);
-    if ((image[7] & 0x0C) == 0x08) {
-        mapper |= (image[8] & 15) << 8;
-        if (mapper != 0 && mapper != 1 && mapper != 2 && mapper != 3 &&
-            mapper != 4 && mapper != 7 && mapper != 66) return false;
-    }
+    NesCartInfo info;
+    if (!nes_cart_image(image, size, &info) || !nes_cart_variant_supported(&info)) return false;
+    int mapper = info.mapper;
     switch (mapper) {   // the set hw_mapper.c implements
     case 232: break;
     case 184: break;
@@ -9601,25 +9597,26 @@ bool cyc_load_ines(const uint8_t *image, size_t size) {
     case 0: case 1: case 2: case 3: case 4: case 7: case 66: break;
     default: return false;
     }
-    if (image[6] & 0x08) return false;   // four-screen boards carry their own RAM
-    size_t prg_len = (size_t)image[4] * 0x4000;
-    size_t chr_len = (size_t)image[5] * 0x2000;
-    size_t offset = 16 + ((image[6] & 0x04) ? 512 : 0);
-    if (prg_len == 0 || offset + prg_len + chr_len > size) return false;
+    int prg_alloc, chr_alloc;
+    uint32_t chr_len = info.chr_size ? info.chr_size : info.chr_ram + info.chr_nvram;
+    byte *prg = tric_alloc_padded(image + info.data_offset, info.prg_size, &prg_alloc);
+    byte *chr = tric_alloc_padded(info.chr_size ? image + info.data_offset + info.prg_size : NULL,
+                                 chr_len, &chr_alloc);
+    if (!prg || !chr) { free(prg); free(chr); return false; }
     free(Cart.PRGROM);
     free(Cart.CHRROM);
-    int prg_alloc, chr_alloc;
-    Cart.PRGROM = tric_alloc_padded(image + offset, prg_len, &prg_alloc);
-    Cart.PRGROM_Length = (int)prg_len;
-    Cart.PRGSlots = prg_alloc / 0x2000 ? prg_alloc / 0x2000 : 1;
-    Cart.UsingCHRRAM = chr_len == 0;
-    Cart.CHRROM = tric_alloc_padded(chr_len ? image + offset + prg_len : NULL, chr_len ? chr_len : (mapper == 13 ? 0x4000 : 0x2000),
-                                    &chr_alloc);
-    Cart.CHRROM_Length = (int)(chr_len ? chr_len : (mapper == 13 ? 0x4000 : 0x2000));
-    Cart.CHRPages = chr_alloc / 0x400 ? chr_alloc / 0x400 : 1;
+    memset(&Cart, 0, sizeof(Cart));
+    Cart.Info = info;
+    Cart.PRGROM = prg;
+    Cart.PRGROM_Length = info.prg_size;
+    Cart.PRGSlots = prg_alloc / 8192;
+    Cart.CHRROM = chr;
+    Cart.CHRROM_Length = chr_len;
+    Cart.CHRPages = chr_alloc / 1024;
+    Cart.UsingCHRRAM = !info.chr_size;
     Cart.Mapper = mapper;
-    Cart.NametableHorizontalMirroring = (image[6] & 1) == 0;
-    Cart.AlternativeNametableArrangement = (image[6] & 8) != 0;
+    Cart.NametableHorizontalMirroring = !info.vertical;
+    Cart.AlternativeNametableArrangement = info.four_screen != 0;
     Cart.MapperChip.Reset();
     return true;
 }
@@ -9723,17 +9720,17 @@ static const struct { const char *name; const void *p; size_t n; } cyc_hw_fields
 // What any NES model can be compared on at a frame boundary (cyc_trace.c).
 uint64_t cyc_mem_state_hash(void)
 {
-    return cyc_mem_hash(totalCycles, RAM, VRAM, OAM, PaletteRAM, Cart.UsingCHRRAM ? Cart.CHRROM : NULL,
+    return cyc_mem_hash(totalCycles, RAM, VRAM, Cart.Info.four_screen ? 4096 : 2048, OAM, PaletteRAM, Cart.UsingCHRRAM ? Cart.CHRROM : NULL,
                         (size_t)Cart.CHRROM_Length,
-                        Cart.MapperChip.HasWRAM ? Cart.MapperChip.WRAM : NULL, sizeof(Cart.MapperChip.WRAM),
+                        Cart.MapperChip.HasWRAM ? Cart.MapperChip.WRAM : NULL, Cart.MapperChip.WRAM_Length,
                         cyc_frame_index_buffer);
 }
 
 void cyc_mem_state_dump(void *file)
 {
-    cyc_mem_dump(file, totalCycles, RAM, VRAM, OAM, PaletteRAM, Cart.UsingCHRRAM ? Cart.CHRROM : NULL,
+    cyc_mem_dump(file, totalCycles, RAM, VRAM, Cart.Info.four_screen ? 4096 : 2048, OAM, PaletteRAM, Cart.UsingCHRRAM ? Cart.CHRROM : NULL,
                  (size_t)Cart.CHRROM_Length,
-                 Cart.MapperChip.HasWRAM ? Cart.MapperChip.WRAM : NULL, sizeof(Cart.MapperChip.WRAM),
+                 Cart.MapperChip.HasWRAM ? Cart.MapperChip.WRAM : NULL, Cart.MapperChip.WRAM_Length,
                  cyc_frame_index_buffer);
 }
 

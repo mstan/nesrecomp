@@ -29,3 +29,6 @@ add_test(NAME cyc_helper_test COMMAND cyc_helper_test)
 add_executable(cyc_mapper_test mapper_test.c hw_mapper.c cyc_trace.c)
 target_include_directories(cyc_mapper_test PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})
 add_test(NAME cyc_mapper_test COMMAND cyc_mapper_test)
+
+add_executable(cyc_cart_header_test cart_header_test.c)
+add_test(NAME cyc_cart_header_test COMMAND cyc_cart_header_test)

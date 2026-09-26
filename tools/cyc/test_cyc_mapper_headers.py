@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reject unsupported NES 2.0 variants consistently in compiler and both hosts."""
+"""Accept known NES 2.0 boards and reject unknown IDs/variants in all loaders."""
 import argparse
 from pathlib import Path
 import subprocess
@@ -23,12 +23,14 @@ def main():
         if mapper in checked:
             continue
         checked.add(mapper)
-        for variant, byte8 in [('unspecified', 0), ('submapper', 0x10), ('extended_id', 1)]:
+        for variant, byte8, accepted in [('unspecified', 0, True), ('submapper', 0xf0, False), ('extended_id', 1, False)]:
             case = out / f'mapper{mapper}_{variant}'
             case.mkdir(exist_ok=True)
             rom = bytearray(image)
             rom[7] |= 8
             rom[8] = byte8
+            if not rom[5]:
+                rom[11] = 8 if mapper == 13 else 7
             (case / 'test.nes').write_bytes(rom)
             (case / 'game.toml').write_text('[game]\noutput_prefix="test"\ncycle_accurate=true\n')
             for name, exe, extra in [
@@ -40,10 +42,10 @@ def main():
                                    capture_output=True, text=True, timeout=30,
                                    creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
                 (case / f'{name}.log').write_text(p.stdout + p.stderr)
-                if p.returncode == 0 or not any(word in p.stderr for word in ('NES 2.0', 'cannot load')):
-                    raise AssertionError(f'{case.name}: {name} did not reject unsupported header cleanly')
+                if (p.returncode == 0) != accepted:
+                    raise AssertionError(f'{case.name}: {name} header acceptance was {p.returncode}, expected {accepted}')
                 count += 1
-    print(f'{count} unsupported-header checks passed ({len(checked)} mapper IDs)')
+    print(f'{count} header acceptance/rejection checks passed ({len(checked)} mapper IDs)')
 
 
 if __name__ == '__main__':

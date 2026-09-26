@@ -19,7 +19,7 @@ models; it does not independently establish the mapper specification.
 
 | ID | Board / reference | Behavior and limits |
 |---:|---|---|
-| 232 | [Quattro](https://www.nesdev.org/wiki/INES_Mapper_071) | Outer 64 KiB bank plus inner 16 KiB bank; upper window follows outer bank. Aladdin variant excluded. |
+| 232 | [Quattro](https://www.nesdev.org/wiki/INES_Mapper_071) | Outer 64 KiB plus inner 16 KiB banking; NES 2.0 submapper 1 swaps the outer bits for Aladdin. |
 | 184 | [Sunsoft-1](https://www.nesdev.org/wiki/Sunsoft_1) | Fixed PRG; two 4 KiB CHR windows; upper window forces bank bit 2. |
 | 180 | [UxROM variant](https://www.nesdev.org/wiki/UxROM) | First 16 KiB fixed, upper 16 KiB switchable; AND bus conflicts. |
 | 140 | [JF-11/14](https://www.nesdev.org/wiki/INES_Mapper_140) | 32 KiB PRG / 8 KiB CHR; $6000-$7FFF decode; no conflicts. |
@@ -28,18 +28,29 @@ models; it does not independently establish the mapper specification.
 | 87 | [J87](https://www.nesdev.org/wiki/INES_Mapper_087) | Fixed PRG; reversed CHR select bits; $6000-$7FFF decode. |
 | 79 | [NINA-003/006](https://www.nesdev.org/wiki/NINA-003-006) | 32 KiB PRG / 8 KiB CHR; partial $4100-$5FFF decode. |
 | 76 | [Namco 109](https://www.nesdev.org/wiki/INES_Mapper_076) | Two 8 KiB PRG windows; four 2 KiB CHR windows; fixed mirroring. |
-| 206 | [DxROM](https://www.nesdev.org/wiki/INES_Mapper_206) | Fixed MMC3-style bank orientation; no IRQ/WRAM. Four-screen Gauntlet, Popils prototype WRAM, and Namco 108 spurious-write erratum excluded. |
+| 206 | [DxROM](https://www.nesdev.org/wiki/INES_Mapper_206) | Fixed MMC3-style orientation, no IRQ; four-screen memory and header-declared Popils WRAM; submapper 1 fixes 32 KiB PRG. Namco 108 spurious writes remain a separate chip-revision task. |
 | 75 | [VRC1](https://www.nesdev.org/wiki/VRC1) | Three 8 KiB PRG windows; split CHR high/low bits; H/V control. Vs. System excluded. |
-| 71 | [Camerica](https://www.nesdev.org/wiki/INES_Mapper_071) | 16 KiB PRG; iNES Fire Hawk mirroring heuristic only at $9000-$9FFF; no bus conflicts. |
-| 34 | [BNROM / NINA-001](https://www.nesdev.org/wiki/INES_Mapper_034) | 0–8 KiB CHR ROM selects BNROM (AND conflicts); larger CHR ROM selects NINA-001 (WRAM writes also reach bank registers). |
+| 71 | [Camerica](https://www.nesdev.org/wiki/INES_Mapper_071) | 16 KiB PRG; NES 2.0 submapper 0 fixes H/V, submapper 1 enables Fire Hawk mirroring at $8000-$9FFF. iNES retains the $9000 heuristic. |
+| 34 | [BNROM / NINA-001](https://www.nesdev.org/wiki/INES_Mapper_034) | Submapper 1 selects NINA, 2 selects BNROM; submapper 0/iNES uses CHR size. NINA WRAM writes also reach bank registers. BNROM has AND conflicts. |
 | 13 | [CPROM](https://www.nesdev.org/wiki/CPROM) | Fixed PRG; 16 KiB CHR RAM, upper 4 KiB switchable; vertical mirroring; AND conflicts. |
 | 11 | [Color Dreams](https://www.nesdev.org/wiki/Color_Dreams) | 32 KiB PRG / 8 KiB CHR; AND bus conflicts. Conflict-free prototypes excluded. |
 
-New boards initially accept legacy iNES images only. NES 2.0 variants are rejected
-for these IDs until their submapper and RAM-size metadata are implemented. Fixed
-mirroring follows the iNES header. Four-screen boards are rejected. Power-on
-mappings are deterministic implementation choices where hardware does not guarantee a state.
-Battery RAM persistence and analog CIC defeat circuits are outside this host.
+[NES 2.0](https://www.nesdev.org/wiki/NES_2.0) decoding now preserves the 12-bit
+mapper, submapper, extended/exponent ROM lengths, RAM/NVRAM sizes, trainer offset,
+timing, and console type. Unknown submappers, unsupported console/timing models,
+and mixed CHR ROM/RAM boards are rejected explicitly. NTSC and multi-region
+headers run the NTSC machine. File allocations are bounded to 64 MiB per ROM,
+128 KiB PRG RAM, and 1 MiB CHR RAM. RAM sizes do not by themselves add banking
+registers: extended MMC1 RAM/outer-bank wiring is separate follow-up work.
+
+Four-screen cartridges have four independent nametables, included in memory
+hashes and dumps. RAM below a CPU/PPU window size mirrors within that window.
+Submapper 5 of MMC1 fixes the 32 KiB PRG map; submappers 1/2 of UxROM, CNROM,
+and AxROM select no/AND bus conflicts. Generated programs now check cartridge
+metadata as well as PRG bytes: regenerate older cycle output when updating.
+Power-on mappings remain deterministic where hardware does not specify a state.
+NVRAM bytes survive machine power-on within a loaded cartridge; host save-file
+persistence is part of the EEPROM/persistence follow-up.
 
 Run the cartridge contracts with `ctest` in a `runner/cyc` build. Run execution
 checks with `tools/cyc/test_cyc_runtime.py`; every fixture runs compiled code, the
@@ -58,6 +69,13 @@ exactly at all four alignments. AccuracyCoin retains its existing alignment
 scores of 144/144, 143/144, 141/144 and 143/144; this change adds no new failures.
 
 Deferred work includes MMC2/MMC4 read-triggered latches, MMC5, VRC IRQ/audio chips,
-Bandai EEPROM, four-screen nametable RAM, and mappers with PRG banks below 8 KiB.
+Bandai EEPROM, and mappers with PRG banks below 8 KiB.
 Each needs its missing hardware primitive and suitable regression ROMs before
 being added to the supported list. The legacy runner still needs separate work.
+
+The metadata/variant draft adds `cart_header_test.c` and
+`tools/cyc/cart_variant_fixtures.py`. Contracts cover Aladdin, fixed Namco PRG,
+explicit NINA/BNROM selection, exponent lengths, Camerica variants, Popils RAM,
+small RAM mirroring, and four-screen reads/writes through the actual PPU bus.
+The full execution harness and header acceptance/rejection harness retain their
+per-case logs under the selected output directory.
