@@ -67,6 +67,7 @@ inline void TricMapper::VRCWrite(ushort Address, byte Input) {
     }
 }
 inline void TricMapper::CPUClock() {
+    if (Cart.Mapper==5) { MMC5Clock(); return; }
     if (BandaiBoard()) { BandaiClock(); return; }
     if (!IrqEnable || totalCycles == LastWriteCycle) return;
     if (Cart.Mapper == 73) {

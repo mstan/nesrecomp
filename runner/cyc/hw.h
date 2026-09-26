@@ -62,6 +62,7 @@ unsigned hw_prg_bank(uint16_t addr);
 unsigned hw_prg_bank4(uint16_t addr);
 /* PRG bytes cannot change from PPU activity until the CPU writes a register. */
 bool hw_prg_is_stable(void);
+bool hw_prg_is_rom(uint16_t addr);
 
 #ifdef __cplusplus
 }

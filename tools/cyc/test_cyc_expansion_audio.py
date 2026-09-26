@@ -11,6 +11,7 @@ def main():
     ap=argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--fixtures',type=Path,help='VRC6 tone fixture directory')
     ap.add_argument('--fm-fixtures',type=Path,help='VRC7 fixture directory')
+    ap.add_argument('--mmc5-fixtures',type=Path,help='MMC5 fixture directory')
     args=ap.parse_args();measurements=[];cases=[]
     if args.fixtures:
         for mapper in (24,26):
@@ -20,7 +21,9 @@ def main():
         root=args.fm_fixtures.resolve()
         cases += [(root,'fm_nes2_tone_85_2',(3579545/72)*290/32768),
                   (root,'fm_nes2_tone_85_1',None),(root,'fm_nes2_tone_85_2_reset',None)]
-    if not cases: ap.error('pass --fixtures and/or --fm-fixtures')
+    if args.mmc5_fixtures:
+        cases += [(args.mmc5_fixtures.resolve(),f'mmc5_tone{i}',(21477272.7272727/12)/(16*254)) for i in range(2)]
+    if not cases: ap.error('pass --fixtures, --fm-fixtures or --mmc5-fixtures')
     for root,name,expected in cases:
             case=root/name
             suffix='.exe' if hasattr(subprocess,'CREATE_NO_WINDOW') else ''

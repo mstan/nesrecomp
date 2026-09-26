@@ -53,6 +53,8 @@ void hw_cart_power_on(void);
 
 /* A CPU write to $4020-$FFFF: the mapper's registers and its work RAM. */
 void hw_cart_cpu_write(uint16_t addr, uint8_t value);
+void hw_cart_cpu_read_snoop(uint16_t addr, uint8_t value);
+uint32_t hw_cart_mmc5_chr_index(uint16_t addr);
 /* A CPU read of $4020-$7FFF (work RAM and mappers that answer there).
  * Pass the current open-bus byte in *value for partially driven reads.
  * Returns true and sets *value when the cartridge drives the bus; $8000-$FFFF

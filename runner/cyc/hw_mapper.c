@@ -394,6 +394,8 @@ static void mmc3_ppu_addr(uint16_t vbus)
 /* Dispatch                                                                  */
 /* ------------------------------------------------------------------------- */
 
+#include "hw_mmc5.inc"
+
 /* MMC2 / MMC4: https://www.nesdev.org/wiki/MMC2 and /MMC4.
  * A triggering read still returns data from the old bank. Only subsequent
  * accesses see the latch's new bank. MMC2 fully decodes the lower trigger;
@@ -422,6 +424,7 @@ static void mmc2_write(uint16_t addr, uint8_t value)
 
 uint8_t hw_cart_chr_read(uint16_t addr)
 {
+    if (hw_cart.mapper==5) mmc5_ppu_read(addr);
     uint8_t value = hw_cart.chr[hw_cart_chr_index(addr)];
     if ((hw_cart.mapper == 9 || hw_cart.mapper == 10) && !hw_cart.m.pattern_pending) {
         hw_cart.m.pattern_pending = 1;
@@ -432,6 +435,7 @@ uint8_t hw_cart_chr_read(uint16_t addr)
 
 void hw_cart_ppu_rd(bool reading)
 {
+    if (hw_cart.mapper==5) { if (!reading) hw_cart.m.mmc5.rd=0; return; }
     if (!reading && hw_cart.m.pattern_pending) {
         uint16_t addr = hw_cart.m.pattern_addr;
         hw_cart.m.pattern_pending = 0;
@@ -459,6 +463,7 @@ static const struct {
     uint8_t     watch_ppu_addr;
     uint8_t     wram;            /* boards for this mapper carry work RAM */
 } MAPPERS[] = {
+    { 5, "MMC5", 0, 1 },
     { 157, "Bandai Datach", 1, 0 },
     { 153, "Bandai BA-JUMP2", 1, 1 },
     { 16, "Bandai FCG / LZ93D50", 0, 0 },
@@ -516,6 +521,11 @@ bool hw_prg_is_stable(void)
            !((hw_cart.m.reg[0]^hw_cart.m.reg[3])&1);
 }
 
+bool hw_prg_is_rom(uint16_t addr)
+{
+    return addr>=0x8000 && !(hw_cart.prg_off[addr>>12&7]&(MMC5_PRG_RAM|MMC5_PRG_OPEN));
+}
+
 bool hw_cart_supports(int mapper) { return mapper_index(mapper) >= 0; }
 
 const char *hw_cart_mapper_name(int mapper)
@@ -527,11 +537,12 @@ const char *hw_cart_mapper_name(int mapper)
 void hw_cart_power_on(void)
 {
     memset(&hw_cart.m, 0, sizeof(hw_cart.m));
+    if (!hw_cart.info.battery && !hw_cart.info.prg_nvram) memset(hw_cart.exram,0,sizeof(hw_cart.exram));
     memset(hw_cart.prg_off, 0, sizeof(hw_cart.prg_off));
     memset(hw_cart.chr_off, 0, sizeof(hw_cart.chr_off));
     int i = mapper_index(hw_cart.mapper);
     hw_cart.watch_ppu_addr = i >= 0 ? MAPPERS[i].watch_ppu_addr : 0;
-    hw_cart.watch_cpu = bandai_board() || (vrc24_board() && !vrc2_board()) || hw_cart.mapper == 73 || vrc6_board() || hw_cart.mapper == 85;
+    hw_cart.watch_cpu = hw_cart.mapper==5 || bandai_board() || (vrc24_board() && !vrc2_board()) || hw_cart.mapper == 73 || vrc6_board() || hw_cart.mapper == 85;
     hw_cart.mirroring = hw_cart.info.vertical ? HW_MIRROR_VERTICAL : HW_MIRROR_HORIZONTAL;
     hw_cart.wram_bank = 0;
     hw_cart.has_wram = hw_cart.info.prg_size ? hw_cart.wram_len != 0 : i >= 0 ? MAPPERS[i].wram : 0;
@@ -550,6 +561,7 @@ void hw_cart_power_on(void)
     memset(&hw_cart.barcode,0,sizeof(hw_cart.barcode));
     vrc7_sound_reset(true);
     switch (hw_cart.mapper) {
+    case 5: mmc5_reset(); break;
     case 16: case 159: case 153: case 157: bandai_apply(); break;
     case 85: hw_cart.m.reg[1]=1; hw_cart.m.reg[2]=2; hw_cart.m.irq_prescaler=341; vrc7_apply(); break;
     case 24: case 26:
@@ -587,6 +599,7 @@ void hw_cart_power_on(void)
 
 void hw_cart_cpu_write(uint16_t addr, uint8_t value)
 {
+    if (hw_cart.mapper==5) { mmc5_write(addr,value); return; }
     if (bandai_board()) { bandai_write(addr,value); return; }
     if (vrc24_board() && addr >= 0x6000 && addr < 0x8000) {
         if (vrc2_board() && !hw_cart.has_wram) {
@@ -733,6 +746,7 @@ void hw_cart_cpu_write(uint16_t addr, uint8_t value)
 
 bool hw_cart_cpu_read(uint16_t addr, uint8_t *value)
 {
+    if (hw_cart.mapper==5) return mmc5_read(addr,value);
     if (bandai_board()) return bandai_read(addr,value);
     if (vrc24_board() && addr >= 0x6000 && addr < 0x8000) {
         if (vrc2_board() && !hw_cart.has_wram) {
@@ -755,10 +769,17 @@ void hw_cart_ppu_addr_watched(uint16_t vbus)
     else if (hw_cart.mapper==153 || hw_cart.mapper==157) bandai_ppu_addr(vbus);
 }
 
-bool hw_cart_irq(void) { return hw_cart.m.irq_out != 0; }
+bool hw_cart_irq(void) {
+    if (hw_cart.mapper==5) {
+        const Mmc5State *m=&hw_cart.m.mmc5;
+        return (m->irq_enable && m->irq_pending) || m->timer_irq || (m->pcm_irq && (m->pcm_control&128));
+    }
+    return hw_cart.m.irq_out != 0;
+}
 
 void hw_cart_cpu_clock(void)
 {
+    if (hw_cart.mapper==5) { mmc5_clock(); return; }
     if (bandai_board()) { bandai_clock(); return; }
     if (hw_cart.mapper==85) vrc7_audio_clock();
     if (vrc6_board()) vrc6_audio_clock();
@@ -771,6 +792,7 @@ void hw_cart_cpu_clock(void)
 uint16_t hw_cart_nt_a10(uint16_t addr) { return (vrc6_nt_bank((addr >> 10) & 3) & 1) << 10; }
 bool hw_cart_nt_read(uint16_t addr, bool read_bus, uint8_t *value)
 {
+    if (hw_cart.mapper==5) { if (read_bus) *value=mmc5_nt_read(addr,true); return true; }
     if (!vrc6_board() || !(hw_cart.m.ctrl & 0x10)) return false;
     if (read_bus) {
         unsigned index = (vrc6_nt_bank((addr >> 10) & 3) % hw_cart.chr_pages)*1024 + (addr & 1023);
@@ -780,6 +802,7 @@ bool hw_cart_nt_read(uint16_t addr, bool read_bus, uint8_t *value)
 }
 bool hw_cart_nt_write(uint16_t addr, uint8_t value)
 {
+    if (hw_cart.mapper==5) { mmc5_nt_write(addr,value); return true; }
     if (!vrc6_board() || !(hw_cart.m.ctrl & 0x10)) return false;
     if (hw_cart.chr_ram) {
         unsigned index = vrc6_nt_bank((addr >> 10) & 3)*1024 + (addr & 1023);
@@ -791,6 +814,7 @@ double hw_cart_audio_level(void)
 {
     /* Nominal inverted linear DAC: one 15-level pulse ~= one 2A03 pulse.
      * Cartridge mixer resistor tolerances are not modeled. */
+    if (hw_cart.mapper==5) return mmc5_audio();
     if (hw_cart.mapper==85) return -(double)hw_cart.m.vrc7_output / 32768.0;
     return vrc6_board() ? -(double)vrc6_audio_dac() * (0.1488 / 15.0) : 0;
 }
@@ -842,6 +866,10 @@ uint64_t hw_cart_state_hash(uint64_t h)
             acc=acc*131+a->timer[ch]; acc=acc*131+a->step[ch];
         }
         acc=acc*131+a->control; acc=acc*131+a->accumulator;
+    }
+    if (hw_cart.mapper==5) {
+        const uint8_t *bytes=(const uint8_t *)&hw_cart.m.mmc5;
+        for (unsigned i=0;i<sizeof(Mmc5State);++i) acc=acc*131+bytes[i];
     }
     if (hw_cart.mapper==85) acc=vrc7_sound_hash(acc);
     if (bandai_board()) {

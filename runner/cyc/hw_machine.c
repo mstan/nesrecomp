@@ -30,7 +30,7 @@ static uint32_t frame_argb[256 * 240];
 static void clock_cpu_devices(void)
 {
     apu_cycle();
-    if (hw_cart.watch_cpu) hw_cart_cpu_clock();
+    if (hw_cart.watch_cpu && hw_cart.mapper!=5) hw_cart_cpu_clock();
 }
 
 /* ------------------------------------------------------------------------- */
@@ -45,6 +45,9 @@ static inline void sample_nmi(void)
 
 static inline void run_tick(unsigned k)
 {
+    /* MMC5 samples the PPU /RD pin at the CPU edge, before a coincident PPU
+     * transition. Keep the same CPU -> cartridge -> PPU order as the oracle. */
+    if (k==0 && hw_cart.mapper==5) hw_cart_cpu_clock();
     if (k == 4) sample_nmi();
     else if (k == 7) apu_sample_irq();
     unsigned q = (hw.align + k) & 3;
@@ -107,6 +110,7 @@ static void run_ticks_1_to_11(void)
 /* run_tick(0) without the CPU's access. */
 static inline void run_tick_0(void)
 {
+    if (hw_cart.mapper==5) hw_cart_cpu_clock();
     if (hw.align == 0) ppu_dot();
     else if (hw.align == 2) ppu_half_dot();
     clock_cpu_devices();
@@ -144,6 +148,7 @@ uint8_t hw_read(uint16_t addr)
 
 uint8_t hw_read_rom(uint16_t addr, uint8_t value)
 {
+    hw_cart_cpu_read_snoop(addr,value);
     hw.data_driven = 1;
     hw.data_bus = hw.internal_bus = value;
     if (cyc_trace_enabled) cyc_trace_access(addr, value, false);
@@ -182,7 +187,8 @@ uint8_t hw_bus_read(uint16_t addr)
     hw.data_driven = 0;
     if (addr >= 0x8000) {
         hw.data_bus = hw_cart_prg_read(addr);
-        hw.data_driven = 1;
+        hw.data_driven = !(hw_cart.prg_off[addr>>12&7]&MMC5_PRG_OPEN);
+        hw_cart_cpu_read_snoop(addr,hw.data_bus);
     } else if (addr < 0x2000) {
         hw.data_bus = hw.ram[addr & 0x7FF];
         hw.data_driven = 1;
@@ -229,6 +235,7 @@ uint8_t hw_bus_read(uint16_t addr)
 void hw_bus_write(uint16_t addr, uint8_t value)
 {
     if (cyc_trace_enabled) cyc_trace_access(addr, value, true);
+    if (hw_cart.mapper==5 && addr<0x4020) hw_cart_cpu_write(addr,value);
     if (addr < 0x2000) hw.ram[addr & 0x7FF] = value;
     else if (addr < 0x4000) ppu_write(addr, value);
     else if (addr <= 0x4017) apu_write(addr, value);
@@ -326,11 +333,11 @@ void cyc_power_on(uint8_t ppu_alignment)
 }
 
 #include "../../common/nes_nvram.h"
-static NesNvram nvram_region(unsigned region) { return nes_nvram_region(&hw_cart.info,hw_cart.wram,hw_cart.chr,hw_cart.eeprom,region); }
+static NesNvram nvram_region(unsigned region) { return nes_nvram_region(&hw_cart.info,hw_cart.wram,hw_cart.chr,hw_cart.eeprom,hw_cart.exram,region); }
 bool cyc_scan_barcode(const char *digits, unsigned cycles_per_module) {
     return hw_cart.mapper==157 && nes_barcode_scan(&hw_cart.barcode,digits,cycles_per_module,hw.cycles);
 }
-size_t cyc_nvram_size(unsigned region) { NesNvram n=nvram_region(region); return n.size[0]+n.size[1]; }
+size_t cyc_nvram_size(unsigned region) { NesNvram n=nvram_region(region); return n.size[0]+n.size[1]+n.size[2]; }
 bool cyc_nvram_export(unsigned region, void *buffer, size_t size) {
     return nes_nvram_transfer(nvram_region(region),buffer,size,false);
 }
@@ -384,6 +391,7 @@ uint64_t cyc_mem_state_hash(void)
                         hw_frame_index);
     for (unsigned chip=0;chip<2;++chip)
         for (unsigned i=0;i<hw_cart.eeprom[chip].size;++i) h=cyc_trace_mix(h,hw_cart.eeprom[chip].data[i]);
+    if (hw_cart.mapper==5) for (unsigned i=0;i<1024;++i) h=cyc_trace_mix(h,hw_cart.exram[i]);
     return h;
 }
 

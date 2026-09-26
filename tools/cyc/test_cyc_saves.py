@@ -45,6 +45,26 @@ def main():
                     save.write_bytes(bad)
                     run(executable,rom,save,out/f'bad_{mapper}_{mode}_{align}.txt',extra_align,False,save_flag)
                     assert save.read_bytes()==bad;checked+=1
+    # MMC5 internal ExRAM has a separate battery pin and is not part of the
+    # header's PRG RAM count. Persist it after external NVRAM. ETROM's other
+    # chip is volatile and must start fresh in each process.
+    for name in ('mmc5_save','mmc5_save_mixed'):
+        rom=root/name/(name+'.nes')
+        if not rom.exists():continue
+        for mode,executable,extra in [('native',exe(name),[]),('embedded',exe(name),['--interp-only']),
+                    ('standalone',args.interp.resolve(),[]),('oracle',args.oracle.resolve(),[])]:
+            for align in range(4):
+                save=out/f'{name}_{mode}_{align}.sav';save.unlink(missing_ok=True)
+                flags=[*extra,'--align',str(align)]
+                for counter in (1,2):
+                    line=run(executable,rom,save,out/f'{name}_{mode}_{align}_{counter}.txt',flags)
+                    assert f'A={counter:02X}' in line,line
+                    expected=bytearray(9216);expected[0]=expected[8192]=counter
+                    assert save.read_bytes()==expected,(name,mode,align);checked+=1
+                for bad in (bytes(8192),bytes(expected)+b'extra'):
+                    save.write_bytes(bad)
+                    run(executable,rom,save,out/f'{name}_{mode}_{align}_bad.txt',flags,False)
+                    assert save.read_bytes()==bad;checked+=1
     # Never allow the two differently-sized Datach regions to overwrite one
     # another through a spelling such as "./save". Also reject bad barcodes
     # before any save is written.

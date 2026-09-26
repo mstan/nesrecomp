@@ -48,7 +48,7 @@ void cyc_run_frame(void) {
         } else {
             uint16_t pc = cpu.pc;
             uint64_t before = cyc_cycle_count();
-            if (cyc_run_miss && pc >= 0x8000) cyc_run_miss[cyc_run_miss_index(pc)]++;
+            if (cyc_run_miss && hw_prg_is_rom(pc)) cyc_run_miss[cyc_run_miss_index(pc)]++;
             else if (cyc_run_ram_miss && pc < 0x2000) {
                 cyc_run_ram_miss[pc]++;
                 if (cyc_run_ram_opcodes) {
@@ -59,7 +59,7 @@ void cyc_run_frame(void) {
             cpu_interp_step();
             uint64_t took = cyc_cycle_count() - before;
             if (pc < 0x2000) cyc_run_interp_ram_cycles += took;
-            else if (pc >= 0x8000) cyc_run_interp_rom_cycles += took;
+            else if (hw_prg_is_rom(pc)) cyc_run_interp_rom_cycles += took;
             else cyc_run_interp_other_cycles += took;
         }
     }

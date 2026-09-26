@@ -19,6 +19,7 @@ from vrc_fixtures import vrc_fixtures
 from expansion_fixtures import expansion_fixtures
 from vrc7_fixtures import vrc7_fixtures
 from bandai_fixtures import bandai_fixtures
+from mmc5_fixtures import mmc5_fixtures
 
 
 def run(cmd, cwd, log, timeout=180):
@@ -81,6 +82,7 @@ def main():
              'target_include_directories(cyc_regression_runtime PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})',
              'target_compile_definitions(cyc_regression_runtime PRIVATE _CRT_SECURE_NO_WARNINGS)']
     cases = list(fixtures()) + list(mapper_fixtures()) + list(ppu_fixtures()) + list(variant_fixtures()) + list(latch_fixtures()) + list(fineprg_fixtures()) + list(vrc_fixtures()) + list(expansion_fixtures()) + list(vrc7_fixtures()) + list(bandai_fixtures())
+    cases += list(mmc5_fixtures())
     cases = [case for case in cases if case[0].startswith(args.case_prefix)]
     if not cases:
         ap.error('no matching fixtures')
@@ -109,6 +111,8 @@ def main():
         expected = expected.removeprefix('final:')
         mixed = expected.startswith('mixed:')
         expected = expected.removeprefix('mixed:')
+        fallback = expected.startswith('fallback:')
+        expected = expected.removeprefix('fallback:')
         frames = 6 if final_only else 3
         case = out / name
         suffix = '.exe' if hasattr(subprocess, 'CREATE_NO_WINDOW') else ''
@@ -128,7 +132,9 @@ def main():
                     raise AssertionError(f'{name}, {mode}, alignment {align}: wrong result in {trace}')
                 if mode == 'native' and mixed and 'interpreted: ROM' not in stdout:
                     raise AssertionError(f'{name}: expected PPU-driven PRG interpreter fallback')
-                if mode == 'native' and not mixed and '(100.0%)' not in stdout:
+                if mode == 'native' and fallback and 'native_cycles=0 ' in stdout:
+                    raise AssertionError(f'{name}: did not exercise native code around RAM fallback')
+                if mode == 'native' and not mixed and not fallback and '(100.0%)' not in stdout:
                     raise AssertionError(f'{name}: regression did not exercise native code')
                 hashes[mode] = trace
             for mode in ('interp', 'standalone', 'oracle'):

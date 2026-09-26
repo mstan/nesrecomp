@@ -33,6 +33,7 @@
 #include <stdint.h>
 
 #include "hw_mapper.h"
+#include "mmc5_state.h"
 #include "../../common/nes_cart.h"
 #include "../../common/nes_eeprom.h"
 #include "../../common/nes_barcode.h"
@@ -101,6 +102,7 @@ typedef struct {
     NesCartInfo info;
     NesEeprom eeprom[2];
     NesBarcode barcode;
+    uint8_t exram[1024]; /* MMC5 internal RAM, battery-powered separately. */
     uint32_t wram_len, wram_bank;
     uint16_t mapper;            /* iNES mapper number */
     uint8_t  mirroring;         /* HwMirroring, as the cartridge drives CIRAM A10 */
@@ -129,6 +131,7 @@ typedef struct {
         uint16_t vrc_chr[8], irq_latch16, irq_counter16;
         int16_t irq_prescaler;
         uint8_t irq_mode;
+        Mmc5State mmc5;
         HwVrc6Audio vrc6_audio;
         uint8_t vrc7_reg[64], vrc7_address;
         uint64_t vrc7_phase;
@@ -142,12 +145,16 @@ extern HwCart    hw_cart;
 /* PRG ROM as the CPU sees it at addr ($8000-$FFFF). */
 HW_ALWAYS_INLINE uint8_t hw_cart_prg_read(uint16_t addr)
 {
-    return hw_cart.prg[hw_cart.prg_off[(addr >> 12) & 7] | (addr & 0x0FFF)];
+    uint32_t offset=hw_cart.prg_off[(addr >> 12)&7] | (addr&4095);
+    if (offset&MMC5_PRG_OPEN) return hw.data_bus;
+    if (offset&MMC5_PRG_RAM) return hw_cart.wram[offset&0x1ffff];
+    return hw_cart.prg[offset];
 }
 
 /* CHR as the PPU sees it at a ($0000-$1FFF). */
 HW_ALWAYS_INLINE uint32_t hw_cart_chr_index(uint16_t a)
 {
+    if (hw_cart.mapper==5) return hw_cart_mmc5_chr_index(a);
     uint32_t index = hw_cart.chr_off[(a >> 10) & 7] | (a & 0x3FF);
     return hw_cart.chr_ram && hw_cart.chr_len ? index % hw_cart.chr_len : index;
 }
