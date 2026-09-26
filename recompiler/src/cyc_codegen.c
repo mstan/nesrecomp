@@ -757,8 +757,7 @@ static char index_reg(AddrMode am) {
 
 /* ---- writes that can move PRG banks ----
  *
- * On every banked mapper here the registers live in $8000-$FFFF, the same
- * space the program is executing from, so a write there can change which bank
+ * A write to a mapper register can change which bank
  * backs the addresses this block folded to constants. The instructions after
  * such a write are only correct for the mapping the block was generated for,
  * so the block ends there and the scheduler re-dispatches on the live
@@ -767,18 +766,26 @@ static char index_reg(AddrMode am) {
  * Most writes cannot reach that far and continue in place. */
 typedef enum { WR_NEVER, WR_MAYBE, WR_ALWAYS } WriteReach;
 
+static unsigned mapper_write_floor(int mapper) {
+    switch (mapper) {
+    /* Low-address register apertures are added with their boards. */
+    default: return 0x8000;
+    }
+}
+
 static WriteReach write_reach(Emit *e, AddrMode am) {
     if (INTERP(e) || !e->p->banked) return WR_NEVER;
+    unsigned floor = mapper_write_floor(e->p->mapper);
     switch (am) {
     case AM_ZP: case AM_ZPX: case AM_ZPY:
         return WR_NEVER;                     /* the effective address is one byte */
     case AM_ABS:
-        return insn_operand16(e) >= 0x8000 ? WR_ALWAYS : WR_NEVER;
+        return insn_operand16(e) >= floor ? WR_ALWAYS : WR_NEVER;
     case AM_ABSX: case AM_ABSY: {
         uint16_t base = insn_operand16(e);
-        if (base <= 0x7F00) return WR_NEVER;                      /* base + 255 < $8000 */
-        if (base >= 0x8000 && base <= 0xFF00) return WR_ALWAYS;   /* and cannot wrap */
-        return WR_MAYBE;                                          /* spans $8000, or wraps */
+        if ((unsigned)base + 255 < floor) return WR_NEVER;
+        if (base >= floor && base <= 0xFF00) return WR_ALWAYS;
+        return WR_MAYBE; /* crosses the register aperture or wraps */
     }
     default:
         return WR_MAYBE;                     /* (zp,X) and (zp),Y: a run-time pointer */
@@ -795,7 +802,8 @@ static bool bank_exit(Emit *e, WriteReach reach) {
         ln(e, "cpu.pc = 0x%04X; return;   /* wrote the mapper: re-dispatch */", next);
         return true;
     }
-    ln(e, "if (ea >= 0x8000) { cpu.pc = 0x%04X; return; }   /* wrote the mapper */", next);
+    ln(e, "if (ea >= 0x%04X) { cpu.pc = 0x%04X; return; }   /* wrote the mapper */",
+       mapper_write_floor(e->p->mapper), next);
     return false;
 }
 
@@ -1360,8 +1368,7 @@ static void seed_vectors(const Program *p, uint32_t bank, uint32_t *seeds, int *
 bool cyc_codegen_emit(const NESRom *rom, const GameConfig *cfg, const char *output_prefix) {
     const char *board = mapper_name(rom->mapper);
     if (!board) {
-        fprintf(stderr, "[cyc] --cycle-accurate supports mappers 0, 1, 2, 3, 4, 7 and 66; "
-                        "this ROM uses mapper %d\n", rom->mapper);
+        fprintf(stderr, "[cyc] unsupported mapper %d; see runner/cyc/MAPPERS.md\n", rom->mapper);
         return false;
     }
     if (!check_table()) return false;

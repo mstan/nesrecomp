@@ -10,6 +10,7 @@ from pathlib import Path
 import subprocess
 
 from cyc_verify import first_difference
+from mapper_fixtures import mapper_fixtures
 
 
 def run(cmd, cwd, log):
@@ -66,7 +67,7 @@ def main():
     source = Path(__file__).resolve().parents[2] / 'runner/cyc'
     cmake = ['cmake_minimum_required(VERSION 3.20)', 'project(cyc_regressions C)',
              'set(CMAKE_C_STANDARD 11)', f'include("{source.as_posix()}/cyc.cmake")']
-    cases = list(fixtures())
+    cases = list(fixtures()) + list(mapper_fixtures())
     for name, image, seeds, _ in cases:
         case = out / name
         case.mkdir(exist_ok=True)

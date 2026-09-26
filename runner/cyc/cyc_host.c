@@ -353,7 +353,7 @@ int main(int argc, char **argv) {
     size_t size;
     uint8_t *image = read_file(rom_path, &size);
     if (!image || !cyc_load_ines(image, size)) {
-        fprintf(stderr, "cannot load %s (iNES image with mapper 0, 1, 2, 3, 4, 7 or 66 required)\n", rom_path);
+        fprintf(stderr, "cannot load %s (invalid or unsupported cartridge; see runner/cyc/MAPPERS.md)\n", rom_path);
         return 2;
     }
 #ifndef CYC_ORACLE
