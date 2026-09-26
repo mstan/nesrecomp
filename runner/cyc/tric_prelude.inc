@@ -360,6 +360,11 @@ inline void TricMapper::StoreCPU(ushort Address, byte Input) {
         Mirroring = (Input & 128) ? TRIC_MIRROR_VERTICAL : TRIC_MIRROR_HORIZONTAL;
         return;
     }
+    if (Cart.Mapper == 140 && (Address & 0xe000) == 0x6000) {
+        MapPRG32((Input / 16) % 4);
+        MapCHR8(Input % 16);
+        return;
+    }
     if (Address >= 0x6000 && Address < 0x8000) {
         if (HasWRAM && WRAM_Writable) WRAM[Address & 0x1FFF] = Input;
         return;
