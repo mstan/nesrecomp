@@ -53,6 +53,21 @@ static void no_wram(void)
 }
 
 /* Per-board tests. */
+static void test_mapper113(void)
+{
+    cart(113, 256, 128);
+    hw_cart_cpu_write(0x4000, 0xff); hw_cart_cpu_write(0x6000, 0xff);
+    prg_banks(0, 1, 2, 3);
+    hw_cart_cpu_write(0x4100, 235);
+    prg_banks(20, 21, 22, 23);
+    chr_bank(0, 88, 8);
+    CHECK(hw_cart.mirroring == HW_MIRROR_VERTICAL);
+    hw_cart_cpu_write(0x5fff, 0);
+    prg_banks(0, 1, 2, 3);
+    chr_bank(0, 0, 8);
+    no_wram();
+}
+
 static void test_mapper94(void)
 {
     cart(94, 128, 8);
@@ -228,6 +243,7 @@ int main(void)
     chr_bank(0, 0, 8);
     no_wram();
     /* Run added board contracts. */
+    test_mapper113();
     test_mapper94();
     test_mapper87();
     test_mapper79();
