@@ -9580,7 +9580,7 @@ bool cyc_load_ines(const uint8_t *image, size_t size) {
     if (!nes_cart_image(image, size, &info) || !nes_cart_variant_supported(&info)) return false;
     int mapper = info.mapper;
     switch (mapper) {   // the set hw_mapper.c implements
-    case 9: break;
+    case 9: case 10: break;
     case 232: break;
     case 184: break;
     case 180: break;

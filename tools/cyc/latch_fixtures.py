@@ -4,7 +4,7 @@ from mapper_ppu_fixtures import ppu_contract
 
 
 def latch_fixtures():
-    for mapper in (9,):
+    for mapper in (9, 10):
         yield handoff(f'latch_mapper{mapper}_prg', mapper, [(0xa000, 3)],
                       3 if mapper == 9 else 6, chr_kb=128)
         operations = [

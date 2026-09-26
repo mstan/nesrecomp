@@ -450,6 +450,7 @@ static const struct {
     uint8_t     wram;            /* boards for this mapper carry work RAM */
 } MAPPERS[] = {
     { 9, "MMC2", 0, 0 },
+    { 10, "MMC4", 0, 1 },
     { 232, "Camerica Quattro", 0, 0 },
     { 184, "Sunsoft-1", 0, 0 },
     { 180, "Crazy Climber", 0, 0 },

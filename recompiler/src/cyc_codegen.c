@@ -1345,6 +1345,7 @@ bool cyc_codegen_emit_interpreter(const char *path) {
 static const char *mapper_name(int mapper) {
     switch (mapper) {
     case 9: return "MMC2";
+    case 10: return "MMC4";
     case 11: return "Color Dreams";
     case 13: return "CPROM";
     case 34: return "BNROM / NINA-001";

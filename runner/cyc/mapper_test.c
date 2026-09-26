@@ -298,7 +298,7 @@ static void test_mapper11(void)
 
 static void test_mmc2_latches(void)
 {
-    for (int mapper = 9; mapper <= 9; ++mapper) {
+    for (int mapper = 9; mapper <= 10; ++mapper) {
         cart(mapper, 128, 128);
         hw_cart_cpu_write(0xafff, 3);
         if (mapper == 9) { prg_banks(3, 13, 14, 15); no_wram(); }
