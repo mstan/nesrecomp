@@ -355,6 +355,11 @@ typedef struct {
     bool             disable_ptr_scan; /* skip switchable→fixed ROM pointer scan */
     bool             disable_secondary; /* skip secondary entry classification */
     bool             deduplicate_functions; /* exact generated-body sharing, opt-in */
+    bool             cycle_accurate; /* emit <prefix>_cyc.c for runner/cyc instead (cyc_codegen.c) */
+    /* [game] cycle_seed_file: instruction addresses observed running on the
+     * interpreter (written by the cycle-accurate host's --miss-log), used as
+     * extra discovery entry points. Resolved relative to game.toml. */
+    char             cycle_seed_file[512];
 } GameConfig;
 
 /* Initialize to empty (no dispatch tables, prefix derived from ROM name) */

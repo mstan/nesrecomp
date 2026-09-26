@@ -1,0 +1,5 @@
+# dynamic entry points of the stress program (game.toml cycle_seed_file)
+86C4
+89B6
+8A2E
+8A3B

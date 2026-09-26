@@ -1,0 +1,10 @@
+# AccuracyCoin (NROM) - the accuracy test suite cycle-accurate mode is built
+# against. The ROM is not in this repository; see README.md.
+#   NESRecomp AccuracyCoin.nes --game game.toml
+
+[game]
+output_prefix = "accuracycoin"
+cycle_accurate = true
+# Entry points only reachable through RTS/JMP-indirect dispatch, collected by
+#   AccuracyCoinRecomp AccuracyCoin.nes --acccoin --miss-log cyc_seeds.txt
+cycle_seed_file = "cyc_seeds.txt"

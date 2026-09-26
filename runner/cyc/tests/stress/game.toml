@@ -1,0 +1,9 @@
+# Synthetic stress program for the cycle-accurate templates.
+#   python ../../../../tools/cyc/make_cyc_stress_rom.py cyc_stress.nes
+#   NESRecomp cyc_stress.nes --game game.toml
+# then compare native and --interp-only per-frame trace hashes (README.md).
+
+[game]
+output_prefix = "cyc_stress"
+cycle_accurate = true
+cycle_seed_file = "cyc_stress_seeds.txt"
