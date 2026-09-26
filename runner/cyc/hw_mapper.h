@@ -54,6 +54,7 @@ void hw_cart_power_on(void);
 /* A CPU write to $4020-$FFFF: the mapper's registers and its work RAM. */
 void hw_cart_cpu_write(uint16_t addr, uint8_t value);
 /* A CPU read of $4020-$7FFF (work RAM and mappers that answer there).
+ * Pass the current open-bus byte in *value for partially driven reads.
  * Returns true and sets *value when the cartridge drives the bus; $8000-$FFFF
  * is read inline through hw_cart.prg_off. */
 bool hw_cart_cpu_read(uint16_t addr, uint8_t *value);
@@ -67,6 +68,8 @@ void hw_cart_ppu_addr_watched(uint16_t vbus);
 uint8_t hw_cart_chr_read(uint16_t addr);
 /* Finish any read-triggered latch when the PPU releases /RD. */
 void hw_cart_ppu_rd(bool reading);
+/* Once per completed CPU cycle, including cycles stolen by DMA. */
+void hw_cart_cpu_clock(void);
 
 /* The mapper's /IRQ output, ORed into the CPU's IRQ input with the 2A03's
  * own frame and DMC interrupts. */

@@ -9580,6 +9580,11 @@ bool cyc_load_ines(const uint8_t *image, size_t size) {
     if (!nes_cart_image(image, size, &info) || !nes_cart_variant_supported(&info)) return false;
     int mapper = info.mapper;
     switch (mapper) {   // the set hw_mapper.c implements
+    case 21: break;
+    case 22: break;
+    case 23: break;
+    case 25: break;
+    case 73: break;
     case 31: break;
     case 9: case 10: break;
     case 232: break;
@@ -9716,7 +9721,8 @@ static const struct { const char *name; const void *p; size_t n; } cyc_hw_fields
         F(Cart.MapperChip.Reg), F(Cart.MapperChip.MirrorReg), F(Cart.MapperChip.RamProtect),
         F(Cart.MapperChip.IrqLatch), F(Cart.MapperChip.IrqCounter), F(Cart.MapperChip.IrqReload),
         F(Cart.MapperChip.IrqEnable), F(Cart.MapperChip.IrqOut), F(Cart.MapperChip.A12),
-        F(Cart.MapperChip.Latch), F(Cart.MapperChip.PatternPending), F(Cart.MapperChip.PatternAddress)
+        F(Cart.MapperChip.Latch), F(Cart.MapperChip.PatternPending), F(Cart.MapperChip.PatternAddress), F(Cart.MapperChip.VrcChr), F(Cart.MapperChip.VrcLatch16),
+        F(Cart.MapperChip.VrcCounter16), F(Cart.MapperChip.IrqDivider), F(Cart.MapperChip.IrqMode)
 };
 #undef F
 

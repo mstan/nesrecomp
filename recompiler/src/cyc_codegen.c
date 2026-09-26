@@ -508,9 +508,9 @@ static int fixed_bank_for(int mapper, uint32_t banks, uint32_t slot) {
     unsigned slots;
     switch (mapper) {
     case 0: case 3: case 13: case 87: case 184: slots = 255; break; /* all PRG fixed */
-    case 2: case 10: case 71: case 76: case 94: case 206: slots = 240; break; /* last 16 KiB */
+    case 2: case 10: case 22: case 73: case 71: case 76: case 94: case 206: slots = 240; break; /* last 16 KiB */
     case 9: slots = 252; break;                                  /* last 24 KiB */
-    case 4: case 75: slots = 192; break;                           /* last 8 KiB */
+    case 4: case 21: case 23: case 25: case 75: slots = 192; break;                           /* last 8 KiB */
     case 180: slots = 15; break;                                 /* first 16 KiB */
     default: slots = 0; break;
     }
@@ -522,6 +522,8 @@ static int fixed_bank_for(int mapper, uint32_t banks, uint32_t slot) {
 /* The configuration a cold console comes up in; hw_mapper.c's reset paths. */
 static int power_on_bank8_for(int mapper, uint32_t banks, uint32_t slot) {
     switch (mapper) {
+    case 21: case 22: case 23: case 25: case 73:
+        return slot >= 2 ? (int)(banks - 4 + slot) : (int)slot;
     case 9: return slot ? (int)(banks - 4 + slot) : 0;
     case 10: return slot >= 2 ? (int)(banks - 4 + slot) : (int)slot;
     case 71: return slot >= 2 ? (int)(banks - 2 + slot - 2) : (int)slot;
@@ -1351,6 +1353,11 @@ bool cyc_codegen_emit_interpreter(const char *path) {
 /* The board names hw_mapper.c implements, for the message and the banner. */
 static const char *mapper_name(int mapper) {
     switch (mapper) {
+    case 21: return "VRC4a/c";
+    case 23: return "VRC2b / VRC4e/f";
+    case 25: return "VRC2c / VRC4b/d";
+    case 22: return "VRC2a";
+    case 73: return "VRC3";
     case 31: return "NSF cartridge";
     case 9: return "MMC2";
     case 10: return "MMC4";

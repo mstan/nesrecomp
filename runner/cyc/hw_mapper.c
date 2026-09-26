@@ -448,12 +448,19 @@ void hw_cart_ppu_rd(bool reading)
     }
 }
 
+#include "hw_vrc.inc"
+
 static const struct {
     int         mapper;
     const char *name;
     uint8_t     watch_ppu_addr;
     uint8_t     wram;            /* boards for this mapper carry work RAM */
 } MAPPERS[] = {
+    { 21, "VRC4a/c", 0, 1 },
+    { 22, "VRC2a", 0, 0 },
+    { 23, "VRC2b / VRC4e/f", 0, 1 },
+    { 25, "VRC2c / VRC4b/d", 0, 1 },
+    { 73, "VRC3", 0, 1 },
     { 31, "NSF cartridge", 0, 0 },
     { 9, "MMC2", 0, 0 },
     { 10, "MMC4", 0, 1 },
@@ -503,6 +510,7 @@ void hw_cart_power_on(void)
     memset(hw_cart.chr_off, 0, sizeof(hw_cart.chr_off));
     int i = mapper_index(hw_cart.mapper);
     hw_cart.watch_ppu_addr = i >= 0 ? MAPPERS[i].watch_ppu_addr : 0;
+    hw_cart.watch_cpu = (vrc24_board() && !vrc2_board()) || hw_cart.mapper == 73;
     hw_cart.mirroring = hw_cart.info.vertical ? HW_MIRROR_VERTICAL : HW_MIRROR_HORIZONTAL;
     hw_cart.wram_bank = 0;
     hw_cart.has_wram = hw_cart.info.prg_size ? hw_cart.wram_len != 0 : i >= 0 ? MAPPERS[i].wram : 0;
@@ -517,6 +525,9 @@ void hw_cart_power_on(void)
     memset(hw_cart.wram, 0, hw_cart.info.prg_nvram ? hw_cart.info.prg_ram : sizeof(hw_cart.wram));
 
     switch (hw_cart.mapper) {
+    case 21: case 22: case 23: case 25:
+        hw_cart.m.reg[1] = 1; hw_cart.m.irq_prescaler = 341; vrc24_apply(); break;
+    case 73: uxrom_reset(); break;
     case 31:
         for (unsigned slot = 0; slot < 8; ++slot) map_prg4(slot, slot == 7 ? 255 : 0);
         map_chr8(0); break;
@@ -546,6 +557,13 @@ void hw_cart_power_on(void)
 
 void hw_cart_cpu_write(uint16_t addr, uint8_t value)
 {
+    if (vrc24_board() && addr >= 0x6000 && addr < 0x8000) {
+        if (vrc2_board() && !hw_cart.has_wram) {
+            if (addr < 0x7000) hw_cart.m.latch = value & 1;
+            return;
+        }
+        if (!vrc2_board() && hw_cart.wram_len == 2048 && addr >= 0x7000) return;
+    }
     /* Mapper 31: https://www.nesdev.org/wiki/INES_Mapper_031 */
     if (hw_cart.mapper == 31 && (addr & 0xf000) == 0x5000) {
         hw_cart.m.reg[addr & 7] = value;
@@ -599,6 +617,8 @@ void hw_cart_cpu_write(uint16_t addr, uint8_t value)
     if ((hw_cart.mapper == 2 || hw_cart.mapper == 3 || hw_cart.mapper == 7) &&
         hw_cart.info.submapper == 2) value &= hw_cart_prg_read(addr);
     switch (hw_cart.mapper) {
+    case 21: case 22: case 23: case 25: vrc24_write(addr, value); break;
+    case 73: vrc3_write(addr, value); break;
     case 9: case 10: mmc2_write(addr, value); break;
     case 11: /* Color Dreams; see MAPPERS.md. */
         value &= hw_cart_prg_read(addr);
@@ -680,6 +700,14 @@ void hw_cart_cpu_write(uint16_t addr, uint8_t value)
 
 bool hw_cart_cpu_read(uint16_t addr, uint8_t *value)
 {
+    if (vrc24_board() && addr >= 0x6000 && addr < 0x8000) {
+        if (vrc2_board() && !hw_cart.has_wram) {
+            if (addr >= 0x7000) return false;
+            *value = (*value & 0xfe) | hw_cart.m.latch;
+            return true;
+        }
+        if (!vrc2_board() && hw_cart.wram_len == 2048 && addr >= 0x7000) return false;
+    }
     if (addr >= 0x6000 && addr < 0x8000 && hw_cart.has_wram && hw_cart.wram_readable) {
         *value = hw_cart.wram[(hw_cart.wram_bank + (addr & 0x1FFF)) % hw_cart.wram_len];
         return true;
@@ -693,6 +721,12 @@ void hw_cart_ppu_addr_watched(uint16_t vbus)
 }
 
 bool hw_cart_irq(void) { return hw_cart.m.irq_out != 0; }
+
+void hw_cart_cpu_clock(void)
+{
+    if (hw_cart.mapper == 73) vrc3_clock();
+    else if (hw_cart.watch_cpu) vrc_irq_clock();
+}
 
 /* ------------------------------------------------------------------------- */
 /* Comparison                                                                */
@@ -727,6 +761,14 @@ uint64_t hw_cart_state_hash(uint64_t h)
         acc = acc * 131 + hw_cart.m.pattern_pending;
         acc = acc * 131 + hw_cart.m.pattern_addr;
     }
+    if (vrc24_board() || hw_cart.mapper == 73) {
+        for (unsigned i=0; i<8; ++i) acc = acc*131 + hw_cart.m.vrc_chr[i];
+        acc = acc*131 + hw_cart.m.irq_latch16;
+        acc = acc*131 + hw_cart.m.irq_counter16;
+        acc = acc*131 + hw_cart.m.irq_prescaler;
+        acc = acc*131 + hw_cart.m.irq_mode;
+        acc = acc*131 + hw_cart.m.last_write_cycle;
+    }
     /* Work RAM is a memory a program can read back, so it is compared across
      * implementations in cyc_mem_hash, not here. */
     return cyc_trace_mix(h, acc);
@@ -735,6 +777,11 @@ uint64_t hw_cart_state_hash(uint64_t h)
 void hw_cart_state_dump(void *file)
 {
     FILE *f = (FILE *)file;
+    if (vrc24_board() || hw_cart.mapper == 73) {
+        for (unsigned i=0; i<8; ++i) fprintf(f, "cart.vrc_chr[%u] %03X\n", i, hw_cart.m.vrc_chr[i]);
+        fprintf(f, "cart.irq_latch16 %04X\ncart.irq_counter16 %04X\ncart.irq_prescaler %d\ncart.irq_mode %u\n",
+                hw_cart.m.irq_latch16, hw_cart.m.irq_counter16, hw_cart.m.irq_prescaler, hw_cart.m.irq_mode);
+    }
     if (hw_cart.mapper == 9 || hw_cart.mapper == 10)
         fprintf(f, "cart.pattern_pending %u\ncart.pattern_addr %04X\n",
                 hw_cart.m.pattern_pending, hw_cart.m.pattern_addr);

@@ -27,6 +27,11 @@ int        hw_dma_stalls;
 CycRamInit cyc_ram_init = CYC_RAM_PATTERN;
 
 static uint32_t frame_argb[256 * 240];
+static void clock_cpu_devices(void)
+{
+    apu_cycle();
+    if (hw_cart.watch_cpu) hw_cart_cpu_clock();
+}
 
 /* ------------------------------------------------------------------------- */
 /* Master clock                                                              */
@@ -45,7 +50,7 @@ static inline void run_tick(unsigned k)
     unsigned q = (hw.align + k) & 3;
     if (q == 0) ppu_dot();
     else if (q == 2) ppu_half_dot();
-    if (k == 0) apu_cycle();
+    if (k == 0) clock_cpu_devices();
 }
 
 void hw_clock_run_ticks(int n)
@@ -104,7 +109,7 @@ static inline void run_tick_0(void)
 {
     if (hw.align == 0) ppu_dot();
     else if (hw.align == 2) ppu_half_dot();
-    apu_cycle();
+    clock_cpu_devices();
 }
 
 /* ------------------------------------------------------------------------- */
@@ -187,7 +192,7 @@ uint8_t hw_bus_read(uint16_t addr)
     } else if (addr >= 0x4020) {
         /* $4020-$7FFF: the cartridge's work RAM, if the board has any and the
          * mapper has it enabled. Otherwise nothing drives the bus. */
-        uint8_t value;
+        uint8_t value = hw.data_bus; /* Partially driven cartridge reads. */
         if (hw_cart_cpu_read(addr, &value)) {
             hw.data_bus = value;
             hw.data_driven = 1;
@@ -313,7 +318,7 @@ void cyc_power_on(uint8_t ppu_alignment)
     /* Tick 0 of the first CPU cycle has no CPU access, and the PPU clock
      * starts at its alignment phase: its first dot is not on this tick. */
     if (hw.align == 2) ppu_half_dot();
-    apu_cycle();
+    clock_cpu_devices();
     hw.tick = 1;
 }
 

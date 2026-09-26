@@ -19,6 +19,11 @@ models; it does not independently establish the mapper specification.
 
 | ID | Board / reference | Behavior and limits |
 |---:|---|---|
+| 21 | VRC4a/c | Submappers 1/2 select address wiring; PRG swap, 9-bit CHR, WRAM gate and CPU/divider IRQ. |
+| 22 | VRC2a | Swapped address lines, shifted 8-bit CHR, one-bit latch, no IRQ. |
+| 23 | VRC2b / VRC4e/f | Submappers 1/2 select VRC4 wiring; submapper 3 selects VRC2. |
+| 25 | VRC2c / VRC4b/d | Submappers 1/2 select VRC4 wiring; submapper 3 selects VRC2. |
+| 73 | VRC3 | 16 KiB PRG switch and 8/16-bit CPU IRQ counter. |
 | 31 | [NSF cartridge](https://www.nesdev.org/wiki/INES_Mapper_031) | Eight independent 4 KiB PRG windows, $5000-$5FFF register aliases, $F000 power-on bank $FF, fixed CHR and H/V wiring. |
 | 9 | [MMC2](https://www.nesdev.org/wiki/MMC2) | Switchable 8 KiB PRG plus fixed last 24 KiB; two pairs of 4 KiB CHR banks. Read latches commit when /RD is released. |
 | 10 | [MMC4](https://www.nesdev.org/wiki/MMC4) | Switchable 16 KiB PRG plus fixed last 16 KiB, 8 KiB WRAM, and MMC2-style latches with eight-address trigger ranges on both CHR halves. |
@@ -71,7 +76,7 @@ AccuracyCoin and the 3,000-frame SMB3 route also match the pre-expansion traces
 exactly at all four alignments. AccuracyCoin retains its existing alignment
 scores of 144/144, 143/144, 141/144 and 143/144; this change adds no new failures.
 
-The remaining draft stack includes MMC5, VRC IRQ/audio chips,
+The remaining draft stack includes MMC5, VRC expansion audio chips,
 Bandai EEPROM, and extended board wiring.
 Each needs its missing hardware primitive and suitable regression ROMs before
 being added to the supported list. The legacy runner still needs separate work.
@@ -98,3 +103,18 @@ independently banked halves of an old 8 KiB window, and load an exponent-encoded
 logs use `4k:BB:AAAA`. `test_cyc_seed_units.py` checks log merging and recompiling
 from those identities. The PRG table's hardware-state hash layout changes with
 its granularity; bus, memory, and picture traces remain comparable.
+
+VRC board contracts follow [VRC2/VRC4](https://www.nesdev.org/wiki/VRC2_and_VRC4),
+[VRC IRQ](https://www.nesdev.org/wiki/VRC_IRQ), and
+[VRC3](https://www.nesdev.org/wiki/VRC3). The IRQ hook runs once per completed
+CPU cycle, including DMA. Tests assert the VRC4 divider's 114/114/113 sequence,
+reload/acknowledge behavior, CHR high bits, all PCB address decodes, WRAM gating,
+and VRC2's partially driven read bus. CPU programs exercise rendering and IRQs
+through OAM DMA. The full five-ID matrix has 33 programs (528 executions on
+Windows), all passing at every alignment with 100% native execution. Commercial
+VRC games and physical hardware have not been tested.
+
+iNES mapper 23/25 cannot unambiguously distinguish VRC2 from VRC4. Submapper 0
+retains the historical VRC4 union of address decodes; use NES 2.0 submapper 3 for
+the VRC2 bit latch and 8-bit CHR behavior (including Wai Wai World). VRC4 boards
+with explicit 2 KiB WRAM mirror it only through $6000-$6FFF.

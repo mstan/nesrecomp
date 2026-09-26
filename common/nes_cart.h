@@ -62,7 +62,7 @@ static inline bool nes_cart_header(const uint8_t *h, size_t size, NesCartInfo *c
         c->chr_size = (uint32_t)h[5] * 8192;
         /* iNES leaves RAM ambiguous. Retain established per-board defaults. */
         bool wram = c->mapper == 1 || c->mapper == 4 || c->mapper == 5 ||
-                    c->mapper == 10 ||
+                    c->mapper == 10 || c->mapper == 21 || c->mapper == 23 || c->mapper == 25 || c->mapper == 73 ||
                     (c->mapper == 34 && c->chr_size > 8192);
         uint32_t ram = h[8] ? (uint32_t)h[8] * 8192 : wram ? 8192 : 0;
         if (c->battery) c->prg_nvram = ram; else c->prg_ram = ram;
@@ -89,6 +89,8 @@ static inline bool nes_cart_variant_supported(const NesCartInfo *c)
     if (c->chr_size && (c->chr_ram || c->chr_nvram)) return false;
     if (!c->chr_size && !c->chr_ram && !c->chr_nvram) return false;
     switch (c->mapper) {
+    case 21: return c->submapper <= 2;
+    case 23: case 25: return c->submapper <= 3;
     case 1: return c->submapper == 0 || c->submapper == 5;
     case 2: case 3: case 7: case 34: return c->submapper <= 2;
     case 71: case 206: case 232: return c->submapper <= 1;

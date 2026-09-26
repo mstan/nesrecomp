@@ -96,6 +96,7 @@ typedef struct {
     uint16_t mapper;            /* iNES mapper number */
     uint8_t  mirroring;         /* HwMirroring, as the cartridge drives CIRAM A10 */
     uint8_t  watch_ppu_addr;    /* the mapper needs every PPU address (MMC3) */
+    uint8_t  watch_cpu;
 
     /* Work RAM at $6000-$7FFF. Boards without it leave the bus open there. */
     uint8_t  wram[0x20000];
@@ -116,6 +117,9 @@ typedef struct {
         uint8_t  latch;
         uint8_t  pattern_pending;
         uint16_t pattern_addr;
+        uint16_t vrc_chr[8], irq_latch16, irq_counter16;
+        int16_t irq_prescaler;
+        uint8_t irq_mode;
     } m;
 } HwCart;
 
