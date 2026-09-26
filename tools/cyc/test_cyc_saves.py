@@ -65,6 +65,26 @@ def main():
                     save.write_bytes(bad)
                     run(executable,rom,save,out/f'{name}_{mode}_{align}_bad.txt',flags,False)
                     assert save.read_bytes()==bad;checked+=1
+    # SOROM/SZROM battery-back chip 1; SXROM uses linear physical bank order.
+    for board in ('sorom','szrom','sxrom'):
+        name='board_mmc1_save_'+board;rom=root/name/(name+'.nes')
+        if not rom.exists():continue
+        size=32768 if board=='sxrom' else 8192
+        for mode,executable,extra in [('native',exe(name),[]),('embedded',exe(name),['--interp-only']),
+                    ('standalone',args.interp.resolve(),[]),('oracle',args.oracle.resolve(),[])]:
+            for align in range(4):
+                save=out/f'{name}_{mode}_{align}.sav';save.unlink(missing_ok=True)
+                flags=[*extra,'--align',str(align)]
+                for counter in (1,2):
+                    line=run(executable,rom,save,out/f'{name}_{mode}_{align}_{counter}.txt',flags)
+                    assert f'A={counter:02X}' in line,line
+                    expected=bytearray(size)
+                    for offset in range(0,size,8192):expected[offset]=counter
+                    assert save.read_bytes()==expected,(name,mode,align);checked+=1
+                for bad in (bytes(size-1),bytes(size+1)):
+                    save.write_bytes(bad)
+                    run(executable,rom,save,out/f'{name}_{mode}_{align}_bad.txt',flags,False)
+                    assert save.read_bytes()==bad;checked+=1
     # Never allow the two differently-sized Datach regions to overwrite one
     # another through a spelling such as "./save". Also reject bad barcodes
     # before any save is written.

@@ -61,7 +61,7 @@ static inline bool nes_cart_header(const uint8_t *h, size_t size, NesCartInfo *c
         c->prg_size = (uint32_t)h[4] * 16384;
         c->chr_size = (uint32_t)h[5] * 8192;
         /* iNES leaves RAM ambiguous. Retain established per-board defaults. */
-        bool wram = c->mapper == 1 || c->mapper == 4 || c->mapper == 5 ||
+        bool wram = c->mapper == 1 || c->mapper == 155 || c->mapper == 4 || c->mapper == 5 ||
                     c->mapper == 10 || c->mapper == 21 || c->mapper == 23 || c->mapper == 25 || c->mapper == 73 ||
                     c->mapper == 24 || c->mapper == 26 || c->mapper == 85 ||
                     (c->mapper == 34 && c->chr_size > 8192);
@@ -70,6 +70,9 @@ static inline bool nes_cart_header(const uint8_t *h, size_t size, NesCartInfo *c
          * compatibility allocation covers both chip selects; NES 2.0 gives
          * the actual geometry and consequently the actual open-bus holes. */
         if (c->mapper==5 && !h[8]) ram=65536;
+        /* Old headers do not distinguish SNROM/SOROM/SXROM. Reserve all
+         * four banks for compatibility; NES 2.0 supplies actual wiring. */
+        if ((c->mapper==1 || c->mapper==155) && !h[8]) ram=32768;
         if (c->battery) c->prg_nvram = ram; else c->prg_ram = ram;
         if (c->mapper == 157) { c->prg_ram=0; c->prg_nvram=c->battery?128:0; }
         if (c->mapper == 153) { c->prg_ram=0; c->prg_nvram=8192; }
@@ -117,7 +120,20 @@ static inline bool nes_cart_variant_supported(const NesCartInfo *c)
     case 85: return c->submapper <= 2;
     case 21: return c->submapper <= 2;
     case 23: case 25: return c->submapper <= 3;
-    case 1: return c->submapper == 0 || c->submapper == 5;
+    case 1: case 155: {
+        uint32_t ram=c->prg_ram+c->prg_nvram, chr=c->chr_size+c->chr_ram+c->chr_nvram;
+        if (c->four_screen || c->prg_size>524288 || chr>131072 || ram>32768) return false;
+        if (c->prg_size>262144 && chr>8192) return false;
+        if (c->nes2 && ram>8192 && chr>8192 && !(ram==16384 && chr<=65536)) return false;
+        switch (c->submapper) {
+        case 0: case 3: case 7: return true;
+        case 1: return c->prg_size==524288 && chr==8192 && ram==8192;
+        case 2: return c->prg_size<=262144 && chr==8192 && ram==16384;
+        case 4: return chr==8192 && ram==32768;
+        case 5: return c->prg_size==32768;
+        default: return false;
+        }
+    }
     case 2: case 3: case 7: case 34: return c->submapper <= 2;
     case 71: case 206: case 232: return c->submapper <= 1;
     default: return c->submapper == 0;
