@@ -522,6 +522,7 @@ static int fixed_bank_for(int mapper, uint32_t banks, uint32_t slot) {
 /* The configuration a cold console comes up in; hw_mapper.c's reset paths. */
 static int power_on_bank8_for(int mapper, uint32_t banks, uint32_t slot) {
     switch (mapper) {
+    case 40: { static const int b[4]={4,5,0,7}; return (int)(b[slot] & (banks-1)); }
     case 5: return slot==3 ? (int)(banks-1) : (int)(slot&(banks-1));
     case 153: return (int)((slot>=2 ? slot+28 : slot) & (banks-1));
     case 85: return slot == 3 ? (int)(banks - 1) : (int)slot;
@@ -1393,6 +1394,7 @@ static const char *mapper_name(int mapper) {
     case 0:  return "NROM";
     case 1:  return "MMC1";
     case 155: return "MMC1A";
+    case 40: return "NTDEC 2722";
     case 2:  return "UxROM";
     case 3:  return "CNROM";
     case 4:  return "MMC3";

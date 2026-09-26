@@ -101,6 +101,8 @@ static inline bool nes_cart_variant_supported(const NesCartInfo *c)
     if (c->chr_size && (c->chr_ram || c->chr_nvram)) return false;
     if (!c->chr_size && !c->chr_ram && !c->chr_nvram) return false;
     switch (c->mapper) {
+    case 40: return !c->submapper && c->prg_size==65536 && c->chr_size<=8192 &&
+        !c->prg_ram && !c->prg_nvram && !c->four_screen;
     case 5: {
         uint32_t ram=c->prg_ram+c->prg_nvram;
         bool dual=c->prg_ram && c->prg_nvram;

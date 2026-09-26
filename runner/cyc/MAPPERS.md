@@ -19,6 +19,7 @@ models; it does not independently establish the mapper specification.
 
 | ID | Board / reference | Behavior and limits |
 |---:|---|---|
+| 40 | [NTDEC 2722](https://www.nesdev.org/wiki/INES_Mapper_040) | Fixed PRG banks at $6000/$8000/$A000/$E000, switchable 8 KiB at $C000, 4096-M2 IRQ. Code at $6000 uses the interpreter. |
 | 155 | [MMC1A](https://www.nesdev.org/wiki/MMC1) | RAM stays enabled by the PRG register; bit 4 instead bypasses fixed-bank A17 selection. Uses the same SxROM board wiring as mapper 1. |
 | 85 | [VRC7](https://www.nesdev.org/wiki/VRC7) | Three 8 KiB PRG windows, eight CHR windows, WRAM gate, VRC IRQ, and six FM channels. Submapper 1 selects A3 and omits the oscillator; submapper 2 selects A4. |
 | 24 | [VRC6a](https://www.nesdev.org/wiki/VRC6) | 16+8 KiB PRG, all CHR/nametable modes, WRAM gate, CPU IRQ and two pulse/one saw audio channels. |
@@ -286,6 +287,21 @@ save lengths. Legacy headers with larger CHR use the SZROM RAM select pin.
 Only explicit 8 KiB RAM geometry enables SNROM's additional /CE behavior.
 SOROM/SZROM saves contain chip 1; chip 0 remains volatile. SXROM saves use the
 physical A14:A13 order, with four consecutive 8 KiB banks.
+
+### NTDEC 2722 / mapper 40
+
+The [traced discrete PCB](https://forums.nesdev.org/viewtopic.php?t=19744)
+defines fixed 8 KiB banks 6/4/5/7 at $6000/$8000/$A000/$E000, and a three-bit
+$E000 bank register for $C000. $8000 clears/disables the counter and acknowledges
+IRQ; $A000 starts it, without restarting an already enabled counter. The IRQ
+arrives after 4,096 CPU clocks, including DMA. All address aliases use A15:A13;
+there are no bus conflicts. Writes to the ROM at $6000 are ignored.
+
+This enables the mapper 40 SMB2J conversion in the cycle runtime and oracle.
+The compiler's native window begins at $8000, so code at $6000 runs through the
+cycle interpreter and can return to native ROM normally. The different NTDEC
+2752 multicart (submapper 1) is explicitly rejected. Tests cover fixed/read-only
+windows, instruction handoffs, IRQ acknowledgement and counting through DMA.
 
 Mapper 155 models MMC1A's PRG-register bit 4: RAM remains enabled and PRG
 bit 3 drives A17 even in a fixed window. The separate SNROM CHR-controlled
