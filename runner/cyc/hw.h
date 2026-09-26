@@ -55,11 +55,11 @@ void cpu_nmi_input(bool asserted);
  * next instruction boundary and clears it. */
 extern bool hw_frame_done;
 
-/* Which 8KB PRG bank the cartridge has at addr ($8000-$FFFF). Recompiled code
- * is generated per (bank, CPU address) pair, because what the bytes at an
- * address are - and so what a block compiled from them does - depends on the
- * bank; this is what its dispatch looks up at each entry. */
+/* Legacy 8 KiB identity, retained for older generated programs. It cannot
+ * distinguish independently mapped 4 KiB halves; new dispatch uses bank4. */
 unsigned hw_prg_bank(uint16_t addr);
+/* Exact 4 KiB identity used by current generated dispatch and miss logs. */
+unsigned hw_prg_bank4(uint16_t addr);
 
 #ifdef __cplusplus
 }

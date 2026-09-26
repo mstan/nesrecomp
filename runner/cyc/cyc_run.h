@@ -25,7 +25,7 @@ extern uint64_t cyc_run_native_cycles;  /* CPU cycles performed by recompiled co
 /* Optional: ROM instruction starts that ran interpreted, counted per
  * (PRG bank, slot) because that pair, not the CPU address, is what the
  * recompiler compiles. Indexed cyc_run_miss_index(); the host allocates
- * cyc_run_miss_slots() entries and writes them out as `BB:AAAA` seeds. */
+ * cyc_run_miss_slots() entries and writes them out as `4k:BB:AAAA` seeds. */
 extern uint32_t *cyc_run_miss;
 extern uint32_t *cyc_run_ram_miss;      /* optional [0x2000]: RAM instruction starts (always interpreted) */
 size_t   cyc_run_miss_slots(void);

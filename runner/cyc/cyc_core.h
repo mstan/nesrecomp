@@ -21,7 +21,7 @@ extern "C" {
 
 /* ---- machine control ---- */
 
-/* Load an iNES image (NROM only). Returns false on unsupported input. */
+/* Load an iNES/NES 2.0 image. Returns false on unsupported input; see MAPPERS.md. */
 bool cyc_load_ines(const uint8_t *image, size_t size);
 /* What CPU RAM holds at power-on. The console leaves no defined state; the
  * default is the pattern AccuracyCoin's power-on page reports from the

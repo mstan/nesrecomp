@@ -73,14 +73,14 @@ typedef struct {
 } HwMachine;
 
 /* The cartridge. Address translation is two tables the mapper fills (see
- * hw_mapper.h): PRG in 8KB slots and CHR in 1KB pages, the finest granularity
+ * hw_mapper.h): PRG in 4KB slots and CHR in 1KB pages, the finest granularity
  * any supported mapper switches. Reads are then one indexed load, and both
  * the recompiler's dispatch and the mapper implementations talk about banks
  * in the same terms. */
 typedef struct {
     uint8_t *prg;
     uint32_t prg_len;
-    uint32_t prg_slots;         /* prg_len / 0x2000, rounded up to a power of 2 */
+    uint32_t prg_slots;         /* prg_len / 0x1000, rounded up to a power of 2 */
     uint8_t *chr;               /* CHR ROM, or CHR RAM */
     uint32_t chr_len;
     uint32_t chr_pages;         /* chr_len / 0x400, rounded up to a power of 2 */
@@ -88,7 +88,7 @@ typedef struct {
 
     /* Where each window reads from, as a byte offset into prg/chr. Mappers
      * set these only through hw_cart_map_prg8()/hw_cart_map_chr1(). */
-    uint32_t prg_off[4];        /* $8000, $A000, $C000, $E000 */
+    uint32_t prg_off[8];        /* $8000, $9000, ... $F000 */
     uint32_t chr_off[8];        /* $0000, $0400, ... $1C00 */
 
     NesCartInfo info;
@@ -125,7 +125,7 @@ extern HwCart    hw_cart;
 /* PRG ROM as the CPU sees it at addr ($8000-$FFFF). */
 HW_ALWAYS_INLINE uint8_t hw_cart_prg_read(uint16_t addr)
 {
-    return hw_cart.prg[hw_cart.prg_off[(addr >> 13) & 3] | (addr & 0x1FFF)];
+    return hw_cart.prg[hw_cart.prg_off[(addr >> 12) & 7] | (addr & 0x0FFF)];
 }
 
 /* CHR as the PPU sees it at a ($0000-$1FFF). */

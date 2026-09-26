@@ -8,11 +8,11 @@
 #pragma once
 #include "cpu6502.h"
 
-/* One compiled view of the cartridge: the instructions of one 8KB PRG bank as
- * mapped in one of the CPU's four 8KB slots. A block folds the ROM bytes at
+/* One compiled view of the cartridge: the instructions of one 4KB PRG bank as
+ * mapped in one of the CPU's eight 4KB slots. A block folds the ROM bytes at
  * its address to constants, so it is only valid while that bank is the one
  * the mapper has there - which is what the generated dispatch checks, using
- * hw_prg_bank(). NROM has one fixed bank per slot and never leaves it. */
+ * hw_prg_bank4(). NROM has one fixed bank per slot and never leaves it. */
 typedef struct {
     const uint8_t *bits;            /* 0x2000 bits: which offsets start an instruction */
     void (*const *chunks)(void);    /* one function per 1KB, 0 where nothing is compiled */

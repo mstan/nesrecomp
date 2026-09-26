@@ -19,6 +19,7 @@ models; it does not independently establish the mapper specification.
 
 | ID | Board / reference | Behavior and limits |
 |---:|---|---|
+| 31 | [NSF cartridge](https://www.nesdev.org/wiki/INES_Mapper_031) | Eight independent 4 KiB PRG windows, $5000-$5FFF register aliases, $F000 power-on bank $FF, fixed CHR and H/V wiring. |
 | 9 | [MMC2](https://www.nesdev.org/wiki/MMC2) | Switchable 8 KiB PRG plus fixed last 24 KiB; two pairs of 4 KiB CHR banks. Read latches commit when /RD is released. |
 | 10 | [MMC4](https://www.nesdev.org/wiki/MMC4) | Switchable 16 KiB PRG plus fixed last 16 KiB, 8 KiB WRAM, and MMC2-style latches with eight-address trigger ranges on both CHR halves. |
 | 232 | [Quattro](https://www.nesdev.org/wiki/INES_Mapper_071) | Outer 64 KiB plus inner 16 KiB banking; NES 2.0 submapper 1 swaps the outer bits for Aladdin. |
@@ -71,7 +72,7 @@ exactly at all four alignments. AccuracyCoin retains its existing alignment
 scores of 144/144, 143/144, 141/144 and 143/144; this change adds no new failures.
 
 The remaining draft stack includes MMC5, VRC IRQ/audio chips,
-Bandai EEPROM, and mappers with PRG banks below 8 KiB.
+Bandai EEPROM, and extended board wiring.
 Each needs its missing hardware primitive and suitable regression ROMs before
 being added to the supported list. The legacy runner still needs separate work.
 
@@ -89,3 +90,11 @@ tiles, with native/interpreter/oracle parity at all four alignments. This caught
 and corrected an early latch update: `$2007` samples more than once during /RD,
 so committing on the first sample returned the new bank too soon. Commercial
 MMC2/MMC4 games and a physical cartridge are not part of this validation.
+
+PRG translation and generated views now use 4 KiB banks. Mapper 31 fixtures
+replace each of the eight executing windows, use register aliases, read across
+independently banked halves of an old 8 KiB window, and load an exponent-encoded
+4 KiB ROM. Old `BB:AAAA` seed files retain their physical 8 KiB meaning; new miss
+logs use `4k:BB:AAAA`. `test_cyc_seed_units.py` checks log merging and recompiling
+from those identities. The PRG table's hardware-state hash layout changes with
+its granularity; bus, memory, and picture traces remain comparable.

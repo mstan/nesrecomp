@@ -31,7 +31,7 @@
  *
  * Banked mappers. Folding a ROM byte to a constant assumes the byte at that
  * CPU address is known, which on a banked cartridge it is not: $8000-$FFFF is
- * four 8KB slots whose contents a game changes at run time. So a block is
+ * eight 4KB slots whose contents a game changes at run time. So a block is
  * generated per (bank, slot) pair rather than per address, execution enters
  * one only through a dispatch that checks which bank the mapper has there
  * (hw_prg_bank), and a write that can reach the mapper's registers ends the
@@ -62,16 +62,16 @@
 
 /* A compiled block is valid for one PRG bank at one CPU address, because the
  * bytes at an address in $8000-$FFFF depend on which bank the mapper has
- * there. 8KB is the finest granularity any supported mapper switches, so the
+ * there. 4KB is the finest granularity any supported mapper switches, so the
  * CPU's $8000-$FFFF is four slots and a block is identified by (bank, slot,
  * offset in slot). NROM is the degenerate case: every slot's bank is fixed.
  *
  * One C function per 1KB keeps individual functions small, and one
  * translation unit per bank keeps them compilable in parallel (see
  * SPLITGEN_MIGRATION.md for the same split in the function-level output). */
-#define SLOT_SHIFT      13
+#define SLOT_SHIFT      12
 #define SLOT_SIZE       (1u << SLOT_SHIFT)
-#define SLOT_COUNT      4
+#define SLOT_COUNT      8
 #define CHUNK_SHIFT     10
 #define CHUNKS_PER_SLOT (SLOT_SIZE >> CHUNK_SHIFT)
 
@@ -467,7 +467,7 @@ typedef struct {
 typedef struct {
     const NESRom *rom;
     uint32_t prg_len;              /* the image's own length */
-    uint32_t banks;                /* 8KB banks, rounded up to a power of two */
+    uint32_t banks;                /* 4KB banks, rounded up to a power of two */
     int      mapper;
     bool     banked;               /* the mapper can move PRG under the CPU */
     /* The bank a slot is wired to permanently, or -1 when a game can switch
@@ -507,20 +507,20 @@ static int fixed_bank_for(int mapper, uint32_t banks, uint32_t slot) {
      * into the four-slot initialization loop (even NROM lost its fixed banks). */
     unsigned slots;
     switch (mapper) {
-    case 0: case 3: case 13: case 87: case 184: slots = 15; break; /* all PRG fixed */
-    case 2: case 10: case 71: case 76: case 94: case 206: slots = 12; break; /* last 16 KiB */
-    case 9: slots = 14; break;                                  /* last 24 KiB */
-    case 4: case 75: slots = 8; break;                           /* last 8 KiB */
-    case 180: slots = 3; break;                                 /* first 16 KiB */
+    case 0: case 3: case 13: case 87: case 184: slots = 255; break; /* all PRG fixed */
+    case 2: case 10: case 71: case 76: case 94: case 206: slots = 240; break; /* last 16 KiB */
+    case 9: slots = 252; break;                                  /* last 24 KiB */
+    case 4: case 75: slots = 192; break;                           /* last 8 KiB */
+    case 180: slots = 15; break;                                 /* first 16 KiB */
     default: slots = 0; break;
     }
     if (!(slots & (1u << slot))) return -1;
-    if (slots == 15 || slots == 3) return (int)(slot & (banks - 1));
+    if (slots == 255 || slots == 15) return (int)(slot & (banks - 1));
     return (int)((banks - SLOT_COUNT + slot) & (banks - 1));
 }
 
 /* The configuration a cold console comes up in; hw_mapper.c's reset paths. */
-static int power_on_bank_for(int mapper, uint32_t banks, uint32_t slot) {
+static int power_on_bank8_for(int mapper, uint32_t banks, uint32_t slot) {
     switch (mapper) {
     case 9: return slot ? (int)(banks - 4 + slot) : 0;
     case 10: return slot >= 2 ? (int)(banks - 4 + slot) : (int)slot;
@@ -536,6 +536,12 @@ static int power_on_bank_for(int mapper, uint32_t banks, uint32_t slot) {
     case 4:  return slot == 2 ? (int)(banks - 2) : slot == 3 ? (int)(banks - 1) : (int)slot;
     default: return (int)(slot & (banks - 1));
     }
+}
+
+static int power_on_bank_for(int mapper, uint32_t banks, uint32_t slot) {
+    if (mapper == 31) return slot == 7 ? (int)(255 & (banks-1)) : 0;
+    if (banks == 1) return 0;
+    return power_on_bank8_for(mapper, banks / 2, slot / 2) * 2 + (slot & 1);
 }
 
 /* Whether every byte of the instruction is a byte this block knows: inside
@@ -789,6 +795,7 @@ static unsigned mapper_write_floor(int mapper) {
     /* Low-address register apertures are added with their boards. */
     case 34: return 0x7ffd;
     case 79: return 0x4100;
+    case 31: return 0x5000;
     case 113: return 0x4100;
     case 140: return 0x6000;
     default: return 0x8000;
@@ -1260,11 +1267,11 @@ static void emit_umbrella(const Program *p, const char *path, const char *prefix
         "const char *cyc_native_program_name = \"%s\";\n"
         "const uint32_t cyc_native_prg_hash = 0x%08Xu;  /* FNV-1a of the PRG ROM compiled */\n\n"
         "/* Which compiled view covers a CPU address right now: the bank the\n"
-        " * cartridge has in that address's 8KB slot decides, because the bytes\n"
+        " * cartridge has in that address's 4KB slot decides, because the bytes\n"
         " * there - and so the block compiled from them - depend on it. */\n"
         "static const CycNativeView *view_at(uint16_t addr, unsigned *out_k) {\n"
         "    unsigned slot = (addr >> %d) & %u;\n"
-        "    unsigned bank = hw_prg_bank(addr);\n"
+        "    unsigned bank = hw_prg_bank4(addr);\n"
         "    if (bank >= CYC_BANKS) return 0;\n"
         "    const CycNativeView *v = &VIEWS[bank][slot];\n"
         "    *out_k = addr & %uu;\n"
@@ -1344,6 +1351,7 @@ bool cyc_codegen_emit_interpreter(const char *path) {
 /* The board names hw_mapper.c implements, for the message and the banner. */
 static const char *mapper_name(int mapper) {
     switch (mapper) {
+    case 31: return "NSF cartridge";
     case 9: return "MMC2";
     case 10: return "MMC4";
     case 11: return "Color Dreams";
@@ -1372,15 +1380,19 @@ static const char *mapper_name(int mapper) {
     }
 }
 
-/* A seed line is `AAAA` or `BB:AAAA`, either with an optional count after it.
+/* A seed line is `AAAA`, legacy 8 KiB `BB:AAAA`, or `4k:BB:AAAA`,
+ * each with an optional count after it.
  * The bank-less form means the bank the power-on configuration has at that
  * address, which is every bank on NROM and what a hand-written seed means.
  * Returns POS_NONE for a line that is not a seed. */
 static uint32_t parse_seed(const Program *p, const char *line) {
     unsigned bank, addr;
     if (line[0] == '#') return POS_NONE;
-    if (sscanf(line, "%x:%x", &bank, &addr) == 2) {
+    if (sscanf(line, "4k:%x:%x", &bank, &addr) == 2) {
         if (addr < 0x8000 || addr > 0xFFFF || bank >= p->banks) return POS_NONE;
+    } else if (sscanf(line, "%x:%x", &bank, &addr) == 2) {
+        if (addr < 0x8000 || addr > 0xFFFF || bank >= (p->banks + 1)/2) return POS_NONE;
+        bank = (bank * 2 + ((addr >> 12) & 1)) & (p->banks - 1);
     } else if (sscanf(line, "%x", &addr) == 1) {
         if (addr < 0x8000 || addr > 0xFFFF) return POS_NONE;
         bank = (unsigned)p->power_on[(addr >> SLOT_SHIFT) & (SLOT_COUNT - 1)];
@@ -1396,7 +1408,7 @@ static uint32_t parse_seed(const Program *p, const char *line) {
  * vectors at all, so every bank's are seeded - compiling a block that never
  * runs costs output, not correctness. */
 static void seed_vectors(const Program *p, uint32_t bank, uint32_t *seeds, int *n) {
-    Pos from = { bank, 3, SLOT_SIZE - 1 };
+    Pos from = { bank, SLOT_COUNT - 1, SLOT_SIZE - 1 };
     for (uint32_t v = 0xFFFA; v <= 0xFFFE; v += 2) {
         uint32_t k = v & (SLOT_SIZE - 1);
         uint16_t target = (uint16_t)(prg_byte(p, bank, k) | prg_byte(p, bank, k + 1) << 8);
@@ -1451,7 +1463,7 @@ bool cyc_codegen_emit(const NESRom *rom, const GameConfig *cfg, const char *outp
     uint32_t *seeds = (uint32_t *)malloc(sizeof(uint32_t) * seed_cap);
     int n = 0;
     if (any_fixed) {
-        seed_vectors(p, (uint32_t)(p->fixed[3] >= 0 ? p->fixed[3] : p->power_on[3]), seeds, &n);
+        seed_vectors(p, (uint32_t)(p->fixed[SLOT_COUNT - 1] >= 0 ? p->fixed[SLOT_COUNT - 1] : p->power_on[SLOT_COUNT - 1]), seeds, &n);
     } else {
         for (uint32_t bank = 0; bank < p->banks; bank++) seed_vectors(p, bank, seeds, &n);
     }
@@ -1502,7 +1514,7 @@ bool cyc_codegen_emit(const NESRom *rom, const GameConfig *cfg, const char *outp
     snprintf(path, sizeof(path), "generated/%s_cyc.c", output_prefix);
     emit_umbrella(p, path, output_prefix);
 
-    printf("[NESRecomp] cycle-accurate (%s, %u KB PRG in %u banks of 8KB): %u instructions compiled",
+    printf("[NESRecomp] cycle-accurate (%s, %u KB PRG in %u banks of 4KB): %u instructions compiled",
            board, p->prg_len / 1024, p->banks, count);
     if (tails) printf(", %u left to the interpreter (they cross a bank or $FFFF)", tails);
     printf(" -> generated/%s_cyc.c + %d bank file%s\n", output_prefix, files, files == 1 ? "" : "s");

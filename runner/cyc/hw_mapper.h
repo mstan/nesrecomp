@@ -5,14 +5,14 @@
  * The CPU and PPU sides of the machine reach the cartridge only through this
  * header. Everything a mapper can do is expressed as four things:
  *
- *   - where $8000-$FFFF and $6000-$7FFF read from, as an offset per 8KB slot
+ *   - where $8000-$FFFF and $6000-$7FFF read from, as an offset per 4KB slot
  *     (hw_cart.prg_off) and the work RAM;
  *   - where the PPU's $0000-$1FFF reads from, as an offset per 1KB page
  *     (hw_cart.chr_off);
  *   - how it drives CIRAM A10, which is the nametable arrangement;
  *   - whether it asserts /IRQ.
  *
- * 8KB PRG slots and 1KB CHR pages are the finest granularity any supported
+ * 4KB PRG slots and 1KB CHR pages are the finest granularity any supported
  * mapper switches, so every mapper is a rule for filling those two tables.
  * The tables are what makes reads a single indexed load on the hot path and
  * what the recompiler dispatches on (a compiled block is valid for one PRG
@@ -32,7 +32,8 @@ extern "C" {
 
 /* How the cartridge drives CIRAM A10 (pin 22 of the 72-pin connector): the
  * nametable arrangement. Four-screen boards leave CIRAM deselected for the
- * upper half and supply their own RAM, which no supported mapper needs. */
+ * upper half and supply their own RAM; the machine stores those extra tables
+ * alongside CIRAM when the header selects four-screen wiring. */
 typedef enum {
     HW_MIRROR_HORIZONTAL,  /* CIRAM A10 = PPU A11 ("vertical arrangement") */
     HW_MIRROR_VERTICAL,    /* CIRAM A10 = PPU A10 */

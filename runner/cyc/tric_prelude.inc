@@ -48,8 +48,8 @@ struct TricMapper {
     byte   PPU_DataOut;
     byte   PPU_NonTiltData;
 
-    // ---- bank tables: byte offsets, PRG in 8KB slots, CHR in 1KB pages ----
-    uint PRG_Off[4];
+    // ---- bank tables: byte offsets, PRG in 4KB slots, CHR in 1KB pages ----
+    uint PRG_Off[8];
     uint CHR_Off[8];
 
     // ---- work RAM at $6000-$7FFF ----
@@ -74,6 +74,7 @@ struct TricMapper {
     ushort PatternAddress;
 
     void Reset();
+    void MapPRG4(uint Slot, int Bank);
     void MapPRG8(uint Slot, int Bank);
     void MapPRG16(uint Slot, int Bank) { MapPRG8(Slot * 2, Bank * 2); MapPRG8(Slot * 2 + 1, Bank * 2 + 1); }
     void MapPRG32(int Bank) { for (uint i = 0; i < 4; i++) MapPRG8(i, Bank * 4 + (int)i); }
@@ -127,7 +128,7 @@ struct TricCartridge {
     NesCartInfo Info;
     byte *PRGROM;
     int   PRGROM_Length;     // the image's own length
-    int   PRGSlots;          // 8KB slots in the padded buffer, a power of two
+    int   PRGSlots;          // 4KB slots in the padded buffer, a power of two
     byte *CHRROM;
     int   CHRROM_Length;
     int   CHRPages;          // 1KB pages in the padded buffer, a power of two
@@ -144,9 +145,13 @@ extern TricCartridge Cart;
 // A negative bank counts from the end of the ROM, and a bank past the end
 // wraps, as a board's missing address lines make it (nesdev wiki, per mapper).
 
+inline void TricMapper::MapPRG4(uint Slot, int Bank) {
+    PRG_Off[Slot % 8] = ((uint)Bank & ((uint)Cart.PRGSlots - 1)) * 4096;
+}
+
 inline void TricMapper::MapPRG8(uint Slot, int Bank) {
-    uint n = (uint)Cart.PRGSlots;
-    PRG_Off[Slot & 3] = ((uint)Bank & (n - 1)) * 0x2000u;
+    MapPRG4(Slot * 2, Bank * 2);
+    MapPRG4(Slot * 2 + 1, Bank * 2 + 1);
 }
 
 inline void TricMapper::MapCHR1(uint Page, int Bank) {
@@ -270,7 +275,7 @@ inline void TricMapper::PPUClock() {
 // ---- reset ----
 
 inline void TricMapper::Reset() {
-    for (int i = 0; i < 4; i++) PRG_Off[i] = 0;
+    for (int i = 0; i < 8; i++) PRG_Off[i] = 0;
     for (int i = 0; i < 8; i++) CHR_Off[i] = 0;
     for (int i = 0; i < 8; i++) Reg[i] = 0;
     Shift = ShiftCount = Ctrl = Chr0 = Chr1 = PrgReg = 0;
@@ -293,6 +298,9 @@ inline void TricMapper::Reset() {
     WRAM_Readable = WRAM_Writable = HasWRAM;
 
     switch (Cart.Mapper) {
+    case 31:
+        for (uint i=0; i<8; ++i) MapPRG4(i, i == 7 ? 255 : 0);
+        MapCHR8(0); break;
     case 9:
         MapPRG8(0, 0); MapPRG8(1, -3); MapPRG8(2, -2); MapPRG8(3, -1);
         Chr0 = Chr1 = 1; MapCHR4(0, 0); MapCHR4(1, 0); break;
@@ -339,7 +347,7 @@ inline void TricMapper::Reset() {
 inline void TricMapper::FetchCPU() {
     CPU_Drove = false;
     if (!SeventyTwoPinConnector[49]) {    // A15 high: PRG ROM
-        CPU_NonTiltData = Cart.PRGROM[PRG_Off[(CPU_AddressIn >> 13) & 3] | (CPU_AddressIn & 0x1FFF)];
+        CPU_NonTiltData = Cart.PRGROM[PRG_Off[(CPU_AddressIn >> 12) & 7] | (CPU_AddressIn & 0xFFF)];
         CPU_Drove = true;
     } else if (CPU_AddressIn >= 0x6000 && HasWRAM && WRAM_Readable) {
         CPU_NonTiltData = WRAM[(WRAM_Bank + (CPU_AddressIn & 0x1FFF)) % WRAM_Length];
@@ -348,12 +356,17 @@ inline void TricMapper::FetchCPU() {
 }
 
 inline byte TricMapper::SnoopCPU(ushort Address) {
-    if (Address >= 0x8000) return Cart.PRGROM[PRG_Off[(Address >> 13) & 3] | (Address & 0x1FFF)];
+    if (Address >= 0x8000) return Cart.PRGROM[PRG_Off[(Address >> 12) & 7] | (Address & 0xFFF)];
     if (Address >= 0x6000 && HasWRAM && WRAM_Readable) return WRAM[(WRAM_Bank + (Address & 0x1FFF)) % WRAM_Length];
     return dataBus;
 }
 
 inline void TricMapper::StoreCPU(ushort Address, byte Input) {
+    if (Cart.Mapper == 31 && Address / 4096 == 5) {
+        Reg[Address % 8] = Input;
+        MapPRG4(Address % 8, Input);
+        return;
+    }
     if (Cart.Mapper == 34) {
         if (!nes_cart_nina(&Cart.Info) && Address >= 0x8000) {
             Latch = (byte)(Input & SnoopCPU(Address));
