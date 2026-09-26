@@ -87,8 +87,11 @@ static void vrc24_write(uint16_t addr, uint8_t value)
         hw_cart.m.reg[page == 10] = value & 31;
         vrc24_apply();
     } else if (page == 9) {
-        if (vrc2_board() || port < 2) hw_cart.m.mirror_reg = value;
-        else hw_cart.m.ctrl = value & 3;
+        if (vrc2_board() || port == 0) hw_cart.m.mirror_reg = value;
+        else if (port == 2) hw_cart.m.ctrl = value & 3;
+        /* $9001 is unassigned; $9003 drives an external select pin. Neither
+         * changes these registers on the original Konami boards.
+         * Hardware test: https://forums.nesdev.org/viewtopic.php?p=240820 */
         vrc24_apply();
     } else if (page >= 11 && page <= 14) {
         unsigned index = (page - 11)*2 + port/2;

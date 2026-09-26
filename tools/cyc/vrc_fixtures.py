@@ -49,8 +49,10 @@ def _vrc_fixtures():
             operations += [('cpu',0x9000,3),('write',0x2000,0x55),('read',0x2400,0x55),
                            ('cpu',0x6000,1),('cpu_read',0x6000,0x61),('cpu_read',0x7000,0x70)]
         else:
-            operations += [('cpu',0x9000+next_,1),('cpu',0x6000,0x55),('cpu_read',0x6000,0x55),
-                           ('cpu',0x9000,3),('write',0x2000,0x56),('read',0x2c00,0x56)]
+            operations += [('cpu',0x9000+next_,1),('cpu',0x9000+high+next_,0),
+                           ('cpu',0x6000,0x55),('cpu_read',0x6000,0x55),
+                           ('cpu',0x9000,3),('cpu',0x9000+high,0),
+                           ('write',0x2000,0x56),('read',0x2c00,0x56)]
         case=ppu_contract(mapper,256,512,operations,f'_vrc{sub}')
         name,image,seeds,expected=nes2(case,sub=sub,ram=0 if is2 else 7)
         image=bytearray(image)

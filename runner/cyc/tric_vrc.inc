@@ -46,8 +46,8 @@ inline void TricMapper::VRCWrite(ushort Address, byte Input) {
     case 8: Reg[0] = Input % 32; VRCApply(); break;
     case 10: Reg[1] = Input % 32; VRCApply(); break;
     case 9:
-        if (VRC2Board() || port < 2) MirrorReg = Input;
-        else Ctrl = Input % 4;
+        if (VRC2Board() || port == 0) MirrorReg = Input;
+        else if (port == 2) Ctrl = Input % 4;
         VRCApply(); break;
     case 11: case 12: case 13: case 14: {
         unsigned r = (page-11)*2 + port/2;

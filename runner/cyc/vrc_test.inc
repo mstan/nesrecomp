@@ -23,7 +23,14 @@ static void test_vrc(void)
         prg_banks(3,5,30,31);
         hw_cart_cpu_write((uint16_t)(0x9000+next),3);
         if (is2) { prg_banks(3,5,30,31); CHECK(hw_cart.mirroring==HW_MIRROR_HORIZONTAL); }
-        else { prg_banks(30,5,3,31); CHECK(hw_cart.wram_readable); }
+        else {
+            prg_banks(30,5,3,31); CHECK(hw_cart.wram_readable);
+            hw_cart_cpu_write(0x9000,3);
+            hw_cart_cpu_write((uint16_t)(0x9000+high),0);
+            hw_cart_cpu_write((uint16_t)(0x9000+high+next),0);
+            CHECK(hw_cart.mirroring==HW_MIRROR_SCREEN_B); CHECK(hw_cart.wram_readable);
+            prg_banks(30,5,3,31);
+        }
         for (unsigned page=0; page<8; ++page) {
             uint16_t lo=(uint16_t)(0xb000+(page/2)*4096+(page%2)*next);
             hw_cart_cpu_write(lo,10);
