@@ -331,6 +331,12 @@ inline void TricMapper::StoreCPU(ushort Address, byte Input) {
     }
     if (Address < 0x8000) return;
     switch (Cart.Mapper) {
+    case 11:
+        Input = (byte)(Input & SnoopCPU(Address));
+        Latch = Input;
+        MapPRG32(Input % 4);
+        MapCHR8(Input / 16);
+        break;
     case 1: MMC1Write(Address, Input); break;
     case 2: Latch = Input; MapPRG16(0, Input); break;
     case 3: Latch = Input; MapCHR8(Input); break;

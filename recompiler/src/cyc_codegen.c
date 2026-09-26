@@ -1321,6 +1321,7 @@ bool cyc_codegen_emit_interpreter(const char *path) {
 /* The board names hw_mapper.c implements, for the message and the banner. */
 static const char *mapper_name(int mapper) {
     switch (mapper) {
+    case 11: return "Color Dreams";
     case 0:  return "NROM";
     case 1:  return "MMC1";
     case 2:  return "UxROM";
@@ -1366,6 +1367,11 @@ static void seed_vectors(const Program *p, uint32_t bank, uint32_t *seeds, int *
 }
 
 bool cyc_codegen_emit(const NESRom *rom, const GameConfig *cfg, const char *output_prefix) {
+    if (rom->nes2 && rom->mapper != 0 && rom->mapper != 1 && rom->mapper != 2 &&
+        rom->mapper != 3 && rom->mapper != 4 && rom->mapper != 7 && rom->mapper != 66) {
+        fprintf(stderr, "[cyc] NES 2.0 variants of mapper %d are not implemented; see runner/cyc/MAPPERS.md\n", rom->mapper);
+        return false;
+    }
     const char *board = mapper_name(rom->mapper);
     if (!board) {
         fprintf(stderr, "[cyc] unsupported mapper %d; see runner/cyc/MAPPERS.md\n", rom->mapper);

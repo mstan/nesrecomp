@@ -14,6 +14,7 @@ typedef struct {
     uint8_t *prg_data;      /* All PRG ROM data concatenated */
     int      prg_banks;     /* Number of 16KB PRG banks */
     int      chr_banks;     /* Number of 8KB CHR banks (0 = CHR RAM) */
+    bool     nes2;          /* NES 2.0 header; cycle board support validates it */
     int      mapper;        /* Mapper number */
     uint16_t nmi_vector;    /* $FFFA/$FFFB (from last/power-on bank) */
     uint16_t reset_vector;  /* $FFFC/$FFFD */

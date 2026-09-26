@@ -9577,7 +9577,13 @@ void TricMmc3TraceClock(byte counter, bool out, ushort vbus) {
 bool cyc_load_ines(const uint8_t *image, size_t size) {
     if (size < 16 || memcmp(image, "NES\x1A", 4) != 0) return false;
     int mapper = (image[6] >> 4) | (image[7] & 0xF0);
+    if ((image[7] & 0x0C) == 0x08) {
+        mapper |= (image[8] & 15) << 8;
+        if (mapper != 0 && mapper != 1 && mapper != 2 && mapper != 3 &&
+            mapper != 4 && mapper != 7 && mapper != 66) return false;
+    }
     switch (mapper) {   // the set hw_mapper.c implements
+    case 11: break;
     case 0: case 1: case 2: case 3: case 4: case 7: case 66: break;
     default: return false;
     }

@@ -18,6 +18,7 @@ models; it does not independently establish the mapper specification.
 
 | ID | Board / reference | Behavior and limits |
 |---:|---|---|
+| 11 | [Color Dreams](https://www.nesdev.org/wiki/Color_Dreams) | 32 KiB PRG / 8 KiB CHR; AND bus conflicts. Conflict-free prototypes excluded. |
 
 New boards initially accept legacy iNES images only. NES 2.0 variants are rejected
 for these IDs until their submapper and RAM-size metadata are implemented. Fixed

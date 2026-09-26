@@ -392,6 +392,7 @@ static const struct {
     uint8_t     watch_ppu_addr;
     uint8_t     wram;            /* boards for this mapper carry work RAM */
 } MAPPERS[] = {
+    { 11, "Color Dreams", 0, 0 },
     { 0,  "NROM",  0, 0 },
     { 1,  "MMC1",  0, 1 },
     { 2,  "UxROM", 0, 0 },
@@ -448,6 +449,12 @@ void hw_cart_cpu_write(uint16_t addr, uint8_t value)
     }
     if (addr < 0x8000) return;   /* $4020-$5FFF: no supported mapper decodes it */
     switch (hw_cart.mapper) {
+    case 11: /* Color Dreams; see MAPPERS.md. */
+        value &= hw_cart_prg_read(addr);
+        hw_cart.m.latch = value;
+        map_prg32(value & 3);
+        map_chr8(value >> 4);
+        break;
     case 1:  mmc1_write(addr, value); break;
     case 2:  uxrom_write(value); break;
     case 3:  cnrom_write(value); break;

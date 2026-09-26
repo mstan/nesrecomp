@@ -60,6 +60,7 @@ def main():
     ap.add_argument('--cmake', default='cmake')
     ap.add_argument('--generator')
     ap.add_argument('--config', default='Release')
+    ap.add_argument('--case-prefix', default='', help='Run only fixtures with this name prefix')
     args = ap.parse_args()
     out = args.out.resolve()
     out.mkdir(parents=True, exist_ok=True)
@@ -68,6 +69,9 @@ def main():
     cmake = ['cmake_minimum_required(VERSION 3.20)', 'project(cyc_regressions C)',
              'set(CMAKE_C_STANDARD 11)', f'include("{source.as_posix()}/cyc.cmake")']
     cases = list(fixtures()) + list(mapper_fixtures())
+    cases = [case for case in cases if case[0].startswith(args.case_prefix)]
+    if not cases:
+        ap.error('no matching fixtures')
     for name, image, seeds, _ in cases:
         case = out / name
         case.mkdir(exist_ok=True)

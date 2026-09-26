@@ -27,9 +27,12 @@ bool rom_parse(const char *path, NESRom *out) {
         return false;
     }
 
+    out->nes2 = (header[7] & 0x0c) == 0x08;
     out->prg_banks = header[4];
     out->chr_banks = header[5];
     out->mapper    = ((header[6] >> 4) & 0x0F) | (header[7] & 0xF0);
+
+    if (out->nes2) out->mapper |= (header[8] & 15) << 8;
 
     /* Skip trainer if present */
     if (header[6] & 0x04) {
