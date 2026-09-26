@@ -282,6 +282,7 @@ inline void TricMapper::Reset() {
     case 13: MapPRG32(0); MapCHR4(0, 0); MapCHR4(1, 0); Mirroring = TRIC_MIRROR_VERTICAL; break;
     case 71: MapPRG16(0, 0); MapPRG16(1, -1); MapCHR8(0); break;
     case 75: MapPRG32(0); MapPRG8(3, -1); MapCHR4(0, 0); MapCHR4(1, 0); Mirroring = TRIC_MIRROR_VERTICAL; break;
+    case 206: Reg[7] = 1; MMC3Apply(); break;
     case 1:
         Ctrl = 0x0C;   // PRG mode 3, the state a bit-7 write leaves
         MMC1Apply();
@@ -375,6 +376,13 @@ inline void TricMapper::StoreCPU(ushort Address, byte Input) {
         }
         MapCHR4(0, Chr0 + ((Ctrl & 2) ? 16 : 0));
         MapCHR4(1, Chr1 + ((Ctrl & 4) ? 16 : 0));
+        break;
+    case 206:
+        if ((Address & 0xe000) == 0x8000) {
+            if (Address % 2 == 0) BankSelect = Input % 8;
+            else Reg[BankSelect] = Input % (BankSelect < 6 ? 64 : 16);
+            MMC3Apply();
+        }
         break;
     case 1: MMC1Write(Address, Input); break;
     case 2: Latch = Input; MapPRG16(0, Input); break;

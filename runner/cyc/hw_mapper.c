@@ -392,6 +392,7 @@ static const struct {
     uint8_t     watch_ppu_addr;
     uint8_t     wram;            /* boards for this mapper carry work RAM */
 } MAPPERS[] = {
+    { 206, "DxROM", 0, 0 },
     { 75, "VRC1", 0, 0 },
     { 71, "Camerica", 0, 0 },
     { 34, "BNROM / NINA-001", 0, 0 },
@@ -442,6 +443,7 @@ void hw_cart_power_on(void)
     case 13: nrom_reset(); map_chr4(1, 0); hw_cart.mirroring = HW_MIRROR_VERTICAL; break;
     case 71: uxrom_reset(); break;
     case 75: nrom_reset(); map_prg8(3, -1); map_chr4(1, 0); hw_cart.mirroring = HW_MIRROR_VERTICAL; break;
+    case 206: hw_cart.m.reg[7] = 1; mmc3_apply(); break;
     case 1:  mmc1_reset(); break;
     case 2:  uxrom_reset(); break;
     case 3:  cnrom_reset(); break;
@@ -502,6 +504,16 @@ void hw_cart_cpu_write(uint16_t addr, uint8_t value)
         }
         map_chr4(0, hw_cart.m.chr0 | ((hw_cart.m.ctrl & 2) << 3));
         map_chr4(1, hw_cart.m.chr1 | ((hw_cart.m.ctrl & 4) << 2));
+        break;
+    case 206: /* DxROM; see MAPPERS.md. */
+        if (addr < 0xa000) {
+            if (!(addr & 1)) hw_cart.m.bank_select = value & 7;
+            else {
+                unsigned r = hw_cart.m.bank_select;
+                hw_cart.m.reg[r] = value & (r < 6 ? 63 : 15);
+            }
+            mmc3_apply(); /* mode bits are absent, so both modes stay zero */
+        }
         break;
     case 1:  mmc1_write(addr, value); break;
     case 2:  uxrom_write(value); break;
