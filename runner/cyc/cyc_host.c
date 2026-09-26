@@ -292,9 +292,12 @@ static void numbered_path(char *buf, size_t n, const char *base, long frame) {
     snprintf(buf, n, "%.*s_%05ld%s", stem, base, frame, dot ? dot : ".png");
 }
 
+#include "cyc_save.inc"
+
 int main(int argc, char **argv) {
     const char *rom_path = NULL, *hash_out = NULL, *trace_out = NULL, *screenshot = NULL, *state_out = NULL,
                *wav_out = NULL, *mem_out = NULL;
+    const char *save_file=NULL;
     long mem_frame = -1, shot_every = 0;
 #ifndef CYC_ORACLE
     const char *miss_log = NULL;
@@ -315,6 +318,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--spam-seed") && i + 1 < argc) spam_seed = (unsigned)strtoul(argv[++i], NULL, 10);
         else if (!strcmp(argv[i], "--spam-no-dpad")) spam_dpad = false;
         else if (!strcmp(argv[i], "--input") && i + 1 < argc) input_file = argv[++i], headless = true;
+        else if (!strcmp(argv[i], "--save-file") && i + 1 < argc) save_file=argv[++i];
         else if (!strcmp(argv[i], "--align") && i + 1 < argc) align = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--ram-init") && i + 1 < argc) {
             const char *m = argv[++i];
@@ -349,6 +353,7 @@ int main(int argc, char **argv) {
     }
     if (!rom_path) {
         fprintf(stderr, "usage: %s <rom.nes> [--interp-only] [--align N] [--scale N]\n"
+                        "       [--save-file FILE] (raw battery RAM/EEPROM, loaded and atomically saved)\n"
                         "       headless: [--frames N] [--acccoin] [--hash-out FILE]\n"
                         "       [--spam PAGE ROW] [--spam-seed N] [--spam-no-dpad] [--input FILE]\n"
                         "       [--trace-frame N --trace-out FILE] [--state-frame N --state-out FILE]\n"
@@ -374,13 +379,17 @@ int main(int argc, char **argv) {
         return 2;
     }
 #endif
+    if (!save_load(save_file,0)) return 2;
     cyc_power_on((uint8_t)align);
 #ifndef CYC_ORACLE
     cyc_run_power_on();
 #endif
 
 #if defined(CYC_WITH_SDL) && !defined(CYC_ORACLE)
-    if (!headless) return cyc_sdl_main(cyc_native_program_name ? cyc_native_program_name : rom_path, scale);
+    if (!headless) {
+        int result=cyc_sdl_main(cyc_native_program_name ? cyc_native_program_name : rom_path, scale);
+        return save_write(save_file,0)?result:2;
+    }
 #else
     (void)scale;
     (void)headless;
@@ -503,6 +512,7 @@ int main(int argc, char **argv) {
     if (screenshot && !cyc_write_png(screenshot, cyc_frame_argb(), 256, 240))
         fprintf(stderr, "cannot write %s\n", screenshot);
 
+    if (!save_write(save_file,0)) return 2;
     if (acccoin) {
         const uint8_t *prg = image + cart_info.data_offset;
         size_t prg_len = (size_t)cart_info.prg_size;

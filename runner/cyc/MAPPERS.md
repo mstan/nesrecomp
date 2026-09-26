@@ -61,7 +61,11 @@ and AxROM select no/AND bus conflicts. Generated programs now check cartridge
 metadata as well as PRG bytes: regenerate older cycle output when updating.
 Power-on mappings remain deterministic where hardware does not specify a state.
 NVRAM bytes survive machine power-on within a loaded cartridge; host save-file
-persistence is part of the EEPROM/persistence follow-up.
+persistence is available with `--save-file FILE`. Files contain raw PRG NVRAM
+followed by CHR NVRAM, or the cartridge's serial EEPROM bytes. Saves are opt-in
+so unattended regression runs start consistently. Invalid lengths fail before
+execution; successful exits flush a temporary file and atomically replace the
+save, including after the SDL host returns.
 
 Run the cartridge contracts with `ctest` in a `runner/cyc` build. Run execution
 checks with `tools/cyc/test_cyc_runtime.py`; every fixture runs compiled code, the
@@ -80,7 +84,7 @@ exactly at all four alignments. AccuracyCoin retains its existing alignment
 scores of 144/144, 143/144, 141/144 and 143/144; this change adds no new failures.
 
 The remaining draft stack includes MMC5,
-Bandai EEPROM, and extended board wiring.
+extended board wiring, and the remaining Bandai boards.
 Each needs its missing hardware primitive and suitable regression ROMs before
 being added to the supported list. The legacy runner still needs separate work.
 
@@ -144,3 +148,28 @@ silent VRC7b/reset cases. The PCM harness measures the 440.601 Hz carrier and
 compares native/interpreter WAVs byte for byte. This is an FM model with nominal
 gain, not a bit-exact capture of the chip's serial DAC or cartridge analog mixer.
 Lagrange Point and Tiny Toon Adventures 2 remain commercial-game validation work.
+
+Bandai mapper 16 supports FCG-1/2 ($6000 registers, direct IRQ counter) and
+LZ93D50 ($8000 registers, reload latch). NES 2.0 submappers 4/5 choose those
+decodes; ambiguous submapper 0 accepts each in its corresponding window.
+Deprecated submappers 1/2/3 are rejected; use mapper 159/157/153 respectively.
+LZ93D50's Xicor X24C02 EEPROM uses an A0/A1 device command, MSB-first bytes,
+four-byte page wrapping, sequential reads, ACK polling, and a nominal 5 ms
+programming interval. Only committed bytes are exported; power interruption
+discards an unfinished write. D7 releases SDA for reads and D4 receives the
+open-drain result. EEPROM capacity comes from NES 2.0 PRG NVRAM (256 bytes) or
+the iNES battery bit. The bytes are not exposed as CPU work RAM.
+
+Sources: [mapper 16](https://www.nesdev.org/wiki/INES_Mapper_016),
+[FCG-2 PCB tracing](https://seesaawiki.jp/famicomcartridge/d/Bandai%20FCG-2),
+[LZ93D50 PCB tracing](https://seesaawiki.jp/famicomcartridge/d/Bandai%20LZ93D50%20standard),
+and the Xicor datasheets attached to the latter page (its two PDF labels are
+reversed; inspect the document title). These parts have four-byte pages,
+unlike many later 24Cxx devices. The EEPROM primitive is shared with the oracle;
+board and IRQ logic are independent. Direct transaction vectors check every
+address, sequential wrap, page rollover, NACK, and interrupted programming.
+Fourteen 6502 fixtures (224 executions) exercise banks, rendering, IRQs through
+DMA, and bit-banged serial traffic at all alignments. Save tests start separate
+processes to increment persisted bytes, verify PRG/CHR save layout, and reject
+truncated/oversized files without modifying them. Commercial Bandai games and
+physical EEPROM timing have not been compared yet.

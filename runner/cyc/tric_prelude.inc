@@ -16,6 +16,7 @@
 // two models have to agree about when the PPU drives each address.
 
 #include "../../common/nes_cart.h"
+#include "../../common/nes_eeprom.h"
 
 typedef uint8_t  byte;
 typedef int8_t   sbyte;
@@ -54,6 +55,7 @@ struct TricMapper {
 
     // ---- work RAM at $6000-$7FFF ----
     byte WRAM[0x20000];
+    NesEeprom Eeprom[2];
     uint WRAM_Length, WRAM_Bank;
     bool HasWRAM, WRAM_Readable, WRAM_Writable;
 
@@ -102,6 +104,11 @@ struct TricMapper {
     void AccessPPU();
     void PPUClock();
     void CPUClock();
+    bool BandaiBoard();
+    void BandaiApply();
+    void BandaiWrite(ushort Address, byte Input);
+    bool BandaiRead(ushort Address, byte &Value);
+    void BandaiClock();
     void VRC7Apply();
     void VRC7Write(ushort Address, byte Input);
     bool VRC6Board();
@@ -177,6 +184,7 @@ inline bool TricMapper::VRC6Board() { return Cart.Mapper == 24 || Cart.Mapper ==
 #include "tric_vrc.inc"
 #include "tric_vrc6.inc"
 #include "tric_vrc7.inc"
+#include "tric_bandai.inc"
 
 // ---- MMC1 (nesdev wiki, MMC1) ----
 
@@ -316,10 +324,12 @@ inline void TricMapper::Reset() {
     memset(WRAM, 0, Cart.Info.prg_nvram ? Cart.Info.prg_ram : sizeof(WRAM));
 
     Mirroring = Cart.NametableHorizontalMirroring ? TRIC_MIRROR_HORIZONTAL : TRIC_MIRROR_VERTICAL;
-    HasWRAM = WRAM_Length != 0;
+    HasWRAM = WRAM_Length != 0 && !BandaiBoard();
+    for (unsigned chip=0;chip<2;++chip) nes_eeprom_reset(&Eeprom[chip]);
     WRAM_Readable = WRAM_Writable = HasWRAM;
 
     switch (Cart.Mapper) {
+    case 16: BandaiApply(); break;
     case 85: Reg[1]=1; Reg[2]=2; VRC7Apply(); break;
     case 24: case 26: Ctrl=0x20; VRC6Apply(); break;
     case 21: case 22: case 23: case 25: Reg[1] = 1; VRCApply(); break;
@@ -372,6 +382,7 @@ inline void TricMapper::Reset() {
 
 inline void TricMapper::FetchCPU() {
     CPU_Drove = false;
+    if (BandaiBoard() && CPU_AddressIn<0x8000) { CPU_Drove=BandaiRead(CPU_AddressIn,CPU_NonTiltData); return; }
     if (VRC24Board() && CPU_AddressIn >= 0x6000 && CPU_AddressIn < 0x8000) {
         if (VRC2Board() && !HasWRAM) {
             if (CPU_AddressIn < 0x7000) {
@@ -392,6 +403,7 @@ inline void TricMapper::FetchCPU() {
 }
 
 inline byte TricMapper::SnoopCPU(ushort Address) {
+    if (BandaiBoard() && Address<0x8000) { byte v=dataBus; BandaiRead(Address,v); return v; }
     if (VRC24Board() && Address >= 0x6000 && Address < 0x8000) {
         if (VRC2Board() && !HasWRAM) return Address < 0x7000 ? (dataBus & 0xfe) | Latch : dataBus;
         if (!VRC2Board() && WRAM_Length == 2048 && Address >= 0x7000) return dataBus;
@@ -402,6 +414,7 @@ inline byte TricMapper::SnoopCPU(ushort Address) {
 }
 
 inline void TricMapper::StoreCPU(ushort Address, byte Input) {
+    if (BandaiBoard()) { BandaiWrite(Address,Input); return; }
     if (VRC24Board() && Address >= 0x6000 && Address < 0x8000) {
         if (VRC2Board() && !HasWRAM) {
             if (Address < 0x7000) Latch = Input%2;

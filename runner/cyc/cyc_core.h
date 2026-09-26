@@ -38,6 +38,13 @@ uint32_t cyc_prg_hash(void);
 /* Which hardware implementation this is: "nesrecomp" or "tricnes". */
 const char *cyc_hw_name(void);
 
+/* Committed nonvolatile bytes, preserved by cyc_power_on. Region 0 is the
+ * cartridge; region 1 is reserved for separately persisted accessory storage.
+ * Import only between load/power-on and CPU execution. Length must match. */
+size_t cyc_nvram_size(unsigned region);
+bool cyc_nvram_export(unsigned region, void *buffer, size_t size);
+bool cyc_nvram_import(unsigned region, const void *buffer, size_t size);
+
 /* ---- host I/O ---- */
 
 /* The 2KB of CPU RAM. */
