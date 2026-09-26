@@ -19,6 +19,9 @@ models; it does not independently establish the mapper specification.
 
 | ID | Board / reference | Behavior and limits |
 |---:|---|---|
+| 85 | [VRC7](https://www.nesdev.org/wiki/VRC7) | Three 8 KiB PRG windows, eight CHR windows, WRAM gate, VRC IRQ, and six FM channels. Submapper 1 selects A3 and omits the oscillator; submapper 2 selects A4. |
+| 24 | [VRC6a](https://www.nesdev.org/wiki/VRC6) | 16+8 KiB PRG, all CHR/nametable modes, WRAM gate, CPU IRQ and two pulse/one saw audio channels. |
+| 26 | [VRC6b](https://www.nesdev.org/wiki/VRC6) | VRC6 with swapped A0/A1 register wiring, including the audio ports. |
 | 21 | VRC4a/c | Submappers 1/2 select address wiring; PRG swap, 9-bit CHR, WRAM gate and CPU/divider IRQ. |
 | 22 | VRC2a | Swapped address lines, shifted 8-bit CHR, one-bit latch, no IRQ. |
 | 23 | VRC2b / VRC4e/f | Submappers 1/2 select VRC4 wiring; submapper 3 selects VRC2. |
@@ -76,7 +79,7 @@ AccuracyCoin and the 3,000-frame SMB3 route also match the pre-expansion traces
 exactly at all four alignments. AccuracyCoin retains its existing alignment
 scores of 144/144, 143/144, 141/144 and 143/144; this change adds no new failures.
 
-The remaining draft stack includes MMC5, VRC expansion audio chips,
+The remaining draft stack includes MMC5,
 Bandai EEPROM, and extended board wiring.
 Each needs its missing hardware primitive and suitable regression ROMs before
 being added to the supported list. The legacy runner still needs separate work.
@@ -118,3 +121,26 @@ iNES mapper 23/25 cannot unambiguously distinguish VRC2 from VRC4. Submapper 0
 retains the historical VRC4 union of address decodes; use NES 2.0 submapper 3 for
 the VRC2 bit latch and 8-bit CHR behavior (including Wai Wai World). VRC4 boards
 with explicit 2 KiB WRAM mirror it only through $6000-$6FFF.
+
+VRC6 nametable pin vectors come from BootGod's measurements reported by Quietust
+on [Talk:VRC6](https://www.nesdev.org/wiki/Talk:VRC6#Raw_data). The contracts cover
+all 64 banking-style values, including CHR-ROM nametables and independent CIRAM
+selection. Execution fixtures read these through $2007 and enable rendering.
+The audio sequencers run during DMA and when host audio is disabled; PCM mixing
+adds their inverted linear DAC before the existing output filters. Nominal mixer
+gain is approximate; cartridge resistor tolerances and analog response need
+hardware comparison. `test_cyc_expansion_audio.py` records native/interpreter
+WAVs, checks exact parity and pulse/saw frequencies, and rejects silent/clipped
+output. The oracle does not synthesize expansion audio; waveform contracts and
+recorded PCM tests provide that validation. Commercial VRC6 games remain to test.
+
+VRC7 uses the pinned MIT-licensed emu2413 core in `vendor/emu2413`, with the
+instrument bytes checked against the chip's dumped patch ROM. A rational clock
+divider models the independent 3.579545 MHz resonator; power-on phase is
+deterministic. Diagnostic test-register behavior, sound reset, ignored writes,
+and all six channels have contracts. CPU fixtures cover all three submapper
+choices, PRG/CHR/WRAM/mirroring, IRQs through DMA, a custom sine carrier, and the
+silent VRC7b/reset cases. The PCM harness measures the 440.601 Hz carrier and
+compares native/interpreter WAVs byte for byte. This is an FM model with nominal
+gain, not a bit-exact capture of the chip's serial DAC or cartridge analog mixer.
+Lagrange Point and Tiny Toon Adventures 2 remain commercial-game validation work.

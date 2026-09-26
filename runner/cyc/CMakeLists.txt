@@ -26,7 +26,8 @@ target_include_directories(cyc_helper_test PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS}
 enable_testing()
 add_test(NAME cyc_helper_test COMMAND cyc_helper_test)
 
-add_executable(cyc_mapper_test mapper_test.c hw_mapper.c cyc_trace.c)
+add_executable(cyc_mapper_test mapper_test.c hw_mapper.c cyc_trace.c vendor/emu2413/emu2413.c)
+target_link_libraries(cyc_mapper_test PRIVATE ${NESRECOMP_CYC_LIBRARIES})
 target_include_directories(cyc_mapper_test PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})
 add_test(NAME cyc_mapper_test COMMAND cyc_mapper_test)
 

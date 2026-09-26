@@ -16,6 +16,8 @@ from cart_variant_fixtures import variant_fixtures
 from latch_fixtures import latch_fixtures
 from fineprg_fixtures import fineprg_fixtures
 from vrc_fixtures import vrc_fixtures
+from expansion_fixtures import expansion_fixtures
+from vrc7_fixtures import vrc7_fixtures
 
 
 def run(cmd, cwd, log):
@@ -73,7 +75,7 @@ def main():
     source = Path(__file__).resolve().parents[2] / 'runner/cyc'
     cmake = ['cmake_minimum_required(VERSION 3.20)', 'project(cyc_regressions C)',
              'set(CMAKE_C_STANDARD 11)', f'include("{source.as_posix()}/cyc.cmake")']
-    cases = list(fixtures()) + list(mapper_fixtures()) + list(ppu_fixtures()) + list(variant_fixtures()) + list(latch_fixtures()) + list(fineprg_fixtures()) + list(vrc_fixtures())
+    cases = list(fixtures()) + list(mapper_fixtures()) + list(ppu_fixtures()) + list(variant_fixtures()) + list(latch_fixtures()) + list(fineprg_fixtures()) + list(vrc_fixtures()) + list(expansion_fixtures()) + list(vrc7_fixtures())
     cases = [case for case in cases if case[0].startswith(args.case_prefix)]
     if not cases:
         ap.error('no matching fixtures')

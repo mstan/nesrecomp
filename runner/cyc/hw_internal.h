@@ -78,6 +78,11 @@ typedef struct {
  * the recompiler's dispatch and the mapper implementations talk about banks
  * in the same terms. */
 typedef struct {
+    uint8_t reg[3][3], control, step[3], accumulator;
+    uint16_t timer[3];
+} HwVrc6Audio;
+
+typedef struct {
     uint8_t *prg;
     uint32_t prg_len;
     uint32_t prg_slots;         /* prg_len / 0x1000, rounded up to a power of 2 */
@@ -120,6 +125,10 @@ typedef struct {
         uint16_t vrc_chr[8], irq_latch16, irq_counter16;
         int16_t irq_prescaler;
         uint8_t irq_mode;
+        HwVrc6Audio vrc6_audio;
+        uint8_t vrc7_reg[64], vrc7_address;
+        uint64_t vrc7_phase;
+        int16_t vrc7_output;
     } m;
 } HwCart;
 
@@ -142,6 +151,7 @@ HW_ALWAYS_INLINE uint32_t hw_cart_chr_index(uint16_t a)
 /* CIRAM A10 as the cartridge drives it, as a CIRAM index bit. */
 HW_ALWAYS_INLINE uint16_t hw_cart_ciram_a10(uint16_t vbus)
 {
+    if (hw_cart.mapper == 24 || hw_cart.mapper == 26) return hw_cart_nt_a10(vbus);
     if (hw_cart.info.four_screen) return vbus & 0xc00;
     switch (hw_cart.mirroring) {
     case HW_MIRROR_HORIZONTAL: return (vbus & 0x800) ? 0x400 : 0;
