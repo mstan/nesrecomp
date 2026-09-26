@@ -22,6 +22,7 @@ from bandai_fixtures import bandai_fixtures
 from mmc5_fixtures import mmc5_fixtures
 from mmc1_fixtures import mmc1_fixtures
 from mapper40_fixtures import mapper40_fixtures
+from namco108_probe import fixture as namco108_fixture
 
 
 def run(cmd, cwd, log, timeout=180):
@@ -34,6 +35,14 @@ def run(cmd, cwd, log, timeout=180):
 
 
 def fixtures():
+    # A halt opcode stops instruction fetch, not the PPU/APU or host frames.
+    # Previously the oracle waited forever for another SYNC/instruction end.
+    for opcode in (0x02,0x12,0x22,0x32,0x42,0x52,0x62,0x72,0x92,0xb2,0xd2,0xf2):
+        prg = bytearray([0xff]) * 32768
+        prg[:3] = bytes([0xa9,0x42,opcode])
+        prg[-6:] = bytes([0,0x80]) * 3
+        yield f'cpu_halt_{opcode:02x}', b'NES\x1a'+bytes([2,0])+bytes(10)+prg, '', 'fallback:A=42'
+
     # Valid NROM containing no $FF terminators. Parsing it as an AccuracyCoin
     # menu used to hang before the host ran even one instruction.
     prg = bytearray([0xea]) * 32768
@@ -87,6 +96,7 @@ def main():
     cases += list(mmc5_fixtures())
     cases += list(mmc1_fixtures())
     cases += list(mapper40_fixtures())
+    cases += [namco108_fixture()]
     cases = [case for case in cases if case[0].startswith(args.case_prefix)]
     if not cases:
         ap.error('no matching fixtures')
@@ -128,8 +138,14 @@ def main():
             for mode, exe, extra in [('native', native, []), ('interp', native, ['--interp-only']),
                                       ('standalone', interp, []), ('oracle', oracle, [])]:
                 trace = case / f'a{align}_{mode}.txt'
-                stdout = run([exe, case / f'{name}.nes', '--frames', frames, '--align', align,
-                              '--hash-out', trace] + extra, case, trace.with_suffix('.log'))
+                command = [exe, case / f'{name}.nes', '--frames', frames, '--align', align,
+                           '--hash-out', trace] + extra
+                if name == 'namco108_probe':
+                    command += ['--mem-frame', frames - 1, '--mem-out', trace.with_suffix('.mem')]
+                stdout = run(command, case, trace.with_suffix('.log'))
+                if name == 'namco108_probe':
+                    from namco108_probe import check_memory
+                    check_memory(trace.with_suffix('.mem'))
                 lines = trace.read_text().splitlines()
                 checked_lines = lines[-1:] if final_only else lines
                 if len(lines) != frames or any(expected not in line for line in checked_lines):
