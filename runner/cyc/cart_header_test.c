@@ -20,7 +20,7 @@ int main(void)
     CHECK(nes_cart_header(h,16,&c)); CHECK(!nes_cart_variant_supported(&c));
     h[11]=7; CHECK(nes_cart_header(h,16,&c)); CHECK(nes_cart_variant_supported(&c));
     h[7]=0; CHECK(nes_cart_header(h,16,&c)); CHECK(c.chr_ram==8192 && c.prg_ram==0);
-    h[6]=0x12; CHECK(nes_cart_header(h,16,&c)); CHECK(c.prg_nvram==8192);
+    h[6]=0x12; CHECK(nes_cart_header(h,16,&c)); CHECK(c.prg_nvram==32768);
     h[6]=4; CHECK(nes_cart_header(h,16,&c)); CHECK(c.data_offset==528);
     CHECK(!nes_cart_image(h,16,&c)); CHECK(!nes_cart_header(h,15,&c));
     h[0]=0; CHECK(!nes_cart_header(h,16,&c));
@@ -37,6 +37,18 @@ int main(void)
         CHECK(nes_cart_variant_supported(&c)==expected);
     }
     h[10]=0; h[6]=0x58; CHECK(nes_cart_header(h,16,&c)); CHECK(!nes_cart_variant_supported(&c));
+    memset(&c,0,sizeof(c)); c.mapper=1; c.nes2=1; c.prg_size=524288; c.chr_ram=8192; c.prg_ram=8192;
+    c.submapper=1; CHECK(nes_cart_variant_supported(&c));
+    c.prg_size=262144; CHECK(!nes_cart_variant_supported(&c));
+    c.submapper=2; c.prg_nvram=8192; CHECK(nes_cart_variant_supported(&c));
+    c.chr_ram=16384; CHECK(!nes_cart_variant_supported(&c));
+    c.submapper=0; CHECK(nes_cart_variant_supported(&c)); /* SZROM */
+    c.prg_nvram=32768; CHECK(!nes_cart_variant_supported(&c));
+    c.prg_ram=0; c.chr_ram=8192; c.submapper=4; CHECK(nes_cart_variant_supported(&c));
+    c.submapper=5; CHECK(!nes_cart_variant_supported(&c));
+    c.prg_size=32768; CHECK(nes_cart_variant_supported(&c));
+    c.submapper=7; CHECK(nes_cart_variant_supported(&c));
+    c.submapper=6; CHECK(!nes_cart_variant_supported(&c));
     puts("cartridge header contracts passed");
     return 0;
 }

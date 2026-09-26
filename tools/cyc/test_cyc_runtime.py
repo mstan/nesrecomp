@@ -20,6 +20,7 @@ from expansion_fixtures import expansion_fixtures
 from vrc7_fixtures import vrc7_fixtures
 from bandai_fixtures import bandai_fixtures
 from mmc5_fixtures import mmc5_fixtures
+from mmc1_fixtures import mmc1_fixtures
 
 
 def run(cmd, cwd, log, timeout=180):
@@ -83,6 +84,7 @@ def main():
              'target_compile_definitions(cyc_regression_runtime PRIVATE _CRT_SECURE_NO_WARNINGS)']
     cases = list(fixtures()) + list(mapper_fixtures()) + list(ppu_fixtures()) + list(variant_fixtures()) + list(latch_fixtures()) + list(fineprg_fixtures()) + list(vrc_fixtures()) + list(expansion_fixtures()) + list(vrc7_fixtures()) + list(bandai_fixtures())
     cases += list(mmc5_fixtures())
+    cases += list(mmc1_fixtures())
     cases = [case for case in cases if case[0].startswith(args.case_prefix)]
     if not cases:
         ap.error('no matching fixtures')

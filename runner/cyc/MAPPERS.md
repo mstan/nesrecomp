@@ -52,7 +52,7 @@ timing, and console type. Unknown submappers, unsupported console/timing models,
 and mixed CHR ROM/RAM boards are rejected explicitly. NTSC and multi-region
 headers run the NTSC machine. File allocations are bounded to 64 MiB per ROM,
 128 KiB PRG RAM, and 1 MiB CHR RAM. RAM sizes do not by themselves add banking
-registers: extended MMC1 RAM/outer-bank wiring is separate follow-up work.
+registers; implemented MMC1 board wiring is described below.
 
 Four-screen cartridges have four independent nametables, included in memory
 hashes and dumps. RAM below a CPU/PPU window size mirrors within that window.
@@ -83,10 +83,8 @@ AccuracyCoin and the 3,000-frame SMB3 route also match the pre-expansion traces
 exactly at all four alignments. AccuracyCoin retains its existing alignment
 scores of 144/144, 143/144, 141/144 and 143/144; this change adds no new failures.
 
-The remaining draft stack includes MMC5,
-and extended board wiring.
-Each needs its missing hardware primitive and suitable regression ROMs before
-being added to the supported list. The legacy runner still needs separate work.
+The extended board wiring is described below. The legacy runner still needs
+separate integration work.
 
 The metadata/variant draft adds `cart_header_test.c` and
 `tools/cyc/cart_variant_fixtures.py`. Contracts cover Aladdin, fixed Namco PRG,
@@ -267,3 +265,30 @@ ROM-free fixtures exercise bank handoffs, writable code, PCM/DMA, timer and
 scanline IRQs, CHR selection, split rendering and expansion tones at all four
 CPU/PPU alignments. The cartridge contracts enumerate all 65,536 multiplier
 inputs and RAM geometry; rendered PCM is checked separately.
+
+### MMC1 board wiring
+
+[MMC1 board documentation](https://www.nesdev.org/wiki/MMC1) and the
+[pinout](https://www.nesdev.org/wiki/MMC1_pinout) define SNROM RAM /CE,
+SOROM/SXROM RAM banking, SUROM/SXROM outer PRG banking and SZROM RAM selection.
+All use the currently selected CHR output, including PPU A12 changes in 4 KiB
+CHR mode. A 512 KiB ROM's fixed bank stays within its selected 256 KiB half.
+Native execution falls back while unequal CHR registers can change PRG during
+an instruction, then resumes when the mapping is stable.
+
+NES 2.0 sizes distinguish those boards. Deprecated submappers 1, 2 and 4 are
+accepted only with matching SUROM, SOROM and SXROM geometry. Submapper 5 retains
+fixed 32 KiB PRG; submapper 7 preserves the header's hardwired nametables.
+Unspecified iNES RAM counts reserve 32 KiB for compatibility, so old MMC1
+battery saves may need migration from 8 KiB; explicit NES 2.0 sizes keep exact
+save lengths. Legacy headers with larger CHR use the SZROM RAM select pin.
+Only explicit 8 KiB RAM geometry enables SNROM's additional /CE behavior.
+SOROM/SZROM saves contain chip 1; chip 0 remains volatile. SXROM saves use the
+physical A14:A13 order, with four consecutive 8 KiB banks.
+
+The ROM-free board tests exhaust inner/outer PRG mode combinations and PPU
+A12, test hardwired mirroring, then run synthetic ROMs through all four
+execution modes/alignments. Save tests restart each executable twice and
+verify exact physical bytes plus rejection of invalid lengths. Submapper 6
+is a Famicom Network System card on a separate card bus, not the console's
+CPU/PPU bus; it remains explicitly rejected pending an FCNS machine model.

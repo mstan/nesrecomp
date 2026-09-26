@@ -182,29 +182,38 @@ static void gxrom_write(uint8_t value)
 
 enum { MMC1_CTRL_MIRROR = 3, MMC1_CTRL_PRG_MODE = 0x0C, MMC1_CTRL_CHR_4K = 0x10 };
 
+/* CHR A16/A15/A14 are also CPU memory signals on SxROM. Their source
+ * changes with PPU A12 even when /RD is high or rendering is disabled. */
 static void mmc1_apply(void)
 {
-    static const uint8_t mirror[4] = { HW_MIRROR_SCREEN_A, HW_MIRROR_SCREEN_B, HW_MIRROR_VERTICAL,
-                                       HW_MIRROR_HORIZONTAL };
-    hw_cart.mirroring = mirror[hw_cart.m.ctrl & MMC1_CTRL_MIRROR];
-
-    int prg = hw_cart.m.prg & 0x0F;
+    static const uint8_t mirror[4] = { HW_MIRROR_SCREEN_A, HW_MIRROR_SCREEN_B,
+        HW_MIRROR_VERTICAL, HW_MIRROR_HORIZONTAL };
+    hw_cart.mirroring = hw_cart.info.submapper==7 ?
+        (hw_cart.info.vertical ? HW_MIRROR_VERTICAL : HW_MIRROR_HORIZONTAL) :
+        mirror[hw_cart.m.ctrl & MMC1_CTRL_MIRROR];
+    unsigned chr=(hw_cart.m.ctrl&MMC1_CTRL_CHR_4K) && hw_cart.m.a12 ?
+        hw_cart.m.chr1 : hw_cart.m.chr0;
+    unsigned outer=hw_cart.prg_slots>64 ? chr&16 : 0;
+    unsigned prg=hw_cart.m.prg&15;
     switch ((hw_cart.m.ctrl & MMC1_CTRL_PRG_MODE) >> 2) {
-    case 0: case 1: map_prg32(prg >> 1); break;          /* 32KB, ignoring bit 0 */
-    case 2: map_prg16(0, 0); map_prg16(1, prg); break;   /* first bank fixed at $8000 */
-    default: map_prg16(0, prg); map_prg16(1, -1); break; /* last bank fixed at $C000 */
+    case 0: case 1: map_prg32((outer|prg)>>1); break;
+    case 2: map_prg16(0,outer); map_prg16(1,outer|prg); break;
+    default: map_prg16(0,outer|prg); map_prg16(1,outer|15); break;
     }
-
-    if (hw_cart.info.submapper == 5) map_prg32(0);
-
+    if (hw_cart.info.submapper==5) map_prg32(0);
     if (hw_cart.m.ctrl & MMC1_CTRL_CHR_4K) {
-        map_chr4(0, hw_cart.m.chr0 & 0x1F);
-        map_chr4(1, hw_cart.m.chr1 & 0x1F);
-    } else {
-        map_chr8((hw_cart.m.chr0 & 0x1F) >> 1);
-    }
-    /* Bit 4 of the PRG register disables work RAM on boards that have it. */
-    hw_cart.wram_readable = hw_cart.wram_writable = (hw_cart.m.prg & 0x10) == 0;
+        map_chr4(0,hw_cart.m.chr0); map_chr4(1,hw_cart.m.chr1);
+    } else map_chr8(hw_cart.m.chr0>>1);
+    /* SXROM uses C as RAM A13 and D as A14; SOROM uses D as A13.
+     * SZROM instead uses E and has 16-64 KiB CHR. Save layout is physical
+     * chip order: volatile chip 0, battery-backed chip 1 on SOROM/SZROM. */
+    unsigned bank=hw_cart.chr_pages>8 && hw_cart.wram_len>=16384 ? (chr>>4)&1 :
+        hw_cart.wram_len==32768 ? (chr>>2)&3 : hw_cart.wram_len==16384 ? (chr>>3)&1 : 0;
+    hw_cart.wram_bank=bank*8192;
+    bool disabled=(hw_cart.m.prg&16)!=0;
+    if (hw_cart.chr_pages<=8 && hw_cart.prg_slots<=64 && hw_cart.wram_len==8192)
+        disabled|=(chr&16)!=0; /* SNROM's additional RAM /CE */
+    hw_cart.wram_readable=hw_cart.wram_writable=!disabled;
 }
 
 static void mmc1_reset(void)
@@ -515,6 +524,8 @@ static int mapper_index(int mapper)
  * native dispatch automatically after software makes the outer bank stable. */
 bool hw_prg_is_stable(void)
 {
+    if (hw_cart.mapper==1 && hw_cart.prg_slots>64)
+        return !(hw_cart.m.ctrl&16) || !((hw_cart.m.chr0^hw_cart.m.chr1)&16);
     if (hw_cart.mapper!=153 || hw_cart.prg_slots<=64) return true;
     return !((hw_cart.m.reg[0]^hw_cart.m.reg[1])&1) &&
            !((hw_cart.m.reg[0]^hw_cart.m.reg[2])&1) &&
@@ -542,6 +553,7 @@ void hw_cart_power_on(void)
     memset(hw_cart.chr_off, 0, sizeof(hw_cart.chr_off));
     int i = mapper_index(hw_cart.mapper);
     hw_cart.watch_ppu_addr = i >= 0 ? MAPPERS[i].watch_ppu_addr : 0;
+    if (hw_cart.mapper==1) hw_cart.watch_ppu_addr=1;
     hw_cart.watch_cpu = hw_cart.mapper==5 || bandai_board() || (vrc24_board() && !vrc2_board()) || hw_cart.mapper == 73 || vrc6_board() || hw_cart.mapper == 85;
     hw_cart.mirroring = hw_cart.info.vertical ? HW_MIRROR_VERTICAL : HW_MIRROR_HORIZONTAL;
     hw_cart.wram_bank = 0;
@@ -765,7 +777,10 @@ bool hw_cart_cpu_read(uint16_t addr, uint8_t *value)
 
 void hw_cart_ppu_addr_watched(uint16_t vbus)
 {
-    if (hw_cart.mapper == 4) mmc3_ppu_addr(vbus);
+    if (hw_cart.mapper==1) {
+        unsigned a12=(vbus>>12)&1;
+        if (hw_cart.m.a12!=a12) { hw_cart.m.a12=(uint8_t)a12; mmc1_apply(); }
+    } else if (hw_cart.mapper == 4) mmc3_ppu_addr(vbus);
     else if (hw_cart.mapper==153 || hw_cart.mapper==157) bandai_ppu_addr(vbus);
 }
 

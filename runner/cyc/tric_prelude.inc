@@ -211,23 +211,26 @@ inline bool TricMapper::CartMapperIRQ() { return Cart.Mapper==5 ? (M5.irq_enable
 // ---- MMC1 (nesdev wiki, MMC1) ----
 
 inline void TricMapper::MMC1Apply() {
-    static const byte MirrorOf[4] = { TRIC_MIRROR_SCREEN_A, TRIC_MIRROR_SCREEN_B, TRIC_MIRROR_VERTICAL,
-                                      TRIC_MIRROR_HORIZONTAL };
-    Mirroring = MirrorOf[Ctrl & 3];
-    int prg = PrgReg & 0x0F;
-    switch ((Ctrl & 0x0C) >> 2) {
-    case 0: case 1: MapPRG32(prg >> 1); break;
-    case 2: MapPRG16(0, 0); MapPRG16(1, prg); break;
-    default: MapPRG16(0, prg); MapPRG16(1, -1); break;
-    }
-    if (Cart.Info.submapper == 5) MapPRG32(0);
-    if (Ctrl & 0x10) {
-        MapCHR4(0, Chr0 & 0x1F);
-        MapCHR4(1, Chr1 & 0x1F);
-    } else {
-        MapCHR8((Chr0 & 0x1F) >> 1);
-    }
-    WRAM_Readable = WRAM_Writable = (PrgReg & 0x10) == 0;
+    const byte names[4]={TRIC_MIRROR_SCREEN_A,TRIC_MIRROR_SCREEN_B,TRIC_MIRROR_VERTICAL,TRIC_MIRROR_HORIZONTAL};
+    Mirroring=Cart.Info.submapper==7 ? (Cart.Info.vertical?TRIC_MIRROR_VERTICAL:TRIC_MIRROR_HORIZONTAL) : names[Ctrl%4];
+    unsigned pins=(Ctrl>=16 && A12)?Chr1:Chr0;
+    unsigned group=Cart.PRGSlots>64 ? (pins/16)*16 : 0;
+    unsigned banks[2]={PrgReg%16,PrgReg%16}, mode=(Ctrl/4)%4;
+    if (mode<2) { banks[0]&=14; banks[1]=banks[0]+1; }
+    else if (mode==2) banks[0]=0;
+    else banks[1]=15;
+    for (unsigned slot=0;slot<2;++slot) MapPRG16(slot,group+banks[slot]);
+    if (Cart.Info.submapper==5) MapPRG32(0);
+    if (Ctrl&16) { MapCHR4(0,Chr0); MapCHR4(1,Chr1); }
+    else MapCHR8(Chr0/2);
+    unsigned bank=0;
+    if (Cart.CHRPages>8 && WRAM_Length>=16384) bank=(pins/16)%2;
+    else if (WRAM_Length==32768) bank=(pins/4)%4;
+    else if (WRAM_Length==16384) bank=(pins/8)%2;
+    WRAM_Bank=bank*8192;
+    bool enabled=PrgReg<16;
+    if (Cart.CHRPages<=8 && Cart.PRGSlots<=64 && WRAM_Length==8192 && pins>=16) enabled=false;
+    WRAM_Readable=WRAM_Writable=enabled;
 }
 
 inline void TricMapper::MMC1Write(ushort Address, byte Input) {
@@ -310,6 +313,10 @@ inline void TricMapper::MMC3ClockIRQ() {
 // been low for at least three CPU cycles. TriCNES calls this once per PPU
 // clock with its own address bus, which is the independent part of the check.
 inline void TricMapper::PPUClock() {
+    if (Cart.Mapper==1) {
+        bool high=(PPU_AddressBus&4096)!=0;
+        if (A12!=high) { A12=high; MMC1Apply(); }
+    }
     if (Cart.Mapper==153 || Cart.Mapper==157) {
         unsigned select=(PPU_AddressBus/1024)%4;
         if (BankSelect!=select) { BankSelect=select; if (Cart.Mapper==157) DatachLines(); else BandaiApply(); }
