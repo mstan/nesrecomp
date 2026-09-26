@@ -392,6 +392,7 @@ static const struct {
     uint8_t     watch_ppu_addr;
     uint8_t     wram;            /* boards for this mapper carry work RAM */
 } MAPPERS[] = {
+    { 232, "Camerica Quattro", 0, 0 },
     { 184, "Sunsoft-1", 0, 0 },
     { 180, "Crazy Climber", 0, 0 },
     { 140, "Jaleco JF-11/14", 0, 0 },
@@ -456,6 +457,7 @@ void hw_cart_power_on(void)
     case 94: uxrom_reset(); break;
     case 180: map_prg16(0, 0); map_prg16(1, 0); map_chr8(0); break;
     case 184: nrom_reset(); map_chr4(1, 4); break;
+    case 232: map_prg16(0, 0); map_prg16(1, 3); map_chr8(0); break;
     case 1:  mmc1_reset(); break;
     case 2:  uxrom_reset(); break;
     case 3:  cnrom_reset(); break;
@@ -572,6 +574,12 @@ void hw_cart_cpu_write(uint16_t addr, uint8_t value)
         value &= hw_cart_prg_read(addr);
         hw_cart.m.latch = value;
         map_prg16(1, value & 7);
+        break;
+    case 232: /* Camerica Quattro; see MAPPERS.md. */
+        if (addr < 0xc000) hw_cart.m.ctrl = (value >> 1) & 12;
+        else hw_cart.m.prg = value & 3;
+        map_prg16(0, hw_cart.m.ctrl | hw_cart.m.prg);
+        map_prg16(1, hw_cart.m.ctrl | 3);
         break;
     case 1:  mmc1_write(addr, value); break;
     case 2:  uxrom_write(value); break;

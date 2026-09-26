@@ -287,6 +287,7 @@ inline void TricMapper::Reset() {
     case 94: MapPRG16(0, 0); MapPRG16(1, -1); MapCHR8(0); break;
     case 180: MapPRG16(0, 0); MapPRG16(1, 0); MapCHR8(0); break;
     case 184: MapPRG32(0); MapCHR4(0, 0); MapCHR4(1, 4); break;
+    case 232: MapPRG16(0, 0); MapPRG16(1, 3); MapCHR8(0); break;
     case 1:
         Ctrl = 0x0C;   // PRG mode 3, the state a bit-7 write leaves
         MMC1Apply();
@@ -431,6 +432,12 @@ inline void TricMapper::StoreCPU(ushort Address, byte Input) {
     case 180:
         Latch = (byte)(Input & SnoopCPU(Address));
         MapPRG16(1, Latch % 8);
+        break;
+    case 232:
+        if (Address >= 0xc000) PrgReg = Input % 4;
+        else Ctrl = (Input / 8) % 4;
+        MapPRG16(0, Ctrl * 4 + PrgReg);
+        MapPRG16(1, Ctrl * 4 + 3);
         break;
     case 1: MMC1Write(Address, Input); break;
     case 2: Latch = Input; MapPRG16(0, Input); break;

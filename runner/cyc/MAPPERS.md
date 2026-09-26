@@ -18,6 +18,7 @@ models; it does not independently establish the mapper specification.
 
 | ID | Board / reference | Behavior and limits |
 |---:|---|---|
+| 232 | [Quattro](https://www.nesdev.org/wiki/INES_Mapper_071) | Outer 64 KiB bank plus inner 16 KiB bank; upper window follows outer bank. Aladdin variant excluded. |
 | 184 | [Sunsoft-1](https://www.nesdev.org/wiki/Sunsoft_1) | Fixed PRG; two 4 KiB CHR windows; upper window forces bank bit 2. |
 | 180 | [UxROM variant](https://www.nesdev.org/wiki/UxROM) | First 16 KiB fixed, upper 16 KiB switchable; AND bus conflicts. |
 | 140 | [JF-11/14](https://www.nesdev.org/wiki/INES_Mapper_140) | 32 KiB PRG / 8 KiB CHR; $6000-$7FFF decode; no conflicts. |

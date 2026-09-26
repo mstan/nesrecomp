@@ -528,6 +528,7 @@ static int power_on_bank_for(int mapper, uint32_t banks, uint32_t slot) {
     case 76: return slot >= 2 ? (int)(banks - 2 + slot - 2) : (int)slot;
     case 94: return slot >= 2 ? (int)(banks - 2 + slot - 2) : (int)slot;
     case 180: return (int)(slot & 1);
+    case 232: return slot < 2 ? (int)slot : (int)(slot + 4);
     case 1:  return slot >= 2 ? (int)(banks - 2 + (slot - 2)) : (int)slot;  /* mode 3 */
     case 2:  return slot >= 2 ? (int)(banks - 2 + (slot - 2)) : (int)slot;
     case 4:  return slot == 2 ? (int)(banks - 2) : slot == 3 ? (int)(banks - 1) : (int)slot;
@@ -1354,6 +1355,7 @@ static const char *mapper_name(int mapper) {
     case 140: return "Jaleco JF-11/14";
     case 180: return "Crazy Climber";
     case 184: return "Sunsoft-1";
+    case 232: return "Camerica Quattro";
     case 0:  return "NROM";
     case 1:  return "MMC1";
     case 2:  return "UxROM";
