@@ -181,3 +181,15 @@ is MSB first, as verified by the PCB researcher using sequential reads; older
 emulators sometimes reverse both addresses and data. Mapper 159 has its own
 bank, IRQ, serial and process-restart fixtures. Low-window FCG writes also
 terminate compiled blocks, so switching $6008 cannot execute stale native code.
+
+Mapper 153 (BA-JUMP2/Famicom Jump II) has fixed 8 KiB CHR RAM and 8 KiB
+battery RAM, enabled by $800D bit 5. Cold battery RAM starts at $FF because
+this game does not tolerate an all-zero uninitialized save. The active PPU
+A11:A10 selects which of $8000-$8003 drives PRG A18, including in the otherwise
+fixed $C000 window. This follows the [measured PCB wiring](https://seesaawiki.jp/famicomcartridge/d/Bandai%20BA-JUMP2),
+rather than ORing four bank registers. With unequal A18 outputs, dispatch uses
+the interpreter so every opcode and operand sees changes during PPU clocks or
+DMA. Native dispatch resumes when the outputs agree. Its fixtures check both
+256 KiB halves from both CPU windows, PPU-controlled outer banks, WRAM gating,
+IRQ/DMA and persisted SRAM. Driving RAM and the unconnected SDA input together
+resolves D4 low; exact analog contention on that invalid setting is unspecified.

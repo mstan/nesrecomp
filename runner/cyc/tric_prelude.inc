@@ -288,6 +288,10 @@ inline void TricMapper::MMC3ClockIRQ() {
 // been low for at least three CPU cycles. TriCNES calls this once per PPU
 // clock with its own address bus, which is the independent part of the check.
 inline void TricMapper::PPUClock() {
+    if (Cart.Mapper==153) {
+        unsigned select=(PPU_AddressBus/1024)%4;
+        if (BankSelect!=select) { BankSelect=select; BandaiApply(); }
+    }
     if (Cart.Mapper != 4) return;
     if (!(PPU_AddressBus & 0x1000)) {
         if (A12) { A12 = false; A12LowCycle = totalCycles; }
@@ -324,12 +328,12 @@ inline void TricMapper::Reset() {
     memset(WRAM, 0, Cart.Info.prg_nvram ? Cart.Info.prg_ram : sizeof(WRAM));
 
     Mirroring = Cart.NametableHorizontalMirroring ? TRIC_MIRROR_HORIZONTAL : TRIC_MIRROR_VERTICAL;
-    HasWRAM = WRAM_Length != 0 && !BandaiBoard();
+    HasWRAM = WRAM_Length != 0 && (!BandaiBoard() || Cart.Mapper==153);
     for (unsigned chip=0;chip<2;++chip) nes_eeprom_reset(&Eeprom[chip]);
     WRAM_Readable = WRAM_Writable = HasWRAM;
 
     switch (Cart.Mapper) {
-    case 16: case 159: BandaiApply(); break;
+    case 16: case 159: case 153: BandaiApply(); break;
     case 85: Reg[1]=1; Reg[2]=2; VRC7Apply(); break;
     case 24: case 26: Ctrl=0x20; VRC6Apply(); break;
     case 21: case 22: case 23: case 25: Reg[1] = 1; VRCApply(); break;

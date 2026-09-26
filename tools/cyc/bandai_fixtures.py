@@ -80,7 +80,7 @@ def irq_program(sub=0,dma=False,mapper=16):
     if dma:p.store(0x4014,2)
     p.emit(0x58,0xa5,0,0xf0,0xfc);p.expect(1);p.emit(0xa9,0x42);p.jump('done')
     p.label('handler');p.store(base+10,0);p.emit(0xe6,0,0x40)
-    case=image_case(f'irq{mapper}_{sub}'+('_dma' if dma else ''),mapper,p,sub,1 if mapper==159 else 0)
+    case=image_case(f'irq{mapper}_{sub}'+('_dma' if dma else ''),mapper,p,sub,1 if mapper==159 else 7 if mapper==153 else 0)
     name,image,seeds,expected=case;image=bytearray(image);a=p.labels['handler']
     for bank in range(8):
         end=16+(bank+1)*8192
@@ -103,4 +103,31 @@ def bandai_fixtures():
               eeprom_program(),eeprom_program(counter=True),eeprom_program(159),eeprom_program(159,True),
               irq_program(mapper=159),irq_program(mapper=159,dma=True),
               nes2(handoff('bandai159_prg',159,[(0x8008,5),(0x6008,7)],10,prg_kb=256),ram=0x10)]
+    cases += list(mapper153_fixtures())
     for name,image,seeds,expected in cases:yield 'bandai_'+name,image,seeds,expected
+
+def mapper153_fixtures():
+    for start in (0x8000,0xc000):
+        for high in (0,1):
+            writes=[(0x8000+r,high) for r in range(4)]+[(0x8008,3)]
+            expected=high*32+(6 if start==0x8000 else 30)
+            yield nes2(handoff(f'jump2_prg_{start:04x}_{high}',153,writes,expected,
+                               prg_kb=512,chr_kb=0,start=start),ram=0x70,chr_ram=7)
+    ops=[('cpu',0x800d,32),('cpu_read',0x6000,255),('cpu',0x6000,0xa5),
+         ('cpu_read',0x6000,0xa5),('cpu',0x800d,0),('cpu',0x6000,0),
+         ('cpu_read',0x6000,0x60),('cpu',0x800d,32),('cpu_read',0x6000,0xa5),
+         ('cpu',0x800d,128),('cpu_read',0x7000,0x60),('cpu',0x800d,0)]
+    ops += [('cpu',0x8000+r,r%2) for r in range(4)]
+    for select in range(4):
+        ops += [('write',0x2000+select*1024,0x55),('cpu_read',0xbf00,(select%2)*16)]
+    ops += [('write',0x1400,0x5a),('read',0x1400,0x5a)]
+    name,image,seeds,_=nes2(ppu_contract(153,512,0,ops,'_outer_ppu'),ram=0x70,chr_ram=7)
+    image=bytearray(image)
+    for bank in range(32):image[16+bank*16384+0x3f00]=bank
+    yield name,bytes(image),seeds,'final:mixed:A=42'
+    yield irq_program(mapper=153)
+    yield irq_program(mapper=153,dma=True)
+    p=Program();p.emit(0x78,0xd8);p.store(0x800d,32)
+    p.emit(0xad,0,96,0x18,0x69,1,0x8d,0,96)
+    name,image,seeds,_=image_case('sram_153_counter',153,p,nv=7)
+    yield name,image,seeds,'final:A=00'

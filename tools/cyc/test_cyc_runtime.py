@@ -103,6 +103,8 @@ def main():
     for name, _, _, expected in cases:
         final_only = expected.startswith('final:')
         expected = expected.removeprefix('final:')
+        mixed = expected.startswith('mixed:')
+        expected = expected.removeprefix('mixed:')
         frames = 6 if final_only else 3
         case = out / name
         suffix = '.exe' if hasattr(subprocess, 'CREATE_NO_WINDOW') else ''
@@ -120,7 +122,9 @@ def main():
                 checked_lines = lines[-1:] if final_only else lines
                 if len(lines) != frames or any(expected not in line for line in checked_lines):
                     raise AssertionError(f'{name}, {mode}, alignment {align}: wrong result in {trace}')
-                if mode == 'native' and '(100.0%)' not in stdout:
+                if mode == 'native' and mixed and 'interpreted: ROM' not in stdout:
+                    raise AssertionError(f'{name}: expected PPU-driven PRG interpreter fallback')
+                if mode == 'native' and not mixed and '(100.0%)' not in stdout:
                     raise AssertionError(f'{name}: regression did not exercise native code')
                 hashes[mode] = trace
             for mode in ('interp', 'standalone', 'oracle'):

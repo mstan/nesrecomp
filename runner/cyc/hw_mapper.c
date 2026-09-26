@@ -459,6 +459,7 @@ static const struct {
     uint8_t     watch_ppu_addr;
     uint8_t     wram;            /* boards for this mapper carry work RAM */
 } MAPPERS[] = {
+    { 153, "Bandai BA-JUMP2", 1, 1 },
     { 16, "Bandai FCG / LZ93D50", 0, 0 },
     { 159, "Bandai LZ93D50 / X24C01", 0, 0 },
     { 85, "VRC7", 0, 1 },
@@ -503,6 +504,17 @@ static int mapper_index(int mapper)
     return -1;
 }
 
+/* PPU-driven A18 can change DURING an instruction or a DMA stall. Native
+ * constants are valid only while all four selected outputs agree. Re-enable
+ * native dispatch automatically after software makes the outer bank stable. */
+bool hw_prg_is_stable(void)
+{
+    if (hw_cart.mapper!=153 || hw_cart.prg_slots<=64) return true;
+    return !((hw_cart.m.reg[0]^hw_cart.m.reg[1])&1) &&
+           !((hw_cart.m.reg[0]^hw_cart.m.reg[2])&1) &&
+           !((hw_cart.m.reg[0]^hw_cart.m.reg[3])&1);
+}
+
 bool hw_cart_supports(int mapper) { return mapper_index(mapper) >= 0; }
 
 const char *hw_cart_mapper_name(int mapper)
@@ -532,11 +544,11 @@ void hw_cart_power_on(void)
      * board would come up with its saved contents, which no run here has. */
     memset(hw_cart.wram, 0, hw_cart.info.prg_nvram ? hw_cart.info.prg_ram : sizeof(hw_cart.wram));
 
-    if (bandai_board()) hw_cart.has_wram=hw_cart.wram_readable=hw_cart.wram_writable=0;
+    if (bandai_board() && hw_cart.mapper!=153) hw_cart.has_wram=hw_cart.wram_readable=hw_cart.wram_writable=0;
     for (unsigned chip=0;chip<2;++chip) nes_eeprom_reset(&hw_cart.eeprom[chip]);
     vrc7_sound_reset(true);
     switch (hw_cart.mapper) {
-    case 16: case 159: bandai_apply(); break;
+    case 16: case 159: case 153: bandai_apply(); break;
     case 85: hw_cart.m.reg[1]=1; hw_cart.m.reg[2]=2; hw_cart.m.irq_prescaler=341; vrc7_apply(); break;
     case 24: case 26:
         hw_cart.m.vrc6_audio.step[0] = hw_cart.m.vrc6_audio.step[1] = 15;
@@ -738,6 +750,7 @@ bool hw_cart_cpu_read(uint16_t addr, uint8_t *value)
 void hw_cart_ppu_addr_watched(uint16_t vbus)
 {
     if (hw_cart.mapper == 4) mmc3_ppu_addr(vbus);
+    else if (hw_cart.mapper==153) bandai_ppu_addr(vbus);
 }
 
 bool hw_cart_irq(void) { return hw_cart.m.irq_out != 0; }

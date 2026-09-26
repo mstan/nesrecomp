@@ -57,6 +57,22 @@ static void test_eeprom(void)
 }
 static void test_bandai(void)
 {
+    cart(153,512,8);
+    prg_banks(0,1,30,31); CHECK(hw_prg_is_stable());
+    hw_cart_cpu_write(0x8001,1); CHECK(!hw_prg_is_stable());
+    for (unsigned select=0;select<4;++select) {
+        hw_cart_ppu_addr_watched(select*1024);
+        unsigned high=select==1?32:0;
+        prg_banks(high,high+1,high+30,high+31); chr_bank(0,0,8);
+    }
+    for (unsigned r=0;r<4;++r) hw_cart_cpu_write(0x8000+r,1);
+    CHECK(hw_prg_is_stable()); prg_banks(32,33,62,63);
+    uint8_t value=0x70;
+    CHECK(!hw_cart_cpu_read(0x6000,&value));
+    hw_cart_cpu_write(0x800d,32); hw_cart_cpu_write(0x6000,0xa5);
+    CHECK(hw_cart_cpu_read(0x6000,&value) && value==0xa5);
+    hw_cart_cpu_write(0x800d,128); value=0x70;
+    CHECK(hw_cart_cpu_read(0x6000,&value) && value==0x60);
     test_eeprom();
     cart(159,256,128);
     hw_cart_cpu_write(0x8008,5); hw_cart_cpu_write(0x6008,7); prg_banks(10,11,30,31);

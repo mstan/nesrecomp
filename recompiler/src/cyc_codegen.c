@@ -522,6 +522,7 @@ static int fixed_bank_for(int mapper, uint32_t banks, uint32_t slot) {
 /* The configuration a cold console comes up in; hw_mapper.c's reset paths. */
 static int power_on_bank8_for(int mapper, uint32_t banks, uint32_t slot) {
     switch (mapper) {
+    case 153: return (int)((slot>=2 ? slot+28 : slot) & (banks-1));
     case 85: return slot == 3 ? (int)(banks - 1) : (int)slot;
     case 24: case 26: return slot == 3 ? (int)(banks - 1) : slot < 2 ? (int)slot : 0;
     case 159: case 16: case 21: case 22: case 23: case 25: case 73:
@@ -1283,7 +1284,7 @@ static void emit_umbrella(const Program *p, const char *path, const char *prefix
         "    return v->bits ? v : 0;\n"
         "}\n\n"
         "bool cyc_native_has(uint16_t addr) {\n"
-        "    if (addr < 0x8000) return false;\n"
+        "    if (addr < 0x8000 || !hw_prg_is_stable()) return false;\n"
         "    unsigned k;\n"
         "    const CycNativeView *v = view_at(addr, &k);\n"
         "    return v && ((v->bits[k >> 3] >> (k & 7)) & 1);\n"
@@ -1295,7 +1296,7 @@ static void emit_umbrella(const Program *p, const char *path, const char *prefix
         "void cyc_native_run(void) {\n"
         "    while (!hw_frame_done && !cpu.jammed) {\n"
         "        uint16_t pc = cpu.pc;\n"
-        "        if (pc < 0x8000) return;\n"
+        "        if (pc < 0x8000 || !hw_prg_is_stable()) return;\n"
         "        unsigned k;\n"
         "        const CycNativeView *v = view_at(pc, &k);\n"
         "        if (!v || !((v->bits[k >> 3] >> (k & 7)) & 1)) return;\n"
@@ -1357,6 +1358,7 @@ bool cyc_codegen_emit_interpreter(const char *path) {
 static const char *mapper_name(int mapper) {
     switch (mapper) {
     case 159: return "Bandai LZ93D50 / X24C01";
+    case 153: return "Bandai BA-JUMP2";
     case 16: return "Bandai FCG / LZ93D50";
     case 85: return "VRC7";
     case 24: return "VRC6a";

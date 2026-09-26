@@ -9580,7 +9580,7 @@ bool cyc_load_ines(const uint8_t *image, size_t size) {
     if (!nes_cart_image(image, size, &info) || !nes_cart_variant_supported(&info)) return false;
     int mapper = info.mapper;
     switch (mapper) {   // the set hw_mapper.c implements
-    case 16: case 159: break;
+    case 16: case 159: case 153: break;
     case 85: break;
     case 24: case 26: break;
     case 21: break;
@@ -9626,6 +9626,7 @@ bool cyc_load_ines(const uint8_t *image, size_t size) {
     Cart.CHRPages = chr_alloc / 1024;
     Cart.UsingCHRRAM = !info.chr_size;
     Cart.Mapper = mapper;
+    if (mapper==153) memset(Cart.MapperChip.WRAM,255,8192);
     nes_eeprom_init(&Cart.MapperChip.Eeprom[0],(mapper==16 || mapper==159)?info.prg_nvram:0);
     nes_eeprom_init(&Cart.MapperChip.Eeprom[1],0);
     Cart.NametableHorizontalMirroring = !info.vertical;

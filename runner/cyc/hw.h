@@ -60,6 +60,8 @@ extern bool hw_frame_done;
 unsigned hw_prg_bank(uint16_t addr);
 /* Exact 4 KiB identity used by current generated dispatch and miss logs. */
 unsigned hw_prg_bank4(uint16_t addr);
+/* PRG bytes cannot change from PPU activity until the CPU writes a register. */
+bool hw_prg_is_stable(void);
 
 #ifdef __cplusplus
 }

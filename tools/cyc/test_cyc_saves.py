@@ -21,8 +21,8 @@ def main():
         assert (p.returncode==0)==success,(rom,save,p.returncode,p.stderr)
         return trace.read_text().splitlines()[-1] if success else ''
     checked=0
-    for mapper,size in ((16,256),(159,128)):
-        name=f'bandai_nes2_eeprom_{mapper}_counter';rom=root/name/(name+'.nes')
+    for mapper,size in ((16,256),(159,128),(153,8192)):
+        name=f'bandai_nes2_{"sram" if mapper==153 else "eeprom"}_{mapper}_counter';rom=root/name/(name+'.nes')
         if not rom.exists():continue
         for mode,executable,extra in [('native',exe(name),[]),('embedded',exe(name),['--interp-only']),
                     ('standalone',args.interp.resolve(),[]),('oracle',args.oracle.resolve(),[])]:
@@ -32,7 +32,7 @@ def main():
                 for counter in (0,1):
                     trace=out/f'{mapper}_{mode}_{align}_{counter}.txt'
                     assert f'A={counter:02X}' in run(executable,rom,save,trace,extra_align)
-                    data=save.read_bytes();expected=bytearray([255])*size;expected[0x23]=counter
+                    data=save.read_bytes();expected=bytearray([255])*size;expected[0 if mapper==153 else 0x23]=counter
                     assert data==expected,(save,data.hex());checked+=1
                 for bad in (b'bad',data+b'extra'):
                     save.write_bytes(bad)

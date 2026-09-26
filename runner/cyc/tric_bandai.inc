@@ -1,13 +1,23 @@
 // Independent Bandai board decoding. The serial EEPROM chip is shared.
-inline bool TricMapper::BandaiBoard() { return Cart.Mapper==16 || Cart.Mapper==159; }
+inline bool TricMapper::BandaiBoard() { return Cart.Mapper==16 || Cart.Mapper==159 || Cart.Mapper==153; }
 inline void TricMapper::BandaiApply() {
-    MapPRG16(0,PrgReg%16); MapPRG16(1,-1);
-    for (unsigned page=0;page<8;++page) MapCHR1(page,Reg[page]);
+    if (Cart.Mapper==153) {
+        int high=(Reg[BankSelect]%2)*16;
+        MapPRG16(0,high+PrgReg%16); MapPRG16(1,high+15); MapCHR8(0);
+        WRAM_Readable=WRAM_Writable=(Ctrl&32)!=0;
+    } else {
+        MapPRG16(0,PrgReg%16); MapPRG16(1,-1);
+        for (unsigned page=0;page<8;++page) MapCHR1(page,Reg[page]);
+    }
     Mirroring=MirrorReg%4==0?TRIC_MIRROR_VERTICAL:MirrorReg%4==1?TRIC_MIRROR_HORIZONTAL:
               MirrorReg%4==2?TRIC_MIRROR_SCREEN_A:TRIC_MIRROR_SCREEN_B;
 }
 inline void TricMapper::BandaiWrite(ushort Address, byte Input) {
-    if (Address<0x6000 || (Cart.Mapper==159 && Address<0x8000)) return;
+    if (Cart.Mapper==153 && Address>=0x6000 && Address<0x8000) {
+        if (WRAM_Writable) WRAM[Address%8192]=Input;
+        return;
+    }
+    if (Address<0x6000 || (Cart.Mapper!=16 && Address<0x8000)) return;
     if (Cart.Info.submapper==4 && Address>=0x8000) return;
     if (Cart.Info.submapper==5 && Address<0x8000) return;
     switch (Address%16) {
@@ -30,12 +40,18 @@ inline void TricMapper::BandaiWrite(ushort Address, byte Input) {
     case 13:
         if (Address>=0x8000) {
             Ctrl=Input;
-            nes_eeprom_lines(&Eeprom[0],(Input/32)%2,(Input&192)!=0,totalCycles);
+            if (Cart.Mapper==153) BandaiApply();
+            else nes_eeprom_lines(&Eeprom[0],(Input/32)%2,(Input&192)!=0,totalCycles);
         }
         break;
     }
 }
 inline bool TricMapper::BandaiRead(ushort Address, byte &Value) {
+    if (Cart.Mapper==153 && Address>=0x6000 && Address<0x8000) {
+        if (WRAM_Readable) Value=WRAM[Address%8192];
+        if (Ctrl&128) Value &= 0xef;
+        return WRAM_Readable || (Ctrl&128);
+    }
     if (Address<0x6000 || Address>=0x8000 || Cart.Info.submapper==4 || !(Ctrl&128)) return false;
     Value=(Value&0xef)+16*nes_eeprom_read(&Eeprom[0]);
     return true;

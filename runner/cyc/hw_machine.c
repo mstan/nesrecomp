@@ -284,6 +284,7 @@ bool cyc_load_ines(const uint8_t *image, size_t size)
     hw_cart.chr_pages = chr_alloc / 1024;
     hw_cart.chr_ram = !info.chr_size;
     hw_cart.mapper = info.mapper;
+    if (info.mapper==153) memset(hw_cart.wram,255,8192);
     nes_eeprom_init(&hw_cart.eeprom[0],(info.mapper==16 || info.mapper==159)?info.prg_nvram:0);
     nes_eeprom_init(&hw_cart.eeprom[1],0);
     hw_cart.wram_len = info.prg_ram + info.prg_nvram;
