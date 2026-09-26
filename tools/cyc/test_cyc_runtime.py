@@ -107,7 +107,7 @@ def main():
     command = [args.cmake, '-S', out, '-B', out / 'build', f'-DCMAKE_BUILD_TYPE={args.config}']
     if args.generator:
         command += ['-G', args.generator]
-    run(command, out, out / 'configure.log')
+    run(command, out, out / 'configure.log', timeout=args.build_timeout)
     run([args.cmake, '--build', out / 'build', '--config', args.config, '--parallel', '4'],
         out, out / 'build.log', timeout=args.build_timeout)
     for name, _, _, expected in cases:
