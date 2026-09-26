@@ -392,6 +392,7 @@ static const struct {
     uint8_t     watch_ppu_addr;
     uint8_t     wram;            /* boards for this mapper carry work RAM */
 } MAPPERS[] = {
+    { 76, "Namco 109", 0, 0 },
     { 206, "DxROM", 0, 0 },
     { 75, "VRC1", 0, 0 },
     { 71, "Camerica", 0, 0 },
@@ -444,6 +445,7 @@ void hw_cart_power_on(void)
     case 71: uxrom_reset(); break;
     case 75: nrom_reset(); map_prg8(3, -1); map_chr4(1, 0); hw_cart.mirroring = HW_MIRROR_VERTICAL; break;
     case 206: hw_cart.m.reg[7] = 1; mmc3_apply(); break;
+    case 76: uxrom_reset(); hw_cart.m.reg[7] = 1; for (unsigned j = 0; j < 4; ++j) map_chr2(j, 0); break;
     case 1:  mmc1_reset(); break;
     case 2:  uxrom_reset(); break;
     case 3:  cnrom_reset(); break;
@@ -513,6 +515,15 @@ void hw_cart_cpu_write(uint16_t addr, uint8_t value)
                 hw_cart.m.reg[r] = value & (r < 6 ? 63 : 15);
             }
             mmc3_apply(); /* mode bits are absent, so both modes stay zero */
+        }
+        break;
+    case 76: /* Namco 109; see MAPPERS.md. */
+        if (addr < 0xa000) {
+            if (!(addr & 1)) hw_cart.m.bank_select = value & 7;
+            else hw_cart.m.reg[hw_cart.m.bank_select] = value & 63;
+            map_prg8(0, hw_cart.m.reg[6] & 15);
+            map_prg8(1, hw_cart.m.reg[7] & 15);
+            for (unsigned i = 0; i < 4; ++i) map_chr2(i, hw_cart.m.reg[i + 2]);
         }
         break;
     case 1:  mmc1_write(addr, value); break;
