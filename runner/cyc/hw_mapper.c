@@ -392,6 +392,7 @@ static const struct {
     uint8_t     watch_ppu_addr;
     uint8_t     wram;            /* boards for this mapper carry work RAM */
 } MAPPERS[] = {
+    { 180, "Crazy Climber", 0, 0 },
     { 140, "Jaleco JF-11/14", 0, 0 },
     { 113, "HES", 0, 0 },
     { 94, "UN1ROM", 0, 0 },
@@ -452,6 +453,7 @@ void hw_cart_power_on(void)
     case 206: hw_cart.m.reg[7] = 1; mmc3_apply(); break;
     case 76: uxrom_reset(); hw_cart.m.reg[7] = 1; for (unsigned j = 0; j < 4; ++j) map_chr2(j, 0); break;
     case 94: uxrom_reset(); break;
+    case 180: map_prg16(0, 0); map_prg16(1, 0); map_chr8(0); break;
     case 1:  mmc1_reset(); break;
     case 2:  uxrom_reset(); break;
     case 3:  cnrom_reset(); break;
@@ -558,6 +560,11 @@ void hw_cart_cpu_write(uint16_t addr, uint8_t value)
         value &= hw_cart_prg_read(addr);
         hw_cart.m.latch = value;
         map_prg16(0, (value >> 2) & 7);
+        break;
+    case 180: /* Crazy Climber; see MAPPERS.md. */
+        value &= hw_cart_prg_read(addr);
+        hw_cart.m.latch = value;
+        map_prg16(1, value & 7);
         break;
     case 1:  mmc1_write(addr, value); break;
     case 2:  uxrom_write(value); break;
