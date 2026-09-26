@@ -392,6 +392,7 @@ static const struct {
     uint8_t     watch_ppu_addr;
     uint8_t     wram;            /* boards for this mapper carry work RAM */
 } MAPPERS[] = {
+    { 94, "UN1ROM", 0, 0 },
     { 87, "J87", 0, 0 },
     { 79, "NINA-003/006", 0, 0 },
     { 76, "Namco 109", 0, 0 },
@@ -448,6 +449,7 @@ void hw_cart_power_on(void)
     case 75: nrom_reset(); map_prg8(3, -1); map_chr4(1, 0); hw_cart.mirroring = HW_MIRROR_VERTICAL; break;
     case 206: hw_cart.m.reg[7] = 1; mmc3_apply(); break;
     case 76: uxrom_reset(); hw_cart.m.reg[7] = 1; for (unsigned j = 0; j < 4; ++j) map_chr2(j, 0); break;
+    case 94: uxrom_reset(); break;
     case 1:  mmc1_reset(); break;
     case 2:  uxrom_reset(); break;
     case 3:  cnrom_reset(); break;
@@ -537,6 +539,11 @@ void hw_cart_cpu_write(uint16_t addr, uint8_t value)
             map_prg8(1, hw_cart.m.reg[7] & 15);
             for (unsigned i = 0; i < 4; ++i) map_chr2(i, hw_cart.m.reg[i + 2]);
         }
+        break;
+    case 94: /* UN1ROM; see MAPPERS.md. */
+        value &= hw_cart_prg_read(addr);
+        hw_cart.m.latch = value;
+        map_prg16(0, (value >> 2) & 7);
         break;
     case 1:  mmc1_write(addr, value); break;
     case 2:  uxrom_write(value); break;

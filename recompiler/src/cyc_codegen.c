@@ -508,6 +508,7 @@ static int fixed_bank_for(int mapper, uint32_t banks, uint32_t slot) {
     case 206: return slot >= 2 ? (int)(banks - 2 + slot - 2) : -1;
     case 76: return slot >= 2 ? (int)(banks - 2 + slot - 2) : -1;
     case 87: return (int)(slot & (banks - 1));
+    case 94: return slot >= 2 ? (int)(banks - 2 + slot - 2) : -1;
     case 0: case 3:  return (int)(slot & (banks - 1));            /* wired straight through */
     case 2:  return slot >= 2 ? (int)(banks - 2 + (slot - 2)) : -1;  /* last 16KB fixed */
     case 1:  return -1;
@@ -523,6 +524,7 @@ static int power_on_bank_for(int mapper, uint32_t banks, uint32_t slot) {
     case 75: return slot == 3 ? (int)(banks - 1) : (int)slot;
     case 206: return slot >= 2 ? (int)(banks - 2 + slot - 2) : (int)slot;
     case 76: return slot >= 2 ? (int)(banks - 2 + slot - 2) : (int)slot;
+    case 94: return slot >= 2 ? (int)(banks - 2 + slot - 2) : (int)slot;
     case 1:  return slot >= 2 ? (int)(banks - 2 + (slot - 2)) : (int)slot;  /* mode 3 */
     case 2:  return slot >= 2 ? (int)(banks - 2 + (slot - 2)) : (int)slot;
     case 4:  return slot == 2 ? (int)(banks - 2) : slot == 3 ? (int)(banks - 1) : (int)slot;
@@ -1342,6 +1344,7 @@ static const char *mapper_name(int mapper) {
     case 76: return "Namco 109";
     case 79: return "NINA-003/006";
     case 87: return "J87";
+    case 94: return "UN1ROM";
     case 0:  return "NROM";
     case 1:  return "MMC1";
     case 2:  return "UxROM";
