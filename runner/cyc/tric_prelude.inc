@@ -329,7 +329,7 @@ inline void TricMapper::Reset() {
     WRAM_Readable = WRAM_Writable = HasWRAM;
 
     switch (Cart.Mapper) {
-    case 16: BandaiApply(); break;
+    case 16: case 159: BandaiApply(); break;
     case 85: Reg[1]=1; Reg[2]=2; VRC7Apply(); break;
     case 24: case 26: Ctrl=0x20; VRC6Apply(); break;
     case 21: case 22: case 23: case 25: Reg[1] = 1; VRCApply(); break;

@@ -10,7 +10,7 @@ static inline NesNvram nes_nvram_region(const NesCartInfo *c, uint8_t *prg,
 {
     NesNvram n={{NULL,NULL},{0,0}};
     if (region) return n;
-    if (c->mapper==16) { n.data[0]=ee[0].data; n.size[0]=ee[0].size; }
+    if ((c->mapper==16 || c->mapper==159)) { n.data[0]=ee[0].data; n.size[0]=ee[0].size; }
     else {
         n.data[0]=prg+c->prg_ram; n.size[0]=c->prg_nvram;
         n.data[1]=chr+c->chr_ram; n.size[1]=c->chr_nvram;

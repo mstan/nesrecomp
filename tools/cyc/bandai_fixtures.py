@@ -72,7 +72,7 @@ def eeprom_program(mapper=16,counter=False):
     if counter:case=(*case[:3],'final:A=00')
     return case
 
-def irq_program(sub=0,dma=False):
+def irq_program(sub=0,dma=False,mapper=16):
     p=Program();p.emit(0x78,0xd8,0xa2,255,0x9a)
     base=0x6000 if sub==4 else 0x8000
     p.store(0,0);p.store(0x4017,64)
@@ -80,7 +80,7 @@ def irq_program(sub=0,dma=False):
     if dma:p.store(0x4014,2)
     p.emit(0x58,0xa5,0,0xf0,0xfc);p.expect(1);p.emit(0xa9,0x42);p.jump('done')
     p.label('handler');p.store(base+10,0);p.emit(0xe6,0,0x40)
-    case=image_case(f'irq16_{sub}'+('_dma' if dma else ''),16,p,sub)
+    case=image_case(f'irq{mapper}_{sub}'+('_dma' if dma else ''),mapper,p,sub,1 if mapper==159 else 0)
     name,image,seeds,expected=case;image=bytearray(image);a=p.labels['handler']
     for bank in range(8):
         end=16+(bank+1)*8192
@@ -92,12 +92,15 @@ def bandai_fixtures():
     for sub in (0,4,5):
         base=0x6000 if sub==4 else 0x8000
         writes=[(base+8,3)]
-        if sub:writes.append(((base^0xe000)+8,7))
+        if sub==5:writes.append(((base^0xe000)+8,7))
         cases.append(nes2(handoff(f'bandai16_prg_{sub}',16,writes,6,prg_kb=256),sub=sub))
         ops=[('cpu',base+r,241+r) for r in range(8)]
         ops += [('read',r*1024,241+r) for r in range(8)]
         ops += [('cpu',base+9,3),('write',0x2000,0x55),('read',0x2c00,0x55)]
         cases.append(nes2(ppu_contract(16,256,256,ops,f'_bandai{sub}'),sub=sub))
         cases += [irq_program(sub),irq_program(sub,True)]
-    cases += [eeprom_program(),eeprom_program(counter=True)]
+    cases += [nes2(handoff('bandai16_lowwrite',16,[(0x6008,3)],6,prg_kb=256)),
+              eeprom_program(),eeprom_program(counter=True),eeprom_program(159),eeprom_program(159,True),
+              irq_program(mapper=159),irq_program(mapper=159,dma=True),
+              nes2(handoff('bandai159_prg',159,[(0x8008,5),(0x6008,7)],10,prg_kb=256),ram=0x10)]
     for name,image,seeds,expected in cases:yield 'bandai_'+name,image,seeds,expected

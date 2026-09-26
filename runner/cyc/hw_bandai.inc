@@ -1,6 +1,6 @@
 /* Bandai FCG-1/2 and LZ93D50: NESdev mapper 16 and physical PCB tracing at
  * https://seesaawiki.jp/famicomcartridge/d/Bandai%20LZ93D50%20standard */
-static bool bandai_board(void) { return hw_cart.mapper==16; }
+static bool bandai_board(void) { return hw_cart.mapper==16 || hw_cart.mapper==159; }
 static void bandai_apply(void)
 {
     map_prg16(0, hw_cart.m.prg & 15); map_prg16(1, -1);
@@ -10,7 +10,7 @@ static void bandai_apply(void)
 }
 static void bandai_write(uint16_t addr, uint8_t value)
 {
-    unsigned sub=hw_cart.info.submapper;
+    unsigned sub=hw_cart.mapper==159 ? 5 : hw_cart.info.submapper;
     if (addr<0x6000 || (sub==4 && addr>=0x8000) || (sub==5 && addr<0x8000)) return;
     unsigned port=addr&15;
     if (port<8) { hw_cart.m.reg[port]=value; bandai_apply(); }

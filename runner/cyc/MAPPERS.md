@@ -173,3 +173,11 @@ DMA, and bit-banged serial traffic at all alignments. Save tests start separate
 processes to increment persisted bytes, verify PRG/CHR save layout, and reject
 truncated/oversized files without modifying them. Commercial Bandai games and
 physical EEPROM timing have not been compared yet.
+
+Mapper 159 uses the same LZ93D50 board with a 128-byte X24C01. Its command is
+the seven-bit word address followed by R/W, with no I2C device address. NES 2.0
+must declare 128-byte PRG NVRAM; iNES mapper 159 implies that chip. Byte order
+is MSB first, as verified by the PCB researcher using sequential reads; older
+emulators sometimes reverse both addresses and data. Mapper 159 has its own
+bank, IRQ, serial and process-restart fixtures. Low-window FCG writes also
+terminate compiled blocks, so switching $6008 cannot execute stale native code.

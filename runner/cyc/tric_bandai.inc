@@ -1,5 +1,5 @@
 // Independent Bandai board decoding. The serial EEPROM chip is shared.
-inline bool TricMapper::BandaiBoard() { return Cart.Mapper==16; }
+inline bool TricMapper::BandaiBoard() { return Cart.Mapper==16 || Cart.Mapper==159; }
 inline void TricMapper::BandaiApply() {
     MapPRG16(0,PrgReg%16); MapPRG16(1,-1);
     for (unsigned page=0;page<8;++page) MapCHR1(page,Reg[page]);
@@ -7,7 +7,7 @@ inline void TricMapper::BandaiApply() {
               MirrorReg%4==2?TRIC_MIRROR_SCREEN_A:TRIC_MIRROR_SCREEN_B;
 }
 inline void TricMapper::BandaiWrite(ushort Address, byte Input) {
-    if (Address<0x6000) return;
+    if (Address<0x6000 || (Cart.Mapper==159 && Address<0x8000)) return;
     if (Cart.Info.submapper==4 && Address>=0x8000) return;
     if (Cart.Info.submapper==5 && Address<0x8000) return;
     switch (Address%16) {

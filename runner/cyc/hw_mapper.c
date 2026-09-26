@@ -460,6 +460,7 @@ static const struct {
     uint8_t     wram;            /* boards for this mapper carry work RAM */
 } MAPPERS[] = {
     { 16, "Bandai FCG / LZ93D50", 0, 0 },
+    { 159, "Bandai LZ93D50 / X24C01", 0, 0 },
     { 85, "VRC7", 0, 1 },
     { 24, "VRC6a", 0, 1 },
     { 26, "VRC6b", 0, 1 },
@@ -535,7 +536,7 @@ void hw_cart_power_on(void)
     for (unsigned chip=0;chip<2;++chip) nes_eeprom_reset(&hw_cart.eeprom[chip]);
     vrc7_sound_reset(true);
     switch (hw_cart.mapper) {
-    case 16: bandai_apply(); break;
+    case 16: case 159: bandai_apply(); break;
     case 85: hw_cart.m.reg[1]=1; hw_cart.m.reg[2]=2; hw_cart.m.irq_prescaler=341; vrc7_apply(); break;
     case 24: case 26:
         hw_cart.m.vrc6_audio.step[0] = hw_cart.m.vrc6_audio.step[1] = 15;

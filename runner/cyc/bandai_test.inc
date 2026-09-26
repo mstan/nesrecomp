@@ -58,6 +58,10 @@ static void test_eeprom(void)
 static void test_bandai(void)
 {
     test_eeprom();
+    cart(159,256,128);
+    hw_cart_cpu_write(0x8008,5); hw_cart_cpu_write(0x6008,7); prg_banks(10,11,30,31);
+    hw_cart_cpu_write(0x8007,127); chr_bank(7,127,1);
+    CHECK(!hw_cart.has_wram);
     for (unsigned sub=0;sub<=5;++sub) {
         if (sub && sub!=4 && sub!=5) continue;
         cart(16,256,256); hw_cart.info.submapper=sub;
