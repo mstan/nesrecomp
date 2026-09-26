@@ -501,22 +501,21 @@ static uint16_t pos_addr(const Pos *at) {
  * MMC1 has no permanently fixed slots: mode 2 switches $C000-$FFFF, and
  * modes 0/1 switch all of PRG. Its reset mapping is only a discovery seed. */
 static int fixed_bank_for(int mapper, uint32_t banks, uint32_t slot) {
+    /* Decode the board once into a slot mask, then calculate its bank. The
+     * execution regressions cover this with an optimized compiler too: GCC
+     * 13.3 -O3 miscompiled the previous per-case bank returns when inlined
+     * into the four-slot initialization loop (even NROM lost its fixed banks). */
+    unsigned slots;
     switch (mapper) {
-    case 13: return (int)(slot & (banks - 1));
-    case 71: return slot >= 2 ? (int)(banks - 2 + slot - 2) : -1;
-    case 75: return slot == 3 ? (int)(banks - 1) : -1;
-    case 206: return slot >= 2 ? (int)(banks - 2 + slot - 2) : -1;
-    case 76: return slot >= 2 ? (int)(banks - 2 + slot - 2) : -1;
-    case 87: return (int)(slot & (banks - 1));
-    case 94: return slot >= 2 ? (int)(banks - 2 + slot - 2) : -1;
-    case 180: return slot < 2 ? (int)slot : -1;
-    case 184: return (int)(slot & (banks - 1));
-    case 0: case 3:  return (int)(slot & (banks - 1));            /* wired straight through */
-    case 2:  return slot >= 2 ? (int)(banks - 2 + (slot - 2)) : -1;  /* last 16KB fixed */
-    case 1:  return -1;
-    case 4:  return slot == 3 ? (int)(banks - 1) : -1;            /* $E000 is hardwired */
-    default: return -1;                                           /* AxROM, GxROM */
+    case 0: case 3: case 13: case 87: case 184: slots = 15; break; /* all PRG fixed */
+    case 2: case 71: case 76: case 94: case 206: slots = 12; break; /* last 16 KiB */
+    case 4: case 75: slots = 8; break;                           /* last 8 KiB */
+    case 180: slots = 3; break;                                 /* first 16 KiB */
+    default: slots = 0; break;
     }
+    if (!(slots & (1u << slot))) return -1;
+    if (slots == 15 || slots == 3) return (int)(slot & (banks - 1));
+    return (int)((banks - SLOT_COUNT + slot) & (banks - 1));
 }
 
 /* The configuration a cold console comes up in; hw_mapper.c's reset paths. */

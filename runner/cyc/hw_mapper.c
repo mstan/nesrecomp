@@ -513,7 +513,7 @@ void hw_cart_cpu_write(uint16_t addr, uint8_t value)
         if (hw_cart.has_wram && hw_cart.wram_writable) hw_cart.wram[addr & 0x1FFF] = value;
         return;
     }
-    if (addr < 0x8000) return;   /* $4020-$5FFF: no supported mapper decodes it */
+    if (addr < 0x8000) return;   /* low-address registers were handled above */
     switch (hw_cart.mapper) {
     case 11: /* Color Dreams; see MAPPERS.md. */
         value &= hw_cart_prg_read(addr);

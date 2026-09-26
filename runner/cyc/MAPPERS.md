@@ -46,12 +46,16 @@ checks with `tools/cyc/test_cyc_runtime.py`; every fixture runs compiled code, t
 same binary's interpreter, the standalone interpreter, and the independent oracle
 at all four CPU/PPU alignments. Retained logs contain the frame and bus hashes.
 
-Validation of this expansion: 41 synthetic programs (656 executions across the
-four modes and alignments), all with 100% native CPU execution, plus 135 rejection
+Validation of this expansion: 417 cartridge assertions and 41 synthetic programs
+(656 executions across the four modes and alignments on each of Windows and
+Linux), all with 100% native CPU execution, plus 135 rejection
 checks from `test_cyc_mapper_headers.py`. PPU programs assert physical CHR-page
 bytes through `$2007`, verify banked CHR RAM, mirroring and overlapping WRAM,
 then enable background rendering for frame-hash comparison. These tests establish
 specific board contracts; commercial games on the new IDs have not been tested.
+AccuracyCoin and the 3,000-frame SMB3 route also match the pre-expansion traces
+exactly at all four alignments. AccuracyCoin retains its existing alignment
+scores of 144/144, 143/144, 141/144 and 143/144; this change adds no new failures.
 
 Deferred work includes MMC2/MMC4 read-triggered latches, MMC5, VRC IRQ/audio chips,
 Bandai EEPROM, four-screen nametable RAM, and mappers with PRG banks below 8 KiB.
