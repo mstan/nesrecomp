@@ -459,6 +459,7 @@ static const struct {
     uint8_t     watch_ppu_addr;
     uint8_t     wram;            /* boards for this mapper carry work RAM */
 } MAPPERS[] = {
+    { 157, "Bandai Datach", 1, 0 },
     { 153, "Bandai BA-JUMP2", 1, 1 },
     { 16, "Bandai FCG / LZ93D50", 0, 0 },
     { 159, "Bandai LZ93D50 / X24C01", 0, 0 },
@@ -546,9 +547,10 @@ void hw_cart_power_on(void)
 
     if (bandai_board() && hw_cart.mapper!=153) hw_cart.has_wram=hw_cart.wram_readable=hw_cart.wram_writable=0;
     for (unsigned chip=0;chip<2;++chip) nes_eeprom_reset(&hw_cart.eeprom[chip]);
+    memset(&hw_cart.barcode,0,sizeof(hw_cart.barcode));
     vrc7_sound_reset(true);
     switch (hw_cart.mapper) {
-    case 16: case 159: case 153: bandai_apply(); break;
+    case 16: case 159: case 153: case 157: bandai_apply(); break;
     case 85: hw_cart.m.reg[1]=1; hw_cart.m.reg[2]=2; hw_cart.m.irq_prescaler=341; vrc7_apply(); break;
     case 24: case 26:
         hw_cart.m.vrc6_audio.step[0] = hw_cart.m.vrc6_audio.step[1] = 15;
@@ -750,7 +752,7 @@ bool hw_cart_cpu_read(uint16_t addr, uint8_t *value)
 void hw_cart_ppu_addr_watched(uint16_t vbus)
 {
     if (hw_cart.mapper == 4) mmc3_ppu_addr(vbus);
-    else if (hw_cart.mapper==153) bandai_ppu_addr(vbus);
+    else if (hw_cart.mapper==153 || hw_cart.mapper==157) bandai_ppu_addr(vbus);
 }
 
 bool hw_cart_irq(void) { return hw_cart.m.irq_out != 0; }
@@ -846,6 +848,10 @@ uint64_t hw_cart_state_hash(uint64_t h)
         /* Chip padding starts zero and all fields have deterministic reset. */
         const unsigned char *b=(const unsigned char *)hw_cart.eeprom;
         for (unsigned i=0;i<sizeof(hw_cart.eeprom);++i) acc=acc*131+b[i];
+        if (hw_cart.mapper==157) {
+            b=(const unsigned char *)&hw_cart.barcode;
+            for (unsigned i=0;i<sizeof(hw_cart.barcode);++i) acc=acc*131+b[i];
+        }
     }
     /* Work RAM is a memory a program can read back, so it is compared across
      * implementations in cyc_mem_hash, not here. */

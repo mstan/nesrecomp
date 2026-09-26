@@ -26,28 +26,33 @@ def image_case(name,mapper,p,sub=0,nv=0):
     h=b'NES\x1a'+bytes([4,0,(mapper&15)<<4,mapper&240])+bytes(8)
     return nes2((name,h+prg,'00:8000\n','final:A=42'),sub=sub,ram=nv<<4,chr_ram=7)
 
-def eeprom_program(mapper=16,counter=False):
+def eeprom_program(mapper=16,counter=False,external=False):
     p=Program();p.emit(0x78,0xd8,0xa2,255,0x9a)
     sub=5 if mapper==16 else 0
     port=0x800d
-    def line(c,d):p.store(port,(32 if c else 0)|(64 if d else 0))
+    if mapper==157:
+        for r in range(4):p.store(0x8000+r,0)
+    def drive(v):
+        if external:p.emit(0xa9,v);p.jump('external_line',0x20)
+        else:p.store(port,v)
+    def line(c,d):drive((32 if c else 0)|(64 if d else 0))
     def start():line(0,1);line(1,1);line(1,0);line(0,0)
     def stop():line(0,0);line(1,0);line(1,1)
     def ack(expect=0):
-        p.store(port,128);p.store(port,160);p.emit(0xad,0,0x60,0x29,16);p.expect(expect);p.store(port,128)
+        drive(128);drive(160);p.emit(0xad,0,0x60,0x29,16);p.expect(expect);drive(128)
     def put(v):
         for i in range(7,-1,-1):line(0,(v>>i)&1);line(1,(v>>i)&1);line(0,(v>>i)&1)
         ack()
     def seek(a,read=False):
         start()
-        if mapper==159:put(a*2+int(read))
+        if mapper==159 or external:put(a*2+int(read))
         else:
             put(0xa0);put(a)
             if read:start();put(0xa1)
     def get(continue_=False):
         p.store(0,0)
         for _ in range(8):
-            p.store(port,160);p.emit(0xad,0,0x60,0x29,16,0xc9,16,0x26,0);p.store(port,128)
+            drive(160);p.emit(0xad,0,0x60,0x29,16,0xc9,16,0x26,0);drive(128)
         line(0,not continue_);line(1,not continue_);line(0,not continue_)
         p.emit(0xa5,0)
     def wait():
@@ -60,15 +65,27 @@ def eeprom_program(mapper=16,counter=False):
         # Erased FF becomes zero; each later process sees and increments it.
         seek(0x23)
         for _ in range(8):
-            p.emit(0x06,2,0xa9,0,0x90,2,0xa9,64,0x8d,13,128,
-                   0x09,32,0x8d,13,128,0x29,64,0x8d,13,128)
+            p.emit(0x06,2,0xa9,0,0x90,2,0xa9,64)
+            for operation in ((),(0x09,32),(0x29,64)):
+                p.emit(*operation)
+                if external:p.jump('external_line',0x20)
+                else:p.emit(0x8d,13,128)
         ack();stop();wait();seek(0x23,True);get();stop();p.emit(0xa5,0)
     else:
         seek(0x23);put(0xa5);put(0x3c);stop();wait()
         # Page wrap writes the second byte at 0x20, not 0x24.
         seek(0x23,True);get(True);p.expect(0xa5);get();p.expect(255);stop()
         seek(0x20,True);get();p.expect(0x3c);stop();p.emit(0xa9,0x42)
-    case=image_case(f'eeprom_{mapper}'+('_counter' if counter else ''),mapper,p,sub,1 if mapper==159 else 2)
+    if external:
+        p.jump('done')
+        p.label('external_line');p.emit(0x85,3,0x29,32,0xf0,3);p.jump('external_high')
+        for r in range(4):p.store(0x8000+r,0)
+        p.emit(0xa5,3,0x29,192,0x8d,13,128,0xa5,3,0x60)
+        p.label('external_high');p.emit(0xa5,3,0x29,192,0x8d,13,128)
+        for r in range(4):p.store(0x8000+r,8)
+        p.emit(0xa5,3,0x60)
+    nv=1 if mapper==159 or external else 0 if mapper==157 else 2
+    case=image_case(f'eeprom_{mapper}'+('_external' if external else '')+('_counter' if counter else ''),mapper,p,sub,nv)
     if counter:case=(*case[:3],'final:A=00')
     return case
 
@@ -104,6 +121,15 @@ def bandai_fixtures():
               irq_program(mapper=159),irq_program(mapper=159,dma=True),
               nes2(handoff('bandai159_prg',159,[(0x8008,5),(0x6008,7)],10,prg_kb=256),ram=0x10)]
     cases += list(mapper153_fixtures())
+    cases += [eeprom_program(157),eeprom_program(157,True),eeprom_program(157,external=True),
+              eeprom_program(157,True,True),irq_program(mapper=157),irq_program(mapper=157,dma=True)]
+    cases.append(nes2(handoff('datach_prg',157,[(0x8008,5)],10,prg_kb=256,chr_kb=0),chr_ram=7))
+    cases.append(nes2(ppu_contract(157,256,0,[('write',0,0xa5),('cpu',0x8000,31),
+        ('read',0,0xa5),('cpu',0x8009,3),('write',0x2000,0x55),('read',0x2c00,0x55)],'_datach'),chr_ram=7))
+    p=Program();p.emit(0x78,0xd8);p.store(0,0);p.store(1,0);p.store(0x800d,128)
+    p.label('poll');p.emit(0xad,0,96,0x29,8,0xc5,1,0xf0,4,0x85,1,0xe6,0,0xa6,0);p.jump('poll')
+    name,image,seeds,_=image_case('barcode_probe',157,p)
+    cases.append((name,image,seeds,'final:X=00'))
     for name,image,seeds,expected in cases:yield 'bandai_'+name,image,seeds,expected
 
 def mapper153_fixtures():

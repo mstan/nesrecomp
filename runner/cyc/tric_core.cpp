@@ -9580,7 +9580,7 @@ bool cyc_load_ines(const uint8_t *image, size_t size) {
     if (!nes_cart_image(image, size, &info) || !nes_cart_variant_supported(&info)) return false;
     int mapper = info.mapper;
     switch (mapper) {   // the set hw_mapper.c implements
-    case 16: case 159: case 153: break;
+    case 16: case 159: case 153: case 157: break;
     case 85: break;
     case 24: case 26: break;
     case 21: break;
@@ -9627,8 +9627,8 @@ bool cyc_load_ines(const uint8_t *image, size_t size) {
     Cart.UsingCHRRAM = !info.chr_size;
     Cart.Mapper = mapper;
     if (mapper==153) memset(Cart.MapperChip.WRAM,255,8192);
-    nes_eeprom_init(&Cart.MapperChip.Eeprom[0],(mapper==16 || mapper==159)?info.prg_nvram:0);
-    nes_eeprom_init(&Cart.MapperChip.Eeprom[1],0);
+    nes_eeprom_init(&Cart.MapperChip.Eeprom[0],mapper==157?256:(mapper==16 || mapper==159)?info.prg_nvram:0);
+    nes_eeprom_init(&Cart.MapperChip.Eeprom[1],mapper==157?info.prg_nvram:0);
     Cart.NametableHorizontalMirroring = !info.vertical;
     Cart.AlternativeNametableArrangement = info.four_screen != 0;
     Cart.MapperChip.Reset();
@@ -9644,6 +9644,9 @@ void cyc_power_on(uint8_t ppu_alignment) {
 
 #include "../../common/nes_nvram.h"
 static NesNvram nvram_region(unsigned region) { return nes_nvram_region(&Cart.Info,Cart.MapperChip.WRAM,Cart.CHRROM,Cart.MapperChip.Eeprom,region); }
+bool cyc_scan_barcode(const char *digits, unsigned cycles_per_module) {
+    return Cart.Mapper==157 && nes_barcode_scan(&Cart.MapperChip.Barcode,digits,cycles_per_module,totalCycles);
+}
 size_t cyc_nvram_size(unsigned region) { NesNvram n=nvram_region(region); return n.size[0]+n.size[1]; }
 bool cyc_nvram_export(unsigned region, void *buffer, size_t size) {
     return nes_nvram_transfer(nvram_region(region),buffer,size,false);

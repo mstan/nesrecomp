@@ -57,6 +57,30 @@ static void test_eeprom(void)
 }
 static void test_bandai(void)
 {
+    NesBarcode barcode={0},same;
+    CHECK(nes_barcode_scan(&barcode,"5901234123457",1000,100));
+    const char *ean13="101" "0001011" "0100111" "0110011" "0010011" "0111101" "0011101"
+        "01010" "1100110" "1101100" "1000010" "1011100" "1001110" "1000100" "101";
+    CHECK(strlen(ean13)==95 && barcode.length==160);
+    for (unsigned i=0;i<95;++i) CHECK(barcode.light[33+i]==(ean13[i]=='0'));
+    CHECK(nes_barcode_read(&barcode,99)==0 && nes_barcode_read(&barcode,100)==8);
+    CHECK(nes_barcode_read(&barcode,33100)==0 && nes_barcode_read(&barcode,34100)==8);
+    CHECK(nes_barcode_read(&barcode,160100)==0);
+    same=barcode; CHECK(!nes_barcode_scan(&barcode,"5901234123458",1000,0)); CHECK(!memcmp(&same,&barcode,sizeof(barcode)));
+    CHECK(!nes_barcode_scan(&barcode,"abcdefgh",1000,0)); CHECK(!nes_barcode_scan(&barcode,"96385074",0,0));
+    CHECK(nes_barcode_scan(&barcode,"96385074",1000,0) && barcode.length==132);
+    CHECK(nes_barcode_scan(&barcode,"036000291452",1000,0));
+    CHECK(nes_barcode_scan(&same,"0036000291452",1000,0)); CHECK(!memcmp(&same,&barcode,sizeof(barcode)));
+    cart(157,256,8); nes_eeprom_init(&hw_cart.eeprom[0],256); nes_eeprom_init(&hw_cart.eeprom[1],128);
+    hw_cart_cpu_write(0x8008,5); prg_banks(10,11,30,31);
+    hw_cart_cpu_write(0x8001,255); chr_bank(0,0,8);
+    hw_cart_cpu_write(0x800d,128);
+    hw_cart_ppu_addr_watched(0x400); CHECK(hw_cart.eeprom[1].scl==1);
+    hw_cart_ppu_addr_watched(0); CHECK(hw_cart.eeprom[1].scl==0);
+    uint8_t bus=0xff; CHECK(hw_cart_cpu_read(0x6000,&bus) && bus==0xf7);
+    hw_cart.eeprom[1].drive=1; bus=0xff; CHECK(hw_cart_cpu_read(0x6000,&bus) && bus==0xe7);
+    hw_cart.eeprom[1].drive=0; hw_cart.eeprom[0].drive=1;
+    bus=0xff; CHECK(hw_cart_cpu_read(0x6000,&bus) && bus==0xe7);
     cart(153,512,8);
     prg_banks(0,1,30,31); CHECK(hw_prg_is_stable());
     hw_cart_cpu_write(0x8001,1); CHECK(!hw_prg_is_stable());

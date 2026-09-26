@@ -21,6 +21,34 @@
 #define save_flush fsync
 #define save_pid getpid
 #endif
+static bool save_paths_distinct(const char *a, const char *b)
+{
+    if (!a || !b) return true;
+#ifdef _WIN32
+    char *x=_fullpath(NULL,a,0), *y=_fullpath(NULL,b,0);
+    bool distinct=x && y && _stricmp(x,y)!=0;
+#else
+    /* Resolve parent directories even when a save does not exist yet. */
+    char *x=NULL,*y=NULL;
+    const char *paths[2]={a,b}; char **resolved[2]={&x,&y};
+    for (unsigned i=0;i<2;++i) {
+        *resolved[i]=realpath(paths[i],NULL);
+        if (*resolved[i]) continue;
+        char *copy=strdup(paths[i]); if (!copy) continue;
+        char *slash=strrchr(copy,'/'); const char *name=slash?slash+1:copy;
+        if (slash) *slash=0;
+        char *parent=realpath(slash?(slash==copy?"/":copy):".",NULL);
+        if (parent) {
+            size_t n=strlen(parent)+strlen(name)+2; *resolved[i]=(char *)malloc(n);
+            if (*resolved[i]) snprintf(*resolved[i],n,"%s/%s",parent,name);
+            free(parent);
+        }
+        free(copy);
+    }
+    bool distinct=x && y && strcmp(x,y)!=0;
+#endif
+    free(x);free(y);return distinct;
+}
 static bool save_load(const char *path, unsigned region)
 {
     if (!path) return true;

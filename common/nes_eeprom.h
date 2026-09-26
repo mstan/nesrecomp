@@ -115,4 +115,15 @@ static inline void nes_eeprom_lines(NesEeprom *e, unsigned scl, unsigned sda, ui
     }
     e->scl=(uint8_t)scl; e->sda=(uint8_t)sda;
 }
+/* Datach's two devices have independent clocks but share an open-drain SDA
+ * wire. Settle changes in either output while preserving actual clock edges. */
+static inline void nes_eeprom_pair(NesEeprom *e, unsigned scl0, unsigned scl1,
+                                   unsigned master_sda, uint64_t cycle)
+{
+    for (unsigned pass=0;pass<3;++pass) {
+        unsigned wire=!!master_sda && !e[0].drive && !e[1].drive;
+        nes_eeprom_lines(&e[0],scl0,wire,cycle);
+        nes_eeprom_lines(&e[1],scl1,wire,cycle);
+    }
+}
 #endif

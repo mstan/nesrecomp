@@ -84,7 +84,7 @@ exactly at all four alignments. AccuracyCoin retains its existing alignment
 scores of 144/144, 143/144, 141/144 and 143/144; this change adds no new failures.
 
 The remaining draft stack includes MMC5,
-extended board wiring, and the remaining Bandai boards.
+and extended board wiring.
 Each needs its missing hardware primitive and suitable regression ROMs before
 being added to the supported list. The legacy runner still needs separate work.
 
@@ -193,3 +193,29 @@ DMA. Native dispatch resumes when the outputs agree. Its fixtures check both
 256 KiB halves from both CPU windows, PPU-controlled outer banks, WRAM gating,
 IRQ/DMA and persisted SRAM. Driving RAM and the unconnected SDA input together
 resolves D4 low; exact analog contention on that invalid setting is unspecified.
+
+Mapper 157 (Datach) has fixed 8 KiB CHR RAM, its own 256-byte X24C02, and an
+optional cartridge 128-byte X24C01. Header NVRAM describes only the latter.
+`--datach-save-file FILE` persists the main unit independently of cartridge
+`--save-file FILE`, so it can be shared between games. The clock from the active
+CHR register's bit 3 selects the external device; $800D bit 5 clocks the internal
+one, and both share a resolved open-drain SDA wire. PPU A11:A10 selection is
+modeled, so unequal clock registers can generate serial edges during rendering.
+
+The barcode API and headless `--barcode DIGITS --barcode-frame N` provide
+EAN-8, UPC-A or EAN-13 light/dark input, including checksum validation. Swipe
+speed is selectable with `--barcode-module-cycles N` (default 1000 CPU cycles).
+This models a chosen photodiode stimulus; actual swipe speed is user-dependent.
+The [Datach PCB tracing](https://seesaawiki.jp/famicomcartridge/d/Bandai%20Datach)
+and [mapper 157 register description](https://www.nesdev.org/wiki/INES_Mapper_157)
+define the serial and barcode bus wiring. GS1's General Specifications section
+5.2 defines the barcode symbols. The scanner contract checks a literal EAN-13
+waveform; 48 process runs check its 62 transitions at three speeds and every
+alignment. Runtime and oracle share the optical stimulus and EEPROM primitives,
+so these expectations are checked directly instead of claiming independent
+chip implementations. No commercial Datach game or physical reader was tested.
+
+The enlarged fixture harness compiles its common runtime once as an object
+library, explicitly selects Release on single-configuration generators, and
+allows `--build-timeout` for slower machines. Generated game code still links
+into separate executables and runs all four execution modes.

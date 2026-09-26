@@ -9,6 +9,10 @@ static inline NesNvram nes_nvram_region(const NesCartInfo *c, uint8_t *prg,
                                         uint8_t *chr, NesEeprom *ee, unsigned region)
 {
     NesNvram n={{NULL,NULL},{0,0}};
+    if (c->mapper==157 && region<=1) {
+        unsigned chip=region?0:1;
+        n.data[0]=ee[chip].data; n.size[0]=ee[chip].size; return n;
+    }
     if (region) return n;
     if ((c->mapper==16 || c->mapper==159)) { n.data[0]=ee[0].data; n.size[0]=ee[0].size; }
     else {
