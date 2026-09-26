@@ -389,12 +389,67 @@ static void mmc3_ppu_addr(uint16_t vbus)
 /* Dispatch                                                                  */
 /* ------------------------------------------------------------------------- */
 
+/* MMC2 / MMC4: https://www.nesdev.org/wiki/MMC2 and /MMC4.
+ * A triggering read still returns data from the old bank. Only subsequent
+ * accesses see the latch's new bank. MMC2 fully decodes the lower trigger;
+ * MMC4 ignores A0-A2 on both halves. Power-on latch state is not guaranteed;
+ * choose FE consistently in both machines. */
+static void mmc2_chr_apply(void)
+{
+    map_chr4(0, hw_cart.m.reg[hw_cart.m.chr0]);
+    map_chr4(1, hw_cart.m.reg[2 + hw_cart.m.chr1]);
+}
+
+static void mmc2_write(uint16_t addr, uint8_t value)
+{
+    unsigned page = addr >> 12;
+    if (page == 10) {
+        hw_cart.m.prg = value & 15;
+        if (hw_cart.mapper == 9) map_prg8(0, hw_cart.m.prg);
+        else map_prg16(0, hw_cart.m.prg);
+    } else if (page >= 11 && page <= 14) {
+        hw_cart.m.reg[page - 11] = value & 31;
+        mmc2_chr_apply();
+    } else if (page == 15) {
+        hw_cart.mirroring = (value & 1) ? HW_MIRROR_HORIZONTAL : HW_MIRROR_VERTICAL;
+    }
+}
+
+uint8_t hw_cart_chr_read(uint16_t addr)
+{
+    uint8_t value = hw_cart.chr[hw_cart_chr_index(addr)];
+    if ((hw_cart.mapper == 9 || hw_cart.mapper == 10) && !hw_cart.m.pattern_pending) {
+        hw_cart.m.pattern_pending = 1;
+        hw_cart.m.pattern_addr = addr;
+    }
+    return value;
+}
+
+void hw_cart_ppu_rd(bool reading)
+{
+    if (!reading && hw_cart.m.pattern_pending) {
+        uint16_t addr = hw_cart.m.pattern_addr;
+        hw_cart.m.pattern_pending = 0;
+        unsigned decoded = addr;
+        if (hw_cart.mapper == 10 || (addr & 0x1000)) decoded &= 0x1ff8;
+        switch (decoded) {
+        case 0x0fd8: hw_cart.m.chr0 = 0; break;
+        case 0x0fe8: hw_cart.m.chr0 = 1; break;
+        case 0x1fd8: hw_cart.m.chr1 = 0; break;
+        case 0x1fe8: hw_cart.m.chr1 = 1; break;
+        default: return;
+        }
+        mmc2_chr_apply();
+    }
+}
+
 static const struct {
     int         mapper;
     const char *name;
     uint8_t     watch_ppu_addr;
     uint8_t     wram;            /* boards for this mapper carry work RAM */
 } MAPPERS[] = {
+    { 9, "MMC2", 0, 0 },
     { 232, "Camerica Quattro", 0, 0 },
     { 184, "Sunsoft-1", 0, 0 },
     { 180, "Crazy Climber", 0, 0 },
@@ -455,6 +510,11 @@ void hw_cart_power_on(void)
     memset(hw_cart.wram, 0, hw_cart.info.prg_nvram ? hw_cart.info.prg_ram : sizeof(hw_cart.wram));
 
     switch (hw_cart.mapper) {
+    case 9:
+        map_prg8(0, 0); map_prg8(1, -3); map_prg8(2, -2); map_prg8(3, -1);
+        hw_cart.m.chr0 = hw_cart.m.chr1 = 1; mmc2_chr_apply(); break;
+    case 10:
+        uxrom_reset(); hw_cart.m.chr0 = hw_cart.m.chr1 = 1; mmc2_chr_apply(); break;
     case 13: nrom_reset(); map_chr4(1, 0); hw_cart.mirroring = HW_MIRROR_VERTICAL; break;
     case 71: uxrom_reset(); break;
     case 75: nrom_reset(); map_prg8(3, -1); map_chr4(1, 0); hw_cart.mirroring = HW_MIRROR_VERTICAL; break;
@@ -523,6 +583,7 @@ void hw_cart_cpu_write(uint16_t addr, uint8_t value)
     if ((hw_cart.mapper == 2 || hw_cart.mapper == 3 || hw_cart.mapper == 7) &&
         hw_cart.info.submapper == 2) value &= hw_cart_prg_read(addr);
     switch (hw_cart.mapper) {
+    case 9: case 10: mmc2_write(addr, value); break;
     case 11: /* Color Dreams; see MAPPERS.md. */
         value &= hw_cart_prg_read(addr);
         hw_cart.m.latch = value;
@@ -646,6 +707,10 @@ uint64_t hw_cart_state_hash(uint64_t h)
     acc = acc * 131 + hw_cart.m.irq_out;
     acc = acc * 131 + hw_cart.m.a12;
     acc = acc * 131 + hw_cart.m.latch;
+    if (hw_cart.mapper == 9 || hw_cart.mapper == 10) {
+        acc = acc * 131 + hw_cart.m.pattern_pending;
+        acc = acc * 131 + hw_cart.m.pattern_addr;
+    }
     /* Work RAM is a memory a program can read back, so it is compared across
      * implementations in cyc_mem_hash, not here. */
     return cyc_trace_mix(h, acc);
@@ -654,6 +719,9 @@ uint64_t hw_cart_state_hash(uint64_t h)
 void hw_cart_state_dump(void *file)
 {
     FILE *f = (FILE *)file;
+    if (hw_cart.mapper == 9 || hw_cart.mapper == 10)
+        fprintf(f, "cart.pattern_pending %u\ncart.pattern_addr %04X\n",
+                hw_cart.m.pattern_pending, hw_cart.m.pattern_addr);
     for (int i = 0; i < 4; i++) fprintf(f, "cart.prg_off[%d] %06X\n", i, hw_cart.prg_off[i]);
     for (int i = 0; i < 8; i++) fprintf(f, "cart.chr_off[%d] %06X\n", i, hw_cart.chr_off[i]);
     fprintf(f, "cart.mirroring %02X\ncart.wram_readable %02X\ncart.wram_writable %02X\n", hw_cart.mirroring,

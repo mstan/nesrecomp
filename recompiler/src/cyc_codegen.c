@@ -508,7 +508,8 @@ static int fixed_bank_for(int mapper, uint32_t banks, uint32_t slot) {
     unsigned slots;
     switch (mapper) {
     case 0: case 3: case 13: case 87: case 184: slots = 15; break; /* all PRG fixed */
-    case 2: case 71: case 76: case 94: case 206: slots = 12; break; /* last 16 KiB */
+    case 2: case 10: case 71: case 76: case 94: case 206: slots = 12; break; /* last 16 KiB */
+    case 9: slots = 14; break;                                  /* last 24 KiB */
     case 4: case 75: slots = 8; break;                           /* last 8 KiB */
     case 180: slots = 3; break;                                 /* first 16 KiB */
     default: slots = 0; break;
@@ -521,6 +522,8 @@ static int fixed_bank_for(int mapper, uint32_t banks, uint32_t slot) {
 /* The configuration a cold console comes up in; hw_mapper.c's reset paths. */
 static int power_on_bank_for(int mapper, uint32_t banks, uint32_t slot) {
     switch (mapper) {
+    case 9: return slot ? (int)(banks - 4 + slot) : 0;
+    case 10: return slot >= 2 ? (int)(banks - 4 + slot) : (int)slot;
     case 71: return slot >= 2 ? (int)(banks - 2 + slot - 2) : (int)slot;
     case 75: return slot == 3 ? (int)(banks - 1) : (int)slot;
     case 206: return slot >= 2 ? (int)(banks - 2 + slot - 2) : (int)slot;
@@ -1341,6 +1344,7 @@ bool cyc_codegen_emit_interpreter(const char *path) {
 /* The board names hw_mapper.c implements, for the message and the banner. */
 static const char *mapper_name(int mapper) {
     switch (mapper) {
+    case 9: return "MMC2";
     case 11: return "Color Dreams";
     case 13: return "CPROM";
     case 34: return "BNROM / NINA-001";

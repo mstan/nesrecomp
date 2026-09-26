@@ -61,6 +61,11 @@ bool hw_cart_cpu_read(uint16_t addr, uint8_t *value);
  * filtered rising edges of A12. Call hw_cart_ppu_addr(), which is free when the loaded
  * mapper does not care. */
 void hw_cart_ppu_addr_watched(uint16_t vbus);
+/* A real pattern read, including read-triggered bank latches. Debugger peeks
+ * use hw_cart_chr_index directly and must not change cartridge state. */
+uint8_t hw_cart_chr_read(uint16_t addr);
+/* Finish any read-triggered latch when the PPU releases /RD. */
+void hw_cart_ppu_rd(bool reading);
 
 /* The mapper's /IRQ output, ORed into the CPU's IRQ input with the 2A03's
  * own frame and DMC interrupts. */

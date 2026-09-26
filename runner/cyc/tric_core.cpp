@@ -1634,6 +1634,7 @@ void PPU_DATA_StateMachine()
 
 
             PPU_READ = (PPU_2007_PD_RB || (!BLNK && PPU_2007_Read_H0_Latch)); // even ppu cycles outside of blanking always read. Also read if we are reading $2007.
+            Cart.MapperChip.PatternReadEnd(PPU_READ);
 
             PPU_2007_Write_Latches[0] = PPU_2007_Write_SR;
             if (PPU_2007_Write)
@@ -9579,6 +9580,7 @@ bool cyc_load_ines(const uint8_t *image, size_t size) {
     if (!nes_cart_image(image, size, &info) || !nes_cart_variant_supported(&info)) return false;
     int mapper = info.mapper;
     switch (mapper) {   // the set hw_mapper.c implements
+    case 9: break;
     case 232: break;
     case 184: break;
     case 180: break;
@@ -9713,7 +9715,7 @@ static const struct { const char *name; const void *p; size_t n; } cyc_hw_fields
         F(Cart.MapperChip.Reg), F(Cart.MapperChip.MirrorReg), F(Cart.MapperChip.RamProtect),
         F(Cart.MapperChip.IrqLatch), F(Cart.MapperChip.IrqCounter), F(Cart.MapperChip.IrqReload),
         F(Cart.MapperChip.IrqEnable), F(Cart.MapperChip.IrqOut), F(Cart.MapperChip.A12),
-        F(Cart.MapperChip.Latch)
+        F(Cart.MapperChip.Latch), F(Cart.MapperChip.PatternPending), F(Cart.MapperChip.PatternAddress)
 };
 #undef F
 
