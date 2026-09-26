@@ -37,4 +37,9 @@ def mapper_fixtures():
     # Add a runtime fixture with each mapper implementation.
     yield handoff('mapper11', 11, [(0xb000, 0x21)], 4, chr_kb=128)
     yield handoff('mapper13', 13, [(0xb000, 3)], 0, prg_kb=32, chr_kb=0)
+    yield handoff('mapper34_bnrom', 34, [(0xb000, 2)], 8, chr_kb=0)
+    yield handoff('mapper34_bnrom_chrrom', 34, [(0xb000, 2)], 8, chr_kb=8)
+    for mode in ('absolute', 'indexed', 'indirect'):
+        yield handoff('mapper34_nina_' + mode, 34, [(0x7ffd, 1)], 4,
+                      prg_kb=64, chr_kb=64, addressing=mode)
     yield from ()

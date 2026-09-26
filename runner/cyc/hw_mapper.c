@@ -392,6 +392,7 @@ static const struct {
     uint8_t     watch_ppu_addr;
     uint8_t     wram;            /* boards for this mapper carry work RAM */
 } MAPPERS[] = {
+    { 34, "BNROM / NINA-001", 0, 0 },
     { 13, "CPROM", 0, 0 },
     { 11, "Color Dreams", 0, 0 },
     { 0,  "NROM",  0, 0 },
@@ -427,6 +428,10 @@ void hw_cart_power_on(void)
     hw_cart.watch_ppu_addr = i >= 0 ? MAPPERS[i].watch_ppu_addr : 0;
     hw_cart.has_wram = i >= 0 ? MAPPERS[i].wram : 0;
     hw_cart.wram_readable = hw_cart.wram_writable = hw_cart.has_wram;
+    if (hw_cart.mapper == 34) {
+        hw_cart.has_wram = hw_cart.chr_pages > 8;
+        hw_cart.wram_readable = hw_cart.wram_writable = hw_cart.has_wram;
+    }
     /* Work RAM is uninitialized at power-on like CPU RAM; a battery-backed
      * board would come up with its saved contents, which no run here has. */
     memset(hw_cart.wram, 0, sizeof(hw_cart.wram));
@@ -445,6 +450,18 @@ void hw_cart_power_on(void)
 
 void hw_cart_cpu_write(uint16_t addr, uint8_t value)
 {
+    if (hw_cart.mapper == 34) {
+        if (hw_cart.chr_pages <= 8) {
+            if (addr >= 0x8000) {
+                hw_cart.m.latch = value & hw_cart_prg_read(addr);
+                map_prg32(hw_cart.m.latch);
+            }
+        } else {
+            if (addr == 0x7ffd) map_prg32(value & 1);
+            if (addr == 0x7ffe) map_chr4(0, value & 15);
+            if (addr == 0x7fff) map_chr4(1, value & 15);
+        }
+    }
     if (addr >= 0x6000 && addr < 0x8000) {
         if (hw_cart.has_wram && hw_cart.wram_writable) hw_cart.wram[addr & 0x1FFF] = value;
         return;

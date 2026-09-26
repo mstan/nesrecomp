@@ -275,7 +275,7 @@ inline void TricMapper::Reset() {
     memset(WRAM, 0, sizeof(WRAM));
 
     Mirroring = Cart.NametableHorizontalMirroring ? TRIC_MIRROR_HORIZONTAL : TRIC_MIRROR_VERTICAL;
-    HasWRAM = Cart.Mapper == 1 || Cart.Mapper == 4;
+    HasWRAM = Cart.Mapper == 1 || Cart.Mapper == 4 || (Cart.Mapper == 34 && Cart.CHRPages > 8);
     WRAM_Readable = WRAM_Writable = HasWRAM;
 
     switch (Cart.Mapper) {
@@ -326,6 +326,18 @@ inline byte TricMapper::SnoopCPU(ushort Address) {
 }
 
 inline void TricMapper::StoreCPU(ushort Address, byte Input) {
+    if (Cart.Mapper == 34) {
+        if (Cart.CHRPages <= 8 && Address >= 0x8000) {
+            Latch = (byte)(Input & SnoopCPU(Address));
+            MapPRG32(Latch);
+        } else if (Cart.CHRPages > 8) {
+            switch (Address) {
+            case 0x7ffd: MapPRG32(Input % 2); break;
+            case 0x7ffe: MapCHR4(0, Input % 16); break;
+            case 0x7fff: MapCHR4(1, Input % 16); break;
+            }
+        }
+    }
     if (Address >= 0x6000 && Address < 0x8000) {
         if (HasWRAM && WRAM_Writable) WRAM[Address & 0x1FFF] = Input;
         return;

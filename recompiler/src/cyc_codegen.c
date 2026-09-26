@@ -770,6 +770,7 @@ typedef enum { WR_NEVER, WR_MAYBE, WR_ALWAYS } WriteReach;
 static unsigned mapper_write_floor(int mapper) {
     switch (mapper) {
     /* Low-address register apertures are added with their boards. */
+    case 34: return 0x7ffd;
     default: return 0x8000;
     }
 }
@@ -1324,6 +1325,7 @@ static const char *mapper_name(int mapper) {
     switch (mapper) {
     case 11: return "Color Dreams";
     case 13: return "CPROM";
+    case 34: return "BNROM / NINA-001";
     case 0:  return "NROM";
     case 1:  return "MMC1";
     case 2:  return "UxROM";

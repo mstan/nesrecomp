@@ -53,6 +53,32 @@ static void no_wram(void)
 }
 
 /* Per-board tests. */
+static void test_mapper34(void)
+{
+    cart(34, 64, 64); /* CHR ROM identifies NINA-001. */
+    hw_cart_cpu_write(0x7ffc, 1);
+    prg_banks(0, 1, 2, 3);
+    hw_cart_cpu_write(0x7ffd, 0xff);
+    hw_cart_cpu_write(0x7ffe, 2);
+    hw_cart_cpu_write(0x7fff, 5);
+    prg_banks(4, 5, 6, 7);
+    chr_bank(0, 8, 4); chr_bank(4, 20, 4);
+    uint8_t v = 0;
+    CHECK(hw_cart_cpu_read(0x7ffd, &v) && v == 0xff);
+    hw_cart_cpu_write(0x8000, 0);
+    prg_banks(4, 5, 6, 7);
+    cart(34, 128, 8);
+    /* BNROM also permits an unbanked 8 KiB CHR ROM. */
+    hw_cart_cpu_write(0x7ffd, 1);
+    prg_banks(0, 1, 2, 3);
+    hw_cart_cpu_write(0xb000, 6); /* wraps at physical ROM size */
+    prg_banks(8, 9, 10, 11);
+    prg[hw_cart.prg_off[1] + 0x1000] = 0;
+    hw_cart_cpu_write(0xb000, 3);
+    prg_banks(0, 1, 2, 3);
+    no_wram();
+}
+
 static void test_mapper13(void)
 {
     cart(13, 32, 16);
@@ -94,6 +120,7 @@ int main(void)
     chr_bank(0, 0, 8);
     no_wram();
     /* Run added board contracts. */
+    test_mapper34();
     test_mapper13();
     test_mapper11();
     printf("mapper contracts: %u checks passed\n", checks);
