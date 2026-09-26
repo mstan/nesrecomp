@@ -9,6 +9,8 @@ from mapper_fixtures import mapper_fixtures
 from latch_fixtures import latch_fixtures
 from fineprg_fixtures import fineprg_fixtures
 from vrc_fixtures import vrc_fixtures
+from expansion_fixtures import expansion_fixtures
+from vrc7_fixtures import vrc7_fixtures
 
 
 def main():
@@ -22,7 +24,7 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     checked = set()
     count = 0
-    for _, image, _, _ in chain(mapper_fixtures(), latch_fixtures(), fineprg_fixtures(), vrc_fixtures()):
+    for _, image, _, _ in chain(mapper_fixtures(), latch_fixtures(), fineprg_fixtures(), vrc_fixtures(), expansion_fixtures(), vrc7_fixtures()):
         mapper = (image[6] >> 4) | (image[7] & 0xf0)
         if mapper in checked:
             continue

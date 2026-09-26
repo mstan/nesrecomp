@@ -17,6 +17,9 @@ def irq_program(mapper, sub=0, high=0, next_=0, scanline=False, dma=False, width
     if mapper==73:
         for a,v in ((0x8000,14),(0x9000,15),(0xa000,15),(0xb000,15)):store(a,v)
         control=0xc000;store(control,6 if width8 else 2)
+    elif mapper==85:
+        store(0xe008 if sub==1 else 0xe010,255)
+        control=0xf000;store(control,2 if scanline else 6)
     elif mapper in (24,26):
         store(0xf000,255)
         control=0xf001 if mapper==24 else 0xf002

@@ -126,6 +126,9 @@ typedef struct {
         int16_t irq_prescaler;
         uint8_t irq_mode;
         HwVrc6Audio vrc6_audio;
+        uint8_t vrc7_reg[64], vrc7_address;
+        uint64_t vrc7_phase;
+        int16_t vrc7_output;
     } m;
 } HwCart;
 

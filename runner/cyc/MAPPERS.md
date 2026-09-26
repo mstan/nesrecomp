@@ -19,6 +19,7 @@ models; it does not independently establish the mapper specification.
 
 | ID | Board / reference | Behavior and limits |
 |---:|---|---|
+| 85 | [VRC7](https://www.nesdev.org/wiki/VRC7) | Three 8 KiB PRG windows, eight CHR windows, WRAM gate, VRC IRQ, and six FM channels. Submapper 1 selects A3 and omits the oscillator; submapper 2 selects A4. |
 | 24 | [VRC6a](https://www.nesdev.org/wiki/VRC6) | 16+8 KiB PRG, all CHR/nametable modes, WRAM gate, CPU IRQ and two pulse/one saw audio channels. |
 | 26 | [VRC6b](https://www.nesdev.org/wiki/VRC6) | VRC6 with swapped A0/A1 register wiring, including the audio ports. |
 | 21 | VRC4a/c | Submappers 1/2 select address wiring; PRG swap, 9-bit CHR, WRAM gate and CPU/divider IRQ. |
@@ -78,7 +79,7 @@ AccuracyCoin and the 3,000-frame SMB3 route also match the pre-expansion traces
 exactly at all four alignments. AccuracyCoin retains its existing alignment
 scores of 144/144, 143/144, 141/144 and 143/144; this change adds no new failures.
 
-The remaining draft stack includes MMC5, VRC expansion audio chips,
+The remaining draft stack includes MMC5,
 Bandai EEPROM, and extended board wiring.
 Each needs its missing hardware primitive and suitable regression ROMs before
 being added to the supported list. The legacy runner still needs separate work.
@@ -132,3 +133,14 @@ hardware comparison. `test_cyc_expansion_audio.py` records native/interpreter
 WAVs, checks exact parity and pulse/saw frequencies, and rejects silent/clipped
 output. The oracle does not synthesize expansion audio; waveform contracts and
 recorded PCM tests provide that validation. Commercial VRC6 games remain to test.
+
+VRC7 uses the pinned MIT-licensed emu2413 core in `vendor/emu2413`, with the
+instrument bytes checked against the chip's dumped patch ROM. A rational clock
+divider models the independent 3.579545 MHz resonator; power-on phase is
+deterministic. Diagnostic test-register behavior, sound reset, ignored writes,
+and all six channels have contracts. CPU fixtures cover all three submapper
+choices, PRG/CHR/WRAM/mirroring, IRQs through DMA, a custom sine carrier, and the
+silent VRC7b/reset cases. The PCM harness measures the 440.601 Hz carrier and
+compares native/interpreter WAVs byte for byte. This is an FM model with nominal
+gain, not a bit-exact capture of the chip's serial DAC or cartridge analog mixer.
+Lagrange Point and Tiny Toon Adventures 2 remain commercial-game validation work.

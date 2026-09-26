@@ -1,0 +1,9 @@
+{
+  "repository": "https://github.com/digital-sound-antiques/emu2413",
+  "commit": "11676f6c43af7a53a0a940f8faea57eed73a22ba",
+  "sha256": {
+    "emu2413.c": "7e9512eab3e560ad2c001702be068c47c7986ed0cc3b763b727b97ea391bca38",
+    "emu2413.h": "a6e3adc35034e20afdf0839206be3362c7329bd460b9e90e9116a68ab3a5b9de",
+    "LICENSE": "8fb093f26ed0d78c8ca033bbec7063ac5b34c5d2475e6bd121d03ccfaaf2355f"
+  }
+}

@@ -102,6 +102,8 @@ struct TricMapper {
     void AccessPPU();
     void PPUClock();
     void CPUClock();
+    void VRC7Apply();
+    void VRC7Write(ushort Address, byte Input);
     bool VRC6Board();
     unsigned VRC6Nametable(unsigned nt);
     void VRC6Apply();
@@ -174,6 +176,7 @@ inline void TricMapper::MapCHR1(uint Page, int Bank) {
 inline bool TricMapper::VRC6Board() { return Cart.Mapper == 24 || Cart.Mapper == 26; }
 #include "tric_vrc.inc"
 #include "tric_vrc6.inc"
+#include "tric_vrc7.inc"
 
 // ---- MMC1 (nesdev wiki, MMC1) ----
 
@@ -317,6 +320,7 @@ inline void TricMapper::Reset() {
     WRAM_Readable = WRAM_Writable = HasWRAM;
 
     switch (Cart.Mapper) {
+    case 85: Reg[1]=1; Reg[2]=2; VRC7Apply(); break;
     case 24: case 26: Ctrl=0x20; VRC6Apply(); break;
     case 21: case 22: case 23: case 25: Reg[1] = 1; VRCApply(); break;
     case 73: MapPRG16(0, 0); MapPRG16(1, -1); MapCHR8(0); break;
@@ -457,6 +461,7 @@ inline void TricMapper::StoreCPU(ushort Address, byte Input) {
     if ((Cart.Mapper == 2 || Cart.Mapper == 3 || Cart.Mapper == 7) && Cart.Info.submapper == 2)
         Input &= SnoopCPU(Address);
     switch (Cart.Mapper) {
+    case 85: VRC7Write(Address,Input); break;
     case 24: case 26: VRC6Write(Address, Input); break;
     case 21: case 22: case 23: case 25: case 73: VRCWrite(Address, Input); break;
     case 9: case 10:

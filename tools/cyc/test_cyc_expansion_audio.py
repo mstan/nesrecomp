@@ -9,11 +9,20 @@ from pathlib import Path
 
 def main():
     ap=argparse.ArgumentParser(description=__doc__)
-    ap.add_argument('--fixtures',type=Path,required=True)
-    args=ap.parse_args();root=args.fixtures.resolve();measurements=[]
-    for mapper in (24,26):
-        for voice,divisor in (('pulse',16*254),('saw',14*128)):
-            name=f'exp_tone_{mapper}_{voice}';case=root/name
+    ap.add_argument('--fixtures',type=Path,help='VRC6 tone fixture directory')
+    ap.add_argument('--fm-fixtures',type=Path,help='VRC7 fixture directory')
+    args=ap.parse_args();measurements=[];cases=[]
+    if args.fixtures:
+        for mapper in (24,26):
+            for voice,divisor in (('pulse',16*254),('saw',14*128)):
+                cases.append((args.fixtures.resolve(),f'exp_tone_{mapper}_{voice}',(21477272.7272727/12)/divisor))
+    if args.fm_fixtures:
+        root=args.fm_fixtures.resolve()
+        cases += [(root,'fm_nes2_tone_85_2',(3579545/72)*290/32768),
+                  (root,'fm_nes2_tone_85_1',None),(root,'fm_nes2_tone_85_2_reset',None)]
+    if not cases: ap.error('pass --fixtures and/or --fm-fixtures')
+    for root,name,expected in cases:
+            case=root/name
             suffix='.exe' if hasattr(subprocess,'CREATE_NO_WINDOW') else ''
             exe=root/'build'/'Release'/(name+suffix)
             if not exe.exists():exe=root/'build'/(name+suffix)
@@ -33,15 +42,19 @@ def main():
                 samples=struct.unpack('<'+'h'*(len(data)//2),data)[rate//2:]
                 assert len(samples)>rate//2
                 center=sum(samples)/len(samples)
+                rms=math.sqrt(sum((x-center)**2 for x in samples)/len(samples))
+                if expected is None:
+                    assert rms<1,(name,align,'expected silence',rms)
+                    measurements.append(dict(case=name,align=align,rms=rms,expected='silence'))
+                    continue
                 crossings=[i for i in range(1,len(samples)) if samples[i-1]<=center<samples[i]]
                 assert len(crossings)>100
                 frequency=rate*(len(crossings)-1)/(crossings[-1]-crossings[0])
-                expected=(21477272.7272727/12)/divisor
                 assert abs(frequency-expected)<1,(name,align,frequency,expected)
-                rms=math.sqrt(sum((x-center)**2 for x in samples)/len(samples))
                 assert rms>50 and max(samples)<32767 and min(samples)>-32768,(name,rms)
-                measurements.append(dict(mapper=mapper,voice=voice,align=align,frequency=frequency,expected=expected,rms=rms))
-    (root/'pcm-measurements.json').write_text(json.dumps(measurements,indent=2))
+                measurements.append(dict(case=name,align=align,frequency=frequency,expected=expected,rms=rms))
+    for root in {case[0] for case in cases}:
+        (root/'pcm-measurements.json').write_text(json.dumps(measurements,indent=2))
     print(f'{len(measurements)} PCM measurements passed; native/interpreter WAVs identical')
 
 if __name__=='__main__':main()
