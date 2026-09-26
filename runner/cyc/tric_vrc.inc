@@ -74,7 +74,7 @@ inline void TricMapper::CPUClock() {
             VrcCounter16 = (VrcCounter16 & ~(width-1)) | (VrcLatch16 & (width-1));
             IrqOut = true;
         } else ++VrcCounter16;
-    } else if (VRC24Board() && !VRC2Board()) {
+    } else if ((VRC24Board() && !VRC2Board()) || VRC6Board()) {
         if (!(IrqMode & 4)) {
             IrqDivider -= 3;
             if (IrqDivider > 0) return;

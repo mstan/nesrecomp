@@ -365,6 +365,7 @@ static void test_variants(void)
 }
 
 #include "vrc_test.inc"
+#include "vrc6_test.inc"
 
 int main(void)
 {
@@ -392,6 +393,7 @@ int main(void)
     test_mmc2_latches();
     test_mapper31();
     test_vrc();
+    test_vrc6();
     printf("mapper contracts: %u checks passed\n", checks);
     return 0;
 }

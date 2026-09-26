@@ -102,6 +102,10 @@ struct TricMapper {
     void AccessPPU();
     void PPUClock();
     void CPUClock();
+    bool VRC6Board();
+    unsigned VRC6Nametable(unsigned nt);
+    void VRC6Apply();
+    void VRC6Write(ushort Address, byte Input);
     bool VRC2Board();
     bool VRC24Board();
     unsigned VRCPort(ushort Address);
@@ -167,7 +171,9 @@ inline void TricMapper::MapCHR1(uint Page, int Bank) {
     CHR_Off[Page & 7] = ((uint)Bank & (n - 1)) * 0x400u;
 }
 
+inline bool TricMapper::VRC6Board() { return Cart.Mapper == 24 || Cart.Mapper == 26; }
 #include "tric_vrc.inc"
+#include "tric_vrc6.inc"
 
 // ---- MMC1 (nesdev wiki, MMC1) ----
 
@@ -311,6 +317,7 @@ inline void TricMapper::Reset() {
     WRAM_Readable = WRAM_Writable = HasWRAM;
 
     switch (Cart.Mapper) {
+    case 24: case 26: Ctrl=0x20; VRC6Apply(); break;
     case 21: case 22: case 23: case 25: Reg[1] = 1; VRCApply(); break;
     case 73: MapPRG16(0, 0); MapPRG16(1, -1); MapCHR8(0); break;
     case 31:
@@ -450,6 +457,7 @@ inline void TricMapper::StoreCPU(ushort Address, byte Input) {
     if ((Cart.Mapper == 2 || Cart.Mapper == 3 || Cart.Mapper == 7) && Cart.Info.submapper == 2)
         Input &= SnoopCPU(Address);
     switch (Cart.Mapper) {
+    case 24: case 26: VRC6Write(Address, Input); break;
     case 21: case 22: case 23: case 25: case 73: VRCWrite(Address, Input); break;
     case 9: case 10:
         switch (Address / 4096) {
@@ -570,6 +578,11 @@ inline void TricMapper::PatternReadEnd(bool Reading) {
 
 inline byte TricMapper::SnoopPPU(ushort Address) {
     if (Address < 0x2000) return Cart.CHRROM[FetchPatternAddress(Address)];
+    if (VRC6Board()) {
+        unsigned bank=VRC6Nametable((Address>>10)&3);
+        if (Ctrl&16) return Cart.CHRROM[(bank*1024+(Address&1023))%(Cart.UsingCHRRAM ? Cart.CHRROM_Length : Cart.CHRPages*1024)];
+        return VRAM[(bank%2)*1024+(Address&1023)];
+    }
     if (Cart.AlternativeNametableArrangement) return VRAM[Address & 0xfff];
     ushort Addr = (ushort)(Address & 0x3FF);
     if (Mirroring == TRIC_MIRROR_HORIZONTAL) Addr |= (ushort)((Address & 0x800) ? 0x400 : 0);
@@ -580,6 +593,12 @@ inline byte TricMapper::SnoopPPU(ushort Address) {
 
 inline void TricMapper::AccessPPU() {
     ushort Address = PPU_AddressIn;
+    if (VRC6Board() && SeventyTwoPinConnector[64] && (Ctrl & 16)) {
+        unsigned index=(VRC6Nametable((Address>>10)&3)*1024+(Address&1023))%(Cart.UsingCHRRAM ? Cart.CHRROM_Length : Cart.CHRPages*1024);
+        PPU_DataIn=PPU_NonTiltData;
+        if (!SeventyTwoPinConnector[20]) PPU_NonTiltData=PPU_DataOut=Cart.CHRROM[index];
+        if (!SeventyTwoPinConnector[55] && Cart.UsingCHRRAM) Cart.CHRROM[index]=PPU_DataIn;
+    }
     if (!SeventyTwoPinConnector[64]) {
         int CHR_Address = FetchPatternAddress(Address);
         PPU_DataIn = PPU_NonTiltData;
@@ -596,6 +615,11 @@ inline void TricMapper::AccessPPU() {
 
 inline void TricMapper::Connector_CheckCIRAM() {
     SeventyTwoPinConnector[56] = (PPU_AddressBus & 0x2000) == 0;
+    if (VRC6Board()) {
+        if (Ctrl & 16) SeventyTwoPinConnector[56]=true;
+        SeventyTwoPinConnector[21]=(VRC6Nametable((PPU_AddressBus>>10)&3)&1)!=0;
+        return;
+    }
     bool a10;
     if (Mirroring == TRIC_MIRROR_HORIZONTAL)    a10 = (PPU_AddressBus & 0x800) != 0;
     else if (Mirroring == TRIC_MIRROR_VERTICAL) a10 = (PPU_AddressBus & 0x400) != 0;

@@ -59,6 +59,13 @@ void hw_cart_cpu_write(uint16_t addr, uint8_t value);
  * is read inline through hw_cart.prg_off. */
 bool hw_cart_cpu_read(uint16_t addr, uint8_t *value);
 
+/* Cartridge nametable source. False means the normal CIRAM read/write applies.
+ * Address includes the PPU's latched low byte. read_bus is the current /RD. */
+bool hw_cart_nt_read(uint16_t addr, bool read_bus, uint8_t *value);
+bool hw_cart_nt_write(uint16_t addr, uint8_t value);
+uint16_t hw_cart_nt_a10(uint16_t addr);
+double hw_cart_audio_level(void);
+
 /* Every address the PPU puts on its bus: MMC3's IRQ counter clocks on
  * filtered rising edges of A12. Call hw_cart_ppu_addr(), which is free when the loaded
  * mapper does not care. */

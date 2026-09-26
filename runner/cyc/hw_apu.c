@@ -309,6 +309,7 @@ static void audio_cycle(void)
     apu_channel_levels(out);
     double level = audio.pulse_mix[out[0] + out[1]] + audio.tnd_mix[3 * out[2] + 2 * out[3] + out[4]];
 
+    level += hw_cart_audio_level();
     audio.acc += level;
     audio.count++;
     audio.phase += 1.0;

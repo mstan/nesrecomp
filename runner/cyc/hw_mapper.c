@@ -449,6 +449,7 @@ void hw_cart_ppu_rd(bool reading)
 }
 
 #include "hw_vrc.inc"
+#include "hw_vrc6.inc"
 
 static const struct {
     int         mapper;
@@ -456,6 +457,7 @@ static const struct {
     uint8_t     watch_ppu_addr;
     uint8_t     wram;            /* boards for this mapper carry work RAM */
 } MAPPERS[] = {
+    { 24, "VRC6a", 0, 1 },
     { 21, "VRC4a/c", 0, 1 },
     { 22, "VRC2a", 0, 0 },
     { 23, "VRC2b / VRC4e/f", 0, 1 },
@@ -510,7 +512,7 @@ void hw_cart_power_on(void)
     memset(hw_cart.chr_off, 0, sizeof(hw_cart.chr_off));
     int i = mapper_index(hw_cart.mapper);
     hw_cart.watch_ppu_addr = i >= 0 ? MAPPERS[i].watch_ppu_addr : 0;
-    hw_cart.watch_cpu = (vrc24_board() && !vrc2_board()) || hw_cart.mapper == 73;
+    hw_cart.watch_cpu = (vrc24_board() && !vrc2_board()) || hw_cart.mapper == 73 || vrc6_board();
     hw_cart.mirroring = hw_cart.info.vertical ? HW_MIRROR_VERTICAL : HW_MIRROR_HORIZONTAL;
     hw_cart.wram_bank = 0;
     hw_cart.has_wram = hw_cart.info.prg_size ? hw_cart.wram_len != 0 : i >= 0 ? MAPPERS[i].wram : 0;
@@ -525,6 +527,9 @@ void hw_cart_power_on(void)
     memset(hw_cart.wram, 0, hw_cart.info.prg_nvram ? hw_cart.info.prg_ram : sizeof(hw_cart.wram));
 
     switch (hw_cart.mapper) {
+    case 24: case 26:
+        hw_cart.m.vrc6_audio.step[0] = hw_cart.m.vrc6_audio.step[1] = 15;
+        hw_cart.m.ctrl = 0x20; hw_cart.m.irq_prescaler = 341; vrc6_apply(); break;
     case 21: case 22: case 23: case 25:
         hw_cart.m.reg[1] = 1; hw_cart.m.irq_prescaler = 341; vrc24_apply(); break;
     case 73: uxrom_reset(); break;
@@ -618,6 +623,7 @@ void hw_cart_cpu_write(uint16_t addr, uint8_t value)
         hw_cart.info.submapper == 2) value &= hw_cart_prg_read(addr);
     switch (hw_cart.mapper) {
     case 21: case 22: case 23: case 25: vrc24_write(addr, value); break;
+    case 24: case 26: vrc6_write(addr, value); break;
     case 73: vrc3_write(addr, value); break;
     case 9: case 10: mmc2_write(addr, value); break;
     case 11: /* Color Dreams; see MAPPERS.md. */
@@ -724,11 +730,39 @@ bool hw_cart_irq(void) { return hw_cart.m.irq_out != 0; }
 
 void hw_cart_cpu_clock(void)
 {
+    if (vrc6_board()) vrc6_audio_clock();
     if (hw_cart.mapper == 73) vrc3_clock();
     else if (hw_cart.watch_cpu) vrc_irq_clock();
 }
 
 /* ------------------------------------------------------------------------- */
+/* Cartridge nametables and expansion audio. */
+uint16_t hw_cart_nt_a10(uint16_t addr) { return (vrc6_nt_bank((addr >> 10) & 3) & 1) << 10; }
+bool hw_cart_nt_read(uint16_t addr, bool read_bus, uint8_t *value)
+{
+    if (!vrc6_board() || !(hw_cart.m.ctrl & 0x10)) return false;
+    if (read_bus) {
+        unsigned index = (vrc6_nt_bank((addr >> 10) & 3) % hw_cart.chr_pages)*1024 + (addr & 1023);
+        *value = hw_cart.chr[hw_cart.chr_ram ? index % hw_cart.chr_len : index];
+    }
+    return true;
+}
+bool hw_cart_nt_write(uint16_t addr, uint8_t value)
+{
+    if (!vrc6_board() || !(hw_cart.m.ctrl & 0x10)) return false;
+    if (hw_cart.chr_ram) {
+        unsigned index = vrc6_nt_bank((addr >> 10) & 3)*1024 + (addr & 1023);
+        hw_cart.chr[index % hw_cart.chr_len] = value;
+    }
+    return true;
+}
+double hw_cart_audio_level(void)
+{
+    /* Nominal inverted linear DAC: one 15-level pulse ~= one 2A03 pulse.
+     * Cartridge mixer resistor tolerances are not modeled. */
+    return vrc6_board() ? -(double)vrc6_audio_dac() * (0.1488 / 15.0) : 0;
+}
+
 /* Comparison                                                                */
 /* ------------------------------------------------------------------------- */
 
@@ -761,13 +795,21 @@ uint64_t hw_cart_state_hash(uint64_t h)
         acc = acc * 131 + hw_cart.m.pattern_pending;
         acc = acc * 131 + hw_cart.m.pattern_addr;
     }
-    if (vrc24_board() || hw_cart.mapper == 73) {
+    if (vrc24_board() || hw_cart.mapper == 73 || vrc6_board()) {
         for (unsigned i=0; i<8; ++i) acc = acc*131 + hw_cart.m.vrc_chr[i];
         acc = acc*131 + hw_cart.m.irq_latch16;
         acc = acc*131 + hw_cart.m.irq_counter16;
         acc = acc*131 + hw_cart.m.irq_prescaler;
         acc = acc*131 + hw_cart.m.irq_mode;
         acc = acc*131 + hw_cart.m.last_write_cycle;
+    }
+    if (vrc6_board()) {
+        const HwVrc6Audio *a = &hw_cart.m.vrc6_audio;
+        for (unsigned ch=0; ch<3; ++ch) {
+            for (unsigned r=0; r<3; ++r) acc=acc*131+a->reg[ch][r];
+            acc=acc*131+a->timer[ch]; acc=acc*131+a->step[ch];
+        }
+        acc=acc*131+a->control; acc=acc*131+a->accumulator;
     }
     /* Work RAM is a memory a program can read back, so it is compared across
      * implementations in cyc_mem_hash, not here. */
@@ -777,7 +819,14 @@ uint64_t hw_cart_state_hash(uint64_t h)
 void hw_cart_state_dump(void *file)
 {
     FILE *f = (FILE *)file;
-    if (vrc24_board() || hw_cart.mapper == 73) {
+    if (vrc6_board()) {
+        const HwVrc6Audio *a=&hw_cart.m.vrc6_audio;
+        fprintf(f,"cart.vrc6.control %u\ncart.vrc6.accumulator %u\n",a->control,a->accumulator);
+        for (unsigned ch=0;ch<3;++ch)
+            fprintf(f,"cart.vrc6.ch%u %02X %02X %02X timer=%u step=%u\n",ch,
+                    a->reg[ch][0],a->reg[ch][1],a->reg[ch][2],a->timer[ch],a->step[ch]);
+    }
+    if (vrc24_board() || hw_cart.mapper == 73 || vrc6_board()) {
         for (unsigned i=0; i<8; ++i) fprintf(f, "cart.vrc_chr[%u] %03X\n", i, hw_cart.m.vrc_chr[i]);
         fprintf(f, "cart.irq_latch16 %04X\ncart.irq_counter16 %04X\ncart.irq_prescaler %d\ncart.irq_mode %u\n",
                 hw_cart.m.irq_latch16, hw_cart.m.irq_counter16, hw_cart.m.irq_prescaler, hw_cart.m.irq_mode);

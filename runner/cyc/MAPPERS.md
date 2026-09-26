@@ -19,6 +19,7 @@ models; it does not independently establish the mapper specification.
 
 | ID | Board / reference | Behavior and limits |
 |---:|---|---|
+| 24 | [VRC6a](https://www.nesdev.org/wiki/VRC6) | 16+8 KiB PRG, all CHR/nametable modes, WRAM gate, CPU IRQ and two pulse/one saw audio channels. |
 | 21 | VRC4a/c | Submappers 1/2 select address wiring; PRG swap, 9-bit CHR, WRAM gate and CPU/divider IRQ. |
 | 22 | VRC2a | Swapped address lines, shifted 8-bit CHR, one-bit latch, no IRQ. |
 | 23 | VRC2b / VRC4e/f | Submappers 1/2 select VRC4 wiring; submapper 3 selects VRC2. |
@@ -118,3 +119,15 @@ iNES mapper 23/25 cannot unambiguously distinguish VRC2 from VRC4. Submapper 0
 retains the historical VRC4 union of address decodes; use NES 2.0 submapper 3 for
 the VRC2 bit latch and 8-bit CHR behavior (including Wai Wai World). VRC4 boards
 with explicit 2 KiB WRAM mirror it only through $6000-$6FFF.
+
+VRC6 nametable pin vectors come from BootGod's measurements reported by Quietust
+on [Talk:VRC6](https://www.nesdev.org/wiki/Talk:VRC6#Raw_data). The contracts cover
+all 64 banking-style values, including CHR-ROM nametables and independent CIRAM
+selection. Execution fixtures read these through $2007 and enable rendering.
+The audio sequencers run during DMA and when host audio is disabled; PCM mixing
+adds their inverted linear DAC before the existing output filters. Nominal mixer
+gain is approximate; cartridge resistor tolerances and analog response need
+hardware comparison. `test_cyc_expansion_audio.py` records native/interpreter
+WAVs, checks exact parity and pulse/saw frequencies, and rejects silent/clipped
+output. The oracle does not synthesize expansion audio; waveform contracts and
+recorded PCM tests provide that validation. Commercial VRC6 games remain to test.
