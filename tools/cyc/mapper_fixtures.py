@@ -36,4 +36,5 @@ def handoff(name, mapper, writes, expected_bank, *, prg_kb=128, chr_kb=8,
 def mapper_fixtures():
     # Add a runtime fixture with each mapper implementation.
     yield handoff('mapper11', 11, [(0xb000, 0x21)], 4, chr_kb=128)
+    yield handoff('mapper13', 13, [(0xb000, 3)], 0, prg_kb=32, chr_kb=0)
     yield from ()

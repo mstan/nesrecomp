@@ -9583,6 +9583,7 @@ bool cyc_load_ines(const uint8_t *image, size_t size) {
             mapper != 4 && mapper != 7 && mapper != 66) return false;
     }
     switch (mapper) {   // the set hw_mapper.c implements
+    case 13: break;
     case 11: break;
     case 0: case 1: case 2: case 3: case 4: case 7: case 66: break;
     default: return false;
@@ -9599,9 +9600,9 @@ bool cyc_load_ines(const uint8_t *image, size_t size) {
     Cart.PRGROM_Length = (int)prg_len;
     Cart.PRGSlots = prg_alloc / 0x2000 ? prg_alloc / 0x2000 : 1;
     Cart.UsingCHRRAM = chr_len == 0;
-    Cart.CHRROM = tric_alloc_padded(chr_len ? image + offset + prg_len : NULL, chr_len ? chr_len : 0x2000,
+    Cart.CHRROM = tric_alloc_padded(chr_len ? image + offset + prg_len : NULL, chr_len ? chr_len : (mapper == 13 ? 0x4000 : 0x2000),
                                     &chr_alloc);
-    Cart.CHRROM_Length = (int)(chr_len ? chr_len : 0x2000);
+    Cart.CHRROM_Length = (int)(chr_len ? chr_len : (mapper == 13 ? 0x4000 : 0x2000));
     Cart.CHRPages = chr_alloc / 0x400 ? chr_alloc / 0x400 : 1;
     Cart.Mapper = mapper;
     Cart.NametableHorizontalMirroring = (image[6] & 1) == 0;

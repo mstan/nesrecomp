@@ -53,6 +53,25 @@ static void no_wram(void)
 }
 
 /* Per-board tests. */
+static void test_mapper13(void)
+{
+    cart(13, 32, 16);
+    hw_cart_cpu_write(0xb000, 3);
+    prg_banks(0, 1, 2, 3);
+    chr_bank(0, 0, 4);
+    chr_bank(4, 12, 4);
+    CHECK(hw_cart.mirroring == HW_MIRROR_VERTICAL);
+    chr[hw_cart_chr_index(0x1000)] = 0xa5;
+    hw_cart_cpu_write(0xb000, 1);
+    CHECK(chr[hw_cart_chr_index(0x1000)] == 0);
+    hw_cart_cpu_write(0xb000, 3);
+    CHECK(chr[hw_cart_chr_index(0x1000)] == 0xa5);
+    prg[0x3000] = 0;
+    hw_cart_cpu_write(0xb000, 3);
+    chr_bank(4, 0, 4);
+    no_wram();
+}
+
 static void test_mapper11(void)
 {
     cart(11, 128, 128);
@@ -75,6 +94,7 @@ int main(void)
     chr_bank(0, 0, 8);
     no_wram();
     /* Run added board contracts. */
+    test_mapper13();
     test_mapper11();
     printf("mapper contracts: %u checks passed\n", checks);
     return 0;

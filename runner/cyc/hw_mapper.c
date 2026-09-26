@@ -392,6 +392,7 @@ static const struct {
     uint8_t     watch_ppu_addr;
     uint8_t     wram;            /* boards for this mapper carry work RAM */
 } MAPPERS[] = {
+    { 13, "CPROM", 0, 0 },
     { 11, "Color Dreams", 0, 0 },
     { 0,  "NROM",  0, 0 },
     { 1,  "MMC1",  0, 1 },
@@ -431,6 +432,7 @@ void hw_cart_power_on(void)
     memset(hw_cart.wram, 0, sizeof(hw_cart.wram));
 
     switch (hw_cart.mapper) {
+    case 13: nrom_reset(); map_chr4(1, 0); hw_cart.mirroring = HW_MIRROR_VERTICAL; break;
     case 1:  mmc1_reset(); break;
     case 2:  uxrom_reset(); break;
     case 3:  cnrom_reset(); break;
@@ -454,6 +456,11 @@ void hw_cart_cpu_write(uint16_t addr, uint8_t value)
         hw_cart.m.latch = value;
         map_prg32(value & 3);
         map_chr8(value >> 4);
+        break;
+    case 13: /* CPROM; see MAPPERS.md. */
+        value &= hw_cart_prg_read(addr);
+        hw_cart.m.latch = value;
+        map_chr4(1, value & 3);
         break;
     case 1:  mmc1_write(addr, value); break;
     case 2:  uxrom_write(value); break;

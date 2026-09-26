@@ -282,8 +282,8 @@ bool cyc_load_ines(const uint8_t *image, size_t size)
     hw_cart.prg_len = (uint32_t)prg_len;
     hw_cart.prg_slots = prg_alloc / 0x2000 ? prg_alloc / 0x2000 : 1;
     hw_cart.chr_ram = chr_len == 0;
-    hw_cart.chr = alloc_padded(chr_len ? image + offset + prg_len : NULL, chr_len ? chr_len : 0x2000, &chr_alloc);
-    hw_cart.chr_len = (uint32_t)(chr_len ? chr_len : 0x2000);
+    hw_cart.chr = alloc_padded(chr_len ? image + offset + prg_len : NULL, chr_len ? chr_len : (mapper == 13 ? 0x4000 : 0x2000), &chr_alloc);
+    hw_cart.chr_len = (uint32_t)(chr_len ? chr_len : (mapper == 13 ? 0x4000 : 0x2000));
     hw_cart.chr_pages = chr_alloc / 0x400 ? chr_alloc / 0x400 : 1;
     hw_cart.mapper = (uint8_t)mapper;
     /* The header's arrangement bit is the solder pad on boards that have one;

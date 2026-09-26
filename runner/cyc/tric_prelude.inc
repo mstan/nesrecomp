@@ -279,6 +279,7 @@ inline void TricMapper::Reset() {
     WRAM_Readable = WRAM_Writable = HasWRAM;
 
     switch (Cart.Mapper) {
+    case 13: MapPRG32(0); MapCHR4(0, 0); MapCHR4(1, 0); Mirroring = TRIC_MIRROR_VERTICAL; break;
     case 1:
         Ctrl = 0x0C;   // PRG mode 3, the state a bit-7 write leaves
         MMC1Apply();
@@ -336,6 +337,10 @@ inline void TricMapper::StoreCPU(ushort Address, byte Input) {
         Latch = Input;
         MapPRG32(Input % 4);
         MapCHR8(Input / 16);
+        break;
+    case 13:
+        Latch = (byte)(Input & SnoopCPU(Address));
+        MapCHR4(1, Latch % 4);
         break;
     case 1: MMC1Write(Address, Input); break;
     case 2: Latch = Input; MapPRG16(0, Input); break;

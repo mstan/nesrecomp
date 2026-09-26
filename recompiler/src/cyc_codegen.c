@@ -502,6 +502,7 @@ static uint16_t pos_addr(const Pos *at) {
  * modes 0/1 switch all of PRG. Its reset mapping is only a discovery seed. */
 static int fixed_bank_for(int mapper, uint32_t banks, uint32_t slot) {
     switch (mapper) {
+    case 13: return (int)(slot & (banks - 1));
     case 0: case 3:  return (int)(slot & (banks - 1));            /* wired straight through */
     case 2:  return slot >= 2 ? (int)(banks - 2 + (slot - 2)) : -1;  /* last 16KB fixed */
     case 1:  return -1;
@@ -1322,6 +1323,7 @@ bool cyc_codegen_emit_interpreter(const char *path) {
 static const char *mapper_name(int mapper) {
     switch (mapper) {
     case 11: return "Color Dreams";
+    case 13: return "CPROM";
     case 0:  return "NROM";
     case 1:  return "MMC1";
     case 2:  return "UxROM";
