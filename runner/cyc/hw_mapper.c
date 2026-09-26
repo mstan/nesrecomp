@@ -392,6 +392,21 @@ static const struct {
     uint8_t     watch_ppu_addr;
     uint8_t     wram;            /* boards for this mapper carry work RAM */
 } MAPPERS[] = {
+    { 232, "Camerica Quattro", 0, 0 },
+    { 184, "Sunsoft-1", 0, 0 },
+    { 180, "Crazy Climber", 0, 0 },
+    { 140, "Jaleco JF-11/14", 0, 0 },
+    { 113, "HES", 0, 0 },
+    { 94, "UN1ROM", 0, 0 },
+    { 87, "J87", 0, 0 },
+    { 79, "NINA-003/006", 0, 0 },
+    { 76, "Namco 109", 0, 0 },
+    { 206, "DxROM", 0, 0 },
+    { 75, "VRC1", 0, 0 },
+    { 71, "Camerica", 0, 0 },
+    { 34, "BNROM / NINA-001", 0, 0 },
+    { 13, "CPROM", 0, 0 },
+    { 11, "Color Dreams", 0, 0 },
     { 0,  "NROM",  0, 0 },
     { 1,  "MMC1",  0, 1 },
     { 2,  "UxROM", 0, 0 },
@@ -425,11 +440,24 @@ void hw_cart_power_on(void)
     hw_cart.watch_ppu_addr = i >= 0 ? MAPPERS[i].watch_ppu_addr : 0;
     hw_cart.has_wram = i >= 0 ? MAPPERS[i].wram : 0;
     hw_cart.wram_readable = hw_cart.wram_writable = hw_cart.has_wram;
+    if (hw_cart.mapper == 34) {
+        hw_cart.has_wram = hw_cart.chr_pages > 8;
+        hw_cart.wram_readable = hw_cart.wram_writable = hw_cart.has_wram;
+    }
     /* Work RAM is uninitialized at power-on like CPU RAM; a battery-backed
      * board would come up with its saved contents, which no run here has. */
     memset(hw_cart.wram, 0, sizeof(hw_cart.wram));
 
     switch (hw_cart.mapper) {
+    case 13: nrom_reset(); map_chr4(1, 0); hw_cart.mirroring = HW_MIRROR_VERTICAL; break;
+    case 71: uxrom_reset(); break;
+    case 75: nrom_reset(); map_prg8(3, -1); map_chr4(1, 0); hw_cart.mirroring = HW_MIRROR_VERTICAL; break;
+    case 206: hw_cart.m.reg[7] = 1; mmc3_apply(); break;
+    case 76: uxrom_reset(); hw_cart.m.reg[7] = 1; for (unsigned j = 0; j < 4; ++j) map_chr2(j, 0); break;
+    case 94: uxrom_reset(); break;
+    case 180: map_prg16(0, 0); map_prg16(1, 0); map_chr8(0); break;
+    case 184: nrom_reset(); map_chr4(1, 4); break;
+    case 232: map_prg16(0, 0); map_prg16(1, 3); map_chr8(0); break;
     case 1:  mmc1_reset(); break;
     case 2:  uxrom_reset(); break;
     case 3:  cnrom_reset(); break;
@@ -442,12 +470,117 @@ void hw_cart_power_on(void)
 
 void hw_cart_cpu_write(uint16_t addr, uint8_t value)
 {
+    if (hw_cart.mapper == 34) {
+        if (hw_cart.chr_pages <= 8) {
+            if (addr >= 0x8000) {
+                hw_cart.m.latch = value & hw_cart_prg_read(addr);
+                map_prg32(hw_cart.m.latch);
+            }
+        } else {
+            if (addr == 0x7ffd) map_prg32(value & 1);
+            if (addr == 0x7ffe) map_chr4(0, value & 15);
+            if (addr == 0x7fff) map_chr4(1, value & 15);
+        }
+    }
+    if (hw_cart.mapper == 79 && (addr & 0xe100) == 0x4100) {
+        hw_cart.m.latch = value;
+        map_prg32((value >> 3) & 1);
+        map_chr8(value & 7);
+        return;
+    }
+    if (hw_cart.mapper == 87 && addr >= 0x6000 && addr < 0x8000) {
+        map_chr8(((value & 1) << 1) | ((value & 2) >> 1));
+        return;
+    }
+    if (hw_cart.mapper == 113 && (addr & 0xe100) == 0x4100) {
+        hw_cart.m.latch = value;
+        map_prg32((value >> 3) & 7);
+        map_chr8((value & 7) | ((value >> 3) & 8));
+        hw_cart.mirroring = (value & 0x80) ? HW_MIRROR_VERTICAL : HW_MIRROR_HORIZONTAL;
+        return;
+    }
+    if (hw_cart.mapper == 140 && addr >= 0x6000 && addr < 0x8000) {
+        map_prg32((value >> 4) & 3);
+        map_chr8(value & 15);
+        return;
+    }
+    if (hw_cart.mapper == 184 && addr >= 0x6000 && addr < 0x8000) {
+        map_chr4(0, value & 7);
+        map_chr4(1, ((value >> 4) & 3) | 4);
+        return;
+    }
     if (addr >= 0x6000 && addr < 0x8000) {
         if (hw_cart.has_wram && hw_cart.wram_writable) hw_cart.wram[addr & 0x1FFF] = value;
         return;
     }
-    if (addr < 0x8000) return;   /* $4020-$5FFF: no supported mapper decodes it */
+    if (addr < 0x8000) return;   /* low-address registers were handled above */
     switch (hw_cart.mapper) {
+    case 11: /* Color Dreams; see MAPPERS.md. */
+        value &= hw_cart_prg_read(addr);
+        hw_cart.m.latch = value;
+        map_prg32(value & 3);
+        map_chr8(value >> 4);
+        break;
+    case 13: /* CPROM; see MAPPERS.md. */
+        value &= hw_cart_prg_read(addr);
+        hw_cart.m.latch = value;
+        map_chr4(1, value & 3);
+        break;
+    case 71: /* Camerica; see MAPPERS.md. */
+        if (addr >= 0xc000) map_prg16(0, value & 15);
+        else if (addr >= 0x9000 && addr < 0xa000)
+            hw_cart.mirroring = (value & 0x10) ? HW_MIRROR_SCREEN_B : HW_MIRROR_SCREEN_A;
+        break;
+    case 75: /* VRC1; see MAPPERS.md. */
+        switch (addr & 0xf000) {
+        case 0x8000: map_prg8(0, value & 15); break;
+        case 0xa000: map_prg8(1, value & 15); break;
+        case 0xc000: map_prg8(2, value & 15); break;
+        case 0x9000:
+            hw_cart.m.ctrl = value;
+            hw_cart.mirroring = (value & 1) ? HW_MIRROR_HORIZONTAL : HW_MIRROR_VERTICAL;
+            break;
+        case 0xe000: hw_cart.m.chr0 = value & 15; break;
+        case 0xf000: hw_cart.m.chr1 = value & 15; break;
+        }
+        map_chr4(0, hw_cart.m.chr0 | ((hw_cart.m.ctrl & 2) << 3));
+        map_chr4(1, hw_cart.m.chr1 | ((hw_cart.m.ctrl & 4) << 2));
+        break;
+    case 206: /* DxROM; see MAPPERS.md. */
+        if (addr < 0xa000) {
+            if (!(addr & 1)) hw_cart.m.bank_select = value & 7;
+            else {
+                unsigned r = hw_cart.m.bank_select;
+                hw_cart.m.reg[r] = value & (r < 6 ? 63 : 15);
+            }
+            mmc3_apply(); /* mode bits are absent, so both modes stay zero */
+        }
+        break;
+    case 76: /* Namco 109; see MAPPERS.md. */
+        if (addr < 0xa000) {
+            if (!(addr & 1)) hw_cart.m.bank_select = value & 7;
+            else hw_cart.m.reg[hw_cart.m.bank_select] = value & 63;
+            map_prg8(0, hw_cart.m.reg[6] & 15);
+            map_prg8(1, hw_cart.m.reg[7] & 15);
+            for (unsigned i = 0; i < 4; ++i) map_chr2(i, hw_cart.m.reg[i + 2]);
+        }
+        break;
+    case 94: /* UN1ROM; see MAPPERS.md. */
+        value &= hw_cart_prg_read(addr);
+        hw_cart.m.latch = value;
+        map_prg16(0, (value >> 2) & 7);
+        break;
+    case 180: /* Crazy Climber; see MAPPERS.md. */
+        value &= hw_cart_prg_read(addr);
+        hw_cart.m.latch = value;
+        map_prg16(1, value & 7);
+        break;
+    case 232: /* Camerica Quattro; see MAPPERS.md. */
+        if (addr < 0xc000) hw_cart.m.ctrl = (value >> 1) & 12;
+        else hw_cart.m.prg = value & 3;
+        map_prg16(0, hw_cart.m.ctrl | hw_cart.m.prg);
+        map_prg16(1, hw_cart.m.ctrl | 3);
+        break;
     case 1:  mmc1_write(addr, value); break;
     case 2:  uxrom_write(value); break;
     case 3:  cnrom_write(value); break;

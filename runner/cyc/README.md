@@ -13,8 +13,8 @@ implementations**. The run matches the TriCNES oracle on every bus access of
 every cycle and on every pixel, and its APU matches NES_MiSTer's HDL APU
 channel for channel (see [Verification](#verification)).
 
-Mappers 0, 1, 2, 3, 4, 7 and 66 (NROM, MMC1, UxROM, CNROM, MMC3, AxROM, GxROM)
-are supported. **Super Mario Bros. 3** (MMC3, 256KB PRG) runs at 100.0% native
+The cycle runtime supports 22 mapper IDs; see [board coverage and limits](MAPPERS.md).
+**Super Mario Bros. 3** (MMC3, 256KB PRG) runs at 100.0% native
 and matches the oracle on every frame of a 3,000-frame scripted playthrough at
 all four CPU/PPU alignments, and Mesen's picture exactly on most frames.
 **Mega Man 2** (MMC1), **Mega Man** (UxROM) and **Donkey Kong Original
@@ -32,7 +32,7 @@ the few pixels that still differ.
 | Fallback interpreter | `cpu6502_interp.c`, generated from the same templates | NESRecomp's own |
 | CPU ↔ hardware interface | `hw.h` | NESRecomp's own |
 | Master clock, CPU bus, cartridge loading | `hw_machine.c` | NESRecomp's own |
-| Mappers (NROM, MMC1, UxROM, CNROM, MMC3, AxROM, GxROM) | `hw_mapper.h`, `hw_mapper.c` | NESRecomp's own |
+| Mappers ([coverage](MAPPERS.md)) | `hw_mapper.h`, `hw_mapper.c` | NESRecomp's own |
 | PPU (2C02) | `hw_ppu.c` | NESRecomp's own |
 | APU, DMAs, controller ports, audio | `hw_apu.c` | NESRecomp's own |
 | Palette | `hw_palette.c` (NTSC signal model) | NESRecomp's own |
@@ -162,13 +162,12 @@ rather than an address:
   and only enters a block generated for that bank. A block whose bank is not
   mapped is simply never entered, so a wrong guess costs output, never
   correctness;
-- **a write that can reach the mapper's registers ends the block.** Every
-  banked mapper here decodes `$8000-$FFFF`, the space the program is executing
-  from, so such a write can move the ground under the folded bytes that follow
-  it. The generated code sets `cpu.pc` and returns, and the scheduler
-  re-dispatches on the new mapping. Writes that provably cannot reach that far
-  (zero page, an absolute address below `$8000`, an indexed write off a low
-  base) continue in place, so NROM output is unaffected;
+- **a write that can reach a PRG bank register ends the block.** The compiler
+  uses the board's lowest register address, including `$4100` on NINA-003/006
+  and HES, `$6000` on Jaleco JF-11/14, and `$7FFD` on NINA-001. It sets
+  `cpu.pc` and returns so the scheduler re-dispatches on the new mapping.
+  Absolute, indexed, and indirect writes all obey this rule; writes proven
+  below the register aperture continue in place;
 - control flow that leaves the slot it started in also returns to the
   scheduler, unless the board fixes that slot's bank — `$E000-$FFFF` on MMC3,
   the last 16KB on UxROM. Both are cheap: a return to the scheduler is a
@@ -680,12 +679,14 @@ after changing compilers.
 
 ## Roadmap
 
-1. **More mappers.** The seven here cover a large part of the library; the
+1. **More mappers.** [Coverage and validation](MAPPERS.md) list the current boards; the
    layer they plug into (`hw_mapper.h`) is four tables and an IRQ line, and
    `cyc_codegen.c` needs only each new mapper's bank granularity and which
    slots its board fixes. MMC2/MMC4 and MMC5 are the interesting next ones —
-   MMC2/MMC4 latch on PPU pattern fetches, which the A12 hook already sees, and
-   MMC5 needs more than these tables express.
+   MMC2/MMC4 need a qualified PPU-read latch hook that switches after the
+   triggering fetch; merely watching A12 is insufficient. MMC5 needs more
+   than these tables express. NES 2.0 variants and four-screen memory also
+   need explicit implementation and tests.
 2. **Main runner integration**: save states and the launcher (input is now the
    `--input` schedule headless and the keyboard under SDL).
 
@@ -737,16 +738,20 @@ describes trace equality, while the printed test scores describe accuracy.
 
 - The model targets NTSC; PAL/Dendy timing is not implemented. Mapper support
   covers the board configurations above, not every variant sharing an iNES
-  mapper number: discrete-mapper bus conflicts and MMC1 outer PRG/WRAM banking
-  are not modeled. Battery-backed RAM is not persisted by this host.
+  mapper number: MMC1 outer PRG/WRAM banking and the original discrete
+  mappers' bus conflicts are not modeled. The new discrete boards listed in
+  [MAPPERS.md](MAPPERS.md) do model AND conflicts where specified.
+  Battery-backed RAM is not persisted by this host.
 
 - Mappers 0, 1, 2, 3, 4, 7 and 66. NROM, MMC1, UxROM, CNROM and MMC3 have
   each run a game against the oracle (see [Results](#results)); AxROM and
   GxROM are implemented from the nesdev descriptions on the same layer and in
   both the runtime and the oracle, but no game has been put through them yet —
-  treat them as untested. Any other mapper is rejected at load.
-- Four-screen boards (iNES flag 6 bit 3) are rejected: they supply their own
-  nametable RAM, which no supported mapper needs.
+  treat them as untested. The 15 additions have synthetic CPU/PPU contracts
+  and native/interpreter/oracle parity, not commercial-game compatibility
+  certification. Their board and header limits are listed in [MAPPERS.md](MAPPERS.md).
+- Four-screen boards (iNES flag 6 bit 3), including mapper-206 Gauntlet, are
+  rejected because cartridge nametable RAM is not implemented.
 - A separate host from the main runner (`runner/src`).
 - Code the program writes at run time runs on the interpreter, not as compiled
   code, and no amount of seeding changes that: the instructions are not in the

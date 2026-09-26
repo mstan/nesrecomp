@@ -501,18 +501,33 @@ static uint16_t pos_addr(const Pos *at) {
  * MMC1 has no permanently fixed slots: mode 2 switches $C000-$FFFF, and
  * modes 0/1 switch all of PRG. Its reset mapping is only a discovery seed. */
 static int fixed_bank_for(int mapper, uint32_t banks, uint32_t slot) {
+    /* Decode the board once into a slot mask, then calculate its bank. The
+     * execution regressions cover this with an optimized compiler too: GCC
+     * 13.3 -O3 miscompiled the previous per-case bank returns when inlined
+     * into the four-slot initialization loop (even NROM lost its fixed banks). */
+    unsigned slots;
     switch (mapper) {
-    case 0: case 3:  return (int)(slot & (banks - 1));            /* wired straight through */
-    case 2:  return slot >= 2 ? (int)(banks - 2 + (slot - 2)) : -1;  /* last 16KB fixed */
-    case 1:  return -1;
-    case 4:  return slot == 3 ? (int)(banks - 1) : -1;            /* $E000 is hardwired */
-    default: return -1;                                           /* AxROM, GxROM */
+    case 0: case 3: case 13: case 87: case 184: slots = 15; break; /* all PRG fixed */
+    case 2: case 71: case 76: case 94: case 206: slots = 12; break; /* last 16 KiB */
+    case 4: case 75: slots = 8; break;                           /* last 8 KiB */
+    case 180: slots = 3; break;                                 /* first 16 KiB */
+    default: slots = 0; break;
     }
+    if (!(slots & (1u << slot))) return -1;
+    if (slots == 15 || slots == 3) return (int)(slot & (banks - 1));
+    return (int)((banks - SLOT_COUNT + slot) & (banks - 1));
 }
 
 /* The configuration a cold console comes up in; hw_mapper.c's reset paths. */
 static int power_on_bank_for(int mapper, uint32_t banks, uint32_t slot) {
     switch (mapper) {
+    case 71: return slot >= 2 ? (int)(banks - 2 + slot - 2) : (int)slot;
+    case 75: return slot == 3 ? (int)(banks - 1) : (int)slot;
+    case 206: return slot >= 2 ? (int)(banks - 2 + slot - 2) : (int)slot;
+    case 76: return slot >= 2 ? (int)(banks - 2 + slot - 2) : (int)slot;
+    case 94: return slot >= 2 ? (int)(banks - 2 + slot - 2) : (int)slot;
+    case 180: return (int)(slot & 1);
+    case 232: return slot < 2 ? (int)slot : (int)(slot + 4);
     case 1:  return slot >= 2 ? (int)(banks - 2 + (slot - 2)) : (int)slot;  /* mode 3 */
     case 2:  return slot >= 2 ? (int)(banks - 2 + (slot - 2)) : (int)slot;
     case 4:  return slot == 2 ? (int)(banks - 2) : slot == 3 ? (int)(banks - 1) : (int)slot;
@@ -757,8 +772,7 @@ static char index_reg(AddrMode am) {
 
 /* ---- writes that can move PRG banks ----
  *
- * On every banked mapper here the registers live in $8000-$FFFF, the same
- * space the program is executing from, so a write there can change which bank
+ * A write to a mapper register can change which bank
  * backs the addresses this block folded to constants. The instructions after
  * such a write are only correct for the mapping the block was generated for,
  * so the block ends there and the scheduler re-dispatches on the live
@@ -767,18 +781,30 @@ static char index_reg(AddrMode am) {
  * Most writes cannot reach that far and continue in place. */
 typedef enum { WR_NEVER, WR_MAYBE, WR_ALWAYS } WriteReach;
 
+static unsigned mapper_write_floor(int mapper) {
+    switch (mapper) {
+    /* Low-address register apertures are added with their boards. */
+    case 34: return 0x7ffd;
+    case 79: return 0x4100;
+    case 113: return 0x4100;
+    case 140: return 0x6000;
+    default: return 0x8000;
+    }
+}
+
 static WriteReach write_reach(Emit *e, AddrMode am) {
     if (INTERP(e) || !e->p->banked) return WR_NEVER;
+    unsigned floor = mapper_write_floor(e->p->mapper);
     switch (am) {
     case AM_ZP: case AM_ZPX: case AM_ZPY:
         return WR_NEVER;                     /* the effective address is one byte */
     case AM_ABS:
-        return insn_operand16(e) >= 0x8000 ? WR_ALWAYS : WR_NEVER;
+        return insn_operand16(e) >= floor ? WR_ALWAYS : WR_NEVER;
     case AM_ABSX: case AM_ABSY: {
         uint16_t base = insn_operand16(e);
-        if (base <= 0x7F00) return WR_NEVER;                      /* base + 255 < $8000 */
-        if (base >= 0x8000 && base <= 0xFF00) return WR_ALWAYS;   /* and cannot wrap */
-        return WR_MAYBE;                                          /* spans $8000, or wraps */
+        if ((unsigned)base + 255 < floor) return WR_NEVER;
+        if (base >= floor && base <= 0xFF00) return WR_ALWAYS;
+        return WR_MAYBE; /* crosses the register aperture or wraps */
     }
     default:
         return WR_MAYBE;                     /* (zp,X) and (zp),Y: a run-time pointer */
@@ -795,7 +821,8 @@ static bool bank_exit(Emit *e, WriteReach reach) {
         ln(e, "cpu.pc = 0x%04X; return;   /* wrote the mapper: re-dispatch */", next);
         return true;
     }
-    ln(e, "if (ea >= 0x8000) { cpu.pc = 0x%04X; return; }   /* wrote the mapper */", next);
+    ln(e, "if (ea >= 0x%04X) { cpu.pc = 0x%04X; return; }   /* wrote the mapper */",
+       mapper_write_floor(e->p->mapper), next);
     return false;
 }
 
@@ -1313,6 +1340,21 @@ bool cyc_codegen_emit_interpreter(const char *path) {
 /* The board names hw_mapper.c implements, for the message and the banner. */
 static const char *mapper_name(int mapper) {
     switch (mapper) {
+    case 11: return "Color Dreams";
+    case 13: return "CPROM";
+    case 34: return "BNROM / NINA-001";
+    case 71: return "Camerica";
+    case 75: return "VRC1";
+    case 206: return "DxROM";
+    case 76: return "Namco 109";
+    case 79: return "NINA-003/006";
+    case 87: return "J87";
+    case 94: return "UN1ROM";
+    case 113: return "HES";
+    case 140: return "Jaleco JF-11/14";
+    case 180: return "Crazy Climber";
+    case 184: return "Sunsoft-1";
+    case 232: return "Camerica Quattro";
     case 0:  return "NROM";
     case 1:  return "MMC1";
     case 2:  return "UxROM";
@@ -1358,10 +1400,14 @@ static void seed_vectors(const Program *p, uint32_t bank, uint32_t *seeds, int *
 }
 
 bool cyc_codegen_emit(const NESRom *rom, const GameConfig *cfg, const char *output_prefix) {
+    if (rom->nes2 && rom->mapper != 0 && rom->mapper != 1 && rom->mapper != 2 &&
+        rom->mapper != 3 && rom->mapper != 4 && rom->mapper != 7 && rom->mapper != 66) {
+        fprintf(stderr, "[cyc] NES 2.0 variants of mapper %d are not implemented; see runner/cyc/MAPPERS.md\n", rom->mapper);
+        return false;
+    }
     const char *board = mapper_name(rom->mapper);
     if (!board) {
-        fprintf(stderr, "[cyc] --cycle-accurate supports mappers 0, 1, 2, 3, 4, 7 and 66; "
-                        "this ROM uses mapper %d\n", rom->mapper);
+        fprintf(stderr, "[cyc] unsupported mapper %d; see runner/cyc/MAPPERS.md\n", rom->mapper);
         return false;
     }
     if (!check_table()) return false;

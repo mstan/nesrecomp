@@ -10,6 +10,8 @@ from pathlib import Path
 import subprocess
 
 from cyc_verify import first_difference
+from mapper_fixtures import mapper_fixtures
+from mapper_ppu_fixtures import ppu_fixtures
 
 
 def run(cmd, cwd, log):
@@ -59,6 +61,7 @@ def main():
     ap.add_argument('--cmake', default='cmake')
     ap.add_argument('--generator')
     ap.add_argument('--config', default='Release')
+    ap.add_argument('--case-prefix', default='', help='Run only fixtures with this name prefix')
     args = ap.parse_args()
     out = args.out.resolve()
     out.mkdir(parents=True, exist_ok=True)
@@ -66,7 +69,10 @@ def main():
     source = Path(__file__).resolve().parents[2] / 'runner/cyc'
     cmake = ['cmake_minimum_required(VERSION 3.20)', 'project(cyc_regressions C)',
              'set(CMAKE_C_STANDARD 11)', f'include("{source.as_posix()}/cyc.cmake")']
-    cases = list(fixtures())
+    cases = list(fixtures()) + list(mapper_fixtures()) + list(ppu_fixtures())
+    cases = [case for case in cases if case[0].startswith(args.case_prefix)]
+    if not cases:
+        ap.error('no matching fixtures')
     for name, image, seeds, _ in cases:
         case = out / name
         case.mkdir(exist_ok=True)
@@ -88,6 +94,9 @@ def main():
     run([args.cmake, '--build', out / 'build', '--config', args.config, '--parallel', '4'],
         out, out / 'build.log')
     for name, _, _, expected in cases:
+        final_only = expected.startswith('final:')
+        expected = expected.removeprefix('final:')
+        frames = 6 if final_only else 3
         case = out / name
         suffix = '.exe' if hasattr(subprocess, 'CREATE_NO_WINDOW') else ''
         native = out / 'build' / args.config / (name + suffix)
@@ -98,10 +107,11 @@ def main():
             for mode, exe, extra in [('native', native, []), ('interp', native, ['--interp-only']),
                                       ('standalone', interp, []), ('oracle', oracle, [])]:
                 trace = case / f'a{align}_{mode}.txt'
-                stdout = run([exe, case / f'{name}.nes', '--frames', 3, '--align', align,
+                stdout = run([exe, case / f'{name}.nes', '--frames', frames, '--align', align,
                               '--hash-out', trace] + extra, case, trace.with_suffix('.log'))
                 lines = trace.read_text().splitlines()
-                if len(lines) != 3 or any(expected not in line for line in lines):
+                checked_lines = lines[-1:] if final_only else lines
+                if len(lines) != frames or any(expected not in line for line in checked_lines):
                     raise AssertionError(f'{name}, {mode}, alignment {align}: wrong result in {trace}')
                 if mode == 'native' and '(100.0%)' not in stdout:
                     raise AssertionError(f'{name}: regression did not exercise native code')

@@ -9577,7 +9577,27 @@ void TricMmc3TraceClock(byte counter, bool out, ushort vbus) {
 bool cyc_load_ines(const uint8_t *image, size_t size) {
     if (size < 16 || memcmp(image, "NES\x1A", 4) != 0) return false;
     int mapper = (image[6] >> 4) | (image[7] & 0xF0);
+    if ((image[7] & 0x0C) == 0x08) {
+        mapper |= (image[8] & 15) << 8;
+        if (mapper != 0 && mapper != 1 && mapper != 2 && mapper != 3 &&
+            mapper != 4 && mapper != 7 && mapper != 66) return false;
+    }
     switch (mapper) {   // the set hw_mapper.c implements
+    case 232: break;
+    case 184: break;
+    case 180: break;
+    case 140: break;
+    case 113: break;
+    case 94: break;
+    case 87: break;
+    case 79: break;
+    case 76: break;
+    case 206: break;
+    case 75: break;
+    case 71: break;
+    case 34: break;
+    case 13: break;
+    case 11: break;
     case 0: case 1: case 2: case 3: case 4: case 7: case 66: break;
     default: return false;
     }
@@ -9593,9 +9613,9 @@ bool cyc_load_ines(const uint8_t *image, size_t size) {
     Cart.PRGROM_Length = (int)prg_len;
     Cart.PRGSlots = prg_alloc / 0x2000 ? prg_alloc / 0x2000 : 1;
     Cart.UsingCHRRAM = chr_len == 0;
-    Cart.CHRROM = tric_alloc_padded(chr_len ? image + offset + prg_len : NULL, chr_len ? chr_len : 0x2000,
+    Cart.CHRROM = tric_alloc_padded(chr_len ? image + offset + prg_len : NULL, chr_len ? chr_len : (mapper == 13 ? 0x4000 : 0x2000),
                                     &chr_alloc);
-    Cart.CHRROM_Length = (int)(chr_len ? chr_len : 0x2000);
+    Cart.CHRROM_Length = (int)(chr_len ? chr_len : (mapper == 13 ? 0x4000 : 0x2000));
     Cart.CHRPages = chr_alloc / 0x400 ? chr_alloc / 0x400 : 1;
     Cart.Mapper = mapper;
     Cart.NametableHorizontalMirroring = (image[6] & 1) == 0;

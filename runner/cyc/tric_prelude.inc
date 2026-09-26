@@ -275,10 +275,19 @@ inline void TricMapper::Reset() {
     memset(WRAM, 0, sizeof(WRAM));
 
     Mirroring = Cart.NametableHorizontalMirroring ? TRIC_MIRROR_HORIZONTAL : TRIC_MIRROR_VERTICAL;
-    HasWRAM = Cart.Mapper == 1 || Cart.Mapper == 4;
+    HasWRAM = Cart.Mapper == 1 || Cart.Mapper == 4 || (Cart.Mapper == 34 && Cart.CHRPages > 8);
     WRAM_Readable = WRAM_Writable = HasWRAM;
 
     switch (Cart.Mapper) {
+    case 13: MapPRG32(0); MapCHR4(0, 0); MapCHR4(1, 0); Mirroring = TRIC_MIRROR_VERTICAL; break;
+    case 71: MapPRG16(0, 0); MapPRG16(1, -1); MapCHR8(0); break;
+    case 75: MapPRG32(0); MapPRG8(3, -1); MapCHR4(0, 0); MapCHR4(1, 0); Mirroring = TRIC_MIRROR_VERTICAL; break;
+    case 206: Reg[7] = 1; MMC3Apply(); break;
+    case 76: MapPRG16(0, 0); MapPRG16(1, -1); Reg[7] = 1; for (uint j = 0; j < 4; ++j) MapCHR2(j, 0); break;
+    case 94: MapPRG16(0, 0); MapPRG16(1, -1); MapCHR8(0); break;
+    case 180: MapPRG16(0, 0); MapPRG16(1, 0); MapCHR8(0); break;
+    case 184: MapPRG32(0); MapCHR4(0, 0); MapCHR4(1, 4); break;
+    case 232: MapPRG16(0, 0); MapPRG16(1, 3); MapCHR8(0); break;
     case 1:
         Ctrl = 0x0C;   // PRG mode 3, the state a bit-7 write leaves
         MMC1Apply();
@@ -325,12 +334,111 @@ inline byte TricMapper::SnoopCPU(ushort Address) {
 }
 
 inline void TricMapper::StoreCPU(ushort Address, byte Input) {
+    if (Cart.Mapper == 34) {
+        if (Cart.CHRPages <= 8 && Address >= 0x8000) {
+            Latch = (byte)(Input & SnoopCPU(Address));
+            MapPRG32(Latch);
+        } else if (Cart.CHRPages > 8) {
+            switch (Address) {
+            case 0x7ffd: MapPRG32(Input % 2); break;
+            case 0x7ffe: MapCHR4(0, Input % 16); break;
+            case 0x7fff: MapCHR4(1, Input % 16); break;
+            }
+        }
+    }
+    if (Cart.Mapper == 79 && (Address & 0xe100) == 0x4100) {
+        Latch = Input;
+        MapPRG32((Input / 8) % 2);
+        MapCHR8(Input % 8);
+        return;
+    }
+    if (Cart.Mapper == 87 && Address >= 0x6000 && Address < 0x8000) {
+        MapCHR8((Input % 2) * 2 + (Input / 2) % 2);
+        return;
+    }
+    if (Cart.Mapper == 113 && (Address & 0xe100) == 0x4100) {
+        Latch = Input;
+        MapPRG32((Input / 8) % 8);
+        MapCHR8(Input % 8 + ((Input & 64) ? 8 : 0));
+        Mirroring = (Input & 128) ? TRIC_MIRROR_VERTICAL : TRIC_MIRROR_HORIZONTAL;
+        return;
+    }
+    if (Cart.Mapper == 140 && (Address & 0xe000) == 0x6000) {
+        MapPRG32((Input / 16) % 4);
+        MapCHR8(Input % 16);
+        return;
+    }
+    if (Cart.Mapper == 184 && Address / 0x2000 == 3) {
+        MapCHR4(0, Input % 8);
+        MapCHR4(1, 4 + (Input / 16) % 4);
+        return;
+    }
     if (Address >= 0x6000 && Address < 0x8000) {
         if (HasWRAM && WRAM_Writable) WRAM[Address & 0x1FFF] = Input;
         return;
     }
     if (Address < 0x8000) return;
     switch (Cart.Mapper) {
+    case 11:
+        Input = (byte)(Input & SnoopCPU(Address));
+        Latch = Input;
+        MapPRG32(Input % 4);
+        MapCHR8(Input / 16);
+        break;
+    case 13:
+        Latch = (byte)(Input & SnoopCPU(Address));
+        MapCHR4(1, Latch % 4);
+        break;
+    case 71:
+        if (Address >= 0xc000) MapPRG16(0, Input % 16);
+        else if ((Address >> 12) == 9)
+            Mirroring = (Input & 16) ? TRIC_MIRROR_SCREEN_B : TRIC_MIRROR_SCREEN_A;
+        break;
+    case 75:
+        switch (Address >> 12) {
+        case 8: MapPRG8(0, Input % 16); break;
+        case 10: MapPRG8(1, Input % 16); break;
+        case 12: MapPRG8(2, Input % 16); break;
+        case 9:
+            Ctrl = Input;
+            Mirroring = (Input & 1) ? TRIC_MIRROR_HORIZONTAL : TRIC_MIRROR_VERTICAL;
+            break;
+        case 14: Chr0 = Input % 16; break;
+        case 15: Chr1 = Input % 16; break;
+        }
+        MapCHR4(0, Chr0 + ((Ctrl & 2) ? 16 : 0));
+        MapCHR4(1, Chr1 + ((Ctrl & 4) ? 16 : 0));
+        break;
+    case 206:
+        if ((Address & 0xe000) == 0x8000) {
+            if (Address % 2 == 0) BankSelect = Input % 8;
+            else Reg[BankSelect] = Input % (BankSelect < 6 ? 64 : 16);
+            MMC3Apply();
+        }
+        break;
+    case 76:
+        if (Address >= 0x8000 && Address <= 0x9fff) {
+            if (Address & 1) Reg[BankSelect] = Input % 64;
+            else BankSelect = Input % 8;
+            MapPRG8(0, Reg[6] % 16); MapPRG8(1, Reg[7] % 16);
+            MapCHR2(0, Reg[2]); MapCHR2(1, Reg[3]);
+            MapCHR2(2, Reg[4]); MapCHR2(3, Reg[5]);
+        }
+        break;
+    case 94:
+        Latch = (byte)(Input & SnoopCPU(Address));
+        MapPRG16(0, (Latch / 4) % 8);
+        break;
+    case 180:
+        Latch = (byte)(Input & SnoopCPU(Address));
+        MapPRG16(1, Latch % 8);
+        break;
+    case 232:
+        if (Address >= 0xc000) PrgReg = Input % 4;
+        else Ctrl = (Input / 8) % 4;
+        MapPRG16(0, Ctrl * 4 + PrgReg);
+        MapPRG16(1, Ctrl * 4 + 3);
+        break;
     case 1: MMC1Write(Address, Input); break;
     case 2: Latch = Input; MapPRG16(0, Input); break;
     case 3: Latch = Input; MapCHR8(Input); break;

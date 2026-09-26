@@ -259,6 +259,11 @@ bool cyc_load_ines(const uint8_t *image, size_t size)
 {
     if (size < 16 || memcmp(image, "NES\x1A", 4) != 0) return false;
     int mapper = (image[6] >> 4) | (image[7] & 0xF0);
+    if ((image[7] & 0x0C) == 0x08) {
+        mapper |= (image[8] & 15) << 8;
+        if (mapper != 0 && mapper != 1 && mapper != 2 && mapper != 3 &&
+            mapper != 4 && mapper != 7 && mapper != 66) return false;
+    }
     if (!hw_cart_supports(mapper)) return false;
     /* Four-screen boards supply their own nametable RAM instead of letting
      * the console's CIRAM answer the upper half; no supported mapper has it. */
@@ -277,8 +282,8 @@ bool cyc_load_ines(const uint8_t *image, size_t size)
     hw_cart.prg_len = (uint32_t)prg_len;
     hw_cart.prg_slots = prg_alloc / 0x2000 ? prg_alloc / 0x2000 : 1;
     hw_cart.chr_ram = chr_len == 0;
-    hw_cart.chr = alloc_padded(chr_len ? image + offset + prg_len : NULL, chr_len ? chr_len : 0x2000, &chr_alloc);
-    hw_cart.chr_len = (uint32_t)(chr_len ? chr_len : 0x2000);
+    hw_cart.chr = alloc_padded(chr_len ? image + offset + prg_len : NULL, chr_len ? chr_len : (mapper == 13 ? 0x4000 : 0x2000), &chr_alloc);
+    hw_cart.chr_len = (uint32_t)(chr_len ? chr_len : (mapper == 13 ? 0x4000 : 0x2000));
     hw_cart.chr_pages = chr_alloc / 0x400 ? chr_alloc / 0x400 : 1;
     hw_cart.mapper = (uint8_t)mapper;
     /* The header's arrangement bit is the solder pad on boards that have one;
