@@ -489,6 +489,7 @@ static const struct {
     { 25, "VRC2c / VRC4b/d", 0, 1 },
     { 73, "VRC3", 0, 1 },
     { 31, "NSF cartridge", 0, 0 },
+    { 40, "NTDEC 2722", 0, 0 },
     { 9, "MMC2", 0, 0 },
     { 10, "MMC4", 0, 1 },
     { 232, "Camerica Quattro", 0, 0 },
@@ -557,7 +558,7 @@ void hw_cart_power_on(void)
     memset(hw_cart.chr_off, 0, sizeof(hw_cart.chr_off));
     int i = mapper_index(hw_cart.mapper);
     hw_cart.watch_ppu_addr = i >= 0 ? MAPPERS[i].watch_ppu_addr : 0;
-    hw_cart.watch_cpu = hw_cart.mapper==5 || bandai_board() || (vrc24_board() && !vrc2_board()) || hw_cart.mapper == 73 || vrc6_board() || hw_cart.mapper == 85;
+    hw_cart.watch_cpu = hw_cart.mapper==40 || hw_cart.mapper==5 || bandai_board() || (vrc24_board() && !vrc2_board()) || hw_cart.mapper == 73 || vrc6_board() || hw_cart.mapper == 85;
     hw_cart.mirroring = hw_cart.info.vertical ? HW_MIRROR_VERTICAL : HW_MIRROR_HORIZONTAL;
     hw_cart.wram_bank = 0;
     hw_cart.has_wram = hw_cart.info.prg_size ? hw_cart.wram_len != 0 : i >= 0 ? MAPPERS[i].wram : 0;
@@ -585,6 +586,8 @@ void hw_cart_power_on(void)
     case 21: case 22: case 23: case 25:
         hw_cart.m.reg[1] = 1; hw_cart.m.irq_prescaler = 341; vrc24_apply(); break;
     case 73: uxrom_reset(); break;
+    case 40:
+        map_prg8(0,4); map_prg8(1,5); map_prg8(2,0); map_prg8(3,7); map_chr8(0); break;
     case 31:
         for (unsigned slot = 0; slot < 8; ++slot) map_prg4(slot, slot == 7 ? 255 : 0);
         map_chr8(0); break;
@@ -614,6 +617,18 @@ void hw_cart_power_on(void)
 
 void hw_cart_cpu_write(uint16_t addr, uint8_t value)
 {
+    /* NTDEC 2722: decoded A15:A13, no bus conflicts. The enable write
+     * starts the counter; only $8000 clears it and acknowledges IRQ. */
+    if (hw_cart.mapper==40) {
+        if (addr>=0x8000) switch (addr&0xe000) {
+        case 0x8000: hw_cart.m.irq_enable=hw_cart.m.irq_out=0; hw_cart.m.irq_counter16=0; break;
+        case 0xa000:
+            if (!hw_cart.m.irq_enable) hw_cart.m.last_write_cycle=hw.cycles+1;
+            hw_cart.m.irq_enable=1; break;
+        case 0xe000: hw_cart.m.prg=value&7; map_prg8(2,value&7); break;
+        }
+        return;
+    }
     if (hw_cart.mapper==5) { mmc5_write(addr,value); return; }
     if (bandai_board()) { bandai_write(addr,value); return; }
     if (vrc24_board() && addr >= 0x6000 && addr < 0x8000) {
@@ -761,6 +776,9 @@ void hw_cart_cpu_write(uint16_t addr, uint8_t value)
 
 bool hw_cart_cpu_read(uint16_t addr, uint8_t *value)
 {
+    if (hw_cart.mapper==40 && addr>=0x6000 && addr<0x8000) {
+        *value=hw_cart.prg[((12u&(hw_cart.prg_slots-1))*4096)+(addr&8191)]; return true;
+    }
     if (hw_cart.mapper==5) return mmc5_read(addr,value);
     if (bandai_board()) return bandai_read(addr,value);
     if (vrc24_board() && addr >= 0x6000 && addr < 0x8000) {
@@ -797,6 +815,11 @@ bool hw_cart_irq(void) {
 
 void hw_cart_cpu_clock(void)
 {
+    if (hw_cart.mapper==40) {
+        if (hw_cart.m.irq_enable && hw.cycles!=hw_cart.m.last_write_cycle &&
+            hw_cart.m.irq_counter16<4096 && ++hw_cart.m.irq_counter16==4096) hw_cart.m.irq_out=1;
+        return;
+    }
     if (hw_cart.mapper==5) { mmc5_clock(); return; }
     if (bandai_board()) { bandai_clock(); return; }
     if (hw_cart.mapper==85) vrc7_audio_clock();
@@ -869,7 +892,7 @@ uint64_t hw_cart_state_hash(uint64_t h)
         acc = acc * 131 + hw_cart.m.pattern_pending;
         acc = acc * 131 + hw_cart.m.pattern_addr;
     }
-    if (bandai_board() || vrc24_board() || hw_cart.mapper == 73 || vrc6_board() || hw_cart.mapper == 85) {
+    if (hw_cart.mapper==40 || bandai_board() || vrc24_board() || hw_cart.mapper == 73 || vrc6_board() || hw_cart.mapper == 85) {
         for (unsigned i=0; i<8; ++i) acc = acc*131 + hw_cart.m.vrc_chr[i];
         acc = acc*131 + hw_cart.m.irq_latch16;
         acc = acc*131 + hw_cart.m.irq_counter16;
@@ -919,7 +942,7 @@ void hw_cart_state_dump(void *file)
             fprintf(f,"cart.vrc6.ch%u %02X %02X %02X timer=%u step=%u\n",ch,
                     a->reg[ch][0],a->reg[ch][1],a->reg[ch][2],a->timer[ch],a->step[ch]);
     }
-    if (bandai_board() || vrc24_board() || hw_cart.mapper == 73 || vrc6_board() || hw_cart.mapper == 85) {
+    if (hw_cart.mapper==40 || bandai_board() || vrc24_board() || hw_cart.mapper == 73 || vrc6_board() || hw_cart.mapper == 85) {
         for (unsigned i=0; i<8; ++i) fprintf(f, "cart.vrc_chr[%u] %03X\n", i, hw_cart.m.vrc_chr[i]);
         fprintf(f, "cart.irq_latch16 %04X\ncart.irq_counter16 %04X\ncart.irq_prescaler %d\ncart.irq_mode %u\n",
                 hw_cart.m.irq_latch16, hw_cart.m.irq_counter16, hw_cart.m.irq_prescaler, hw_cart.m.irq_mode);

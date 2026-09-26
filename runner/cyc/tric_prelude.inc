@@ -372,6 +372,8 @@ inline void TricMapper::Reset() {
     case 24: case 26: Ctrl=0x20; VRC6Apply(); break;
     case 21: case 22: case 23: case 25: Reg[1] = 1; VRCApply(); break;
     case 73: MapPRG16(0, 0); MapPRG16(1, -1); MapCHR8(0); break;
+    case 40:
+        MapPRG8(0,4); MapPRG8(1,5); MapPRG8(2,0); MapPRG8(3,7); MapCHR8(0); break;
     case 31:
         for (uint i=0; i<8; ++i) MapPRG4(i, i == 7 ? 255 : 0);
         MapCHR8(0); break;
@@ -420,6 +422,9 @@ inline void TricMapper::Reset() {
 
 inline void TricMapper::FetchCPU() {
     CPU_Drove = false;
+    if (Cart.Mapper==40 && CPU_AddressIn>=0x6000 && CPU_AddressIn<0x8000) {
+        CPU_NonTiltData=Cart.PRGROM[(6%(Cart.PRGSlots/2))*8192+CPU_AddressIn%8192]; CPU_Drove=true; return;
+    }
     if (Cart.Mapper==5) { CPU_Drove=MMC5Read(CPU_AddressIn,CPU_NonTiltData,true); return; }
     if (BandaiBoard() && CPU_AddressIn<0x8000) { CPU_Drove=BandaiRead(CPU_AddressIn,CPU_NonTiltData); return; }
     if (VRC24Board() && CPU_AddressIn >= 0x6000 && CPU_AddressIn < 0x8000) {
@@ -442,6 +447,8 @@ inline void TricMapper::FetchCPU() {
 }
 
 inline byte TricMapper::SnoopCPU(ushort Address) {
+    if (Cart.Mapper==40 && Address>=0x6000 && Address<0x8000)
+        return Cart.PRGROM[(6%(Cart.PRGSlots/2))*8192+Address%8192];
     if (Cart.Mapper==5) { byte v=dataBus; MMC5Read(Address,v,false); return v; }
     if (BandaiBoard() && Address<0x8000) { byte v=dataBus; BandaiRead(Address,v); return v; }
     if (VRC24Board() && Address >= 0x6000 && Address < 0x8000) {
@@ -454,6 +461,16 @@ inline byte TricMapper::SnoopCPU(ushort Address) {
 }
 
 inline void TricMapper::StoreCPU(ushort Address, byte Input) {
+    if (Cart.Mapper==40) {
+        switch (Address/8192) {
+        case 4: IrqEnable=IrqOut=false; VrcCounter16=0; break;
+        case 5:
+            if (!IrqEnable) LastWriteCycle=totalCycles+1;
+            IrqEnable=true; break;
+        case 7: PrgReg=Input%8; MapPRG8(2,PrgReg); break;
+        }
+        return;
+    }
     if (Cart.Mapper==5) { MMC5Write(Address,Input); return; }
     if (BandaiBoard()) { BandaiWrite(Address,Input); return; }
     if (VRC24Board() && Address >= 0x6000 && Address < 0x8000) {
