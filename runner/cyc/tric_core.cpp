@@ -9524,6 +9524,20 @@ void Op_DEC(ushort Address)
 
 // ---- Oracle: TriCNES's own CPU and per-tick loop ----
 
+// HLT never asserts SYNC again. After its initial four operand/dummy reads,
+// every remaining CPU read is a valid scheduler stopping point, matching the
+// native core's cpu_jam_cycle(). This changes host scheduling, not CPU timing.
+static bool OracleCPUJammed()
+{
+    if (CPU_SYNC || operationCycle < 5) return false;
+    switch (opCode) {
+    case 0x02: case 0x12: case 0x22: case 0x32: case 0x42: case 0x52:
+    case 0x62: case 0x72: case 0x92: case 0xB2: case 0xD2: case 0xF2:
+        return true;
+    default: return false;
+    }
+}
+
 // Runs until the first instruction boundary at or after VBlank, the same
 // frame rule as NESRecomp's scheduler (cyc_run.c).
 void cyc_oracle_run_frame(void)
@@ -9535,13 +9549,15 @@ void cyc_oracle_run_frame(void)
         bool cpu_tick = CPUClock == 12;
         bool dma = cpu_tick && OracleDMATakesCycle();
         _EmulatorCore();
-        at_boundary = cpu_tick && !dma && CPU_SYNC;
+        at_boundary = cpu_tick && !dma && (CPU_SYNC || OracleCPUJammed());
     }
 }
 
 void cyc_cpu_state(CycCpuState *out)
 {
-    out->pc = programCounter;
+    // The public snapshot denotes the halted opcode, as the native core does;
+    // TriCNES internally increments PC on the opcode fetch even for HLT.
+    out->pc = (ushort)(programCounter - (OracleCPUJammed() ? 1 : 0));
     out->a = A;
     out->x = X;
     out->y = Y;

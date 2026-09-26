@@ -35,6 +35,14 @@ def run(cmd, cwd, log, timeout=180):
 
 
 def fixtures():
+    # A halt opcode stops instruction fetch, not the PPU/APU or host frames.
+    # Previously the oracle waited forever for another SYNC/instruction end.
+    for opcode in (0x02,0x12,0x22,0x32,0x42,0x52,0x62,0x72,0x92,0xb2,0xd2,0xf2):
+        prg = bytearray([0xff]) * 32768
+        prg[:3] = bytes([0xa9,0x42,opcode])
+        prg[-6:] = bytes([0,0x80]) * 3
+        yield f'cpu_halt_{opcode:02x}', b'NES\x1a'+bytes([2,0])+bytes(10)+prg, '', 'fallback:A=42'
+
     # Valid NROM containing no $FF terminators. Parsing it as an AccuracyCoin
     # menu used to hang before the host ran even one instruction.
     prg = bytearray([0xea]) * 32768
