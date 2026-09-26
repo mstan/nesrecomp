@@ -16,6 +16,7 @@ nesrecomp_cyc_add_oracle(cyc_oracle)
 
 add_executable(cyc_interp ${NESRECOMP_CYC_SOURCES} cyc_native_none.c)
 target_include_directories(cyc_interp PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})
+target_link_libraries(cyc_interp PRIVATE ${NESRECOMP_CYC_LIBRARIES})
 if(MSVC)
     target_compile_definitions(cyc_interp PRIVATE _CRT_SECURE_NO_WARNINGS)
 endif()

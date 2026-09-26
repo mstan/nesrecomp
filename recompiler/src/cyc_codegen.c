@@ -497,14 +497,14 @@ static uint16_t pos_addr(const Pos *at) {
 /* Which bank a slot holds. Only what a board wires that way counts as fixed:
  * a mode bit a game can flip does not, because a block compiled for the wrong
  * bank is simply never entered (the dispatch checks the live mapping) while a
- * wrong assumption would waste output. MMC1's $E000 slot is the exception -
- * it is the last bank in the two 16KB modes, one of which is the state the
- * chip resets into, so every game reaches its reset vector through it. */
+ * wrong assumption would also fold reads from another slot to stale bytes.
+ * MMC1 has no permanently fixed slots: mode 2 switches $C000-$FFFF, and
+ * modes 0/1 switch all of PRG. Its reset mapping is only a discovery seed. */
 static int fixed_bank_for(int mapper, uint32_t banks, uint32_t slot) {
     switch (mapper) {
     case 0: case 3:  return (int)(slot & (banks - 1));            /* wired straight through */
     case 2:  return slot >= 2 ? (int)(banks - 2 + (slot - 2)) : -1;  /* last 16KB fixed */
-    case 1:  return slot == 3 ? (int)(banks - 1) : -1;
+    case 1:  return -1;
     case 4:  return slot == 3 ? (int)(banks - 1) : -1;            /* $E000 is hardwired */
     default: return -1;                                           /* AxROM, GxROM */
     }

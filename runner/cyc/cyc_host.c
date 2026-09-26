@@ -405,7 +405,7 @@ int main(int argc, char **argv) {
     AccCoinDriver drv;
     acccoin_driver_init(&drv);
     SpamDriver spam;
-    {
+    if (spam_page >= 0) {
         const uint8_t *prg = image + 16 + ((image[6] & 0x04) ? 512 : 0);
         acccoin_spam_init(&spam, prg, (size_t)image[4] * 0x4000, spam_page, spam_row, spam_seed, spam_dpad);
     }

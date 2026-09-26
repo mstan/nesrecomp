@@ -4,6 +4,7 @@
 #   include(${NESRECOMP_ROOT}/runner/cyc/cyc.cmake)
 #   add_executable(MyGame ${NESRECOMP_CYC_SOURCES} generated/<prefix>_cyc.c)
 #   target_include_directories(MyGame PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})
+#   target_link_libraries(MyGame PRIVATE ${NESRECOMP_CYC_LIBRARIES})
 #   nesrecomp_cyc_enable_sdl(MyGame)      # optional window and audio (runner/external/SDL2)
 #   nesrecomp_cyc_add_oracle(cyc_oracle)  # optional TriCNES reference executable (needs CXX)
 #
@@ -26,6 +27,12 @@ set(NESRECOMP_CYC_SOURCES
     ${NESRECOMP_CYC_DIR}/cyc_png.c
 )
 set(NESRECOMP_CYC_INCLUDE_DIRS ${NESRECOMP_CYC_DIR})
+set(NESRECOMP_CYC_LIBRARIES "")
+if(UNIX)
+    # The C runtime's NTSC palette uses sin/cos. C++ oracle linking can hide
+    # this dependency, but plain C executables need libm explicitly on Linux.
+    list(APPEND NESRECOMP_CYC_LIBRARIES m)
+endif()
 
 # The TriCNES oracle: TriCNES's complete machine with the same host, writing
 # the same --hash-out/--trace-out files as a recompiled build. Used only to

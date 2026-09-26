@@ -441,8 +441,9 @@ oracle, compared on every frame:
 | Donkey Kong Original Edition | CNROM | 0-3 | 3,600 each | 100.0% | — | native and interp identical |
 
 At alignments 1-3 the oracle itself fails the same AccuracyCoin tests ($2002
-flag timing, OAM corruption, frozen OAM2 increment); a build that passed them
-there would be disagreeing with it, not improving on it.
+flag timing, OAM corruption, frozen OAM2 increment). Trace agreement at these
+alignments establishes parity with the oracle, not correctness on hardware;
+the shared failures remain accuracy limitations.
 
 The SMB3 run is a scripted playthrough (`--input`, 3,000 frames: title screen,
 world 1 map, into 1-1, play, death, back to the map), so it covers the map and
@@ -691,6 +692,8 @@ after changing compilers.
 ## Building
 
 Game projects include `cyc.cmake` (see `tests/accuracycoin/CMakeLists.txt`);
+link `NESRECOMP_CYC_LIBRARIES` as well as using its source and include lists
+(the C runtime needs `libm` on Unix).
 `nesrecomp_cyc_add_oracle(cyc_oracle)` adds the oracle. AccuracyCoin itself is
 set up in `tests/accuracycoin/` (see its README for where the ROM comes from).
 This directory also builds standalone:
@@ -713,7 +716,29 @@ python ../../../../tools/cyc/cyc_verify.py --exe build/Release/cyc_stress.exe \
     --oracle build/Release/cyc_oracle.exe --rom cyc_stress.nes --frames 12000 --interp
 ```
 
+ROM-free regressions for the verifier, ordinary-ROM startup and MMC1 banked
+reads (run from the repository root after building the recompiler and the
+standalone runtime):
+
+```bash
+python -m unittest discover -s tools/cyc
+python tools/cyc/test_cyc_runtime.py --recompiler build/compiler/Release/NESRecomp.exe \
+    --interp build/cyc/Release/cyc_interp.exe --oracle build/cyc/Release/cyc_oracle.exe \
+    --out build/cyc-regressions
+```
+
+Use the corresponding executable paths without `Release/` and `.exe` for
+single-configuration Unix builds. `cyc_verify.py` rejects failed launches,
+missing or incomplete traces, and unfinished AccuracyCoin runs. A completed
+AccuracyCoin run with failed tests can still match the oracle; `ALL MATCH`
+describes trace equality, while the printed test scores describe accuracy.
+
 ## Limits
+
+- The model targets NTSC; PAL/Dendy timing is not implemented. Mapper support
+  covers the board configurations above, not every variant sharing an iNES
+  mapper number: discrete-mapper bus conflicts and MMC1 outer PRG/WRAM banking
+  are not modeled. Battery-backed RAM is not persisted by this host.
 
 - Mappers 0, 1, 2, 3, 4, 7 and 66. NROM, MMC1, UxROM, CNROM and MMC3 have
   each run a game against the oracle (see [Results](#results)); AxROM and
