@@ -779,6 +779,7 @@ static unsigned mapper_write_floor(int mapper) {
     switch (mapper) {
     /* Low-address register apertures are added with their boards. */
     case 34: return 0x7ffd;
+    case 79: return 0x4100;
     default: return 0x8000;
     }
 }
@@ -1338,6 +1339,7 @@ static const char *mapper_name(int mapper) {
     case 75: return "VRC1";
     case 206: return "DxROM";
     case 76: return "Namco 109";
+    case 79: return "NINA-003/006";
     case 0:  return "NROM";
     case 1:  return "MMC1";
     case 2:  return "UxROM";
