@@ -9557,7 +9557,7 @@ void cyc_cpu_state(CycCpuState *out)
 // way hw_machine.c loads it.
 static byte *tric_alloc_padded(const byte *src, size_t len, int *out_alloc) {
     uint32_t alloc = 1;
-    while (alloc < len || alloc < 8192) alloc <<= 1;
+    while (alloc < len || alloc < 4096) alloc <<= 1;
     byte *p = (byte *)calloc(1, alloc);
     if (p && src) memcpy(p, src, len);
     *out_alloc = (int)alloc;
@@ -9580,6 +9580,7 @@ bool cyc_load_ines(const uint8_t *image, size_t size) {
     if (!nes_cart_image(image, size, &info) || !nes_cart_variant_supported(&info)) return false;
     int mapper = info.mapper;
     switch (mapper) {   // the set hw_mapper.c implements
+    case 31: break;
     case 9: case 10: break;
     case 232: break;
     case 184: break;
@@ -9611,7 +9612,7 @@ bool cyc_load_ines(const uint8_t *image, size_t size) {
     Cart.Info = info;
     Cart.PRGROM = prg;
     Cart.PRGROM_Length = info.prg_size;
-    Cart.PRGSlots = prg_alloc / 8192;
+    Cart.PRGSlots = prg_alloc / 4096;
     Cart.CHRROM = chr;
     Cart.CHRROM_Length = chr_len;
     Cart.CHRPages = chr_alloc / 1024;

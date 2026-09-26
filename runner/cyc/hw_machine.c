@@ -165,7 +165,8 @@ void hw_cycle_finish(bool instruction_done)
 
 bool hw_irq_line(void) { return hw.irq_line != 0; }
 
-unsigned hw_prg_bank(uint16_t addr) { return hw_cart.prg_off[(addr >> 13) & 3] >> 13; }
+unsigned hw_prg_bank(uint16_t addr) { return hw_cart.prg_off[(addr >> 12) & 7] >> 13; }
+unsigned hw_prg_bank4(uint16_t addr) { return hw_cart.prg_off[(addr >> 12) & 7] >> 12; }
 
 /* ------------------------------------------------------------------------- */
 /* CPU memory map                                                            */
@@ -248,7 +249,7 @@ static uint32_t round_up_pow2(uint32_t n)
 
 static uint8_t *alloc_padded(const uint8_t *src, size_t len, uint32_t *out_alloc)
 {
-    uint32_t alloc = round_up_pow2((uint32_t)(len < 8192 ? 8192 : len));
+    uint32_t alloc = round_up_pow2((uint32_t)(len < 4096 ? 4096 : len));
     uint8_t *p = (uint8_t *)calloc(1, alloc);
     if (p && src) memcpy(p, src, len);
     *out_alloc = alloc;
@@ -272,7 +273,7 @@ bool cyc_load_ines(const uint8_t *image, size_t size)
     hw_cart.info = info;
     hw_cart.prg = prg;
     hw_cart.prg_len = info.prg_size;
-    hw_cart.prg_slots = prg_alloc / 8192;
+    hw_cart.prg_slots = prg_alloc / 4096;
     hw_cart.chr = chr;
     hw_cart.chr_len = chr_len;
     hw_cart.chr_pages = chr_alloc / 1024;

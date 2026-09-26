@@ -68,7 +68,7 @@ static inline bool nes_cart_header(const uint8_t *h, size_t size, NesCartInfo *c
         if (c->battery) c->prg_nvram = ram; else c->prg_ram = ram;
         if (!c->chr_size) c->chr_ram = c->mapper == 13 ? 16384 : 8192;
     }
-    return c->prg_size >= 8192;
+    return c->prg_size >= 4096;
 }
 
 static inline bool nes_cart_image(const uint8_t *image, size_t size, NesCartInfo *c)

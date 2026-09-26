@@ -91,6 +91,7 @@ static void write_miss_log(const char *path) {
     /* Merge with an existing log so runs accumulate; the recompiler reads the
      * first column (game.toml [game] cycle_seed_file). */
     size_t slots = cyc_run_miss_slots();
+    unsigned bank_count = (unsigned)(slots / 32768);
     unsigned new_addrs = 0;
     for (size_t i = 0; i < slots; i++) new_addrs += cyc_run_miss[i] != 0;
     FILE *mf = fopen(path, "r");
@@ -102,17 +103,21 @@ static void write_miss_log(const char *path) {
             /* `BB:AAAA [count]`, or `AAAA [count]` from a run of an NROM
              * program or a hand-written seed: no bank means the one this
              * cartridge has there now. */
-            int got = sscanf(line, "%x:%x %u", &bank, &addr, &count);
-            if (got < 2) {
-                got = sscanf(line, "%x %u", &addr, &count);
-                if (got < 1 || addr < 0x8000 || addr > 0xFFFF) continue;
-                bank = hw_prg_bank((uint16_t)addr);
-                count = got == 2 ? count : 0;
-            } else {
-                if (addr < 0x8000 || addr > 0xFFFF) continue;
+            int got = sscanf(line, "4k:%x:%x %u", &bank, &addr, &count);
+            if (got >= 2) {
                 if (got < 3) count = 0;
+            } else if ((got = sscanf(line, "%x:%x %u", &bank, &addr, &count)) >= 2) {
+                if (bank >= (bank_count + 1)/2) continue;
+                bank = (bank * 2 + ((addr >> 12) & 1)) & (bank_count - 1);
+                if (got < 3) count = 0;
+            } else {
+                got = sscanf(line, "%x %u", &addr, &count);
+                if (got < 1 || addr < 0x8000 || addr > 0xffff) continue;
+                bank = hw_prg_bank4((uint16_t)addr);
+                count = got == 2 ? count : 0;
             }
-            unsigned index = ((bank * 4 + ((addr >> 13) & 3)) << 13) | (addr & 0x1FFF);
+            if (addr < 0x8000 || addr > 0xffff || bank >= bank_count) continue;
+            unsigned index = ((bank * 8 + ((addr >> 12) & 7)) << 12) | (addr & 0xfff);
             if (index >= slots) continue;
             uint32_t add = count ? count : 1;
             uint32_t *slot = &cyc_run_miss[index];
@@ -130,7 +135,7 @@ static void write_miss_log(const char *path) {
             unsigned bank;
             uint16_t addr;
             cyc_run_miss_decode((unsigned)i, &bank, &addr);
-            fprintf(mf, "%02X:%04X %u\n", bank, addr, cyc_run_miss[i]);
+            fprintf(mf, "4k:%02X:%04X %u\n", bank, addr, cyc_run_miss[i]);
         }
         /* RAM instruction starts, as comments: the recompiler skips them, since
          * code the program writes at run time is not in the ROM image to

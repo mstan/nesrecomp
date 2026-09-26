@@ -149,16 +149,16 @@ instruction does; `--interp-only` runs check the folding and control flow.
 ### Banked mappers
 
 Folding a ROM byte into a constant assumes the byte at that CPU address is
-known. On a banked cartridge it is not: `$8000-$FFFF` is four 8KB slots whose
+known. On a banked cartridge it is not: `$8000-$FFFF` is eight 4KB slots whose
 contents the game changes at run time, so the same address holds different
-instructions at different moments. 8KB is the finest granularity any supported
+instructions at different moments. 4KB is the finest granularity any supported
 mapper switches, which makes the unit of compilation a **(bank, slot) pair**
 rather than an address:
 
 - one C function per 1KB of a (bank, slot) pair, one translation unit per PRG
   bank (`<prefix>_cyc_bNN.c`), and a dispatch table in `<prefix>_cyc.c`;
 - entry goes through that table, which asks the cartridge which bank is at
-  `cpu.pc` right now (`hw_prg_bank()`, one indexed load into `hw_cart.prg_off`)
+  `cpu.pc` right now (`hw_prg_bank4()`, one indexed load into `hw_cart.prg_off`)
   and only enters a block generated for that bank. A block whose bank is not
   mapped is simply never entered, so a wrong guess costs output, never
   correctness;
@@ -187,7 +187,8 @@ NESRecomp rom.nes --game game.toml       # 20,300 instructions, 17 of 32 banks
 ```
 
 `--miss-log` records the bank each instruction ran in, so its lines are
-`BB:AAAA count`. A line without a bank still works and means the bank the
+`4k:BB:AAAA count`. Old `BB:AAAA` seeds retain their 8 KiB physical
+bank meaning and are converted using the address half. A line without a bank still works and means the bank the
 power-on configuration has at that address, which is every bank on NROM, so
 seed files written before mappers existed are still valid.
 
@@ -245,7 +246,7 @@ at ~215 fps with it on.
 Unlike the 2A03 and 2C02 timing, mapper behavior is documented: these are small
 synchronous chips whose registers and bank arithmetic the nesdev wiki describes
 completely, and each section of `hw_mapper.c` says which page it follows.
-Everything a mapper can do is expressed as four things — where each 8KB PRG
+Everything a mapper can do is expressed as four things — where each 4KB PRG
 slot and each 1KB CHR page reads from, how it drives CIRAM A10 (the nametable
 arrangement), and whether it asserts `/IRQ` — so a mapper is a rule for filling
 two small tables. That is also what makes a PRG read one indexed load and what

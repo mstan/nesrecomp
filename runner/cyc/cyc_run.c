@@ -18,17 +18,17 @@ uint64_t  cyc_run_interp_other_cycles;
  * know which bank was mapped when the instruction ran, because that is what it
  * compiles a block for. On NROM every slot has one bank and this collapses to
  * the CPU address. */
-size_t cyc_run_miss_slots(void) { return (size_t)hw_cart.prg_slots * 4 * 0x2000; }
+size_t cyc_run_miss_slots(void) { return (size_t)hw_cart.prg_slots * 8 * 0x1000; }
 
 unsigned cyc_run_miss_index(uint16_t pc) {
-    unsigned slot = (pc >> 13) & 3;
-    return ((hw_prg_bank(pc) * 4 + slot) << 13) | (pc & 0x1FFF);
+    unsigned slot = (pc >> 12) & 7;
+    return ((hw_prg_bank4(pc) * 8 + slot) << 12) | (pc & 0xFFF);
 }
 
 void cyc_run_miss_decode(unsigned index, unsigned *bank, uint16_t *addr) {
-    unsigned slot = (index >> 13) & 3;
+    unsigned slot = (index >> 12) & 7;
     *bank = index >> 15;
-    *addr = (uint16_t)(0x8000 + (slot << 13) + (index & 0x1FFF));
+    *addr = (uint16_t)(0x8000 + (slot << 12) + (index & 0xFFF));
 }
 
 void cyc_run_power_on(void) {

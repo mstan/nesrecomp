@@ -23,8 +23,7 @@
 /* Bank tables                                                               */
 /* ------------------------------------------------------------------------- */
 
-/* Map an 8KB PRG bank into one of the four CPU slots ($8000, $A000, $C000,
- * $E000). Negative bank numbers count from the end of the ROM (-1 = last,
+/* Map a 4KB PRG bank into one of eight CPU slots ($8000 through $F000). Negative bank numbers count from the end of the ROM (-1 = last,
  * -2 = second last), which is how the fixed slots of MMC1, MMC3 and UxROM are
  * specified. Bank numbers past the end of the ROM wrap, as a board's missing
  * address lines make them: prg_slots is a power of two, and two's complement
@@ -33,10 +32,16 @@
  * Mappers must not write prg_off directly. Everything downstream - the read
  * fast path, the state hash, and the recompiler's dispatch, which needs the
  * PRG offset a compiled block was generated for - reads these tables. */
-static void map_prg8(unsigned slot, int bank)
+static void map_prg4(unsigned slot, int bank)
 {
     unsigned n = hw_cart.prg_slots;
-    hw_cart.prg_off[slot & 3] = (uint32_t)(((unsigned)bank & (n - 1)) * 0x2000u);
+    hw_cart.prg_off[slot & 7] = ((unsigned)bank & (n - 1)) * 0x1000u;
+}
+
+static void map_prg8(unsigned slot, int bank)
+{
+    map_prg4(slot * 2, bank * 2);
+    map_prg4(slot * 2 + 1, bank * 2 + 1);
 }
 
 static void map_prg16(unsigned slot, int bank)
@@ -449,6 +454,7 @@ static const struct {
     uint8_t     watch_ppu_addr;
     uint8_t     wram;            /* boards for this mapper carry work RAM */
 } MAPPERS[] = {
+    { 31, "NSF cartridge", 0, 0 },
     { 9, "MMC2", 0, 0 },
     { 10, "MMC4", 0, 1 },
     { 232, "Camerica Quattro", 0, 0 },
@@ -511,6 +517,9 @@ void hw_cart_power_on(void)
     memset(hw_cart.wram, 0, hw_cart.info.prg_nvram ? hw_cart.info.prg_ram : sizeof(hw_cart.wram));
 
     switch (hw_cart.mapper) {
+    case 31:
+        for (unsigned slot = 0; slot < 8; ++slot) map_prg4(slot, slot == 7 ? 255 : 0);
+        map_chr8(0); break;
     case 9:
         map_prg8(0, 0); map_prg8(1, -3); map_prg8(2, -2); map_prg8(3, -1);
         hw_cart.m.chr0 = hw_cart.m.chr1 = 1; mmc2_chr_apply(); break;
@@ -537,6 +546,12 @@ void hw_cart_power_on(void)
 
 void hw_cart_cpu_write(uint16_t addr, uint8_t value)
 {
+    /* Mapper 31: https://www.nesdev.org/wiki/INES_Mapper_031 */
+    if (hw_cart.mapper == 31 && (addr & 0xf000) == 0x5000) {
+        hw_cart.m.reg[addr & 7] = value;
+        map_prg4(addr & 7, value);
+        return;
+    }
     if (hw_cart.mapper == 34) {
         if (!(hw_cart.info.prg_size ? nes_cart_nina(&hw_cart.info) : hw_cart.chr_pages > 8)) {
             if (addr >= 0x8000) {
@@ -686,7 +701,7 @@ bool hw_cart_irq(void) { return hw_cart.m.irq_out != 0; }
 uint64_t hw_cart_state_hash(uint64_t h)
 {
     uint64_t acc = 0;
-    for (int i = 0; i < 4; i++) acc = acc * 131 + hw_cart.prg_off[i];
+    for (int i = 0; i < 8; i++) acc = acc * 131 + hw_cart.prg_off[i];
     for (int i = 0; i < 8; i++) acc = acc * 131 + hw_cart.chr_off[i];
     acc = acc * 131 + hw_cart.mirroring;
     acc = acc * 131 + hw_cart.wram_readable;
@@ -723,7 +738,7 @@ void hw_cart_state_dump(void *file)
     if (hw_cart.mapper == 9 || hw_cart.mapper == 10)
         fprintf(f, "cart.pattern_pending %u\ncart.pattern_addr %04X\n",
                 hw_cart.m.pattern_pending, hw_cart.m.pattern_addr);
-    for (int i = 0; i < 4; i++) fprintf(f, "cart.prg_off[%d] %06X\n", i, hw_cart.prg_off[i]);
+    for (int i = 0; i < 8; i++) fprintf(f, "cart.prg_off[%d] %06X\n", i, hw_cart.prg_off[i]);
     for (int i = 0; i < 8; i++) fprintf(f, "cart.chr_off[%d] %06X\n", i, hw_cart.chr_off[i]);
     fprintf(f, "cart.mirroring %02X\ncart.wram_readable %02X\ncart.wram_writable %02X\n", hw_cart.mirroring,
             hw_cart.wram_readable, hw_cart.wram_writable);

@@ -31,7 +31,7 @@ static void cart(int mapper, unsigned prg_kb, unsigned chr_kb)
     hw_cart.mapper = (uint8_t)mapper;
     hw_cart.prg = prg;
     hw_cart.chr = chr;
-    hw_cart.prg_slots = prg_kb / 8;
+    hw_cart.prg_slots = prg_kb / 4;
     hw_cart.chr_pages = chr_kb;
     hw_cart.mirroring = HW_MIRROR_HORIZONTAL;
     CHECK(hw_cart_supports(mapper));
@@ -40,10 +40,11 @@ static void cart(int mapper, unsigned prg_kb, unsigned chr_kb)
 
 static void prg_banks(unsigned a, unsigned b, unsigned c, unsigned d)
 {
-    CHECK(hw_cart.prg_off[0] == a * 8192);
-    CHECK(hw_cart.prg_off[1] == b * 8192);
-    CHECK(hw_cart.prg_off[2] == c * 8192);
-    CHECK(hw_cart.prg_off[3] == d * 8192);
+    unsigned expected[4] = {a,b,c,d};
+    for (unsigned i=0; i<4; ++i) {
+        CHECK(hw_cart.prg_off[2*i] == expected[i]*8192);
+        CHECK(hw_cart.prg_off[2*i+1] == expected[i]*8192 + 4096);
+    }
 }
 
 static void chr_bank(unsigned page, unsigned bank, unsigned pages)
@@ -95,7 +96,7 @@ static void test_mapper180(void)
     hw_cart_cpu_write(0xb000, 3);
     prg_banks(0, 1, 6, 7);
     chr_bank(0, 0, 8);
-    prg[hw_cart.prg_off[1] + 0x1000] = 0;
+    prg[hw_cart.prg_off[3]] = 0;
     hw_cart_cpu_write(0xb000, 0xff);
     prg_banks(0, 1, 0, 1);
     no_wram();
@@ -134,7 +135,7 @@ static void test_mapper94(void)
     hw_cart_cpu_write(0xb000, 12);
     prg_banks(6, 7, 14, 15);
     chr_bank(0, 0, 8);
-    prg[hw_cart.prg_off[1] + 0x1000] = 0;
+    prg[hw_cart.prg_off[3]] = 0;
     hw_cart_cpu_write(0xb000, 0xff);
     prg_banks(0, 1, 14, 15);
     no_wram();
@@ -256,7 +257,7 @@ static void test_mapper34(void)
     prg_banks(0, 1, 2, 3);
     hw_cart_cpu_write(0xb000, 6); /* wraps at physical ROM size */
     prg_banks(8, 9, 10, 11);
-    prg[hw_cart.prg_off[1] + 0x1000] = 0;
+    prg[hw_cart.prg_off[3]] = 0;
     hw_cart_cpu_write(0xb000, 3);
     prg_banks(0, 1, 2, 3);
     no_wram();
@@ -288,13 +289,29 @@ static void test_mapper11(void)
     prg_banks(8, 9, 10, 11);
     chr_bank(0, 80, 8);
     CHECK(hw_cart.mirroring == HW_MIRROR_HORIZONTAL);
-    prg[hw_cart.prg_off[1] + 0x1000] = 0x11;
+    prg[hw_cart.prg_off[3]] = 0x11;
     hw_cart_cpu_write(0xb000, 0xff);
     prg_banks(4, 5, 6, 7);
     chr_bank(0, 8, 8);
     no_wram();
 }
 
+
+static void test_mapper31(void)
+{
+    cart(31, 128, 8);
+    for (unsigned i=0; i<32; ++i) memset(prg + i*4096, (int)i, 4096);
+    CHECK(hw_cart_prg_read(0xfffc) == 31);
+    for (unsigned slot=0; slot<8; ++slot) {
+        hw_cart_cpu_write((uint16_t)(0x5000 + slot), (uint8_t)(slot*3));
+        CHECK(hw_cart_prg_read((uint16_t)(0x8000 + slot*4096)) == slot*3);
+        CHECK(hw_cart_prg_read((uint16_t)(0x8fff + slot*4096)) == slot*3);
+    }
+    hw_cart_cpu_write(0x5fff, 255); CHECK(hw_cart_prg_read(0xffff) == 31);
+    hw_cart_cpu_write(0x6000, 9); CHECK(hw_cart_prg_read(0x8000) == 0);
+    hw_cart_cpu_write(0x4fff, 9); CHECK(hw_cart_prg_read(0xffff) == 31);
+    no_wram();
+}
 
 static void test_mmc2_latches(void)
 {
@@ -371,6 +388,7 @@ int main(void)
     test_mapper11();
     test_variants();
     test_mmc2_latches();
+    test_mapper31();
     printf("mapper contracts: %u checks passed\n", checks);
     return 0;
 }
