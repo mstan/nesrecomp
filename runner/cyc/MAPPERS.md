@@ -20,6 +20,7 @@ models; it does not independently establish the mapper specification.
 | ID | Board / reference | Behavior and limits |
 |---:|---|---|
 | 24 | [VRC6a](https://www.nesdev.org/wiki/VRC6) | 16+8 KiB PRG, all CHR/nametable modes, WRAM gate, CPU IRQ and two pulse/one saw audio channels. |
+| 26 | [VRC6b](https://www.nesdev.org/wiki/VRC6) | VRC6 with swapped A0/A1 register wiring, including the audio ports. |
 | 21 | VRC4a/c | Submappers 1/2 select address wiring; PRG swap, 9-bit CHR, WRAM gate and CPU/divider IRQ. |
 | 22 | VRC2a | Swapped address lines, shifted 8-bit CHR, one-bit latch, no IRQ. |
 | 23 | VRC2b / VRC4e/f | Submappers 1/2 select VRC4 wiring; submapper 3 selects VRC2. |

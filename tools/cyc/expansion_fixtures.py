@@ -5,7 +5,7 @@ from mapper_fixtures import handoff
 from mapper_ppu_fixtures import ppu_contract
 from vrc_fixtures import irq_program
 
-ACTIVE_IDS=(24,)
+ACTIVE_IDS=(24,26)
 
 def tone_program(mapper, pulse=True):
     def addr(a): return (a&0xfffc)|((a&1)<<1)|((a&2)>>1) if mapper==26 else a

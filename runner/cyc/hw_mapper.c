@@ -458,6 +458,7 @@ static const struct {
     uint8_t     wram;            /* boards for this mapper carry work RAM */
 } MAPPERS[] = {
     { 24, "VRC6a", 0, 1 },
+    { 26, "VRC6b", 0, 1 },
     { 21, "VRC4a/c", 0, 1 },
     { 22, "VRC2a", 0, 0 },
     { 23, "VRC2b / VRC4e/f", 0, 1 },

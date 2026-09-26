@@ -1355,6 +1355,7 @@ bool cyc_codegen_emit_interpreter(const char *path) {
 static const char *mapper_name(int mapper) {
     switch (mapper) {
     case 24: return "VRC6a";
+    case 26: return "VRC6b";
     case 21: return "VRC4a/c";
     case 23: return "VRC2b / VRC4e/f";
     case 25: return "VRC2c / VRC4b/d";
