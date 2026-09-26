@@ -70,6 +70,8 @@ struct TricMapper {
     ulong A12LowCycle;
     // ---- UxROM / CNROM / AxROM / GxROM ----
     byte Latch;
+    bool PatternPending;
+    ushort PatternAddress;
 
     void Reset();
     void MapPRG8(uint Slot, int Bank);
@@ -85,6 +87,8 @@ struct TricMapper {
     void MMC3Apply();
     void MMC3Write(ushort Address, byte Input);
     void MMC3ClockIRQ();
+    void PatternReadLatch(ushort Address);
+    void PatternReadEnd(bool Reading);
 
     void FetchCPU();
     byte SnoopCPU(ushort Address);
@@ -277,6 +281,8 @@ inline void TricMapper::Reset() {
     A12 = false;
     A12LowCycle = 0;
     Latch = 0;
+    PatternPending = false;
+    PatternAddress = 0;
     CPU_Drove = false;
     WRAM_Length = Cart.Info.prg_ram + Cart.Info.prg_nvram;
     WRAM_Bank = 0;
@@ -287,6 +293,12 @@ inline void TricMapper::Reset() {
     WRAM_Readable = WRAM_Writable = HasWRAM;
 
     switch (Cart.Mapper) {
+    case 9:
+        MapPRG8(0, 0); MapPRG8(1, -3); MapPRG8(2, -2); MapPRG8(3, -1);
+        Chr0 = Chr1 = 1; MapCHR4(0, 0); MapCHR4(1, 0); break;
+    case 10:
+        MapPRG16(0, 0); MapPRG16(1, -1);
+        Chr0 = Chr1 = 1; MapCHR4(0, 0); MapCHR4(1, 0); break;
     case 13: MapPRG32(0); MapCHR4(0, 0); MapCHR4(1, 0); Mirroring = TRIC_MIRROR_VERTICAL; break;
     case 71: MapPRG16(0, 0); MapPRG16(1, -1); MapCHR8(0); break;
     case 75: MapPRG32(0); MapPRG8(3, -1); MapCHR4(0, 0); MapCHR4(1, 0); Mirroring = TRIC_MIRROR_VERTICAL; break;
@@ -389,6 +401,19 @@ inline void TricMapper::StoreCPU(ushort Address, byte Input) {
     if ((Cart.Mapper == 2 || Cart.Mapper == 3 || Cart.Mapper == 7) && Cart.Info.submapper == 2)
         Input &= SnoopCPU(Address);
     switch (Cart.Mapper) {
+    case 9: case 10:
+        switch (Address / 4096) {
+        case 10:
+            PrgReg = Input % 16;
+            if (Cart.Mapper == 9) MapPRG8(0, PrgReg); else MapPRG16(0, PrgReg);
+            break;
+        case 11: case 12: case 13: case 14:
+            Reg[Address / 4096 - 11] = Input % 32;
+            MapCHR4(0, Reg[Chr0]); MapCHR4(1, Reg[2 + Chr1]);
+            break;
+        case 15: Mirroring = (Input & 1) ? TRIC_MIRROR_HORIZONTAL : TRIC_MIRROR_VERTICAL; break;
+        }
+        break;
     case 11:
         Input = (byte)(Input & SnoopCPU(Address));
         Latch = Input;
@@ -473,6 +498,26 @@ inline int TricMapper::FetchPatternAddress(ushort Address) {
     return Cart.UsingCHRRAM ? index % Cart.CHRROM_Length : index;
 }
 
+inline void TricMapper::PatternReadLatch(ushort Address) {
+    if (Cart.Mapper != 9 && Cart.Mapper != 10) return;
+    if (!PatternPending) { PatternPending = true; PatternAddress = Address; }
+}
+
+inline void TricMapper::PatternReadEnd(bool Reading) {
+    if (Reading || !PatternPending) return;
+    PatternPending = false;
+    ushort Address = PatternAddress;
+    unsigned half = Address >> 12;
+    unsigned offset = Address & 4095;
+    bool range = Cart.Mapper == 10 || half == 1;
+    if (offset >= 0xfd8 && offset <= (range ? 0xfdf : 0xfd8)) {
+        if (half) Chr1 = 0; else Chr0 = 0;
+    } else if (offset >= 0xfe8 && offset <= (range ? 0xfef : 0xfe8)) {
+        if (half) Chr1 = 1; else Chr0 = 1;
+    } else return;
+    MapCHR4(half, Reg[half * 2 + (half ? Chr1 : Chr0)]);
+}
+
 inline byte TricMapper::SnoopPPU(ushort Address) {
     if (Address < 0x2000) return Cart.CHRROM[FetchPatternAddress(Address)];
     if (Cart.AlternativeNametableArrangement) return VRAM[Address & 0xfff];
@@ -491,6 +536,7 @@ inline void TricMapper::AccessPPU() {
         if (!SeventyTwoPinConnector[20]) {
             PPU_DataOut = Cart.CHRROM[CHR_Address];
             PPU_NonTiltData = PPU_DataOut;
+            PatternReadLatch(Address);
         }
         if (!SeventyTwoPinConnector[55] && Cart.UsingCHRRAM) {
             Cart.CHRROM[CHR_Address] = PPU_DataIn;

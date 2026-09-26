@@ -19,6 +19,8 @@ models; it does not independently establish the mapper specification.
 
 | ID | Board / reference | Behavior and limits |
 |---:|---|---|
+| 9 | [MMC2](https://www.nesdev.org/wiki/MMC2) | Switchable 8 KiB PRG plus fixed last 24 KiB; two pairs of 4 KiB CHR banks. Read latches commit when /RD is released. |
+| 10 | [MMC4](https://www.nesdev.org/wiki/MMC4) | Switchable 16 KiB PRG plus fixed last 16 KiB, 8 KiB WRAM, and MMC2-style latches with eight-address trigger ranges on both CHR halves. |
 | 232 | [Quattro](https://www.nesdev.org/wiki/INES_Mapper_071) | Outer 64 KiB plus inner 16 KiB banking; NES 2.0 submapper 1 swaps the outer bits for Aladdin. |
 | 184 | [Sunsoft-1](https://www.nesdev.org/wiki/Sunsoft_1) | Fixed PRG; two 4 KiB CHR windows; upper window forces bank bit 2. |
 | 180 | [UxROM variant](https://www.nesdev.org/wiki/UxROM) | First 16 KiB fixed, upper 16 KiB switchable; AND bus conflicts. |
@@ -68,7 +70,7 @@ AccuracyCoin and the 3,000-frame SMB3 route also match the pre-expansion traces
 exactly at all four alignments. AccuracyCoin retains its existing alignment
 scores of 144/144, 143/144, 141/144 and 143/144; this change adds no new failures.
 
-Deferred work includes MMC2/MMC4 read-triggered latches, MMC5, VRC IRQ/audio chips,
+The remaining draft stack includes MMC5, VRC IRQ/audio chips,
 Bandai EEPROM, and mappers with PRG banks below 8 KiB.
 Each needs its missing hardware primitive and suitable regression ROMs before
 being added to the supported list. The legacy runner still needs separate work.
@@ -79,3 +81,11 @@ explicit NINA/BNROM selection, exponent lengths, Camerica variants, Popils RAM,
 small RAM mirroring, and four-screen reads/writes through the actual PPU bus.
 The full execution harness and header acceptance/rejection harness retain their
 per-case logs under the selected output directory.
+
+MMC2/MMC4 latch tests exhaust all 8,192 pattern addresses for each chip, verify the old byte remains
+stable throughout the read pulse, and keep peeks/writes from triggering latches.
+`latch_fixtures.py` exercises the actual `$2007` state machine and rendered FD/FE
+tiles, with native/interpreter/oracle parity at all four alignments. This caught
+and corrected an early latch update: `$2007` samples more than once during /RD,
+so committing on the first sample returned the new bank too soon. Commercial
+MMC2/MMC4 games and a physical cartridge are not part of this validation.

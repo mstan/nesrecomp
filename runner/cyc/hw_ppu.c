@@ -81,8 +81,9 @@ static uint8_t vram_fetch(void)
     if (ppu.vbus & 0x2000) {
         value = ppu.ciram[ciram_index()];
     } else {
-        uint32_t a = hw_cart_chr_index((uint16_t)(((ppu.vbus & 0x3F00) | ppu.octal_latch) & 0x1FFF));
-        value = ppu.rd ? hw_cart.chr[a] : (uint8_t)ppu.vbus;
+        uint16_t addr = (uint16_t)(((ppu.vbus & 0x3F00) | ppu.octal_latch) & 0x1FFF);
+        uint32_t a = hw_cart_chr_index(addr);
+        value = ppu.rd ? hw_cart_chr_read(addr) : (uint8_t)ppu.vbus;
         if (ppu.wr && hw_cart.chr_ram) hw_cart.chr[a] = (uint8_t)ppu.vbus;
     }
     ppu.vbus = (uint16_t)((ppu.vbus & 0xFF00) | value);
@@ -736,6 +737,7 @@ static void data_sm_dot(bool blnk)
     ppu.pal_enable = (ppu.vbus & 0x3F00) == 0x3F00 && blnk;
     if (sm_rest) {
         ppu.rd = !blnk && h0;
+        hw_cart_ppu_rd(ppu.rd != 0);
         ppu.ale = !blnk && !h0;
         return;
     }
@@ -745,6 +747,7 @@ static void data_sm_dot(bool blnk)
     ppu.pd_rb = ppu.rl[4] && !ppu.rl[2];
     ppu.rd_ale = !ppu.rl[4] && ppu.rl[2];
     ppu.rd = ppu.pd_rb || (!blnk && h0);
+    hw_cart_ppu_rd(ppu.rd != 0);
     ppu.wl[0] = ppu.wr_sr;
     ppu.wl[2] = !ppu.wl[1];
     ppu.wl[4] = !ppu.wl[3];
@@ -879,6 +882,7 @@ static void blank_dot(void)
     ppu.blnk_latch = 1;
     ppu.pal_enable = (ppu.vbus & 0x3F00) == 0x3F00;
     ppu.rd = 0;
+    hw_cart_ppu_rd(false);
     ppu.ale = 0;
 
     ppu.oam_latch = ppu.oam_buffer;

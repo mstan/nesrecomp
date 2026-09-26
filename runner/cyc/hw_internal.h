@@ -114,6 +114,8 @@ typedef struct {
         uint64_t a12_low_cycle;     /* hw.cycles when A12 went low (0 = high) */
         /* UxROM / CNROM / AxROM / GxROM latches. */
         uint8_t  latch;
+        uint8_t  pattern_pending;
+        uint16_t pattern_addr;
     } m;
 } HwCart;
 

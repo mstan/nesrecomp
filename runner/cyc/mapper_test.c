@@ -15,6 +15,14 @@ static unsigned checks;
     fprintf(stderr, "%s:%d: %s\n", __FILE__, __LINE__, #x); exit(1); \
 } } while (0)
 
+static uint8_t pattern_read(uint16_t addr)
+{
+    uint8_t value = hw_cart_chr_read(addr);
+    CHECK(hw_cart_chr_read(addr) == value); /* held /RD keeps the old byte */
+    hw_cart_ppu_rd(false);
+    return value;
+}
+
 static void cart(int mapper, unsigned prg_kb, unsigned chr_kb)
 {
     memset(&hw_cart, 0, sizeof(hw_cart));
@@ -288,6 +296,34 @@ static void test_mapper11(void)
 }
 
 
+static void test_mmc2_latches(void)
+{
+    for (int mapper = 9; mapper <= 10; ++mapper) {
+        cart(mapper, 128, 128);
+        hw_cart_cpu_write(0xafff, 3);
+        if (mapper == 9) { prg_banks(3, 13, 14, 15); no_wram(); }
+        else { prg_banks(6, 7, 14, 15); CHECK(hw_cart.has_wram); }
+        for (unsigned i = 0; i < 128; ++i) memset(chr + i*1024, (int)i, 1024);
+        hw_cart_cpu_write(0xb123, 1); hw_cart_cpu_write(0xc456, 2);
+        hw_cart_cpu_write(0xd789, 3); hw_cart_cpu_write(0xeabc, 4);
+        for (unsigned addr = 0; addr < 8192; ++addr) {
+            pattern_read(0x0fe8); pattern_read(0x1fe8);
+            unsigned half = addr >> 12;
+            CHECK(pattern_read((uint16_t)addr) == (half ? 16 : 8) + ((addr & 4095) >> 10));
+            bool trigger = addr == 0xfd8 || (mapper == 10 && addr >= 0xfd8 && addr <= 0xfdf) ||
+                           (addr >= 0x1fd8 && addr <= 0x1fdf);
+            CHECK(hw_cart.chr_off[half*4] == (trigger ? (half ? 12 : 4) : (half ? 16 : 8))*1024);
+        }
+        /* Peeks and CPU writes to unrelated addresses cannot set the latch. */
+        pattern_read(0x0fe8);
+        (void)hw_cart_chr_index(0xfd8);
+        hw_cart_cpu_write(0x8fd8, 0);
+        chr_bank(0, 8, 4);
+        hw_cart_cpu_write(0xffff, 1); CHECK(hw_cart.mirroring == HW_MIRROR_HORIZONTAL);
+        hw_cart_cpu_write(0xf000, 0); CHECK(hw_cart.mirroring == HW_MIRROR_VERTICAL);
+    }
+}
+
 static void test_variants(void)
 {
     /* SEROM connects CPU A14 directly to PRG ROM. */
@@ -334,6 +370,7 @@ int main(void)
     test_mapper13();
     test_mapper11();
     test_variants();
+    test_mmc2_latches();
     printf("mapper contracts: %u checks passed\n", checks);
     return 0;
 }
