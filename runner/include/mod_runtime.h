@@ -51,6 +51,10 @@ int nes_mod_runtime_initialize_c(const char* root,
                                  const char* game_id,
                                  const char* rom_crc32);
 int nes_mod_runtime_commit_c(const char* rom_path);
+/* Netplay: commit NO mods without touching the persisted offline selection. */
+int nes_mod_runtime_commit_netplay_c(const char* rom_path);
+/* 1 when a feature is enabled in the player's offline SELECTION. */
+int nes_mod_feature_selected(const char* package_id, const char* feature_id);
 void nes_mod_runtime_activate_plugins_c(void);
 const struct RecompLauncherCModProvider*
 nes_mod_runtime_launcher_provider_c(void);

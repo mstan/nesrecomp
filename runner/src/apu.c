@@ -683,6 +683,18 @@ bool apu_irq_asserted(void) {
     return s_dmc.irq_flag || s_fc_irq_flag;
 }
 
+/* Rollback resim: the output ring's producer position, and a rewind to it.
+ * Only presentation -- the samples a replay would otherwise queue a second
+ * time. No channel, timer or IRQ state is touched. */
+int apu_output_ring_head(void) { return s_ring_head; }
+void apu_output_ring_rewind(int head) {
+    head &= (APU_RING_SIZE - 1);
+    /* Never rewind past what the consumer already took. */
+    int queued_then = (head - s_ring_tail) & (APU_RING_SIZE - 1);
+    int queued_now  = (s_ring_head - s_ring_tail) & (APU_RING_SIZE - 1);
+    if (queued_then <= queued_now) s_ring_head = head;
+}
+
 /* Drain n samples from the cycle-driven ring (filled by apu_clock_cycles).
  * The APU is now run by the CPU-cycle stream, so this no longer synthesizes —
  * it pulls finished samples. Underrun (ring empty on a slow/odd frame) holds the

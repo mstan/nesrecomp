@@ -49,3 +49,7 @@ int     apu_get_state_blob(uint8_t *buf, int cap);
 /* Restore a blob produced by apu_get_state_blob. Host audio queues are cleared
  * so samples generated before the restored guest state are not replayed. */
 int     apu_set_state_blob(const uint8_t *buf, int len);
+
+/* Rollback resim audio scratch (main_runner.c rb_on_resim). */
+int  apu_output_ring_head(void);
+void apu_output_ring_rewind(int head);

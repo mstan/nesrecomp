@@ -34,6 +34,12 @@ set(NESRECOMP_RUNNER_SOURCES
     ${NESRECOMP_RUNNER_ROOT}/src/logger.c
     ${NESRECOMP_RUNNER_ROOT}/src/input_script.c
     ${NESRECOMP_RUNNER_ROOT}/src/savestate.c
+    # Rollback snapshot + per-tick digest over the save-state domain, and the
+    # NES_RB_PROBE determinism probe. Inert unless netplay or the probe runs.
+    # See include/nes_rb_state.h and docs/NETPLAY.md.
+    ${NESRECOMP_RUNNER_ROOT}/src/rollback/nes_rb_state.c
+    ${NESRECOMP_RUNNER_ROOT}/src/rollback/nes_rb_probe.c
+    ${NESRECOMP_RUNNER_ROOT}/src/rollback/nes_session_config.c
     ${NESRECOMP_RUNNER_ROOT}/src/save_ram.c
     ${NESRECOMP_RUNNER_ROOT}/src/config.c
     ${NESRECOMP_RUNNER_ROOT}/src/launcher.c

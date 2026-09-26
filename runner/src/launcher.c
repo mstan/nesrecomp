@@ -40,8 +40,12 @@
 #include "recomp_launcher.h"
 #include "launcher_profile.h"
 #include "save_ram.h"
+#endif
 #ifdef NESRECOMP_NET
-#include "nes_launcher_netplay.h"
+#include "nes_netplay.h"
+#if defined(RECOMP_LAUNCHER) && defined(NES_HOST_HAS_RECOMP_UI)
+#include "nes_host_lobby.h"
+#define NES_HAVE_LOBBY 1
 #endif
 #endif
 
@@ -50,9 +54,17 @@ int nesrecomp_runner_run(int argc, char **argv);
 
 char g_exe_dir[260] = ".";
 static int s_expected_process_exit = 0;
-#if defined(RECOMP_LAUNCHER) && defined(NESRECOMP_NET)
-static int s_pre_match_widescreen;
-static int s_match_widescreen_override;
+#if defined(NESRECOMP_NET)
+/* A netplay launch is vanilla (the mod runtime's netplay commit, which never
+ * touches the persisted offline selection); what the match may vary is the
+ * sealed session configuration (nes_netplay_session_*). */
+static int netplay_launch_pending(void) {
+    const char *e = getenv("NES_NETPLAY");
+    return nes_netplay_pending() || (e && e[0] && e[0] != '0');
+}
+#endif
+#if defined(NES_HAVE_LOBBY)
+static char s_net_return_error[96];
 #endif
 
 void nesrecomp_expect_process_exit(void) {
@@ -428,7 +440,9 @@ reopen_recomp_launcher:
             ls.hdpack_enabled = g_nes_config.hdpack_enabled;
             snprintf(ls.hdpack_dir, sizeof(ls.hdpack_dir), "%s", g_nes_config.hdpack_dir);
 #ifdef NESRECOMP_NET
-            nes_launcher_netplay_seed_settings(&ls);
+            snprintf(ls.netplay_player_name, sizeof(ls.netplay_player_name), "%s",
+                     g_nes_config.netplay_player_name[0] ? g_nes_config.netplay_player_name
+                                                         : "Player");
 #endif
             /* Profile first (theme/platform/renderer labels/capabilities), then
              * the per-game specifics on top. */
@@ -496,13 +510,15 @@ reopen_recomp_launcher:
                 snprintf(s_keybinds_path, sizeof(s_keybinds_path), "%skeybinds.ini", dir);
             }
             gi.keybinds_path = s_keybinds_path;
-#ifdef NESRECOMP_NET
-            gi.netplay_supported = 1;
-#  ifdef NESRECOMP_GAME_VERSION
-            gi.netplay = nes_launcher_netplay_callbacks(game_get_name(), NESRECOMP_GAME_VERSION);
-#  else
-            gi.netplay = nes_launcher_netplay_callbacks(game_get_name(), "dev");
-#  endif
+#if defined(NES_HAVE_LOBBY)
+            gi.netplay = nes_host_lobby_init(game_get_name(), init_rom);
+            gi.netplay_supported = gi.netplay != NULL;
+            if (returning_to_lobby && gi.netplay) {
+                /* Soft return: back into the waiting room with the match's
+                 * error (a refusal code, a disconnect) on show. */
+                nes_host_lobby_returned(&gi, s_net_return_error);
+                s_net_return_error[0] = '\0';
+            }
 #endif
 #if NESRECOMP_ENABLE_MODS
             gi.mods = nes_mod_runtime_launcher_provider_c();
@@ -548,20 +564,19 @@ reopen_recomp_launcher:
                 g_nes_config.hdpack_enabled = ls.hdpack_enabled;
                 snprintf(g_nes_config.hdpack_dir, sizeof(g_nes_config.hdpack_dir), "%s", ls.hdpack_dir);
 #ifdef NESRECOMP_NET
-                nes_launcher_netplay_persist_settings(&ls);
-                /* Persist the guest's own display preference before applying
-                 * the host-authoritative match value transiently. */
+                snprintf(g_nes_config.netplay_player_name,
+                         sizeof(g_nes_config.netplay_player_name), "%s",
+                         ls.netplay_player_name);
+#endif
+                /* The player's own settings are saved before a match applies
+                 * the host's session configuration (never persisted). */
                 config_save(config_path());
-                {
-                    int host_widescreen = g_nes_config.widescreen;
-                    if (nes_launcher_netplay_consume_launch(&ls, &host_widescreen)) {
-                        s_pre_match_widescreen = g_nes_config.widescreen;
-                        s_match_widescreen_override = 1;
-                        g_nes_config.widescreen = host_widescreen;
-                    }
+#if defined(NES_HAVE_LOBBY)
+                if (ls.netplay_launch.enabled) {
+                    NesNetplayConfig nc;
+                    if (nes_host_lobby_config_from_launch(&ls.netplay_launch, &nc))
+                        nes_netplay_set_pending_config(&nc);
                 }
-#else
-                config_save(config_path());
 #endif
                 if (rom_path[0]) { rom_cfg_write(rom_path); gui_resolved = 1; }
             }
@@ -639,23 +654,81 @@ reopen_recomp_launcher:
     }
     new_argv[new_argc] = NULL;
 
+#if defined(NES_HAVE_LOBBY)
+    /* Headless room (NES_LOBBY_SELFTEST=host|guest): the same callback table
+     * the launcher drives, looped over NES_LOBBY_SELFTEST_ROUNDS matches --
+     * every round after the first is a soft return and a REMATCH, a cold
+     * boot in this process with the fresh session id the room hands out.
+     * NES_LOBBY_SELFTEST_THEN_OFFLINE=1 then takes one offline Play in the
+     * same process (NES_RUN_FRAMES bounds it), to compare with a fresh one. */
+    if (nes_host_lobby_selftest_role()) {
+        const char *re = getenv("NES_LOBBY_SELFTEST_ROUNDS");
+        const char *off = getenv("NES_LOBBY_SELFTEST_THEN_OFFLINE");
+        int rounds = re ? atoi(re) : 1;
+        if (rounds < 1) rounds = 1;
+        if (!nes_host_lobby_init(game_get_name(), rom_path)) return 1;
+        for (int round = 1; round <= rounds; ++round) {
+            NesNetplayConfig nc;
+            if (round > 1) {
+                nes_host_lobby_returned(NULL, s_net_return_error);
+                nes_host_lobby_selftest_report(round - 1);
+            }
+            if (nes_host_lobby_selftest_room(round, &nc) != 0) return 2;
+            nes_netplay_set_pending_config(&nc);
 #if NESRECOMP_ENABLE_MODS
-    if (!nes_mod_runtime_commit_c(rom_path)) {
-        fprintf(stderr, "[Mods] Cannot launch: %s\n",
-                nes_mod_runtime_last_error_c());
-        return 1;
+            if (!nes_mod_runtime_commit_netplay_c(rom_path)) return 1;
+            nes_mod_runtime_activate_plugins_c();
+#endif
+            (void)nesrecomp_runner_run(new_argc, new_argv);
+            snprintf(s_net_return_error, sizeof(s_net_return_error), "%s",
+                     nes_netplay_last_error());
+            fprintf(stderr, "[lobby-selftest] match %d over (last_error=\"%s\")\n",
+                    round, s_net_return_error);
+        }
+        nes_host_lobby_returned(NULL, s_net_return_error);
+        nes_host_lobby_selftest_report(rounds);
+        /* The room outlives this process's last match only while it pumps:
+         * linger so the other peers can report being back in it before the
+         * host (or anyone) leaves and closes it (NES_LOBBY_SELFTEST_LINGER_MS). */
+        {
+            const char *lg = getenv("NES_LOBBY_SELFTEST_LINGER_MS");
+            nes_host_lobby_selftest_linger(lg ? (unsigned)atoi(lg) : 4000u);
+        }
+        if (off && off[0] == '1') {
+            fprintf(stderr, "[lobby-selftest] offline Play after the last match\n");
+#if NESRECOMP_ENABLE_MODS
+            if (!nes_mod_runtime_commit_c(rom_path)) return 1;
+            nes_mod_runtime_activate_plugins_c();
+#endif
+            (void)nesrecomp_runner_run(new_argc, new_argv);
+        }
+        return 0;
+    }
+#endif
+
+#if NESRECOMP_ENABLE_MODS
+    {
+        int ok;
+#if defined(NESRECOMP_NET)
+        ok = netplay_launch_pending() ? nes_mod_runtime_commit_netplay_c(rom_path)
+                                      : nes_mod_runtime_commit_c(rom_path);
+#else
+        ok = nes_mod_runtime_commit_c(rom_path);
+#endif
+        if (!ok) {
+            fprintf(stderr, "[Mods] Cannot launch: %s\n",
+                    nes_mod_runtime_last_error_c());
+            return 1;
+        }
     }
     nes_mod_runtime_activate_plugins_c();
 #endif
 
     if (nesrecomp_runner_run(new_argc, new_argv)) {
-#if defined(RECOMP_LAUNCHER) && defined(NESRECOMP_NET)
-        if (s_match_widescreen_override) {
-            g_nes_config.widescreen = s_pre_match_widescreen;
-            s_match_widescreen_override = 0;
-        }
+#if defined(NES_HAVE_LOBBY)
         returning_to_lobby = 1;
-        nes_launcher_netplay_returned_to_lobby();
+        snprintf(s_net_return_error, sizeof(s_net_return_error), "%s",
+                 nes_netplay_last_error());
         goto reopen_recomp_launcher;
 #endif
     }

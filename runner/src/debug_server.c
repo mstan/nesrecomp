@@ -1818,6 +1818,24 @@ static void process_command(const char *line)
     if (game_handle_debug_cmd(cmd, id, line))
         return;
 
+    /* A netplay session owns execution (recomp-ai-rules/NETPLAY.md §6): the
+     * verbs that pause, step, rewind, inject input or poke state would either
+     * stop answering the peers or put local state into a shared simulation.
+     * They stay registered so the refusal names the alternative. */
+    if (g_nes_session_locked) {
+        static const char *const refused[] = {
+            "write_ram", "restore_frame", "save_state", "load_state", "set_input",
+            "press", "set_turbo", "pause", "continue", "step", "run_to_frame", NULL
+        };
+        for (int r = 0; refused[r]; r++) {
+            if (strcmp(cmd, refused[r]) == 0) {
+                send_err(id, "refused: a netplay session owns execution -- free-run "
+                             "every peer and query the rings instead (NETPLAY.md 6)");
+                return;
+            }
+        }
+    }
+
     for (const CmdEntry *e = s_commands; e->name; e++) {
         if (strcmp(cmd, e->name) == 0) {
             e->handler(id, line);

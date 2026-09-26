@@ -13,20 +13,26 @@ working `CMakeLists.txt`, `game.cfg`, and `extras.c` to copy from.
 
 ---
 
-## ██████████████████████████████████████████████████
-## ██  RULE 0: NO GHIDRA = NO ACTION. FULL STOP.  ██
-## ██████████████████████████████████████████████████
+## RULE 0 (amended 2026-09-25): Ghidra is a tool, not a gate
 
-At the start of EVERY session, before touching ANY file:
+*Amended by replacement, 2026-09-25.* The former Rule 0 ("NO GHIDRA = NO
+ACTION. FULL STOP." -- refuse to read, write or suggest anything until
+`mcp__ghidra__get_program_info` answers) is **retired**. It conflicted with
+the workspace doctrine and with the owner's 2026-09-24 override recorded in
+`AGENTS.md`, and under the workspace precedence (`../CLAUDE.md` §2: root
+`recomp-ai-rules/PRINCIPLES.md` wins; a lower file that conflicts is the bug)
+this file was the one to fix.
 
-Call `mcp__ghidra__get_program_info`. If it does not respond:
+What stands instead:
 
-> GHIDRA IS NOT RUNNING.
-> I will not read files, write code, or make any suggestions.
-> Load the game's fixed bank into Ghidra as Raw Binary, 6502 processor.
-> Start the Ghidra MCP server, reconnect with /mcp, then try again.
-
-This rule has NO exceptions. No guessing 6502 behavior. No action until Ghidra responds.
+- Ground truth is the ROM, a pinned disassembly, and an independent oracle
+  (`recomp-ai-rules/PRINCIPLES.md`, "Ground Truth"). Ghidra -- the configured
+  headless MCP -- is one way to read the ROM and may be used autonomously.
+  Its absence is not a blocker for work verifiable from disassembly, ROM
+  bytes, and runtime tests.
+- Never launch a Ghidra GUI and never kill another Ghidra process.
+- "Do not guess 6502 behavior" is unchanged: verify against the ROM or the
+  disassembly before acting, and validate a tool's first output by hand.
 
 See `EXTRACTION.md` for bank extraction procedures per game.
 
@@ -232,7 +238,11 @@ Rationale: <why implemented this way>
 
 ## Architecture Notes
 
-**Static recompiler.** 6502 binary → C → native x64. No interpreter loop.
+**Static recompiler.** 6502 binary → C → native x64. *(Corrected 2026-09-25: the
+previous text said "No interpreter loop"; `runner/src/interp.c` is a bounded
+interpreter BRIDGE -- dispatch misses and the save-state / rollback guest-resume
+continuation run through it, loudly counted. See docs/PHASE1_INTERP_FALLBACK_PLAN.md
+and docs/NETPLAY.md "Replay model" for the honesty conditions it meets.)*
 **JSR = direct C function call.** `func_C123()` calls `func_C456()` directly.
 **NMI is the frame driver.** Runner calls func_NMI() at 60Hz wall-clock.
 **runtime.c starts minimal.** Implement stubs only as the game calls them. Ghidra first.

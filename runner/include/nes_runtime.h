@@ -329,6 +329,9 @@ void nes_write_runtime_fault(const char *reason);
 /* Reset frame/timing/latch state before starting a fresh launcher session. */
 void runtime_session_reset(void);
 uint32_t nes_runtime_state_digest(void);
+/* Set while a netplay session owns execution: TCP execution control, input
+ * overrides, scripts and quick states are refused (docs/NETPLAY.md). */
+extern int g_nes_session_locked;
 
 /* ---- PRG ROM writable accessor ----
  * Returns a writable pointer to the start of the given 16KB PRG bank (0-based).
@@ -363,6 +366,10 @@ int  runtime_get_savestate_resume(uint16_t *pc, int *tick_charged);
 /* A successful state load requests a non-local guest restart. The runner
  * consumes it after the restored frame callback has completed. */
 void runtime_request_guest_resume(uint16_t pc, int tick_charged);
+/* A state loaded INSIDE a frame callback replaces the continuation that
+ * callback was entered with, so a save taken later in the same callback
+ * records the restored guest point rather than the discarded one. */
+void runtime_rebase_frame_resume(uint16_t pc, int tick_charged);
 int  runtime_guest_resume_pending(void);
 int  runtime_take_guest_resume(uint16_t *pc, int *tick_charged);
 void runtime_prepare_guest_resume(uint16_t pc, int tick_charged);

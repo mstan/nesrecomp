@@ -55,8 +55,12 @@ uint8_t nes_input_seat(int seat) {
 #include "nes_video.h"
 #include "ppu_dot.h"
 #include "interp.h"
+#include "nes_rb_state.h"
+#include "nes_rb_probe.h"
 #ifdef NESRECOMP_NET
 #include "nes_netplay.h"
+#include "nes_netplay_identity.h"
+#include "nes_netplay_rb.h"
 #endif
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
@@ -113,8 +117,26 @@ static uint32_t    s_smoke_hashes[SMOKE_MAX_HASHES];
 static jmp_buf s_guest_resume_jmp;
 static int     s_guest_resume_ready = 0;
 
+/* Rollback (netplay and NES_RB_PROBE) restarts the guest continuation at the
+ * end of EVERY outer callback, not only after a load: the main thread's next
+ * segment is always rebuilt from (resume PC, charged) + guest state, so a
+ * live tick and a replayed tick run the identical host path by construction.
+ * Measured need (2026-09-25): SMB's idle loop is `JMP $8057`, which native
+ * code charges as 3+2 cycles in func_RESET's body but 3 then 2 per iteration
+ * in func_8057_b0 (the resume handoff target) -- a resumed timeline landed
+ * the next VBlank one CPU cycle off the live one (NES_RB_PROBE: runtime_blob
+ * nes_cycles/ops_count +-1 on every probe). See docs/NETPLAY.md. */
+static int rb_restart_every_tick(void);
+
 static void finish_frame_callback(void) {
+    uint16_t pc = 0;
+    int charged = 0;
+    int have_point = rb_restart_every_tick() &&
+                     runtime_get_savestate_resume(&pc, &charged);
     int outermost = runtime_end_frame_callback();
+    if (outermost && s_guest_resume_ready && !runtime_guest_resume_pending() &&
+        have_point)
+        runtime_request_guest_resume(pc, charged);
     if (outermost && s_guest_resume_ready && runtime_guest_resume_pending())
         longjmp(s_guest_resume_jmp, 1);
 }
@@ -125,6 +147,8 @@ static int     s_state_nmi_en     = 0;   /* $2000 bit7 at frame boundary */
 static int     s_state_depth      = 0;   /* vblank depth at frame boundary */
 static int     s_state_shim_fired = 0;   /* legacy nested-NMI shim ran */
 
+static uint64_t s_rb_resumes = 0;   /* continuation restarts (evidence) */
+static int rb_restart_every_tick(void);
 static void run_guest_execution(void) {
     (void)setjmp(s_guest_resume_jmp);
     s_guest_resume_ready = 1;
@@ -133,8 +157,11 @@ static void run_guest_execution(void) {
     int tick_charged = 0;
     if (runtime_take_guest_resume(&resume_pc, &tick_charged)) {
         runtime_prepare_guest_resume(resume_pc, tick_charged);
-        printf("[SaveState] Resuming guest execution at $%04X\n", resume_pc);
-        fflush(stdout);
+        s_rb_resumes++;
+        if (!rb_restart_every_tick()) {
+            printf("[SaveState] Resuming guest execution at $%04X\n", resume_pc);
+            fflush(stdout);
+        }
         if (!nes_interp_resume(resume_pc))
             nes_write_runtime_fault("save-state guest resume failed");
         else
@@ -186,10 +213,240 @@ static jmp_buf s_netplay_return;
 static int s_netplay_return_ready;
 static void netplay_return_to_lobby(const char *why) {
     fprintf(stderr, "[Netplay] Returning to lobby: %s\n", why ? why : "match ended");
+    nes_netplay_log_summary();
+    fflush(stderr); fflush(stdout);
+    /* Harnesses that grade one match per process (tools/rb_loopback.sh). */
+    if (getenv("NES_NET_EXIT_ON_RETURN")) {
+        nesrecomp_expect_process_exit();
+        exit(3);
+    }
     if (s_netplay_return_ready) longjmp(s_netplay_return, 1);
     exit(0);
 }
 #endif
+
+/* ---- rollback tick gate --------------------------------------------------
+ * Netplay (and the offline determinism probe) own the per-tick boundary at
+ * the top of the OUTERMOST frame callback, before the NMI handler runs:
+ *   - the snapshot/digest taken there is the state BEFORE this tick;
+ *   - a baseline load there makes the rest of this callback replay the load
+ *     tick, and finish_frame_callback() then discards the stale native stack
+ *     and resumes the restored guest continuation (run_guest_execution);
+ *   - the rows the driver published are applied right before the NMI, after
+ *     every local input source, so the published rows are the only input any
+ *     seat sees while a session is active;
+ *   - a replayed tick runs the same code as a live one and only its SDL
+ *     present, wall-clock pacing and audio delivery are skipped.
+ * With neither active nothing here runs and the callback is unchanged. */
+static int     s_rb_tick_replay = 0;     /* this tick is a replay: no present */
+static int     s_rb_rows_valid = 0;
+static uint8_t s_rb_rows[4];
+static int     s_rb_resim_audio_mark = -1;
+static Uint64  s_rb_tick_t0 = 0;        /* admit time of the running tick */
+static uint8_t s_rb_local_test_pad(void);
+
+#ifdef NESRECOMP_NET
+static void rb_on_publish(const uint8_t *rows, int slots, int replay) {
+    memset(s_rb_rows, 0, sizeof(s_rb_rows));
+    for (int i = 0; i < slots && i < 4; ++i) s_rb_rows[i] = rows[i];
+    s_rb_rows_valid = 1;
+    s_rb_tick_replay = replay ? 1 : 0;
+}
+
+/* Resim audio goes to scratch: everything the replayed ticks push into the
+ * APU output ring is dropped at resim end, so the player hears no tick twice
+ * (recomp-ai-rules/NETPLAY.md §1). The APU's simulation state is untouched. */
+static void rb_on_resim(int begin) {
+    if (begin) s_rb_resim_audio_mark = apu_output_ring_head();
+    else if (s_rb_resim_audio_mark >= 0) {
+        apu_output_ring_rewind(s_rb_resim_audio_mark);
+        s_rb_resim_audio_mark = -1;
+    }
+}
+
+static uint8_t rb_sample_local_pad(void) {
+    uint8_t pad = 0;
+    int src;
+    if (nes_netplay_is_spectator()) return 0;
+    pad = s_rb_local_test_pad();
+    if (pad) return pad;
+    if (headless_run_active()) return 0;
+    /* The local peer plays with ITS player-1 device, whatever seat it holds. */
+    src = g_nes_config.player_src[0];
+    {
+        const uint8_t *keys = SDL_GetKeyboardState(NULL);
+        if (src == 1) pad |= keybinds_read_player(keys, 1);
+        if (src == 2) pad |= controller_read_player(1);
+    }
+    return pad;
+}
+
+static void rb_netplay_gate(void) {
+    const char *why = NULL;
+    nes_netplay_frame_end();
+    s_rb_rows_valid = 0;
+    s_rb_tick_replay = 0;
+    for (;;) {
+        SDL_Event ev;
+        int a;
+        if (nes_netplay_quiesced()) {
+            const char *shot = getenv("NES_NET_SCREENSHOT");
+            if (shot && shot[0]) runner_screenshot(shot);
+            /* A lobby match drains and goes back to the room; a harness
+             * process (rb_loopback.sh) exits once both sides are idle. */
+            if (getenv("NES_LOBBY_SELFTEST") || getenv("NES_NET_QUIESCE_RETURN"))
+                netplay_return_to_lobby("match_complete");
+            fprintf(stderr, "[Netplay] drained — exiting (frame %llu)\n",
+                    (unsigned long long)g_frame_count);
+            nes_netplay_log_summary();
+            fflush(stderr); fflush(stdout);
+            nesrecomp_expect_process_exit();
+            exit(0);
+        }
+        {
+            /* NES_NET_MATCH_TICKS=N: a bounded match -- ask for the
+             * coordinated stop at sim tick N (every peer drains). */
+            static int s_match_ticks = -1;
+            if (s_match_ticks < 0) {
+                const char *e = getenv("NES_NET_MATCH_TICKS");
+                s_match_ticks = (e && e[0]) ? atoi(e) : 0;
+            }
+            if (s_match_ticks > 0 && nes_netplay_sim_tick() >= (uint32_t)s_match_ticks)
+                nes_netplay_request_quiesce();
+        }
+        if (nes_netplay_return_to_lobby_requested(&why))
+            netplay_return_to_lobby(why);
+        if (!headless_run_active() && SDL_WasInit(SDL_INIT_EVENTS)) {
+            while (SDL_PollEvent(&ev)) {
+                controller_handle_event(&ev);
+                if (ev.type == SDL_QUIT ||
+                    (ev.type == SDL_WINDOWEVENT && ev.window.event == SDL_WINDOWEVENT_CLOSE) ||
+                    (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_ESCAPE))
+                    netplay_return_to_lobby("local player left");
+            }
+        }
+        nes_netplay_stage_local(rb_sample_local_pad());
+        a = nes_netplay_poll_admit();
+        if (a != NES_NETPLAY_ADMIT_STALL) { s_rb_tick_t0 = SDL_GetPerformanceCounter(); break; }
+        SDL_Delay(1);
+    }
+}
+/* Engine-level session key: widescreen changes what the game simulates for
+ * the extended margins, so a match runs the HOST's value on every peer and
+ * each peer's own preference comes back when the session ends. */
+static int s_ws_offline = -1;
+static int ws_get(char *out, int cap) { return snprintf(out, (size_t)cap, "%d", g_nes_config.widescreen ? 1 : 0); }
+static int ws_offer(char *out, int cap) {
+    /* The player's own setting, not a previous match's applied value. */
+    int v = s_ws_offline >= 0 ? s_ws_offline : g_nes_config.widescreen;
+    return snprintf(out, (size_t)cap, "%d", v ? 1 : 0);
+}
+static int ws_apply(const char *v) {
+    if (!v || (strcmp(v, "0") && strcmp(v, "1"))) return 0;
+    if (s_ws_offline < 0) s_ws_offline = g_nes_config.widescreen;
+    g_nes_config.widescreen = atoi(v);
+    return 1;
+}
+static void ws_restore(void) {
+    if (s_ws_offline >= 0) g_nes_config.widescreen = s_ws_offline;
+    s_ws_offline = -1;
+}
+#endif
+
+/* The interpreter bridge the continuation restart runs through, counted
+ * (PRINCIPLES.md "The interpreter may bridge -- but only honestly"). */
+void nes_rb_log_bridge(void) {
+    NesInterpStats st;
+    nes_interp_get_stats(&st);
+    fprintf(stderr, "RB_BRIDGE restarts=%llu interp_instrs=%llu interp_runs=%llu "
+                    "native_handoffs=%llu resume_reentries=%llu declines=%llu "
+                    "watchdog_trips=%llu interp_enabled=%d\n",
+            (unsigned long long)s_rb_resumes, (unsigned long long)st.instrs_total,
+            (unsigned long long)st.runs, (unsigned long long)st.native_handoffs,
+            (unsigned long long)st.native_resume_reentries,
+            (unsigned long long)st.declines, (unsigned long long)st.watchdog_trips,
+            nes_interp_is_enabled());
+}
+
+static int rb_restart_every_tick(void) {
+#ifdef NESRECOMP_NET
+    if (nes_netplay_active()) return 1;
+#endif
+    return nes_rb_probe_active();
+}
+
+#ifdef NESRECOMP_NET
+/* The engine's session keys. Called by the runner and by the lobby before
+ * the room publishes its caps (the room's text must already carry every key
+ * a peer will require). Idempotent. */
+void nes_runner_register_session_keys(void) {
+    (void)nes_netplay_session_register("widescreen", ws_get, ws_apply, ws_restore);
+    (void)nes_netplay_session_set_offer("widescreen", ws_offer);
+}
+#endif
+
+static void rb_frame_top(void) {
+#ifdef NESRECOMP_NET
+    if (nes_netplay_active()) { rb_netplay_gate(); return; }
+#endif
+    if (nes_rb_probe_active()) {
+        nes_rb_probe_top();
+        s_rb_tick_replay = nes_rb_probe_replaying();
+    }
+}
+
+static void rb_pre_tick(void) {
+    if (s_rb_rows_valid) {
+        g_controller1_buttons = s_rb_rows[0];
+        g_controller2_buttons = s_rb_rows[1];
+        g_logical_input[2] = s_rb_rows[2];
+        g_logical_input[3] = s_rb_rows[3];
+        s_rb_rows_valid = 0;
+    }
+    if (nes_rb_probe_active()) nes_rb_probe_pre_tick();
+    /* Guest code runs from here on: the cached snapshot image is stale. */
+    nes_rb_state_invalidate();
+}
+
+/* NES_NET_TEST_PAD=<seed>[:<start_tick>]: a scripted local pad for harnesses
+ * -- a deterministic per-seed pattern (walk right, run, jump on a period,
+ * Start once to leave the title), so peers mispredict each other for real.
+ * It is a LOCAL sample: it reaches the match only through the published rows,
+ * exactly like a controller. */
+static uint8_t s_rb_local_test_pad(void) {
+    static int init = 0, seed = -1, start_tick = 0;
+    uint32_t n;
+    if (!init) {
+        const char *e = getenv("NES_NET_TEST_PAD");
+        init = 1;
+        if (e && e[0]) {
+            seed = atoi(e);
+            const char *c = strchr(e, ':');
+            start_tick = c ? atoi(c + 1) : 90;
+        }
+    }
+    if (seed < 0) return 0;
+    /* Keyed to the session's sim tick, so a stalled admit re-samples the
+     * same value and every peer's pattern is a function of the tick alone. */
+#ifdef NESRECOMP_NET
+    n = nes_netplay_sim_tick();
+#else
+    n = (uint32_t)g_frame_count;
+#endif
+    if ((int)n < start_tick) return 0;
+    {
+        uint32_t t = n - (uint32_t)start_tick;
+        uint8_t pad = 0;
+        /* Start: seat 0 leaves the title / attract once, near the beginning. */
+        if (seed == 0 && t < 6) return 0x10;
+        if (t < 60) return 0;
+        pad |= 0x01;                                   /* right */
+        if (((t / (37 + 11 * (uint32_t)seed)) & 3) == 2) pad = 0x02;  /* back off */
+        if ((t % (53 + 7 * (uint32_t)seed)) < 18) pad |= 0x80;        /* jump */
+        if (((t / 97) + (uint32_t)seed) & 1) pad |= 0x40;             /* run */
+        return pad;
+    }
+}
 
 /* ---- SDL state (file-level so nes_vblank_callback can access) ---- */
 static SDL_Window        *s_window    = NULL;
@@ -877,10 +1134,10 @@ void nes_vblank_callback(void) {
     nes_fallback_telemetry_frame_boundary();
     if (s_cb_count == 0) { /* debug_log_open(); */ }
     s_cb_count++;
-#ifdef NESRECOMP_NET
-    if (runtime_get_vblank_depth() <= 1 && nes_netplay_active())
-        nes_netplay_finish_frame();
-#endif
+    if (runtime_get_vblank_depth() <= 1) {
+        s_rb_tick_replay = 0;
+        rb_frame_top();
+    }
 
     /* Dot-PPU: complete the just-finished frame and publish it to the
      * presentation framebuffer, then arm the next frame's visible region.
@@ -945,7 +1202,11 @@ void nes_vblank_callback(void) {
                     (unsigned long long)g_frame_count);
             exit(0);
         }
-        if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_TAB)
+        if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_TAB
+#ifdef NESRECOMP_NET
+            && !nes_netplay_active()   /* no wall-clock catch-up online */
+#endif
+            )
             s_turbo_hotkey_held = 1;
         if (ev.type == SDL_KEYUP && ev.key.keysym.sym == SDLK_TAB)
             s_turbo_hotkey_held = 0;
@@ -1040,38 +1301,6 @@ smoke_skip_input:
         if (p==2) { if(sp>=0) g_controller2_buttons=(uint8_t)sp; }
         else if(sp>=0) g_logical_input[p-1]=(uint8_t)sp;
     }
-#ifdef NESRECOMP_NET
-    /* One lockstep tick is admitted per outer VBlank. Nested VBlanks reuse the
-     * already-published inputs, which keeps coroutine/spin-wait callbacks from
-     * sampling or advancing the network timeline twice. */
-    if (runtime_get_vblank_depth() <= 1 && nes_netplay_active()) {
-        uint8_t local = nes_netplay_input_player()
-                      ? g_controller2_buttons : g_controller1_buttons;
-        uint32_t tick = 0, a = 0, b = 0;
-        if (nes_netplay_needs_local_sample()) nes_netplay_stage_local(local);
-        while (!nes_netplay_poll_admit()) {
-            if (nes_netplay_state_desync(&tick, &a, &b)) {
-                fprintf(stderr,
-                        "[Netplay] State digest mismatch at tick %u: %08X != %08X\n",
-                        tick, a, b);
-                netplay_return_to_lobby("deterministic state mismatch");
-            }
-            if (nes_netplay_input_desync(&tick, &a, &b)) {
-                fprintf(stderr,
-                        "[Netplay] Input mismatch at tick %u: %08X != %08X\n",
-                        tick, a, b);
-                netplay_return_to_lobby("input stream mismatch");
-            }
-            if (nes_netplay_peer_disconnected(1500))
-                netplay_return_to_lobby("peer disconnected");
-            nes_netplay_wait_recv(2);
-        }
-        if (nes_netplay_state_desync(&tick, &a, &b))
-            netplay_return_to_lobby("deterministic state mismatch");
-        g_controller1_buttons = nes_netplay_published_buttons(0);
-        g_controller2_buttons = nes_netplay_published_buttons(1);
-    }
-#endif
 
     /* Nested callbacks resolve guest spin-waits but do not present or advance
      * g_frame_count, so consuming WAIT commands there runs scripts ahead. */
@@ -1109,6 +1338,8 @@ smoke_skip_input:
      * rendering off, which would loop forever. */
     if (s_debug)
         log_on_change("NMI_enable", (g_ppuctrl >> 7) & 1);
+    if (runtime_get_vblank_depth() <= 1)
+        rb_pre_tick();
     game_on_frame(g_frame_count);
     save_ram_tick();   /* wall-time-throttled dirty SRAM flush; no-op when inactive */
 
@@ -1289,7 +1520,7 @@ smoke_skip_input:
      * fraction, so the pushed audio tracks the video clock exactly (long-term
      * drift = 0) instead of a fixed 735 samples per nominal 29781-cycle frame.
      * cpu_hz = 21477272.727 (master) / 12 = 1789772.727; NTSC APU rate 44100. */
-    if (s_audio_dev && !turbo_active() && !headless_run_active()) {
+    if (s_audio_dev && !turbo_active() && !headless_run_active() && !s_rb_tick_replay) {
         static uint64_t s_last_boundary_cyc = 0;
         static int      s_have_boundary = 0;
         int push_n = AUDIO_SAMPLES_PER_FRAME;
@@ -1647,9 +1878,74 @@ smoke_skip_input:
         }
     }
 
+#ifdef NESRECOMP_NET
+    /* NES_NET_SHOT_TICK=N + NES_NET_SHOT_PATH: the frame tick N rendered,
+     * rewritten by every replay of N, so the file left is the confirmed one
+     * (compared across peers by tools/rb_loopback.sh). */
+    if (nes_netplay_active()) {
+        static long shot = -2;
+        static const char *shot_path;
+        if (shot == -2) {
+            const char *e = getenv("NES_NET_SHOT_TICK");
+            shot_path = getenv("NES_NET_SHOT_PATH");
+            shot = (e && e[0] && shot_path && shot_path[0]) ? atol(e) : -1;
+        }
+        if (shot >= 0 && (long)nes_netplay_current_tick() == shot) {
+            runner_screenshot(shot_path);
+            /* NES_NET_SHOT_STATE=<file>: the snapshot image of the same
+             * confirmed tick (u32 length + V7 save-state + trailer; strip the
+             * first 4 bytes for a .sav), for reading game state behind a
+             * screenshot. Rewritten by every replay of the tick. */
+            {
+                const char *sp = getenv("NES_NET_SHOT_STATE");
+                if (sp && sp[0]) {
+                    size_t n = 0;
+                    const uint8_t *img;
+                    nes_rb_state_invalidate();
+                    img = nes_rb_state_image(&n);
+                    FILE *f = img ? fopen(sp, "wb") : NULL;
+                    if (f) { fwrite(img, 1, n, f); fclose(f); }
+                }
+            }
+        }
+    }
+#endif
     /* Auto-screenshot disabled — use F8 or input scripts for screenshots */
     /* if (g_frame_count % 120 == 0) { save_screenshot(); } */
     g_frame_count++;
+
+    /* NES_RUN_FRAMES=N (windowed runs, e.g. the in-process offline Play after
+     * a rematch): stop at frame N and print the machine's identity so a
+     * harness can compare it with a fresh process's run of the same length. */
+    {
+        static long s_run_frames = -1;
+        if (s_run_frames < 0) {
+            const char *e = getenv("NES_RUN_FRAMES");
+            s_run_frames = (e && e[0]) ? atol(e) : 0;
+        }
+        if (s_run_frames > 0 && (long)g_frame_count >= s_run_frames
+#ifdef NESRECOMP_NET
+            && !nes_netplay_active()
+#endif
+        ) {
+            NesRbDigest d;
+            uint32_t fb = crc32_compute((const uint8_t *)s_framebuf,
+                                        (size_t)g_render_width * 240 * sizeof(uint32_t));
+            nes_rb_state_invalidate();
+            nes_rb_state_digest(&d);
+            fprintf(stderr, "RUN_DONE frames=%llu fb_crc=%08x state=%08x cpu_wram=%08x "
+                            "ppu=%08x apu_io_mods=%08x\n",
+                    (unsigned long long)g_frame_count, (unsigned)fb, (unsigned)d.master,
+                    (unsigned)d.part[0], (unsigned)d.part[1], (unsigned)d.part[2]);
+            {
+                const char *shot = getenv("NES_RUN_SCREENSHOT");
+                if (shot && shot[0]) runner_screenshot(shot);
+            }
+            fflush(stderr); fflush(stdout);
+            nesrecomp_expect_process_exit();
+            exit(0);
+        }
+    }
 
     /* Zapper crosshair — always visible when enabled in keybinds.ini */
     if (g_zapper_enabled && keybinds_zapper_mouse() && keybinds_zapper_crosshair()) {
@@ -1669,10 +1965,20 @@ smoke_skip_input:
             s_framebuf[cy * g_render_width + cx] = 0xFFFFFFFF;
     }
 
+#ifdef NESRECOMP_NET
+    /* A tick's host cost: admit -> the frame's work done, before the present
+     * (which may wait on vsync) and the pacing sleep. */
+    if (s_rb_tick_t0 && nes_netplay_active()) {
+        nes_netplay_rb_note_tick_cost(s_rb_tick_replay,
+            (double)(SDL_GetPerformanceCounter() - s_rb_tick_t0) * 1e6 /
+            (double)SDL_GetPerformanceFrequency());
+        s_rb_tick_t0 = 0;
+    }
+#endif
     /* Upload texture and present.
      * In turbo mode, only present every 16th frame to avoid vsync blocking
      * on every SDL_RenderPresent call (~6ms each on a 165Hz monitor). */
-    if (!turbo_active() || (g_frame_count & 15) == 0) {
+    if (!s_rb_tick_replay && (!turbo_active() || (g_frame_count & 15) == 0)) {
         /* Present-time palette swap (opt-in, default Raw = passthrough). Raw
          * presents the raw framebuffer untouched => byte-identical to canon. */
         const uint32_t *present = s_framebuf;
@@ -1703,7 +2009,7 @@ smoke_skip_input:
      * next one has not started rendering. */
     video_apply_pending();
 
-    pace_ntsc_frame();
+    if (!s_rb_tick_replay) pace_ntsc_frame();
     finish_frame_callback();
 }
 
@@ -1727,6 +2033,10 @@ static uint8_t *s_chr_rom_full = NULL; /* Full CHR ROM for bank switching */
 static int      s_rom_has_battery = 0; /* iNES header[6] bit1 — battery-backed SRAM */
 
 static bool load_rom(const char *path) {
+#ifdef NESRECOMP_NET
+    /* content_fingerprint: SHA-256 of the exact image this process runs. */
+    (void)nes_netplay_identity_set_rom_file(path);
+#endif
     FILE *f = fopen(path, "rb");
     if (!f) { fprintf(stderr, "Cannot open %s\n", path); return false; }
 
@@ -1846,31 +2156,72 @@ int nesrecomp_runner_run(int argc, char *argv[]) {
     game_on_init();
     startup_timing_mark("game_initialized");
 
+    nes_rb_probe_init();
 #ifdef NESRECOMP_NET
+    int net_on = 0;
+    nes_runner_register_session_keys();
     {
         NesNetplayConfig net;
-        if (!nes_netplay_take_pending_config(&net)) nes_netplay_config_defaults(&net);
-        nes_netplay_apply_env(&net);
+        int from_lobby = nes_netplay_take_pending_config(&net);
+        if (!from_lobby) nes_netplay_config_defaults(&net);
+        nes_netplay_config_apply_env(&net);
+        if (net.enabled) {
+            /* Refuse, before connecting, what an online session cannot
+             * honour: every input must come from the published rows, and a
+             * rewind/record path outside the episode driver would put local
+             * state into the shared simulation (recomp-ai-rules/NETPLAY.md). */
+            const char *refuse = NULL;
+            if (s_script_path) refuse = "input scripts";
+            else if (s_record_path) refuse = "input recording";
+            else if (s_loadstate_path) refuse = "--loadstate";
+            else if (nes_rb_probe_active()) refuse = "NES_RB_PROBE";
+            else if (s_smoke_frames || s_benchmark_frames) refuse = "--smoke/--benchmark";
 #if NESRECOMP_ENABLE_MODS
-        if (net.enabled && nes_mod_local_only_reason()) {
-            fprintf(stderr, "[Netplay] %s requires local play. Disable it before starting an online session.\n",
-                    nes_mod_local_only_reason());
-            /* A nonzero runner return reopens the lobby. This is a rejected
-               launch, including scripted/headless launches, so terminate. */
-            exit(1);
-        }
+            else if (nes_mod_local_only_reason()) refuse = nes_mod_local_only_reason();
 #endif
-        if (net.enabled && nes_netplay_start(&net) != 0) {
-            fprintf(stderr, "[Netplay] Could not start the requested session.\n");
-            return 1;
+            if (refuse) {
+                fprintf(stderr, "[Netplay] %s requires local play — refusing the "
+                                "online session before connecting.\n", refuse);
+                /* A lobby launch goes back to the room (nonzero return); an
+                 * environment-driven launch has no room to go back to. */
+                if (!from_lobby || getenv("NES_NET_EXIT_ON_RETURN")) {
+                    nesrecomp_expect_process_exit();
+                    exit(1);
+                }
+                return 1;
+            }
+            if (nes_netplay_start(&net) != 0) {
+                fprintf(stderr, "[Netplay] Could not start the requested session (%s).\n",
+                        nes_netplay_last_error());
+                if (!from_lobby || getenv("NES_NET_EXIT_ON_RETURN")) {
+                    nesrecomp_expect_process_exit();
+                    exit(1);
+                }
+                return 1;
+            }
+            net_on = 1;
+            g_nes_session_locked = 1;
         }
+        nes_netplay_set_publish_hook(rb_on_publish);
+        nes_netplay_set_resim_hook(rb_on_resim);
     }
 #endif
 
     /* SRAM persistence (saves/<title>.srm <-> g_sram). Auto-enabled for battery
      * games via the iNES bit; synthetic-SRAM games opt in from game_on_init()
-     * (which ran just above) via save_ram_request_enable(). NONE backend = no-op. */
+     * (which ran just above) via save_ram_request_enable(). NONE backend = no-op.
+     * A netplay guest resolves to its sandbox (nes_netplay_start). */
     save_ram_init(game_get_name(), s_rom_has_battery);
+#ifdef NESRECOMP_NET
+    if (net_on && nes_netplay_boot_barrier() != 0) {
+        fprintf(stderr, "[Netplay] Match could not boot (%s) — back to the lobby.\n",
+                nes_netplay_last_error());
+        nes_netplay_shutdown();
+        g_nes_session_locked = 0;
+        if (getenv("NES_NET_EXIT_ON_RETURN")) { nesrecomp_expect_process_exit(); exit(3); }
+        return 1;
+    }
+#endif
 
     if (g_zapper_enabled) {
         runtime_set_zapper_render_callback(zapper_on_demand_render);
@@ -2164,7 +2515,11 @@ int nesrecomp_runner_run(int argc, char *argv[]) {
     SDL_Quit();
     free(s_prg_data); s_prg_data = NULL;
 #ifdef NESRECOMP_NET
-    if (nes_netplay_active()) { nes_netplay_shutdown(); return 1; }
+    if (nes_netplay_active()) {
+        nes_netplay_shutdown();
+        g_nes_session_locked = 0;
+        return 1;
+    }
 #endif
     return 0;
 }

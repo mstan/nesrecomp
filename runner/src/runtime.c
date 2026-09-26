@@ -523,6 +523,7 @@ static int      s_skip_next_boundary_tick = 0;
 /* Monotonic guest CPU-cycle counter (see nes_runtime.h). Advanced by the same
  * _c as s_ops_count, but never reset — the co-sim alignment ruler. */
 uint64_t g_nes_cycles = 0;
+int g_nes_session_locked = 0;
 /* g_nes_cycles sampled at the frame-boundary FIRE (before the NMI handler runs).
  * The co-sim must measure frame length here, not at the post-handler tap: the
  * handler's length varies frame-to-frame, so sampling after it injects that
@@ -1072,6 +1073,14 @@ void runtime_request_guest_resume(uint16_t pc, int tick_charged) {
     s_guest_resume_pc = pc;
     s_guest_resume_tick_charged = tick_charged ? 1 : 0;
     s_guest_resume_pending = 1;
+}
+
+void runtime_rebase_frame_resume(uint16_t pc, int tick_charged) {
+    if (s_frame_callback_depth <= 0)
+        return;
+    s_frame_resume_pc = pc;
+    s_frame_resume_valid = 1;
+    s_frame_resume_tick_charged = tick_charged ? 1 : 0;
 }
 
 int runtime_guest_resume_pending(void) {
@@ -3583,7 +3592,19 @@ void runtime_session_reset(void) {
     s_scroll_2005_complete=0;s_visible_frame_valid=0;s_visible_frame_frame=0;
     g_controller1_buttons=g_controller2_buttons=0;s_ctrl1_shift=s_ctrl2_shift=0;s_ctrl1_strobe=false;
     s_vblank_depth=0;s_interrupt_epoch=0;s_ops_count=0;s_oam_dma_stall=0;
+    /* s_dotclock back to "unqueried": its first-use init also computes the
+     * first dot-accurate budget and advances s_odd_frame/s_dot_debt, so a
+     * cold boot in a process that already ran a machine (a netplay rematch)
+     * must redo it exactly as a fresh process does (NETPLAY.md §3). */
     s_odd_frame=0;s_dot_debt=0;s_frame_budget=OPS_PER_FRAME;s_vblank_pending=0;
+    s_dotclock=-1;
+    /* Host continuation state from the previous machine: a guest-resume
+     * request left pending by a netplay tick restart (or a load) must not
+     * be taken by the next cold boot's run_guest_execution -- measured: the
+     * offline Play after a rematch resumed $8057 on zeroed RAM and hung. */
+    s_guest_resume_pending=0;s_guest_resume_pc=0;s_guest_resume_tick_charged=0;
+    s_skip_next_boundary_tick=0;s_frame_callback_depth=0;s_frame_resume_valid=0;
+    s_guest_pc=0;s_guest_pc_valid=0;s_guest_tick_charged=0;s_unclocked_depth=0;
     s_in_irq=0;s_saved_vblank_depth=0;s_open_bus=0;s_ppu_io_latch=0;
     s_tail_pending=-1;s_tail_caller=-1;s_tail_active_n=0;s_tail_pending_slot=-1;
     s_last_sync_sx=s_last_sync_sy=0;s_last_sync_t=0;s_last_sync_frame=0;

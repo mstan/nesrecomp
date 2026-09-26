@@ -48,6 +48,15 @@ void save_ram_set_legacy_path(const char *legacy_abs);
 void save_ram_init(const char *default_title, int battery_bit);
 
 /*
+ * Netplay guest sandbox (recomp-ai-rules/NETPLAY.md §3): with a subdir set,
+ * persistence resolves to saves/<subdir>/<title>.srm, so a guest's personal
+ * save is never read into a match nor overwritten by the host's bytes. Call
+ * before save_ram_init(); "" / NULL restores the personal path for the next
+ * init. The match's SRAM is the host's, transferred before boot.
+ */
+void save_ram_set_sandbox(const char *subdir);
+
+/*
  * Notify the persistence layer that SRAM was modified by guest execution or a
  * debug/script write. Calls with unchanged bytes are ignored by callers.
  */

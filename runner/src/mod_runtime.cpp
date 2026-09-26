@@ -2609,6 +2609,23 @@ extern "C" int nes_mod_option_value(
     return 1;
 }
 
+/* Is a feature ENABLED in the player's offline selection (not the committed
+ * plan)? A netplay host reads its session offer from here: the match itself
+ * runs vanilla plus the sealed session configuration, so the committed plan
+ * is empty while the host still has to say what it would play. */
+extern "C" int nes_mod_feature_selected(const char* package_id,
+                                        const char* feature_id) {
+    if (!package_id || !feature_id) return 0;
+    NESRecomp::Runtime& runtime = NESRecomp::state();
+    if (!runtime.initialized) return 0;
+    const NESRecomp::Package* package =
+        NESRecomp::selected_package(runtime, package_id);
+    if (!package) return 0;
+    const NESRecomp::Feature* feature =
+        NESRecomp::find_feature(*package, feature_id);
+    return feature && NESRecomp::feature_enabled(runtime, *package, *feature) ? 1 : 0;
+}
+
 extern "C" const char* nes_mod_external_rom_path(
     const char* package_id, const char* feature_id, const char* resource_id) {
     if (!package_id || !feature_id || !resource_id) return nullptr;
@@ -2633,6 +2650,31 @@ extern "C" int nes_mod_runtime_commit_c(const char* rom_path) {
     std::string error;
     return NESRecomp::mod_runtime_commit(
         rom_path ? fs::path(rom_path) : fs::path(), &error) ? 1 : 0;
+}
+
+/* Netplay launch: vanilla, WITHOUT touching the persisted offline selection
+ * (recomp-ai-rules/MODS.md §7, NETPLAY.md §4 "mods are cleared, not merged").
+ * The same as the launcher provider's commit_netplay, reachable from a
+ * headless / env-driven launch too. The next ordinary commit rebuilds the
+ * offline plan. What a match MAY vary is its sealed session configuration
+ * (nes_netplay_session_*), applied by the runner, not a mod plan. */
+extern "C" int nes_mod_runtime_commit_netplay_c(const char* rom_path) {
+    NESRecomp::Runtime& runtime = NESRecomp::state();
+    if (rom_path && rom_path[0]) {
+        std::string digest;
+        if (!NESRecomp::crc32_file(rom_path, digest, &runtime.error) ||
+            digest != runtime.rom_crc32) {
+            if (runtime.error.empty())
+                runtime.error =
+                    "The selected ROM does not match this mod catalog target.";
+            return 0;
+        }
+    }
+    runtime.committed = {};
+    runtime.committed_external_rom_paths.clear();
+    runtime.commit_succeeded = false;
+    runtime.error.clear();
+    return 1;
 }
 
 extern "C" void nes_mod_runtime_activate_plugins_c(void) {

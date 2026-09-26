@@ -41,6 +41,7 @@ static int      s_dirty = 0;
 static uint64_t s_first_dirty_ms = 0;
 static uint64_t s_last_dirty_ms = 0;
 static int      s_atexit_registered = 0;
+static char     s_subdir[64] = "";           /* "netplay" = guest sandbox */
 
 static uint64_t monotonic_ms(void) {
 #ifdef _WIN32
@@ -151,6 +152,11 @@ static void resolve_path(const char *basename, const char *default_title) {
     char saves_dir[1024];
     snprintf(saves_dir, sizeof(saves_dir), "%ssaves", dir);
     save_ram_mkdir(saves_dir);   /* ignore EEXIST */
+    if (s_subdir[0]) {
+        size_t n = strlen(saves_dir);
+        snprintf(saves_dir + n, sizeof(saves_dir) - n, "/%s", s_subdir);
+        save_ram_mkdir(saves_dir);
+    }
     snprintf(s_path, sizeof(s_path), "%s/%s.srm", saves_dir, s_basename);
     s_bound = 1;
 }
@@ -160,6 +166,10 @@ void save_ram_ui_bind(const char *basename) {
     // launcher and the runtime resolve the identical saves/<stem>.srm. (Passed as
     // default_title, not the explicit-basename slot, so it gets sanitized.)
     resolve_path(NULL, basename);       /* UI only: path, no load/flush/atexit */
+}
+
+void save_ram_set_sandbox(const char *subdir) {
+    snprintf(s_subdir, sizeof(s_subdir), "%s", subdir ? subdir : "");
 }
 
 void save_ram_init(const char *default_title, int battery_bit) {
