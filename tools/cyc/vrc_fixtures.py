@@ -3,7 +3,7 @@ from mapper_fixtures import handoff
 from mapper_ppu_fixtures import ppu_contract
 from cart_variant_fixtures import nes2
 
-ACTIVE_IDS = (21,)
+ACTIVE_IDS = (21, 22)
 
 BOARDS=((21,1,2,4),(21,2,64,128),(22,0,2,1),
         (23,1,1,2),(23,2,4,8),(23,3,1,2),
