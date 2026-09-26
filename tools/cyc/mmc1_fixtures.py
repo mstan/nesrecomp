@@ -37,6 +37,22 @@ def save_fixture(board):
         ram=0x90 if board=='sxrom' else 0x77,chr_ram=0 if chr_kb else 7),'save_'+board)
 
 def mmc1_fixtures():
+    for mode in range(4):
+        for high in (0,8):
+            for start in (0x8000,0xc000):
+                lo=(2 if mode<2 else high if mode==2 else 3)|high
+                hi=(3 if mode<3 else 7)|high
+                writes=serial(0x8000,mode*4)+serial(0xe000,19|high)
+                case=nes2(handoff('mmc1a',155,writes,2*(lo if start==0x8000 else hi),
+                    prg_kb=256,chr_kb=128,start=start),ram=7)
+                yield named(case,f'155_{mode}_{high}_{start:x}')
+    # MMC1A ignores the PRG-register RAM-disable bit. Its other board pins
+    # retain their electrical behavior; large CHR avoids SNROM's extra /CE.
+    ops=operations(0xe000,16)+[('cpu',0x6000,0x51),('cpu_read',0x6000,0x51)]
+    yield named(nes2(ppu_contract(155,256,128,ops),ram=7),'155_ram')
+    case=named(nes2(ppu_contract(155,256,128,ops),ram=7),'155_alias3')
+    name,image,seeds,expected=case;image=bytearray(image);image[6]=0x10;image[7]=8;image[8]=0x30
+    yield name,bytes(image),seeds,expected
     for board in ('sorom','szrom','sxrom'):yield save_fixture(board)
     ops=[('cpu',0x6000,0x51)]+operations(0xa000,16)
     ops += [('cpu_read',0x6000,0x60),('cpu',0x6000,0xee)]

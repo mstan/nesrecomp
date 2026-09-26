@@ -219,6 +219,8 @@ inline void TricMapper::MMC1Apply() {
     if (mode<2) { banks[0]&=14; banks[1]=banks[0]+1; }
     else if (mode==2) banks[0]=0;
     else banks[1]=15;
+    bool a=Cart.Mapper==155 || Cart.Info.submapper==3;
+    if (a && PrgReg>=16 && mode>=2) banks[mode==2?0:1]=(PrgReg&8)+(mode==2?0:7);
     for (unsigned slot=0;slot<2;++slot) MapPRG16(slot,group+banks[slot]);
     if (Cart.Info.submapper==5) MapPRG32(0);
     if (Ctrl&16) { MapCHR4(0,Chr0); MapCHR4(1,Chr1); }
@@ -228,7 +230,7 @@ inline void TricMapper::MMC1Apply() {
     else if (WRAM_Length==32768) bank=(pins/4)%4;
     else if (WRAM_Length==16384) bank=(pins/8)%2;
     WRAM_Bank=bank*8192;
-    bool enabled=PrgReg<16;
+    bool enabled=a || PrgReg<16;
     if (Cart.CHRPages<=8 && Cart.PRGSlots<=64 && WRAM_Length==8192 && pins>=16) enabled=false;
     WRAM_Readable=WRAM_Writable=enabled;
 }
@@ -313,7 +315,7 @@ inline void TricMapper::MMC3ClockIRQ() {
 // been low for at least three CPU cycles. TriCNES calls this once per PPU
 // clock with its own address bus, which is the independent part of the check.
 inline void TricMapper::PPUClock() {
-    if (Cart.Mapper==1) {
+    if (Cart.Mapper==1 || Cart.Mapper==155) {
         bool high=(PPU_AddressBus&4096)!=0;
         if (A12!=high) { A12=high; MMC1Apply(); }
     }
@@ -388,7 +390,7 @@ inline void TricMapper::Reset() {
     case 180: MapPRG16(0, 0); MapPRG16(1, 0); MapCHR8(0); break;
     case 184: MapPRG32(0); MapCHR4(0, 0); MapCHR4(1, 4); break;
     case 232: MapPRG16(0, 0); MapPRG16(1, 3); MapCHR8(0); break;
-    case 1:
+    case 1: case 155:
         Ctrl = 0x0C;   // PRG mode 3, the state a bit-7 write leaves
         MMC1Apply();
         break;
@@ -590,7 +592,7 @@ inline void TricMapper::StoreCPU(ushort Address, byte Input) {
         MapPRG16(0, Ctrl * 4 + PrgReg);
         MapPRG16(1, Ctrl * 4 + 3);
         break;
-    case 1: MMC1Write(Address, Input); break;
+    case 1: case 155: MMC1Write(Address, Input); break;
     case 2: Latch = Input; MapPRG16(0, Input); break;
     case 3: Latch = Input; MapCHR8(Input); break;
     case 4: MMC3Write(Address, Input); break;

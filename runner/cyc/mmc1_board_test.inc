@@ -3,6 +3,20 @@ static void mmc1_serial(unsigned addr, unsigned value)
     for (unsigned i=0;i<5;++i) { hw.cycles+=2; hw_cart_cpu_write((uint16_t)addr,(value>>i)&1); }
 }
 
+static void test_mmc1a(void)
+{
+    cart(155,256,128);
+    for (unsigned mode=0;mode<4;++mode) for (unsigned prg_value=0;prg_value<32;++prg_value) {
+        mmc1_serial(0x8000,mode*4); mmc1_serial(0xe000,prg_value);
+        unsigned lo=prg_value&15, hi=lo;
+        if (mode<2) { lo&=14; hi=lo+1; }
+        if (mode==2) lo=prg_value&16 ? prg_value&8 : 0;
+        if (mode==3) hi=prg_value&16 ? (prg_value&8)|7 : 15;
+        prg_banks(lo*2,lo*2+1,hi*2,hi*2+1);
+        CHECK(hw_cart.wram_readable && hw_cart.wram_writable);
+    }
+}
+
 static void test_mmc1_boards(void)
 {
     /* Exhaustive ROM output pins: all modes, inner/outer bank values and

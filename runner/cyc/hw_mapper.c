@@ -195,10 +195,13 @@ static void mmc1_apply(void)
         hw_cart.m.chr1 : hw_cart.m.chr0;
     unsigned outer=hw_cart.prg_slots>64 ? chr&16 : 0;
     unsigned prg=hw_cart.m.prg&15;
+    bool early=hw_cart.mapper==155 || hw_cart.info.submapper==3;
+    unsigned first=early && (hw_cart.m.prg&16) ? prg&8 : 0;
+    unsigned last=early && (hw_cart.m.prg&16) ? (prg&8)|7 : 15;
     switch ((hw_cart.m.ctrl & MMC1_CTRL_PRG_MODE) >> 2) {
     case 0: case 1: map_prg32((outer|prg)>>1); break;
-    case 2: map_prg16(0,outer); map_prg16(1,outer|prg); break;
-    default: map_prg16(0,outer|prg); map_prg16(1,outer|15); break;
+    case 2: map_prg16(0,outer|first); map_prg16(1,outer|prg); break;
+    default: map_prg16(0,outer|prg); map_prg16(1,outer|last); break;
     }
     if (hw_cart.info.submapper==5) map_prg32(0);
     if (hw_cart.m.ctrl & MMC1_CTRL_CHR_4K) {
@@ -210,7 +213,7 @@ static void mmc1_apply(void)
     unsigned bank=hw_cart.chr_pages>8 && hw_cart.wram_len>=16384 ? (chr>>4)&1 :
         hw_cart.wram_len==32768 ? (chr>>2)&3 : hw_cart.wram_len==16384 ? (chr>>3)&1 : 0;
     hw_cart.wram_bank=bank*8192;
-    bool disabled=(hw_cart.m.prg&16)!=0;
+    bool disabled=!early && (hw_cart.m.prg&16)!=0;
     if (hw_cart.chr_pages<=8 && hw_cart.prg_slots<=64 && hw_cart.wram_len==8192)
         disabled|=(chr&16)!=0; /* SNROM's additional RAM /CE */
     hw_cart.wram_readable=hw_cart.wram_writable=!disabled;
@@ -504,7 +507,8 @@ static const struct {
     { 13, "CPROM", 0, 0 },
     { 11, "Color Dreams", 0, 0 },
     { 0,  "NROM",  0, 0 },
-    { 1,  "MMC1",  0, 1 },
+    { 1,  "MMC1",  1, 1 },
+    { 155,"MMC1A", 1, 1 },
     { 2,  "UxROM", 0, 0 },
     { 3,  "CNROM", 0, 0 },
     { 4,  "MMC3",  1, 1 },
@@ -524,7 +528,7 @@ static int mapper_index(int mapper)
  * native dispatch automatically after software makes the outer bank stable. */
 bool hw_prg_is_stable(void)
 {
-    if (hw_cart.mapper==1 && hw_cart.prg_slots>64)
+    if ((hw_cart.mapper==1 || hw_cart.mapper==155) && hw_cart.prg_slots>64)
         return !(hw_cart.m.ctrl&16) || !((hw_cart.m.chr0^hw_cart.m.chr1)&16);
     if (hw_cart.mapper!=153 || hw_cart.prg_slots<=64) return true;
     return !((hw_cart.m.reg[0]^hw_cart.m.reg[1])&1) &&
@@ -553,7 +557,6 @@ void hw_cart_power_on(void)
     memset(hw_cart.chr_off, 0, sizeof(hw_cart.chr_off));
     int i = mapper_index(hw_cart.mapper);
     hw_cart.watch_ppu_addr = i >= 0 ? MAPPERS[i].watch_ppu_addr : 0;
-    if (hw_cart.mapper==1) hw_cart.watch_ppu_addr=1;
     hw_cart.watch_cpu = hw_cart.mapper==5 || bandai_board() || (vrc24_board() && !vrc2_board()) || hw_cart.mapper == 73 || vrc6_board() || hw_cart.mapper == 85;
     hw_cart.mirroring = hw_cart.info.vertical ? HW_MIRROR_VERTICAL : HW_MIRROR_HORIZONTAL;
     hw_cart.wram_bank = 0;
@@ -599,7 +602,7 @@ void hw_cart_power_on(void)
     case 180: map_prg16(0, 0); map_prg16(1, 0); map_chr8(0); break;
     case 184: nrom_reset(); map_chr4(1, 4); break;
     case 232: map_prg16(0, 0); map_prg16(1, 3); map_chr8(0); break;
-    case 1:  mmc1_reset(); break;
+    case 1: case 155: mmc1_reset(); break;
     case 2:  uxrom_reset(); break;
     case 3:  cnrom_reset(); break;
     case 4:  mmc3_reset(); break;
@@ -746,7 +749,7 @@ void hw_cart_cpu_write(uint16_t addr, uint8_t value)
         map_prg16(0, hw_cart.m.ctrl | hw_cart.m.prg);
         map_prg16(1, hw_cart.m.ctrl | 3);
         break;
-    case 1:  mmc1_write(addr, value); break;
+    case 1: case 155: mmc1_write(addr, value); break;
     case 2:  uxrom_write(value); break;
     case 3:  cnrom_write(value); break;
     case 4:  mmc3_write(addr, value); break;
@@ -777,7 +780,7 @@ bool hw_cart_cpu_read(uint16_t addr, uint8_t *value)
 
 void hw_cart_ppu_addr_watched(uint16_t vbus)
 {
-    if (hw_cart.mapper==1) {
+    if (hw_cart.mapper==1 || hw_cart.mapper==155) {
         unsigned a12=(vbus>>12)&1;
         if (hw_cart.m.a12!=a12) { hw_cart.m.a12=(uint8_t)a12; mmc1_apply(); }
     } else if (hw_cart.mapper == 4) mmc3_ppu_addr(vbus);

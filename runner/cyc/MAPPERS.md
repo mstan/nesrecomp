@@ -19,6 +19,7 @@ models; it does not independently establish the mapper specification.
 
 | ID | Board / reference | Behavior and limits |
 |---:|---|---|
+| 155 | [MMC1A](https://www.nesdev.org/wiki/MMC1) | RAM stays enabled by the PRG register; bit 4 instead bypasses fixed-bank A17 selection. Uses the same SxROM board wiring as mapper 1. |
 | 85 | [VRC7](https://www.nesdev.org/wiki/VRC7) | Three 8 KiB PRG windows, eight CHR windows, WRAM gate, VRC IRQ, and six FM channels. Submapper 1 selects A3 and omits the oscillator; submapper 2 selects A4. |
 | 24 | [VRC6a](https://www.nesdev.org/wiki/VRC6) | 16+8 KiB PRG, all CHR/nametable modes, WRAM gate, CPU IRQ and two pulse/one saw audio channels. |
 | 26 | [VRC6b](https://www.nesdev.org/wiki/VRC6) | VRC6 with swapped A0/A1 register wiring, including the audio ports. |
@@ -285,6 +286,12 @@ save lengths. Legacy headers with larger CHR use the SZROM RAM select pin.
 Only explicit 8 KiB RAM geometry enables SNROM's additional /CE behavior.
 SOROM/SZROM saves contain chip 1; chip 0 remains volatile. SXROM saves use the
 physical A14:A13 order, with four consecutive 8 KiB banks.
+
+Mapper 155 models MMC1A's PRG-register bit 4: RAM remains enabled and PRG
+bit 3 drives A17 even in a fixed window. The separate SNROM CHR-controlled
+/CE still applies. Deprecated mapper 1 submapper 3 selects the same revision.
+Direct contracts enumerate every PRG register value in every mode, and ROM
+fixtures test both fixed windows and both A17 states.
 
 The ROM-free board tests exhaust inner/outer PRG mode combinations and PPU
 A12, test hardwired mirroring, then run synthetic ROMs through all four

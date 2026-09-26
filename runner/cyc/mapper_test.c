@@ -403,6 +403,7 @@ int main(void)
     test_bandai();
     test_mmc5();
     test_mmc1_boards();
+    test_mmc1a();
     printf("mapper contracts: %u checks passed\n", checks);
     return 0;
 }
