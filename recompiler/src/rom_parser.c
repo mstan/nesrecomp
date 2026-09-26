@@ -27,21 +27,28 @@ bool rom_parse(const char *path, NESRom *out) {
         return false;
     }
 
-    out->nes2 = (header[7] & 0x0c) == 0x08;
-    out->prg_banks = header[4];
-    out->chr_banks = header[5];
-    out->mapper    = ((header[6] >> 4) & 0x0F) | (header[7] & 0xF0);
+    if (!nes_cart_header(header, sizeof(header), &out->cart)) {
+        fclose(f);
+        return false;
+    }
+    out->nes2 = out->cart.nes2 != 0;
+    out->prg_banks = (out->cart.prg_size + 16383) / 16384;
+    out->chr_banks = (out->cart.chr_size + 8191) / 8192;
+    out->mapper = out->cart.mapper;
 
-    if (out->nes2) out->mapper |= (header[8] & 15) << 8;
-
-    /* Skip trainer if present */
-    if (header[6] & 0x04) {
-        fseek(f, 512, SEEK_CUR);
+    /* Reject truncated CHR/trainer data too, before generating any code. */
+    if (fseek(f, 0, SEEK_END) != 0) { fclose(f); return false; }
+    long file_size = ftell(f);
+    uint64_t required = out->cart.data_offset + (uint64_t)out->cart.prg_size + out->cart.chr_size;
+    if (file_size < 0 || (uint64_t)file_size < required ||
+        fseek(f, (long)out->cart.data_offset, SEEK_SET) != 0) {
+        fclose(f);
+        return false;
     }
 
     /* Read all PRG ROM */
-    size_t prg_size = (size_t)out->prg_banks * PRG_BANK_SIZE;
-    out->prg_data = (uint8_t *)malloc(prg_size);
+    size_t prg_size = out->cart.prg_size;
+    out->prg_data = (uint8_t *)calloc((size_t)out->prg_banks, PRG_BANK_SIZE);
     if (!out->prg_data) {
         fclose(f);
         return false;
@@ -54,14 +61,13 @@ bool rom_parse(const char *path, NESRom *out) {
     }
     fclose(f);
 
-    /* Fixed bank is always the last bank */
-    int fixed_bank = out->prg_banks - 1;
-    const uint8_t *fixed = out->prg_data + (size_t)fixed_bank * PRG_BANK_SIZE;
+    /* Vectors occupy the last six physical bytes, including 8 KiB images. */
+    const uint8_t *fixed = out->prg_data + prg_size - 6;
 
     /* Read vectors from fixed bank — NES $FFFA-$FFFF = offset $3FFA in bank */
-    out->nmi_vector   = fixed[0x3FFA] | ((uint16_t)fixed[0x3FFB] << 8);
-    out->reset_vector = fixed[0x3FFC] | ((uint16_t)fixed[0x3FFD] << 8);
-    out->irq_vector   = fixed[0x3FFE] | ((uint16_t)fixed[0x3FFF] << 8);
+    out->nmi_vector   = fixed[0] | ((uint16_t)fixed[1] << 8);
+    out->reset_vector = fixed[2] | ((uint16_t)fixed[3] << 8);
+    out->irq_vector   = fixed[4] | ((uint16_t)fixed[5] << 8);
 
     /* For mappers with fully-switchable 32KB banks (e.g. GxROM/mapper 66),
      * read per-window vectors.  Each 32KB window has its own upper 16KB bank

@@ -190,6 +190,8 @@ static void mmc1_apply(void)
     default: map_prg16(0, prg); map_prg16(1, -1); break; /* last bank fixed at $C000 */
     }
 
+    if (hw_cart.info.submapper == 5) map_prg32(0);
+
     if (hw_cart.m.ctrl & MMC1_CTRL_CHR_4K) {
         map_chr4(0, hw_cart.m.chr0 & 0x1F);
         map_chr4(1, hw_cart.m.chr1 & 0x1F);
@@ -251,6 +253,7 @@ static void mmc3_apply(void)
     }
     map_prg8(1, r[7]);
     map_prg8(3, -1);
+    if (hw_cart.mapper == 206 && hw_cart.info.submapper == 1) map_prg32(0);
 
     /* Bit 7 swaps the 2KB and 1KB halves of the pattern tables (it inverts
      * CHR A12). The 2KB banks ignore the low bit of their register. */
@@ -438,15 +441,18 @@ void hw_cart_power_on(void)
     memset(hw_cart.chr_off, 0, sizeof(hw_cart.chr_off));
     int i = mapper_index(hw_cart.mapper);
     hw_cart.watch_ppu_addr = i >= 0 ? MAPPERS[i].watch_ppu_addr : 0;
-    hw_cart.has_wram = i >= 0 ? MAPPERS[i].wram : 0;
+    hw_cart.mirroring = hw_cart.info.vertical ? HW_MIRROR_VERTICAL : HW_MIRROR_HORIZONTAL;
+    hw_cart.wram_bank = 0;
+    hw_cart.has_wram = hw_cart.info.prg_size ? hw_cart.wram_len != 0 : i >= 0 ? MAPPERS[i].wram : 0;
     hw_cart.wram_readable = hw_cart.wram_writable = hw_cart.has_wram;
-    if (hw_cart.mapper == 34) {
+    if (hw_cart.mapper == 34 && !hw_cart.info.prg_size) {
         hw_cart.has_wram = hw_cart.chr_pages > 8;
         hw_cart.wram_readable = hw_cart.wram_writable = hw_cart.has_wram;
     }
+    if (!hw_cart.info.prg_size) hw_cart.wram_len = hw_cart.has_wram ? 8192 : 0;
     /* Work RAM is uninitialized at power-on like CPU RAM; a battery-backed
      * board would come up with its saved contents, which no run here has. */
-    memset(hw_cart.wram, 0, sizeof(hw_cart.wram));
+    memset(hw_cart.wram, 0, hw_cart.info.prg_nvram ? hw_cart.info.prg_ram : sizeof(hw_cart.wram));
 
     switch (hw_cart.mapper) {
     case 13: nrom_reset(); map_chr4(1, 0); hw_cart.mirroring = HW_MIRROR_VERTICAL; break;
@@ -471,7 +477,7 @@ void hw_cart_power_on(void)
 void hw_cart_cpu_write(uint16_t addr, uint8_t value)
 {
     if (hw_cart.mapper == 34) {
-        if (hw_cart.chr_pages <= 8) {
+        if (!(hw_cart.info.prg_size ? nes_cart_nina(&hw_cart.info) : hw_cart.chr_pages > 8)) {
             if (addr >= 0x8000) {
                 hw_cart.m.latch = value & hw_cart_prg_read(addr);
                 map_prg32(hw_cart.m.latch);
@@ -510,10 +516,12 @@ void hw_cart_cpu_write(uint16_t addr, uint8_t value)
         return;
     }
     if (addr >= 0x6000 && addr < 0x8000) {
-        if (hw_cart.has_wram && hw_cart.wram_writable) hw_cart.wram[addr & 0x1FFF] = value;
+        if (hw_cart.has_wram && hw_cart.wram_writable) hw_cart.wram[(hw_cart.wram_bank + (addr & 0x1FFF)) % hw_cart.wram_len] = value;
         return;
     }
     if (addr < 0x8000) return;   /* low-address registers were handled above */
+    if ((hw_cart.mapper == 2 || hw_cart.mapper == 3 || hw_cart.mapper == 7) &&
+        hw_cart.info.submapper == 2) value &= hw_cart_prg_read(addr);
     switch (hw_cart.mapper) {
     case 11: /* Color Dreams; see MAPPERS.md. */
         value &= hw_cart_prg_read(addr);
@@ -528,7 +536,8 @@ void hw_cart_cpu_write(uint16_t addr, uint8_t value)
         break;
     case 71: /* Camerica; see MAPPERS.md. */
         if (addr >= 0xc000) map_prg16(0, value & 15);
-        else if (addr >= 0x9000 && addr < 0xa000)
+        else if ((!hw_cart.info.nes2 && addr >= 0x9000 && addr < 0xa000) ||
+                 (hw_cart.info.nes2 && hw_cart.info.submapper == 1 && addr < 0xa000))
             hw_cart.mirroring = (value & 0x10) ? HW_MIRROR_SCREEN_B : HW_MIRROR_SCREEN_A;
         break;
     case 75: /* VRC1; see MAPPERS.md. */
@@ -576,7 +585,8 @@ void hw_cart_cpu_write(uint16_t addr, uint8_t value)
         map_prg16(1, value & 7);
         break;
     case 232: /* Camerica Quattro; see MAPPERS.md. */
-        if (addr < 0xc000) hw_cart.m.ctrl = (value >> 1) & 12;
+        if (addr < 0xc000) hw_cart.m.ctrl = hw_cart.info.submapper == 1 ?
+            ((value & 8) | ((value >> 2) & 4)) : (value >> 1) & 12;
         else hw_cart.m.prg = value & 3;
         map_prg16(0, hw_cart.m.ctrl | hw_cart.m.prg);
         map_prg16(1, hw_cart.m.ctrl | 3);
@@ -594,7 +604,7 @@ void hw_cart_cpu_write(uint16_t addr, uint8_t value)
 bool hw_cart_cpu_read(uint16_t addr, uint8_t *value)
 {
     if (addr >= 0x6000 && addr < 0x8000 && hw_cart.has_wram && hw_cart.wram_readable) {
-        *value = hw_cart.wram[addr & 0x1FFF];
+        *value = hw_cart.wram[(hw_cart.wram_bank + (addr & 0x1FFF)) % hw_cart.wram_len];
         return true;
     }
     return false;

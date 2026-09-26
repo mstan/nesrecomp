@@ -62,10 +62,10 @@ extern uint32_t cyc_trace_cycle;
  * entries are compared on their 6 bits. Only memories a program can observe
  * belong here: the mapper's registers are internal state and go in
  * cyc_hw_state_hash, which is compared between runs of one implementation. */
-uint64_t cyc_mem_hash(uint64_t cycles, const uint8_t *ram, const uint8_t *ciram, const uint8_t *oam,
+uint64_t cyc_mem_hash(uint64_t cycles, const uint8_t *ram, const uint8_t *ciram, size_t ciram_len, const uint8_t *oam,
                       const uint8_t *palette, const uint8_t *chr_ram, size_t chr_ram_len,
                       const uint8_t *wram, size_t wram_len, const uint16_t *frame_index);
-void cyc_mem_dump(void *file, uint64_t cycles, const uint8_t *ram, const uint8_t *ciram, const uint8_t *oam,
+void cyc_mem_dump(void *file, uint64_t cycles, const uint8_t *ram, const uint8_t *ciram, size_t ciram_len, const uint8_t *oam,
                   const uint8_t *palette, const uint8_t *chr_ram, size_t chr_ram_len, const uint8_t *wram,
                   size_t wram_len, const uint16_t *frame_index);
 

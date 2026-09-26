@@ -50,6 +50,7 @@
  */
 #include "cyc_accuracycoin.h"
 #include "cyc_core.h"
+#include "../../common/nes_cart.h"
 #include "cyc_png.h"
 #include "cyc_trace.h"
 
@@ -352,11 +353,16 @@ int main(int argc, char **argv) {
     }
     size_t size;
     uint8_t *image = read_file(rom_path, &size);
-    if (!image || !cyc_load_ines(image, size)) {
+    NesCartInfo cart_info;
+    if (!image || !nes_cart_image(image, size, &cart_info) || !cyc_load_ines(image, size)) {
         fprintf(stderr, "cannot load %s (invalid or unsupported cartridge; see runner/cyc/MAPPERS.md)\n", rom_path);
         return 2;
     }
 #ifndef CYC_ORACLE
+    if (cyc_native_program_name && nes_cart_identity(&cart_info) != cyc_native_cart_hash) {
+        fprintf(stderr, "Cartridge metadata differs from the compiled program; regenerate native code\n");
+        return 2;
+    }
     if (cyc_native_program_name && cyc_prg_hash() != cyc_native_prg_hash) {
         fprintf(stderr, "PRG ROM does not match the ROM '%s' was recompiled from (hash %08X, expected %08X)\n",
                 cyc_native_program_name, cyc_prg_hash(), cyc_native_prg_hash);
@@ -406,8 +412,8 @@ int main(int argc, char **argv) {
     acccoin_driver_init(&drv);
     SpamDriver spam;
     if (spam_page >= 0) {
-        const uint8_t *prg = image + 16 + ((image[6] & 0x04) ? 512 : 0);
-        acccoin_spam_init(&spam, prg, (size_t)image[4] * 0x4000, spam_page, spam_row, spam_seed, spam_dpad);
+        const uint8_t *prg = image + cart_info.data_offset;
+        acccoin_spam_init(&spam, prg, (size_t)cart_info.prg_size, spam_page, spam_row, spam_seed, spam_dpad);
     }
     if (input_file && !load_input(input_file)) return 2;
     long frame = 0;
@@ -493,8 +499,8 @@ int main(int argc, char **argv) {
         fprintf(stderr, "cannot write %s\n", screenshot);
 
     if (acccoin) {
-        const uint8_t *prg = image + 16 + ((image[6] & 0x04) ? 512 : 0);
-        size_t prg_len = (size_t)image[4] * 0x4000;
+        const uint8_t *prg = image + cart_info.data_offset;
+        size_t prg_len = (size_t)cart_info.prg_size;
         AccCoinSummary s = acccoin_report(prg, prg_len, cyc_cpu_ram(), stdout, false);
         return s.fail == 0 && s.not_run == 0 ? 0 : 1;
     }

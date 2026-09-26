@@ -248,47 +248,38 @@ static uint32_t round_up_pow2(uint32_t n)
 
 static uint8_t *alloc_padded(const uint8_t *src, size_t len, uint32_t *out_alloc)
 {
-    uint32_t alloc = round_up_pow2((uint32_t)len);
+    uint32_t alloc = round_up_pow2((uint32_t)(len < 8192 ? 8192 : len));
     uint8_t *p = (uint8_t *)calloc(1, alloc);
-    if (src) memcpy(p, src, len);
+    if (p && src) memcpy(p, src, len);
     *out_alloc = alloc;
     return p;
 }
 
 bool cyc_load_ines(const uint8_t *image, size_t size)
 {
-    if (size < 16 || memcmp(image, "NES\x1A", 4) != 0) return false;
-    int mapper = (image[6] >> 4) | (image[7] & 0xF0);
-    if ((image[7] & 0x0C) == 0x08) {
-        mapper |= (image[8] & 15) << 8;
-        if (mapper != 0 && mapper != 1 && mapper != 2 && mapper != 3 &&
-            mapper != 4 && mapper != 7 && mapper != 66) return false;
-    }
-    if (!hw_cart_supports(mapper)) return false;
-    /* Four-screen boards supply their own nametable RAM instead of letting
-     * the console's CIRAM answer the upper half; no supported mapper has it. */
-    if (image[6] & 0x08) return false;
-    size_t prg_len = (size_t)image[4] * 0x4000;
-    size_t chr_len = (size_t)image[5] * 0x2000;
-    size_t offset = 16 + ((image[6] & 0x04) ? 512 : 0);
-    if (prg_len == 0 || offset + prg_len + chr_len > size) return false;
+    NesCartInfo info;
+    if (!nes_cart_image(image, size, &info) || !hw_cart_supports(info.mapper) ||
+        !nes_cart_variant_supported(&info)) return false;
+    uint32_t prg_alloc, chr_alloc;
+    uint32_t chr_len = info.chr_size ? info.chr_size : info.chr_ram + info.chr_nvram;
+    uint8_t *prg = alloc_padded(image + info.data_offset, info.prg_size, &prg_alloc);
+    uint8_t *chr = alloc_padded(info.chr_size ? image + info.data_offset + info.prg_size : NULL,
+                              chr_len, &chr_alloc);
+    if (!prg || !chr) { free(prg); free(chr); return false; }
     free(hw_cart.prg);
     free(hw_cart.chr);
-    /* prg_len/chr_len stay the image's own sizes (cyc_prg_hash must match the
-     * recompiler's hash of the same bytes); the buffers behind them are padded
-     * to a power of two so that a wrapped bank number stays in bounds. */
-    uint32_t prg_alloc, chr_alloc;
-    hw_cart.prg = alloc_padded(image + offset, prg_len, &prg_alloc);
-    hw_cart.prg_len = (uint32_t)prg_len;
-    hw_cart.prg_slots = prg_alloc / 0x2000 ? prg_alloc / 0x2000 : 1;
-    hw_cart.chr_ram = chr_len == 0;
-    hw_cart.chr = alloc_padded(chr_len ? image + offset + prg_len : NULL, chr_len ? chr_len : (mapper == 13 ? 0x4000 : 0x2000), &chr_alloc);
-    hw_cart.chr_len = (uint32_t)(chr_len ? chr_len : (mapper == 13 ? 0x4000 : 0x2000));
-    hw_cart.chr_pages = chr_alloc / 0x400 ? chr_alloc / 0x400 : 1;
-    hw_cart.mapper = (uint8_t)mapper;
-    /* The header's arrangement bit is the solder pad on boards that have one;
-     * mappers that drive CIRAM A10 themselves overwrite it at reset. */
-    hw_cart.mirroring = (image[6] & 1) ? HW_MIRROR_VERTICAL : HW_MIRROR_HORIZONTAL;
+    memset(&hw_cart, 0, sizeof(hw_cart));
+    hw_cart.info = info;
+    hw_cart.prg = prg;
+    hw_cart.prg_len = info.prg_size;
+    hw_cart.prg_slots = prg_alloc / 8192;
+    hw_cart.chr = chr;
+    hw_cart.chr_len = chr_len;
+    hw_cart.chr_pages = chr_alloc / 1024;
+    hw_cart.chr_ram = !info.chr_size;
+    hw_cart.mapper = info.mapper;
+    hw_cart.wram_len = info.prg_ram + info.prg_nvram;
+    hw_cart.mirroring = info.vertical ? HW_MIRROR_VERTICAL : HW_MIRROR_HORIZONTAL;
     hw_cart_power_on();
     return true;
 }
@@ -366,15 +357,15 @@ size_t cyc_audio_read(int16_t *out, size_t max) { return apu_audio_read(out, max
 
 uint64_t cyc_mem_state_hash(void)
 {
-    return cyc_mem_hash(hw.cycles, hw.ram, ppu.ciram, ppu.oam, ppu.palette, hw_cart.chr_ram ? hw_cart.chr : NULL,
-                        hw_cart.chr_len, hw_cart.has_wram ? hw_cart.wram : NULL, sizeof(hw_cart.wram),
+    return cyc_mem_hash(hw.cycles, hw.ram, ppu.ciram, hw_cart.info.four_screen ? 4096 : 2048, ppu.oam, ppu.palette, hw_cart.chr_ram ? hw_cart.chr : NULL,
+                        hw_cart.chr_len, hw_cart.has_wram ? hw_cart.wram : NULL, hw_cart.wram_len,
                         hw_frame_index);
 }
 
 void cyc_mem_state_dump(void *file)
 {
-    cyc_mem_dump(file, hw.cycles, hw.ram, ppu.ciram, ppu.oam, ppu.palette, hw_cart.chr_ram ? hw_cart.chr : NULL,
-                 hw_cart.chr_len, hw_cart.has_wram ? hw_cart.wram : NULL, sizeof(hw_cart.wram), hw_frame_index);
+    cyc_mem_dump(file, hw.cycles, hw.ram, ppu.ciram, hw_cart.info.four_screen ? 4096 : 2048, ppu.oam, ppu.palette, hw_cart.chr_ram ? hw_cart.chr : NULL,
+                 hw_cart.chr_len, hw_cart.has_wram ? hw_cart.wram : NULL, hw_cart.wram_len, hw_frame_index);
 }
 
 uint64_t cyc_hw_state_hash(void)

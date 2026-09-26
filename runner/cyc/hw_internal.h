@@ -33,6 +33,7 @@
 #include <stdint.h>
 
 #include "hw_mapper.h"
+#include "../../common/nes_cart.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -90,12 +91,14 @@ typedef struct {
     uint32_t prg_off[4];        /* $8000, $A000, $C000, $E000 */
     uint32_t chr_off[8];        /* $0000, $0400, ... $1C00 */
 
-    uint8_t  mapper;            /* iNES mapper number */
+    NesCartInfo info;
+    uint32_t wram_len, wram_bank;
+    uint16_t mapper;            /* iNES mapper number */
     uint8_t  mirroring;         /* HwMirroring, as the cartridge drives CIRAM A10 */
     uint8_t  watch_ppu_addr;    /* the mapper needs every PPU address (MMC3) */
 
     /* Work RAM at $6000-$7FFF. Boards without it leave the bus open there. */
-    uint8_t  wram[0x2000];
+    uint8_t  wram[0x20000];
     uint8_t  has_wram, wram_readable, wram_writable;
 
     /* Per-mapper registers. Only the loaded mapper's members are live; they
@@ -126,12 +129,14 @@ HW_ALWAYS_INLINE uint8_t hw_cart_prg_read(uint16_t addr)
 /* CHR as the PPU sees it at a ($0000-$1FFF). */
 HW_ALWAYS_INLINE uint32_t hw_cart_chr_index(uint16_t a)
 {
-    return hw_cart.chr_off[(a >> 10) & 7] | (a & 0x3FF);
+    uint32_t index = hw_cart.chr_off[(a >> 10) & 7] | (a & 0x3FF);
+    return hw_cart.chr_ram && hw_cart.chr_len ? index % hw_cart.chr_len : index;
 }
 
 /* CIRAM A10 as the cartridge drives it, as a CIRAM index bit. */
 HW_ALWAYS_INLINE uint16_t hw_cart_ciram_a10(uint16_t vbus)
 {
+    if (hw_cart.info.four_screen) return vbus & 0xc00;
     switch (hw_cart.mirroring) {
     case HW_MIRROR_HORIZONTAL: return (vbus & 0x800) ? 0x400 : 0;
     case HW_MIRROR_VERTICAL:   return (vbus & 0x400) ? 0x400 : 0;
@@ -237,7 +242,7 @@ typedef struct {
     /* ---- memories ---- */
     uint8_t  oam[256];
     uint8_t  palette[32];
-    uint8_t  ciram[0x800];
+    uint8_t  ciram[0x1000] /* upper 2 KiB belongs to four-screen cartridges */;
 } HwPpu;
 
 extern HwPpu ppu;

@@ -4,6 +4,7 @@
 #pragma once
 #include <stdint.h>
 #include <stdbool.h>
+#include "../../common/nes_cart.h"
 
 #define PRG_BANK_SIZE 0x4000  /* 16KB */
 #define CHR_BANK_SIZE 0x2000  /* 8KB */
@@ -11,6 +12,7 @@
 #define MAX_32K_WINDOWS 8     /* max 32KB PRG windows (GxROM has up to 4) */
 
 typedef struct {
+    NesCartInfo cart;
     uint8_t *prg_data;      /* All PRG ROM data concatenated */
     int      prg_banks;     /* Number of 16KB PRG banks */
     int      chr_banks;     /* Number of 8KB CHR banks (0 = CHR RAM) */

@@ -1251,6 +1251,7 @@ static void emit_umbrella(const Program *p, const char *path, const char *prefix
     fprintf(f, "};\n\n");
 
     uint32_t prg_hash = 2166136261u;
+    fprintf(f, "const uint32_t cyc_native_cart_hash = 0x%08Xu;\n", nes_cart_identity(&p->rom->cart));
     for (uint32_t i = 0; i < p->prg_len; i++) prg_hash = (prg_hash ^ p->rom->prg_data[i]) * 16777619u;
     fprintf(f,
         "const char *cyc_native_program_name = \"%s\";\n"
@@ -1400,9 +1401,9 @@ static void seed_vectors(const Program *p, uint32_t bank, uint32_t *seeds, int *
 }
 
 bool cyc_codegen_emit(const NESRom *rom, const GameConfig *cfg, const char *output_prefix) {
-    if (rom->nes2 && rom->mapper != 0 && rom->mapper != 1 && rom->mapper != 2 &&
-        rom->mapper != 3 && rom->mapper != 4 && rom->mapper != 7 && rom->mapper != 66) {
-        fprintf(stderr, "[cyc] NES 2.0 variants of mapper %d are not implemented; see runner/cyc/MAPPERS.md\n", rom->mapper);
+    if (!nes_cart_variant_supported(&rom->cart)) {
+        fprintf(stderr, "[cyc] unsupported cartridge metadata for mapper %d submapper %u\n",
+                rom->mapper, rom->cart.submapper);
         return false;
     }
     const char *board = mapper_name(rom->mapper);
@@ -1415,7 +1416,7 @@ bool cyc_codegen_emit(const NESRom *rom, const GameConfig *cfg, const char *outp
     Program *p = (Program *)calloc(1, sizeof(Program));
     p->rom = rom;
     p->mapper = rom->mapper;
-    p->prg_len = (uint32_t)rom->prg_banks * 0x4000u;
+    p->prg_len = rom->cart.prg_size;
     /* Banks are counted in the padded image, so that a bank number the
      * hardware wraps lands on the same byte here as in hw_mapper.c. */
     p->banks = 1;
@@ -1425,6 +1426,9 @@ bool cyc_codegen_emit(const NESRom *rom, const GameConfig *cfg, const char *outp
     for (uint32_t s = 0; s < SLOT_COUNT; s++) {
         p->fixed[s] = fixed_bank_for(rom->mapper, p->banks, s);
         p->power_on[s] = power_on_bank_for(rom->mapper, p->banks, s);
+        if ((rom->mapper == 206 && rom->cart.submapper == 1) ||
+            (rom->mapper == 1 && rom->cart.submapper == 5))
+            p->fixed[s] = p->power_on[s] = s & (p->banks - 1);
         if (p->fixed[s] >= 0) any_fixed = true;
     }
     p->is_insn = (uint8_t *)calloc(1, pos_space(p));
