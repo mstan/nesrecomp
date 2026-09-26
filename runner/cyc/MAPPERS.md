@@ -18,6 +18,7 @@ models; it does not independently establish the mapper specification.
 
 | ID | Board / reference | Behavior and limits |
 |---:|---|---|
+| 87 | [J87](https://www.nesdev.org/wiki/INES_Mapper_087) | Fixed PRG; reversed CHR select bits; $6000-$7FFF decode. |
 | 79 | [NINA-003/006](https://www.nesdev.org/wiki/NINA-003-006) | 32 KiB PRG / 8 KiB CHR; partial $4100-$5FFF decode. |
 | 76 | [Namco 109](https://www.nesdev.org/wiki/INES_Mapper_076) | Two 8 KiB PRG windows; four 2 KiB CHR windows; fixed mirroring. |
 | 206 | [DxROM](https://www.nesdev.org/wiki/INES_Mapper_206) | Fixed MMC3-style bank orientation; no IRQ/WRAM. Four-screen Gauntlet, Popils prototype WRAM, and Namco 108 spurious-write erratum excluded. |

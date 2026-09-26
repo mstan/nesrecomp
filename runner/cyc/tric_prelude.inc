@@ -348,6 +348,10 @@ inline void TricMapper::StoreCPU(ushort Address, byte Input) {
         MapCHR8(Input % 8);
         return;
     }
+    if (Cart.Mapper == 87 && Address >= 0x6000 && Address < 0x8000) {
+        MapCHR8((Input % 2) * 2 + (Input / 2) % 2);
+        return;
+    }
     if (Address >= 0x6000 && Address < 0x8000) {
         if (HasWRAM && WRAM_Writable) WRAM[Address & 0x1FFF] = Input;
         return;

@@ -392,6 +392,7 @@ static const struct {
     uint8_t     watch_ppu_addr;
     uint8_t     wram;            /* boards for this mapper carry work RAM */
 } MAPPERS[] = {
+    { 87, "J87", 0, 0 },
     { 79, "NINA-003/006", 0, 0 },
     { 76, "Namco 109", 0, 0 },
     { 206, "DxROM", 0, 0 },
@@ -475,6 +476,10 @@ void hw_cart_cpu_write(uint16_t addr, uint8_t value)
         hw_cart.m.latch = value;
         map_prg32((value >> 3) & 1);
         map_chr8(value & 7);
+        return;
+    }
+    if (hw_cart.mapper == 87 && addr >= 0x6000 && addr < 0x8000) {
+        map_chr8(((value & 1) << 1) | ((value & 2) >> 1));
         return;
     }
     if (addr >= 0x6000 && addr < 0x8000) {
