@@ -13,7 +13,8 @@ Those are a cross-check, not a replacement for hardware documentation.
 
 The original IDs are 0, 1, 2, 3, 4, 7, and 66. The additions below have explicit
 bank/decode contracts in `mapper_test.c` and generated ROM execution checks in
-`tools/cyc/mapper_fixtures.py`. Oracle parity checks integration with two CPU/PPU
+`tools/cyc/mapper_fixtures.py` and `mapper_ppu_fixtures.py`.
+Oracle parity checks integration with two CPU/PPU
 models; it does not independently establish the mapper specification.
 
 | ID | Board / reference | Behavior and limits |
@@ -36,11 +37,23 @@ models; it does not independently establish the mapper specification.
 
 New boards initially accept legacy iNES images only. NES 2.0 variants are rejected
 for these IDs until their submapper and RAM-size metadata are implemented. Fixed
-mirroring follows the iNES header. Four-screen boards are rejected. Power-on bank
-registers use deterministic zero values where hardware does not guarantee a state.
+mirroring follows the iNES header. Four-screen boards are rejected. Power-on
+mappings are deterministic implementation choices where hardware does not guarantee a state.
 Battery RAM persistence and analog CIC defeat circuits are outside this host.
 
 Run the cartridge contracts with `ctest` in a `runner/cyc` build. Run execution
 checks with `tools/cyc/test_cyc_runtime.py`; every fixture runs compiled code, the
 same binary's interpreter, the standalone interpreter, and the independent oracle
 at all four CPU/PPU alignments. Retained logs contain the frame and bus hashes.
+
+Validation of this expansion: 41 synthetic programs (656 executions across the
+four modes and alignments), all with 100% native CPU execution, plus 135 rejection
+checks from `test_cyc_mapper_headers.py`. PPU programs assert physical CHR-page
+bytes through `$2007`, verify banked CHR RAM, mirroring and overlapping WRAM,
+then enable background rendering for frame-hash comparison. These tests establish
+specific board contracts; commercial games on the new IDs have not been tested.
+
+Deferred work includes MMC2/MMC4 read-triggered latches, MMC5, VRC IRQ/audio chips,
+Bandai EEPROM, four-screen nametable RAM, and mappers with PRG banks below 8 KiB.
+Each needs its missing hardware primitive and suitable regression ROMs before
+being added to the supported list. The legacy runner still needs separate work.

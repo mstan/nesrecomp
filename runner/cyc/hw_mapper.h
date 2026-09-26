@@ -19,9 +19,7 @@
  * offset at one CPU address), so mappers only ever write them through
  * hw_cart_map_prg8/hw_cart_map_chr1 below.
  *
- * Supported: 0 (NROM), 1 (MMC1), 2 (UxROM), 3 (CNROM), 4 (MMC3/MMC6),
- * 7 (AxROM), 66 (GxROM). hw_mapper.c has one section per mapper, and says
- * where its behavior comes from.
+ * MAPPERS.md lists supported IDs, board variants, references and validation.
  */
 #pragma once
 #include <stdbool.h>
@@ -59,9 +57,8 @@ void hw_cart_cpu_write(uint16_t addr, uint8_t value);
  * is read inline through hw_cart.prg_off. */
 bool hw_cart_cpu_read(uint16_t addr, uint8_t *value);
 
-/* Every address the PPU puts on its bus, for mappers that watch it: MMC3's
- * IRQ counter clocks on filtered rising edges of A12, and MMC2/MMC4 latch on
- * pattern fetches. Call hw_cart_ppu_addr(), which is free when the loaded
+/* Every address the PPU puts on its bus: MMC3's IRQ counter clocks on
+ * filtered rising edges of A12. Call hw_cart_ppu_addr(), which is free when the loaded
  * mapper does not care. */
 void hw_cart_ppu_addr_watched(uint16_t vbus);
 
