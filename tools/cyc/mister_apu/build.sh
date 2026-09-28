@@ -33,8 +33,8 @@ for f in "$OUT"/obj/Vapu_harness*.cpp "$VINC/verilated.cpp" "$VINC/verilated_thr
     g++ $CXXFLAGS -c "$f" -o "$o"
     objs+=("$o")
 done
-for f in cpu6502.c cpu6502_interp.c hw_machine.c hw_mapper.c hw_fds.c hw_fds_audio.c hw_fds_hle.c vendor/emu2413/emu2413.c hw_ppu.c hw_apu.c \
-         hw_palette.c cyc_trace.c cyc_ring.c cyc_run.c cyc_ramview.c cyc_native_none.c cyc_accuracycoin.c; do
+for f in cpu6502.c cpu6502_interp.c hw_machine.c hw_mapper.c hw_fds.c hw_fds_audio.c hw_fds_hle.c hw_fds_boot.c vendor/emu2413/emu2413.c hw_ppu.c hw_apu.c \
+         hw_palette.c cyc_trace.c cyc_ring.c cyc_run.c cyc_fds_skip.c cyc_ramview.c cyc_native_none.c cyc_accuracycoin.c; do
     o="$OUT/$(basename "${f%.c}").o"
     gcc -std=c11 -O2 -I"$CYC" -c "$CYC/$f" -o "$o"
     objs+=("$o")

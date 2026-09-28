@@ -67,6 +67,13 @@ extern bool hw_observe_hit;
  * so a stop that was both an observation point and the frame end is not
  * mistaken for an observation alone. */
 extern bool hw_frame_end_hit;
+/* The FDS BIOS handing control to the game (hw_fds_boot.c sees its jump):
+ * when hw_entry_stop is set, the scheduler also stops at the first
+ * instruction boundary after it (setting hw_frame_done and hw_entry_hit), the
+ * game's first instruction, so a host can look at the machine there. It
+ * changes nothing the machine does. */
+extern bool hw_entry_stop;
+extern bool hw_entry_hit;
 
 /* Legacy 8 KiB identity, retained for older generated programs. It cannot
  * distinguish independently mapped 4 KiB halves; new dispatch uses bank4. */

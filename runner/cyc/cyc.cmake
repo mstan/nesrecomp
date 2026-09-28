@@ -20,6 +20,7 @@ set(NESRECOMP_CYC_SOURCES
     ${NESRECOMP_CYC_DIR}/hw_fds.c
     ${NESRECOMP_CYC_DIR}/hw_fds_audio.c
     ${NESRECOMP_CYC_DIR}/hw_fds_hle.c
+    ${NESRECOMP_CYC_DIR}/hw_fds_boot.c
     ${NESRECOMP_CYC_DIR}/vendor/emu2413/emu2413.c
     ${NESRECOMP_CYC_DIR}/hw_ppu.c
     ${NESRECOMP_CYC_DIR}/hw_apu.c
@@ -27,6 +28,7 @@ set(NESRECOMP_CYC_SOURCES
     ${NESRECOMP_CYC_DIR}/cyc_trace.c
     ${NESRECOMP_CYC_DIR}/cyc_ring.c
     ${NESRECOMP_CYC_DIR}/cyc_run.c
+    ${NESRECOMP_CYC_DIR}/cyc_fds_skip.c
     ${NESRECOMP_CYC_DIR}/cyc_ramview.c
     ${NESRECOMP_CYC_DIR}/cyc_host.c
     ${NESRECOMP_CYC_DIR}/cyc_accuracycoin.c

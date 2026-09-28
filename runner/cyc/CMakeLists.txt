@@ -18,6 +18,7 @@ project(nesrecomp_cyc C CXX)
 #   cyc_fds_hle_plan_test the FDS HLE plan (common/nes_fds_hle.h)
 #   cyc_fds_hle_test the FDS HLE tier on the whole machine: auto swap and fast
 #                    load with a synthetic BIOS and multi-side disks
+#   cyc_fds_boot_test the FDS boot skip and auto insert on the whole machine
 #   cyc_console_audio_test / cyc_console_audio_pcm  the console output stage
 #                    (nes / famicom): defaults, responses, pinned renders
 # Tests that build a generated program use this build's toolchain
@@ -44,7 +45,7 @@ enable_testing()
 add_test(NAME cyc_helper_test COMMAND cyc_helper_test)
 
 # Every cartridge board source; each test that links the boards uses this list.
-set(CYC_TEST_BOARD_SOURCES hw_mapper.c hw_fds.c hw_fds_audio.c hw_fds_hle.c vendor/emu2413/emu2413.c)
+set(CYC_TEST_BOARD_SOURCES hw_mapper.c hw_fds.c hw_fds_audio.c hw_fds_hle.c hw_fds_boot.c vendor/emu2413/emu2413.c)
 
 add_executable(cyc_mapper_test mapper_test.c ${CYC_TEST_BOARD_SOURCES} cyc_ring.c cyc_trace.c)
 target_link_libraries(cyc_mapper_test PRIVATE ${NESRECOMP_CYC_LIBRARIES})
@@ -76,7 +77,7 @@ set_tests_properties(cyc_fds_disk_test PROPERTIES FIXTURES_REQUIRED fds_fixtures
 # FDS RAM Adapter and drive: register/IRQ/drive contracts, then a synthetic
 # BIOS (tools/cyc/fds_board_fixtures.py) run on the whole machine.
 add_executable(cyc_fds_board_test fds_board_test.c cpu6502.c cpu6502_interp.c hw_machine.c ${CYC_TEST_BOARD_SOURCES}
-    hw_ppu.c hw_apu.c hw_palette.c cyc_trace.c cyc_ring.c cyc_run.c cyc_ramview.c cyc_native_none.c)
+    hw_ppu.c hw_apu.c hw_palette.c cyc_trace.c cyc_ring.c cyc_run.c cyc_fds_skip.c cyc_ramview.c cyc_native_none.c)
 target_include_directories(cyc_fds_board_test PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})
 target_link_libraries(cyc_fds_board_test PRIVATE ${NESRECOMP_CYC_LIBRARIES})
 if(MSVC)
@@ -94,7 +95,7 @@ set_tests_properties(cyc_fds_board_test PROPERTIES FIXTURES_REQUIRED fds_board_f
 # model's frequency and step response against its documented RC sections, and
 # no effect on the machine. The FDS default uses the board fixtures' disk.
 add_executable(cyc_console_audio_test console_audio_test.c cpu6502.c cpu6502_interp.c hw_machine.c ${CYC_TEST_BOARD_SOURCES}
-    hw_ppu.c hw_apu.c hw_palette.c cyc_trace.c cyc_ring.c cyc_run.c cyc_ramview.c
+    hw_ppu.c hw_apu.c hw_palette.c cyc_trace.c cyc_ring.c cyc_run.c cyc_fds_skip.c cyc_ramview.c
     cyc_native_none.c)
 target_include_directories(cyc_console_audio_test PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})
 target_link_libraries(cyc_console_audio_test PRIVATE ${NESRECOMP_CYC_LIBRARIES})
@@ -220,6 +221,18 @@ add_test(NAME cyc_fds_hle_test
             --recompiler $<TARGET_FILE:NESRecomp> --interp $<TARGET_FILE:cyc_interp>
             --out ${CMAKE_CURRENT_BINARY_DIR}/fds_hle_test ${NESRECOMP_NESTED_BUILD_ARGS})
 set_tests_properties(cyc_fds_hle_test PROPERTIES TIMEOUT 1800)
+# The FDS boot skip and auto insert (cyc_fds_skip.c, hw_fds_boot.c,
+# common/nes_fds_boot.h) on the whole machine: a synthetic BIOS that boots the
+# way disksys.rom does (tools/cyc/fds_boot_fixtures.py), disks exercising every
+# LoadFiles rule and every refusal. The machine at the game's first
+# instruction, skipped against the BIOS's own boot, at all four alignments;
+# native = --interp-only = cyc_interp with the skip on; refusals run as HLE off;
+# auto insert equals a host insert at the same frame; config precedence.
+add_test(NAME cyc_fds_boot_test
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_cyc_fds_boot.py
+            --recompiler $<TARGET_FILE:NESRecomp> --interp $<TARGET_FILE:cyc_interp>
+            --out ${CMAKE_CURRENT_BINARY_DIR}/fds_boot_test ${NESRECOMP_NESTED_BUILD_ARGS})
+set_tests_properties(cyc_fds_boot_test PROPERTIES TIMEOUT 1800)
 # The console output stage end to end (tools/cyc/test_cyc_console_audio.py):
 # board defaults in cyc_interp, the nes and famicom renders pinned by SHA-256,
 # their spectra against the models, and game.toml [game] console compiled in.

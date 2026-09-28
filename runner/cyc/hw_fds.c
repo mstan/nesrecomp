@@ -137,7 +137,9 @@ static const FdsProfile *prof(void)
     return &PROFILES[p < 3 ? p : 0];
 }
 
-static bool crc_reported(void)
+bool fds_crc_reported(void);
+static bool crc_reported(void) { return fds_crc_reported(); }
+bool fds_crc_reported(void)
 {
     return media.opt.crc_check || media.opt.profile == CYC_FDS_PROFILE_HARDWARE ||
            (media.opt.profile == CYC_FDS_PROFILE_MESEN2 && media.qd);
@@ -163,6 +165,17 @@ static void free_media(void)
 
 bool cyc_fds_load_media(const uint8_t *image, size_t size, const CycFdsOptions *opt)
 {
+    if (!image) {
+        /* No disk at all (the BIOS alone): an empty drive, no sides. */
+        free_media();
+        media.opt = *opt;
+        media.qd = false;
+        media.write_hash = 0;
+        media.writes = 0;
+        media.generation = 0;
+        memset(&media.run, 0, sizeof(media.run));
+        return true;
+    }
     NesFdsImage img;
     if (!nes_fds_image(image, size, opt->qd ? NES_FDS_QD : NES_FDS_NONE, &img)) return false;
     NesFdsProfile layout = opt->profile == CYC_FDS_PROFILE_MESEN ? NES_FDS_PROFILE_MESEN099 : NES_FDS_PROFILE_MESEN2;
@@ -264,6 +277,7 @@ bool cyc_fds_eject(void)
 {
     if (media.side < 0) return false;
     fds_hle_host_disk_change();
+    fds_boot_host_disk_change();
     return fds_drive_eject(CYC_FDS_SIDE_HOST);
 }
 
@@ -271,6 +285,7 @@ bool cyc_fds_insert(unsigned side)
 {
     if (media.side >= 0 || side >= media.count) return false;
     fds_hle_host_disk_change();
+    fds_boot_host_disk_change();
     return fds_drive_insert(side, CYC_FDS_SIDE_HOST);
 }
 
@@ -289,6 +304,7 @@ void fds_power_on(void)
     hw_cart.mirroring = HW_MIRROR_VERTICAL;    /* FdsLoader.cpp:141 */
     cyc_ring_push(CYC_EV_FDS_SIDE, CYC_FDS_SIDE_POWER_ON, media.side < 0 ? 0xFF : (uint32_t)media.side);
     fds_hle_power_on();
+    fds_boot_power_on();
 }
 
 static void ack(uint16_t addr, uint8_t sources)
@@ -378,6 +394,7 @@ static bool register_read(uint16_t addr, uint8_t *value)
             break;
         case 0x4032: {
             fds_hle_status_read();
+            fds_boot_status_read();
             bool in = media.side >= 0;
             v &= 0xF8;
             v |= !in ? 0x01 : 0;
@@ -651,7 +668,38 @@ uint64_t fds_state_hash(uint64_t acc)
     acc = acc * 131 + (uint64_t)(media.side + 1);
     acc = acc * 131 + (uint64_t)media.opt.profile;
     acc = acc * 131 + (uint64_t)media.opt.write_at;
-    return fds_hle_state_hash(acc);
+    return fds_boot_state_hash(fds_hle_state_hash(acc));
+}
+
+/* The boot skip (cyc_fds_skip.c): the drive as the BIOS's boot load leaves
+ * it once the head has run to the end of the side (lr:317-326 and the
+ * motor-off clock: stopped, head at the end, gap and CRC state cleared by the
+ * bytes clocked with CRC mode off), with $4025 as LoadFiles last wrote it. */
+void fds_drive_boot_end(uint8_t ctrl, uint8_t read_data, uint8_t write_data, bool bad_crc)
+{
+    if (media.side < 0) return;
+    write_run_end();
+    F.ctrl = ctrl;
+    F.motor_on = 0;
+    F.reset_transfer = (ctrl >> 1) & 1;
+    F.read_mode = (ctrl >> 2) & 1;
+    hw_cart.mirroring = (ctrl & 8) ? HW_MIRROR_HORIZONTAL : HW_MIRROR_VERTICAL;
+    F.crc_control = (ctrl >> 4) & 1;
+    F.crc_enable = (ctrl >> 6) & 1;
+    F.transfer_irq = ctrl >> 7;
+    F.write_data = write_data;
+    F.read_data = read_data;
+    F.bad_crc = bad_crc && !prof()->crc_direct;    /* direct: cleared by bytes clocked with CRC off */
+    F.transfer = 0;
+    F.disk_irq = 0;
+    F.gap_ended = 0;
+    F.crc = 0;
+    F.prev_crc_control = F.crc_control;
+    F.end_of_head = 1;
+    F.scanning = 0;
+    F.at_end = 1;
+    F.delay = 0;
+    F.position = media.sides[media.side].len;
 }
 
 /* The disks are memory a program can read back after writing them. */

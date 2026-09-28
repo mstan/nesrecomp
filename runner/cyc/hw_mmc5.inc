@@ -139,7 +139,7 @@ static void mmc5_pcm(uint8_t value)
 
 void hw_cart_cpu_read_snoop(uint16_t addr, uint8_t value)
 {
-    if (hw_cart.mapper==20) { fds_hle_snoop(addr); return; }   /* the RAM Adapter sees the BIOS fetches */
+    if (hw_cart.mapper==20) { fds_hle_snoop(addr); fds_boot_snoop(addr); return; }   /* the RAM Adapter sees the BIOS fetches */
     if (hw_cart.mapper!=5) return;
     if (addr==0xfffa || addr==0xfffb) mmc5_frame_clear();
     if (addr>=0x8000 && addr<0xc000 && (M5.pcm_control&1)) mmc5_pcm(value);

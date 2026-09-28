@@ -115,6 +115,11 @@ typedef enum {
     CYC_EV_FDS_IDBYTES,
     CYC_EV_FDS_SPAN,
     CYC_EV_FDS_HLE,
+    /* FDS boot (hw_fds_boot.c): the BIOS handing control to the game, the
+     * boot skip's decisions and the evidence it used, and auto insert. A
+     * length in `repeat`, like FDS_HLE: addr = CYC_FDS_BOOT_*, value and
+     * length as listed there. */
+    CYC_EV_FDS_BOOT,
     CYC_EV_KINDS
 } CycRingKind;
 
@@ -136,6 +141,34 @@ enum {
     CYC_FDS_HLE_EJECT     = 7,  /* auto swap ejected: side, frames the drive stays empty */
     CYC_FDS_HLE_INSERT    = 8,  /* auto swap inserted: side, wait round (0: after a request) */
     CYC_FDS_HLE_CANCEL    = 9,  /* a host disk change cancelled an auto swap: its side, its step */
+};
+
+/* FDS_BOOT codes: value, length */
+enum {
+    CYC_FDS_BOOT_ENTRY  = 1,  /* the game's first instruction: pc | skipped << 16 | odd frame << 17,
+                                 PPU scanline << 16 | dot */
+    CYC_FDS_BOOT_PLAN   = 2,  /* boot plan applied: skip | auto insert << 1 | skip refused << 2 |
+                                 insert refused << 3, the BIOS's jump into the game */
+    CYC_FDS_BOOT_FILE   = 3,  /* the skip visited a boot file: index << 8 | file ID, how (CYC_FDS_BOOT_HOW_*)
+                                 << 24 | type << 16 | load address */
+    CYC_FDS_BOOT_CHECK  = 4,  /* a check the skip made on its evidence: CYC_FDS_BOOT_CHECK_*, result */
+    CYC_FDS_BOOT_SKIP   = 5,  /* the skip built the machine: files loaded, bytes written */
+    CYC_FDS_BOOT_REFUSE = 6,  /* the skip was asked for and refused: CYC_FDS_BOOT_WHY_*, detail */
+    CYC_FDS_BOOT_WAIT   = 7,  /* the boot waits for a disk with the drive empty: BIOS pc of the poll, polls */
+    CYC_FDS_BOOT_INSERT = 8,  /* auto insert put a side in: side, frame of the wait it answered */
+    CYC_FDS_BOOT_YIELD  = 9,  /* auto insert stood down: 1 host disk change, 2 the game started; frame */
+};
+
+/* FDS_BOOT check codes (value of a CYC_FDS_BOOT_CHECK event; length the result) */
+enum {
+    CYC_FDS_BOOT_CHECK_SIGNATURE = 1,  /* block 1 reads with *NINTENDO-HVC* */
+    CYC_FDS_BOOT_CHECK_ID        = 2,  /* the disk ID matched: side | disk number << 8 */
+    CYC_FDS_BOOT_CHECK_AMOUNT    = 3,  /* file amount | boot file code << 8 */
+    CYC_FDS_BOOT_CHECK_FILES     = 4,  /* files asked for */
+    CYC_FDS_BOOT_CHECK_LICENSE   = 5,  /* 1: the license screen matched (0: the BIOS stops) */
+    CYC_FDS_BOOT_CHECK_CRC       = 6,  /* 1: the drive reports CRC mismatches (all blocks checked good) */
+    CYC_FDS_BOOT_CHECK_OAM       = 7,  /* the OAM row the load's rendering-off corrupts ($FF: none) */
+    CYC_FDS_BOOT_CHECK_LOOP      = 8,  /* license screen passes run forward */
 };
 
 enum {

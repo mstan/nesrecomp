@@ -1272,6 +1272,40 @@ void ppu_write(uint16_t addr, uint8_t value)
     dot_kind = DOT_UNKNOWN;
 }
 
+/* ---- the FDS boot skip (cyc_fds_skip.c) ----
+ * A byte of the PPU's address space as a $2007 write with rendering off stores
+ * it (vram_store's map: palette with its mirrors and 6 bits, nametables
+ * through the cartridge's CIRAM A10, CHR RAM where writable), and as a read
+ * finds it; neither touches the PPU's registers or buses. */
+void ppu_hle_store(uint16_t addr, uint8_t value)
+{
+    addr &= 0x3FFF;
+    if (addr >= 0x3F00) {
+        ppu.palette[addr & ((addr & 3) ? 0x1F : 0x0F)] = value & 0x3F;
+    } else if (addr & 0x2000) {
+        if (!hw_cart_nt_write(addr, value)) ppu.ciram[(addr & 0x3FF) | hw_cart_ciram_a10(addr)] = value;
+    } else if (hw_cart.chr_write[(addr >> 10) & 7]) {
+        hw_cart.chr[hw_cart_chr_index(addr)] = value;
+    }
+}
+
+uint8_t ppu_hle_peek(uint16_t addr)
+{
+    addr &= 0x3FFF;
+    if (addr >= 0x3F00) return ppu.palette[addr & ((addr & 3) ? 0x1F : 0x0F)];
+    if (addr & 0x2000) return ppu.ciram[(addr & 0x3FF) | hw_cart_ciram_a10(addr)];
+    return hw_cart.chr[hw_cart_chr_index(addr)];
+}
+
+/* After the whole of ppu has been replaced (a machine snapshot put back):
+ * the dot classifier and the $2007 state machine's rest cache are derived
+ * from it, so they start over. */
+void ppu_restored(void)
+{
+    sm_rest = false;
+    dot_kind = DOT_UNKNOWN;
+}
+
 /* ---- power-on ---- */
 
 void ppu_power_on(void)

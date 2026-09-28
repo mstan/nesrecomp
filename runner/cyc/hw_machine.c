@@ -25,6 +25,8 @@ bool       hw_frame_done;
 int        hw_observe_line = -1;
 bool       hw_observe_hit;
 bool       hw_frame_end_hit;
+bool       hw_entry_stop;
+bool       hw_entry_hit;
 int        hw_dma_stalls;
 uint8_t    hw_code_watch[HW_CODE_BYTES];
 static void no_code_write(unsigned phys, uint8_t value) { (void)phys; (void)value; }

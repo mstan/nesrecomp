@@ -385,6 +385,10 @@ void    ppu_dot(void);
 void    ppu_half_dot(void);
 uint8_t ppu_read(uint16_t addr);
 void    ppu_write(uint16_t addr, uint8_t value);
+/* The FDS boot skip's view of PPU memory and the snapshot hook (hw_ppu.c). */
+void    ppu_hle_store(uint16_t addr, uint8_t value);
+uint8_t ppu_hle_peek(uint16_t addr);
+void    ppu_restored(void);
 /* /NMI as the PPU drives it (active high here). */
 HW_INLINE bool ppu_nmi_output(void) { return ppu.nmi_enable && ppu.vblank; }
 
@@ -439,6 +443,11 @@ typedef struct {
     uint8_t  buffer, have_buffer, shifter, bits, out_silent, playing, enable, dma;
 } ApuDmcView;
 void    apu_debug_dmc(ApuDmcView *v);
+
+/* The APU as a machine snapshot holds it (cyc_fds_skip.c). */
+size_t  apu_snapshot_size(void);
+void    apu_snapshot_save(void *out);
+void    apu_snapshot_load(const void *in);
 
 /* Hardware state hash and dump, per module. */
 uint64_t apu_state_hash(uint64_t h);

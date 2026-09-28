@@ -47,6 +47,7 @@ typedef struct {
     int  boot_side;        /* side in the drive at power-on; -1 = empty drive */
 } CycFdsOptions;
 void cyc_fds_default_options(CycFdsOptions *o);
+/* image NULL: the RAM Adapter with no disk at all (an empty drive, no sides). */
 bool cyc_load_fds(const uint8_t *bios, size_t bios_size, const uint8_t *image, size_t image_size,
                   const CycFdsOptions *options);
 bool     cyc_is_fds(void);
@@ -98,8 +99,66 @@ typedef struct {
     uint32_t spans, requests;      /* load spans; disk-ID requests seen */
 } CycFdsHleStatus;
 void cyc_fds_hle_status(CycFdsHleStatus *out);
+/* ---- the FDS boot (hw_fds_boot.c, cyc_fds_skip.c) ----
+ *
+ * boot_jump is the BIOS's jump into the game (JMP ($DFFC), 0: none known).
+ * With it known, the machine records where the game starts (ring fds.boot
+ * entry) whatever else is planned. boot_skip and auto_insert are the plan's
+ * answers (common/nes_fds_hle.h); boot_skip_refused only goes into the ring's
+ * plan event. Configure after cyc_load_fds and before power-on; the boot skip
+ * also needs cyc_fds_skip_prepare() and cyc_fds_skip_enable() (below). */
+typedef struct {
+    uint16_t boot_jump;
+    bool     boot_skip, boot_skip_refused, auto_insert;
+} CycFdsBoot;
+void cyc_fds_boot_configure(const CycFdsBoot *boot);
+typedef struct {
+    bool     entered, skipped;       /* the game has started; the boot skip started it */
+    uint16_t entry_pc;
+    uint32_t entry_frame;
+    uint64_t entry_cycle;
+    uint16_t entry_line, entry_dot;  /* where the PPU was */
+    bool     insert_armed;           /* auto insert waits for the boot's disk wait */
+    bool     auto_inserted;          /* auto insert put side A in, at the end of insert_frame */
+    uint32_t insert_frame;
+} CycFdsBootStatus;
+void cyc_fds_boot_status(CycFdsBootStatus *out);
+/* A host's look at the machine after the first run of the instruction at pc
+ * (an opcode fetch the RAM Adapter sees: $8000 up): with hw_entry_stop set,
+ * the scheduler stops at the next instruction boundary as at the game entry,
+ * and cyc_fds_boot_watch_hit() is true from then on. For deriving what the
+ * BIOS leaves where; 0 turns it off. */
+void cyc_fds_boot_watch(uint16_t pc);
+bool cyc_fds_boot_watch_hit(void);
+/* The boot skip (cyc_fds_skip.c; model: common/nes_fds_hle.h
+ * NesFdsBootModel; analysis: common/nes_fds_boot.h).
+ * cyc_fds_skip_prepare runs the BIOS from power-on to its boot LoadFiles call
+ * once, headless, keeps the whole machine there (up to that call the boot
+ * depends on nothing on the disk), and checks that the model reproduces this
+ * image's boot load exactly. It returns NULL when it does, else why not (then
+ * the plan refuses the axis). The machine is left in an undefined state: the
+ * host powers on as usual afterwards. With the skip enabled, power-on puts
+ * that machine back, loads the boot files as LoadFiles would, lets the BIOS
+ * run its license check, runs its license screen loop forward and lets it run
+ * the last pass and its jump into the game. Call prepare after
+ * cyc_fds_boot_configure and before power-on; ppu_alignment as power-on's. */
+typedef struct {
+    uint16_t load_call, load_entry, jump;
+    uint16_t loop_branch, loop_entry, loop_top;
+    uint8_t  loop_counter, timer_divider, fast_last, slow_last, divider_reload;
+    uint8_t  scroll, scroll_step, scroll_limit;
+    uint16_t license, license_vram;
+    uint8_t  license_len;
+    uint16_t mask_store;
+} CycFdsBootModel;
+const char *cyc_fds_skip_prepare(const CycFdsBootModel *model, uint8_t ppu_alignment);
+void        cyc_fds_skip_enable(bool on);
+/* Cycles the skipped boot would have run before the BIOS's LoadFiles call (the
+ * pre-run's), so a host can tell the program's own cycles apart; 0 without a
+ * skip. */
+uint64_t    cyc_fds_skip_prerun_cycles(void);
 /* fds.side event sources */
-enum { CYC_FDS_SIDE_HOST = 0, CYC_FDS_SIDE_POWER_ON = 1, CYC_FDS_SIDE_HLE = 2 };
+enum { CYC_FDS_SIDE_HOST = 0, CYC_FDS_SIDE_POWER_ON = 1, CYC_FDS_SIDE_HLE = 2, CYC_FDS_SIDE_AUTO = 3 };
 /* The sound unit's state in Mesen's field order and widths (FdsAudio,
  * BaseFdsChannel, ModChannel StreamState), so it compares byte for byte with
  * the FdsAudio snapshot in a nesref savestate (tools/cyc/fds_audio_gates.py).

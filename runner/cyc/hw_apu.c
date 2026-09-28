@@ -789,6 +789,13 @@ void dma_end_of_cycle(void)
 /* Power-on, state                                                           */
 /* ------------------------------------------------------------------------- */
 
+/* The whole APU (frame counter, channels, DMC, DMAs, ports) for a machine
+ * snapshot (cyc_fds_skip.c); the audio output stage is the host's, not the
+ * machine's, and is not part of it. */
+size_t apu_snapshot_size(void) { return sizeof(apu); }
+void apu_snapshot_save(void *out) { memcpy(out, &apu, sizeof(apu)); }
+void apu_snapshot_load(const void *in) { memcpy(&apu, in, sizeof(apu)); }
+
 void apu_power_on(void)
 {
     memset(&apu, 0, sizeof(apu));

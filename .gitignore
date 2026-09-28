@@ -36,3 +36,6 @@ __pycache__/
 
 # Local MCP server config (paths are machine-specific); see .mcp.json.example
 .mcp.json
+
+# The FDS BIOS showcase (runner/cyc/fds-bios): your own dump, never committed
+bios/*.rom

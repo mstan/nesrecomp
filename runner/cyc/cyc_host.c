@@ -95,11 +95,19 @@
  *                          turns that off.
  *     --fds-import-ips FILE  start from a Mesen/nesref disk save (<stem>.ips)
  *     --fds-export-ips FILE  also write the disk as a Mesen .ips at each save
- *     --fds-hle LIST       the HLE tier (common/nes_fds_hle.h): auto-swap,
- *                          fast-load, all, off, no-auto-swap, no-fast-load.
- *                          Overrides NESRECOMP_FDS_HLE, which overrides
- *                          game.toml [fds] hle; default off. An axis the BIOS or
- *                          image cannot support is refused with the reason.
+ *     --fds-hle LIST       the HLE tier (common/nes_fds_hle.h): boot-skip,
+ *                          auto-swap, fast-load, all (the three), off, and
+ *                          no-... of each; auto-insert / no-auto-insert (LLE,
+ *                          default on: insert side A when the boot waits for
+ *                          a disk with the drive empty). Overrides
+ *                          NESRECOMP_FDS_HLE, which overrides game.toml [fds]
+ *                          hle; HLE axes default off. An axis the BIOS or image
+ *                          cannot support is refused with the reason.
+ *     --boot-state-out FILE  the whole machine at the game's first instruction
+ *                          (after the BIOS's jump into it; with the boot skip,
+ *                          where the skip's boot jumps): cpu, hardware, memories
+ *     --state-at-pc PC FILE  the same after the first run of the instruction at
+ *                          PC ($8000 up; for deriving what the BIOS leaves)
  *     --realtime           headless: pace frames at the console's 60.0988 Hz as
  *                          the window does (fast load then skips the pacing of
  *                          load frames), and report the wall-clock time of loads
@@ -115,8 +123,10 @@
 #include "cyc_trace.h"
 #include "../../common/nes_fds.h"
 #include "../../common/nes_fds_hle.h"
+#include "../../common/nes_fds_boot.h"
 
 #ifndef CYC_ORACLE
+#include "cpu6502.h"
 #include "cyc_ramview.h"
 #include "cyc_recomp.h"
 #include "cyc_run.h"
@@ -500,11 +510,114 @@ static NesFdsHleAnchor hle_anchor(const char *bios_path, uint32_t bios_crc) {
     return a;
 }
 
+/* The BIOS's boot model (common/nes_fds_hle.h): the built-in one for a known
+ * image, else hle_boot_load / hle_boot_load_entry / hle_boot_jump in the
+ * BIOS's identity file. Verified against the code: the call is JSR
+ * load_entry, the jump is JMP ($DFFC), the license loop starts as the model
+ * says; a part that does not verify is dropped. */
+static NesFdsBootModel boot_model(const char *bios_path, uint32_t bios_crc) {
+    NesFdsBootModel m = nes_fds_boot_builtin_model(bios_crc);
+    if (!m.load_call && !m.jump) {
+        char toml[1024];
+        snprintf(toml, sizeof(toml), "%s", bios_path);
+        char *dot = strrchr(toml, '.'), *slash = strrchr(toml, '/'), *bslash = strrchr(toml, '\\');
+        if (dot && dot > slash && dot > bslash) *dot = 0;
+        strncat(toml, ".toml", sizeof(toml) - strlen(toml) - 1);
+        FILE *f = fopen(toml, "r");
+        if (f) {
+            char line[256];
+            unsigned v;
+            while (fgets(line, sizeof(line), f)) {
+                if (sscanf(line, " hle_boot_load = \"0x%x\"", &v) == 1) m.load_call = (uint16_t)v;
+                else if (sscanf(line, " hle_boot_load_entry = \"0x%x\"", &v) == 1) m.load_entry = (uint16_t)v;
+                else if (sscanf(line, " hle_boot_jump = \"0x%x\"", &v) == 1) m.jump = (uint16_t)v;
+                else if (sscanf(line, " hle_boot_mask_store = \"0x%x\"", &v) == 1) m.mask_store = (uint16_t)v;
+            }
+            fclose(f);
+        }
+        m.load_check[0] = 0x20; m.load_check[1] = (uint8_t)m.load_entry; m.load_check[2] = (uint8_t)(m.load_entry >> 8);
+        m.jump_check[0] = 0x6C; m.jump_check[1] = 0xFC; m.jump_check[2] = 0xDF;
+        m.mask_check[0] = 0x8D; m.mask_check[1] = 0x01; m.mask_check[2] = 0x20;
+    }
+    uint8_t b;
+    for (unsigned i = 0; m.load_call && i < 3; ++i)
+        if (m.load_call < 0xE000 || !cyc_debug_peek((uint16_t)(m.load_call + i), &b) || b != m.load_check[i])
+            m.load_call = 0;
+    for (unsigned i = 0; m.jump && i < 3; ++i)
+        if (m.jump < 0xE000 || !cyc_debug_peek((uint16_t)(m.jump + i), &b) || b != m.jump_check[i]) m.jump = 0;
+    for (unsigned i = 0; m.loop_branch && i < 4; ++i)
+        if (!cyc_debug_peek((uint16_t)(m.loop_entry + i), &b) || b != m.loop_check[i]) m.loop_branch = 0;
+    for (unsigned i = 0; m.mask_store && i < 3; ++i)
+        if (!cyc_debug_peek((uint16_t)(m.mask_store + i), &b) || b != m.mask_check[i]) m.mask_store = 0;
+    if (!m.load_call) m.load_entry = 0;
+    return m;
+}
+
+/* A proof record for this disk: built in, or listed in hle_boot_proven in the
+ * BIOS's identity file (common/nes_fds_boot.h). */
+static bool boot_proven(const char *bios_path, uint32_t disk_id) {
+    if (nes_fds_boot_proven(disk_id)) return true;
+    char toml[1024];
+    snprintf(toml, sizeof(toml), "%s", bios_path);
+    char *dot = strrchr(toml, '.'), *slash = strrchr(toml, '/'), *bslash = strrchr(toml, '\\');
+    if (dot && dot > slash && dot > bslash) *dot = 0;
+    strncat(toml, ".toml", sizeof(toml) - strlen(toml) - 1);
+    FILE *f = fopen(toml, "r");
+    bool found = false;
+    if (f) {
+        char line[256];
+        unsigned v;
+        /* hle_boot_proven = ["0x...", ...] on one line */
+        while (fgets(line, sizeof(line), f)) {
+            const char *q = strstr(line, "hle_boot_proven");
+            if (!q || !(q = strchr(q, '='))) continue;
+            for (; (q = strstr(q, "0x")) != NULL; q += 2)
+                if (sscanf(q, "0x%x", &v) == 1 && v == disk_id) found = true;
+        }
+        fclose(f);
+    }
+    return found;
+}
+
+static CycFdsBootModel boot_core_model(const NesFdsBootModel *m) {
+    CycFdsBootModel c;
+    memset(&c, 0, sizeof(c));
+    c.load_call = m->load_call; c.load_entry = m->load_entry; c.jump = m->jump;
+    c.loop_branch = m->loop_branch; c.loop_entry = m->loop_entry; c.loop_top = m->loop_top;
+    c.loop_counter = m->loop_counter; c.timer_divider = m->timer_divider; c.fast_last = m->fast_last;
+    c.slow_last = m->slow_last; c.divider_reload = m->divider_reload;
+    c.scroll = m->scroll; c.scroll_step = m->scroll_step; c.scroll_limit = m->scroll_limit;
+    c.license = m->license; c.license_vram = m->license_vram; c.license_len = m->license_len;
+    c.mask_store = m->mask_store;
+    return c;
+}
+
 static void hle_describe(void) {
     /* The drive bar's font: capitals, digits, space and -.:/()= */
     const NesFdsHlePlan *p = &hle_plan;
-    snprintf(hle_text, sizeof(hle_text), "HLE%s%s%s%s", p->auto_swap ? " SWAP" : "", p->fast_load ? " FAST" : "",
-             !p->auto_swap && !p->fast_load ? " OFF" : "", p->auto_swap_denied ? " (NO SWAP)" : "");
+    snprintf(hle_text, sizeof(hle_text), "HLE%s%s%s%s%s", p->boot_skip ? " BOOT" : "", p->auto_swap ? " SWAP" : "",
+             p->fast_load ? " FAST" : "", !p->auto_swap && !p->fast_load && !p->boot_skip ? " OFF" : "",
+             p->auto_swap_denied ? " (NO SWAP)" : "");
+}
+
+/* The boot axes are decided once, before power-on; said whenever the boot
+ * skip was asked for or auto insert was asked for or will act. */
+static void boot_banner(void) {
+    const NesFdsHlePlan *p = &hle_plan;
+    const NesFdsHleAsk *asks[4] = { &hle_req.config, &hle_req.env, &hle_req.cli, &hle_req.live };
+    bool skip_asked = false, insert_asked = false;
+    for (int i = 0; i < 4; ++i) {
+        skip_asked |= asks[i]->boot_skip >= 0;
+        insert_asked |= asks[i]->auto_insert >= 0;
+    }
+    bool insert_acts = p->auto_insert && cyc_fds_side() < 0 && cyc_fds_side_count() > 0;
+    if (!skip_asked && !insert_asked && !insert_acts) return;
+    printf("fds boot: boot-skip %s (%s)%s%s, auto-insert %s (%s)%s%s%s\n",
+           p->boot_skip ? "on" : p->boot_skip_denied ? "REFUSED" : "off", p->boot_skip_from,
+           p->boot_skip_denied ? ": " : "", p->boot_skip_denied ? p->boot_skip_why : "",
+           p->auto_insert ? "on" : p->auto_insert_denied ? "REFUSED" : "off", p->auto_insert_from,
+           p->auto_insert_denied ? ": " : "", p->auto_insert_denied ? p->auto_insert_why : "",
+           p->auto_insert && cyc_fds_side() >= 0 ? " (a disk is in: nothing to do)" : "");
 }
 
 static void hle_apply(bool banner) {
@@ -603,6 +716,53 @@ static long  observe_frame, observe_first, observe_last;
 static void observe_frame_log(void) {
     if (observe_frame >= observe_first && (observe_last < 0 || observe_frame <= observe_last))
         write_frame_log(observe_log, observe_frame);
+}
+#endif
+
+#ifndef CYC_ORACLE
+/* --boot-state-out: the whole machine at the FDS game's first instruction
+ * (after the BIOS's jump into it, or where the boot skip starts it): CPU
+ * registers and interrupt latches, every hashed hardware field
+ * (cyc_hw_state_dump) and the memories and picture (cyc_mem_state_dump). */
+static const char *boot_state_path, *watch_state_path;
+static long        boot_state_frame;
+static unsigned    watch_state_pc;
+static void write_state_file(const char *path);
+static void write_boot_state(void) {
+    /* the watch (--state-at-pc) stops first when it comes before the entry */
+    if (watch_state_path && cyc_fds_boot_watch_hit()) {
+        write_state_file(watch_state_path);
+        watch_state_path = NULL;
+        cyc_fds_boot_watch(0);
+        hw_entry_stop = boot_state_path != NULL;
+        CycFdsBootStatus st;
+        cyc_fds_boot_status(&st);
+        if (!st.entered) return;
+    }
+    if (!boot_state_path) return;
+    CycFdsBootStatus st;
+    cyc_fds_boot_status(&st);
+    if (!st.entered) return;
+    write_state_file(boot_state_path);
+    boot_state_path = NULL;
+    hw_entry_stop = watch_state_path != NULL;
+}
+static void write_state_file(const char *path) {
+    FILE *f = fopen(path, "w");
+    if (!f) { fprintf(stderr, "cannot write %s\n", path); return; }
+    CycFdsBootStatus st;
+    cyc_fds_boot_status(&st);
+    fprintf(f, "boot.frame %ld\nboot.skipped %u\nboot.entry %04X\nboot.line %u\nboot.dot %u\n", boot_state_frame,
+            st.skipped, st.entry_pc, st.entry_line, st.entry_dot);
+    fprintf(f, "cpu.pc %04X\ncpu.a %02X\ncpu.x %02X\ncpu.y %02X\ncpu.s %02X\ncpu.p %02X\ncpu.nmi_input %u\n"
+               "cpu.nmi_edge %u\ncpu.do_nmi %u\ncpu.do_irq %u\ncpu.do_reset %u\n",
+            cpu.pc, cpu.a, cpu.x, cpu.y, cpu.s, cpu_get_p(0) & 0xCF, cpu.nmi_input, cpu.nmi_edge, cpu.do_nmi,
+            cpu.do_irq, cpu.do_reset);
+    cyc_hw_state_dump(f);
+    cyc_mem_state_dump(f);
+    fclose(f);
+    printf("boot state: %s game entry at $%04X, frame %ld, line %u dot %u -> %s\n", st.skipped ? "skipped" : "BIOS",
+           st.entry_pc, boot_state_frame, st.entry_line, st.entry_dot, path);
 }
 #endif
 
@@ -779,6 +939,12 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--fds-export-ips") && i + 1 < argc) fds_export_ips = argv[++i];
         else if (!strcmp(argv[i], "--no-save")) no_save = true;
         else if (!strcmp(argv[i], "--fds-hle") && i + 1 < argc) fds_hle_arg = argv[++i];
+        else if (!strcmp(argv[i], "--boot-state-out") && i + 1 < argc) boot_state_path = argv[++i], headless = true;
+        else if (!strcmp(argv[i], "--state-at-pc") && i + 2 < argc) {
+            watch_state_pc = (unsigned)strtoul(argv[++i], NULL, 16);
+            watch_state_path = argv[++i];
+            headless = true;
+        }
         else if (!strcmp(argv[i], "--realtime")) realtime = headless = true;
         else if (!strcmp(argv[i], "--miss-log") && i + 1 < argc) miss_log = argv[++i], headless = true;
         else if (!strcmp(argv[i], "--capture-log") && i + 1 < argc) capture_log = argv[++i], headless = true;
@@ -790,10 +956,14 @@ int main(int argc, char **argv) {
             return 2;
         }
     }
+    bool bios_only = false;
 #ifndef CYC_ORACLE
     if (!rom_path) rom_path = cyc_native_fds_image_path;   /* game.toml [fds] image */
+    /* A program compiled from the BIOS alone (NESRecomp --fds-bios-only, the
+     * runner/cyc/fds-bios showcase) runs it with no disk. */
+    bios_only = !rom_path && cyc_native_fds_bios_crc32;
 #endif
-    if (!rom_path) {
+    if (!rom_path && !bios_only) {
         fprintf(stderr, "usage: %s <rom.nes | disk.fds> [--interp-only] [--align N] [--scale N]\n"
                         "       [--save-file FILE] (raw battery RAM/EEPROM, loaded and atomically saved)\n"
                         "       [--datach-save-file FILE] (shared internal EEPROM)\n"
@@ -809,18 +979,21 @@ int main(int argc, char **argv) {
                         "            [--fds-profile mesen|mesen2|hardware] [--fds-crc computed|mesen]\n"
                         "            [--fds-crc-check] [--fds-write-protect] [--fds-write-at head|mesen]\n"
                         "            [--save-file FILE | --no-save] [--fds-import-ips FILE] [--fds-export-ips FILE]\n"
-                        "            [--fds-hle auto-swap,fast-load|all|off] [--realtime]\n",
+                        "            [--fds-hle boot-skip,auto-swap,fast-load,auto-insert|all|off] [--realtime]\n"
+                        "            [--boot-state-out FILE] [--state-at-pc PC FILE]\n",
                 argv[0]);
         return 2;
     }
-    size_t size;
-    uint8_t *image = read_file(rom_path, &size);
+    size_t size = 0;
+    uint8_t *image = bios_only ? NULL : read_file(rom_path, &size);
     NesCartInfo cart_info;
     NesFdsImage fds_image;
-    const char *ext = strrchr(rom_path, '.');
+    memset(&fds_image, 0, sizeof(fds_image));
+    const char *ext = bios_only ? NULL : strrchr(rom_path, '.');
     bool qd = ext && (!strcmp(ext, ".qd") || !strcmp(ext, ".QD"));
-    bool fds = image && !nes_cart_image(image, size, &cart_info) &&
-               nes_fds_image(image, size, qd ? NES_FDS_QD : NES_FDS_NONE, &fds_image);
+    bool fds = bios_only || (image && !nes_cart_image(image, size, &cart_info) &&
+                             nes_fds_image(image, size, qd ? NES_FDS_QD : NES_FDS_NONE, &fds_image));
+    if (bios_only) rom_path = "";
     if (fds) {
 #ifdef CYC_ORACLE
         fprintf(stderr, "%s is a Famicom Disk System image; the TriCNES oracle has no RAM Adapter "
@@ -831,6 +1004,7 @@ int main(int argc, char **argv) {
         size_t bios_size = 0;
         char bios_path[1024];
         uint8_t *bios = load_bios(fds_bios, rom_path, &bios_size, bios_path, sizeof(bios_path));
+        if (bios_only) fds_opt.boot_side = -1;
         if (!bios) {
             fprintf(stderr, "%s: no FDS BIOS (give --fds-bios FILE, or put disksys.rom in bios/)\n", rom_path);
             return 2;
@@ -843,7 +1017,7 @@ int main(int argc, char **argv) {
             return 2;
         }
         fds_opt.qd = qd;
-        if (!cyc_load_fds(bios, bios_size, image, size, &fds_opt)) {
+        if (!cyc_load_fds(bios, bios_size, bios_only ? NULL : image, size, &fds_opt)) {
             fprintf(stderr, "cannot load disk image %s\n", rom_path);
             return 2;
         }
@@ -864,7 +1038,8 @@ int main(int argc, char **argv) {
             fprintf(stderr, "the disk save and --fds-export-ips must be different files\n");
             return 2;
         }
-        if (!fds_save_open(disk_save, fds_import_ips, fds_export_ips, image, size, &fds_opt)) return 2;
+        if (bios_only) disk_save = fds_import_ips = fds_export_ips = NULL;
+        if (!bios_only && !fds_save_open(disk_save, fds_import_ips, fds_export_ips, image, size, &fds_opt)) return 2;
         save_file = NULL;              /* the FDS has no cartridge NVRAM */
         nes_fds_cart_info(&cart_info);
         /* The HLE plan: requests from game.toml, the environment and the
@@ -875,11 +1050,13 @@ int main(int argc, char **argv) {
             return 2;
         }
         if (!nes_fds_hle_parse(getenv("NESRECOMP_FDS_HLE"), &hle_req.env, &bad)) {
-            fprintf(stderr, "NESRECOMP_FDS_HLE: unknown word at '%s' (auto-swap, fast-load, all, off)\n", bad);
+            fprintf(stderr, "NESRECOMP_FDS_HLE: unknown word at '%s' (boot-skip, auto-swap, fast-load, auto-insert, "
+                            "all, off)\n", bad);
             return 2;
         }
         if (!nes_fds_hle_parse(fds_hle_arg, &hle_req.cli, &bad)) {
-            fprintf(stderr, "--fds-hle: unknown word at '%s' (auto-swap, fast-load, all, off)\n", bad);
+            fprintf(stderr, "--fds-hle: unknown word at '%s' (boot-skip, auto-swap, fast-load, auto-insert, all, "
+                            "off)\n", bad);
             return 2;
         }
         hle_req.live = NES_FDS_HLE_ASK_NONE;
@@ -895,8 +1072,30 @@ int main(int argc, char **argv) {
             const uint8_t *stream = cyc_fds_side_stream(s, &len);
             hle_req.sides_with_id += stream && nes_fds_hle_block1(stream, len, block1);
         }
+        /* The boot model; the boot skip's analysis runs only when it is asked
+         * for (it runs the BIOS's intro once, before power-on). */
+        NesFdsBootModel bm = boot_model(bios_path, crc);
+        hle_req.have_boot = bm.load_call && bm.jump;
+        hle_req.have_jump = bm.jump != 0;
+        hle_req.boot_why = NULL;
+        static char disk_why[96];
+        if (nes_fds_hle_plan(hle_req).boot_skip) {
+            uint32_t disk_id = nes_fds_boot_disk_id(&fds_image);
+            if (!boot_proven(bios_path, disk_id)) {
+                snprintf(disk_why, sizeof(disk_why), "no equivalence proof for this disk (side A CRC32 %08X)", disk_id);
+                hle_req.boot_why = disk_why;
+            } else {
+                CycFdsBootModel cm = boot_core_model(&bm);
+                hle_req.boot_why = cyc_fds_skip_prepare(&cm, (uint8_t)align);
+            }
+        }
         hle_apply(true);
-        printf("fds: %s, %u side%s, BIOS %s (CRC32 %08X), drive %s\n", rom_path, cyc_fds_side_count(),
+        boot_banner();
+        CycFdsBoot boot_core = { bm.jump, hle_plan.boot_skip, hle_plan.boot_skip_denied, hle_plan.auto_insert };
+        cyc_fds_boot_configure(&boot_core);
+        cyc_fds_skip_enable(hle_plan.boot_skip);
+        printf("fds: %s, %u side%s, BIOS %s (CRC32 %08X), drive %s\n", bios_only ? "no disk (the BIOS alone)" : rom_path,
+               cyc_fds_side_count(),
                cyc_fds_side_count() == 1 ? "" : "s", bios_path, crc,
                cyc_fds_side() < 0 ? "empty" : "loaded");
 #endif
@@ -999,8 +1198,15 @@ int main(int argc, char **argv) {
     if (input_file && !load_input(input_file)) return 2;
     long frame = 0;
 #ifndef CYC_ORACLE
+    if ((boot_state_path || watch_state_path) && cyc_is_fds()) {
+        hw_entry_stop = true;
+        cyc_run_entry_observer = write_boot_state;
+        if (watch_state_path) cyc_fds_boot_watch((uint16_t)watch_state_pc);
+    }
+#endif
+#ifndef CYC_ORACLE
     double run_start = wall_seconds(), next_frame = run_start, load_wall = 0;
-    long load_frames = 0;
+    long load_frames = 0, unpaced_frames = 0;
 #endif
     for (;;) {
         if (acccoin && drv.done) break;
@@ -1015,11 +1221,13 @@ int main(int argc, char **argv) {
 #else
         if (disk_event_count) disk_tick(frame);
         observe_frame = frame;
+        boot_state_frame = frame;
         double frame_start = wall_seconds();
         cyc_run_frame();
         fds_save_frame(frame + 1);
         if (cyc_is_fds() && cyc_fds_hle_loading()) {
             load_frames++;
+            unpaced_frames += cyc_host_frame_unpaced();   /* what the window runs unpaced */
             if (!realtime || cyc_host_frame_unpaced()) load_wall += wall_seconds() - frame_start;
         }
         if (realtime) {
@@ -1117,12 +1325,21 @@ int main(int argc, char **argv) {
                fds_save.saves == 1 ? "" : "s", fds_save.path ? " to " : " (no --save-file: in memory only)",
                fds_save.path ? fds_save.path : "", (unsigned long long)cyc_ring_total());
     if (cyc_is_fds()) {
+        CycFdsBootStatus bs;
+        cyc_fds_boot_status(&bs);
+        if (bs.entered)
+            printf("fds boot: %s, game entry $%04X at frame %u (PPU line %u dot %u)", bs.skipped ? "boot skip" : "BIOS",
+                   bs.entry_pc, bs.entry_frame, bs.entry_line, bs.entry_dot);
+        else if (bs.auto_inserted || hle_plan.boot_skip)
+            printf("fds boot: %s, game not started", bs.skipped ? "boot skip" : "BIOS");
+        if (bs.auto_inserted) printf(", side A auto-inserted at the end of frame %u", bs.insert_frame);
+        if (bs.entered || bs.auto_inserted || hle_plan.boot_skip) printf("\n");
         CycFdsHleStatus st;
         cyc_fds_hle_status(&st);
         printf("fds hle: %s; %u disk-ID request%s seen, %u auto swap%s, %u disk bump%s, %u load span%s, %ld load "
-               "frames (%.2f s at 60 fps) took %.2f s%s; run %.2f s\n", hle_text, st.requests,
+               "frames (%ld unpaced) (%.2f s at 60 fps) took %.2f s%s; run %.2f s\n", hle_text, st.requests,
                st.requests == 1 ? "" : "s", st.swaps, st.swaps == 1 ? "" : "s", st.bumps, st.bumps == 1 ? "" : "s",
-               st.spans, st.spans == 1 ? "" : "s", load_frames,
+               st.spans, st.spans == 1 ? "" : "s", load_frames, unpaced_frames,
                (double)load_frames * FRAME_SECONDS, load_wall, realtime ? " (paced)" : " (unpaced)",
                wall_seconds() - run_start);
     }

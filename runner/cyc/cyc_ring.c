@@ -59,7 +59,7 @@ static bool has_length(unsigned kind)
 {
     return kind == CYC_EV_FDS_WRITE_RUN || kind == CYC_EV_FDS_WRITE_BLOCK || kind == CYC_EV_FDS_SAVE ||
            kind == CYC_EV_FDS_LOAD || kind == CYC_EV_FDS_IDREQ || kind == CYC_EV_FDS_IDBYTES ||
-           kind == CYC_EV_FDS_SPAN || kind == CYC_EV_FDS_HLE;
+           kind == CYC_EV_FDS_SPAN || kind == CYC_EV_FDS_HLE || kind == CYC_EV_FDS_BOOT;
 }
 
 uint64_t cyc_ring_total(void) { return ring_total; }
@@ -89,9 +89,43 @@ const char *cyc_ring_kind_name(unsigned kind)
         "fds.wrun", "fds.wblock", "fds.save", "fds.load",
         "view.valid", "view.reject", "view.invalid", "view.exit", "ram.interp", "view.frame",
         "fds.env", "fds.audio",
-        "fds.idreq", "fds.idbytes", "fds.span", "fds.hle",
+        "fds.idreq", "fds.idbytes", "fds.span", "fds.hle", "fds.boot",
     };
     return kind < CYC_EV_KINDS ? NAMES[kind] : "?";
+}
+
+static void cyc_ring_describe_boot(FILE *f, const CycRingEvent *e)
+{
+    static const char *const HOW[] = { "loaded", "not-boot", "skipped-address", "skipped-range" };
+    static const char *const CHECK[] = { "?", "nintendo-hvc", "boot-id(side|disk<<8)", "amount(n|boot<<8)",
+                                         "files", "license", "crc-checked", "oam-corrupt-row", "loop-passes" };
+    switch (e->addr) {
+    case CYC_FDS_BOOT_ENTRY:
+        fprintf(f, "entry pc=%04X%s frame=%s line=%u dot=%u", e->value & 0xFFFF, e->value & 0x10000 ? " skipped" : "",
+                e->value & 0x20000 ? "odd" : "even", e->repeat >> 16, e->repeat & 0xFFFF);
+        break;
+    case CYC_FDS_BOOT_PLAN:
+        fprintf(f, "plan boot_skip=%u auto_insert=%u%s%s jump=%04X", e->value & 1, (e->value >> 1) & 1,
+                e->value & 4 ? " skip-refused" : "", e->value & 8 ? " insert-refused" : "", e->repeat);
+        break;
+    case CYC_FDS_BOOT_FILE: {
+        unsigned how = e->repeat >> 24;
+        fprintf(f, "file index=%u id=%02X %s type=%u at=%04X", e->value >> 8, e->value & 0xFF,
+                how < 4 ? HOW[how] : "?", (e->repeat >> 16) & 0xFF, e->repeat & 0xFFFF);
+        break;
+    }
+    case CYC_FDS_BOOT_CHECK:
+        fprintf(f, "check %s=%u", e->value < 9 ? CHECK[e->value] : "?", e->repeat);
+        break;
+    case CYC_FDS_BOOT_SKIP: fprintf(f, "skip requested=%u bytes=%u", e->value, e->repeat); break;
+    case CYC_FDS_BOOT_REFUSE: fprintf(f, "refuse why=%u detail=%u", e->value, e->repeat); break;
+    case CYC_FDS_BOOT_WAIT: fprintf(f, "wait pc=%04X polls=%u", e->value, e->repeat); break;
+    case CYC_FDS_BOOT_INSERT: fprintf(f, "auto-insert side=%u wait_frame=%u", e->value, e->repeat); break;
+    case CYC_FDS_BOOT_YIELD:
+        fprintf(f, "auto-insert off (%s) frame=%u", e->value == 1 ? "host disk change" : "game started", e->repeat);
+        break;
+    default: fprintf(f, "code=%u value=%u length=%u", e->addr, e->value, e->repeat); break;
+    }
 }
 
 static void describe(FILE *f, const CycRingEvent *e)
@@ -124,6 +158,7 @@ static void describe(FILE *f, const CycRingEvent *e)
         else fprintf(f, "side %u inserted", e->value);
         if (e->addr == 1) fprintf(f, " (power-on)");
         else if (e->addr == 2) fprintf(f, " (hle)");
+        else if (e->addr == 3) fprintf(f, " (auto-insert)");
         break;
     case CYC_EV_FDS_CRC: fprintf(f, "%s acc=%04X", e->addr ? "bad" : "good", e->value & 0xFFFF); break;
     case CYC_EV_FDS_WRITE_RUN:
@@ -182,6 +217,7 @@ static void describe(FILE *f, const CycRingEvent *e)
         default: fprintf(f, "code=%u value=%u length=%u", e->addr, e->value, e->repeat); break;
         }
         break;
+    case CYC_EV_FDS_BOOT: cyc_ring_describe_boot(f, e); break;
     default: fprintf(f, "addr=%04X value=%08X", e->addr, e->value); break;
     }
 }

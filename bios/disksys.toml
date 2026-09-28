@@ -1,0 +1,13 @@
+# bios/disksys.toml - identity of the Famicom Disk System BIOS image.
+#
+# Facts about the image only. The ROM itself stays untracked (bios/*.rom);
+# supply your own dump at bios/disksys.rom. The runner rejects any other image.
+
+[program]
+name         = "Famicom Disk System BIOS (RAM Adapter, Japan)"
+id           = "DISKSYS"
+rom          = "bios/disksys.rom"
+load_address = "0xE000"
+size         = 8192
+crc32        = "0x5E607DCF"
+sha1         = "57fe1bdee955bb48d357e463ccbf129496930b62"

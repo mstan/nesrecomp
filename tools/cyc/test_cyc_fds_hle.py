@@ -27,8 +27,10 @@ standalone cyc_interp:
   host         a host eject/insert before the tier acts takes the drive back:
                no HLE disk change follows
   fast load    load spans in the ring (fds.span, marked fast when fast load ran
-               them), and with --realtime the loads take less wall-clock time
-               than paced
+               them), and the host's count of load frames it runs unpaced: all
+               of them with fast load, none without; the machine is the same.
+               Deterministic: no wall-clock time is measured here (the timing
+               check is tools/cyc/perf_fds_fast_load.py, a local perf script)
 
 python tools/cyc/test_cyc_fds_hle.py --recompiler build/compiler/NESRecomp.exe \\
     --interp build/cyc/cyc_interp.exe --out build/cyc-fds-hle [--toolchain build/cyc/nested_build.json]
@@ -373,19 +375,21 @@ def main():
     check('auto-swap REFUSED' in r.stdout and 'anchor' in r.stdout, f'wrong anchor: {r.stdout[:300]}')
     check_ram(r, OFF[1], 'wrong anchor: behaves as HLE off')
 
-    # ---- fast load: wall-clock with --realtime (scenario 7: most frames are loads)
-    times = {}
+    # ---- fast load: which frames the host runs unpaced (scenario 7: most frames
+    # are loads). Deterministic counts only; wall-clock timing is measured by
+    # tools/cyc/perf_fds_fast_load.py outside CTest.
+    counts = {}
     for tag, hle in [('paced', 'auto-swap'), ('fast', 'auto-swap,fast-load')]:
-        r = Run(main_exe, fxdir / 'disk4_7.fds', bios, f'rt_{tag}', runs, ['--realtime', '--fds-hle', hle], frames=240)
-        times[tag + '_hash'] = r.hash
-        m = re.search(r'(\d+) load frames \(([\d.]+) s at 60 fps\) took ([\d.]+) s', r.stdout)
+        r = Run(main_exe, fxdir / 'disk4_7.fds', bios, f'rt_{tag}', runs, ['--fds-hle', hle], frames=240)
+        counts[tag + '_hash'] = r.hash
+        m = re.search(r'(\d+) load frames \((\d+) unpaced\)', r.stdout)
         check(m is not None, f'{tag}: no load summary')
-        times[tag] = (int(m.group(1)), float(m.group(2)), float(m.group(3)))
-    check(times['paced_hash'] == times['fast_hash'], 'fast load changed the --realtime run')
-    check(times['paced'][0] == times['fast'][0] and times['paced'][0] >= 60, f'load frames {times}')
-    check(times['paced'][2] >= 0.9 * times['paced'][1], f'paced loads run at 60 fps: {times}')
-    check(times['fast'][2] < 0.5 * times['paced'][2], f'fast load is not faster: {times}')
-    print(f'fast load: {times["paced"][0]} load frames, paced {times["paced"][2]:.2f} s, fast {times["fast"][2]:.2f} s')
+        counts[tag] = (int(m.group(1)), int(m.group(2)))
+    check(counts['paced_hash'] == counts['fast_hash'], 'fast load changed the machine')
+    check(counts['paced'][0] == counts['fast'][0] and counts['paced'][0] >= 60, f'load frames {counts}')
+    check(counts['paced'][1] == 0, f'frames unpaced without fast load: {counts}')
+    check(counts['fast'][1] == counts['fast'][0], f'fast load left load frames paced: {counts}')
+    print(f'fast load: {counts["fast"][0]} load frames, all run unpaced with fast load, none without')
     print(f'test_cyc_fds_hle: {checks} checks passed')
     return 0
 

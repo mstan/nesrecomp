@@ -55,6 +55,26 @@ void     fds_hle_ready(void);
 void     fds_hle_host_disk_change(void);     /* a host eject or insert */
 void     fds_hle_frame_end(void);
 uint64_t fds_hle_state_hash(uint64_t acc);
+/* The boot (hw_fds_boot.c): the BIOS's jump into the game, the boot skip's
+ * stops, auto insert. */
+void     fds_boot_power_on(void);
+void     fds_boot_snoop(uint16_t addr);       /* every CPU read of $8000-$FFFF */
+void     fds_boot_status_read(void);          /* $4032 read */
+void     fds_boot_host_disk_change(void);     /* a host eject or insert */
+void     fds_boot_frame_end(void);
+uint64_t fds_boot_state_hash(uint64_t acc);
+void     fds_boot_skipped(void);              /* the boot skip started this boot */
+/* Stop the scheduler after the next execution of the instruction at pc
+ * (hw_entry_hit); fds_boot_stop_taken() says (once) that it happened. */
+void     fds_boot_stop_after(uint16_t pc);
+bool     fds_boot_stop_taken(void);
+/* The drive reports CRC mismatches ($4030.4) with these options (hw_fds.c). */
+bool     fds_crc_reported(void);
+/* The boot skip's access to the drive (hw_fds.c): put the drive in the state
+ * the BIOS's boot load leaves it in once the head has run to the end of the
+ * side: stopped at the end, $4025 as last written, the last byte transferred,
+ * $4024 as last written, the last CRC check's result. */
+void     fds_drive_boot_end(uint8_t ctrl, uint8_t read_data, uint8_t write_data, bool bad_crc);
 
 #ifdef __cplusplus
 }

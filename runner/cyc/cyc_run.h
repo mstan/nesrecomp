@@ -57,6 +57,15 @@ void cyc_run_frame(void);
 /* Called at the first instruction boundary after hw_observe_line's dot 0
  * (hw.h), in the middle of cyc_run_frame. */
 extern void (*cyc_run_observer)(void);
+/* Called at the FDS game's first instruction boundary, when hw_entry_stop
+ * (hw.h) is set: after the BIOS's jump into the game, or once the boot skip
+ * has built the machine the jump would leave (hw_fds_boot.c). */
+extern void (*cyc_run_entry_observer)(void);
+/* The FDS boot skip (cyc_fds_skip.c): power-on (true: it started the
+ * machine, the reset sequence is not run) and the scheduler stops it asked
+ * for inside the BIOS. */
+bool cyc_fds_skip_power_on(void);
+void cyc_fds_skip_boundary(void);
 
 #ifdef __cplusplus
 }

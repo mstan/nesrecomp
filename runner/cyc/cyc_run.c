@@ -43,22 +43,31 @@ void cyc_run_miss_decode(unsigned index, unsigned *bank, uint16_t *addr) {
 void cyc_run_power_on(void) {
     cpu_power_on();
     cyc_ramview_power_on();
+    cyc_run_native_cycles = cyc_run_interp_rom_cycles = cyc_run_interp_ram_cycles = 0;
+    cyc_run_interp_prg_ram_cycles = cyc_run_interp_other_cycles = 0;
 }
 
 void (*cyc_run_observer)(void);
+void (*cyc_run_entry_observer)(void);
 
 static void run_until_stop(void);
 
 void cyc_run_frame(void) {
     hw_frame_done = hw_frame_end_hit = false;
-    if (cpu.power_on) cpu_power_on_sequence();
+    /* The FDS boot skip puts the machine the BIOS's intro leaves back at
+     * power-on instead of running the reset sequence (cyc_fds_skip.c). */
+    if (cpu.power_on && !cyc_fds_skip_power_on()) cpu_power_on_sequence();
     for (;;) {
         run_until_stop();
-        if (!hw_observe_hit) break;
-        /* An observation point: look, then go on unless the frame also
-         * ended (an OAM DMA can carry the CPU from scanline 240 into VBlank). */
-        hw_observe_hit = false;
-        if (cyc_run_observer) cyc_run_observer();
+        bool observe = hw_observe_hit, entry = hw_entry_hit;
+        if (!observe && !entry) break;
+        /* An observation point (or the FDS game's first instruction): look,
+         * then go on unless the frame also ended (an OAM DMA can carry the
+         * CPU from scanline 240 into VBlank). */
+        hw_observe_hit = hw_entry_hit = false;
+        if (entry && cyc_is_fds()) cyc_fds_skip_boundary();
+        if (entry && cyc_run_entry_observer) cyc_run_entry_observer();
+        if (observe && cyc_run_observer) cyc_run_observer();
         if (hw_frame_end_hit) break;
         hw_frame_done = false;
     }
@@ -66,6 +75,7 @@ void cyc_run_frame(void) {
     if (cyc_is_fds()) {
         fds_audio_frame_end();
         fds_hle_frame_end();
+        fds_boot_frame_end();
     }
     cyc_ring_frame++;
 }

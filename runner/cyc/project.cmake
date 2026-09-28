@@ -1,8 +1,9 @@
 # Opt-in cycle backend for existing game projects. See PROJECTS.md.
 include_guard(GLOBAL)
 
+# BIOS_ONLY: ROM is an FDS BIOS, compiled alone with no disk (nesrecomp_add_fds_bios).
 function(nesrecomp_add_cycle_game target)
-    cmake_parse_arguments(CYC "HEADLESS" "ROM;GAME_CONFIG;SEED_FILE;CAPTURE_FILE;RECOMPILER;BIOS" "" ${ARGN})
+    cmake_parse_arguments(CYC "HEADLESS;BIOS_ONLY" "ROM;GAME_CONFIG;SEED_FILE;CAPTURE_FILE;RECOMPILER;BIOS" "" ${ARGN})
     if(CYC_UNPARSED_ARGUMENTS OR NOT CYC_ROM)
         message(FATAL_ERROR "nesrecomp_add_cycle_game requires ROM; unknown arguments: ${CYC_UNPARSED_ARGUMENTS}")
     endif()
@@ -69,6 +70,9 @@ function(nesrecomp_add_cycle_game target)
     if(CYC_BIOS)
         list(APPEND args --fds-bios "${CYC_BIOS}")
     endif()
+    if(CYC_BIOS_ONLY)
+        list(APPEND args --fds-bios-only)
+    endif()
     execute_process(COMMAND "${Python3_EXECUTABLE}" "${root}/tools/cyc/prepare_project.py" ${args}
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" RESULT_VARIABLE result
         OUTPUT_VARIABLE output ERROR_VARIABLE error)
@@ -89,4 +93,20 @@ function(nesrecomp_add_cycle_game target)
     endif()
     set_property(TARGET ${target} PROPERTY NESRECOMP_ROM "${CYC_PROJECT_ROM}")
     message(STATUS "${target}: cycle backend, ROM SHA256 ${CYC_PROJECT_ROM_SHA256}")
+endfunction()
+
+# The Famicom Disk System BIOS alone, recompiled: the RAM Adapter with an empty
+# drive (the Nintendo logo, PLEASE SET DISK CARD). BIOS must match the identity
+# in its <stem>.toml (bios/disksys.toml: size, CRC32, SHA-1). See the "BIOS
+# showcase" section of README.md.
+function(nesrecomp_add_fds_bios target)
+    cmake_parse_arguments(FB "HEADLESS" "BIOS;RECOMPILER" "" ${ARGN})
+    if(NOT FB_BIOS)
+        message(FATAL_ERROR "nesrecomp_add_fds_bios requires BIOS")
+    endif()
+    set(extra "")
+    if(FB_HEADLESS)
+        list(APPEND extra HEADLESS)
+    endif()
+    nesrecomp_add_cycle_game(${target} ROM "${FB_BIOS}" RECOMPILER "${FB_RECOMPILER}" BIOS_ONLY ${extra})
 endfunction()

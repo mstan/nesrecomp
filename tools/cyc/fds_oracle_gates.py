@@ -33,6 +33,11 @@ machines number frames differently (measured and printed).
   python tools/cyc/fds_oracle_gates.py --gate otocky --image otocky.fds ...
   python tools/cyc/fds_oracle_gates.py --gate input --input route.txt --frames 3200:3950 ...
       # any cyc --input route (buttons and DISK_ lines), disk in at power-on
+  python tools/cyc/fds_oracle_gates.py --gate insert ...  # no disk at power-on: cyc's auto
+      # insert (the default) against nesref's no-disk boot and a scripted DISK_INSERT at the same frame
+
+The nodisk gate turns cyc's auto insert off (--fds-hle no-auto-insert), so the
+drive stays empty in both machines.
 """
 import argparse
 import concurrent.futures
@@ -332,7 +337,7 @@ def pairing_offset(cyc, ref_ram, frames):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('--gate', choices=['nodisk', 'boot', 'otocky', 'input'], required=True)
+    ap.add_argument('--gate', choices=['nodisk', 'boot', 'otocky', 'input', 'insert'], required=True)
     ap.add_argument('--input', type=Path, help='--gate input: the cyc --input route both machines run')
     ap.add_argument('--cyc', type=Path, required=True, help='cyc_interp or a compiled FDS program')
     ap.add_argument('--cyc-args', default='', help='extra cyc arguments (space separated)')
@@ -360,7 +365,23 @@ def main():
     script, cyc_extra = [], args.cyc_args.split()
     if args.gate == 'nodisk':
         args.boot, default_frames = 'none', '60,155,177,300,600,1200'
+        cyc_extra += ['--fds-boot-disk', 'none', '--fds-hle', 'no-auto-insert']
+    elif args.gate == 'insert':
+        # Where cyc's auto insert puts side A in (the end of frame N = a host
+        # event before frame N + 1), and nesref's DISK_INSERT at the same point
+        # (nesref WAIT n applies at f = n - 1, as the otocky gate's 1199 / WAIT 1200).
+        args.boot, default_frames = 'none', '5,8,9,10,20,60,155,300,600,751,800'
         cyc_extra += ['--fds-boot-disk', 'none']
+        probe = subprocess.run([str(args.cyc.resolve()), str(args.image), '--fds-bios', str(args.bios), '--frames', '120',
+                                '--fds-boot-disk', 'none'] + args.cyc_args.split(), capture_output=True, text=True,
+                               creationflags=NO_WINDOW)
+        import re as _re
+        m = _re.search(r'side A auto-inserted at the end of frame (\d+)', probe.stdout)
+        if not m:
+            raise SystemExit('cyc did not auto-insert: ' + probe.stdout + probe.stderr)
+        event = int(m.group(1)) + 1
+        print(f'cyc auto insert: end of frame {event - 1} (= a host insert before frame {event}); nesref WAIT {event + 1}')
+        script = [f'WAIT {event + 1}', 'DISK_INSERT A']
     elif args.gate == 'boot':
         args.boot, default_frames = '0', '1:800'
         cyc_extra += ['--fds-boot-disk', '0']

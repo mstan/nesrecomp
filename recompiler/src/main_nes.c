@@ -393,6 +393,9 @@ static void print_usage(void) {
         "                         An FDS image (.fds/.qd, or game.toml [fds] image) is\n"
         "                         compiled for the cycle backend only: the BIOS as a\n"
         "                         fixed ROM at $E000-$FFFF; disk code runs interpreted.\n"
+        "  --fds-bios-only        FDS: compile the BIOS alone, no disk (the BIOS\n"
+        "                         showcase, runner/cyc/fds-bios); the BIOS from\n"
+        "                         --fds-bios or game.toml [fds] bios, --cycle-accurate.\n"
         "  --help, -h             Show this help message.\n"
         "\n"
         "Output:\n"
@@ -598,16 +601,21 @@ static void absolute_path(const char *path, char *out, size_t n) {
 /* Build the program's NESRom from the BIOS and describe the media. */
 static bool fds_program(const char *image_path, const char *bios_arg, const GameConfig *cfg, NESRom *rom,
                         CycFdsProgram *prog) {
-    uint8_t *data;
-    NesFdsImage img;
-    if (!fds_open_file(image_path, &data, &img)) return false;
-    printf("[NESRecomp] FDS image: %s (%s, %u side%s)\n", image_path, nes_fds_format_name(img.format), img.sides,
-           img.sides == 1 ? "" : "s");
-    free(data);
-    char beside[1024];
-    const char *slash = strrchr(image_path, '/'), *bslash = strrchr(image_path, '\\');
-    const char *sep = slash > bslash ? slash : bslash;
-    snprintf(beside, sizeof(beside), "%.*sbios/disksys.rom", sep ? (int)(sep - image_path + 1) : 0, image_path);
+    /* image_path NULL: the BIOS alone, with no disk (--fds-bios-only). */
+    char beside[1024] = "bios/disksys.rom";
+    if (image_path) {
+        uint8_t *data;
+        NesFdsImage img;
+        if (!fds_open_file(image_path, &data, &img)) return false;
+        printf("[NESRecomp] FDS image: %s (%s, %u side%s)\n", image_path, nes_fds_format_name(img.format), img.sides,
+               img.sides == 1 ? "" : "s");
+        free(data);
+        const char *slash = strrchr(image_path, '/'), *bslash = strrchr(image_path, '\\');
+        const char *sep = slash > bslash ? slash : bslash;
+        snprintf(beside, sizeof(beside), "%.*sbios/disksys.rom", sep ? (int)(sep - image_path + 1) : 0, image_path);
+    } else {
+        printf("[NESRecomp] FDS: the BIOS alone, no disk\n");
+    }
     const char *bios_path = bios_arg ? bios_arg : cfg->fds_bios[0] ? cfg->fds_bios : beside;
     size_t n = 0;
     uint8_t *bios = read_whole_file(bios_path, &n);
@@ -637,7 +645,7 @@ static bool fds_program(const char *image_path, const char *bios_arg, const Game
     NesFdsHleAsk ask;
     const char *bad = NULL;
     if (!nes_fds_hle_parse(cfg->fds_hle, &ask, &bad)) {
-        fprintf(stderr, "[NESRecomp] game.toml [fds] hle: unknown word at '%s' (auto-swap, fast-load, all, off, "
+        fprintf(stderr, "[NESRecomp] game.toml [fds] hle: unknown word at '%s' (boot-skip, auto-swap, fast-load, auto-insert, all, off, "
                         "no-auto-swap, no-fast-load)\n", bad);
         free(bios);
         return false;
@@ -646,7 +654,7 @@ static bool fds_program(const char *image_path, const char *bios_arg, const Game
     if (cfg->fds_hle[0]) printf("[NESRecomp] FDS HLE default: %s\n", cfg->fds_hle);
     prog->bios_crc32 = crc;
     absolute_path(bios_path, prog->bios_path, sizeof(prog->bios_path));
-    absolute_path(image_path, prog->image_path, sizeof(prog->image_path));
+    if (image_path) absolute_path(image_path, prog->image_path, sizeof(prog->image_path));
     printf("[NESRecomp] FDS BIOS: %s (CRC32 %08X, identity from %s)\n", bios_path, crc, source);
     printf("[NESRecomp] Vectors: NMI=$%04X  RESET=$%04X  IRQ=$%04X\n", rom->nmi_vector, rom->reset_vector,
            rom->irq_vector);
@@ -670,6 +678,7 @@ int main(int argc, char *argv[]) {
     NesFdsProfile fds_profile = NES_FDS_PROFILE_MESEN099;
     NesFdsCrc fds_crc = NES_FDS_CRC_COMPUTED;
     const char *fds_bios_arg = NULL;
+    bool fds_bios_only = false;
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
@@ -695,6 +704,8 @@ int main(int argc, char *argv[]) {
             else { fprintf(stderr, "Error: --fds-crc '%s'\n", v); return 1; }
         } else if (strcmp(argv[i], "--fds-bios") == 0 && i+1 < argc) {
             fds_bios_arg = argv[++i];
+        } else if (strcmp(argv[i], "--fds-bios-only") == 0) {
+            fds_bios_only = true;
         } else if (strcmp(argv[i], "--cycle-accurate") == 0) {
             cycle_accurate = true;
         } else if (strcmp(argv[i], "--emit-cycle-interpreter") == 0 && i+1 < argc) {
@@ -726,6 +737,30 @@ int main(int argc, char *argv[]) {
     if (!game_path) {
         FILE *f = fopen("game.toml", "r");
         if (f) { fclose(f); game_path = "game.toml"; }
+    }
+
+    /* The BIOS alone: no ROM, no disk. */
+    if (fds_bios_only) {
+        static GameConfig bios_cfg;
+        if (game_path) game_config_load(&bios_cfg, game_path);
+        else game_config_init_empty(&bios_cfg);
+        if (!fds_bios_arg && !bios_cfg.fds_bios[0]) {
+            fprintf(stderr, "Error: --fds-bios-only needs --fds-bios (or game.toml [fds] bios)\n");
+            return 1;
+        }
+        if (!(cycle_accurate || bios_cfg.cycle_accurate)) {
+            fprintf(stderr, "Error: --fds-bios-only builds on the cycle backend only (--cycle-accurate)\n");
+            return 1;
+        }
+        char prefix[128];
+        snprintf(prefix, sizeof(prefix), "%s", prefix_override ? prefix_override
+                                                : bios_cfg.output_prefix[0] ? bios_cfg.output_prefix : "fdsbios");
+        NESRom rom = {0};
+        static CycFdsProgram prog;
+        if (!fds_program(NULL, fds_bios_arg, &bios_cfg, &rom, &prog)) return 1;
+        bool ok = cyc_codegen_emit(&rom, &bios_cfg, prefix, &prog);
+        rom_free(&rom);
+        return ok ? 0 : 1;
     }
 
     /* An FDS title may name its disk in game.toml ([fds] image) instead. */

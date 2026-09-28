@@ -13,6 +13,8 @@ HwPpu ppu;
 /* hw_machine.c pieces the FDS HLE tier (hw_fds_hle.c) links against. */
 int hw_dma_stalls;
 bool cyc_debug_peek(uint16_t addr, uint8_t *value) { (void)addr; *value = 0; return false; }
+/* ...and the boot observation (hw_fds_boot.c). */
+bool hw_frame_done, hw_entry_stop, hw_entry_hit;
 /* The code watch (hw_machine.c): no compiled RAM views here. */
 uint8_t hw_code_watch[HW_CODE_BYTES];
 static void no_code_write(unsigned phys, uint8_t value) { (void)phys; (void)value; }

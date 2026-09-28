@@ -56,6 +56,8 @@ def main():
         ap.add_argument('--' + flag, type=Path, required=True)
     for flag in ('game', 'seeds', 'captures', 'fds_bios'):
         ap.add_argument('--' + flag.replace('_', '-'), dest=flag, type=Path)
+    ap.add_argument('--fds-bios-only', action='store_true',
+                    help='--rom is an FDS BIOS, compiled alone with no disk (runner/cyc/fds-bios)')
     args = ap.parse_args()
     rom, compiler, out = (p.resolve() for p in (args.rom, args.recompiler, args.out))
     dependencies = [rom, compiler]
@@ -81,8 +83,8 @@ def main():
     # A Famicom Disk System title compiles the RAM Adapter BIOS; the image is
     # the disk. The BIOS comes from --fds-bios, game.toml [fds] bios, or
     # bios/disksys.rom beside the image, and must match its identity.
-    bios = args.fds_bios.resolve() if args.fds_bios else None
-    fds = is_fds_image(rom) or bool(game and config.get('game', {}).get('fds'))
+    bios = args.fds_bios.resolve() if args.fds_bios else (rom if args.fds_bios_only else None)
+    fds = args.fds_bios_only or is_fds_image(rom) or bool(game and config.get('game', {}).get('fds'))
     if fds and bios is None:
         configured = config.get('fds', {}).get('bios') if game else None
         bios = (game.parent / configured).resolve() if configured else rom.parent / 'bios' / 'disksys.rom'
@@ -102,8 +104,10 @@ def main():
         config_path = game or folder / 'game.toml'
         if not game:
             config_path.write_text('[game]\n', encoding='utf-8', newline='\n')
-        command = [str(compiler), str(rom), '--game', str(config_path),
-                   '--cycle-accurate', '--output-prefix', 'game']
+        command = [str(compiler)] + ([] if args.fds_bios_only else [str(rom)])
+        command += ['--game', str(config_path), '--cycle-accurate', '--output-prefix', 'game']
+        if args.fds_bios_only:
+            command += ['--fds-bios-only']
         if seeds:
             command += ['--cycle-seed-file', str(seeds)]
         if captures:
