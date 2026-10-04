@@ -8,14 +8,20 @@ import subprocess
 import wave
 
 
-def fixture(mapper):
+def fixture(mapper, dma=False):
     prg = bytearray([0xEA] * 32768)
     # One pulse, NMI on, rendering on (also exercise odd-frame dot skipping).
     boot = bytes.fromhex('78 D8 A2 FF 9A A9 40 8D 17 40 A9 01 8D 15 40 '
                          'A9 BF 8D 00 40 A9 10 8D 02 40 A9 08 8D 03 40 '
                          'A9 80 8D 00 20 A9 08 8D 01 20')
+    if dma:
+        # Looping DMC plus repeated OAM transfers cross every blank interval.
+        boot += bytes.fromhex('A9 4F 8D 10 40 A9 FF 8D 12 40 A9 01 8D 13 40 '
+                              'A9 11 8D 15 40')
     spin = 0xFE00 + len(boot)
-    boot += bytes([0xE6, 1, 0x4C, spin & 255, spin >> 8])
+    boot += bytes([0xE6, 1])
+    if dma: boot += bytes.fromhex('A9 02 8D 14 40')
+    boot += bytes([0x4C, spin & 255, spin >> 8])
     prg[0x7E00:0x7E00 + len(boot)] = boot
     prg[0x6000:0x6003] = bytes.fromhex('E6 00 40')
     prg[0x6010] = 0x40
@@ -110,6 +116,28 @@ def main():
     assert 'MMC3 cartridge' in rejected.stderr
     for value in ('-1', '263', 'word', '1x'):
         run('invalid-' + value, ['--extra-scanlines', value], expected=2)
+
+    dma_rom = out / 'budget-dma.nes'
+    dma_rom.write_bytes(fixture(4, dma=True))
+    for alignment in range(4):
+        trace = out / f'dma-align{alignment}.trace'
+        run(f'dma-align{alignment}', ['--align', alignment, '--extra-scanlines', 256,
+                                    '--frames', 4, '--trace-frame', 2, '--trace-out', trace], image=dma_rom)
+        previous = None
+        repeat = longest = transfers = 0
+        for line in trace.read_text().splitlines():
+            fields = line.split()
+            kind = fields[1]
+            if kind == 'INSN': continue
+            if kind in ('r', 'w', 'H'):
+                repeat = repeat + 1 if kind == previous else 1
+                longest = max(longest, repeat)
+                if kind == 'w' and fields[2] == '2004': transfers += 1
+            else: repeat = 0
+            previous = kind
+        assert longest <= 8, (alignment, longest, 'DMA phase froze in added lines')
+        assert transfers > 2000, (alignment, transfers)
+        print(f'alignment {alignment}: concurrent DMC/OAM DMA stayed bounded during audio pause', flush=True)
 
 
 if __name__ == '__main__':

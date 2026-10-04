@@ -765,12 +765,16 @@ static void dmc_dma_get(void)
 void dma_cycle(void)
 {
     if (cyc_trace_enabled) cyc_trace_dma(false);
+    /* Extra blank lines freeze the audio clock, including apu.put. The DMA
+     * bus still alternates with CPU cycles: a frozen put half otherwise holds
+     * a pending sample (or OAM) transfer until the entire budget expires. */
+    bool put = hw_extra_timing.active ? (hw.cycles & 1u) != 0 : apu.put != 0;
     if (apu.oam_dma && apu.oam_dma_first) {
         apu.oam_dma_first = 0;
-        if (!apu.put) apu.oam_dma_halt = 1;
+        if (!put) apu.oam_dma_halt = 1;
     }
     bool dmc = apu.dmc_dma, oam = apu.oam_dma;
-    if (apu.put) {
+    if (put) {
         if (dmc && oam) {
             if (apu.dmc_dma_halt && apu.oam_dma_halt) dma_halt();
             else if (apu.oam_dma_halt) dma_halt(); /* the sample DMA's put cycle */

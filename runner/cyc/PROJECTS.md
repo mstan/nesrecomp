@@ -6,7 +6,9 @@ stock timing. This enhancement adds blank scanlines before NMI and pauses APU
 clocks during those lines; the window continues at the normal frame rate. Keep
 the setting visible and reversible in a game's menu. Stock hardware parity is
 tested with zero extra lines; enhanced runs compare native and interpreted CPU
-execution instead. Other boards currently reject nonzero values.
+execution instead. Other boards currently reject nonzero values. DMA bus
+arbitration keeps alternating during the audio pause, so pending sample or
+sprite transfers cannot consume the added budget waiting for an audio edge.
 
 Cycle save states now write version 2 with the enhancement's selection and
 progress. The reader accepts version 1 states with the same program and hardware
