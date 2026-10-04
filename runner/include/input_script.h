@@ -16,9 +16,9 @@
  *                                        # and optional exact public frame (30s timeout)
  *   ASSERT_RAM8 <hex_addr> <hex_value> [msg]
  *
- * A wait timeout or assert failure marks the script desynced: a run that would
- * exit 0 (EXIT 0 or end of script) exits 3 instead. Explicit nonzero EXIT
- * codes are kept.
+ * A wait timeout, assert failure or undeliverable KEY_TAP marks the script
+ * desynced: a run that would exit 0 (EXIT 0 or end of script) exits 3
+ * instead. Explicit nonzero EXIT codes are kept.
  */
 #pragma once
 #include <stdint.h>

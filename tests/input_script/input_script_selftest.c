@@ -4,6 +4,8 @@
 #include "input_script.h"
 #include "foreign_controller.h"
 
+#include <SDL.h>
+
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -85,6 +87,25 @@ static void test_failures_reset_per_load(void) {
     CHECK(run("is_clean2.script", "EXIT 0\n") == 0);
 }
 
+static void test_key_tap_delivery(void) {
+    /* No event queue: an undeliverable tap must fail the run, not vanish. */
+    CHECK(!SDL_WasInit(SDL_INIT_EVENTS));
+    CHECK(run("is_key0.script", "KEY_TAP KP0\nEXIT 0\n") == 3);
+    CHECK(run("is_keyx.script", "KEY_TAP NOT_A_KEY\nEXIT 0\n") == 3);
+
+    CHECK(SDL_InitSubSystem(SDL_INIT_EVENTS) == 0);
+    SDL_FlushEvents(SDL_FIRSTEVENT, SDL_LASTEVENT);
+    CHECK(run("is_key1.script", "KEY_TAP KP8\nEXIT 0\n") == 0);
+    SDL_Event ev;
+    int down = 0, up = 0;
+    while (SDL_PollEvent(&ev)) {
+        if (ev.type == SDL_KEYDOWN && ev.key.keysym.scancode == SDL_SCANCODE_KP_8) down++;
+        if (ev.type == SDL_KEYUP && ev.key.keysym.scancode == SDL_SCANCODE_KP_8) up++;
+    }
+    CHECK(down == 1 && up == 1);
+    SDL_QuitSubSystem(SDL_INIT_EVENTS);
+}
+
 static void test_screenshot_dir(void) {
     char buf[256];
     set_shot_dir(NULL);
@@ -118,6 +139,7 @@ int main(void) {
     test_explicit_nonzero_exit_kept();
     test_failures_reset_per_load();
     test_screenshot_dir();
+    test_key_tap_delivery();
     if (failures) {
         fprintf(stderr, "input_script_selftest: %d failure(s)\n", failures);
         return 1;

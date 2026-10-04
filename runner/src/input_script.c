@@ -432,6 +432,7 @@ void script_tick(uint64_t frame, const uint8_t *ram) {
                 SDL_Event key_event;
                 if (scancode == SDL_SCANCODE_UNKNOWN) {
                     fprintf(stderr, "[Script] Unknown host key: %s\n", c->sarg);
+                    note_failure(frame, "KEY_TAP unknown key");
                     break;
                 }
                 memset(&key_event, 0, sizeof(key_event));
@@ -439,10 +440,17 @@ void script_tick(uint64_t frame, const uint8_t *ram) {
                 key_event.key.state = SDL_PRESSED;
                 key_event.key.keysym.scancode = scancode;
                 key_event.key.keysym.sym = SDL_GetKeyFromScancode(scancode);
-                SDL_PushEvent(&key_event);
+                int pushed = SDL_PushEvent(&key_event) == 1;
                 key_event.type = SDL_KEYUP;
                 key_event.key.state = SDL_RELEASED;
-                SDL_PushEvent(&key_event);
+                pushed = (SDL_PushEvent(&key_event) == 1) && pushed;
+                if (!pushed) {
+                    /* A dropped tap would leave the run silently untested. */
+                    fprintf(stderr, "[Script] KEY_TAP %s not delivered: %s\n",
+                            c->sarg, SDL_GetError());
+                    note_failure(frame, "KEY_TAP not delivered");
+                    break;
+                }
                 printf("[Script] KEY_TAP %s\n", c->sarg);
                 break;
             }

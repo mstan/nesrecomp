@@ -2259,8 +2259,14 @@ int nesrecomp_runner_run(int argc, char *argv[]) {
         exit(2);
     }
 
-    /* In smoke/benchmark mode, skip all SDL initialization and run headless. */
+    /* In smoke/benchmark mode, skip all SDL initialization and run headless.
+     * Input scripts still need the event queue (no window, no video) so
+     * KEY_TAP reaches the game hook through the real SDL event path. */
     if (headless_run_active()) {
+        if (s_script_path && !SDL_WasInit(SDL_INIT_EVENTS) &&
+            SDL_InitSubSystem(SDL_INIT_EVENTS) < 0)
+            fprintf(stderr, "[Script] SDL events unavailable (%s); KEY_TAP will fail\n",
+                    SDL_GetError());
         if (s_benchmark_frames) {
             printf("[Benchmark] Headless mode: warmup=%d measured=%d\n",
                    s_benchmark_warmup, s_benchmark_frames);

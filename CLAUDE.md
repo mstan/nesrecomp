@@ -177,7 +177,7 @@ GameRecomp.exe rom.nes --script C:/temp/session.txt > C:/temp/stdout.txt 2>&1
 | `ASSERT_RAM8 <hex_addr> <hex_val> [msg]` | Assert RAM value |
 | `EXIT [code]` | Exit with code (default 0) |
 
-A `WAIT_RAM8`/`WAIT_FOREIGN_STATE` timeout or `ASSERT_RAM8` failure means the script
+A `WAIT_RAM8`/`WAIT_FOREIGN_STATE` timeout, `ASSERT_RAM8` failure or undeliverable `KEY_TAP` means the script
 desynced: a run that would exit 0 exits **3** instead (explicit nonzero codes are kept).
 
 ### Save state hotkeys (in-game)
