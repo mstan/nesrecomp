@@ -1240,7 +1240,9 @@ static void emit_rts(Emit *e) {
     ln(e, "uint8_t hi = cpu_read((uint16_t)(0x100 | (uint8_t)(cpu.s + 2)), 0);");
     ln(e, "cpu_read((uint16_t)(lo | hi << 8), CYC_POLL | CYC_DONE);");
     ln(e, "cpu.s = (uint8_t)(cpu.s + 2);");
-    go_expr(e, "(uint16_t)((lo | hi << 8) + 1)");
+    ln(e, "cpu.pc = (uint16_t)((lo | hi << 8) + 1);");
+    ln(e, "if (cyc_cpu_rts_observer) cyc_cpu_rts_observer();");
+    ln(e, "return;");
 }
 
 static void emit_rti(Emit *e) {

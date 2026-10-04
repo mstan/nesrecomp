@@ -45,6 +45,9 @@ typedef struct {
 } Cpu6502;
 
 extern Cpu6502 cpu;
+/* Trusted host observation after a completed RTS, before its caller resumes.
+ * No bus activity is replaced. NULL unless a game installs an observer. */
+extern void (*cyc_cpu_rts_observer)(void);
 
 /* Flags for one CPU cycle. */
 enum {

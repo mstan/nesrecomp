@@ -141,7 +141,17 @@ int cyc_run_isolated(uint16_t stop_pc, uint8_t entry_s) {
         if (hw_frame_done) return CYC_MOD_FAIL_BUDGET;
         if (cpu.jammed) return CYC_MOD_FAIL_JAM;
         if ((int8_t)(cpu.s - entry_s) > 0) return CYC_MOD_FAIL_STACK;   /* returned past its caller */
+        if (cyc_hooks_armed) {
+            cyc_hook_hit = false;
+            if (cyc_hooks_due(cpu.pc)) {
+                uint16_t at = cpu.pc;
+                cyc_hooks_fire(at);
+                if (cpu.pc == at) cyc_hook_passed = at;
+                continue;
+            }
+        }
         dispatch();
+        cyc_hook_passed = -1;
     }
     return 0;
 }

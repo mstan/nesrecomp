@@ -397,7 +397,7 @@ static void load_ini(const char *path) {
 
 /* ── Public API ───────────────────────────────────────────────────────────── */
 
-void keybinds_init(const char *exe_path) {
+static void init_policy(const char *exe_path, int write_missing) {
     s_binds = s_defaults;
     /* Match the launcher's established second keyboard layout. Extra seats
        remain unbound until assigned; two-seat titles retain legacy behavior. */
@@ -416,10 +416,12 @@ void keybinds_init(const char *exe_path) {
     if (test) {
         fclose(test);
         load_ini(s_ini_path);
-    } else {
+    } else if (write_missing) {
         write_defaults(s_ini_path);
     }
 }
+void keybinds_init(const char *exe_path) {init_policy(exe_path, 1);}
+void keybinds_init_readonly(const char *exe_path) {init_policy(exe_path, 0);}
 
 const KeyBinds *keybinds_get(void) {
     return &s_binds;

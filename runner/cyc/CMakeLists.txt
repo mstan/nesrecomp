@@ -379,3 +379,12 @@ if(MSVC)
     target_compile_definitions(cyc_content_test PRIVATE _CRT_SECURE_NO_WARNINGS)
 endif()
 add_test(NAME cyc_content_test COMMAND cyc_content_test)
+
+add_executable(cyc_return_test return_test.c cpu6502.c cpu6502_interp.c hw_machine.c ${CYC_TEST_BOARD_SOURCES}
+    hw_ppu.c hw_apu.c hw_palette.c cyc_trace.c cyc_ring.c ${NESRECOMP_CYC_SCHEDULER_SOURCES} cyc_native_none.c)
+target_include_directories(cyc_return_test PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})
+target_link_libraries(cyc_return_test PRIVATE ${NESRECOMP_CYC_LIBRARIES})
+if(MSVC)
+    target_compile_definitions(cyc_return_test PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()
+add_test(NAME cyc_return_test COMMAND cyc_return_test)

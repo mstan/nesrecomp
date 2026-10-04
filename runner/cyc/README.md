@@ -1274,13 +1274,17 @@ and write CPU RAM, PRG RAM and cartridge RAM. Between `cyc_mod_isolate_begin`
 and `cyc_mod_isolate_end`, `cyc_mod_call(routine, regs)` runs the program's
 own routine (a JSR to a sentinel return) on a machine whose cycles clock
 nothing: no PPU dots, APU, mapper counters or drive, no ring or trace events,
-hooks suspended. The end restores the whole machine from a snapshot (CPU,
+hooks suspended by default. The end restores the whole machine from a snapshot (CPU,
 RAM, cartridge and PRG RAM, CHR RAM, PPU, APU, mapper and expansion sound, FDS
 media and HLE, RAM view validity), so a mod can decode, simulate and draw with
 the game's own code without the game noticing. A budget (default 2,000,000
 CPU cycles per call), a stack check and a jam check fail a call loudly
 (`MOD_FAIL` ring event). `cyc_mod_call_commit` keeps a routine's memory effects
 instead, and refuses a routine that stores to a device register.
+
+Trusted game ports can opt into return observation and hooks inside one
+isolated scope. Input/event callbacks and the voxel presentation adapter are
+described in [CYCLE-MOD-ADAPTERS.md](../../docs/CYCLE-MOD-ADAPTERS.md).
 
 **Save states** (`cyc_state.h`). The whole machine, the host's section and
 every registered mod record (`runner/include/mod_savestate.h`), identified by
@@ -1360,12 +1364,10 @@ describes trace equality, while the printed test scores describe accuracy.
 
 ## Limits
 
-- The model targets NTSC; PAL/Dendy timing is not implemented. Mapper support
-  covers the board configurations above, not every variant sharing an iNES
-  mapper number: MMC1 outer PRG/WRAM banking and the original discrete
-  mappers' bus conflicts are not modeled. The new discrete boards listed in
-  [MAPPERS.md](MAPPERS.md) do model AND conflicts where specified.
-  Battery-backed RAM is not persisted by this host.
+- NTSC and PAL have separate CPU/PPU/APU timing and save-state clock phase.
+  Dendy timing is not implemented. Mapper support covers the board
+  configurations above, not every variant sharing a mapper number. Cartridge
+  battery RAM is persisted unless `--no-save` is active.
 
 - Mappers 0, 1, 2, 3, 4, 7 and 66. NROM, MMC1, UxROM, CNROM and MMC3 have
   each run a game against the oracle (see [Results](#results)); AxROM and

@@ -7,7 +7,7 @@
  * optional: leave a field NULL/0 and the host does what it does today. The
  * headless host uses the fields marked (both); the window uses all of them.
  *
- *   present      The picture the window shows. Default: the engine's
+ *   present      (both) The picture the window and --present-out show. Default: the engine's
  *                (cyc_render.h: the machine's 256x240 frame, or a game
  *                compositor's picture at cyc_video_width()). A game that draws
  *                everything itself returns its own ARGB8888 buffer; the width
@@ -91,6 +91,12 @@ typedef struct CycHostExtras {
     size_t option_count;
     bool (*option)(void *ctx, const char *name, const char *value);
     void (*tcp_setup)(void *ctx);
+    /* Final NES controller bytes, after host mapping and before latching.
+     * Password prefill can drive the original input path in both hosts. */
+    void (*input)(void *ctx, uint8_t buttons[2]);
+    /* Window gameplay events only. event is SDL_Event; player is the zero-
+     * based owner of a controller axis event, or -1. No SDL dependency here. */
+    void (*event)(void *ctx, const void *event, int player);
 } CycHostExtras;
 
 const CycHostExtras *cyc_host_extras(void);

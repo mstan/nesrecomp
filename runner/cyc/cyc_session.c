@@ -153,6 +153,15 @@ bool cyc_session_start(void)
     return true;
 }
 
+void cyc_session_input(uint8_t buttons[2]) {
+    const CycHostExtras *x = cyc_session_extras();
+    if (x && x->input) x->input(x->ctx, buttons);
+}
+void cyc_session_event(const void *event, int player) {
+    const CycHostExtras *x = cyc_session_extras();
+    if (x && x->event) x->event(x->ctx, event, player);
+}
+
 void cyc_session_frame_begin(void)
 {
     const CycHostExtras *x = cyc_session_extras();

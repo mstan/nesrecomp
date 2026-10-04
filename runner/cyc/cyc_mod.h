@@ -90,6 +90,13 @@ bool cyc_mod_isolated(void);
 bool cyc_mod_call(uint16_t routine, CycModRegs *regs);
 void cyc_mod_isolate_end(void);
 void cyc_mod_set_call_budget(uint64_t cycles);
+/* Optional trusted routine observation. Defaults: no return observer and no
+ * hooks in isolated scopes. Enable isolated hooks explicitly AFTER begin;
+ * scope end resets the permission. The game's callbacks must keep their own
+ * speculative presentation/simulation state separate from live state. */
+void cyc_mod_set_return_hook(void (*hook)(void));
+void cyc_mod_allow_isolated_hooks(bool allow);
+bool cyc_mod_call_commit_hooked(uint16_t routine, CycModRegs *regs);
 bool cyc_mod_call_commit(uint16_t routine, CycModRegs *regs);
 
 typedef struct {

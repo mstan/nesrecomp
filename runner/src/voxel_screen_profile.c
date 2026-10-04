@@ -3,7 +3,11 @@
 #include "controller.h"
 #include "keybinds.h"
 
+#ifdef NESRECOMP_CYCLE_PRESENTATION
+#include "cyc_presentation.h"
+#else
 #include "nes_runtime.h"
+#endif
 #include "nes_video.h"
 #include "voxel_renderer.h"
 

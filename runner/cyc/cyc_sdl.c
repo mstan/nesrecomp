@@ -1214,6 +1214,18 @@ int cyc_sdl_main(const char *title_in, int scale)
 #ifdef CYC_WITH_RECOMP_UI
             cyc_ui_process_event(&ev);
 #endif
+            if (ev.type == SDL_CONTROLLERDEVICEREMOVED ||
+                (!open && (!s_pause_unfocused || s_hidden || (SDL_GetWindowFlags(s_win) & SDL_WINDOW_INPUT_FOCUS)))) {
+                int player = -1;
+                if (ev.type == SDL_CONTROLLERAXISMOTION) {
+                    CycInputFrame ef; CycInputState es;
+                    read_frame(&ef); cyc_input_eval(&s_set.bind, &ef, &es);
+                    for (int p = 0; p < CYC_INPUT_PLAYERS; ++p)
+                        if (es.player_pad[p] >= 0 && SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(s_pads[es.player_pad[p]])) == ev.caxis.which)
+                            player = p;
+                }
+                cyc_session_event(&ev, player);
+            }
             if (ev.type == SDL_QUIT) s_running = false;
             else if (ev.type == SDL_WINDOWEVENT && ev.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
                 int ow = 0, oh = 0;
@@ -1308,8 +1320,10 @@ int cyc_sdl_main(const char *title_in, int scale)
                 else hold_input = false;
             }
             cyc_host_disk_frame(now, s_frames_done);
-            cyc_set_controller(0, pad0);
-            cyc_set_controller(1, pad1);
+            uint8_t buttons[2] = {pad0, pad1};
+            cyc_session_input(buttons);
+            cyc_set_controller(0, buttons[0]);
+            cyc_set_controller(1, buttons[1]);
             zapper_mouse_frame();
             cyc_session_frame_begin();
             cyc_run_frame();

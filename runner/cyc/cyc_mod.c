@@ -23,6 +23,20 @@
 static CycSnapshot *s_snap;
 static size_t       s_snap_chr;
 static bool         s_open;
+static bool         s_isolated_hooks;
+static void (*s_return_hook)(void);
+static void returned(void) {
+    if (s_return_hook && (!s_open || s_isolated_hooks)) s_return_hook();
+}
+void cyc_mod_set_return_hook(void (*hook)(void)) {
+    s_return_hook = hook;
+    cyc_cpu_rts_observer = hook ? returned : NULL;
+}
+void cyc_mod_allow_isolated_hooks(bool allow) {
+    if (!s_open) return;
+    s_isolated_hooks = allow;
+    cyc_hooks_suspend(!allow);
+}
 static bool         s_trace_was;
 static uint64_t     s_budget = 2000000;
 static CycModStats  s_stats;
@@ -117,6 +131,7 @@ bool cyc_mod_isolate_begin(void)
     }
     cyc_snapshot_take(s_snap);
     s_open = true;
+    s_isolated_hooks = false;
     s_stats.scopes++;
     /* Nothing but the routine: no clock, no interrupt about to be taken, no
      * hook sites, no device history, no comparison trace. */
@@ -201,15 +216,17 @@ void cyc_mod_isolate_end(void)
     cyc_trace_enabled = s_trace_was;
     cyc_hooks_suspend(false);
     s_open = false;
+    s_isolated_hooks = false;
 }
 
-bool cyc_mod_call_commit(uint16_t routine, CycModRegs *regs)
+static bool call_commit(uint16_t routine, CycModRegs *regs, bool hooked)
 {
     if (s_open) {
         fprintf(stderr, "[cyc mod] cyc_mod_call_commit($%04X) inside an isolated scope\n", routine);
         return false;
     }
     if (!cyc_mod_isolate_begin()) return false;
+    cyc_mod_allow_isolated_hooks(hooked);
     hw_isolated_io_writes = 0;
     CycModRegs out = *regs;
     bool ok = cyc_mod_call(routine, &out);
@@ -248,6 +265,12 @@ bool cyc_mod_call_commit(uint16_t routine, CycModRegs *regs)
     return true;
 }
 
+bool cyc_mod_call_commit(uint16_t routine, CycModRegs *regs) {
+    return call_commit(routine, regs, false);
+}
+bool cyc_mod_call_commit_hooked(uint16_t routine, CycModRegs *regs) {
+    return call_commit(routine, regs, true);
+}
 void cyc_mod_stats(CycModStats *out) { *out = s_stats; }
 
 void cyc_mod_frame_end(void)

@@ -490,8 +490,12 @@ static void input_tick(long frame) {
         input_held[input_steps[input_next].port] = input_steps[input_next].buttons;
         input_next++;
     }
-    cyc_set_controller(0, input_held[0]);
-    cyc_set_controller(1, input_held[1]);
+    uint8_t buttons[2] = {input_held[0], input_held[1]};
+#ifndef CYC_ORACLE
+    cyc_session_input(buttons);
+#endif
+    cyc_set_controller(0, buttons[0]);
+    cyc_set_controller(1, buttons[1]);
 }
 
 #ifndef CYC_ORACLE
@@ -850,7 +854,10 @@ static void write_presentation(const char *base, long frame, uint64_t now_ms, bo
 {
     static uint32_t buf[CYC_VIDEO_MAX_WIDTH * 240];
     int w, h;
-    const uint32_t *pic = cyc_render_present(&w, &h);
+    const CycHostExtras *extras = cyc_session_extras();
+    const uint32_t *pic = extras && extras->present ? extras->present(extras->ctx, &w, &h) : NULL;
+    if (!pic || w <= 0 || h <= 0 || w > CYC_VIDEO_MAX_WIDTH || h > 240)
+        pic = cyc_render_present(&w, &h);
     memcpy(buf, pic, (size_t)w * (size_t)h * sizeof(uint32_t));
     CycDiskToast t;
     if (cyc_is_fds() && cyc_disk_action_toast(cyc_host_disk_action(), now_ms, &t)) {
@@ -1476,7 +1483,7 @@ int main(int argc, char **argv) {
         if (barcode && frame==barcode_frame) cyc_scan_barcode(barcode,barcode_speed);
         if (spam_page >= 0) cyc_set_controller(0, acccoin_spam_tick(&spam, cyc_cpu_ram(), stdout));
         else if (acccoin) cyc_set_controller(0, acccoin_driver_tick(&drv, cyc_cpu_ram()));
-        else if (input_count) input_tick(frame);
+        else input_tick(frame);
         cyc_trace_file = (trace_f && frame == trace_frame) ? trace_f : NULL;
 #ifdef CYC_ORACLE
         cyc_oracle_run_frame();

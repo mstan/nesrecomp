@@ -5,6 +5,7 @@
 #include <string.h>
 
 Cpu6502 cpu;
+void (*cyc_cpu_rts_observer)(void);
 
 void cpu_power_on(void) {
     memset(&cpu, 0, sizeof(cpu));

@@ -923,6 +923,8 @@ void cpu_interp_step(void) {
         cpu_read((uint16_t)(lo | hi << 8), CYC_POLL | CYC_DONE);
         cpu.s = (uint8_t)(cpu.s + 2);
         cpu.pc = (uint16_t)((lo | hi << 8) + 1);
+        if (cyc_cpu_rts_observer) cyc_cpu_rts_observer();
+        return;
         return;
     }
     case 0x61: { /* ADC (zp,X) */

@@ -152,6 +152,14 @@ def main():
                     raise AssertionError(f'iso {flavour}: {c}')
     print(f'inert + isolation: {FRAMES} frames identical to the plain program, native and interpreted; '
           f'{c["iso_ok"]} isolated scopes restored the machine')
+    # Explicit isolated hooks and return observers share the same scheduler on
+    # generated code and the interpreter, including a handled routine's RTS.
+    for flavour, extra in (('native', []), ('interp', ['--interp-only'])):
+        p, lines, _ = play(exe, fmods, out, f'observe_{flavour}', ['--test-mode', 'observe'] + extra)
+        m = re.search(r'return-test: ok=(\d+) bad=(\d+)', p.stdout)
+        if lines != base or not m or int(m[1]) < 30 or int(m[2]):
+            raise AssertionError(f'observers {flavour}: {m and m.groups()}')
+    print('return observers: actual and handled RTS, explicit isolated hook permission, full machine parity')
     ring = fmods / 'iso_ring.txt'
     run([exe, out / 'disk.fds', '--fds-bios', out / 'bios' / 'disksys.rom', '--frames', FRAMES, '--test-mode', 'iso',
          '--ring-out', ring], fmods, fmods / 'iso_ring.log')
