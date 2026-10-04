@@ -1163,8 +1163,25 @@ void nes_vblank_callback(void) {
         printf("[VBlank] callback #%llu frame=%llu\n",
                (unsigned long long)s_cb_count, (unsigned long long)g_frame_count);
 
-    /* In headless modes, skip all SDL input/event handling. */
-    if (headless_run_active()) goto smoke_skip_input;
+    /* In headless modes, skip all SDL input/event handling. There is no
+     * window or real keyboard, so the only queued key events are ones an input
+     * script injected (KEY_TAP); route those to the game hook so scripted host
+     * keys (e.g. voxel camera numpad) take effect, and drop everything else. */
+    if (headless_run_active()) {
+        if (SDL_WasInit(SDL_INIT_EVENTS)) {
+            SDL_Event ev;
+            while (SDL_PollEvent(&ev)) {
+#ifdef NESRECOMP_GAME_SDL_EVENT_HOOK
+                extern void NESRECOMP_GAME_SDL_EVENT_HOOK(const SDL_Event *event);
+                if (ev.type == SDL_KEYDOWN || ev.type == SDL_KEYUP)
+                    NESRECOMP_GAME_SDL_EVENT_HOOK(&ev);
+#else
+                (void)ev;
+#endif
+            }
+        }
+        goto smoke_skip_input;
+    }
 
     /* Handle SDL events */
     SDL_Event ev;
