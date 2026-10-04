@@ -122,6 +122,7 @@ if(SDL2_FOUND)
             "${NESRECOMP_RECOMP_UI}/src" "${NESRECOMP_RECOMP_UI}/src/common")
         target_link_libraries(cyc_ui_launcher_test PRIVATE SDL2::SDL2)
         target_compile_definitions(cyc_ui_launcher_test PRIVATE SDL_MAIN_HANDLED _CRT_SECURE_NO_WARNINGS
+            "CYC_GAME_PASSWORD_SAVE=\"test-password.srm\"" "CYC_GAME_PASSWORD_SAVE_LABEL=\"Mantra\""
             "CYC_LAUNCHER_ROM_SHA256=\"ab00000000000000000000000000000000000000000000000000000000000001\"")
         if(WIN32)
             add_custom_command(TARGET cyc_ui_launcher_test POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -369,3 +370,12 @@ if(MSVC)
     target_compile_definitions(cyc_region_test PRIVATE _CRT_SECURE_NO_WARNINGS)
 endif()
 add_test(NAME cyc_region_test COMMAND cyc_region_test)
+
+add_executable(cyc_content_test content_test.c cpu6502.c cpu6502_interp.c hw_machine.c ${CYC_TEST_BOARD_SOURCES}
+    hw_ppu.c hw_apu.c hw_palette.c cyc_trace.c cyc_ring.c ${NESRECOMP_CYC_SCHEDULER_SOURCES} cyc_native_none.c)
+target_include_directories(cyc_content_test PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})
+target_link_libraries(cyc_content_test PRIVATE ${NESRECOMP_CYC_LIBRARIES})
+if(MSVC)
+    target_compile_definitions(cyc_content_test PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()
+add_test(NAME cyc_content_test COMMAND cyc_content_test)

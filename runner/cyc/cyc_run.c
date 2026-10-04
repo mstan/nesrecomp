@@ -81,11 +81,11 @@ static void dispatch(void) {
     {
         if (cpu.jammed) {
             cpu_jam_cycle();
-        } else if (cyc_run_native && cyc_native_has(cpu.pc)) {
+        } else if (cyc_run_native && !hw_prg_modified && cyc_native_has(cpu.pc)) {
             uint64_t before = cyc_cycle_count();
             cyc_native_run();
             cyc_run_native_cycles += cyc_cycle_count() - before;
-        } else if (cyc_run_native && (view = cyc_ramview_find(cpu.pc)) >= 0) {
+        } else if (cyc_run_native && !hw_prg_modified && (view = cyc_ramview_find(cpu.pc)) >= 0) {
             /* Code in RAM that a compiled view covers, as RAM holds it now. */
             uint64_t before = cyc_cycle_count();
             cyc_ramview_run(view);

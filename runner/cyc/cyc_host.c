@@ -937,6 +937,12 @@ static bool add_state_save(const char *spec)
 #include "cyc_fds_save.inc"
 #endif
 
+/* Shared with game-owned password saves and the launcher's password editor. */
+#ifndef CYC_ORACLE
+static bool s_saves_enabled = true;
+bool cyc_host_saves_enabled(void) { return s_saves_enabled; }
+#endif
+
 int main(int argc, char **argv) {
     const char *rom_path = NULL, *hash_out = NULL, *trace_out = NULL, *screenshot = NULL, *state_out = NULL,
                *wav_out = NULL, *mem_out = NULL;
@@ -1138,6 +1144,7 @@ int main(int argc, char **argv) {
         }
     }
 #ifndef CYC_ORACLE
+    s_saves_enabled = !no_save;
     if (!rom_path) rom_path = cyc_native_fds_image_path;   /* game.toml [fds] image */
 #if defined(CYC_WITH_SDL)
     /* The window: its settings, and recomp-ui's launcher where the build has it. */

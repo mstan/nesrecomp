@@ -43,6 +43,20 @@ uint8_t cyc_mod_peek(uint16_t addr)
 
 bool cyc_mod_peek_ok(uint16_t addr, uint8_t *value) { return cyc_debug_peek(addr, value); }
 
+uint8_t *cyc_mod_prg_data_rw(size_t *size) {
+    if (size) *size = 0;
+    if (s_open || hw_cart.mapper == NES_FDS_MAPPER || !hw_cart.prg) return NULL;
+    hw_prg_modified = true;
+    if (size) *size = hw_cart.prg_len;
+    return hw_cart.prg;
+}
+bool cyc_mod_chr_poke(uint16_t addr, uint8_t value) {
+    if (s_open || addr >= 0x2000 || !hw_cart.chr_write[addr >> 10]) return false;
+    hw_cart.chr[hw_cart_chr_index(addr)] = value;
+    ppu_state_reloaded();
+    return true;
+}
+
 bool cyc_mod_poke(uint16_t addr, uint8_t value)
 {
     if (addr < 0x2000) {

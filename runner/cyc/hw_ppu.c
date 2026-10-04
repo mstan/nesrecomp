@@ -20,11 +20,14 @@
 #include "hw_internal.h"
 
 #include "hw.h"
+#include "cyc_mod.h"
 
 #include <stdio.h>
 #include <string.h>
 
 HwPpu    ppu;
+static CycModPpuWriteHook content_write_hook;
+void cyc_mod_set_ppu_write_hook(CycModPpuWriteHook hook) { content_write_hook = hook; }
 uint16_t hw_frame_index[256 * 240];
 CycLine  hw_frame_lines[240];
 uint8_t  hw_frame_bg[256 * 240];
@@ -1278,6 +1281,8 @@ static void write_register(uint16_t addr, uint8_t value)
             ppu.t = (uint16_t)((ppu.t & 0x00FF) | ((value & 0x3F) << 8));
         } else {
             ppu.t = (uint16_t)((ppu.t & 0x7F00) | value);
+            if (content_write_hook && !hw_isolated)
+                content_write_hook(6, ppu.t & 0x3FFF, value, ppu.inc32 ? 32 : 1);
             ppu.w2006_value = ppu.t;
             ppu.w2006_old_v = ppu.v;
             ppu.w2006_delay = !hw_pal() && hw.align == 2 ? 5 : 4;
@@ -1285,6 +1290,8 @@ static void write_register(uint16_t addr, uint8_t value)
         ppu.addr_latch = !ppu.addr_latch;
         break;
     case 7:
+        if (content_write_hook && !hw_isolated)
+            content_write_hook(7, ppu.v & 0x3FFF, value, ppu.inc32 ? 32 : 1);
         ppu.write_data = value;
         hw_clock_run_ticks(7);
         ppu.wr_sr = 1;

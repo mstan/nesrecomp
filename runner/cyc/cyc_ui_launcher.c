@@ -197,6 +197,25 @@ int cyc_ui_launcher(CycSettings *settings, const char *settings_path, const CycH
     gi.widescreen_supported = 0;
     (void)extras;
     gi.config_path = settings_path;
+#ifdef CYC_GAME_PASSWORD_SAVE
+    /* --config must not redirect an existing mantra away from the executable. */
+    if (cyc_host_saves_enabled()) {
+        static char password_path[1100];
+        char *base = SDL_GetBasePath();
+        if (base) {
+            int n = snprintf(password_path, sizeof(password_path), "%s%s", base, CYC_GAME_PASSWORD_SAVE);
+            SDL_free(base);
+            if (n > 0 && (size_t)n < sizeof(password_path)) {
+                gi.password_save_path = password_path;
+#ifdef CYC_GAME_PASSWORD_SAVE_LABEL
+                gi.password_save_label = CYC_GAME_PASSWORD_SAVE_LABEL;
+#else
+                gi.password_save_label = "Password";
+#endif
+            }
+        }
+    }
+#endif
     /* the launcher's last-image memory beside config.ini, never in the cwd */
     static char rom_cache[1100];
     snprintf(rom_cache, sizeof(rom_cache), "%s", settings_path ? settings_path : "config.ini");

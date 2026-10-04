@@ -336,6 +336,8 @@ static uint8_t *alloc_padded(const uint8_t *src, size_t len, uint32_t *out_alloc
     return p;
 }
 
+bool hw_prg_modified;
+
 bool cyc_load_ines(const uint8_t *image, size_t size)
 {
     NesCartInfo info;
@@ -363,6 +365,7 @@ bool cyc_load_ines(const uint8_t *image, size_t size)
     free(hw_cart.chr);
     memset(&hw_cart, 0, sizeof(hw_cart));
     hw_cart.info = info;
+    hw_prg_modified = false;
     hw_cart.prg = prg;
     hw_cart.prg_len = info.prg_size;
     hw_cart.prg_slots = prg_alloc / 4096;
@@ -398,6 +401,7 @@ bool cyc_load_fds(const uint8_t *bios, size_t bios_size, const uint8_t *image, s
     free(hw_cart.chr);
     memset(&hw_cart, 0, sizeof(hw_cart));
     nes_fds_cart_info(&hw_cart.info);
+    hw_prg_modified = false;
     hw_cart.prg = prg;
     hw_cart.prg_len = NES_FDS_BIOS_BYTES;
     hw_cart.prg_slots = prg_alloc / 4096;

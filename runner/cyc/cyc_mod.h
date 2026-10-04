@@ -49,6 +49,7 @@
  */
 #pragma once
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -58,6 +59,19 @@ extern "C" {
 uint8_t cyc_mod_peek(uint16_t addr);
 bool    cyc_mod_peek_ok(uint16_t addr, uint8_t *value);
 bool    cyc_mod_poke(uint16_t addr, uint8_t value);
+
+/* Optional trusted content tools. Obtaining writable PRG disables generated
+ * ROM dispatch until another image is loaded: generated opcodes/operands and
+ * folded NROM data may otherwise disagree with the edited image (also from
+ * compiled RAM views). Image files on disk are never changed. */
+uint8_t *cyc_mod_prg_data_rw(size_t *size);
+/* Mapped CHR RAM only; for a finished tile transfer, outside isolated calls. */
+bool cyc_mod_chr_poke(uint16_t ppu_addr, uint8_t value);
+/* CPU writes to $2006 (completed address) and $2007 (address/value before the
+ * write). Optional content-tool callback; suppressed during isolated calls.
+ * The hook is host policy and is not serialized as machine state. */
+typedef void (*CycModPpuWriteHook)(unsigned reg, uint16_t addr, uint8_t value, unsigned increment);
+void cyc_mod_set_ppu_write_hook(CycModPpuWriteHook hook);
 
 typedef struct {
     uint8_t  a, x, y, s, p;     /* p: N V - B D I Z C as pushed (B and bit 5 ignored on set) */

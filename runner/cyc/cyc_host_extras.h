@@ -95,6 +95,11 @@ typedef struct CycHostExtras {
 
 const CycHostExtras *cyc_host_extras(void);
 
+/* The host's --no-save policy also applies to game-owned password sidecars.
+ * Available before the launcher opens and before power_on / option callbacks.
+ * Explicit command-line passwords may still be used without loading a save. */
+bool cyc_host_saves_enabled(void);
+
 #ifdef __cplusplus
 }
 #endif

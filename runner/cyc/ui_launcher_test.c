@@ -39,6 +39,8 @@
 #endif
 
 static unsigned checks;
+static bool saves_enabled = true;
+bool cyc_host_saves_enabled(void) { return saves_enabled; }
 #define CHECK(x) do { ++checks; if (!(x)) { fprintf(stderr, "%s:%d: %s\n", __FILE__, __LINE__, #x); exit(1); } } while (0)
 
 /* cyc_recomp.h's program metadata, as a compiled FDS program has it */
@@ -285,6 +287,18 @@ int main(int argc, char **argv)
     CHECK(seen_game.assist_default_pad_bind[0] == RECOMP_LAUNCHER_PAD_BUTTON(SDL_CONTROLLER_BUTTON_LEFTSHOULDER));
     CHECK(seen_game.default_settings && seen_game.default_settings->player_key_bind[0][4] == SDL_SCANCODE_Z);
     CHECK(seen_game.rom_cache_path && strstr(seen_game.rom_cache_path, "rom.cfg"));
+    /* An external config path must not move a password save away from the exe. */
+    char *base = SDL_GetBasePath();
+    char password_path[1100];
+    CHECK(base);
+    snprintf(password_path, sizeof(password_path), "%stest-password.srm", base);
+    SDL_free(base);
+    CHECK(seen_game.password_save_path && !strcmp(seen_game.password_save_path, password_path));
+    CHECK(!strcmp(seen_game.password_save_label, "Mantra"));
+    saves_enabled = false;
+    CHECK(cyc_ui_launcher(&s, cfg, NULL, &rom, true, NULL, NULL) == 1);
+    CHECK(!seen_game.password_save_path && !seen_game.password_save_label);
+    saves_enabled = true;
     /* the profile's button order (Up Down Left Right A B Start Select) */
     CHECK(seen_io.player_key_bind[0][0] == SDL_SCANCODE_UP && seen_io.player_key_bind[0][4] == SDL_SCANCODE_Z);
     CHECK(seen_io.player_key_bind[0][6] == SDL_SCANCODE_RETURN && seen_io.player_key_bind[0][7] == SDL_SCANCODE_BACKSLASH);

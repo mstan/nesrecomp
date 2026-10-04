@@ -211,3 +211,29 @@ palette contents differ before initialization. These comparisons cover the
 tested route, rather than every 2C07 register quirk or every PAL game.
 The seven migrated NTSC game routes retained their complete prior 1,800-frame
 trace, memory, CPU and hardware hashes.
+
+## Password saves and content tools
+
+`PASSWORD_SAVE "faxanadu.srm" PASSWORD_SAVE_LABEL "Mantra"` on
+`nesrecomp_add_cycle_game` supplies the launcher's existing password editor.
+The file lives beside the executable, even when `--config` points elsewhere.
+Games implement their own encoder, text-file persistence and restore path in
+`HOST_EXTRAS`. `cyc_host_saves_enabled()` exposes `--no-save` before the launcher
+and game callbacks run; a game must honor it for sidecar loading and writing.
+The password editor is also omitted with `--no-save`.
+
+Trusted text tools can edit the in-memory PRG with `cyc_mod_prg_data_rw`.
+This disables generated dispatch until another image loads, because its
+folded constants would otherwise retain the original bytes. Execution still
+uses the cycle CPU interpreter; disk ROM files are unchanged. Save states
+retain their PRG hash identity and refuse a different patch set.
+
+`cyc_mod_set_ppu_write_hook` observes completed CPU `$2006` addresses and CPU
+`$2007` writes for CHR transfer tracking. Isolated calls suppress these hooks.
+`cyc_mod_chr_poke` updates mapped CHR RAM and invalidates rendering caches;
+it refuses CHR ROM, out-of-range addresses and isolated calls. The shared
+`override_chr.c` tool supports this path when built with `CYC_CONTENT_TOOLS`.
+`cyc_content_test` checks memory, isolation and hook contracts. Faxanadu runtime
+checks cover native/interpreter/reference parity, complete machine restoration
+after mantra capture, accepted password restore, persistence/history, no-save,
+text replacement, tile round trips, visible tile overrides and PNG compilation.
