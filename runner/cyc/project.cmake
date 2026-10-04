@@ -48,7 +48,7 @@ if(NOT NESRECOMP_HEADLESS AND NOT NESRECOMP_RECOMP_UI STREQUAL "OFF")
 endif()
 
 function(nesrecomp_add_cycle_game target)
-    cmake_parse_arguments(CYC "HEADLESS;NO_RECOMP_UI;MODS" "ROM;GAME_CONFIG;SEED_FILE;CAPTURE_FILE;RECOMPILER;BIOS;BOXART;GAME_ID;PLAYERS"
+    cmake_parse_arguments(CYC "HEADLESS;NO_RECOMP_UI;MODS" "ROM;GAME_CONFIG;SEED_FILE;CAPTURE_FILE;RECOMPILER;BIOS;BOXART;GAME_ID;PLAYERS;ZAPPER_PORT"
         "HOST_EXTRAS" ${ARGN})
     if(CYC_UNPARSED_ARGUMENTS OR NOT CYC_ROM)
         message(FATAL_ERROR "nesrecomp_add_cycle_game requires ROM; unknown arguments: ${CYC_UNPARSED_ARGUMENTS}")
@@ -138,10 +138,17 @@ function(nesrecomp_add_cycle_game target)
         target_compile_definitions(${target} PRIVATE CYC_GAME_PLAYERS=${CYC_PLAYERS})
     endif()
     if(CYC_HOST_EXTRAS)
+        # See cyc_host_extras.h for the game's optional host additions.
         # the game's additions (cyc_host_extras.h): its window, options,
         # per-frame work, compositor (cyc_render.h) and mods
         target_sources(${target} PRIVATE ${CYC_HOST_EXTRAS})
         set_property(TARGET ${target} PROPERTY NESRECOMP_CYC_HOST_EXTRAS TRUE)
+    endif()
+    if(CYC_ZAPPER_PORT)
+        if(NOT CYC_ZAPPER_PORT MATCHES "^[12]$")
+            message(FATAL_ERROR "ZAPPER_PORT must be 1 or 2")
+        endif()
+        target_compile_definitions(${target} PRIVATE CYC_GAME_ZAPPER_PORT=${CYC_ZAPPER_PORT})
     endif()
     if(CYC_MODS)
         # The mod package runtime (runner/include/mod_runtime.h, docs/MOD_PACKAGES.md)

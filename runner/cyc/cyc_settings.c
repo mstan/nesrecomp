@@ -23,6 +23,7 @@ void cyc_settings_default(CycSettings *s)
     s->volume = 100;
     s->skip_launcher = 0;
     s->view_mode = 0;
+    s->zapper_mouse = s->zapper_crosshair = 1;
     s->fds_hle = NES_FDS_HLE_ASK_NONE;
     cyc_bindings_default(&s->bind);
 }
@@ -71,7 +72,7 @@ static bool parse_int(const char *v, int *out)
     return true;
 }
 
-typedef enum { SEC_NONE, SEC_DISPLAY, SEC_AUDIO, SEC_INPUT, SEC_LAUNCHER, SEC_FDS, SEC_KEYS, SEC_PADS, SEC_GAME } Section;
+typedef enum { SEC_NONE, SEC_DISPLAY, SEC_AUDIO, SEC_INPUT, SEC_LAUNCHER, SEC_FDS, SEC_KEYS, SEC_PADS, SEC_GAME, SEC_ZAPPER } Section;
 
 bool cyc_settings_load(CycSettings *s, const char *path, FILE *log, const CycSettingsGame *game)
 {
@@ -92,6 +93,7 @@ bool cyc_settings_load(CycSettings *s, const char *path, FILE *log, const CycSet
             sec = SEC_NONE;
             player = -1;
             if (eq_ci(name, "Display")) sec = SEC_DISPLAY;
+            else if (eq_ci(name, "Zapper")) sec = SEC_ZAPPER;
             else if (eq_ci(name, "Audio")) sec = SEC_AUDIO;
             else if (eq_ci(name, "Input")) sec = SEC_INPUT;
             else if (eq_ci(name, "Launcher")) sec = SEC_LAUNCHER;
@@ -139,6 +141,13 @@ bool cyc_settings_load(CycSettings *s, const char *path, FILE *log, const CycSet
         case SEC_GAME:
             if (eq_ci(key, "ViewMode")) bad = !parse_int(val, &v) || (s->view_mode = clampi(v, 0, 2), 0);
             else if (game && game->load) game->load(game->ctx, key, val);
+            break;
+        case SEC_ZAPPER:
+            if (eq_ci(val, "true") || eq_ci(val, "on")) v = 1;
+            else if (eq_ci(val, "false") || eq_ci(val, "off")) v = 0;
+            else bad = !parse_int(val, &v);
+            if (!bad && eq_ci(key, "Mouse")) { s->zapper_mouse = v != 0; s->zapper_keys |= 1; }
+            else if (!bad && eq_ci(key, "Crosshair")) { s->zapper_crosshair = v != 0; s->zapper_keys |= 2; }
             break;
         case SEC_FDS: {
             if (eq_ci(key, "Bios")) {
@@ -197,6 +206,7 @@ bool cyc_settings_save(const CycSettings *s, const char *path, const CycSettings
         fprintf(f, "Player%dSource = %d\nPlayer%dDevice = %s\nPlayer%dDeadzone = %d\n", p + 1, s->bind.source[p], p + 1,
                 s->bind.device[p], p + 1, s->bind.deadzone[p]);
     fprintf(f, "[Launcher]\nSkipLauncher = %d\n", s->skip_launcher);
+    fprintf(f, "[Zapper]\nMouse = %d\nCrosshair = %d\n", s->zapper_mouse, s->zapper_crosshair);
     fprintf(f, "[FDS]\n# on, off, or default (the game's own setting)\n");
     unsigned n;
     const NesFdsHleAxis *ax = nes_fds_hle_axes(&n);

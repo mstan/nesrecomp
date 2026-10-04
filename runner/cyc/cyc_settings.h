@@ -39,6 +39,8 @@ typedef struct CycSettings {
     int  volume;            /* 0..100 */
     int  skip_launcher;     /* bool */
     int  view_mode;         /* RECOMP_RUNTIME_UI_VIEW_* of a game that has view modes; 0 native */
+    int  zapper_mouse, zapper_crosshair; /* [Zapper], booleans (both default on) */
+    unsigned zapper_keys;   /* presence bits for migration from legacy keybinds.ini */
     NesFdsHleAsk fds_hle;   /* the player's saved HLE choices (the plan's "settings" source) */
     char fds_bios[512];     /* [FDS] Bios: the player's FDS BIOS file; "" looks for one */
     CycBindings  bind;

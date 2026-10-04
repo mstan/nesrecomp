@@ -739,6 +739,7 @@ static void output_pixel(void)
         uint8_t c = ppu.color[3];
         if (ppu.greyscale) c &= 0x30;
         hw_frame_index[sl * 256 + dot - 4] = (uint16_t)(c | ppu.emphasis << 6);
+        if (hw_zapper.port) hw_zapper_pixel(dot - 4, sl, hw_frame_index[sl * 256 + dot - 4]);
     }
 }
 
@@ -833,6 +834,7 @@ static void data_sm_half(void)
  * latches clocked on the first half of every dot. */
 HW_ALWAYS_INLINE void advance_dot(void)
 {
+    if (hw_zapper.port) hw_zapper.dots++;
     if (++ppu.dot > 340) {
         ppu.dot = 0;
         if (ppu.scanline == 240 && hw_extra_timing.line < hw_extra_timing.extra_scanlines) {
@@ -956,9 +958,7 @@ static void blank_dot(void)
                 for (int i = 0; i < 8; i++) ppu.spr_x[i] -= ppu.spr_x[i] > 0;
         }
         if (sl < 240 && dot > 3 && dot <= 259) {
-            uint8_t c = ppu.color[3];
-            if (ppu.greyscale) c &= 0x30;
-            hw_frame_index[sl * 256 + dot - 4] = (uint16_t)(c | ppu.emphasis << 6);
+            output_pixel();
         }
     }
     io_bus_decay();

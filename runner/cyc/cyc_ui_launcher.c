@@ -53,6 +53,12 @@ static void to_launcher(const CycSettings *s, RecompLauncherCSettings *io, const
     io->enable_audio = s->audio_enabled;
     io->volume = s->volume;
     io->skip_launcher = s->skip_launcher;
+#ifdef RECOMP_LAUNCHER_HAS_ZAPPER_SETTINGS
+    io->zapper_mouse = s->zapper_mouse ? 1 : -1;
+    io->zapper_crosshair = s->zapper_crosshair ? 1 : -1;
+#elif defined(CYC_GAME_ZAPPER_PORT)
+#error Zapper builds require recomp-ui with host-owned Zapper settings
+#endif
     snprintf(io->bios_path, sizeof(io->bios_path), "%s", s->fds_bios);
     for (int p = 0; p < CYC_INPUT_PLAYERS; ++p) {
         io->player_src[p] = s->bind.source[p];
@@ -78,6 +84,10 @@ static void from_launcher(const RecompLauncherCSettings *io, CycSettings *s, con
     s->audio_enabled = io->enable_audio != 0;
     s->volume = io->volume < 0 ? 0 : io->volume > 100 ? 100 : io->volume;
     s->skip_launcher = io->skip_launcher != 0;
+#ifdef RECOMP_LAUNCHER_HAS_ZAPPER_SETTINGS
+    s->zapper_mouse = io->zapper_mouse >= 0;
+    s->zapper_crosshair = io->zapper_crosshair >= 0;
+#endif
     snprintf(s->fds_bios, sizeof(s->fds_bios), "%s", io->bios_path);
     for (int p = 0; p < CYC_INPUT_PLAYERS; ++p) {
         s->bind.source[p] = io->player_src[p] < 0 ? 0 : io->player_src[p] > 2 ? 2 : io->player_src[p];
@@ -177,6 +187,9 @@ int cyc_ui_launcher(CycSettings *settings, const char *settings_path, const CycH
     gi.name = name;
     gi.region = NULL;                 /* the identity is the image's SHA-256, not a region */
     gi.num_players = CYC_GAME_PLAYERS;
+#ifdef CYC_GAME_ZAPPER_PORT
+    gi.zapper = 1;
+#endif
     gi.has_renderer = 0;              /* the cycle host has one SDL renderer */
     gi.hdpack_supported = 0;          /* HD packs are not ported to the cycle host */
     gi.has_integer_scale = 1;

@@ -91,6 +91,7 @@
 /* ---- options and settings ---- */
 
 static CycSettings s_set;
+static bool s_zapper_override, s_zapper_release;
 static char        s_set_path[1024];
 static bool        s_fds;
 static const CycHostExtras *s_extras;
@@ -163,7 +164,17 @@ int cyc_sdl_prelaunch(const char **rom_path, const char *cli_bios, NesFdsHleAsk 
     s_extras = cyc_session_extras();
     if (!s_set_path[0]) snprintf(s_set_path, sizeof(s_set_path), "%s", cyc_settings_default_path());
     cyc_settings_default(&s_set);
-    if (!cyc_settings_load(&s_set, s_set_path, stderr, &GAME_KEYS)) save_settings();   /* first run: write it */
+    bool had_config = cyc_settings_load(&s_set, s_set_path, stderr, &GAME_KEYS);
+    /* Preserve legacy Zapper choices without modifying the old keybind file. */
+    CycSettings legacy;
+    cyc_settings_default(&legacy);
+    char legacy_path[1100];
+    exe_path(legacy_path, sizeof(legacy_path), "keybinds.ini");
+    if (cyc_settings_load(&legacy, legacy_path, NULL, NULL)) {
+        if (!(s_set.zapper_keys & 1) && (legacy.zapper_keys & 1)) s_set.zapper_mouse = legacy.zapper_mouse;
+        if (!(s_set.zapper_keys & 2) && (legacy.zapper_keys & 2)) s_set.zapper_crosshair = legacy.zapper_crosshair;
+    }
+    if (!had_config) save_settings();
     s_fds = looks_fds(*rom_path);
     /* The mod catalog beside the executable, for a game built with mods. */
     char mods[1100], err[600];
@@ -773,6 +784,61 @@ static void tcp_ping(int id, const char *line)
     cyc_tcp_ok(id, f);
 }
 
+static void zapper_window_point(int wx, int wy, int *x, int *y)
+{
+    float lx, ly;
+    SDL_RenderWindowToLogical(s_ren, wx, wy, &lx, &ly);
+    int w, h;
+    picture(&w, &h);
+    lx -= (float)(w - 256) / 2.0f;
+    if (lx < 0 || lx >= 256 || ly < 0 || ly >= 240) *x = *y = -1;
+    else { *x = (int)lx; *y = (int)ly; }
+}
+
+static void zapper_mouse_frame(void)
+{
+    CycZapperState gun;
+    cyc_zapper_state(&gun);
+    if (!gun.port || s_zapper_override) return;
+    int wx, wy, x = -1, y = -1;
+    Uint32 buttons = SDL_GetMouseState(&wx, &wy);
+    bool trigger = (buttons & SDL_BUTTON(SDL_BUTTON_LEFT)) != 0;
+    if (s_zapper_release) {
+        if (!trigger) s_zapper_release = false;
+        trigger = false;
+    }
+    bool aiming = s_set.zapper_mouse && (SDL_GetWindowFlags(s_win) & SDL_WINDOW_MOUSE_FOCUS);
+    if (aiming) zapper_window_point(wx, wy, &x, &y);
+    cyc_set_zapper(x, y, aiming && trigger);
+}
+
+static void tcp_zapper(int id, const char *line)
+{
+    CycZapperState gun;
+    cyc_zapper_state(&gun);
+    if (!gun.port) { cyc_tcp_err(id, "no Zapper attached"); return; }
+    bool mouse, trigger = gun.trigger;
+    long x = gun.x, y = gun.y, wx, wy;
+    bool set = cyc_tcp_long(line, "x", &x);
+    set |= cyc_tcp_long(line, "y", &y);
+    set |= cyc_tcp_bool(line, "trigger", &trigger);
+    if (cyc_tcp_long(line, "window_x", &wx) && cyc_tcp_long(line, "window_y", &wy)) {
+        int px, py;
+        zapper_window_point((int)wx, (int)wy, &px, &py);
+        x = px; y = py; set = true;
+    }
+    if (set) { s_zapper_override = true; cyc_set_zapper((int)x, (int)y, trigger); }
+    if (cyc_tcp_bool(line, "mouse", &mouse)) s_zapper_override = !mouse;
+    cyc_zapper_state(&gun);
+    char fields[256];
+    snprintf(fields, sizeof(fields), "\"port\":%u,\"aim\":[%d,%d],\"trigger\":%s,\"light\":%s,\"mouse\":%s,"
+             "\"mouse_enabled\":%s,\"crosshair\":%s",
+             gun.port, gun.x, gun.y, gun.trigger ? "true" : "false", gun.light ? "true" : "false",
+             s_zapper_override ? "false" : "true", s_set.zapper_mouse ? "true" : "false",
+             s_set.zapper_crosshair ? "true" : "false");
+    cyc_tcp_ok(id, fields);
+}
+
 static void tcp_setup(void)
 {
     int port = s_tcp_port;
@@ -789,6 +855,7 @@ static void tcp_setup(void)
     }
     if (port <= 0) return;
     cyc_tcp_register("ping", "liveness; the frame counter", tcp_ping);
+    cyc_tcp_register("zapper", "aim x/y, trigger, mouse true; optional window_x/window_y", tcp_zapper);
     cyc_tcp_register("state", "frame, menu, drive, toast, HLE, disk save, bindings, build", tcp_state);
     cyc_tcp_register("key", "hold an SDL key through the bindings: name, frames", tcp_key);
     cyc_tcp_register("pad", "hold virtual game controller buttons: buttons (a+start), frames", tcp_pad);
@@ -959,6 +1026,17 @@ static void show(bool loading, const char *toast_title, const char *toast_body)
     SDL_RenderClear(s_ren);
     SDL_Rect dst = { 0, 0, w, h };
     SDL_RenderCopy(s_ren, s_tex, NULL, &dst);
+    CycZapperState gun;
+    cyc_zapper_state(&gun);
+    if (gun.port && s_set.zapper_crosshair && gun.x >= 0 && !menu_open()) {
+        int x = gun.x + (w - 256) / 2, y = gun.y;
+        SDL_SetRenderDrawColor(s_ren, 0, 0, 0, 255);
+        SDL_Rect back = {x - 5, y - 1, 11, 3}; SDL_RenderFillRect(s_ren, &back);
+        back.x = x - 1; back.y = y - 5; back.w = 3; back.h = 11; SDL_RenderFillRect(s_ren, &back);
+        SDL_SetRenderDrawColor(s_ren, 255, 255, 255, 255);
+        SDL_RenderDrawLine(s_ren, x - 4, y, x + 4, y);
+        SDL_RenderDrawLine(s_ren, x, y - 4, x, y + 4);
+    }
 #ifdef CYC_DEV_UI
     if (s_bar) draw_drive_bar(loading);
 #else
@@ -972,8 +1050,14 @@ static void show(bool loading, const char *toast_title, const char *toast_body)
         int ow = 0, oh = 0;
         SDL_GetRendererOutputSize(s_ren, &ow, &oh);
         uint32_t *px = (uint32_t *)malloc((size_t)ow * (size_t)oh * 4);
+        /* ReadPixels(NULL) reads only the current picture viewport. Capture
+         * the whole window, including pillarboxes and the full-size menu. */
+        SDL_Rect viewport;
+        SDL_RenderGetViewport(s_ren, &viewport);
+        SDL_RenderSetViewport(s_ren, NULL);
         bool ok = px && SDL_RenderReadPixels(s_ren, NULL, SDL_PIXELFORMAT_ARGB8888, px, ow * 4) == 0 &&
                   cyc_write_png(s_ui_shot, px, ow, oh);
+        SDL_RenderSetViewport(s_ren, &viewport);
         free(px);
         char q[1100], fl[1200];
         cyc_tcp_quote(s_ui_shot, q, sizeof(q));
@@ -1186,7 +1270,10 @@ int cyc_sdl_main(const char *title_in, int scale)
             if (cyc_write_png(name, pic, pw, ph)) printf("saved %s\n", name);
         }
         open = menu_open();
-        if (was_open && !open) hold_input = true;
+        if (was_open && !open) {
+            hold_input = true;
+            s_zapper_release = true;
+        }
         was_open = open;
 
         /* the toast */
@@ -1223,6 +1310,7 @@ int cyc_sdl_main(const char *title_in, int scale)
             cyc_host_disk_frame(now, s_frames_done);
             cyc_set_controller(0, pad0);
             cyc_set_controller(1, pad1);
+            zapper_mouse_frame();
             cyc_session_frame_begin();
             cyc_run_frame();
             cyc_session_frame_end();

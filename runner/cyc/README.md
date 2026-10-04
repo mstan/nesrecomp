@@ -1203,6 +1203,33 @@ the drive bar, the dev keys (F1 eject / insert, F2 recompiled code /
 interpreter, F3 next side, F4 the bar, F6 + n HLE axis n) and the coverage in
 the title bar. Production builds have none of them.
 
+**Zapper games** pass `ZAPPER_PORT 2` to `nesrecomp_add_cycle_game` (port 1 is
+also supported). This requires recomp-ui's `RECOMP_LAUNCHER_HAS_ZAPPER_SETTINGS`
+interface. The mouse aims within the hardware 256x240 picture, with letterbox
+bars treated as offscreen, and the left button pulls the trigger. The runtime
+Zapper section and launcher offer Mouse aiming and Crosshair. Both persist in
+`config.ini [Zapper]`; missing choices are imported from an existing
+`keybinds.ini [zapper]` without rewriting that legacy file. Closing the menu
+waits for the mouse button to be released before a gameplay trigger pull.
+
+Light detection uses pixels as the PPU draws them, a small aperture and a
+20-scanline decay. This is an optical approximation informed by
+[NESdev's Zapper research](https://www.nesdev.org/wiki/Zapper) and
+[Mesen2's input implementation](https://github.com/SourMesen/Mesen2/blob/master/Core/NES/Input/Zapper.h).
+Presentation crosshairs never enter the hardware picture or charge the sensor.
+Zapper states use version 3 with a required `ZAPP` section for aim, trigger and
+sensor history; matching older states remain loadable with no attached gun.
+Ordinary states retain version 2. `cyc_zapper_test` covers port polarity, beam
+locality, dark-screen rejection, decay, offscreen aim and state/snapshot safety.
+
+For deterministic headless routes, `--zapper-port 1|2` attaches the gun and
+`--zapper-input FILE` reads ordered `FRAME X Y TRIGGER` lines (trigger 0/1;
+offscreen `-1 -1`). `--zapper-port 0` restores the ordinary controller ports.
+The TCP `zapper` command supports aim, trigger, returning control to the mouse,
+and window-coordinate mapping. TriCNES has no Zapper oracle: compare gun routes
+between native and interpreter execution, validate actual hits/misses, and use
+the oracle separately for the unattached-controller machine.
+
 **Games** add to the window with `nesrecomp_add_cycle_game(... HOST_EXTRAS
 <sources>)` defining `cyc_host_extras()` (`cyc_host_extras.h`): a presented
 picture of their own size (widescreen), view modes for the menu's View mode

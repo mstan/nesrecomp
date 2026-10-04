@@ -242,6 +242,7 @@ static void persistence(const char *dir)
     /* change every field */
     s.window_scale = 5; s.fullscreen = 2; s.integer_scale = 0; s.linear_filter = 1;
     s.audio_enabled = 0; s.volume = 35; s.skip_launcher = 1;
+    s.zapper_mouse = 0; s.zapper_crosshair = 0;
     s.fds_hle.auto_swap = 1; s.fds_hle.fast_load = 0;
     for (int p = 0; p < CYC_INPUT_PLAYERS; ++p) {
         s.bind.source[p] = p == 0 ? 2 : 0;
@@ -263,6 +264,7 @@ static void persistence(const char *dir)
     CHECK(cyc_settings_load(&back, path, stderr, NULL));
     CHECK(back.window_scale == 5 && back.fullscreen == 2 && back.integer_scale == 0 && back.linear_filter == 1);
     CHECK(back.audio_enabled == 0 && back.volume == 35 && back.skip_launcher == 1);
+    CHECK(!back.zapper_mouse && !back.zapper_crosshair && back.zapper_keys == 3);
     CHECK(back.fds_hle.auto_swap == 1 && back.fds_hle.fast_load == 0);
     CHECK(!memcmp(&back.bind, &s.bind, sizeof(s.bind)));
     /* the file is what a person can read and edit */
@@ -300,7 +302,8 @@ static void persistence(const char *dir)
     f = fopen(path, "w");
     fputs("[Display]\nWindowScale = lots\nFullscreen = 9\n[Unknown]\nx = y\n"
           "[Keyboard.Player1]\na = NoSuchKey\nb = rshift\n[Gamepad.Player1]\nstart = a, b\nup = paddle9\n"
-          "[Keyboard.Player7]\na = Q\n[FDS]\nAutoSwap = maybe\nFastLoad = on\n", f);
+          "[Keyboard.Player7]\na = Q\n[FDS]\nAutoSwap = maybe\nFastLoad = on\n"
+          "[Zapper]\nMouse = false\nCrosshair = true\n", f);
     fclose(f);
     char logpath[1024];
     snprintf(logpath, sizeof(logpath), "%s/input_test_log.txt", dir);
@@ -316,6 +319,7 @@ static void persistence(const char *dir)
     CHECK(back.bind.button[0][3].pad == CYC_PAD_BUTTON(SDL_CONTROLLER_BUTTON_A));
     CHECK(back.bind.button[0][4].pad == d.bind.button[0][4].pad);
     CHECK(back.fds_hle.auto_swap == -1 && back.fds_hle.fast_load == 1);
+    CHECK(!back.zapper_mouse && back.zapper_crosshair && back.zapper_keys == 3);
     log = fopen(logpath, "r");
     n = fread(all, 1, sizeof(all) - 1, log);
     fclose(log);

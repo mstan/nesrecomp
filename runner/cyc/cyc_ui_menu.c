@@ -291,6 +291,8 @@ static int get_value(void *ctx, const RecompRuntimeUiItem *it, int *out)
     else if (is_key(it, RECOMP_RUNTIME_UI_KEY_LINEAR_FILTER)) *out = s->linear_filter;
     else if (is_key(it, RECOMP_RUNTIME_UI_KEY_AUDIO)) *out = s->audio_enabled;
     else if (is_key(it, RECOMP_RUNTIME_UI_KEY_VOLUME)) *out = s->volume;
+    else if (is_key(it, "cyc.zapper.mouse")) *out = s->zapper_mouse;
+    else if (is_key(it, "cyc.zapper.crosshair")) *out = s->zapper_crosshair;
     else if (is_key(it, RECOMP_RUNTIME_UI_KEY_VIEW_MODE)) *out = x && x->get_view_mode ? x->get_view_mode(x->ctx) : s->view_mode;
     else if (mod_row(it)) return mod_get(mod_row(it), out);
     else if (is_key(it, "cyc.disk.side")) {
@@ -315,6 +317,8 @@ static int set_value(void *ctx, const RecompRuntimeUiItem *it, int v)
     else if (is_key(it, RECOMP_RUNTIME_UI_KEY_LINEAR_FILTER)) s->linear_filter = v != 0;
     else if (is_key(it, RECOMP_RUNTIME_UI_KEY_AUDIO)) s->audio_enabled = v != 0;
     else if (is_key(it, RECOMP_RUNTIME_UI_KEY_VOLUME)) s->volume = v < 0 ? 0 : v > 100 ? 100 : v;
+    else if (is_key(it, "cyc.zapper.mouse")) s->zapper_mouse = v != 0;
+    else if (is_key(it, "cyc.zapper.crosshair")) s->zapper_crosshair = v != 0;
     else if (is_key(it, RECOMP_RUNTIME_UI_KEY_VIEW_MODE)) {
         if (!x || !x->set_view_mode || !x->set_view_mode(x->ctx, v)) return 0;
         s->view_mode = v;
@@ -454,9 +458,18 @@ RecompRuntimeUi *cyc_ui_menu_create(const CycUiHost *host)
             RECOMP_RUNTIME_UI_ACTION, 0, 0, 0, NULL, 0, NULL);
     }
     if (x && x->menu_items)
+        /* Game-defined additions follow the host's controls. */
         for (size_t i = 0; i < x->menu_item_count; ++i)
             if (s_item_count < sizeof(s_items) / sizeof(s_items[0])) s_items[s_item_count++] = x->menu_items[i];
     add_mod_rows();
+    CycZapperState gun;
+    cyc_zapper_state(&gun);
+    if (gun.port) {
+        add("cyc.zapper.mouse", "Zapper", "Mouse aiming", "Aim with the mouse and fire with the left button.",
+            RECOMP_RUNTIME_UI_BOOL, 0, 1, 1, NULL, 0, NULL);
+        add("cyc.zapper.crosshair", "Zapper", "Crosshair", "Show the aiming marker.",
+            RECOMP_RUNTIME_UI_BOOL, 0, 1, 1, NULL, 0, NULL);
+    }
     add("cyc.quit", "System", "Quit", "Close the game (the disk save is written first).", RECOMP_RUNTIME_UI_ACTION,
         0, 0, 0, NULL, 0, NULL);
     refresh();

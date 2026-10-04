@@ -152,6 +152,13 @@ bool cyc_debug_peek(uint16_t addr, uint8_t *value);
 /* Buttons for controller port 0 or 1 (A B Select Start Up Down Left Right,
  * MSB first), latched by the console when it strobes the port. */
 void cyc_set_controller(int port, uint8_t buttons);
+/* Zapper on physical connector 1 or 2; 0 detaches it. Aim is the hardware
+ * 256x240 picture; out-of-bounds is offscreen. PPU pixels near the aim charge
+ * a light sensor with a 20-scanline decay. Snapshots include that history. */
+typedef struct { unsigned port; int x, y; bool trigger, light; } CycZapperState;
+bool cyc_zapper_attach(unsigned port);
+void cyc_set_zapper(int x, int y, bool trigger);
+void cyc_zapper_state(CycZapperState *out);
 /* CPU cycles since power-on, including cycles taken by DMAs. */
 uint64_t cyc_cycle_count(void);
 /* Enhancement: 0 restores stock hardware timing; 1..262 adds blank lines

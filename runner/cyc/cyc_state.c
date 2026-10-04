@@ -103,7 +103,7 @@ bool cyc_state_save(uint8_t **out, size_t *len, char *err, size_t err_len)
     Header h;
     memset(&h, 0, sizeof(h));
     memcpy(h.magic, STATE_MAGIC, 8);
-    h.version = STATE_VERSION;
+    h.version = hw_zapper.port ? 3u : STATE_VERSION;
     h.prg_hash = cyc_prg_hash();
     h.cart_hash = cyc_native_cart_hash;
     h.layout = layout_signature();
@@ -114,6 +114,7 @@ bool cyc_state_save(uint8_t **out, size_t *len, char *err, size_t err_len)
     chunk(&b, TAG('C', 'P', 'U', ' '), &cpu, sizeof(cpu));
     chunk(&b, TAG('H', 'W', ' ', ' '), &hw, sizeof(hw));
     chunk(&b, TAG('T', 'I', 'M', 'E'), &hw_extra_timing, sizeof(hw_extra_timing));
+    if (hw_zapper.port) chunk(&b, TAG('Z', 'A', 'P', 'P'), &hw_zapper, sizeof(hw_zapper));
     HwCart *cart = (HwCart *)malloc(sizeof(HwCart));
     if (!cart) { free(b.p); set_err(err, err_len, "out of memory"); return false; }
     cart_copy_out(cart);
@@ -194,7 +195,7 @@ static int parse(const uint8_t *data, size_t len, Chunk *c, char *err, size_t er
     if (len < sizeof(h)) { set_err(err, err_len, "not a save state"); return -1; }
     memcpy(&h, data, sizeof(h));
     if (memcmp(h.magic, STATE_MAGIC, 8)) { set_err(err, err_len, "not a save state"); return -1; }
-    if (h.version != 1u && h.version != STATE_VERSION) { set_err(err, err_len, "save state of another version"); return -1; }
+    if (h.version < 1u || h.version > 3u) { set_err(err, err_len, "save state of another version"); return -1; }
     if (h.prg_hash != cyc_prg_hash() || h.cart_hash != cyc_native_cart_hash || h.program_crc != program_crc()) {
         set_err(err, err_len, "save state of another program");
         return -1;
@@ -236,8 +237,10 @@ bool cyc_state_load(const uint8_t *data, size_t len, char *err, size_t err_len)
     void *apu = apu_state_ptr(&apu_size);
     void *hle = fds_hle_state_ptr(&hle_size);
     const Chunk *ccpu = NULL, *chw = NULL, *ccart = NULL, *cchr = NULL, *cppu = NULL, *cpi = NULL, *cpl = NULL,
-                *cpb = NULL, *capu = NULL, *cmed = NULL, *chle = NULL, *chost = NULL, *ctrace = NULL, *ctime = NULL;
+                *cpb = NULL, *capu = NULL, *cmed = NULL, *chle = NULL, *chost = NULL, *ctrace = NULL, *ctime = NULL, *czapper = NULL;
     HwExtraTiming timing = {0};
+    HwZapper zapper = {0};
+    zapper.x = zapper.y = -1;
     if (ok) {
         ccpu = find(c, n, TAG('C', 'P', 'U', ' '));
         chw = find(c, n, TAG('H', 'W', ' ', ' '));
@@ -253,6 +256,7 @@ bool cyc_state_load(const uint8_t *data, size_t len, char *err, size_t err_len)
         chost = find(c, n, TAG('H', 'O', 'S', 'T'));
         ctrace = find(c, n, TAG('T', 'R', 'A', 'C'));
         ctime = find(c, n, TAG('T', 'I', 'M', 'E'));
+        czapper = find(c, n, TAG('Z', 'A', 'P', 'P'));
         ok = sized(ccpu, sizeof(cpu)) && sized(chw, sizeof(hw)) && sized(ccart, sizeof(HwCart)) &&
              sized(cppu, sizeof(ppu)) && sized(cpi, sizeof(hw_frame_index)) && sized(cpl, sizeof(hw_frame_lines)) &&
              sized(cpb, sizeof(hw_frame_bg)) && sized(capu, apu_size) && sized(ctrace, 12) &&
@@ -269,6 +273,18 @@ bool cyc_state_load(const uint8_t *data, size_t len, char *err, size_t err_len)
                  (timing.active || timing.line == 0) &&
                  !timing.reserved[0] && !timing.reserved[1] && !timing.reserved[2];
             if (!ok) set_err(err, err_len, "invalid CPU budget enhancement state");
+            if (ok) {
+                ok = header.version == 3u ? sized(czapper, sizeof(zapper)) : !czapper;
+                if (ok && czapper) {
+                    memcpy(&zapper, czapper->data, sizeof(zapper));
+                    ok = zapper.port >= 1 && zapper.port <= 2 && zapper.trigger <= 1 &&
+                         ((zapper.x == -1 && zapper.y == -1) ||
+                          (zapper.x >= 0 && zapper.x < 256 && zapper.y >= 0 && zapper.y < 240)) &&
+                         !zapper.reserved[0] && !zapper.reserved[1] &&
+                         (zapper.light_until <= zapper.dots || zapper.light_until - zapper.dots <= 20u * 341u);
+                }
+                if (!ok) set_err(err, err_len, "invalid Zapper state");
+            }
         }
     }
     if (ok && cyc_is_fds()) {
@@ -310,6 +326,7 @@ bool cyc_state_load(const uint8_t *data, size_t len, char *err, size_t err_len)
     memcpy(&cpu, ccpu->data, sizeof(cpu));
     memcpy(&hw, chw->data, sizeof(hw));
     hw_extra_timing = timing;
+    hw_zapper = zapper;
     uint8_t *prg = hw_cart.prg, *chr = hw_cart.chr;
     memcpy(&hw_cart, ccart->data, sizeof(HwCart));
     hw_cart.prg = prg;
@@ -405,6 +422,7 @@ struct CycSnapshot {
     Cpu6502   cpu;
     HwMachine hw;
     HwExtraTiming timing;
+    HwZapper zapper;
     HwCart   *cart;
     uint8_t  *chr, *apu, *media, *hle, *sound, *views;
     size_t    chr_len, apu_len, media_len, hle_len, sound_len, views_len;
@@ -455,6 +473,7 @@ void cyc_snapshot_take(CycSnapshot *s)
     s->cpu = cpu;
     s->hw = hw;
     s->timing = hw_extra_timing;
+    s->zapper = hw_zapper;
     memcpy(s->cart, &hw_cart, sizeof(HwCart));
     if (s->chr_len) memcpy(s->chr, hw_cart.chr + hw_cart.chr_ram_base, s->chr_len);
     s->ppu = ppu;
@@ -487,6 +506,7 @@ void cyc_snapshot_restore(const CycSnapshot *s)
     cpu = s->cpu;
     hw = s->hw;
     hw_extra_timing = s->timing;
+    hw_zapper = s->zapper;
     memcpy(&hw_cart, s->cart, sizeof(HwCart));
     if (s->chr_len) memcpy(hw_cart.chr + hw_cart.chr_ram_base, s->chr, s->chr_len);
     ppu = s->ppu;

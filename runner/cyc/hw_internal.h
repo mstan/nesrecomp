@@ -87,6 +87,14 @@ typedef struct {
 } HwExtraTiming;
 extern HwExtraTiming hw_extra_timing;
 
+typedef struct {
+    uint64_t dots, light_until;
+    int16_t x, y;
+    uint8_t port, trigger, reserved[2];
+} HwZapper;
+extern HwZapper hw_zapper;
+void hw_zapper_pixel(int x, int y, uint16_t color);
+
 /* The cartridge. Address translation is two tables the mapper fills (see
  * hw_mapper.h): PRG in 4KB slots and CHR in 1KB pages, the finest granularity
  * any supported mapper switches. Reads are then one indexed load, and both

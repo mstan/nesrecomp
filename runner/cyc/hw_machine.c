@@ -21,6 +21,7 @@
 
 HwMachine  hw;
 HwExtraTiming hw_extra_timing;
+HwZapper hw_zapper;
 HwCart     hw_cart;
 bool       hw_frame_done;
 int        hw_observe_line = -1;
@@ -247,6 +248,9 @@ uint8_t hw_bus_read(uint16_t addr)
         }
         if (reg == 0x16 || reg == 0x17) {
             uint8_t value = (uint8_t)(apu_read_controller((int)reg - 0x16) | (hw.data_bus & 0xE0));
+            if (hw_zapper.port == reg - 0x15)
+                value = (uint8_t)((hw.data_bus & 0xE0) | (hw_zapper.trigger ? 0x10 : 0) |
+                                  (hw_zapper.dots < hw_zapper.light_until ? 0 : 0x08));
             if (hw_oam_dma_active() && hw.data_driven) {
                 /* A driven bus masks the controller bit. */
                 if (cyc_trace_enabled) cyc_trace_access(addr, hw.data_bus, false);
@@ -397,6 +401,8 @@ void cyc_power_on(uint8_t ppu_alignment)
     }
     memset(&hw, 0, sizeof(hw));
     memset(&hw_extra_timing, 0, sizeof(hw_extra_timing));
+    memset(&hw_zapper, 0, sizeof(hw_zapper));
+    hw_zapper.x = hw_zapper.y = -1;
     hw.align = ppu_alignment & 3;
     cyc_ring_reset();
     /* CPU RAM at power-on: runs of $F0 and $0F (the pattern AccuracyCoin's
@@ -476,6 +482,42 @@ uint64_t cyc_cycle_count(void) { return hw.cycles; }
 
 bool cyc_extra_scanlines_supported(void) { return hw_cart.mapper == 4; }
 unsigned cyc_extra_scanlines(void) { return hw_extra_timing.extra_scanlines; }
+
+bool cyc_zapper_attach(unsigned port)
+{
+    if (port > 2) return false;
+    memset(&hw_zapper, 0, sizeof(hw_zapper));
+    hw_zapper.port = (uint8_t)port;
+    hw_zapper.x = hw_zapper.y = -1;
+    return true;
+}
+
+void cyc_set_zapper(int x, int y, bool trigger)
+{
+    bool inside = x >= 0 && x < 256 && y >= 0 && y < 240;
+    hw_zapper.x = inside ? (int16_t)x : -1;
+    hw_zapper.y = inside ? (int16_t)y : -1;
+    hw_zapper.trigger = trigger;
+}
+
+void cyc_zapper_state(CycZapperState *out)
+{
+    out->port = hw_zapper.port;
+    out->x = hw_zapper.x; out->y = hw_zapper.y;
+    out->trigger = hw_zapper.trigger != 0;
+    out->light = hw_zapper.dots < hw_zapper.light_until;
+}
+
+void hw_zapper_pixel(int x, int y, uint16_t color)
+{
+    if (!hw_zapper.port || hw_zapper.x < 0 || abs(x - hw_zapper.x) > 4 || abs(y - hw_zapper.y) > 4) return;
+    uint32_t rgb = hw_palette_argb[color & 0x1FF];
+    unsigned brightness = (77 * ((rgb >> 16) & 255) + 150 * ((rgb >> 8) & 255) + 29 * (rgb & 255)) >> 8;
+    /* Optical approximation: small aperture, 20-scanline decay. Only PPU
+     * pixels can charge it; crosshairs and compositors cannot. Polarity and
+     * scanline locality: NESdev Zapper research, Mesen2 Input/Zapper.h. */
+    if (brightness >= 85) hw_zapper.light_until = hw_zapper.dots + 20u * 341u;
+}
 bool cyc_set_extra_scanlines(unsigned lines)
 {
     if (lines > 262 || (lines && !cyc_extra_scanlines_supported())) return false;
@@ -550,6 +592,12 @@ uint64_t cyc_hw_state_hash(void)
     if (hw_extra_timing.extra_scanlines || hw_extra_timing.active)
         h = cyc_trace_mix(h, (uint64_t)hw_extra_timing.extra_scanlines |
                          (uint64_t)hw_extra_timing.line << 16 | (uint64_t)hw_extra_timing.active << 32);
+    if (hw_zapper.port) {
+        h = cyc_trace_mix(h, hw_zapper.dots);
+        h = cyc_trace_mix(h, hw_zapper.light_until);
+        h = cyc_trace_mix(h, (uint16_t)hw_zapper.x | (uint64_t)(uint16_t)hw_zapper.y << 16 |
+                         (uint64_t)hw_zapper.port << 32 | (uint64_t)hw_zapper.trigger << 40);
+    }
     h = hw_cart_state_hash(h);
     h = ppu_state_hash(h);
     return apu_state_hash(h);

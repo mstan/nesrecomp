@@ -78,6 +78,10 @@ static void edit_everything(RecompLauncherCSettings *io)
     io->enable_audio = 0;
     io->volume = 40;
     io->skip_launcher = 1;
+#ifdef RECOMP_LAUNCHER_HAS_ZAPPER_SETTINGS
+    io->zapper_mouse = -1;
+    io->zapper_crosshair = -1;
+#endif
     io->player_src[0] = 2;
     io->player_src[1] = 0;
     io->deadzone[0] = 12;
@@ -286,6 +290,9 @@ int main(int argc, char **argv)
     CHECK(seen_io.player_key_bind[0][6] == SDL_SCANCODE_RETURN && seen_io.player_key_bind[0][7] == SDL_SCANCODE_BACKSLASH);
     CHECK(seen_io.player_pad_bind[0][5] == RECOMP_LAUNCHER_PAD_BUTTON(SDL_CONTROLLER_BUTTON_X));
     CHECK(seen_io.player_src[0] == 1 && seen_io.player_src[1] == 2 && seen_io.volume == 100);
+#ifdef RECOMP_LAUNCHER_HAS_ZAPPER_SETTINGS
+    CHECK(seen_io.zapper_mouse == 1 && seen_io.zapper_crosshair == 1);
+#endif
 #ifdef CYC_LAUNCHER_ROM_SHA256
     CHECK(seen_game.num_known_sha256 == 1 && seen_game.known_sha256[0][0] == 0xAB && seen_game.known_sha256[0][31] == 0x01);
 #endif
@@ -306,6 +313,9 @@ int main(int argc, char **argv)
     CHECK(!strcmp(rom, "F:/somewhere/else.fds"));
     CHECK(s.window_scale == 5 && s.fullscreen == 1 && s.integer_scale == 0 && s.linear_filter == 1);
     CHECK(s.audio_enabled == 0 && s.volume == 40 && s.skip_launcher == 1);
+#ifdef RECOMP_LAUNCHER_HAS_ZAPPER_SETTINGS
+    CHECK(!s.zapper_mouse && !s.zapper_crosshair);
+#endif
     CHECK(s.bind.source[0] == 2 && s.bind.source[1] == 0 && s.bind.deadzone[0] == 12);
     CHECK(!strcmp(s.bind.device[0], "030000005e0400008e02000000007801"));
     static const int SPEC_TO_CYC[8] = { 4, 5, 6, 7, 0, 1, 3, 2 };
@@ -325,6 +335,9 @@ int main(int argc, char **argv)
     cyc_settings_default(&back);
     CHECK(cyc_settings_load(&back, cfg, stderr, NULL));
     CHECK(!memcmp(&back.bind, &s.bind, sizeof(s.bind)) && back.volume == 40 && back.skip_launcher == 1);
+#ifdef RECOMP_LAUNCHER_HAS_ZAPPER_SETTINGS
+    CHECK(!back.zapper_mouse && !back.zapper_crosshair);
+#endif
     /* the edited settings go back into the launcher next time */
     script_edit = NULL;
     script_rom = NULL;

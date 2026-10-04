@@ -311,6 +311,47 @@ static InputStep *input_steps;
 static int        input_count, input_next;
 static uint8_t    input_held[2];
 
+#ifndef CYC_ORACLE
+typedef struct { long frame; int x, y, trigger; } ZapperStep;
+static ZapperStep *zapper_steps;
+static int zapper_count, zapper_next;
+static bool load_zapper_input(const char *path)
+{
+    FILE *f = fopen(path, "r");
+    if (!f) { fprintf(stderr, "cannot read Zapper input %s\n", path); return false; }
+    char line[256];
+    long last = -1;
+    bool ok = true;
+    while (fgets(line, sizeof(line), f)) {
+        char *comment = strchr(line, '#');
+        if (comment) *comment = 0;
+        char *text = line;
+        while (*text == ' ' || *text == '\t') text++;
+        if (!*text || *text == '\r' || *text == '\n') continue;
+        ZapperStep step;
+        char extra;
+        if (sscanf(text, "%ld %d %d %d %c", &step.frame, &step.x, &step.y, &step.trigger, &extra) != 4 ||
+            step.frame < 0 || step.frame < last || (step.trigger != 0 && step.trigger != 1)) { ok = false; break; }
+        ZapperStep *grown = (ZapperStep *)realloc(zapper_steps, (size_t)(zapper_count + 1) * sizeof(*grown));
+        if (!grown) { ok = false; break; }
+        zapper_steps = grown;
+        zapper_steps[zapper_count++] = step;
+        last = step.frame;
+    }
+    fclose(f);
+    if (!ok) fprintf(stderr, "%s: Zapper input is ordered lines of FRAME X Y TRIGGER(0|1)\n", path);
+    return ok;
+}
+
+static void zapper_tick(long frame)
+{
+    while (zapper_next < zapper_count && zapper_steps[zapper_next].frame <= frame) {
+        const ZapperStep *s = &zapper_steps[zapper_next++];
+        cyc_set_zapper(s->x, s->y, s->trigger != 0);
+    }
+}
+#endif
+
 /* ---- FDS disk events: nesref's DISK_EJECT / DISK_SELECT / DISK_INSERT ----
  * Applied between frames, before frame F runs (after F frames), which is
  * where nesref applies them ("f=F", after F retro_runs). */
@@ -916,6 +957,8 @@ int main(int argc, char **argv) {
     long present_every = 0;
     int present_w = 0, present_h = 0;
     int extra_scanlines = -1;
+    int zapper_port = -1;
+    const char *zapper_input = NULL;
     bool bad_option = false;
     bool frame_log_mesen = false, no_save = false, realtime = false;
     NesFdsHleAsk saved_hle = NES_FDS_HLE_ASK_NONE;
@@ -951,6 +994,14 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--headless")) headless = true;
         else if (!strcmp(argv[i], "--frames") && i + 1 < argc) frames = atol(argv[++i]), frames_given = headless = true;
 #ifndef CYC_ORACLE
+        else if (!strcmp(argv[i], "--zapper-port") && i + 1 < argc) {
+            const char *port = argv[++i];
+            if (strlen(port) != 1 || port[0] < '0' || port[0] > '2') {
+                fprintf(stderr, "--zapper-port: 0, 1 or 2\n"); return 2;
+            }
+            zapper_port = port[0] - '0';
+        }
+        else if (!strcmp(argv[i], "--zapper-input") && i + 1 < argc) zapper_input = argv[++i], headless = true;
         else if (!strcmp(argv[i], "--extra-scanlines") && i + 1 < argc) {
             char *end;
             long value = strtol(argv[++i], &end, 10);
@@ -1100,6 +1151,7 @@ int main(int argc, char **argv) {
                         "            [--fds-hle auto-swap,fast-load|all|off] [--realtime]\n"
                         "       [--save-state F:FILE] [--load-state FILE] [--mods-root DIR]\n"
                         "       [--extra-scanlines N] MMC3 CPU budget enhancement, 0..262 (0: stock)\n"
+                        "       [--zapper-port N] [--zapper-input FILE] FRAME X Y TRIGGER schedule\n"
                         "       window: [--pause-unfocused] [--tcp PORT] [--config FILE]\n"
                         "       [--present-out FILE [--present-every N] [--present-size WxH]]\n",
                 argv[0]);
@@ -1275,7 +1327,11 @@ int main(int argc, char **argv) {
 #endif
     cyc_set_console(console);
     cyc_power_on((uint8_t)align);
+#ifdef CYC_GAME_ZAPPER_PORT
+    cyc_zapper_attach(CYC_GAME_ZAPPER_PORT);
+#endif
 #ifndef CYC_ORACLE
+    if (zapper_port >= 0) cyc_zapper_attach((unsigned)zapper_port);
     cyc_run_power_on();
     fds_save_powered_on();
     cyc_state_set_host(&HOST_STATE);
@@ -1366,6 +1422,13 @@ int main(int argc, char **argv) {
         while (disk_event_next < disk_event_count && disk_events[disk_event_next].frame < frame) disk_event_next++;
         printf("state: loaded %s, continuing at frame %ld\n", load_state, frame);
     }
+    if (zapper_input) {
+        CycZapperState gun;
+        cyc_zapper_state(&gun);
+        if (!gun.port) { fprintf(stderr, "--zapper-input needs a Zapper port\n"); return 2; }
+        if (!load_zapper_input(zapper_input)) return 2;
+        while (zapper_next < zapper_count && zapper_steps[zapper_next].frame < frame) zapper_next++;
+    }
     /* An explicit command-line choice overrides a loaded state's selection. */
     if (extra_scanlines >= 0 && !cyc_set_extra_scanlines((unsigned)extra_scanlines)) {
         fprintf(stderr, "--extra-scanlines requires an MMC3 cartridge\n"); return 2;
@@ -1386,6 +1449,7 @@ int main(int argc, char **argv) {
 #ifdef CYC_ORACLE
         cyc_oracle_run_frame();
 #else
+        zapper_tick(frame);
         if (disk_event_count) disk_tick(frame);
         cyc_host_disk_frame(emulated_ms(frame), frame);
         observe_frame = frame;
@@ -1569,6 +1633,7 @@ int main(int argc, char **argv) {
 #endif
 
 #ifndef CYC_ORACLE
+    free(zapper_steps);
     if (!disk_ok) return 2;
 #endif
     if (!save_write(save_file,0) || !save_write(datach_save,1)) return 2;
