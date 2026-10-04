@@ -154,6 +154,14 @@ bool cyc_debug_peek(uint16_t addr, uint8_t *value);
 void cyc_set_controller(int port, uint8_t buttons);
 /* CPU cycles since power-on, including cycles taken by DMAs. */
 uint64_t cyc_cycle_count(void);
+/* Enhancement: 0 restores stock hardware timing; 1..262 adds blank lines
+ * before NMI, increasing the game's CPU budget at the host's usual frame
+ * rate. Audio clocks pause during those lines. Currently supported only on
+ * MMC3 boards. This changes console timing and is separate from stock parity.
+ * Set between frames. The selection and progress are saved in cycle states. */
+bool cyc_extra_scanlines_supported(void);
+unsigned cyc_extra_scanlines(void);
+bool cyc_set_extra_scanlines(unsigned lines);
 /* The picture as 256x240 ARGB8888, and as 9-bit color indices
  * (color | emphasis << 6), as far as the PPU has drawn it. */
 const uint32_t *cyc_frame_argb(void);

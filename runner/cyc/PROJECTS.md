@@ -1,5 +1,17 @@
 # Using the cycle backend in an existing game project
 
+MMC3 projects can opt into extra CPU time with `cyc_set_extra_scanlines(128)`
+between frames, or with the host's `--extra-scanlines 128` option. Zero restores
+stock timing. This enhancement adds blank scanlines before NMI and pauses APU
+clocks during those lines; the window continues at the normal frame rate. Keep
+the setting visible and reversible in a game's menu. Stock hardware parity is
+tested with zero extra lines; enhanced runs compare native and interpreted CPU
+execution instead. Other boards currently reject nonzero values.
+
+Cycle save states now write version 2 with the enhancement's selection and
+progress. The reader accepts version 1 states with the same program and hardware
+layout, restoring stock timing. Version 1 readers reject version 2 files.
+
 The cycle backend now has a CMake entry point for existing game checkouts.
 It uses their ROM and game configuration and builds the cartridge hardware
 documented in [MAPPERS.md](MAPPERS.md), including the new mapper families.

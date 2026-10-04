@@ -76,6 +76,17 @@ typedef struct {
     uint8_t  ram[0x800];
 } HwMachine;
 
+/* Optional CPU budget enhancement. Separate from hardware structures so
+ * stock version-1 save states retain their layout. Repeats blank line 240
+ * before NMI; the APU pauses during the added lines to preserve audio rate.
+ * Same clock policy as Mesen2's NesPpu::UpdateApuStatus:
+ * https://github.com/SourMesen/Mesen2/blob/master/Core/NES/NesPpu.cpp */
+typedef struct {
+    uint16_t extra_scanlines, line;
+    uint8_t active, reserved[3];
+} HwExtraTiming;
+extern HwExtraTiming hw_extra_timing;
+
 /* The cartridge. Address translation is two tables the mapper fills (see
  * hw_mapper.h): PRG in 4KB slots and CHR in 1KB pages, the finest granularity
  * any supported mapper switches. Reads are then one indexed load, and both

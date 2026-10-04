@@ -20,6 +20,7 @@
 #include <string.h>
 
 HwMachine  hw;
+HwExtraTiming hw_extra_timing;
 HwCart     hw_cart;
 bool       hw_frame_done;
 int        hw_observe_line = -1;
@@ -40,7 +41,7 @@ CycRamInit cyc_ram_init = CYC_RAM_PATTERN;
 static uint32_t frame_argb[256 * 240];
 static void clock_cpu_devices(void)
 {
-    apu_cycle();
+    if (!hw_extra_timing.active) apu_cycle();
 }
 
 /* ------------------------------------------------------------------------- */
@@ -395,6 +396,7 @@ void cyc_power_on(uint8_t ppu_alignment)
         palette_ready = true;
     }
     memset(&hw, 0, sizeof(hw));
+    memset(&hw_extra_timing, 0, sizeof(hw_extra_timing));
     hw.align = ppu_alignment & 3;
     cyc_ring_reset();
     /* CPU RAM at power-on: runs of $F0 and $0F (the pattern AccuracyCoin's
@@ -472,6 +474,15 @@ void cyc_set_controller(int port, uint8_t buttons) { hw_set_controller(port, but
 
 uint64_t cyc_cycle_count(void) { return hw.cycles; }
 
+bool cyc_extra_scanlines_supported(void) { return hw_cart.mapper == 4; }
+unsigned cyc_extra_scanlines(void) { return hw_extra_timing.extra_scanlines; }
+bool cyc_set_extra_scanlines(unsigned lines)
+{
+    if (lines > 262 || (lines && !cyc_extra_scanlines_supported())) return false;
+    hw_extra_timing.extra_scanlines = (uint16_t)lines;
+    return true;
+}
+
 const uint16_t *cyc_frame_index(void) { return hw_frame_index; }
 
 const uint32_t *cyc_frame_argb(void)
@@ -536,6 +547,9 @@ uint64_t cyc_hw_state_hash(void)
     acc = acc * 131 + hw.data_driven;
     acc = acc * 131 + hw.irq_line;
     h = cyc_trace_mix(h, acc);
+    if (hw_extra_timing.extra_scanlines || hw_extra_timing.active)
+        h = cyc_trace_mix(h, (uint64_t)hw_extra_timing.extra_scanlines |
+                         (uint64_t)hw_extra_timing.line << 16 | (uint64_t)hw_extra_timing.active << 32);
     h = hw_cart_state_hash(h);
     h = ppu_state_hash(h);
     return apu_state_hash(h);
@@ -549,6 +563,8 @@ void cyc_hw_state_dump(void *file)
             hw.tick, hw.align, (unsigned long long)hw.cycles, hw.cpu_addr, hw.cpu_reading, hw.data_bus,
             hw.internal_bus, hw.data_driven, hw.irq_line);
     hw_cart_state_dump(file);
+    fprintf(f, "extra.scanlines %u\nextra.line %u\nextra.active %u\n",
+            hw_extra_timing.extra_scanlines, hw_extra_timing.line, hw_extra_timing.active);
     ppu_state_dump(file);
     apu_state_dump(file);
 }

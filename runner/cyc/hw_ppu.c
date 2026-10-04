@@ -835,8 +835,15 @@ HW_ALWAYS_INLINE void advance_dot(void)
 {
     if (++ppu.dot > 340) {
         ppu.dot = 0;
-        if (++ppu.scanline > 261) ppu.scanline = 0;
-        if (ppu.scanline == hw_observe_line) hw_observe_hit = hw_frame_done = true;
+        if (ppu.scanline == 240 && hw_extra_timing.line < hw_extra_timing.extra_scanlines) {
+            hw_extra_timing.line++;
+            hw_extra_timing.active = 1;
+        } else {
+            hw_extra_timing.line = 0;
+            hw_extra_timing.active = 0;
+            if (++ppu.scanline > 261) ppu.scanline = 0;
+        }
+        if (!hw_extra_timing.active && ppu.scanline == hw_observe_line) hw_observe_hit = hw_frame_done = true;
     }
     if (ppu.scanline >= 241) {
         if (ppu.scanline == 241) {

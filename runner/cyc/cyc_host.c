@@ -915,6 +915,7 @@ int main(int argc, char **argv) {
     const char *present_out = NULL, *load_state = NULL, *mods_root = NULL;
     long present_every = 0;
     int present_w = 0, present_h = 0;
+    int extra_scanlines = -1;
     bool bad_option = false;
     bool frame_log_mesen = false, no_save = false, realtime = false;
     NesFdsHleAsk saved_hle = NES_FDS_HLE_ASK_NONE;
@@ -949,6 +950,16 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--scale") && i + 1 < argc) scale = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--headless")) headless = true;
         else if (!strcmp(argv[i], "--frames") && i + 1 < argc) frames = atol(argv[++i]), frames_given = headless = true;
+#ifndef CYC_ORACLE
+        else if (!strcmp(argv[i], "--extra-scanlines") && i + 1 < argc) {
+            char *end;
+            long value = strtol(argv[++i], &end, 10);
+            if (!argv[i][0] || *end || value < 0 || value > 262) {
+                fprintf(stderr, "--extra-scanlines: 0..262\n"); return 2;
+            }
+            extra_scanlines = (int)value;
+        }
+#endif
         else if (!strcmp(argv[i], "--acccoin")) acccoin = headless = true;
         else if (!strcmp(argv[i], "--hash-out") && i + 1 < argc) hash_out = argv[++i], headless = true;
         else if (!strcmp(argv[i], "--trace-frame") && i + 1 < argc) trace_frame = atol(argv[++i]), headless = true;
@@ -1088,6 +1099,7 @@ int main(int argc, char **argv) {
                         "            [--save-file FILE | --no-save] [--fds-import-ips FILE] [--fds-export-ips FILE]\n"
                         "            [--fds-hle auto-swap,fast-load|all|off] [--realtime]\n"
                         "       [--save-state F:FILE] [--load-state FILE] [--mods-root DIR]\n"
+                        "       [--extra-scanlines N] MMC3 CPU budget enhancement, 0..262 (0: stock)\n"
                         "       window: [--pause-unfocused] [--tcp PORT] [--config FILE]\n"
                         "       [--present-out FILE [--present-every N] [--present-size WxH]]\n",
                 argv[0]);
@@ -1269,6 +1281,9 @@ int main(int argc, char **argv) {
     cyc_state_set_host(&HOST_STATE);
     if (present_w > 0) cyc_video_window_resized(present_w, present_h);
     if (!cyc_session_start()) return 2;
+    if (extra_scanlines >= 0 && !cyc_set_extra_scanlines((unsigned)extra_scanlines)) {
+        fprintf(stderr, "--extra-scanlines requires an MMC3 cartridge\n"); return 2;
+    }
 #endif
 
 #if defined(CYC_WITH_SDL) && !defined(CYC_ORACLE)
@@ -1350,6 +1365,10 @@ int main(int argc, char **argv) {
         /* what happened before the state is already in it */
         while (disk_event_next < disk_event_count && disk_events[disk_event_next].frame < frame) disk_event_next++;
         printf("state: loaded %s, continuing at frame %ld\n", load_state, frame);
+    }
+    /* An explicit command-line choice overrides a loaded state's selection. */
+    if (extra_scanlines >= 0 && !cyc_set_extra_scanlines((unsigned)extra_scanlines)) {
+        fprintf(stderr, "--extra-scanlines requires an MMC3 cartridge\n"); return 2;
     }
 #endif
 #ifndef CYC_ORACLE

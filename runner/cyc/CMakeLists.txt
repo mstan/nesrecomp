@@ -290,6 +290,11 @@ add_test(NAME cyc_mods_test
             --recompiler $<TARGET_FILE:NESRecomp> --out ${CMAKE_CURRENT_BINARY_DIR}/mods_test ${NESRECOMP_NESTED_BUILD_ARGS})
 set_tests_properties(cyc_mods_test PROPERTIES TIMEOUT 1800)
 
+add_test(NAME cyc_extra_timing
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_cyc_extra_timing.py
+            --host $<TARGET_FILE:cyc_interp> --out ${CMAKE_CURRENT_BINARY_DIR}/extra_timing_test)
+set_tests_properties(cyc_extra_timing PROPERTIES TIMEOUT 300)
+
 # FDS disk saves across processes: a synthetic program that saves to its disk
 # (tools/cyc/fds_save_fixtures.py) run by cyc_interp at all four alignments:
 # write -> save file -> reload round trips, the image never modified, foreign /
