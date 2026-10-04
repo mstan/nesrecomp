@@ -39,7 +39,8 @@
  * window resize) is applied after the present and before the next picture.
  *
  * Save states (cyc_state.h): the Save state / Load state shortcuts (F8 / F9)
- * and the menu's rows use one slot, <exe dir>/saves/<image stem>.state; TCP
+ * and the menu's rows use one slot, <exe dir>/saves/<image stem>.cycstate
+ * (FDS retains .state); TCP
  * save_state / load_state take any path.
  */
 #ifndef SDL_MAIN_HANDLED
@@ -100,6 +101,7 @@ static const char *s_vpad_path;
 static int         s_tcp_port;
 static int         s_key_hold[SDL_NUM_SCANCODES];   /* host loops a TCP-held key stays down */
 static bool        s_hidden;
+static bool        s_pause_unfocused;
 static char        s_image[1024];                   /* the image running (the save state slot's name) */
 
 void cyc_sdl_image_path(const char *path) { snprintf(s_image, sizeof(s_image), "%s", path ? path : ""); }
@@ -111,6 +113,7 @@ void cyc_sdl_option(const char *name, const char *value)
     else if (!strcmp(name, "--config")) snprintf(s_set_path, sizeof(s_set_path), "%s", value);
     else if (!strcmp(name, "--tcp")) s_tcp_port = atoi(value);
     else if (!strcmp(name, "--hidden")) s_hidden = true;
+    else if (!strcmp(name, "--pause-unfocused")) s_pause_unfocused = true;
 }
 
 void cyc_sdl_present_out(const char *path, long every)
@@ -256,7 +259,7 @@ static void state_slot(char *out, size_t n)
     char dir[1100];
     exe_path(dir, sizeof(dir), "saves");
     make_dir(dir);
-    snprintf(out, n, "%s/%s.state", dir, stem);
+    snprintf(out, n, "%s/%s.%s", dir, stem, s_fds ? "state" : "cycstate");
 }
 
 static bool save_state_to(const char *path, char *err, size_t n)
@@ -1209,8 +1212,9 @@ int cyc_sdl_main(const char *title_in, int scale)
         cyc_ui_set_toast(toast_title, toast_body);
 #endif
 
+        bool inactive = s_pause_unfocused && !s_hidden && !(SDL_GetWindowFlags(s_win) & SDL_WINDOW_INPUT_FOCUS);
         bool loading = false, fast = false;
-        if (!open) {
+        if (!open && !inactive) {
             uint8_t pad0 = st.buttons[0], pad1 = st.buttons[1];
             if (hold_input) {
                 if (pad0 || pad1) pad0 = pad1 = 0;
@@ -1231,7 +1235,7 @@ int cyc_sdl_main(const char *title_in, int scale)
         size_t n;
         while ((n = cyc_audio_read(pcm, 4096)) > 0) {
             /* Keep latency bounded: skip a frame's audio if ~100 ms are queued. */
-            if (!dev || fast || open || !s_set.audio_enabled || SDL_GetQueuedAudioSize(dev) >= (Uint32)(have.freq / 10) * 2)
+            if (!dev || fast || open || inactive || !s_set.audio_enabled || SDL_GetQueuedAudioSize(dev) >= (Uint32)(have.freq / 10) * 2)
                 continue;
             if (s_set.volume < 100)
                 for (size_t i = 0; i < n; ++i) pcm[i] = (int16_t)(pcm[i] * s_set.volume / 100);

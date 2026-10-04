@@ -48,7 +48,7 @@ if(NOT NESRECOMP_HEADLESS AND NOT NESRECOMP_RECOMP_UI STREQUAL "OFF")
 endif()
 
 function(nesrecomp_add_cycle_game target)
-    cmake_parse_arguments(CYC "HEADLESS;NO_RECOMP_UI;MODS" "ROM;GAME_CONFIG;SEED_FILE;CAPTURE_FILE;RECOMPILER;BIOS;BOXART;GAME_ID"
+    cmake_parse_arguments(CYC "HEADLESS;NO_RECOMP_UI;MODS" "ROM;GAME_CONFIG;SEED_FILE;CAPTURE_FILE;RECOMPILER;BIOS;BOXART;GAME_ID;PLAYERS"
         "HOST_EXTRAS" ${ARGN})
     if(CYC_UNPARSED_ARGUMENTS OR NOT CYC_ROM)
         message(FATAL_ERROR "nesrecomp_add_cycle_game requires ROM; unknown arguments: ${CYC_UNPARSED_ARGUMENTS}")
@@ -131,6 +131,12 @@ function(nesrecomp_add_cycle_game target)
     target_include_directories(${target} PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})
     target_link_libraries(${target} PRIVATE ${NESRECOMP_CYC_LIBRARIES})
     target_compile_definitions(${target} PRIVATE _CRT_SECURE_NO_WARNINGS)
+    if(CYC_PLAYERS)
+        if(NOT CYC_PLAYERS MATCHES "^[12]$")
+            message(FATAL_ERROR "PLAYERS must be 1 or 2")
+        endif()
+        target_compile_definitions(${target} PRIVATE CYC_GAME_PLAYERS=${CYC_PLAYERS})
+    endif()
     if(CYC_HOST_EXTRAS)
         # the game's additions (cyc_host_extras.h): its window, options,
         # per-frame work, compositor (cyc_render.h) and mods

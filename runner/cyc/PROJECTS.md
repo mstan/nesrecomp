@@ -51,6 +51,24 @@ paths are relative to the calling CMake source directory; a seed path inside
 `game.toml` is relative to that configuration file. `GAME_CONFIG` is optional.
 Existing legacy-generated C and `extras.c` are not cycle-backend inputs.
 
+`PLAYERS 1` or `PLAYERS 2` sets the launcher's controller count for the title;
+omitting it retains two controllers. Keep an explicit `legacy` selection in
+projects migrating their default build, with separate build directories for
+the two backends. Enhancements using legacy runtime globals need a cycle
+adapter before the project's migration is complete.
+
+Windowed cartridge games with battery storage automatically load and atomically
+save `<executable dir>/saves/<ROM stem>.sav`. Headless runs persist only with
+`--save-file FILE`; `--no-save` disables loading and writing. A damaged save is
+refused before execution, and a save path pointing at the ROM is refused.
+Cartridge save-state shortcuts use `.cycstate`, leaving previous `.state` files
+available. Save states from the legacy CPU backend are incompatible; raw battery
+RAM can be copied after checking its size. FDS state-slot paths keep `.state`.
+
+For owner playtests, `--pause-unfocused` pauses the window while it lacks
+keyboard focus. This allows several separately built titles to remain open.
+The option is off by default; hidden automated windows keep running.
+
 ## Famicom Disk System titles
 
 Point `ROM` (or `NESRECOMP_ROM`) at the `.fds`/`.qd` image. The BIOS comes from
