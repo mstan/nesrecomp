@@ -171,7 +171,7 @@ static inline bool nes_cart_image(const uint8_t *image, size_t size, NesCartInfo
  * must not silently acquire the behavior of submapper zero. */
 static inline bool nes_cart_variant_supported(const NesCartInfo *c)
 {
-    if (c->console || (c->nes2 && c->timing != 0 && c->timing != 2)) return false;
+    if (c->console || (c->nes2 && c->timing == 3)) return false;
     if (c->prg_ram + c->prg_nvram > 0x20000 || c->chr_ram + c->chr_nvram > 0x100000)
         return false;
     /* TQROM: CHR A16 selects the RAM chip; ROM sees bank bits 0-5 only, and

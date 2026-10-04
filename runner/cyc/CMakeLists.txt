@@ -359,3 +359,13 @@ add_test(NAME cyc_console_audio_pcm
             --recompiler $<TARGET_FILE:NESRecomp> --interp $<TARGET_FILE:cyc_interp>
             --out ${CMAKE_CURRENT_BINARY_DIR}/console_audio_test ${NESRECOMP_NESTED_BUILD_ARGS})
 set_tests_properties(cyc_console_audio_pcm PROPERTIES TIMEOUT 1800)
+
+# PAL master-clock ratio, frame/APU timing, opcode-only DMA and state phase.
+add_executable(cyc_region_test region_test.c cpu6502.c cpu6502_interp.c hw_machine.c ${CYC_TEST_BOARD_SOURCES}
+    hw_ppu.c hw_apu.c hw_palette.c cyc_trace.c cyc_ring.c ${NESRECOMP_CYC_SCHEDULER_SOURCES} cyc_native_none.c)
+target_include_directories(cyc_region_test PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})
+target_link_libraries(cyc_region_test PRIVATE ${NESRECOMP_CYC_LIBRARIES})
+if(MSVC)
+    target_compile_definitions(cyc_region_test PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()
+add_test(NAME cyc_region_test COMMAND cyc_region_test)

@@ -173,3 +173,41 @@ build switch; a game's additions go through `HOST_EXTRAS` instead of
 The older scanline runtime still has its original mapper set. Its renderer
 does not emit the PPU bus events needed for accurate MMC2/MMC4/MMC5 behavior;
 the integration therefore runs the validated cycle implementation directly.
+
+## NTSC and PAL regions
+
+`REGION NTSC` or `REGION PAL` on `nesrecomp_add_cycle_game` selects the
+title's hardware timing. The host's `--region ntsc|pal` overrides it. Without
+a project or CLI choice, a NES 2.0 PAL header selects PAL; other headers use
+NTSC because old dumps often omit region. FDS remains NTSC only; Dendy and
+arcade console variants remain unsupported.
+
+PAL runs the 2A07 CPU at 26.6017125 MHz / 16, with the 2C07 PPU at / 5:
+16 PPU dots per five CPU cycles, 341 dots per line, 312 lines and about
+50.007 frames per second. It has no odd-frame skipped dot. The APU uses PAL
+frame-sequencer, noise and DMC tables, and audio sampling and host pacing use
+the PAL clock. DMA begins at an opcode fetch on the 2A07; OAM refresh starts
+on line 265. Red and green emphasis bits swap meaning on the 2C07.
+Sources: [NESdev clock chart](https://www.nesdev.org/wiki/Cycle_reference_chart),
+[CPU variants](https://www.nesdev.org/wiki/CPU_variants),
+[PPU registers](https://www.nesdev.org/wiki/PPU_registers), and
+[Mesen2 NES implementation](https://github.com/SourMesen/Mesen2/tree/master/Core/NES).
+
+PAL states use version 4 and preserve the /5 divider phase. Loading a state
+from another region is refused before changing the machine. NTSC writes
+remain version 2 (version 3 with a Zapper), and same-layout NTSC versions
+1 through 3 remain readable. In-memory isolated-call snapshots also preserve
+the region phase.
+
+Validation: the clock, rendered frame length, APU sequence, opcode-only DMA,
+audio duration, and corrupt/cross-region state contracts have a CTest target,
+`cyc_region_test`. The ten blargg PAL APU ROMs, which were tested on a PAL NES,
+all report PASSED. European Dr. Mario native/interpreter execution matches
+for 1,800 frames at all five PAL alignments and state continuation is exact.
+Its RAM matches independent Mesen frame-for-frame after startup, and sampled
+PPU color indices match exactly after the game initializes its palette.
+Startup comparison records one transient stack flags byte at frame 8; initial
+palette contents differ before initialization. These comparisons cover the
+tested route, rather than every 2C07 register quirk or every PAL game.
+The seven migrated NTSC game routes retained their complete prior 1,800-frame
+trace, memory, CPU and hardware hashes.

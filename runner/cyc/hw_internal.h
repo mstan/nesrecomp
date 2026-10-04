@@ -87,6 +87,16 @@ typedef struct {
 } HwExtraTiming;
 extern HwExtraTiming hw_extra_timing;
 
+/* PAL's CPU edge advances one master clock relative to the PPU each cycle.
+ * Keep this separate to retain the NTSC hardware/save-state layout. phase is
+ * the PPU divider phase at tick 0, 0..4; half dots use half master clocks. */
+typedef struct {
+    uint8_t region, phase, reserved[6];
+} HwRegionTiming;
+extern HwRegionTiming hw_region_timing;
+static inline bool hw_pal(void) { return hw_region_timing.region == CYC_REGION_PAL; }
+static inline int hw_prerender_line(void) { return hw_pal() ? 311 : 261; }
+
 typedef struct {
     uint64_t dots, light_until;
     int16_t x, y;

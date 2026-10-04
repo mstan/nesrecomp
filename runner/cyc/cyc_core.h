@@ -21,6 +21,16 @@ extern "C" {
 
 /* ---- machine control ---- */
 
+typedef enum { CYC_REGION_NTSC, CYC_REGION_PAL } CycRegion;
+/* Select before power-on; a running machine changes region only on reset.
+ * PAL uses the 2A07 /16 CPU and 2C07 /5 PPU clocks, 312 scanlines.
+ * FDS is NTSC-only. Headers often omit region, so games select it explicitly. */
+bool cyc_set_region(CycRegion region);
+CycRegion cyc_region(void);
+CycRegion cyc_cart_region(void); /* NES 2.0 PAL, otherwise NTSC */
+double cyc_cpu_hz(void);
+double cyc_frame_seconds(void);
+
 /* Load an iNES/NES 2.0 image. Returns false on unsupported input; see MAPPERS.md. */
 bool cyc_load_ines(const uint8_t *image, size_t size);
 /* ---- Famicom Disk System (hw_fds.c) ----

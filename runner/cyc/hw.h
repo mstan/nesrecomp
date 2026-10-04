@@ -33,6 +33,7 @@ typedef enum {
     HW_IDLE,   /* no bus access (the cycle before the power-on reset sequence) */
     HW_READ,   /* R/W high; a pending DMA takes the CPU's cycles first */
     HW_WRITE,  /* R/W low; DMAs wait for the next read */
+    HW_FETCH,  /* opcode read; PAL DMA waits for this instruction boundary */
 } HwCycleKind;
 
 void    hw_cycle_start(uint16_t addr, HwCycleKind kind);

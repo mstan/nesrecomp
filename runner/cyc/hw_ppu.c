@@ -49,8 +49,9 @@ static inline void capture_line(int sl)
 enum { COMMIT_NT = 1, COMMIT_AT = 2, COMMIT_LO = 4, COMMIT_HI = 8 };
 
 static inline bool rendering(void) { return ppu.show_bg || ppu.show_spr; }
-static inline bool eval_rendering(void) { return ppu.eval_bg || ppu.eval_spr; }
-static inline bool render_line(void) { return ppu.scanline < 240 || ppu.scanline == 261; }
+static inline bool pal_oam_refresh(void) { return hw_pal() && ppu.scanline >= 265 && ppu.scanline < 311; }
+static inline bool eval_rendering(void) { return ppu.eval_bg || ppu.eval_spr || pal_oam_refresh(); }
+static inline bool render_line(void) { return ppu.scanline < 240 || ppu.scanline == hw_prerender_line(); }
 
 /* ---- CPU-side I/O bus ---- */
 
@@ -242,7 +243,7 @@ static void bg_fetch_tail(void)
     if (ppu.dot == 0) {
         par_context();
         ppu.par_chr &= 0x1FF7;
-        if (ppu.scanline != 261) ppu.vbus = ppu.par_chr;
+        if (ppu.scanline != hw_prerender_line()) ppu.vbus = ppu.par_chr;
     } else {
         switch (ppu.dot - 337) {
         case 0:
@@ -353,7 +354,7 @@ static void eval_objects(bool prerender)
         ppu.eval_odd_corrupt = 0;
         ppu.eval_wrapped = 0;
     }
-    if (!(ppu.instant_bg || ppu.instant_spr || ppu.oamc_disabled_now)) return;
+    if (!(ppu.instant_bg || ppu.instant_spr || ppu.oamc_disabled_now || pal_oam_refresh())) return;
 
     if (ppu.dot & 1) {
         ppu.oam_buffer_in = ppu.oam[ppu.oam_addr];
@@ -374,7 +375,7 @@ static void eval_objects(bool prerender)
         uint8_t oam2_value = ppu.oam2[ppu.oam2_addr];
         if (ppu.eval_tick == 0) {
             /* Y: in range of this scanline? */
-            ppu.sprite_row = (uint16_t)((ppu.scanline & 0xFF) - ppu.oam_buffer);
+            ppu.sprite_row = (uint16_t)((pal_oam_refresh() ? ppu.scanline : ppu.scanline & 0xFF) - ppu.oam_buffer);
             if (!ppu.eval_nine && !prerender && ppu.sprite_row < height) {
                 if (!ppu.oam2_full) {
                     if (!ppu.eval_odd_corrupt) {
@@ -515,7 +516,7 @@ static void eval_load(void)
 
 static void sprite_evaluation(void)
 {
-    bool prerender = ppu.scanline == 261;
+    bool prerender = ppu.scanline == hw_prerender_line();
     if ((ppu.instant_bg || ppu.instant_spr) && ppu.oamc_pending) {
         /* The first evaluated dot after rendering restarts. */
         ppu.oamc_pending = 0;
@@ -738,7 +739,9 @@ static void output_pixel(void)
     if (dot > 3 && dot <= 259) {
         uint8_t c = ppu.color[3];
         if (ppu.greyscale) c &= 0x30;
-        hw_frame_index[sl * 256 + dot - 4] = (uint16_t)(c | ppu.emphasis << 6);
+        unsigned emphasis = ppu.emphasis;
+        if (hw_pal()) emphasis = (emphasis & 4) | ((emphasis & 1) << 1) | ((emphasis & 2) >> 1);
+        hw_frame_index[sl * 256 + dot - 4] = (uint16_t)(c | emphasis << 6);
         if (hw_zapper.port) hw_zapper_pixel(dot - 4, sl, hw_frame_index[sl * 256 + dot - 4]);
     }
 }
@@ -843,7 +846,7 @@ HW_ALWAYS_INLINE void advance_dot(void)
         } else {
             hw_extra_timing.line = 0;
             hw_extra_timing.active = 0;
-            if (++ppu.scanline > 261) ppu.scanline = 0;
+            if (++ppu.scanline > hw_prerender_line()) ppu.scanline = 0;
         }
         if (!hw_extra_timing.active && ppu.scanline == hw_observe_line) hw_observe_hit = hw_frame_done = true;
     }
@@ -851,9 +854,9 @@ HW_ALWAYS_INLINE void advance_dot(void)
         if (ppu.scanline == 241) {
             if (ppu.dot == 0) ppu.vblank_pending = 1;
             else if (ppu.dot == 1) hw_frame_done = hw_frame_end_hit = true;
-        } else if (ppu.scanline == 260 && ppu.dot == 340) {
+        } else if (ppu.scanline == hw_prerender_line() - 1 && ppu.dot == 340) {
             ppu.odd_frame = !ppu.odd_frame;
-        } else if (ppu.scanline == 261 && ppu.dot == 1) {
+        } else if (ppu.scanline == hw_prerender_line() && ppu.dot == 1) {
             ppu.vblank = 0;
             ppu.can_s0hit = 1;
             ppu.s0hit = 0;
@@ -905,7 +908,7 @@ static uint8_t dot_kind;
 
 static bool is_blank(void)
 {
-    return !(ppu.show_bg | ppu.show_spr | ppu.eval_bg | ppu.eval_spr | ppu.instant_bg | ppu.instant_spr |
+    return !pal_oam_refresh() && !(ppu.show_bg | ppu.show_spr | ppu.eval_bg | ppu.eval_spr | ppu.instant_bg | ppu.instant_spr |
              ppu.skipped_dot | ppu.w2001_delay | ppu.w2001_oam_delay | ppu.w2001_emph_delay | ppu.w2005_delay |
              ppu.w2006_delay | ppu.oamc_disabled | ppu.oamc_disabled_now | ppu.palc_disabled | ppu.palc_v_left |
              ppu.commit | ppu.rd_sr | ppu.wr_sr | ppu.rl[0] | ppu.rl[2] | ppu.rl[4] | ppu.wl[0] | ppu.wl[2] |
@@ -917,7 +920,7 @@ static void blank_dot(void)
 {
     advance_dot();
     int sl = ppu.scanline, dot = ppu.dot;
-    bool line = sl < 240 || sl == 261;
+    bool line = sl < 240 || sl == hw_prerender_line();
 
     /* data_sm_dot() at rest, blanked */
     ppu.blnk_latch = 1;
@@ -996,14 +999,14 @@ static void general_dot(void)
     if (render_line() && rendering() && ppu.render_count >= 1) {
         if (ppu.dot == 256) increment_y();
         else if (ppu.dot == 257) ppu.v = (uint16_t)((ppu.v & 0x7BE0) | (ppu.t & 0x041F));
-        if (ppu.dot >= 280 && ppu.dot <= 304 && ppu.scanline == 261)
+        if (ppu.dot >= 280 && ppu.dot <= 304 && ppu.scanline == hw_prerender_line())
             ppu.v = (uint16_t)((ppu.v & 0x041F) | (ppu.t & 0x7BE0));
     }
 
     advance_dot();
     int sl = ppu.scanline;
 
-    if (ppu.odd_frame && rendering() && sl == 0) {
+    if (!hw_pal() && ppu.odd_frame && rendering() && sl == 0) {
         if (ppu.dot == 0) {
             /* Odd frames skip dot 0 of scanline 0. */
             ppu.dot = 1;
@@ -1021,7 +1024,7 @@ static void general_dot(void)
         ppu.eval_spr = ppu.show_spr;
     }
 
-    data_sm_dot((!ppu.show_bg && !ppu.show_spr) || (sl >= 240 && sl < 261));
+    data_sm_dot((!ppu.show_bg && !ppu.show_spr) || (sl >= 240 && sl < hw_prerender_line()));
     ppu.oam_latch = ppu.oam_buffer;
 
     /* $2006 lands. */
@@ -1040,6 +1043,13 @@ static void general_dot(void)
     if (render_line()) {
         sprite_evaluation();
         if (eval_rendering() && (dot == 63 || dot == 255 || dot == 339)) ppu.oam2_reset = 3;
+    } else if (pal_oam_refresh()) {
+        /* 2C07 refresh clocks the OAM evaluator, not the pattern fetch bus.
+         * VBlank lines above 255 cannot select an onscreen sprite by wrapping
+         * their Y coordinate. Doing so leaves ghost sprites on line zero. */
+        if (dot <= 64) eval_clear(false);
+        else if (dot <= 256) eval_objects(false);
+        else if (dot <= 320) ppu.oam_addr = 0;
     }
 
     if (hw.align == 1) {
@@ -1121,6 +1131,9 @@ static void general_half_dot(void)
  * branch (hw_cart_ppu_addr). */
 void ppu_dot(void)
 {
+    /* The refresh begins independently of $2001 and must invalidate a
+     * blank-dot classification cached earlier in VBlank. */
+    if (hw_pal() && ppu.scanline >= 264) dot_kind = DOT_UNKNOWN;
     if (dot_kind == DOT_UNKNOWN) dot_kind = is_blank() ? DOT_BLANK : DOT_GENERAL;
     if (dot_kind == DOT_BLANK) {
         blank_dot();
@@ -1146,7 +1159,7 @@ void ppu_half_dot(void)
 
 static uint8_t read_oam(void)
 {
-    return rendering() && ppu.scanline < 240 ? ppu.oam_latch : ppu.oam[ppu.oam_addr];
+    return (rendering() && ppu.scanline < 240) || pal_oam_refresh() ? ppu.oam_latch : ppu.oam[ppu.oam_addr];
 }
 
 static uint8_t read_register(uint16_t addr)
@@ -1211,18 +1224,18 @@ static void write_register(uint16_t addr, uint8_t value)
         static const uint8_t mask_delay[4] = {2, 2, 3, 2};
         static const uint8_t oam_delay[4] = {2, 3, 3, 2};
         bool was = rendering(), now = (value & 0x18) != 0;
-        ppu.w2001_delay = mask_delay[hw.align];
-        ppu.w2001_oam_delay = oam_delay[hw.align];
+        ppu.w2001_delay = hw_pal() ? 2 : mask_delay[hw.align];
+        ppu.w2001_oam_delay = hw_pal() ? 2 : oam_delay[hw.align];
         ppu.w2001_was_rendering = was;
         ppu.instant_bg = ppu.show_bg;
         ppu.instant_spr = ppu.show_spr;
         if (was && !now) {
-            if (ppu.scanline < 241 || ppu.scanline == 261) {
+            if (ppu.scanline < 241 || ppu.scanline == hw_prerender_line()) {
                 ppu.oamc_disabled_now = 1;
                 if ((ppu.dot & 7) < 2 && ppu.dot <= 250 && (ppu.v & 0x3FFF) >= 0x3C00) ppu.palc_disabled = 1;
             }
         } else if (!was && now) {
-            if ((ppu.scanline < 241 || ppu.scanline == 261) && ppu.oamc_pending && (hw.align == 1 || hw.align == 2))
+            if ((ppu.scanline < 241 || ppu.scanline == hw_prerender_line()) && ppu.oamc_pending && (hw.align == 1 || hw.align == 2))
                 ppu.oamc_reenabled = 1;
         }
         /* Greyscale and blue emphasis follow the bus's previous value
@@ -1241,7 +1254,7 @@ static void write_register(uint16_t addr, uint8_t value)
         ppu.oam_addr = value;
         break;
     case 4:
-        if (!rendering() || (ppu.scanline >= 240 && ppu.scanline < 261)) {
+        if (!pal_oam_refresh() && (!rendering() || (ppu.scanline >= 240 && ppu.scanline < hw_prerender_line()))) {
             if ((ppu.oam_addr & 3) == 2) value &= 0xE3;
             ppu.oam[ppu.oam_addr++] = value;
         } else {
@@ -1250,7 +1263,7 @@ static void write_register(uint16_t addr, uint8_t value)
         }
         break;
     case 5:
-        ppu.w2005_delay = hw.align == 2 ? 2 : 1;
+        ppu.w2005_delay = !hw_pal() && hw.align == 2 ? 2 : 1;
         ppu.w2005_value = value;
         /* Until it lands, the scroll takes the bus's previous value. */
         if (!ppu.addr_latch) {
@@ -1267,7 +1280,7 @@ static void write_register(uint16_t addr, uint8_t value)
             ppu.t = (uint16_t)((ppu.t & 0x7F00) | value);
             ppu.w2006_value = ppu.t;
             ppu.w2006_old_v = ppu.v;
-            ppu.w2006_delay = hw.align == 2 ? 5 : 4;
+            ppu.w2006_delay = !hw_pal() && hw.align == 2 ? 5 : 4;
         }
         ppu.addr_latch = !ppu.addr_latch;
         break;

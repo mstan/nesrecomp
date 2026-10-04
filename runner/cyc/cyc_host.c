@@ -725,8 +725,13 @@ const NesFdsHleRequest *cyc_host_hle_request(void) { return &hle_req; }
 const char *cyc_host_hle_text(void) { return hle_text; }
 
 /* --realtime and the window: the console's frame rate, and fast load. */
-static const double FRAME_SECONDS = 1.0 / 60.0988;
-double cyc_host_frame_seconds(void) { return FRAME_SECONDS; }
+double cyc_host_frame_seconds(void) {
+#ifdef CYC_ORACLE
+    return 1.0 / 60.0988;
+#else
+    return cyc_frame_seconds();
+#endif
+}
 bool   cyc_host_frame_unpaced(void) { return hle_plan.fast_load && cyc_fds_hle_loading(); }
 
 static double wall_seconds(void) {
@@ -957,6 +962,7 @@ int main(int argc, char **argv) {
     long present_every = 0;
     int present_w = 0, present_h = 0;
     int extra_scanlines = -1;
+    int region = -1;
     int zapper_port = -1;
     const char *zapper_input = NULL;
     bool bad_option = false;
@@ -1002,6 +1008,12 @@ int main(int argc, char **argv) {
             zapper_port = port[0] - '0';
         }
         else if (!strcmp(argv[i], "--zapper-input") && i + 1 < argc) zapper_input = argv[++i], headless = true;
+        else if (!strcmp(argv[i], "--region") && i + 1 < argc) {
+            const char *choice = argv[++i];
+            if (!strcmp(choice, "ntsc")) region = CYC_REGION_NTSC;
+            else if (!strcmp(choice, "pal")) region = CYC_REGION_PAL;
+            else { fprintf(stderr, "--region: ntsc or pal\n"); return 2; }
+        }
         else if (!strcmp(argv[i], "--extra-scanlines") && i + 1 < argc) {
             char *end;
             long value = strtol(argv[++i], &end, 10);
@@ -1150,6 +1162,7 @@ int main(int argc, char **argv) {
                         "            [--save-file FILE | --no-save] [--fds-import-ips FILE] [--fds-export-ips FILE]\n"
                         "            [--fds-hle auto-swap,fast-load|all|off] [--realtime]\n"
                         "       [--save-state F:FILE] [--load-state FILE] [--mods-root DIR]\n"
+                        "       [--region ntsc|pal] (game default, or NES 2.0 header)\n"
                         "       [--extra-scanlines N] MMC3 CPU budget enhancement, 0..262 (0: stock)\n"
                         "       [--zapper-port N] [--zapper-input FILE] FRAME X Y TRIGGER schedule\n"
                         "       window: [--pause-unfocused] [--tcp PORT] [--config FILE]\n"
@@ -1326,6 +1339,18 @@ int main(int argc, char **argv) {
     (void)console_given;
 #endif
     cyc_set_console(console);
+#ifndef CYC_ORACLE
+#ifdef CYC_GAME_REGION
+    if (region < 0) region = CYC_GAME_REGION;
+#endif
+    if (region < 0) region = cyc_cart_region();
+    if (!cyc_set_region((CycRegion)region)) {
+        fprintf(stderr, "PAL timing is not supported for FDS\n"); return 2;
+    }
+    if (align < 0 || align > (region == CYC_REGION_PAL ? 4 : 3)) {
+        fprintf(stderr, "--align: 0..%d for this region\n", region == CYC_REGION_PAL ? 4 : 3); return 2;
+    }
+#endif
     cyc_power_on((uint8_t)align);
 #ifdef CYC_GAME_ZAPPER_PORT
     cyc_zapper_attach(CYC_GAME_ZAPPER_PORT);
@@ -1467,7 +1492,7 @@ int main(int argc, char **argv) {
              * that fast load runs load frames back to back. */
             if (cyc_host_frame_unpaced()) next_frame = wall_seconds();
             else {
-                next_frame += FRAME_SECONDS;
+                next_frame += cyc_host_frame_seconds();
                 wait_until(next_frame);
                 if (cyc_is_fds() && cyc_fds_hle_loading()) load_wall += wall_seconds() - frame_start;
             }
@@ -1595,7 +1620,7 @@ int main(int argc, char **argv) {
                "frames (%.2f s at 60 fps) took %.2f s%s; run %.2f s\n", hle_text, st.requests,
                st.requests == 1 ? "" : "s", st.swaps, st.swaps == 1 ? "" : "s", st.bumps, st.bumps == 1 ? "" : "s",
                st.spans, st.spans == 1 ? "" : "s", load_frames,
-               (double)load_frames * FRAME_SECONDS, load_wall, realtime ? " (paced)" : " (unpaced)",
+               (double)load_frames * cyc_host_frame_seconds(), load_wall, realtime ? " (paced)" : " (unpaced)",
                wall_seconds() - run_start);
     }
     if (ring_out) {

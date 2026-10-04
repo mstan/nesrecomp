@@ -102,7 +102,7 @@ static inline void cpu_trace_instruction(uint16_t pc) {
  * cpu_interrupt() with cpu.pc still at this instruction. The trace records
  * the instruction after any DMA cycles that delay the fetch. */
 static inline bool cpu_fetch_rom(uint16_t pc, uint8_t opcode) {
-    hw_cycle_start(pc, HW_READ);
+    hw_cycle_start(pc, HW_FETCH);
     if (cyc_trace_enabled) cpu_trace_instruction(pc);
     hw_read_rom(pc, opcode);
     hw_cycle_finish(false);
@@ -110,7 +110,7 @@ static inline bool cpu_fetch_rom(uint16_t pc, uint8_t opcode) {
 }
 
 static inline bool cpu_fetch(uint16_t pc, uint8_t *opcode) {
-    hw_cycle_start(pc, HW_READ);
+    hw_cycle_start(pc, HW_FETCH);
     if (cyc_trace_enabled) cpu_trace_instruction(pc);
     *opcode = hw_read(pc);
     hw_cycle_finish(false);
