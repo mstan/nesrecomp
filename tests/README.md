@@ -20,7 +20,11 @@ root-caused:
   'g_ppumask == (uint8_t)mask' failed`.
 
 `foreign_controller`, `mapper`, `mod_runtime` and `render_audio` (3) pass on
-both. A claim that "the focused self-tests pass" is false until these two are
+both.
+
+`input_script` (added 2026-10-04) pins script exit semantics: wait timeouts and
+assert failures turn exit 0 into exit 3; `NESRECOMP_SHOT_DIR` sets the base for
+relative `SCREENSHOT` names. A claim that "the focused self-tests pass" is false until these two are
 fixed.
 
 The focused native self-tests remain standalone CMake projects, matching the

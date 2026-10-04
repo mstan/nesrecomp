@@ -6,7 +6,8 @@
  *   HOLD <BUTTON> [player] # A B SELECT START UP DOWN LEFT RIGHT; player 1..4, default 1
  *   RELEASE <BUTTON> [player]
  *   TURBO ON|OFF           # toggle fast-forward (skip 60Hz delay)
- *   SCREENSHOT [filename]  # save to C:/temp/filename (default: nes_script_NNN.png)
+ *   SCREENSHOT [filename]  # absolute path as-is; else $NESRECOMP_SHOT_DIR/filename
+ *                          # (default dir C:/temp; name nes_script_NNN.png)
  *   KEY_TAP KP8            # enqueue one host keyboard down/up pair
  *   LOG <message>
  *   EXIT [code]
@@ -14,6 +15,10 @@
  *   WAIT_FOREIGN_STATE <state> [frame]  # block until active controller reports state
  *                                        # and optional exact public frame (30s timeout)
  *   ASSERT_RAM8 <hex_addr> <hex_value> [msg]
+ *
+ * A wait timeout, assert failure or undeliverable KEY_TAP marks the script
+ * desynced: a run that would exit 0 (EXIT 0 or end of script) exits 3
+ * instead. Explicit nonzero EXIT codes are kept.
  */
 #pragma once
 #include <stdint.h>
@@ -26,7 +31,7 @@ void script_tick(uint64_t frame, const uint8_t *ram);
 int  script_get_player_buttons(int player);
 int  script_get_buttons(void);   /* -1 = no override; else returns button byte */
 int  script_check_exit(void);    /* -1 = still running; else exit code */
-/* Returns 1 and fills buf with "C:/temp/<name>" if a screenshot was requested this frame */
+/* Returns 1 and fills buf with the resolved path if a screenshot was requested this frame */
 int  script_wants_screenshot(char *buf, int buflen);
 /* Set a prefix for auto-named screenshots (e.g. "native_" or "emu_") */
 void script_set_screenshot_prefix(const char *prefix);
