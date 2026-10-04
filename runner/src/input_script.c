@@ -75,6 +75,12 @@ static int    s_cmd_count  = 0;
 static int    s_cmd_cursor = 0;
 static int    s_wait_left  = 0;
 static int    s_exit_code  = -1;
+/* Timed-out waits and failed asserts mean the script desynced from the game.
+ * A run that would otherwise exit 0 exits SCRIPT_FAILED_EXIT_CODE instead, so
+ * harnesses never mistake a desynced script for a pass. */
+#define SCRIPT_FAILED_EXIT_CODE 3
+static int    s_failures   = 0;
+static char   s_first_failure[160] = {0};
 static int    s_loaded     = 0;
 static int    s_trigger_override = 0; /* 1 = script controls zapper trigger */
 static uint8_t s_buttons_held = 0;
@@ -86,6 +92,20 @@ static char   s_shot_prefix[32] = {0};
 /* For bounded predicate waits (RAM and foreign-controller state). */
 static uint64_t s_wait_predicate_start_frame = UINT64_MAX;
 #define WAIT_PREDICATE_TIMEOUT_FRAMES (30 * 60)  /* 30 seconds at 60fps */
+
+static void note_failure(uint64_t frame, const char *what) {
+    if (!s_failures++)
+        snprintf(s_first_failure, sizeof(s_first_failure), "%s at frame %llu",
+                 what, (unsigned long long)frame);
+}
+
+/* Final exit code for a script that finished with `requested`. */
+static int script_exit_code(int requested) {
+    if (requested != 0 || !s_failures) return requested;
+    fprintf(stderr, "[Script] FAILED: %d wait timeout(s)/assert failure(s); first: %s\n",
+            s_failures, s_first_failure);
+    return SCRIPT_FAILED_EXIT_CODE;
+}
 
 static void trim(char *s) {
     char *p = s + strlen(s) - 1;
@@ -218,6 +238,8 @@ int script_load(const char *path) {
     s_wait_left  = 0;
     s_wait_predicate_start_frame = UINT64_MAX;
     s_exit_code  = -1;
+    s_failures   = 0;
+    s_first_failure[0] = '\0';
     s_buttons_held = 0;
     memset(s_extra_buttons,0,sizeof(s_extra_buttons));
     return 1;
@@ -256,6 +278,7 @@ void script_tick(uint64_t frame, const uint8_t *ram) {
             if (frame - s_wait_predicate_start_frame > WAIT_PREDICATE_TIMEOUT_FRAMES) {
                 fprintf(stderr, "[Script] WAIT_RAM8 $%03X==%02X TIMEOUT (got %02X)\n",
                         c->iarg, c->barg, actual);
+                note_failure(frame, "WAIT_RAM8 timeout");
                 s_wait_predicate_start_frame = UINT64_MAX;
                 s_cmd_cursor++;
             }
@@ -289,6 +312,7 @@ void script_tick(uint64_t frame, const uint8_t *ram) {
                         c->sarg, c->barg ? " with exact frame" : "",
                         actual_name ? actual_name : "<inactive>",
                         foreign ? foreign->state_frame : 0u);
+                note_failure(frame, "WAIT_FOREIGN_STATE timeout");
                 s_wait_predicate_start_frame = UINT64_MAX;
                 s_cmd_cursor++;
             }
@@ -352,14 +376,15 @@ void script_tick(uint64_t frame, const uint8_t *ram) {
                        c->iarg, (unsigned long long)frame);
                 extern int g_nes_expected_exit;
                 g_nes_expected_exit = 1;
-                s_exit_code = c->iarg;
+                s_exit_code = script_exit_code(c->iarg);
                 return;
             case CMD_ASSERT_RAM8: {
                 uint8_t actual = ram[c->iarg & 0x7FF];
-                if (actual != c->barg)
+                if (actual != c->barg) {
                     fprintf(stderr, "[Script] ASSERT FAIL: $%03X expected %02X got %02X %s\n",
                             c->iarg, c->barg, actual, c->sarg);
-                else
+                    note_failure(frame, "ASSERT_RAM8 failure");
+                } else
                     printf("[Script] ASSERT OK: $%03X==%02X %s\n",
                            c->iarg, c->barg, c->sarg);
                 break;
@@ -431,7 +456,7 @@ void script_tick(uint64_t frame, const uint8_t *ram) {
         printf("[Script] Script complete at frame %llu\n", (unsigned long long)frame);
         extern int g_nes_expected_exit;
         g_nes_expected_exit = 1;
-        s_exit_code = 0;
+        s_exit_code = script_exit_code(0);
     }
 }
 
@@ -453,8 +478,15 @@ int script_wants_screenshot(char *buf, int buflen) {
     /* If path is absolute (starts with drive letter: or /), use as-is */
     if (s_shot_pending[1] == ':' || s_shot_pending[0] == '/' || s_shot_pending[0] == '\\')
         snprintf(buf, buflen, "%s", s_shot_pending);
-    else
-        snprintf(buf, buflen, "C:/temp/%s", s_shot_pending);
+    else {
+        /* Relative names land in NESRECOMP_SHOT_DIR (default C:/temp), so
+         * concurrent runs can keep their captures apart. */
+        const char *dir = getenv("NESRECOMP_SHOT_DIR");
+        if (!dir || !dir[0]) dir = "C:/temp";
+        size_t n = strlen(dir);
+        int sep = dir[n-1] == '/' || dir[n-1] == '\\';
+        snprintf(buf, buflen, "%s%s%s", dir, sep ? "" : "/", s_shot_pending);
+    }
     s_shot_pending[0] = '\0';
     return 1;
 }

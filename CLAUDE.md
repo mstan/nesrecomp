@@ -169,13 +169,16 @@ GameRecomp.exe rom.nes --script C:/temp/session.txt > C:/temp/stdout.txt 2>&1
 | `HOLD <BTN>` | Hold button (A B SELECT START UP DOWN LEFT RIGHT) |
 | `RELEASE <BTN>` | Release button |
 | `TURBO ON\|OFF` | Toggle fast-forward |
-| `SCREENSHOT [file]` | Save PNG to C:/temp/ |
+| `SCREENSHOT [file]` | Save PNG; absolute path as-is, else under `NESRECOMP_SHOT_DIR` (default C:/temp/) |
 | `LOG <msg>` | Print message to stdout |
 | `SAVE_STATE <path>` | Save state to file |
 | `LOAD_STATE <path>` | Restore state from file |
 | `WAIT_RAM8 <hex_addr> <hex_val>` | Block until g_ram[addr]==val (30s timeout) |
 | `ASSERT_RAM8 <hex_addr> <hex_val> [msg]` | Assert RAM value |
 | `EXIT [code]` | Exit with code (default 0) |
+
+A `WAIT_RAM8`/`WAIT_FOREIGN_STATE` timeout or `ASSERT_RAM8` failure means the script
+desynced: a run that would exit 0 exits **3** instead (explicit nonzero codes are kept).
 
 ### Save state hotkeys (in-game)
 | Key | Action |
