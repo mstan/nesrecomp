@@ -19,6 +19,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifndef CYC_GAME_PLAYERS
+#define CYC_GAME_PLAYERS CYC_INPUT_PLAYERS
+#endif
+
 /* The NES profile's button order (recomp-ui consoles/nes/nes_profile.h
  * kNesPadButtons: Up Down Left Right A B Start Select) -> cyc_input.h's. */
 static const int SPEC_TO_CYC[8] = { 4, 5, 6, 7, 0, 1, 3, 2 };
@@ -172,7 +176,7 @@ int cyc_ui_launcher(CycSettings *settings, const char *settings_path, const CycH
     else stem_of(*rom_path ? *rom_path : "NES", name, sizeof(name));
     gi.name = name;
     gi.region = NULL;                 /* the identity is the image's SHA-256, not a region */
-    gi.num_players = CYC_INPUT_PLAYERS;
+    gi.num_players = CYC_GAME_PLAYERS;
     gi.has_renderer = 0;              /* the cycle host has one SDL renderer */
     gi.hdpack_supported = 0;          /* HD packs are not ported to the cycle host */
     gi.has_integer_scale = 1;

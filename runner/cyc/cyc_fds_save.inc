@@ -69,8 +69,8 @@ static uint8_t *fds_read_whole(const char *path, size_t *size, bool *missing)
     return buf;
 }
 
-/* <executable dir>/saves/<image stem>.fdssave */
-static const char *fds_default_save_path(const char *image_path)
+/* The host's save directory is beside the executable, independent of cwd. */
+static bool default_save_path(const char *image_path, const char *extension, char *out, size_t cap)
 {
     char dir[900] = ".";
 #ifdef _WIN32
@@ -90,8 +90,15 @@ static const char *fds_default_save_path(const char *image_path)
     int stem = (int)(dot ? (size_t)(dot - base) : strlen(base));
     char saves[1000];
     snprintf(saves, sizeof(saves), "%s/saves", dir);
-    fds_mkdir(saves);
-    snprintf(fds_save.path_buf, sizeof(fds_save.path_buf), "%s/%.*s.fdssave", saves, stem, base);
+    if (fds_mkdir(saves) != 0 && errno != EEXIST) return false;
+    int written = snprintf(out, cap, "%s/%.*s.%s", saves, stem, base, extension);
+    return written >= 0 && (size_t)written < cap;
+}
+
+/* <executable dir>/saves/<image stem>.fdssave */
+static const char *fds_default_save_path(const char *image_path)
+{
+    if (!default_save_path(image_path, "fdssave", fds_save.path_buf, sizeof(fds_save.path_buf))) return NULL;
     return fds_save.path_buf;
 }
 

@@ -1043,7 +1043,7 @@ int main(int argc, char **argv) {
 #endif
             ++i;
         }
-        else if (!strcmp(argv[i], "--hidden")) {
+        else if (!strcmp(argv[i], "--hidden") || !strcmp(argv[i], "--pause-unfocused")) {
 #if defined(CYC_WITH_SDL)
             cyc_sdl_option(argv[i], "");
 #endif
@@ -1088,6 +1088,7 @@ int main(int argc, char **argv) {
                         "            [--save-file FILE | --no-save] [--fds-import-ips FILE] [--fds-export-ips FILE]\n"
                         "            [--fds-hle auto-swap,fast-load|all|off] [--realtime]\n"
                         "       [--save-state F:FILE] [--load-state FILE] [--mods-root DIR]\n"
+                        "       window: [--pause-unfocused] [--tcp PORT] [--config FILE]\n"
                         "       [--present-out FILE [--present-every N] [--present-size WxH]]\n",
                 argv[0]);
 #ifndef CYC_ORACLE
@@ -1221,6 +1222,22 @@ int main(int argc, char **argv) {
         return 2;
     }
 #endif
+    /* Windowed cartridges use the same save convention as disk games.
+     * Headless runs persist only with an explicitly supplied file. */
+#ifndef CYC_ORACLE
+    char cartridge_save_path[1024];
+    if (!fds && !headless && !no_save && !save_file && cyc_nvram_size(0)) {
+        if (!default_save_path(rom_path, "sav", cartridge_save_path, sizeof(cartridge_save_path))) {
+            fprintf(stderr, "cannot create cartridge save path\n");
+            return 2;
+        }
+        save_file = cartridge_save_path;
+    }
+    if (no_save) save_file = datach_save = NULL;
+#endif
+    if (!save_paths_distinct(save_file,rom_path) || !save_paths_distinct(datach_save,rom_path)) {
+        fprintf(stderr,"save files must be different from the ROM image\n"); return 2;
+    }
     if (!save_paths_distinct(save_file,datach_save)) {
         fprintf(stderr,"cartridge and Datach saves must use different files\n"); return 2;
     }
