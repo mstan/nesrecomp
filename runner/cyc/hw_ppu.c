@@ -21,6 +21,9 @@
 
 #include "hw.h"
 #include "cyc_mod.h"
+#ifdef NESRECOMP_CYCLE_HDPACK
+#include "cyc_hdpack.h"
+#endif
 
 #include <stdio.h>
 #include <string.h>
@@ -221,7 +224,12 @@ static void bg_fetch(void)
         break;
     case 5:
         ppu.vbus = (uint16_t)((ppu.par_chr & 0xFF00) | ppu.octal_latch);
+#ifdef NESRECOMP_CYCLE_HDPACK
+        { uint16_t address=ppu.vbus;
+          ppu.fetch_data=vram_fetch();cyc_hdpack_bg_fetch(address,ppu.fetch_data,false); }
+#else
         ppu.fetch_data = vram_fetch();
+#endif
         ppu.commit |= COMMIT_LO;
         break;
     case 6:
@@ -231,7 +239,12 @@ static void bg_fetch(void)
         break;
     case 7:
         ppu.vbus = (uint16_t)((ppu.par_chr & 0xFF00) | ppu.octal_latch);
+#ifdef NESRECOMP_CYCLE_HDPACK
+        { uint16_t address=ppu.vbus;
+          ppu.fetch_data=vram_fetch();cyc_hdpack_bg_fetch(address,ppu.fetch_data,true); }
+#else
         ppu.fetch_data = vram_fetch();
+#endif
         ppu.commit |= COMMIT_HI;
         break;
     }
@@ -286,6 +299,9 @@ static void bg_commit(void)
         ppu.bg_lo = (uint16_t)((ppu.bg_lo & 0xFF00) | ppu.lo_plane);
         ppu.bg_hi = (uint16_t)((ppu.bg_hi & 0xFF00) | ppu.hi_plane);
         ppu.attr_latch = ppu.attribute;
+#ifdef NESRECOMP_CYCLE_HDPACK
+        cyc_hdpack_bg_reload();
+#endif
         increment_x();
     }
     ppu.commit = 0;
@@ -492,7 +508,13 @@ static void eval_load(void)
             par_context();
             ppu.par_chr &= 0x1FF7;
             ppu.vbus = (uint16_t)((ppu.par_chr & 0xFF00) | ppu.octal_latch);
+            uint16_t address=ppu.vbus;
             uint8_t bits = vram_fetch();
+#ifdef NESRECOMP_CYCLE_HDPACK
+            cyc_hdpack_sprite_fetch(slot,address,bits,false);
+#else
+            (void)address;
+#endif
             if (ppu.spr_attr[slot] & 0x40) bits = flip_bits(bits);
             ppu.spr_lo[slot] = ppu.sprite_row < height ? bits : 0;
             break;
@@ -506,7 +528,13 @@ static void eval_load(void)
             par_context();
             ppu.par_chr |= 8;
             ppu.vbus = (uint16_t)((ppu.par_chr & 0xFF00) | ppu.octal_latch);
+            uint16_t address=ppu.vbus;
             uint8_t bits = vram_fetch();
+#ifdef NESRECOMP_CYCLE_HDPACK
+            cyc_hdpack_sprite_fetch(slot,address,bits,true);
+#else
+            (void)address;
+#endif
             if (ppu.spr_attr[slot] & 0x40) bits = flip_bits(bits);
             ppu.spr_hi[slot] = ppu.sprite_row < height ? bits : 0;
             oam2_increment();
@@ -555,6 +583,9 @@ static void shift_sprites(void)
         if (ppu.spr_x[i] > 0 && !ppu.skipped_dot) {
             ppu.spr_x[i]--;
         } else if (rendering()) {
+#ifdef NESRECOMP_CYCLE_HDPACK
+            cyc_hdpack_sprite_shift((unsigned)i);
+#endif
             ppu.spr_lo[i] <<= 1;
             ppu.spr_hi[i] <<= 1;
         }
@@ -680,10 +711,16 @@ static void corrupt_palettes(uint8_t color)
 static void compute_pixel(void)
 {
     uint8_t color = 0, pal = 0;
+#ifdef NESRECOMP_CYCLE_HDPACK
+    unsigned hd_bg_color=0,hd_bg_palette=0,hd_sprite_color=0;int hd_sprite=-1;
+#endif
     if (ppu.show_bg && (ppu.dot > 8 || ppu.show_bg8)) {
         unsigned fx = ppu.fine_x;
         color = (uint8_t)(((ppu.bg_lo >> (15 - fx)) & 1) | (((ppu.bg_hi >> (15 - fx)) & 1) << 1));
         pal = (uint8_t)(((ppu.attr_lo >> (7 - fx)) & 1) | (((ppu.attr_hi >> (7 - fx)) & 1) << 1));
+#ifdef NESRECOMP_CYCLE_HDPACK
+        hd_bg_color=color;hd_bg_palette=pal;
+#endif
         if (color == 0) pal = 0;
     }
     hw_frame_bg[ppu.scanline * 256 + ppu.dot - 1] = color != 0;
@@ -701,6 +738,9 @@ static void compute_pixel(void)
             ppu.can_s0hit = 0;
         }
         if (sc && (color == 0 || !(ppu.spr_attr[i] & 0x20))) {
+#ifdef NESRECOMP_CYCLE_HDPACK
+            hd_sprite=i;hd_sprite_color=sc;
+#endif
             color = sc;
             pal = (uint8_t)((ppu.spr_attr[i] & 3) | 4);
         }
@@ -720,6 +760,10 @@ static void compute_pixel(void)
         corrupt_palettes(color);
     }
     ppu.color[0] = ppu.palette[addr] & 0x3F;
+#ifdef NESRECOMP_CYCLE_HDPACK
+    cyc_hdpack_pixel(hd_bg_color,hd_bg_palette,hd_sprite,hd_sprite_color);
+    if(!rendering())cyc_hdpack_blank(ppu.color[0]);
+#endif
 }
 
 /* The chosen color reaches the video output three dots later, where greyscale
@@ -745,6 +789,9 @@ static void output_pixel(void)
         unsigned emphasis = ppu.emphasis;
         if (hw_pal()) emphasis = (emphasis & 4) | ((emphasis & 1) << 1) | ((emphasis & 2) >> 1);
         hw_frame_index[sl * 256 + dot - 4] = (uint16_t)(c | emphasis << 6);
+#ifdef NESRECOMP_CYCLE_HDPACK
+        cyc_hdpack_output(dot-4,sl);
+#endif
         if (hw_zapper.port) hw_zapper_pixel(dot - 4, sl, hw_frame_index[sl * 256 + dot - 4]);
     }
 }
@@ -943,6 +990,9 @@ static void blank_dot(void)
     ppu.render_count = 0;
     ppu.vbus = ppu.v;
 
+#ifdef NESRECOMP_CYCLE_HDPACK
+    cyc_hdpack_clock();
+#endif
     ppu.color[3] = ppu.color[2];
     ppu.color[2] = ppu.color[1];
     ppu.color[1] = ppu.color[0];
@@ -957,6 +1007,9 @@ static void blank_dot(void)
                     if ((addr & 3) == 0) addr &= 0x0F;
                 }
                 ppu.color[0] = ppu.palette[addr] & 0x3F;
+#ifdef NESRECOMP_CYCLE_HDPACK
+                cyc_hdpack_blank(ppu.color[0]);
+#endif
             }
             uint64_t counters;
             memcpy(&counters, ppu.spr_x, sizeof(counters));
@@ -1084,6 +1137,9 @@ static void general_dot(void)
         ppu.emphasis = ppu.w2001_value >> 5;
     }
 
+#ifdef NESRECOMP_CYCLE_HDPACK
+    cyc_hdpack_clock();
+#endif
     ppu.color[3] = ppu.color[2];
     ppu.color[2] = ppu.color[1];
     ppu.color[1] = ppu.color[0];
@@ -1109,6 +1165,9 @@ static void general_half_dot(void)
     if (render_line() && rendering() && ((ppu.dot >= 1 && ppu.dot <= 257) || (ppu.dot >= 321 && ppu.dot <= 336))) {
         ppu.bg_lo = (uint16_t)(ppu.bg_lo << 1);
         ppu.bg_hi = (uint16_t)(ppu.bg_hi << 1 | 1);
+#ifdef NESRECOMP_CYCLE_HDPACK
+        cyc_hdpack_bg_shift();
+#endif
         ppu.attr_lo = (uint16_t)(ppu.attr_lo << 1 | (ppu.attr_latch & 1));
         ppu.attr_hi = (uint16_t)(ppu.attr_hi << 1 | ((ppu.attr_latch >> 1) & 1));
     }

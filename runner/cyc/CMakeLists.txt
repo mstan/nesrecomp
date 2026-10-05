@@ -81,6 +81,18 @@ find_package(Python3 3.11 REQUIRED COMPONENTS Interpreter)
 list(APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../external/SDL2/cmake")
 find_package(SDL2 CONFIG QUIET)
 if(SDL2_FOUND)
+    include("${CMAKE_CURRENT_SOURCE_DIR}/hdpack.cmake")
+    add_executable(cyc_hdpack_probe ${NESRECOMP_CYC_SOURCES} cyc_native_none.c hdpack_probe.c cyc_presentation.c)
+    target_include_directories(cyc_hdpack_probe PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})
+    target_link_libraries(cyc_hdpack_probe PRIVATE ${NESRECOMP_CYC_LIBRARIES})
+    if(MSVC)
+        target_compile_definitions(cyc_hdpack_probe PRIVATE _CRT_SECURE_NO_WARNINGS SDL_MAIN_HANDLED)
+    endif()
+    nesrecomp_cyc_enable_sdl(cyc_hdpack_probe NO_DEV_UI)
+    nesrecomp_cyc_enable_hdpack(cyc_hdpack_probe)
+    add_test(NAME cyc_hdpack COMMAND "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_cyc_hdpack.py"
+        --host $<TARGET_FILE:cyc_hdpack_probe> --out "${CMAKE_CURRENT_BINARY_DIR}/hdpack-test")
     add_executable(cyc_input_test input_test.c cyc_input.c cyc_settings.c)
     target_include_directories(cyc_input_test PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})
     target_link_libraries(cyc_input_test PRIVATE SDL2::SDL2)
@@ -116,19 +128,22 @@ if(SDL2_FOUND)
         set(window_ui --recomp-ui)
         # The host's side of the launcher against a scripted launcher: what it
         # hands over, and every edit coming back into config.ini.
-        add_executable(cyc_ui_launcher_test ui_launcher_test.c cyc_ui_launcher.c cyc_settings.c cyc_input.c
+        foreach(t cyc_ui_launcher_test cyc_ui_launcher_hd_test)
+        add_executable(${t} ui_launcher_test.c cyc_ui_launcher.c cyc_settings.c cyc_input.c
             cyc_fds_bios.c)
-        target_include_directories(cyc_ui_launcher_test PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS}
+        target_include_directories(${t} PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS}
             "${NESRECOMP_RECOMP_UI}/src" "${NESRECOMP_RECOMP_UI}/src/common")
-        target_link_libraries(cyc_ui_launcher_test PRIVATE SDL2::SDL2)
-        target_compile_definitions(cyc_ui_launcher_test PRIVATE SDL_MAIN_HANDLED _CRT_SECURE_NO_WARNINGS
+        target_link_libraries(${t} PRIVATE SDL2::SDL2)
+        target_compile_definitions(${t} PRIVATE SDL_MAIN_HANDLED _CRT_SECURE_NO_WARNINGS
             "CYC_GAME_PASSWORD_SAVE=\"test-password.srm\"" "CYC_GAME_PASSWORD_SAVE_LABEL=\"Mantra\""
             "CYC_LAUNCHER_ROM_SHA256=\"ab00000000000000000000000000000000000000000000000000000000000001\"")
         if(WIN32)
-            add_custom_command(TARGET cyc_ui_launcher_test POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                $<TARGET_FILE:SDL2::SDL2> $<TARGET_FILE_DIR:cyc_ui_launcher_test>)
+            add_custom_command(TARGET ${t} POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                $<TARGET_FILE:SDL2::SDL2> $<TARGET_FILE_DIR:${t}>)
         endif()
-        add_test(NAME cyc_ui_launcher_test COMMAND cyc_ui_launcher_test ${CMAKE_CURRENT_BINARY_DIR})
+        add_test(NAME ${t} COMMAND ${t} ${CMAKE_CURRENT_BINARY_DIR})
+        endforeach()
+        target_compile_definitions(cyc_ui_launcher_hd_test PRIVATE NESRECOMP_CYCLE_HDPACK)
     endif()
     add_test(NAME cyc_window_run
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_cyc_window.py

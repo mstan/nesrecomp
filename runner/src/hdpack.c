@@ -16,9 +16,19 @@
 #include "stb_image.h"   /* declarations only; impl lives in chr_codec.c */
 
 /* Runtime state the <condition> engine reads (defined in runtime.c / ppu). */
+#ifdef NESRECOMP_CYCLE_HDPACK
+#include "cyc_presentation.h"
+#include "cyc_core.h"
+#include "cyc_ring.h"
+#include "cyc_render.h"
+#define g_frame_count cyc_ring_frame
+#define g_ppuscroll_x (cyc_render_line_scroll_x(239)&255)
+#define g_ppuscroll_y (cyc_render_line_scroll_y(0)%240)
+#else
 extern uint8_t  g_ram[0x0800];
 extern uint64_t g_frame_count;
 extern uint8_t  g_ppuscroll_x, g_ppuscroll_y, g_ppuctrl;
+#endif
 
 /* ── Tile key + entry ─────────────────────────────────────────────────────── */
 
@@ -797,7 +807,11 @@ int hdpack_load_from_config(int is_chr_ram_game, int native_w) {
     const char *dir = g_nes_config.hdpack_dir;
     if (!dir || !dir[0]) {
         char exedir[512];
+#ifdef NESRECOMP_CYCLE_HDPACK
+        char *base=SDL_GetBasePath();snprintf(exedir,sizeof exedir,"%s",base?base:"./");SDL_free(base);
+#else
         nesrecomp_exe_dir(exedir, sizeof(exedir));
+#endif
         snprintf(autobuf, sizeof(autobuf), "%shdpack", exedir);
         dir = autobuf;
     }

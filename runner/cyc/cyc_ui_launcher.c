@@ -53,6 +53,8 @@ static void to_launcher(const CycSettings *s, RecompLauncherCSettings *io, const
     io->enable_audio = s->audio_enabled;
     io->volume = s->volume;
     io->skip_launcher = s->skip_launcher;
+    io->hdpack_enabled = s->hdpack_enabled;
+    snprintf(io->hdpack_dir,sizeof io->hdpack_dir,"%s",s->hdpack_dir);
 #ifdef RECOMP_LAUNCHER_HAS_ZAPPER_SETTINGS
     io->zapper_mouse = s->zapper_mouse ? 1 : -1;
     io->zapper_crosshair = s->zapper_crosshair ? 1 : -1;
@@ -84,6 +86,8 @@ static void from_launcher(const RecompLauncherCSettings *io, CycSettings *s, con
     s->audio_enabled = io->enable_audio != 0;
     s->volume = io->volume < 0 ? 0 : io->volume > 100 ? 100 : io->volume;
     s->skip_launcher = io->skip_launcher != 0;
+    s->hdpack_enabled = io->hdpack_enabled != 0;
+    snprintf(s->hdpack_dir,sizeof s->hdpack_dir,"%s",io->hdpack_dir);
 #ifdef RECOMP_LAUNCHER_HAS_ZAPPER_SETTINGS
     s->zapper_mouse = io->zapper_mouse >= 0;
     s->zapper_crosshair = io->zapper_crosshair >= 0;
@@ -191,7 +195,11 @@ int cyc_ui_launcher(CycSettings *settings, const char *settings_path, const CycH
     gi.zapper = 1;
 #endif
     gi.has_renderer = 0;              /* the cycle host has one SDL renderer */
-    gi.hdpack_supported = 0;          /* HD packs are not ported to the cycle host */
+#ifdef NESRECOMP_CYCLE_HDPACK
+    gi.hdpack_supported = 1;
+#else
+    gi.hdpack_supported = 0;
+#endif
     gi.has_integer_scale = 1;
     /* a game's view modes are a runtime-menu row (live), not a launcher toggle */
     gi.widescreen_supported = 0;

@@ -63,6 +63,9 @@
 #include "cyc_run.h"
 #include "cyc_session.h"
 #include "cyc_settings.h"
+#ifdef NESRECOMP_CYCLE_HDPACK
+#include "cyc_hdpack.h"
+#endif
 #include "cyc_ring.h"
 #include "cyc_state.h"
 #include "cyc_tcp.h"
@@ -207,6 +210,9 @@ int cyc_sdl_prelaunch(const char **rom_path, const char *cli_bios, NesFdsHleAsk 
     if (s_extras && s_extras->set_view_mode && s_set.view_mode) s_extras->set_view_mode(s_extras->ctx, s_set.view_mode);
     *saved_hle = s_set.fds_hle;
     *saved_bios = s_set.fds_bios[0] ? s_set.fds_bios : NULL;
+#ifdef NESRECOMP_CYCLE_HDPACK
+    cyc_hdpack_config(s_set.hdpack_enabled,s_set.hdpack_dir);
+#endif
     return 0;
 }
 
@@ -239,7 +245,7 @@ static const uint32_t *picture(int *w, int *h)
 {
     if (s_extras && s_extras->present) {
         const uint32_t *p = s_extras->present(s_extras->ctx, w, h);
-        if (p && *w > 0 && *h > 0) return p;
+        if (p && *w > 0 && *h > 0 && *w <= CYC_PRESENT_MAX_DIMENSION && *h <= CYC_PRESENT_MAX_DIMENSION) return p;
     }
     return cyc_render_present(w, h);
 }

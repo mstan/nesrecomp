@@ -242,6 +242,8 @@ static void persistence(const char *dir)
     /* change every field */
     s.window_scale = 5; s.fullscreen = 2; s.integer_scale = 0; s.linear_filter = 1;
     s.audio_enabled = 0; s.volume = 35; s.skip_launcher = 1;
+    s.hdpack_enabled = 0;
+    snprintf(s.hdpack_dir,sizeof s.hdpack_dir,"F:/HD Packs/Zelda");
     s.zapper_mouse = 0; s.zapper_crosshair = 0;
     s.fds_hle.auto_swap = 1; s.fds_hle.fast_load = 0;
     for (int p = 0; p < CYC_INPUT_PLAYERS; ++p) {
@@ -264,6 +266,7 @@ static void persistence(const char *dir)
     CHECK(cyc_settings_load(&back, path, stderr, NULL));
     CHECK(back.window_scale == 5 && back.fullscreen == 2 && back.integer_scale == 0 && back.linear_filter == 1);
     CHECK(back.audio_enabled == 0 && back.volume == 35 && back.skip_launcher == 1);
+    CHECK(!back.hdpack_enabled && !strcmp(back.hdpack_dir,s.hdpack_dir));
     CHECK(!back.zapper_mouse && !back.zapper_crosshair && back.zapper_keys == 3);
     CHECK(back.fds_hle.auto_swap == 1 && back.fds_hle.fast_load == 0);
     CHECK(!memcmp(&back.bind, &s.bind, sizeof(s.bind)));

@@ -24,6 +24,7 @@ void cyc_settings_default(CycSettings *s)
     s->skip_launcher = 0;
     s->view_mode = 0;
     s->zapper_mouse = s->zapper_crosshair = 1;
+    s->hdpack_enabled = 1;
     s->fds_hle = NES_FDS_HLE_ASK_NONE;
     cyc_bindings_default(&s->bind);
 }
@@ -78,7 +79,7 @@ bool cyc_settings_load(CycSettings *s, const char *path, FILE *log, const CycSet
 {
     FILE *f = fopen(path, "r");
     if (!f) return false;
-    char line[512];
+    char line[1024];
     Section sec = SEC_NONE;
     int player = -1;           /* in [Keyboard.PlayerN] / [Gamepad.PlayerN]; -1: shortcuts */
     int lineno = 0;
@@ -121,6 +122,8 @@ bool cyc_settings_load(CycSettings *s, const char *path, FILE *log, const CycSet
             else if (eq_ci(key, "Fullscreen")) bad = !parse_int(val, &v) || (s->fullscreen = clampi(v, 0, 2), 0);
             else if (eq_ci(key, "IntegerScale")) bad = !parse_int(val, &v) || (s->integer_scale = v != 0, 0);
             else if (eq_ci(key, "LinearFilter")) bad = !parse_int(val, &v) || (s->linear_filter = v != 0, 0);
+            else if (eq_ci(key, "HdPackEnabled")) bad = !parse_int(val, &v) || (s->hdpack_enabled = v != 0, 0);
+            else if (eq_ci(key, "HdPackDir")) snprintf(s->hdpack_dir,sizeof s->hdpack_dir,"%s",val);
             break;
         case SEC_AUDIO:
             if (eq_ci(key, "Volume")) bad = !parse_int(val, &v) || (s->volume = clampi(v, 0, 100), 0);
@@ -200,6 +203,7 @@ bool cyc_settings_save(const CycSettings *s, const char *path, const CycSettings
                "# window write this file. Keys are SDL key and controller names.\n");
     fprintf(f, "[Display]\nWindowScale = %d\nFullscreen = %d\nIntegerScale = %d\nLinearFilter = %d\n",
             s->window_scale, s->fullscreen, s->integer_scale, s->linear_filter);
+    fprintf(f,"HdPackEnabled = %d\nHdPackDir = %s\n",s->hdpack_enabled,s->hdpack_dir);
     fprintf(f, "[Audio]\nEnabled = %d\nVolume = %d\n", s->audio_enabled, s->volume);
     fprintf(f, "[Input]\n");
     for (int p = 0; p < CYC_INPUT_PLAYERS; ++p)

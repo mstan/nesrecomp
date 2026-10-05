@@ -80,6 +80,8 @@ static void edit_everything(RecompLauncherCSettings *io)
     io->enable_audio = 0;
     io->volume = 40;
     io->skip_launcher = 1;
+    io->hdpack_enabled = 0;
+    snprintf(io->hdpack_dir,sizeof io->hdpack_dir,"F:/HD Packs/Zelda");
 #ifdef RECOMP_LAUNCHER_HAS_ZAPPER_SETTINGS
     io->zapper_mouse = -1;
     io->zapper_crosshair = -1;
@@ -316,6 +318,12 @@ int main(int argc, char **argv)
     CHECK(seen_game.assist_binding_count == CYC_SC_COUNT - 1);
     CHECK(strcmp(seen_game.assist_binding_labels[0], cyc_shortcut_label(CYC_SC_DISK)));
     CHECK(seen_game.num_rom_patterns == 0);
+#ifdef NESRECOMP_CYCLE_HDPACK
+    CHECK(seen_game.hdpack_supported == 1);
+#else
+    CHECK(seen_game.hdpack_supported == 0);
+#endif
+    CHECK(seen_io.hdpack_enabled == 1);
 
     /* every edit comes back, then survives config.ini */
     cyc_settings_default(&s);
@@ -327,6 +335,7 @@ int main(int argc, char **argv)
     CHECK(!strcmp(rom, "F:/somewhere/else.fds"));
     CHECK(s.window_scale == 5 && s.fullscreen == 1 && s.integer_scale == 0 && s.linear_filter == 1);
     CHECK(s.audio_enabled == 0 && s.volume == 40 && s.skip_launcher == 1);
+    CHECK(!s.hdpack_enabled && !strcmp(s.hdpack_dir,"F:/HD Packs/Zelda"));
 #ifdef RECOMP_LAUNCHER_HAS_ZAPPER_SETTINGS
     CHECK(!s.zapper_mouse && !s.zapper_crosshair);
 #endif
@@ -349,6 +358,7 @@ int main(int argc, char **argv)
     cyc_settings_default(&back);
     CHECK(cyc_settings_load(&back, cfg, stderr, NULL));
     CHECK(!memcmp(&back.bind, &s.bind, sizeof(s.bind)) && back.volume == 40 && back.skip_launcher == 1);
+    CHECK(!back.hdpack_enabled && !strcmp(back.hdpack_dir,s.hdpack_dir));
 #ifdef RECOMP_LAUNCHER_HAS_ZAPPER_SETTINGS
     CHECK(!back.zapper_mouse && !back.zapper_crosshair);
 #endif

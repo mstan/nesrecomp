@@ -852,12 +852,19 @@ static void numbered_path(char *buf, size_t n, const char *base, long frame) {
  * copy, never in the machine's picture. */
 static void write_presentation(const char *base, long frame, uint64_t now_ms, bool numbered)
 {
-    static uint32_t buf[CYC_VIDEO_MAX_WIDTH * 240];
+    static uint32_t *buf;
+    static size_t capacity;
     int w, h;
     const CycHostExtras *extras = cyc_session_extras();
     const uint32_t *pic = extras && extras->present ? extras->present(extras->ctx, &w, &h) : NULL;
-    if (!pic || w <= 0 || h <= 0 || w > CYC_VIDEO_MAX_WIDTH || h > 240)
+    if (!pic || w <= 0 || h <= 0 || w > CYC_PRESENT_MAX_DIMENSION || h > CYC_PRESENT_MAX_DIMENSION)
         pic = cyc_render_present(&w, &h);
+    size_t needed=(size_t)w*(size_t)h;
+    if(needed>capacity) {
+        uint32_t *next=realloc(buf,needed*sizeof(*buf));
+        if(!next){fprintf(stderr,"cannot allocate presentation screenshot\n");return;}
+        buf=next;capacity=needed;
+    }
     memcpy(buf, pic, (size_t)w * (size_t)h * sizeof(uint32_t));
     CycDiskToast t;
     if (cyc_is_fds() && cyc_disk_action_toast(cyc_host_disk_action(), now_ms, &t)) {

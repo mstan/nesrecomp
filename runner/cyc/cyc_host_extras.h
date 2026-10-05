@@ -60,6 +60,9 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+/* Includes high-resolution texture packs. These are presentation dimensions;
+ * the hardware picture remains 256 x 240. */
+#define CYC_PRESENT_MAX_DIMENSION 8192
 #ifdef __cplusplus
 extern "C" {
 #endif

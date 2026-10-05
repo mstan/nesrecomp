@@ -78,6 +78,12 @@ refused before execution, and a save path pointing at the ROM is refused.
 Cartridge save-state shortcuts use `.cycstate`, leaving previous `.state` files
 available. Save states from the legacy CPU backend are incompatible; raw battery
 RAM can be copied after checking its size. FDS state-slot paths keep `.state`.
+Known MMC1 cartridges use their recorded chip sizes rather than the ambiguous
+iNES compatibility allocation. Zelda USA's SNROM battery is 8 KiB, so its
+legacy raw battery file imports directly. Unknown MMC1 payloads retain the
+32 KiB compatibility allocation; patched derivatives should specify their
+actual RAM geometry in the header. NES 2.0 and explicit iNES MMC1 RAM sizes
+take precedence over inferred sizes.
 
 For owner playtests, `--pause-unfocused` pauses the window while it lacks
 keyboard focus. This allows several separately built titles to remain open.
@@ -125,6 +131,27 @@ in `mods/`, the launcher's Mods screen, the runtime menu's rows, mod records in
 save states); game.toml `[[mod_function_hook]]` sites give its plugins hooks
 into the program. See [README.md, Game mods](README.md#game-mods). The
 project needs `CXX` among its languages.
+
+## Optional HD texture packs
+
+A game that links `cyc_presentation.c` can add the shared Mesen-format texture
+sampler with `include("${NESRECOMP_ROOT}/runner/cyc/hdpack.cmake")` and
+`nesrecomp_cyc_enable_hdpack(MyGame)`. Its host extras call
+`cyc_hdpack_power_on()` after cartridge initialization and return
+`cyc_hdpack_present(native, width, height)` from their presentation callback.
+The launcher exposes the existing HD toggle and pack directory only for these
+targets; its values persist in config.ini. Headless overrides can call
+`cyc_hdpack_config(enabled, directory)` before power-on.
+
+The cycle adapter observes the actual PPU fetch, shift and output pipeline.
+It records owned CHR content keys, mapped CHR ROM indices, palettes, flips
+and visible sprite priority without bus reads or additional guest cycles.
+Native pictures stay 256x240; HD presentation can be up to 2560x2400. An
+unmatched pack preserves every original pixel with nearest-neighbor scaling.
+Five validated save records preserve the current picture and in-flight
+metadata. Loading a state with a different HD enablement or scale is refused
+before changing the machine. See [HDPACK.md](../HDPACK.md) for the existing
+format support and limitations; replacement audio is not implemented.
 
 ## Audio output stage
 
