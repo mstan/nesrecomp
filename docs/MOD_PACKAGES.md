@@ -11,6 +11,64 @@ The normal default is `OFF`. Opting in compiles the package runtime and opens
 recomp-ui's compile-time Mods gate. The launcher shows Mods only after the game
 also initializes a valid provider.
 
+Cycle projects use `nesrecomp_add_cycle_game(... MODS GAME_ID "my-game")`.
+Add `HD_PACKS` to that call to provide the framework's shared HD pack plugin.
+
+## Mesen HD pack features
+
+HD packs use the same installation, feature selection and persisted state as
+other Mods. They are disabled by default in archives made by the importer.
+The common cycle host loads their assets and presents the real PPU's recorded
+tiles; games do not need HD-specific frame or activation callbacks.
+
+```toml
+[[feature]]
+id = "hd-pack"
+name = "HD textures"
+group = "Display"
+default_enabled = false
+exclusive_group = "display-mode"
+
+[[hd_pack]]
+feature = "hd-pack"
+directory = "pack"
+# Optional, geometry-preserving IPS against the target's stock iNES image:
+# patch = "pack/sound.ips"
+# patched_rom_crc32 = "01234567"
+```
+
+`directory` and `patch` are relative to the installed package root. The
+directory contains `hires.txt` and the creator's assets. The runtime refuses
+parent/absolute paths, links, missing files, multiple selected HD packs and
+unsupported executables. A patch requires both fields above, preserves the
+header, trainer and cartridge size, and must produce the declared payload
+CRC32. It changes an in-memory copy; the original ROM remains untouched.
+Patched PRG uses the cycle interpreter so compiled stock opcodes cannot run
+against changed code. Native execution remains available with the Mod off.
+
+Pack identity includes package/version, target, all pack files and the patch.
+Cycle saves refuse a different pack or patch before changing the machine.
+Installed folders can move with the executable without changing identity.
+Select a pack in the launcher before starting; the running game's menu makes
+HD and conflicting display modes read-only until the next launch. HD packs
+currently require local play. Game display plugins that cannot combine with
+HD presentation must use the same `display-mode` exclusion group.
+
+Create a local archive from an existing pack:
+
+```sh
+python tools/package_hdpack.py --pack "/path/to/pack" --rom "/path/to/stock.nes" --game-id "my-game" --id "my-game.hd" --name "HD textures" --author "Original creator" --license "Original pack terms" --notice "/path/to/original-readme.txt" --out "my-game-hd.nesmod"
+```
+
+The importer verifies a Mesen `<patch>` declaration's original ROM SHA-1,
+checks its IPS and records the patched CRC. It bundles local assets and
+preserved notices, with no ROM. Install the archive through **Mods**, then
+enable its feature. This is the adoption path for cycle titles; the older
+folder/config adapter remains for explicit legacy integrations. Replacement
+pack music/sounds and some Mesen conditions remain unsupported. An installed
+pack should be tested against its original and unmatched-pixel presentation,
+state continuation and the game's other display features.
+
 ## Product and trust model
 
 - A **package** is the installation, update, provenance, and trust boundary.
@@ -352,7 +410,7 @@ or multiply claimed plugin IDs, persists state, runs every reset callback, and
 then activates the resolved plugins. Netplay launches clear the in-session plan
 without overwriting the user's offline selections.
 
-Format 1 intentionally limits executable behavior to trusted activation
-plugins. Guarded guest-ROM writes, assets, and interpreter hooks can extend the
-same package contract later, but must retain pre-boot validation and the
-no-arbitrary-code archive boundary.
+Format 1 limits executable behavior to trusted activation plugins. HD assets
+and their optional geometry-preserving IPS use the shared, pre-boot validated
+HD adapter described above. Further guest writes and interpreter hooks must
+retain that validation and the no-arbitrary-code archive boundary.

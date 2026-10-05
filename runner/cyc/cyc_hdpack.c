@@ -1,7 +1,10 @@
 #include "cyc_hdpack.h"
+#ifndef NESRECOMP_CYCLE_HDPACK_MODS
 #include "cyc_presentation.h"
+#endif
 #include "cyc_core.h"
 #include "cyc_render.h"
+#include "cyc_mod.h"
 #include "hw_internal.h"
 #include "hdpack.h"
 #include "mod_runtime.h"
@@ -26,11 +29,15 @@ typedef struct {
     uint8_t sprite_x[8];
     HdRecordedPixel color[4];
 } HdPipeline;
-typedef struct {uint32_t version,active,scale,part;} HdStateHeader;
+typedef struct {uint32_t version,active,scale,part;uint8_t fingerprint[20];} HdStateHeader;
+static uint8_t fingerprint[20];
 static HdPipeline pipeline;
 static HdRecordedPixel recorded[256*240];
 static uint32_t *upscaled;
 static size_t upscaled_capacity;
+static uint64_t presented_generation;
+static bool presentation_valid;
+#ifndef NESRECOMP_CYCLE_HDPACK_MODS
 static bool configured;
 
 void cyc_hdpack_config(int enabled,const char *directory) {
@@ -38,10 +45,40 @@ void cyc_hdpack_config(int enabled,const char *directory) {
     snprintf(g_nes_config.hdpack_dir,sizeof g_nes_config.hdpack_dir,"%s",directory?directory:"");
 }
 void cyc_hdpack_power_on(void) {
+    presentation_valid=false;
     memset(&pipeline,0,sizeof pipeline);memset(recorded,0,sizeof recorded);
     if(!configured)cyc_hdpack_config(1,"");
     hdpack_load_from_config(hw_cart.chr_ram!=0,256);
 }
+#else
+static void activate_hd_pack(void) { nes_mod_set_local_only("HD pack",1); }
+NES_MOD_CONSTRUCTOR(register_hd_pack_plugin) {
+    nes_mod_register_activation_plugin("nesrecomp.hd-pack",activate_hd_pack);
+}
+bool cyc_hdpack_mod_prepare(void) {
+    presentation_valid=false;
+    const NESModHdPack *pack=nes_mod_hd_pack();
+    memset(&pipeline,0,sizeof pipeline);memset(recorded,0,sizeof recorded);
+    memset(fingerprint,0,sizeof fingerprint);hdpack_unload();
+    if(pack) {
+        if(pack->patched_payload) {
+            if(!cyc_mod_apply_cart_payload(pack->patched_payload,pack->payload_size)) {
+                fprintf(stderr,"[Mods] HD patch does not match this cartridge's geometry\n");return false;
+            }
+        }
+        if(hdpack_load(pack->directory,hw_cart.chr_ram!=0,256)) {
+            fprintf(stderr,"[Mods] Selected HD pack could not be loaded\n");return false;
+        }
+        memcpy(fingerprint,pack->fingerprint,sizeof fingerprint);
+    }
+    nes_mod_lock_hd_pack();
+    return true;
+}
+const uint32_t *cyc_hdpack_mod_present(int *width,int *height) {
+    if(!hdpack_active())return NULL;
+    return cyc_hdpack_present(cyc_frame_argb(),width,height);
+}
+#endif
 static void fetch_tile(HdFetchedTile *tile,uint16_t address,uint8_t value,bool high) {
     unsigned row=address&7;
     if(!high) {
@@ -115,6 +152,13 @@ static uint32_t color(uint8_t value,uint8_t mask) {
 }
 const uint32_t *cyc_hdpack_present(const uint32_t *native,int *width,int *height) {
     *width=256;*height=240;if(!hdpack_active())return native;
+    uint64_t generation=cyc_render_generation();
+    if(presentation_valid && generation==presented_generation) {
+        *width=256*hdpack_scale();*height=240*hdpack_scale();return upscaled;
+    }
+    /* A restored state can reuse a frame number with different RAM/tiles.
+     * Revision identity also keeps repeated paused presents inexpensive. */
+    hdpack_invalidate_conditions();
     HdPixel *pixels=hdpack_pixels();
     for(unsigned i=0;i<256*240;i++) {
         const HdRecordedPixel *r=&recorded[i];HdPixel *p=&pixels[i];memset(p,0,sizeof(*p));
@@ -134,13 +178,15 @@ const uint32_t *cyc_hdpack_present(const uint32_t *native,int *width,int *height
         uint32_t *next=realloc(upscaled,count*sizeof(*next));if(!next)return native;
         upscaled=next;upscaled_capacity=count;
     }
-    hdpack_upscale(native,256,upscaled);*width=256*hdpack_scale();*height=240*hdpack_scale();return upscaled;
+    hdpack_upscale(native,256,upscaled);presented_generation=generation;presentation_valid=true;
+    *width=256*hdpack_scale();*height=240*hdpack_scale();return upscaled;
 }
 
 static int save_part(unsigned part,uint8_t *buf,int cap) {
     size_t size=part==4?sizeof pipeline:sizeof(recorded)/4;
     if(cap<(int)(sizeof(HdStateHeader)+size))return -1;
-    HdStateHeader h={1,hdpack_active()!=0,(uint32_t)hdpack_scale(),part};memcpy(buf,&h,sizeof h);
+    HdStateHeader h={2,hdpack_active()!=0,(uint32_t)hdpack_scale(),part,{0}};
+    memcpy(h.fingerprint,fingerprint,sizeof fingerprint);memcpy(buf,&h,sizeof h);
     memcpy(buf+sizeof h,part==4?(const void *)&pipeline:(const void *)&recorded[part*256*60],size);
     return (int)(sizeof h+size);
 }
@@ -154,7 +200,7 @@ static int validate_part(unsigned part,const uint8_t *buf,int len) {
     size_t size=part==4?sizeof pipeline:sizeof(recorded)/4;
     if(!buf || len!=(int)(sizeof(HdStateHeader)+size))return 0;
     HdStateHeader h;memcpy(&h,buf,sizeof h);
-    if(h.version!=1 || h.part!=part || h.active!=(unsigned)(hdpack_active()!=0) || h.scale!=(unsigned)hdpack_scale())return 0;
+    if(h.version!=2 || h.part!=part || h.active!=(unsigned)(hdpack_active()!=0) || h.scale!=(unsigned)hdpack_scale() || memcmp(h.fingerprint,fingerprint,sizeof fingerprint))return 0;
     if(part==4) {
         HdPipeline v;memcpy(&v,buf+sizeof h,sizeof v);
         if(v.bg_fetch.row>7 || v.bg_fetch.x>7 || v.bg_fetch.valid>1)return 0;
@@ -169,7 +215,7 @@ static int validate_part(unsigned part,const uint8_t *buf,int len) {
 static int load_part(unsigned part,const uint8_t *buf,int len) {
     if(!validate_part(part,buf,len))return 0;
     size_t size=part==4?sizeof pipeline:sizeof(recorded)/4;
-    memcpy(part==4?(void *)&pipeline:(void *)&recorded[part*256*60],buf+sizeof(HdStateHeader),size);return 1;
+    memcpy(part==4?(void *)&pipeline:(void *)&recorded[part*256*60],buf+sizeof(HdStateHeader),size);presentation_valid=false;return 1;
 }
 #define HD_STATE_PART(n) \
 static int get##n(uint8_t *b,int c){return save_part(n,b,c);} \

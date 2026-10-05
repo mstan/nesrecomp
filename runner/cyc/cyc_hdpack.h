@@ -15,3 +15,7 @@ void cyc_hdpack_pixel(unsigned bg_color,unsigned bg_palette,int sprite,unsigned 
 void cyc_hdpack_blank(uint8_t backdrop);
 void cyc_hdpack_output(int x,int y);
 const uint32_t *cyc_hdpack_present(const uint32_t *native,int *width,int *height);
+#ifdef NESRECOMP_CYCLE_HDPACK_MODS
+bool cyc_hdpack_mod_prepare(void);
+const uint32_t *cyc_hdpack_mod_present(int *width,int *height);
+#endif

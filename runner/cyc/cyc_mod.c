@@ -64,6 +64,19 @@ uint8_t *cyc_mod_prg_data_rw(size_t *size) {
     if (size) *size = hw_cart.prg_len;
     return hw_cart.prg;
 }
+bool cyc_mod_apply_cart_payload(const uint8_t *payload, size_t size) {
+    size_t chr_rom=hw_cart.info.chr_size;
+    if(s_open || hw_cart.mapper==NES_FDS_MAPPER || !payload || !hw_cart.prg ||
+       size!=(size_t)hw_cart.prg_len+chr_rom || (chr_rom && !hw_cart.chr))return false;
+    if(memcmp(hw_cart.prg,payload,hw_cart.prg_len)) {
+        memcpy(hw_cart.prg,payload,hw_cart.prg_len);hw_prg_modified=true;
+    }
+    if(chr_rom) {
+        memcpy(hw_cart.chr,payload+hw_cart.prg_len,chr_rom);
+        ppu_state_reloaded();
+    }
+    return true;
+}
 bool cyc_mod_chr_poke(uint16_t addr, uint8_t value) {
     if (s_open || addr >= 0x2000 || !hw_cart.chr_write[addr >> 10]) return false;
     hw_cart.chr[hw_cart_chr_index(addr)] = value;

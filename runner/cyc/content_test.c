@@ -54,6 +54,28 @@ int main(void) {
     cyc_mod_set_ppu_write_hook(NULL);
     boot(true);
     CHECK(!hw_prg_modified && !cyc_mod_chr_poke(0x0412, 0xA5));
+    /* Geometry includes ROM bytes, never a mixed board's CHR RAM chip. */
+    size_t image_size=16+131072+65536;
+    uint8_t *image=(uint8_t *)calloc(1,image_size);
+    CHECK(image!=NULL);
+    if(image) {
+        memcpy(image,"NES\032",4);image[4]=8;image[5]=8;image[6]=0x70;image[7]=0x70; /* TQROM */
+        CHECK(cyc_load_ines(image,image_size));cyc_power_on(0);
+        CHECK(hw_cart.info.chr_size==65536 && hw_cart.chr_ram_len==8192);
+        memset(hw_cart.chr+hw_cart.chr_ram_base,0x5a,hw_cart.chr_ram_len);
+        image[16+131072]=0xa7;
+        CHECK(!cyc_mod_apply_cart_payload(image+16,image_size-17));
+        CHECK(!hw_prg_modified && hw_cart.chr[0]==0);
+        CHECK(cyc_mod_apply_cart_payload(image+16,image_size-16));
+        CHECK(!hw_prg_modified && hw_cart.chr[0]==0xa7 && hw_cart.chr[hw_cart.chr_ram_base]==0x5a);
+        image[16]=0xea;
+        CHECK(cyc_mod_isolate_begin());
+        CHECK(!cyc_mod_apply_cart_payload(image+16,image_size-16));cyc_mod_isolate_end();
+        CHECK(!hw_prg_modified && hw_cart.prg[0]==0);
+        CHECK(cyc_mod_apply_cart_payload(image+16,image_size-16));
+        CHECK(hw_prg_modified && hw_cart.prg[0]==0xea && hw_cart.chr[hw_cart.chr_ram_base]==0x5a);
+        free(image);
+    }
     printf("content_test: %u failures\n", failures);
     return failures ? 1 : 0;
 }

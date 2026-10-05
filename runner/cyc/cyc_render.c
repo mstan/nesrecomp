@@ -31,6 +31,7 @@ void cyc_render_set_margins(int left, int right)
 }
 
 void cyc_render_frame_done(void) { s_generation++; }
+uint64_t cyc_render_generation(void) { return s_generation; }
 
 void cyc_render_stats(CycRenderStats *out) { *out = s_stats; }
 

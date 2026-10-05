@@ -134,7 +134,15 @@ project needs `CXX` among its languages.
 
 ## Optional HD texture packs
 
-A game that links `cyc_presentation.c` can add the shared Mesen-format texture
+New cycle integrations add `MODS HD_PACKS GAME_ID "my-game"` to
+`nesrecomp_add_cycle_game`. The common host loads installed `[[hd_pack]]`
+assets, optionally applies a verified IPS in memory, and presents the native
+PPU through the shared sampler. No game-specific HD callbacks are needed.
+See [Mod packages](../../docs/MOD_PACKAGES.md#mesen-hd-pack-features) for the
+default-off importer, asset/patch identity and launcher selection lifecycle.
+
+The older folder/config adapter is retained: a game that links
+`cyc_presentation.c` can add the shared Mesen-format texture
 sampler with `include("${NESRECOMP_ROOT}/runner/cyc/hdpack.cmake")` and
 `nesrecomp_cyc_enable_hdpack(MyGame)`. Its host extras call
 `cyc_hdpack_power_on()` after cartridge initialization and return
@@ -149,7 +157,8 @@ and visible sprite priority without bus reads or additional guest cycles.
 Native pictures stay 256x240; HD presentation can be up to 2560x2400. An
 unmatched pack preserves every original pixel with nearest-neighbor scaling.
 Five validated save records preserve the current picture and in-flight
-metadata. Loading a state with a different HD enablement or scale is refused
+metadata. Loading a state with a different HD enablement, scale or package
+asset/patch fingerprint is refused
 before changing the machine. See [HDPACK.md](../HDPACK.md) for the existing
 format support and limitations; replacement audio is not implemented.
 

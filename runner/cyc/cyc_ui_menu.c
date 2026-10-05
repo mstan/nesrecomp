@@ -14,6 +14,9 @@
 #include "cyc_run.h"
 #include "recomp_runtime_ui.h"
 #include "recomp_launcher.h"
+#if NESRECOMP_ENABLE_MODS
+#include "mod_runtime.h"
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -103,6 +106,10 @@ static void add_mod_rows(void)
         snprintf(m->key, sizeof(m->key), "cyc.mod.%d", s_mod_count);
         snprintf(m->label, sizeof(m->label), "%s", feat.name);
         snprintf(m->desc, sizeof(m->desc), "%s", feat.description);
+#if NESRECOMP_ENABLE_MODS
+        if (nes_mod_feature_requires_restart(feat.package_id, feat.id))
+            snprintf(m->desc, sizeof(m->desc), "Change this display mode in the launcher, then restart the game.");
+#endif
         m->type = -1;
         add(m->key, "Mods", m->label, m->desc, RECOMP_RUNTIME_UI_BOOL, 0, 1, 1, NULL, 0, NULL);
         s_mod_count++;
@@ -198,6 +205,9 @@ static int mod_set(const ModRow *m, int v)
 
 static int mod_enabled(const ModRow *m)
 {
+#if NESRECOMP_ENABLE_MODS
+    if (nes_mod_feature_requires_restart(m->package, m->feature)) return 0;
+#endif
     if (m->type < 0) return 1;
     RecompLauncherCModFeature feat;
     RecompLauncherCModOption o;

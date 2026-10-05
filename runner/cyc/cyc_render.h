@@ -97,6 +97,7 @@ void cyc_render_sprites(uint32_t *out, int width, int height, int native_x0, con
 const uint32_t *cyc_render_present(int *width, int *height);
 /* The machine finished a frame, or a save state replaced it. */
 void cyc_render_frame_done(void);
+uint64_t cyc_render_generation(void);
 
 typedef struct {
     uint64_t composed;      /* pictures the compositor painted */

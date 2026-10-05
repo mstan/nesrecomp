@@ -17,10 +17,15 @@
 
 /* Runtime state the <condition> engine reads (defined in runtime.c / ppu). */
 #ifdef NESRECOMP_CYCLE_HDPACK
-#include "cyc_presentation.h"
+#ifndef NESRECOMP_CYCLE_HDPACK_MODS
+#include <SDL.h>
+#endif
 #include "cyc_core.h"
 #include "cyc_ring.h"
 #include "cyc_render.h"
+#include "hw_internal.h"
+#define g_ram hw.ram
+#define g_ppuctrl (cyc_frame_lines()[239].ctrl)
 #define g_frame_count cyc_ring_frame
 #define g_ppuscroll_x (cyc_render_line_scroll_x(239)&255)
 #define g_ppuscroll_y (cyc_render_line_scroll_y(0)%240)
@@ -154,6 +159,7 @@ typedef struct HdBg {
     int       blend;         /* 0 alpha, 1 add, 2 subtract */
     HdCond  **conds; int *neg; int ncond;  /* ANDed conditions; neg[i]=='!'  */
     int       active;        /* recomputed per frame */
+    int       offx, offy;    /* scrolling offset computed once per frame */
 } HdBg;
 
 static HdBg     *s_bgs = NULL; static int s_bg_count = 0, s_bg_cap = 0;
@@ -298,7 +304,18 @@ static uint32_t premul(uint32_t argb) {
 }
 
 /* Load dir/name PNG into a new sheet slot (premultiplied). Returns index or -1. */
+static int safe_image_name(const char *name) {
+    if(!name || !*name || *name=='/' || *name=='\\' || strchr(name,':'))return 0;
+    const char *start=name;
+    for(const char *p=name;;p++)if(!*p || *p=='/' || *p=='\\') {
+        if(p==start || (p-start==1 && start[0]=='.') || (p-start==2 && start[0]=='.' && start[1]=='.'))return 0;
+        if(!*p)break;
+        start=p+1;
+    }
+    return 1;
+}
 static int load_sheet(const char *name) {
+    if(!safe_image_name(name)){fprintf(stderr,"[HDPack] Unsafe image path rejected\n");return -1;}
     char path[768];
     snprintf(path, sizeof(path), "%s/%s", s_dir, name);
 
@@ -560,6 +577,7 @@ static void process_condition(char *rest) {
 /* ── <background> parsing ─────────────────────────────────────────────────── */
 
 static HdBgImg *load_bg_img(const char *name) {
+    if(!safe_image_name(name)){fprintf(stderr,"[HDPack] Unsafe background path rejected\n");return NULL;}
     for (int i = 0; i < s_bgimg_count; i++)
         if (!strcmp(s_bgimgs[i]->name, name)) return s_bgimgs[i];   /* dedup */
 
@@ -678,6 +696,9 @@ static void parse_line(char *line) {
 
 /* ── Public API ───────────────────────────────────────────────────────────── */
 
+void hdpack_invalidate_conditions(void) {
+    for(int i=0;i<s_cond_count;i++)s_cond_all[i]->cached_frame=UINT64_MAX;
+}
 int hdpack_active(void) { return s_active; }
 int hdpack_scale(void)  { return s_active ? s_scale : 1; }
 HdPixel *hdpack_pixels(void) { return s_active ? s_pixels : NULL; }
@@ -784,7 +805,7 @@ int hdpack_load(const char *dir, int is_chr_ram_game, int native_w) {
 }
 
 int hdpack_load_from_config(int is_chr_ram_game, int native_w) {
-#ifdef NESRECOMP_GAME_NO_HDPACK
+#if defined(NESRECOMP_GAME_NO_HDPACK) || defined(NESRECOMP_CYCLE_HDPACK_MODS)
     /* This build opts out of HD packs entirely (e.g. stock/unpatched Zelda):
      * never load one, even if a config.ini HdPackEnabled=1 or the NESRECOMP_HDPACK
      * env var is set. The launcher also hides the HD-pack panel for this build. */
@@ -1018,6 +1039,8 @@ static int cond_eval(HdCond *c, int x, int y, HdPixel *cur, int is_sprite) {
 static void eval_backgrounds_for_frame(void) {
     s_nact = 0;
     if (!s_actbg) return;
+    const int scrollx = g_ppuscroll_x + ((g_ppuctrl & 0x01) ? 256 : 0);
+    const int scrolly = g_ppuscroll_y + ((g_ppuctrl & 0x02) ? 240 : 0);
     for (int i = 0; i < s_bg_count; i++) {
         HdBg *b = s_bg_sorted[i];
         int act = 1;
@@ -1026,7 +1049,11 @@ static void eval_backgrounds_for_frame(void) {
             if (b->neg[k]) v = !v;
             if (!v) { act = 0; break; }
         }
-        if (act) s_actbg[s_nact++] = b;   /* preserves priority order */
+        if (act) {
+            b->offx = (int)(scrollx * b->hscroll);
+            b->offy = (int)(scrolly * b->vscroll);
+            s_actbg[s_nact++] = b;   /* preserves priority order */
+        }
     }
     s_band_mid = s_band_fg = s_nact;
     for (int i = 0; i < s_nact; i++) {
@@ -1040,10 +1067,9 @@ static void eval_backgrounds_for_frame(void) {
      * contiguous span of rows the overlay fully spans, so the compositor can skip
      * the room backgrounds there and let those holes fall back to the backdrop. */
     s_hud_rows = 0;
-    int scrolly = g_ppuscroll_y + ((g_ppuctrl & 0x02) ? 240 : 0);
     for (int i = s_band_fg; i < s_nact; i++) {
         HdBg *b = s_actbg[i];
-        int offy = (int)(scrolly * b->vscroll);
+        int offy = b->offy;
         int rows = 0;
         for (int sy = 0; sy < 240; sy++) {
             int py = (b->top + sy + offy) * s_scale;
@@ -1073,10 +1099,7 @@ static uint32_t sat_sub(uint32_t u, uint32_t s) {
 }
 /* Composite one background's scale*scale contribution at native pixel (sx,sy). */
 static void blend_bg_block(uint32_t *dst, int hd_w, const HdBg *b, int sx, int sy, int s) {
-    int scrollx = g_ppuscroll_x + ((g_ppuctrl & 0x01) ? 256 : 0);
-    int scrolly = g_ppuscroll_y + ((g_ppuctrl & 0x02) ? 240 : 0);
-    int offx = (int)(scrollx * b->hscroll);
-    int offy = (int)(scrolly * b->vscroll);
+    int offx = b->offx, offy = b->offy;
     const HdBgImg *im = b->img;
     for (int dy = 0; dy < s; dy++) {
         int py = (b->top + sy + offy) * s + dy;

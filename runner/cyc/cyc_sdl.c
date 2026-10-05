@@ -210,7 +210,7 @@ int cyc_sdl_prelaunch(const char **rom_path, const char *cli_bios, NesFdsHleAsk 
     if (s_extras && s_extras->set_view_mode && s_set.view_mode) s_extras->set_view_mode(s_extras->ctx, s_set.view_mode);
     *saved_hle = s_set.fds_hle;
     *saved_bios = s_set.fds_bios[0] ? s_set.fds_bios : NULL;
-#ifdef NESRECOMP_CYCLE_HDPACK
+#if defined(NESRECOMP_CYCLE_HDPACK) && !defined(NESRECOMP_CYCLE_HDPACK_MODS)
     cyc_hdpack_config(s_set.hdpack_enabled,s_set.hdpack_dir);
 #endif
     return 0;
@@ -243,6 +243,10 @@ static void     request_quit(void) { s_running = false; }
 
 static const uint32_t *picture(int *w, int *h)
 {
+#ifdef NESRECOMP_CYCLE_HDPACK_MODS
+    const uint32_t *hd = cyc_hdpack_mod_present(w, h);
+    if (hd) return hd;
+#endif
     if (s_extras && s_extras->present) {
         const uint32_t *p = s_extras->present(s_extras->ctx, w, h);
         if (p && *w > 0 && *h > 0 && *w <= CYC_PRESENT_MAX_DIMENSION && *h <= CYC_PRESENT_MAX_DIMENSION) return p;

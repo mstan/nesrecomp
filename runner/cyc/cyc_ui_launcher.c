@@ -195,7 +195,7 @@ int cyc_ui_launcher(CycSettings *settings, const char *settings_path, const CycH
     gi.zapper = 1;
 #endif
     gi.has_renderer = 0;              /* the cycle host has one SDL renderer */
-#ifdef NESRECOMP_CYCLE_HDPACK
+#if defined(NESRECOMP_CYCLE_HDPACK) && !defined(NESRECOMP_CYCLE_HDPACK_MODS)
     gi.hdpack_supported = 1;
 #else
     gi.hdpack_supported = 0;

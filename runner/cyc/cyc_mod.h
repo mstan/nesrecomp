@@ -65,6 +65,10 @@ bool    cyc_mod_poke(uint16_t addr, uint8_t value);
  * folded NROM data may otherwise disagree with the edited image (also from
  * compiled RAM views). Image files on disk are never changed. */
 uint8_t *cyc_mod_prg_data_rw(size_t *size);
+/* Replace a geometry-preserving PRG+CHR-ROM payload atomically after its
+ * package verification. CHR RAM is retained; changed PRG disables native code.
+ * Refused for FDS, incomplete payloads and isolated calls. */
+bool cyc_mod_apply_cart_payload(const uint8_t *payload, size_t size);
 /* Mapped CHR RAM only; for a finished tile transfer, outside isolated calls. */
 bool cyc_mod_chr_poke(uint16_t ppu_addr, uint8_t value);
 /* CPU writes to $2006 (completed address) and $2007 (address/value before the

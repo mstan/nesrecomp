@@ -48,7 +48,7 @@ if(NOT NESRECOMP_HEADLESS AND NOT NESRECOMP_RECOMP_UI STREQUAL "OFF")
 endif()
 
 function(nesrecomp_add_cycle_game target)
-    cmake_parse_arguments(CYC "HEADLESS;NO_RECOMP_UI;MODS" "ROM;GAME_CONFIG;SEED_FILE;CAPTURE_FILE;RECOMPILER;BIOS;BOXART;GAME_ID;PLAYERS;ZAPPER_PORT;REGION;PASSWORD_SAVE;PASSWORD_SAVE_LABEL"
+    cmake_parse_arguments(CYC "HEADLESS;NO_RECOMP_UI;MODS;HD_PACKS" "ROM;GAME_CONFIG;SEED_FILE;CAPTURE_FILE;RECOMPILER;BIOS;BOXART;GAME_ID;PLAYERS;ZAPPER_PORT;REGION;PASSWORD_SAVE;PASSWORD_SAVE_LABEL"
         "HOST_EXTRAS" ${ARGN})
     if(CYC_UNPARSED_ARGUMENTS OR NOT CYC_ROM)
         message(FATAL_ERROR "nesrecomp_add_cycle_game requires ROM; unknown arguments: ${CYC_UNPARSED_ARGUMENTS}")
@@ -182,6 +182,13 @@ function(nesrecomp_add_cycle_game target)
         target_compile_definitions(${target} PRIVATE NESRECOMP_ENABLE_MODS=1 "CYC_MOD_GAME_ID=\"${CYC_GAME_ID}\""
             "CYC_MOD_ROM_CRC32=\"${CYC_PROJECT_MOD_CRC32}\"")
         set(RECOMP_UI_ENABLE_MODS ON)
+    endif()
+    if(CYC_HD_PACKS)
+        if(NOT CYC_MODS)
+            message(FATAL_ERROR "HD_PACKS requires MODS GAME_ID")
+        endif()
+        include("${cyc_dir}/hdpack.cmake")
+        nesrecomp_cyc_enable_hdpack(${target} MODS)
     endif()
     if(NOT CYC_HEADLESS)
         nesrecomp_cyc_enable_sdl(${target})

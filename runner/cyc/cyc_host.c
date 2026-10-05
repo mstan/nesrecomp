@@ -174,6 +174,9 @@
 #include "cyc_render.h"
 #include "cyc_run.h"
 #include "cyc_session.h"
+#ifdef NESRECOMP_CYCLE_HDPACK_MODS
+#include "cyc_hdpack.h"
+#endif
 #include "cyc_state.h"
 #include "cyc_video.h"
 #endif
@@ -857,6 +860,10 @@ static void write_presentation(const char *base, long frame, uint64_t now_ms, bo
     int w, h;
     const CycHostExtras *extras = cyc_session_extras();
     const uint32_t *pic = extras && extras->present ? extras->present(extras->ctx, &w, &h) : NULL;
+#ifdef NESRECOMP_CYCLE_HDPACK_MODS
+    const uint32_t *hd = cyc_hdpack_mod_present(&w, &h);
+    if (hd) pic = hd;
+#endif
     if (!pic || w <= 0 || h <= 0 || w > CYC_PRESENT_MAX_DIMENSION || h > CYC_PRESENT_MAX_DIMENSION)
         pic = cyc_render_present(&w, &h);
     size_t needed=(size_t)w*(size_t)h;
@@ -1371,6 +1378,9 @@ int main(int argc, char **argv) {
     if (align < 0 || align > (region == CYC_REGION_PAL ? 4 : 3)) {
         fprintf(stderr, "--align: 0..%d for this region\n", region == CYC_REGION_PAL ? 4 : 3); return 2;
     }
+#endif
+#ifdef NESRECOMP_CYCLE_HDPACK_MODS
+    if (!cyc_hdpack_mod_prepare()) return 2;
 #endif
     cyc_power_on((uint8_t)align);
 #ifdef CYC_GAME_ZAPPER_PORT

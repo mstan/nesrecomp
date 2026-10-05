@@ -129,6 +129,22 @@ const char* nes_mod_external_rom_path(const char* package_id,
                                       const char* feature_id,
                                       const char* resource_id);
 
+/* One framework HD pack selected by the successfully committed Mods plan.
+ * Assets live inside the installed package. An optional IPS produces a
+ * geometry-preserving cartridge payload, without changing the owner's file.
+ * Storage remains valid until initialize/commit. NULL means stock graphics.
+ * The fingerprint identifies the package, assets and patch for save states. */
+typedef struct NESModHdPack {
+    const char *directory;
+    const uint8_t *patched_payload;
+    uint32_t payload_size;
+    uint8_t fingerprint[20];
+} NESModHdPack;
+const NESModHdPack *nes_mod_hd_pack(void);
+/* A running cartridge keeps its pack/patch until the next launch. */
+void nes_mod_lock_hd_pack(void);
+int nes_mod_feature_requires_restart(const char *package_id, const char *feature_id);
+
 #if defined(_MSC_VER)
 #pragma section(".CRT$XCU", read)
 #if defined(_M_IX86)

@@ -1,13 +1,17 @@
 # HD Texture Packs (Mesen HD Pack format)
 
-Runner-level support for **Mesen HD Packs** — high-resolution tile/sprite
-replacement driven by a `hires.txt` manifest + PNG sheets. Modeled on the
-SNES recomp's MSU-1 wiring (opt-in config flag + env var + per-game support
-hook). Source of truth for the format is Mesen2 `Core/NES/HdPacks/`.
+Shared support for **Mesen HD Packs**: tile/sprite and background replacement
+driven by `hires.txt` and PNG assets. Cycle titles adopt the modern Mods package
+path in [MOD_PACKAGES.md](../docs/MOD_PACKAGES.md#mesen-hd-pack-features).
+Source of truth for the format is Mesen2 `Core/NES/HdPacks/`.
 
 ## Architecture
 
-Cycle games opt in through `runner/cyc/hdpack.cmake`. The cycle adapter
+Cycle games opt in with `MODS HD_PACKS GAME_ID` in `nesrecomp_add_cycle_game`.
+The common host resolves a committed `[[hd_pack]]` descriptor, applies an
+optional verified IPS in memory before power-on, and loads its package assets.
+The older explicit `runner/cyc/hdpack.cmake` folder/config adapter remains
+available. The cycle adapter
 (`cyc_hdpack.c`) observes the actual hardware PPU's pattern fetches, shifters,
 pixel selection and color-output pipeline. Its content keys own their bytes,
 so later CHR RAM writes cannot change a previously recorded tile. It preserves
@@ -16,7 +20,9 @@ emphasis and the native sprite/background priority decision. It does not
 read the PPU bus or advance CPU, PPU or APU clocks. It feeds the same
 `hdpack_upscale` sampler used by the legacy renderer. Five pointer-free save
 records preserve its picture and fetch pipeline; validated loads require the
-same HD enablement and scale. `tools/cyc/test_cyc_hdpack.py` checks CHR RAM
+same HD enablement, scale and package asset/patch fingerprint. Rendering is
+cached while paused and invalidated on state load; background scroll offsets
+are computed once per frame. `tools/cyc/test_cyc_hdpack.py` checks CHR RAM
 and banked CHR ROM, scrolling, sprite flips and priority, native fallback
 pixels and fresh-process continuation on all four NTSC alignments.
 
