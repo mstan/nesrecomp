@@ -6,7 +6,11 @@
  * presentation layer: CPU, PPU, save-state, and game timing state are untouched.
  */
 #include "voxel_renderer.h"
+#ifdef NESRECOMP_CYCLE_PRESENTATION
+#include "cyc_presentation.h"
+#else
 #include "nes_runtime.h"
+#endif
 
 #include <math.h>
 #include <stddef.h>
@@ -69,7 +73,9 @@ static uint32_t
     s_custom_tile_pixels[VOXEL_MAX_TILES *
                          VOXEL_CUSTOM_TILE_SIZE * VOXEL_CUSTOM_TILE_SIZE];
 
+#ifndef NESRECOMP_CYCLE_PRESENTATION
 extern const uint32_t g_nes_palette[64];
+#endif
 
 static void draw_card_shadow(const RenderContext *ctx, float center_x,
                              float ground, float foot_z, float card_width,

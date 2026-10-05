@@ -81,11 +81,11 @@ static void dispatch(void) {
     {
         if (cpu.jammed) {
             cpu_jam_cycle();
-        } else if (cyc_run_native && cyc_native_has(cpu.pc)) {
+        } else if (cyc_run_native && !hw_prg_modified && cyc_native_has(cpu.pc)) {
             uint64_t before = cyc_cycle_count();
             cyc_native_run();
             cyc_run_native_cycles += cyc_cycle_count() - before;
-        } else if (cyc_run_native && (view = cyc_ramview_find(cpu.pc)) >= 0) {
+        } else if (cyc_run_native && !hw_prg_modified && (view = cyc_ramview_find(cpu.pc)) >= 0) {
             /* Code in RAM that a compiled view covers, as RAM holds it now. */
             uint64_t before = cyc_cycle_count();
             cyc_ramview_run(view);
@@ -141,7 +141,17 @@ int cyc_run_isolated(uint16_t stop_pc, uint8_t entry_s) {
         if (hw_frame_done) return CYC_MOD_FAIL_BUDGET;
         if (cpu.jammed) return CYC_MOD_FAIL_JAM;
         if ((int8_t)(cpu.s - entry_s) > 0) return CYC_MOD_FAIL_STACK;   /* returned past its caller */
+        if (cyc_hooks_armed) {
+            cyc_hook_hit = false;
+            if (cyc_hooks_due(cpu.pc)) {
+                uint16_t at = cpu.pc;
+                cyc_hooks_fire(at);
+                if (cpu.pc == at) cyc_hook_passed = at;
+                continue;
+            }
+        }
         dispatch();
+        cyc_hook_passed = -1;
     }
     return 0;
 }

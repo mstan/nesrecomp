@@ -76,6 +76,35 @@ typedef struct {
     uint8_t  ram[0x800];
 } HwMachine;
 
+/* Optional CPU budget enhancement. Separate from hardware structures so
+ * stock version-1 save states retain their layout. Repeats blank line 240
+ * before NMI; the APU pauses during the added lines to preserve audio rate.
+ * Same clock policy as Mesen2's NesPpu::UpdateApuStatus:
+ * https://github.com/SourMesen/Mesen2/blob/master/Core/NES/NesPpu.cpp */
+typedef struct {
+    uint16_t extra_scanlines, line;
+    uint8_t active, reserved[3];
+} HwExtraTiming;
+extern HwExtraTiming hw_extra_timing;
+
+/* PAL's CPU edge advances one master clock relative to the PPU each cycle.
+ * Keep this separate to retain the NTSC hardware/save-state layout. phase is
+ * the PPU divider phase at tick 0, 0..4; half dots use half master clocks. */
+typedef struct {
+    uint8_t region, phase, reserved[6];
+} HwRegionTiming;
+extern HwRegionTiming hw_region_timing;
+static inline bool hw_pal(void) { return hw_region_timing.region == CYC_REGION_PAL; }
+static inline int hw_prerender_line(void) { return hw_pal() ? 311 : 261; }
+
+typedef struct {
+    uint64_t dots, light_until;
+    int16_t x, y;
+    uint8_t port, trigger, reserved[2];
+} HwZapper;
+extern HwZapper hw_zapper;
+void hw_zapper_pixel(int x, int y, uint16_t color);
+
 /* The cartridge. Address translation is two tables the mapper fills (see
  * hw_mapper.h): PRG in 4KB slots and CHR in 1KB pages, the finest granularity
  * any supported mapper switches. Reads are then one indexed load, and both

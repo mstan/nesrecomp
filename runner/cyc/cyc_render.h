@@ -49,6 +49,14 @@ typedef int (*CycCompositorFn)(uint32_t *out, int width, int height, int native_
 void cyc_render_set_compositor(CycCompositorFn fn, void *user);
 bool cyc_render_has_compositor(void);
 void cyc_render_set_margins(int left, int right);
+/* Exact background capture for host-drawn sprite replacements. Native sprite
+ * evaluation, hits and overflow remain unchanged. The capture travels in a
+ * separate presentation savestate record. */
+void cyc_render_capture_background(bool enabled);
+bool cyc_render_background(uint32_t *out); /* 256x240 ARGB, false if disabled */
+extern bool cyc_background_enabled;
+extern uint8_t cyc_background_pipe[4];
+void cyc_render_background_output(unsigned pixel, unsigned emphasis, bool grey);
 
 /* ---- what the frame used ---- */
 /* The background's X at native column 0 of visible line y, 0-511 across the
@@ -97,6 +105,7 @@ void cyc_render_sprites(uint32_t *out, int width, int height, int native_x0, con
 const uint32_t *cyc_render_present(int *width, int *height);
 /* The machine finished a frame, or a save state replaced it. */
 void cyc_render_frame_done(void);
+uint64_t cyc_render_generation(void);
 
 typedef struct {
     uint64_t composed;      /* pictures the compositor painted */

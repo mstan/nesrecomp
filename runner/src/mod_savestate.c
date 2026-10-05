@@ -10,7 +10,7 @@
 
 #include <string.h>
 
-#define NES_MOD_MAX_SAVESTATE_HOOKS 16
+#define NES_MOD_MAX_SAVESTATE_HOOKS 32
 #define NES_MOD_SAVESTATE_ID_CAP 64  /* 63 chars + NUL, matches the on-disk id field */
 
 typedef struct {

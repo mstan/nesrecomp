@@ -63,8 +63,14 @@
 #include "cyc_run.h"
 #include "cyc_session.h"
 #include "cyc_settings.h"
+#ifdef NESRECOMP_CYCLE_HDPACK
+#include "cyc_hdpack.h"
+#endif
 #include "cyc_ring.h"
 #include "cyc_state.h"
+#ifdef NESRECOMP_NET
+#include "cyc_net.h"
+#endif
 #include "cyc_tcp.h"
 #include "cyc_video.h"
 #include "../../common/nes_cart.h"
@@ -91,6 +97,7 @@
 /* ---- options and settings ---- */
 
 static CycSettings s_set;
+static bool s_zapper_override, s_zapper_release;
 static char        s_set_path[1024];
 static bool        s_fds;
 static const CycHostExtras *s_extras;
@@ -103,6 +110,15 @@ static int         s_key_hold[SDL_NUM_SCANCODES];   /* host loops a TCP-held key
 static bool        s_hidden;
 static bool        s_pause_unfocused;
 static char        s_image[1024];                   /* the image running (the save state slot's name) */
+bool cyc_sdl_force_launcher;
+#ifdef NESRECOMP_NET
+void cyc_sdl_net_name_store(const char *name) {
+    snprintf(s_set.netplay_player_name,sizeof s_set.netplay_player_name,"%s",name&&*name?name:"Player");
+}
+int cyc_sdl_net_name_load(char *out,size_t cap) {
+    snprintf(out,cap,"%s",s_set.netplay_player_name);return s_set.netplay_player_name[0]!=0;
+}
+#endif
 
 void cyc_sdl_image_path(const char *path) { snprintf(s_image, sizeof(s_image), "%s", path ? path : ""); }
 
@@ -163,7 +179,17 @@ int cyc_sdl_prelaunch(const char **rom_path, const char *cli_bios, NesFdsHleAsk 
     s_extras = cyc_session_extras();
     if (!s_set_path[0]) snprintf(s_set_path, sizeof(s_set_path), "%s", cyc_settings_default_path());
     cyc_settings_default(&s_set);
-    if (!cyc_settings_load(&s_set, s_set_path, stderr, &GAME_KEYS)) save_settings();   /* first run: write it */
+    bool had_config = cyc_settings_load(&s_set, s_set_path, stderr, &GAME_KEYS);
+    /* Preserve legacy Zapper choices without modifying the old keybind file. */
+    CycSettings legacy;
+    cyc_settings_default(&legacy);
+    char legacy_path[1100];
+    exe_path(legacy_path, sizeof(legacy_path), "keybinds.ini");
+    if (cyc_settings_load(&legacy, legacy_path, NULL, NULL)) {
+        if (!(s_set.zapper_keys & 1) && (legacy.zapper_keys & 1)) s_set.zapper_mouse = legacy.zapper_mouse;
+        if (!(s_set.zapper_keys & 2) && (legacy.zapper_keys & 2)) s_set.zapper_crosshair = legacy.zapper_crosshair;
+    }
+    if (!had_config) save_settings();
     s_fds = looks_fds(*rom_path);
     /* The mod catalog beside the executable, for a game built with mods. */
     char mods[1100], err[600];
@@ -175,7 +201,9 @@ int cyc_sdl_prelaunch(const char **rom_path, const char *cli_bios, NesFdsHleAsk 
     }
 #ifdef CYC_WITH_RECOMP_UI
     const char *no = getenv("NESRECOMP_NO_LAUNCHER");
-    if (!(no && *no && *no != '0') && !s_set.skip_launcher) {
+    extern bool cyc_sdl_force_launcher;
+    if (cyc_sdl_force_launcher || (!(no && *no && *no != '0') && !s_set.skip_launcher)) {
+        cyc_sdl_force_launcher=false;
         /* The launcher's BIOS state runs the host's own lookup (cyc_fds_bios.h);
          * its pick comes back in s_set.fds_bios. PLAY commits the Mods
          * screen's selection (the provider's commit) before it returns. */
@@ -196,6 +224,9 @@ int cyc_sdl_prelaunch(const char **rom_path, const char *cli_bios, NesFdsHleAsk 
     if (s_extras && s_extras->set_view_mode && s_set.view_mode) s_extras->set_view_mode(s_extras->ctx, s_set.view_mode);
     *saved_hle = s_set.fds_hle;
     *saved_bios = s_set.fds_bios[0] ? s_set.fds_bios : NULL;
+#if defined(NESRECOMP_CYCLE_HDPACK) && !defined(NESRECOMP_CYCLE_HDPACK_MODS)
+    cyc_hdpack_config(s_set.hdpack_enabled,s_set.hdpack_dir);
+#endif
     return 0;
 }
 
@@ -226,9 +257,13 @@ static void     request_quit(void) { s_running = false; }
 
 static const uint32_t *picture(int *w, int *h)
 {
+#ifdef NESRECOMP_CYCLE_HDPACK_MODS
+    const uint32_t *hd = cyc_hdpack_mod_present(w, h);
+    if (hd) return hd;
+#endif
     if (s_extras && s_extras->present) {
         const uint32_t *p = s_extras->present(s_extras->ctx, w, h);
-        if (p && *w > 0 && *h > 0) return p;
+        if (p && *w > 0 && *h > 0 && *w <= CYC_PRESENT_MAX_DIMENSION && *h <= CYC_PRESENT_MAX_DIMENSION) return p;
     }
     return cyc_render_present(w, h);
 }
@@ -264,11 +299,17 @@ static void state_slot(char *out, size_t n)
 
 static bool save_state_to(const char *path, char *err, size_t n)
 {
+#ifdef NESRECOMP_NET
+    if(nes_netplay_active()){snprintf(err,n,"Save states are unavailable during online play");return false;}
+#endif
     return cyc_state_save_file(path, err, n);
 }
 
 static bool load_state_from(const char *path, char *err, size_t n)
 {
+#ifdef NESRECOMP_NET
+    if(nes_netplay_active()){snprintf(err,n,"Load state is unavailable during online play");return false;}
+#endif
     if (!cyc_state_load_file(path, err, n)) return false;
     s_frames_done = (long)cyc_ring_frame;
     cyc_session_state_loaded();
@@ -295,6 +336,20 @@ static bool load_state_slot(void)
 
 static int logical_h(void) { return s_tex_h + (s_bar ? BAR_ROWS : 0); }
 
+static void apply_picture_scale(void)
+{
+    int ow = 0, oh = 0;
+    SDL_GetRendererOutputSize(s_ren, &ow, &oh);
+    /* Integer scaling cannot fit a picture larger than the drawable. SDL2's
+     * accelerated renderer can produce a black frame with that negative
+     * viewport. Fit fractionally until the window is large enough, keeping
+     * the player's integer-scaling preference for subsequent enlargement. */
+    SDL_bool integer = s_set.integer_scale && ow >= s_tex_w && oh >= logical_h()
+                     ? SDL_TRUE : SDL_FALSE;
+    if (SDL_RenderGetIntegerScale(s_ren) != integer)
+        SDL_RenderSetIntegerScale(s_ren, integer);
+}
+
 static void apply_settings(void)
 {
     if (!s_win) return;
@@ -303,7 +358,7 @@ static void apply_settings(void)
         SDL_SetWindowFullscreen(s_win, fs);
     if (!fs) SDL_SetWindowSize(s_win, s_tex_w * s_set.window_scale, logical_h() * s_set.window_scale);
     SDL_RenderSetLogicalSize(s_ren, s_tex_w, logical_h());
-    SDL_RenderSetIntegerScale(s_ren, s_set.integer_scale ? SDL_TRUE : SDL_FALSE);
+    apply_picture_scale();
     if (s_tex) SDL_SetTextureScaleMode(s_tex, s_set.linear_filter ? SDL_ScaleModeLinear : SDL_ScaleModeNearest);
 }
 
@@ -316,6 +371,7 @@ static bool ensure_texture(int w, int h)
     s_tex_h = h;
     if (s_tex) SDL_SetTextureScaleMode(s_tex, s_set.linear_filter ? SDL_ScaleModeLinear : SDL_ScaleModeNearest);
     SDL_RenderSetLogicalSize(s_ren, s_tex_w, logical_h());
+    apply_picture_scale();
     return s_tex != NULL;
 }
 
@@ -711,6 +767,9 @@ static void tcp_load_state(int id, const char *line) { tcp_state_file(id, line, 
 
 static void tcp_video(int id, const char *line)
 {
+#ifdef NESRECOMP_NET
+    if(nes_netplay_active()){cyc_tcp_err(id,"The room sets the online width");return;}
+#endif
     char mode[16];
     if (cyc_tcp_str(line, "mode", mode, sizeof(mode))) {
         int m;
@@ -773,6 +832,61 @@ static void tcp_ping(int id, const char *line)
     cyc_tcp_ok(id, f);
 }
 
+static void zapper_window_point(int wx, int wy, int *x, int *y)
+{
+    float lx, ly;
+    SDL_RenderWindowToLogical(s_ren, wx, wy, &lx, &ly);
+    int w, h;
+    picture(&w, &h);
+    lx -= (float)(w - 256) / 2.0f;
+    if (lx < 0 || lx >= 256 || ly < 0 || ly >= 240) *x = *y = -1;
+    else { *x = (int)lx; *y = (int)ly; }
+}
+
+static void zapper_mouse_frame(void)
+{
+    CycZapperState gun;
+    cyc_zapper_state(&gun);
+    if (!gun.port || s_zapper_override) return;
+    int wx, wy, x = -1, y = -1;
+    Uint32 buttons = SDL_GetMouseState(&wx, &wy);
+    bool trigger = (buttons & SDL_BUTTON(SDL_BUTTON_LEFT)) != 0;
+    if (s_zapper_release) {
+        if (!trigger) s_zapper_release = false;
+        trigger = false;
+    }
+    bool aiming = s_set.zapper_mouse && (SDL_GetWindowFlags(s_win) & SDL_WINDOW_MOUSE_FOCUS);
+    if (aiming) zapper_window_point(wx, wy, &x, &y);
+    cyc_set_zapper(x, y, aiming && trigger);
+}
+
+static void tcp_zapper(int id, const char *line)
+{
+    CycZapperState gun;
+    cyc_zapper_state(&gun);
+    if (!gun.port) { cyc_tcp_err(id, "no Zapper attached"); return; }
+    bool mouse, trigger = gun.trigger;
+    long x = gun.x, y = gun.y, wx, wy;
+    bool set = cyc_tcp_long(line, "x", &x);
+    set |= cyc_tcp_long(line, "y", &y);
+    set |= cyc_tcp_bool(line, "trigger", &trigger);
+    if (cyc_tcp_long(line, "window_x", &wx) && cyc_tcp_long(line, "window_y", &wy)) {
+        int px, py;
+        zapper_window_point((int)wx, (int)wy, &px, &py);
+        x = px; y = py; set = true;
+    }
+    if (set) { s_zapper_override = true; cyc_set_zapper((int)x, (int)y, trigger); }
+    if (cyc_tcp_bool(line, "mouse", &mouse)) s_zapper_override = !mouse;
+    cyc_zapper_state(&gun);
+    char fields[256];
+    snprintf(fields, sizeof(fields), "\"port\":%u,\"aim\":[%d,%d],\"trigger\":%s,\"light\":%s,\"mouse\":%s,"
+             "\"mouse_enabled\":%s,\"crosshair\":%s",
+             gun.port, gun.x, gun.y, gun.trigger ? "true" : "false", gun.light ? "true" : "false",
+             s_zapper_override ? "false" : "true", s_set.zapper_mouse ? "true" : "false",
+             s_set.zapper_crosshair ? "true" : "false");
+    cyc_tcp_ok(id, fields);
+}
+
 static void tcp_setup(void)
 {
     int port = s_tcp_port;
@@ -789,6 +903,7 @@ static void tcp_setup(void)
     }
     if (port <= 0) return;
     cyc_tcp_register("ping", "liveness; the frame counter", tcp_ping);
+    cyc_tcp_register("zapper", "aim x/y, trigger, mouse true; optional window_x/window_y", tcp_zapper);
     cyc_tcp_register("state", "frame, menu, drive, toast, HLE, disk save, bindings, build", tcp_state);
     cyc_tcp_register("key", "hold an SDL key through the bindings: name, frames", tcp_key);
     cyc_tcp_register("pad", "hold virtual game controller buttons: buttons (a+start), frames", tcp_pad);
@@ -959,6 +1074,17 @@ static void show(bool loading, const char *toast_title, const char *toast_body)
     SDL_RenderClear(s_ren);
     SDL_Rect dst = { 0, 0, w, h };
     SDL_RenderCopy(s_ren, s_tex, NULL, &dst);
+    CycZapperState gun;
+    cyc_zapper_state(&gun);
+    if (gun.port && s_set.zapper_crosshair && gun.x >= 0 && !menu_open()) {
+        int x = gun.x + (w - 256) / 2, y = gun.y;
+        SDL_SetRenderDrawColor(s_ren, 0, 0, 0, 255);
+        SDL_Rect back = {x - 5, y - 1, 11, 3}; SDL_RenderFillRect(s_ren, &back);
+        back.x = x - 1; back.y = y - 5; back.w = 3; back.h = 11; SDL_RenderFillRect(s_ren, &back);
+        SDL_SetRenderDrawColor(s_ren, 255, 255, 255, 255);
+        SDL_RenderDrawLine(s_ren, x - 4, y, x + 4, y);
+        SDL_RenderDrawLine(s_ren, x, y - 4, x, y + 4);
+    }
 #ifdef CYC_DEV_UI
     if (s_bar) draw_drive_bar(loading);
 #else
@@ -972,8 +1098,14 @@ static void show(bool loading, const char *toast_title, const char *toast_body)
         int ow = 0, oh = 0;
         SDL_GetRendererOutputSize(s_ren, &ow, &oh);
         uint32_t *px = (uint32_t *)malloc((size_t)ow * (size_t)oh * 4);
+        /* ReadPixels(NULL) reads only the current picture viewport. Capture
+         * the whole window, including pillarboxes and the full-size menu. */
+        SDL_Rect viewport;
+        SDL_RenderGetViewport(s_ren, &viewport);
+        SDL_RenderSetViewport(s_ren, NULL);
         bool ok = px && SDL_RenderReadPixels(s_ren, NULL, SDL_PIXELFORMAT_ARGB8888, px, ow * 4) == 0 &&
                   cyc_write_png(s_ui_shot, px, ow, oh);
+        SDL_RenderSetViewport(s_ren, &viewport);
         free(px);
         char q[1100], fl[1200];
         cyc_tcp_quote(s_ui_shot, q, sizeof(q));
@@ -1040,6 +1172,7 @@ static bool menu_open(void)
 
 int cyc_sdl_main(const char *title_in, int scale)
 {
+    s_running=true;s_frames_done=(long)cyc_ring_frame;s_tex=NULL;s_pad_count=0;s_vpad_joy=NULL;
     /* a path names the game by its file's stem */
     char title[256];
     const char *base = title_in, *s1 = strrchr(title_in, '/'), *s2 = strrchr(title_in, '\\');
@@ -1094,13 +1227,16 @@ int cyc_sdl_main(const char *title_in, int scale)
 
     /* Audio is queued as frames produce it; fast forward and the menu drop it. */
     SDL_AudioSpec want = { 0 }, have;
-    want.freq = AUDIO_RATE;
+    want.freq = (int)cyc_session_audio_rate(AUDIO_RATE);
     want.format = AUDIO_S16SYS;
     want.channels = 1;
     want.samples = 1024;
     SDL_AudioDeviceID dev = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
     if (dev && cyc_audio_enable(have.freq)) SDL_PauseAudioDevice(dev, 0);
     else if (!dev) fprintf(stderr, "SDL audio: %s (continuing without sound)\n", SDL_GetError());
+#ifdef NESRECOMP_NET
+    if(cyc_net_boot()!=0)s_running=false;
+#endif
 
     if (s_vpad_path && vpad_load(s_vpad_path)) vpad_attach();
     tcp_setup();
@@ -1130,16 +1266,36 @@ int cyc_sdl_main(const char *title_in, int scale)
 #ifdef CYC_WITH_RECOMP_UI
             cyc_ui_process_event(&ev);
 #endif
+            if (ev.type == SDL_CONTROLLERDEVICEREMOVED ||
+                (!open && (!s_pause_unfocused || s_hidden || (SDL_GetWindowFlags(s_win) & SDL_WINDOW_INPUT_FOCUS)))) {
+                int player = -1;
+                if (ev.type == SDL_CONTROLLERAXISMOTION) {
+                    CycInputFrame ef; CycInputState es;
+                    read_frame(&ef); cyc_input_eval(&s_set.bind, &ef, &es);
+                    for (int p = 0; p < CYC_INPUT_PLAYERS; ++p)
+                        if (es.player_pad[p] >= 0 && SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(s_pads[es.player_pad[p]])) == ev.caxis.which)
+                            player = p;
+                }
+#ifdef NESRECOMP_NET
+                if(!nes_netplay_active())
+#endif
+                cyc_session_event(&ev, player);
+            }
             if (ev.type == SDL_QUIT) s_running = false;
             else if (ev.type == SDL_WINDOWEVENT && ev.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
                 int ow = 0, oh = 0;
                 SDL_GetRendererOutputSize(s_ren, &ow, &oh);
+                apply_picture_scale();
                 cyc_video_window_resized(ow, oh);
             }
             else if (ev.type == SDL_CONTROLLERDEVICEADDED || ev.type == SDL_CONTROLLERDEVICEREMOVED) open_pads();
             else if (ev.type == SDL_KEYDOWN) {
 #ifdef CYC_DEV_UI
-                if (!ev.key.repeat && dev_key(ev.key.keysym.scancode)) continue;
+                if (!ev.key.repeat
+#ifdef NESRECOMP_NET
+                    && !nes_netplay_active()
+#endif
+                    && dev_key(ev.key.keysym.scancode)) continue;
 #endif
                 if (open) menu_nav_key(&ev.key);
             } else if (ev.type == SDL_CONTROLLERBUTTONDOWN && open) {
@@ -1186,7 +1342,10 @@ int cyc_sdl_main(const char *title_in, int scale)
             if (cyc_write_png(name, pic, pw, ph)) printf("saved %s\n", name);
         }
         open = menu_open();
-        if (was_open && !open) hold_input = true;
+        if (was_open && !open) {
+            hold_input = true;
+            s_zapper_release = true;
+        }
         was_open = open;
 
         /* the toast */
@@ -1214,33 +1373,57 @@ int cyc_sdl_main(const char *title_in, int scale)
 
         bool inactive = s_pause_unfocused && !s_hidden && !(SDL_GetWindowFlags(s_win) & SDL_WINDOW_INPUT_FOCUS);
         bool loading = false, fast = false;
-        if (!open && !inactive) {
+        bool online=false,replay=false;
+#ifdef NESRECOMP_NET
+        online=nes_netplay_active();
+        if(online&&cyc_net_leaving()){s_running=false;break;}
+#endif
+        if (online || (!open && !inactive)) {
             uint8_t pad0 = st.buttons[0], pad1 = st.buttons[1];
             if (hold_input) {
                 if (pad0 || pad1) pad0 = pad1 = 0;
                 else hold_input = false;
             }
+            uint8_t buttons[2] = {pad0, pad1};
+#ifdef NESRECOMP_NET
+            if(online) {
+                int player=nes_netplay_input_player();if(player<0||player>=CYC_INPUT_PLAYERS)player=0;
+                int admit=cyc_net_admit(open||inactive||hold_input?0:st.buttons[player]);
+                if(!admit){SDL_Delay(1);continue;}
+                s_frames_done=(long)cyc_ring_frame;replay=cyc_net_replaying();cyc_net_input(buttons);
+            } else
+#endif
+            {
             cyc_host_disk_frame(now, s_frames_done);
-            cyc_set_controller(0, pad0);
-            cyc_set_controller(1, pad1);
+            cyc_session_logical_input(st.buttons,CYC_INPUT_PLAYERS);
+            cyc_session_input(buttons);
+            cyc_set_controller(0, buttons[0]);
+            cyc_set_controller(1, buttons[1]);
+            zapper_mouse_frame();
+            }
             cyc_session_frame_begin();
             cyc_run_frame();
             cyc_session_frame_end();
+#ifdef NESRECOMP_NET
+            if(online)cyc_net_finish();
+#endif
             frames++;
             cyc_host_frame_done(++s_frames_done);
             loading = s_fds && cyc_host_frame_unpaced();
-            fast = st.shortcut[CYC_SC_FAST_FORWARD] || loading;
+            fast = !online&&(st.shortcut[CYC_SC_FAST_FORWARD] || loading);
         }
         int16_t pcm[4096];
         size_t n;
         while ((n = cyc_audio_read(pcm, 4096)) > 0) {
+            cyc_session_audio_mix(pcm,n);
             /* Keep latency bounded: skip a frame's audio if ~100 ms are queued. */
-            if (!dev || fast || open || inactive || !s_set.audio_enabled || SDL_GetQueuedAudioSize(dev) >= (Uint32)(have.freq / 10) * 2)
+            if (replay || !dev || fast || open || inactive || !s_set.audio_enabled || SDL_GetQueuedAudioSize(dev) >= (Uint32)(have.freq / 10) * 2)
                 continue;
             if (s_set.volume < 100)
                 for (size_t i = 0; i < n; ++i) pcm[i] = (int16_t)(pcm[i] * s_set.volume / 100);
             SDL_QueueAudio(dev, pcm, (Uint32)(n * sizeof(int16_t)));
         }
+        if(replay){next=SDL_GetPerformanceCounter();continue;}
 
         /* A fast-loaded frame is shown only if 1/60 s passed since the last one. */
         Uint64 tnow = SDL_GetPerformanceCounter();
@@ -1299,5 +1482,8 @@ int cyc_sdl_main(const char *title_in, int scale)
     SDL_DestroyRenderer(s_ren);
     SDL_DestroyWindow(s_win);
     SDL_Quit();
+#ifdef NESRECOMP_NET
+    if(nes_netplay_active())return 3;
+#endif
     return 0;
 }

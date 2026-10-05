@@ -78,9 +78,28 @@ add_test(NAME cyc_disk_action_test COMMAND cyc_disk_action_test)
 
 # The window's input actions and their persistence (cyc_input.h, cyc_settings.h).
 find_package(Python3 3.11 REQUIRED COMPONENTS Interpreter)
+add_test(NAME cyc_bad_game_config COMMAND "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_bad_game_config.py" --compiler $<TARGET_FILE:NESRecomp>)
+add_test(NAME cyc_backend_default COMMAND "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_backend_default.py" --recompiler $<TARGET_FILE:NESRecomp>)
 list(APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../external/SDL2/cmake")
 find_package(SDL2 CONFIG QUIET)
 if(SDL2_FOUND)
+    include("${CMAKE_CURRENT_SOURCE_DIR}/hdpack.cmake")
+    add_executable(cyc_hdpack_probe ${NESRECOMP_CYC_SOURCES} cyc_native_none.c hdpack_probe.c cyc_presentation.c)
+    target_include_directories(cyc_hdpack_probe PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})
+    target_link_libraries(cyc_hdpack_probe PRIVATE ${NESRECOMP_CYC_LIBRARIES})
+    if(MSVC)
+        target_compile_definitions(cyc_hdpack_probe PRIVATE _CRT_SECURE_NO_WARNINGS SDL_MAIN_HANDLED)
+    endif()
+    nesrecomp_cyc_enable_sdl(cyc_hdpack_probe NO_DEV_UI)
+    nesrecomp_cyc_enable_hdpack(cyc_hdpack_probe)
+    add_test(NAME cyc_hdpack COMMAND "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_cyc_hdpack.py"
+        --host $<TARGET_FILE:cyc_hdpack_probe> --out "${CMAKE_CURRENT_BINARY_DIR}/hdpack-test")
+    add_test(NAME cyc_hdpack_window COMMAND "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_cyc_hdpack_window.py"
+        --host $<TARGET_FILE:cyc_hdpack_probe> --out "${CMAKE_CURRENT_BINARY_DIR}/hdpack-window-test")
     add_executable(cyc_input_test input_test.c cyc_input.c cyc_settings.c)
     target_include_directories(cyc_input_test PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})
     target_link_libraries(cyc_input_test PRIVATE SDL2::SDL2)
@@ -93,6 +112,12 @@ if(SDL2_FOUND)
             COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:SDL2::SDL2> $<TARGET_FILE_DIR:cyc_input_test>)
     endif()
     add_test(NAME cyc_input_test COMMAND cyc_input_test ${CMAKE_CURRENT_BINARY_DIR})
+    add_executable(cyc_input_four_test input_test.c cyc_input.c cyc_settings.c)
+    target_include_directories(cyc_input_four_test PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})
+    target_link_libraries(cyc_input_four_test PRIVATE SDL2::SDL2)
+    target_compile_definitions(cyc_input_four_test PRIVATE SDL_MAIN_HANDLED CYC_INPUT_PLAYERS=4 _CRT_SECURE_NO_WARNINGS)
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/input-four")
+    add_test(NAME cyc_input_four_test COMMAND cyc_input_four_test "${CMAKE_CURRENT_BINARY_DIR}/input-four")
     # The window itself, on the standalone interpreter host: production and dev
     # builds, driven over TCP on a hidden window, SDL dummy video (never the desktop)
     # by tools/cyc/test_cyc_window.py. -DNESRECOMP_RECOMP_UI=<recomp-ui> adds the
@@ -116,18 +141,22 @@ if(SDL2_FOUND)
         set(window_ui --recomp-ui)
         # The host's side of the launcher against a scripted launcher: what it
         # hands over, and every edit coming back into config.ini.
-        add_executable(cyc_ui_launcher_test ui_launcher_test.c cyc_ui_launcher.c cyc_settings.c cyc_input.c
+        foreach(t cyc_ui_launcher_test cyc_ui_launcher_hd_test)
+        add_executable(${t} ui_launcher_test.c cyc_ui_launcher.c cyc_settings.c cyc_input.c
             cyc_fds_bios.c)
-        target_include_directories(cyc_ui_launcher_test PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS}
+        target_include_directories(${t} PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS}
             "${NESRECOMP_RECOMP_UI}/src" "${NESRECOMP_RECOMP_UI}/src/common")
-        target_link_libraries(cyc_ui_launcher_test PRIVATE SDL2::SDL2)
-        target_compile_definitions(cyc_ui_launcher_test PRIVATE SDL_MAIN_HANDLED _CRT_SECURE_NO_WARNINGS
+        target_link_libraries(${t} PRIVATE SDL2::SDL2)
+        target_compile_definitions(${t} PRIVATE SDL_MAIN_HANDLED _CRT_SECURE_NO_WARNINGS
+            "CYC_GAME_PASSWORD_SAVE=\"test-password.srm\"" "CYC_GAME_PASSWORD_SAVE_LABEL=\"Mantra\""
             "CYC_LAUNCHER_ROM_SHA256=\"ab00000000000000000000000000000000000000000000000000000000000001\"")
         if(WIN32)
-            add_custom_command(TARGET cyc_ui_launcher_test POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                $<TARGET_FILE:SDL2::SDL2> $<TARGET_FILE_DIR:cyc_ui_launcher_test>)
+            add_custom_command(TARGET ${t} POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                $<TARGET_FILE:SDL2::SDL2> $<TARGET_FILE_DIR:${t}>)
         endif()
-        add_test(NAME cyc_ui_launcher_test COMMAND cyc_ui_launcher_test ${CMAKE_CURRENT_BINARY_DIR})
+        add_test(NAME ${t} COMMAND ${t} ${CMAKE_CURRENT_BINARY_DIR})
+        endforeach()
+        target_compile_definitions(cyc_ui_launcher_hd_test PRIVATE NESRECOMP_CYCLE_HDPACK)
     endif()
     add_test(NAME cyc_window_run
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_cyc_window.py
@@ -183,6 +212,17 @@ if(MSVC)
     target_compile_definitions(cyc_video_test PRIVATE _CRT_SECURE_NO_WARNINGS)
 endif()
 add_test(NAME cyc_video_test COMMAND cyc_video_test)
+
+# The light gun: connector bits, beam timing, sensor decay, offscreen aim,
+# and save/snapshot restoration, including refusal of a damaged sensor state.
+add_executable(cyc_zapper_test zapper_test.c cpu6502.c cpu6502_interp.c hw_machine.c ${CYC_TEST_BOARD_SOURCES}
+    hw_ppu.c hw_apu.c hw_palette.c cyc_trace.c cyc_ring.c ${NESRECOMP_CYC_SCHEDULER_SOURCES} cyc_native_none.c)
+target_include_directories(cyc_zapper_test PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})
+target_link_libraries(cyc_zapper_test PRIVATE ${NESRECOMP_CYC_LIBRARIES})
+if(MSVC)
+    target_compile_definitions(cyc_zapper_test PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()
+add_test(NAME cyc_zapper_test COMMAND cyc_zapper_test)
 
 # The console output stage (hw_apu.c, cyc_set_console): board defaults, each
 # model's frequency and step response against its documented RC sections, and
@@ -290,6 +330,11 @@ add_test(NAME cyc_mods_test
             --recompiler $<TARGET_FILE:NESRecomp> --out ${CMAKE_CURRENT_BINARY_DIR}/mods_test ${NESRECOMP_NESTED_BUILD_ARGS})
 set_tests_properties(cyc_mods_test PROPERTIES TIMEOUT 1800)
 
+add_test(NAME cyc_extra_timing
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_cyc_extra_timing.py
+            --host $<TARGET_FILE:cyc_interp> --out ${CMAKE_CURRENT_BINARY_DIR}/extra_timing_test)
+set_tests_properties(cyc_extra_timing PROPERTIES TIMEOUT 300)
+
 # FDS disk saves across processes: a synthetic program that saves to its disk
 # (tools/cyc/fds_save_fixtures.py) run by cyc_interp at all four alignments:
 # write -> save file -> reload round trips, the image never modified, foreign /
@@ -343,3 +388,40 @@ add_test(NAME cyc_console_audio_pcm
             --recompiler $<TARGET_FILE:NESRecomp> --interp $<TARGET_FILE:cyc_interp>
             --out ${CMAKE_CURRENT_BINARY_DIR}/console_audio_test ${NESRECOMP_NESTED_BUILD_ARGS})
 set_tests_properties(cyc_console_audio_pcm PROPERTIES TIMEOUT 1800)
+
+# PAL master-clock ratio, frame/APU timing, opcode-only DMA and state phase.
+add_executable(cyc_region_test region_test.c cpu6502.c cpu6502_interp.c hw_machine.c ${CYC_TEST_BOARD_SOURCES}
+    hw_ppu.c hw_apu.c hw_palette.c cyc_trace.c cyc_ring.c ${NESRECOMP_CYC_SCHEDULER_SOURCES} cyc_native_none.c)
+target_include_directories(cyc_region_test PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})
+target_link_libraries(cyc_region_test PRIVATE ${NESRECOMP_CYC_LIBRARIES})
+if(MSVC)
+    target_compile_definitions(cyc_region_test PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()
+add_test(NAME cyc_region_test COMMAND cyc_region_test)
+
+add_executable(cyc_content_test content_test.c cpu6502.c cpu6502_interp.c hw_machine.c ${CYC_TEST_BOARD_SOURCES}
+    hw_ppu.c hw_apu.c hw_palette.c cyc_trace.c cyc_ring.c ${NESRECOMP_CYC_SCHEDULER_SOURCES} cyc_native_none.c)
+target_include_directories(cyc_content_test PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})
+target_link_libraries(cyc_content_test PRIVATE ${NESRECOMP_CYC_LIBRARIES})
+if(MSVC)
+    target_compile_definitions(cyc_content_test PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()
+add_test(NAME cyc_content_test COMMAND cyc_content_test)
+
+add_executable(cyc_return_test return_test.c cpu6502.c cpu6502_interp.c hw_machine.c ${CYC_TEST_BOARD_SOURCES}
+    hw_ppu.c hw_apu.c hw_palette.c cyc_trace.c cyc_ring.c ${NESRECOMP_CYC_SCHEDULER_SOURCES} cyc_native_none.c)
+target_include_directories(cyc_return_test PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})
+target_link_libraries(cyc_return_test PRIVATE ${NESRECOMP_CYC_LIBRARIES})
+if(MSVC)
+    target_compile_definitions(cyc_return_test PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()
+add_test(NAME cyc_return_test COMMAND cyc_return_test)
+
+add_executable(cyc_ram_policy_test ram_policy_test.c cpu6502.c cpu6502_interp.c hw_machine.c ${CYC_TEST_BOARD_SOURCES}
+    hw_ppu.c hw_apu.c hw_palette.c cyc_trace.c cyc_ring.c ${NESRECOMP_CYC_SCHEDULER_SOURCES} cyc_native_none.c)
+target_include_directories(cyc_ram_policy_test PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})
+target_link_libraries(cyc_ram_policy_test PRIVATE ${NESRECOMP_CYC_LIBRARIES})
+if(MSVC)
+    target_compile_definitions(cyc_ram_policy_test PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()
+add_test(NAME cyc_ram_policy_test COMMAND cyc_ram_policy_test)

@@ -7,7 +7,7 @@
  * optional: leave a field NULL/0 and the host does what it does today. The
  * headless host uses the fields marked (both); the window uses all of them.
  *
- *   present      The picture the window shows. Default: the engine's
+ *   present      (both) The picture the window and --present-out show. Default: the engine's
  *                (cyc_render.h: the machine's 256x240 frame, or a game
  *                compositor's picture at cyc_video_width()). A game that draws
  *                everything itself returns its own ARGB8888 buffer; the width
@@ -60,6 +60,9 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+/* Includes high-resolution texture packs. These are presentation dimensions;
+ * the hardware picture remains 256 x 240. */
+#define CYC_PRESENT_MAX_DIMENSION 8192
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -91,9 +94,25 @@ typedef struct CycHostExtras {
     size_t option_count;
     bool (*option)(void *ctx, const char *name, const char *value);
     void (*tcp_setup)(void *ctx);
+    /* Final NES controller bytes, after host mapping and before latching.
+     * Password prefill can drive the original input path in both hosts. */
+    void (*input)(void *ctx, uint8_t buttons[2]);
+    /* Window gameplay events only. event is SDL_Event; player is the zero-
+     * based owner of a controller axis event, or -1. No SDL dependency here. */
+    void (*event)(void *ctx, const void *event, int player);
+    /* Trusted PCM/stream overlays. Produced on the emulation thread before
+     * SDL queues audio or headless writes WAV; zero rate keeps host defaults. */
+    unsigned audio_rate;
+    void (*audio_mix)(void *ctx, int16_t *samples, size_t count);
+    void (*state_loaded)(void *ctx);
 } CycHostExtras;
 
 const CycHostExtras *cyc_host_extras(void);
+
+/* The host's --no-save policy also applies to game-owned password sidecars.
+ * Available before the launcher opens and before power_on / option callbacks.
+ * Explicit command-line passwords may still be used without loading a save. */
+bool cyc_host_saves_enabled(void);
 
 #ifdef __cplusplus
 }

@@ -1,11 +1,32 @@
 # HD Texture Packs (Mesen HD Pack format)
 
-Runner-level support for **Mesen HD Packs** — high-resolution tile/sprite
-replacement driven by a `hires.txt` manifest + PNG sheets. Modeled on the
-SNES recomp's MSU-1 wiring (opt-in config flag + env var + per-game support
-hook). Source of truth for the format is Mesen2 `Core/NES/HdPacks/`.
+Shared support for **Mesen HD Packs**: tile/sprite and background replacement
+driven by `hires.txt` and PNG assets. Cycle titles adopt the modern Mods package
+path in [MOD_PACKAGES.md](../docs/MOD_PACKAGES.md#mesen-hd-pack-features).
+Source of truth for the format is Mesen2 `Core/NES/HdPacks/`.
 
 ## Architecture
+
+Cycle games opt in with `MODS HD_PACKS GAME_ID` in `nesrecomp_add_cycle_game`.
+The common host resolves a committed `[[hd_pack]]` descriptor, applies an
+optional verified IPS in memory before power-on, and loads its package assets.
+The older explicit `runner/cyc/hdpack.cmake` folder/config adapter remains
+available. The cycle adapter
+(`cyc_hdpack.c`) observes the actual hardware PPU's pattern fetches, shifters,
+pixel selection and color-output pipeline. Its content keys own their bytes,
+so later CHR RAM writes cannot change a previously recorded tile. It preserves
+mapped CHR ROM indices, fine scrolling, 8x16 sprite halves, flips, grayscale,
+emphasis and the native sprite/background priority decision. It does not
+read the PPU bus or advance CPU, PPU or APU clocks. It feeds the same
+`hdpack_upscale` sampler used by the legacy renderer. Five pointer-free save
+records preserve its picture and fetch pipeline; validated loads require the
+same HD enablement, scale and package asset/patch fingerprint. Rendering is
+cached while paused and invalidated on state load; background scroll offsets
+are computed once per frame. `tools/cyc/test_cyc_hdpack.py` checks CHR RAM
+and banked CHR ROM, scrolling, sprite flips and priority, native fallback
+pixels and fresh-process continuation on all four NTSC alignments.
+
+The remaining renderer description below refers to the legacy backend.
 
 The native PPU renderer (`ppu_renderer.c`) is **unchanged in behavior** — it
 still produces the authentic 256×240 (or widescreen) ARGB framebuffer. When a
@@ -84,23 +105,22 @@ render path is **byte-identical to stock**. Safe to ship on by default off.
   `NESRECOMP_HDPACK_HIDE_ORIGINALS` (`disableOriginalTiles`-style),
   `NESRECOMP_CHR_DUMP` (8 KB CHR snapshot for authoring CHR-RAM packs).
 
-**NOT supported yet** (parsed and **skipped with a logged count**, never fatal):
-- `<background>` full-screen layers (parallax / priority bands / alpha).
-- `<condition>` / `[cond]` conditional tiles.
+The existing sampler also supports conditional tiles and full-screen
+background layers, including CPU-memory comparisons, scroll checks, tile
+presence checks and condition groups. Unsupported condition kinds are logged
+and skipped rather than treated as unconditional matches. A missing image is
+reported and leaves native pixels available.
+
+**NOT supported yet:**
 - `<bgm>` / `<sfx>` HD-pack audio; `<patch>` ROM patches; `<options>`
   (e.g. `disableOriginalTiles` — available only via the env toggle); HDR
   brightness > 1.0.
 
-**Practical consequence — Zelda 1 and similar:** real *Legend of Zelda* (NES)
-packs (e.g. "Zelda Remastered") are ~95% `<background>` + conditional tiles and
-require a bundled **IPS ROM patch** (Zelda 1 Redux base). On stock Zelda with
-this tile-only renderer, **nothing matches** — it needs the background+condition
-subsystem above plus the ROM patch. Tile-based packs (e.g. the Super Mario Bros
-pack) work fully. Zelda's CHR-RAM **content-match path is validated** here with a
-synthetic pack generated from a runtime CHR dump (`tools/hdpack_gen.py
---chr-ram`); only the background/condition rendering is missing.
-
-The loader structs are laid out to add backgrounds/conditions without a rewrite.
+Zelda Remastered's cycle preview uses its locally IPS-patched ROM and the
+existing texture/background sampler. The tested pack contains one missing
+image and some conditions outside the implemented subset; these limitations
+remain visible in its loader log. Its audio patch still runs on the NES APU;
+replacement music and sound files are not played by this sampler.
 
 ## Wiring (mirrors MSU-1)
 

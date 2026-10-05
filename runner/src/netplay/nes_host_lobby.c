@@ -29,7 +29,12 @@
 
 #include <SDL.h>
 
+#ifdef NESRECOMP_CYCLE_NET
+void cyc_sdl_net_name_store(const char *name);
+int cyc_sdl_net_name_load(char *out,size_t cap);
+#else
 #include "config.h"
+#endif
 #include "logical_input.h"
 #include "nes_netplay.h"
 #include "nes_netplay_identity.h"
@@ -103,24 +108,37 @@ static int exe_dir_path(void *ctx, const char *leaf, char *out, size_t cap)
 {
     char dir[1024];
     (void)ctx;
+#ifdef NESRECOMP_CYCLE_NET
+    char *base=SDL_GetBasePath();
+    snprintf(dir,sizeof dir,"%s",base?base:"./");SDL_free(base);
+#else
     nesrecomp_exe_dir(dir, sizeof(dir));
+#endif
     return snprintf(out, cap, "%s%s", dir, leaf) < (int)cap;
 }
 
 static int name_store(void *ctx, const char *name)
 {
     (void)ctx;
+#ifdef NESRECOMP_CYCLE_NET
+    cyc_sdl_net_name_store(name);
+#else
     snprintf(g_nes_config.netplay_player_name, sizeof(g_nes_config.netplay_player_name),
              "%s", name && name[0] ? name : "Player");
+#endif
     return 1;
 }
 
 static int name_load(void *ctx, char *out, size_t cap)
 {
     (void)ctx;
+#ifdef NESRECOMP_CYCLE_NET
+    return cyc_sdl_net_name_load(out,cap);
+#else
     if (!g_nes_config.netplay_player_name[0]) return 0;
     snprintf(out, cap, "%s", g_nes_config.netplay_player_name);
     return 1;
+#endif
 }
 
 static int last_fork(void *ctx, uint32_t *tick, const char **partition,

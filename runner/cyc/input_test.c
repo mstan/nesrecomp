@@ -224,6 +224,52 @@ static void evaluation(void)
 }
 
 typedef struct { int loads; char value[32]; } GameKeys;
+
+static void logical_seats(void)
+{
+#if CYC_INPUT_PLAYERS == 4
+    CycBindings b;
+    CycInputState st;
+    cyc_bindings_default(&b);
+    CycInputFrame f = frame(4);
+    const char *guids[] = {"one", "two", "three", "four"};
+    const int buttons[] = {SDL_CONTROLLER_BUTTON_A, SDL_CONTROLLER_BUTTON_X,
+                           SDL_CONTROLLER_BUTTON_DPAD_LEFT, SDL_CONTROLLER_BUTTON_DPAD_RIGHT};
+    const uint8_t expected[] = {0x80, 0x40, 0x02, 0x01};
+    for (int p = 0; p < 4; ++p) {
+        b.source[p] = 2;
+        snprintf(b.device[p], sizeof b.device[p], "%s", guids[p]);
+        f.pad_guid[p] = guids[p];
+        f.pad_buttons[p] = 1u << buttons[p];
+    }
+    cyc_input_eval(&b, &f, &st);
+    for (int p = 0; p < 4; ++p) CHECK(st.player_pad[p] == p && st.buttons[p] == expected[p]);
+    /* Enumeration order changes when devices reconnect; GUID ownership wins. */
+    for (int p = 0; p < 4; ++p) {
+        f.pad_guid[3-p] = guids[p];
+        f.pad_buttons[3-p] = 1u << buttons[p];
+    }
+    cyc_input_eval(&b, &f, &st);
+    for (int p = 0; p < 4; ++p) CHECK(st.player_pad[p] == 3-p && st.buttons[p] == expected[p]);
+    /* With one device removed the other three retain their named ownership. */
+    f.pad_count = 3;
+    cyc_input_eval(&b, &f, &st);
+    CHECK(st.player_pad[0] == -1 && st.buttons[0] == 0);
+    for (int p = 1; p < 4; ++p) CHECK(st.player_pad[p] == 3-p && st.buttons[p] == expected[p]);
+    /* Four keyboard seats may have independent bindings too. */
+    f = frame(0);
+    memset(keys, 0, sizeof keys);
+    for (int p = 0; p < 4; ++p) {
+        b.source[p] = 1;
+        memset(b.button[p], 0, sizeof b.button[p]);
+        b.button[p][p].key = SDL_SCANCODE_1 + p;
+        keys[SDL_SCANCODE_1+p] = 1;
+    }
+    cyc_input_eval(&b, &f, &st);
+    for (int p = 0; p < 4; ++p) CHECK(st.buttons[p] == (0x80 >> p));
+    memset(keys, 0, sizeof keys);
+#endif
+}
 static void game_load(void *ctx, const char *key, const char *value)
 {
     GameKeys *g = ctx;
@@ -242,6 +288,9 @@ static void persistence(const char *dir)
     /* change every field */
     s.window_scale = 5; s.fullscreen = 2; s.integer_scale = 0; s.linear_filter = 1;
     s.audio_enabled = 0; s.volume = 35; s.skip_launcher = 1;
+    s.hdpack_enabled = 0;
+    snprintf(s.hdpack_dir,sizeof s.hdpack_dir,"F:/HD Packs/Zelda");
+    s.zapper_mouse = 0; s.zapper_crosshair = 0;
     s.fds_hle.auto_swap = 1; s.fds_hle.fast_load = 0;
     for (int p = 0; p < CYC_INPUT_PLAYERS; ++p) {
         s.bind.source[p] = p == 0 ? 2 : 0;
@@ -263,6 +312,8 @@ static void persistence(const char *dir)
     CHECK(cyc_settings_load(&back, path, stderr, NULL));
     CHECK(back.window_scale == 5 && back.fullscreen == 2 && back.integer_scale == 0 && back.linear_filter == 1);
     CHECK(back.audio_enabled == 0 && back.volume == 35 && back.skip_launcher == 1);
+    CHECK(!back.hdpack_enabled && !strcmp(back.hdpack_dir,s.hdpack_dir));
+    CHECK(!back.zapper_mouse && !back.zapper_crosshair && back.zapper_keys == 3);
     CHECK(back.fds_hle.auto_swap == 1 && back.fds_hle.fast_load == 0);
     CHECK(!memcmp(&back.bind, &s.bind, sizeof(s.bind)));
     /* the file is what a person can read and edit */
@@ -300,7 +351,8 @@ static void persistence(const char *dir)
     f = fopen(path, "w");
     fputs("[Display]\nWindowScale = lots\nFullscreen = 9\n[Unknown]\nx = y\n"
           "[Keyboard.Player1]\na = NoSuchKey\nb = rshift\n[Gamepad.Player1]\nstart = a, b\nup = paddle9\n"
-          "[Keyboard.Player7]\na = Q\n[FDS]\nAutoSwap = maybe\nFastLoad = on\n", f);
+          "[Keyboard.Player7]\na = Q\n[FDS]\nAutoSwap = maybe\nFastLoad = on\n"
+          "[Zapper]\nMouse = false\nCrosshair = true\n", f);
     fclose(f);
     char logpath[1024];
     snprintf(logpath, sizeof(logpath), "%s/input_test_log.txt", dir);
@@ -316,6 +368,7 @@ static void persistence(const char *dir)
     CHECK(back.bind.button[0][3].pad == CYC_PAD_BUTTON(SDL_CONTROLLER_BUTTON_A));
     CHECK(back.bind.button[0][4].pad == d.bind.button[0][4].pad);
     CHECK(back.fds_hle.auto_swap == -1 && back.fds_hle.fast_load == 1);
+    CHECK(!back.zapper_mouse && back.zapper_crosshair && back.zapper_keys == 3);
     log = fopen(logpath, "r");
     n = fread(all, 1, sizeof(all) - 1, log);
     fclose(log);
@@ -331,6 +384,7 @@ int main(int argc, char **argv)
     text_forms();
     defaults();
     evaluation();
+    logical_seats();
     persistence(argc > 1 ? argv[1] : ".");
     printf("input_test: %u checks passed\n", checks);
     return 0;

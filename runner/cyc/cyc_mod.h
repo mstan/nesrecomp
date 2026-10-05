@@ -49,6 +49,7 @@
  */
 #pragma once
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -58,6 +59,23 @@ extern "C" {
 uint8_t cyc_mod_peek(uint16_t addr);
 bool    cyc_mod_peek_ok(uint16_t addr, uint8_t *value);
 bool    cyc_mod_poke(uint16_t addr, uint8_t value);
+
+/* Optional trusted content tools. Obtaining writable PRG disables generated
+ * ROM dispatch until another image is loaded: generated opcodes/operands and
+ * folded NROM data may otherwise disagree with the edited image (also from
+ * compiled RAM views). Image files on disk are never changed. */
+uint8_t *cyc_mod_prg_data_rw(size_t *size);
+/* Replace a geometry-preserving PRG+CHR-ROM payload atomically after its
+ * package verification. CHR RAM is retained; changed PRG disables native code.
+ * Refused for FDS, incomplete payloads and isolated calls. */
+bool cyc_mod_apply_cart_payload(const uint8_t *payload, size_t size);
+/* Mapped CHR RAM only; for a finished tile transfer, outside isolated calls. */
+bool cyc_mod_chr_poke(uint16_t ppu_addr, uint8_t value);
+/* CPU writes to $2006 (completed address) and $2007 (address/value before the
+ * write). Optional content-tool callback; suppressed during isolated calls.
+ * The hook is host policy and is not serialized as machine state. */
+typedef void (*CycModPpuWriteHook)(unsigned reg, uint16_t addr, uint8_t value, unsigned increment);
+void cyc_mod_set_ppu_write_hook(CycModPpuWriteHook hook);
 
 typedef struct {
     uint8_t  a, x, y, s, p;     /* p: N V - B D I Z C as pushed (B and bit 5 ignored on set) */
@@ -76,6 +94,17 @@ bool cyc_mod_isolated(void);
 bool cyc_mod_call(uint16_t routine, CycModRegs *regs);
 void cyc_mod_isolate_end(void);
 void cyc_mod_set_call_budget(uint64_t cycles);
+/* Optional trusted routine observation. Defaults: no return observer and no
+ * hooks in isolated scopes. Enable isolated hooks explicitly AFTER begin;
+ * scope end resets the permission. The game's callbacks must keep their own
+ * speculative presentation/simulation state separate from live state. */
+void cyc_mod_set_return_hook(void (*hook)(void));
+/* Pure, optional RAM operand verdict at the actual instruction PC. Physical
+ * RAM, bus values and clocks are untouched. The callback must not mutate the
+ * machine or reenter guest execution. NULL restores unmodified reads. */
+void cyc_mod_set_ram_read_hook(uint8_t (*hook)(uint16_t pc, uint16_t addr, uint8_t value));
+void cyc_mod_allow_isolated_hooks(bool allow);
+bool cyc_mod_call_commit_hooked(uint16_t routine, CycModRegs *regs);
 bool cyc_mod_call_commit(uint16_t routine, CycModRegs *regs);
 
 typedef struct {

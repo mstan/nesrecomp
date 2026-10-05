@@ -107,6 +107,7 @@ static void return_from_routine(void)
     uint8_t hi = hw.ram[0x100 | (uint8_t)(cpu.s + 2)];
     cpu.s = (uint8_t)(cpu.s + 2);
     cpu.pc = (uint16_t)((lo | hi << 8) + 1);
+    if (cyc_cpu_rts_observer) cyc_cpu_rts_observer();
 }
 
 void cyc_hooks_fire(uint16_t pc)

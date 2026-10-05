@@ -87,11 +87,20 @@ def konami_vrc(sub, wram, sram, battery, mirror):
     return int(sub), 0, 1, kib(wram), kib(sram)
 
 
+def mmc1(sub, wram, sram, battery, mirror):
+    # Old MMC1 headers omit the SNROM/SOROM/SXROM RAM wiring. Unknown
+    # payloads keep the compatibility allocation; known boards use their
+    # actual volatile/battery chip sizes, also defining raw-save size.
+    if sub in ('', '-'): return None
+    return int(sub), 0, 1, kib(wram), kib(sram)
+
+
 RULES = {
     210: (19, namco210), 48: (33, tc0690), 207: (80, x1005_207), 185: (185, cnrom185),
     152: (70, bandai152), 154: (88, namco154), 78: (78, irem78),
     16: (16, bandai16), 159: (16, bandai159), 157: (16, datach157),
     21: (21, konami_vrc), 23: (23, konami_vrc), 25: (25, konami_vrc),
+    1: (1, mmc1), 155: (155, mmc1),
 }
 
 

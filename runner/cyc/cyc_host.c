@@ -174,8 +174,18 @@
 #include "cyc_render.h"
 #include "cyc_run.h"
 #include "cyc_session.h"
+#ifdef NESRECOMP_CYCLE_HDPACK_MODS
+#include "cyc_hdpack.h"
+#endif
 #include "cyc_state.h"
 #include "cyc_video.h"
+#ifdef NESRECOMP_NET
+#include "cyc_net.h"
+#include <SDL.h>
+#ifdef NES_HOST_HAS_RECOMP_UI
+#include "nes_host_lobby.h"
+#endif
+#endif
 #endif
 
 #include <stdio.h>
@@ -309,7 +319,48 @@ typedef struct {
 
 static InputStep *input_steps;
 static int        input_count, input_next;
-static uint8_t    input_held[2];
+static uint8_t    input_held[4];
+
+#ifndef CYC_ORACLE
+typedef struct { long frame; int x, y, trigger; } ZapperStep;
+static ZapperStep *zapper_steps;
+static int zapper_count, zapper_next;
+static bool load_zapper_input(const char *path)
+{
+    FILE *f = fopen(path, "r");
+    if (!f) { fprintf(stderr, "cannot read Zapper input %s\n", path); return false; }
+    char line[256];
+    long last = -1;
+    bool ok = true;
+    while (fgets(line, sizeof(line), f)) {
+        char *comment = strchr(line, '#');
+        if (comment) *comment = 0;
+        char *text = line;
+        while (*text == ' ' || *text == '\t') text++;
+        if (!*text || *text == '\r' || *text == '\n') continue;
+        ZapperStep step;
+        char extra;
+        if (sscanf(text, "%ld %d %d %d %c", &step.frame, &step.x, &step.y, &step.trigger, &extra) != 4 ||
+            step.frame < 0 || step.frame < last || (step.trigger != 0 && step.trigger != 1)) { ok = false; break; }
+        ZapperStep *grown = (ZapperStep *)realloc(zapper_steps, (size_t)(zapper_count + 1) * sizeof(*grown));
+        if (!grown) { ok = false; break; }
+        zapper_steps = grown;
+        zapper_steps[zapper_count++] = step;
+        last = step.frame;
+    }
+    fclose(f);
+    if (!ok) fprintf(stderr, "%s: Zapper input is ordered lines of FRAME X Y TRIGGER(0|1)\n", path);
+    return ok;
+}
+
+static void zapper_tick(long frame)
+{
+    while (zapper_next < zapper_count && zapper_steps[zapper_next].frame <= frame) {
+        const ZapperStep *s = &zapper_steps[zapper_next++];
+        cyc_set_zapper(s->x, s->y, s->trigger != 0);
+    }
+}
+#endif
 
 /* ---- FDS disk events: nesref's DISK_EJECT / DISK_SELECT / DISK_INSERT ----
  * Applied between frames, before frame F runs (after F frames), which is
@@ -428,8 +479,7 @@ static bool load_input(const char *path) {
             continue;
         }
         uint8_t port = 0;
-        if (p[0] == '2' && p[1] == ':') port = 1, p += 2;
-        else if (p[0] == '1' && p[1] == ':') p += 2;
+        if (p[0] >= '1' && p[0] <= '4' && p[1] == ':') port = (uint8_t)(p[0]-'1'), p += 2;
         if (input_count == cap) {
             cap *= 2;
             input_steps = (InputStep *)realloc(input_steps, sizeof(InputStep) * cap);
@@ -449,8 +499,13 @@ static void input_tick(long frame) {
         input_held[input_steps[input_next].port] = input_steps[input_next].buttons;
         input_next++;
     }
-    cyc_set_controller(0, input_held[0]);
-    cyc_set_controller(1, input_held[1]);
+    uint8_t buttons[2] = {input_held[0], input_held[1]};
+#ifndef CYC_ORACLE
+    cyc_session_logical_input(input_held,4);
+    cyc_session_input(buttons);
+#endif
+    cyc_set_controller(0, buttons[0]);
+    cyc_set_controller(1, buttons[1]);
 }
 
 #ifndef CYC_ORACLE
@@ -684,8 +739,13 @@ const NesFdsHleRequest *cyc_host_hle_request(void) { return &hle_req; }
 const char *cyc_host_hle_text(void) { return hle_text; }
 
 /* --realtime and the window: the console's frame rate, and fast load. */
-static const double FRAME_SECONDS = 1.0 / 60.0988;
-double cyc_host_frame_seconds(void) { return FRAME_SECONDS; }
+double cyc_host_frame_seconds(void) {
+#ifdef CYC_ORACLE
+    return 1.0 / 60.0988;
+#else
+    return cyc_frame_seconds();
+#endif
+}
 bool   cyc_host_frame_unpaced(void) { return hle_plan.fast_load && cyc_fds_hle_loading(); }
 
 static double wall_seconds(void) {
@@ -802,9 +862,23 @@ static void numbered_path(char *buf, size_t n, const char *base, long frame) {
  * copy, never in the machine's picture. */
 static void write_presentation(const char *base, long frame, uint64_t now_ms, bool numbered)
 {
-    static uint32_t buf[CYC_VIDEO_MAX_WIDTH * 240];
+    static uint32_t *buf;
+    static size_t capacity;
     int w, h;
-    const uint32_t *pic = cyc_render_present(&w, &h);
+    const CycHostExtras *extras = cyc_session_extras();
+    const uint32_t *pic = extras && extras->present ? extras->present(extras->ctx, &w, &h) : NULL;
+#ifdef NESRECOMP_CYCLE_HDPACK_MODS
+    const uint32_t *hd = cyc_hdpack_mod_present(&w, &h);
+    if (hd) pic = hd;
+#endif
+    if (!pic || w <= 0 || h <= 0 || w > CYC_PRESENT_MAX_DIMENSION || h > CYC_PRESENT_MAX_DIMENSION)
+        pic = cyc_render_present(&w, &h);
+    size_t needed=(size_t)w*(size_t)h;
+    if(needed>capacity) {
+        uint32_t *next=realloc(buf,needed*sizeof(*buf));
+        if(!next){fprintf(stderr,"cannot allocate presentation screenshot\n");return;}
+        buf=next;capacity=needed;
+    }
     memcpy(buf, pic, (size_t)w * (size_t)h * sizeof(uint32_t));
     CycDiskToast t;
     if (cyc_is_fds() && cyc_disk_action_toast(cyc_host_disk_action(), now_ms, &t)) {
@@ -891,6 +965,12 @@ static bool add_state_save(const char *spec)
 #include "cyc_fds_save.inc"
 #endif
 
+/* Shared with game-owned password saves and the launcher's password editor. */
+#ifndef CYC_ORACLE
+static bool s_saves_enabled = true;
+bool cyc_host_saves_enabled(void) { return s_saves_enabled; }
+#endif
+
 int main(int argc, char **argv) {
     const char *rom_path = NULL, *hash_out = NULL, *trace_out = NULL, *screenshot = NULL, *state_out = NULL,
                *wav_out = NULL, *mem_out = NULL;
@@ -915,6 +995,10 @@ int main(int argc, char **argv) {
     const char *present_out = NULL, *load_state = NULL, *mods_root = NULL;
     long present_every = 0;
     int present_w = 0, present_h = 0;
+    int extra_scanlines = -1;
+    int region = -1;
+    int zapper_port = -1;
+    const char *zapper_input = NULL;
     bool bad_option = false;
     bool frame_log_mesen = false, no_save = false, realtime = false;
     NesFdsHleAsk saved_hle = NES_FDS_HLE_ASK_NONE;
@@ -949,6 +1033,30 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--scale") && i + 1 < argc) scale = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--headless")) headless = true;
         else if (!strcmp(argv[i], "--frames") && i + 1 < argc) frames = atol(argv[++i]), frames_given = headless = true;
+#ifndef CYC_ORACLE
+        else if (!strcmp(argv[i], "--zapper-port") && i + 1 < argc) {
+            const char *port = argv[++i];
+            if (strlen(port) != 1 || port[0] < '0' || port[0] > '2') {
+                fprintf(stderr, "--zapper-port: 0, 1 or 2\n"); return 2;
+            }
+            zapper_port = port[0] - '0';
+        }
+        else if (!strcmp(argv[i], "--zapper-input") && i + 1 < argc) zapper_input = argv[++i], headless = true;
+        else if (!strcmp(argv[i], "--region") && i + 1 < argc) {
+            const char *choice = argv[++i];
+            if (!strcmp(choice, "ntsc")) region = CYC_REGION_NTSC;
+            else if (!strcmp(choice, "pal")) region = CYC_REGION_PAL;
+            else { fprintf(stderr, "--region: ntsc or pal\n"); return 2; }
+        }
+        else if (!strcmp(argv[i], "--extra-scanlines") && i + 1 < argc) {
+            char *end;
+            long value = strtol(argv[++i], &end, 10);
+            if (!argv[i][0] || *end || value < 0 || value > 262) {
+                fprintf(stderr, "--extra-scanlines: 0..262\n"); return 2;
+            }
+            extra_scanlines = (int)value;
+        }
+#endif
         else if (!strcmp(argv[i], "--acccoin")) acccoin = headless = true;
         else if (!strcmp(argv[i], "--hash-out") && i + 1 < argc) hash_out = argv[++i], headless = true;
         else if (!strcmp(argv[i], "--trace-frame") && i + 1 < argc) trace_frame = atol(argv[++i]), headless = true;
@@ -1064,7 +1172,17 @@ int main(int argc, char **argv) {
         }
     }
 #ifndef CYC_ORACLE
+    s_saves_enabled = !no_save;
     if (!rom_path) rom_path = cyc_native_fds_image_path;   /* game.toml [fds] image */
+#ifdef NESRECOMP_NET
+    const char *offline_save_file=save_file,*offline_datach_save=datach_save;
+    bool online_from_lobby=false;
+#ifdef NES_HOST_HAS_RECOMP_UI
+    int lobby_round=1;
+#endif
+session_restart:
+    save_file=offline_save_file;datach_save=offline_datach_save;
+#endif
 #if defined(CYC_WITH_SDL)
     /* The window: its settings, and recomp-ui's launcher where the build has it. */
     if (!headless && cyc_sdl_prelaunch(&rom_path, fds_bios, &saved_hle, &saved_bios)) return 0;
@@ -1088,6 +1206,9 @@ int main(int argc, char **argv) {
                         "            [--save-file FILE | --no-save] [--fds-import-ips FILE] [--fds-export-ips FILE]\n"
                         "            [--fds-hle auto-swap,fast-load|all|off] [--realtime]\n"
                         "       [--save-state F:FILE] [--load-state FILE] [--mods-root DIR]\n"
+                        "       [--region ntsc|pal] (game default, or NES 2.0 header)\n"
+                        "       [--extra-scanlines N] MMC3 CPU budget enhancement, 0..262 (0: stock)\n"
+                        "       [--zapper-port N] [--zapper-input FILE] FRAME X Y TRIGGER schedule\n"
                         "       window: [--pause-unfocused] [--tcp PORT] [--config FILE]\n"
                         "       [--present-out FILE [--present-every N] [--present-size WxH]]\n",
                 argv[0]);
@@ -1235,6 +1356,22 @@ int main(int argc, char **argv) {
     }
     if (no_save) save_file = datach_save = NULL;
 #endif
+#ifdef NESRECOMP_NET
+    NesNetplayConfig netcfg;
+#ifdef NES_HOST_HAS_RECOMP_UI
+    if(headless && nes_host_lobby_selftest_role()) {
+        if(!nes_host_lobby_init(cyc_native_display_name,rom_path)||nes_host_lobby_selftest_room(lobby_round,&netcfg)!=0)return 2;
+        nes_netplay_set_pending_config(&netcfg);
+    }
+#endif
+    online_from_lobby=nes_netplay_pending()!=0;cyc_net_prepare(&netcfg);
+    if(netcfg.enabled&&(fds||acccoin||spam_page>=0||input_file||load_state||zapper_input||barcode||disk_event_count||zapper_port>0)) {
+        fprintf(stderr,"[cycle netplay] input scripts, load states, disk games and light guns are unavailable online\n");return 2;
+    }
+    /* The guest never reads or writes its personal save. Cartridge storage
+     * arrives from the host before any CPU instruction executes. */
+    if(cyc_net_guest())save_file=datach_save=NULL;
+#endif
     if (!save_paths_distinct(save_file,rom_path) || !save_paths_distinct(datach_save,rom_path)) {
         fprintf(stderr,"save files must be different from the ROM image\n"); return 2;
     }
@@ -1262,13 +1399,48 @@ int main(int argc, char **argv) {
     (void)console_given;
 #endif
     cyc_set_console(console);
-    cyc_power_on((uint8_t)align);
 #ifndef CYC_ORACLE
+#ifdef CYC_GAME_REGION
+    if (region < 0) region = CYC_GAME_REGION;
+#endif
+    if (region < 0) region = cyc_cart_region();
+    if (!cyc_set_region((CycRegion)region)) {
+        fprintf(stderr, "PAL timing is not supported for FDS\n"); return 2;
+    }
+    if (align < 0 || align > (region == CYC_REGION_PAL ? 4 : 3)) {
+        fprintf(stderr, "--align: 0..%d for this region\n", region == CYC_REGION_PAL ? 4 : 3); return 2;
+    }
+#endif
+#ifdef NESRECOMP_CYCLE_HDPACK_MODS
+    if (!cyc_hdpack_mod_prepare()) return 2;
+#endif
+    cyc_power_on((uint8_t)align);
+#ifdef CYC_GAME_ZAPPER_PORT
+    cyc_zapper_attach(CYC_GAME_ZAPPER_PORT);
+#endif
+#ifndef CYC_ORACLE
+    if (zapper_port >= 0) cyc_zapper_attach((unsigned)zapper_port);
     cyc_run_power_on();
     fds_save_powered_on();
     cyc_state_set_host(&HOST_STATE);
     if (present_w > 0) cyc_video_window_resized(present_w, present_h);
+#ifdef NESRECOMP_NET
+    if(cyc_net_start(&netcfg,rom_path)!=0) {
+        char why[96];snprintf(why,sizeof why,"%s",nes_netplay_last_error());
+        fprintf(stderr,"[cycle netplay] start refused: %s\n",why);cyc_net_shutdown();
+#ifdef NES_HOST_HAS_RECOMP_UI
+        if(online_from_lobby&&!headless) {
+            extern bool cyc_sdl_force_launcher;void cyc_ui_net_returned(const char *reason);
+            cyc_ui_net_returned(why);cyc_sdl_force_launcher=true;free(image);goto session_restart;
+        }
+#endif
+        return 2;
+    }
+#endif
     if (!cyc_session_start()) return 2;
+    if (extra_scanlines >= 0 && !cyc_set_extra_scanlines((unsigned)extra_scanlines)) {
+        fprintf(stderr, "--extra-scanlines requires an MMC3 cartridge\n"); return 2;
+    }
 #endif
 
 #if defined(CYC_WITH_SDL) && !defined(CYC_ORACLE)
@@ -1278,7 +1450,19 @@ int main(int argc, char **argv) {
         int result=cyc_sdl_main(cyc_native_display_name ? cyc_native_display_name
                                 : cyc_native_program_name ? cyc_native_program_name : rom_path, scale);
         bool disk_ok=fds_save_flush(CYC_FDS_SAVE_EXIT);
-        return save_write(save_file,0) && save_write(datach_save,1) && disk_ok?result:2;
+        bool saves_ok=save_write(save_file,0)&&save_write(datach_save,1)&&disk_ok;
+#ifdef NESRECOMP_NET
+        char net_error[96];snprintf(net_error,sizeof net_error,"%s",nes_netplay_last_error());
+        cyc_net_shutdown();
+#ifdef NES_HOST_HAS_RECOMP_UI
+        if(saves_ok&&result==3&&online_from_lobby) {
+            extern bool cyc_sdl_force_launcher;void cyc_ui_net_returned(const char *why);
+            cyc_ui_net_returned(net_error);cyc_sdl_force_launcher=true;free(image);goto session_restart;
+        }
+#endif
+        if(result==3)result=net_error[0]?2:0;
+#endif
+        return saves_ok?result:2;
     }
 #else
     (void)scale;
@@ -1316,7 +1500,13 @@ int main(int argc, char **argv) {
         }
     }
 #endif
-    enum { WAV_RATE = 48000 };
+    unsigned WAV_RATE = 48000;
+#ifndef CYC_ORACLE
+    WAV_RATE = cyc_session_audio_rate(WAV_RATE);
+#endif
+#ifdef NESRECOMP_NET
+    if(cyc_net_boot()!=0){cyc_net_shutdown();return 2;}
+#endif
     FILE *wav_f = NULL;
     uint32_t wav_samples = 0;
     if (wav_out) {
@@ -1351,22 +1541,45 @@ int main(int argc, char **argv) {
         while (disk_event_next < disk_event_count && disk_events[disk_event_next].frame < frame) disk_event_next++;
         printf("state: loaded %s, continuing at frame %ld\n", load_state, frame);
     }
+    if (zapper_input) {
+        CycZapperState gun;
+        cyc_zapper_state(&gun);
+        if (!gun.port) { fprintf(stderr, "--zapper-input needs a Zapper port\n"); return 2; }
+        if (!load_zapper_input(zapper_input)) return 2;
+        while (zapper_next < zapper_count && zapper_steps[zapper_next].frame < frame) zapper_next++;
+    }
+    /* An explicit command-line choice overrides a loaded state's selection. */
+    if (extra_scanlines >= 0 && !cyc_set_extra_scanlines((unsigned)extra_scanlines)) {
+        fprintf(stderr, "--extra-scanlines requires an MMC3 cartridge\n"); return 2;
+    }
 #endif
 #ifndef CYC_ORACLE
     double run_start = wall_seconds(), next_frame = run_start, load_wall = 0;
     long load_frames = 0;
 #endif
     for (;;) {
+        bool online=false,replay=false;
+#ifdef NESRECOMP_NET
+        online=nes_netplay_active();
+        if(online) {
+            if(frame>=frames)nes_netplay_request_quiesce();
+            if(cyc_net_leaving())break;
+            int admit=cyc_net_admit(0);
+            if(!admit){SDL_Delay(1);continue;}
+            frame=(long)cyc_ring_frame;replay=cyc_net_replaying();uint8_t buttons[2];cyc_net_input(buttons);
+        }
+#endif
         if (acccoin && drv.done) break;
-        if ((!acccoin || frames_given) && frame >= frames) break;
+        if (!online && (!acccoin || frames_given) && frame >= frames) break;
         if (barcode && frame==barcode_frame) cyc_scan_barcode(barcode,barcode_speed);
         if (spam_page >= 0) cyc_set_controller(0, acccoin_spam_tick(&spam, cyc_cpu_ram(), stdout));
         else if (acccoin) cyc_set_controller(0, acccoin_driver_tick(&drv, cyc_cpu_ram()));
-        else if (input_count) input_tick(frame);
+        else if(!online)input_tick(frame);
         cyc_trace_file = (trace_f && frame == trace_frame) ? trace_f : NULL;
 #ifdef CYC_ORACLE
         cyc_oracle_run_frame();
 #else
+        zapper_tick(frame);
         if (disk_event_count) disk_tick(frame);
         cyc_host_disk_frame(emulated_ms(frame), frame);
         observe_frame = frame;
@@ -1374,17 +1587,20 @@ int main(int argc, char **argv) {
         cyc_session_frame_begin();
         cyc_run_frame();
         cyc_session_frame_end();
+#ifdef NESRECOMP_NET
+        if(online)cyc_net_finish();
+#endif
         fds_save_frame(frame + 1);
         if (cyc_is_fds() && cyc_fds_hle_loading()) {
             load_frames++;
             if (!realtime || cyc_host_frame_unpaced()) load_wall += wall_seconds() - frame_start;
         }
-        if (realtime) {
+        if (realtime && !replay) {
             /* The window's pacing: a frame is shown every 1/60.0988 s, except
              * that fast load runs load frames back to back. */
             if (cyc_host_frame_unpaced()) next_frame = wall_seconds();
             else {
-                next_frame += FRAME_SECONDS;
+                next_frame += cyc_host_frame_seconds();
                 wait_until(next_frame);
                 if (cyc_is_fds() && cyc_fds_hle_loading()) load_wall += wall_seconds() - frame_start;
             }
@@ -1392,15 +1608,20 @@ int main(int argc, char **argv) {
         if (frame_log_f && !frame_log_mesen && frame >= log_first && (log_last < 0 || frame <= log_last))
             write_frame_log(frame_log_f, frame);
 #endif
-        if (hash_f) write_hash_line(hash_f, frame);
-        if (wav_f) {
+        if (hash_f && !replay) write_hash_line(hash_f, frame);
+        if (wav_f || online) {
             int16_t pcm[4096];
             size_t n;
             while ((n = cyc_audio_read(pcm, 4096)) > 0) {
-                fwrite(pcm, sizeof(int16_t), n, wav_f);
-                wav_samples += (uint32_t)n;
+#ifndef CYC_ORACLE
+                cyc_session_audio_mix(pcm,n);
+#endif
+                if(wav_f&&!replay){fwrite(pcm, sizeof(int16_t), n, wav_f);wav_samples += (uint32_t)n;}
             }
         }
+#ifndef CYC_ORACLE
+        if(replay){frame=(long)cyc_ring_frame;next_frame=wall_seconds();continue;}
+#endif
         if (state_out && frame == state_frame) {
             FILE *sf = fopen(state_out, "w");
             if (sf) {
@@ -1512,7 +1733,7 @@ int main(int argc, char **argv) {
                "frames (%.2f s at 60 fps) took %.2f s%s; run %.2f s\n", hle_text, st.requests,
                st.requests == 1 ? "" : "s", st.swaps, st.swaps == 1 ? "" : "s", st.bumps, st.bumps == 1 ? "" : "s",
                st.spans, st.spans == 1 ? "" : "s", load_frames,
-               (double)load_frames * FRAME_SECONDS, load_wall, realtime ? " (paced)" : " (unpaced)",
+               (double)load_frames * cyc_host_frame_seconds(), load_wall, realtime ? " (paced)" : " (unpaced)",
                wall_seconds() - run_start);
     }
     if (ring_out) {
@@ -1550,9 +1771,22 @@ int main(int argc, char **argv) {
 #endif
 
 #ifndef CYC_ORACLE
+    free(zapper_steps);
     if (!disk_ok) return 2;
 #endif
     if (!save_write(save_file,0) || !save_write(datach_save,1)) return 2;
+#ifdef NESRECOMP_NET
+    bool net_failed=nes_netplay_last_error()[0]!=0;cyc_net_shutdown();
+    if(net_failed)return 2;
+#ifdef NES_HOST_HAS_RECOMP_UI
+    if(headless && nes_host_lobby_selftest_role()) {
+        const char *rounds=getenv("NES_LOBBY_SELFTEST_ROUNDS");int count=rounds?atoi(rounds):1;
+        nes_host_lobby_returned(NULL,NULL);nes_host_lobby_selftest_report(lobby_round);
+        if(lobby_round++<count){free(image);goto session_restart;}
+        nes_host_lobby_shutdown();
+    }
+#endif
+#endif
     if (acccoin) {
         const uint8_t *prg = image + cart_info.data_offset;
         size_t prg_len = (size_t)cart_info.prg_size;

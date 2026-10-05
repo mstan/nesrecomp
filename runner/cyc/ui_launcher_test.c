@@ -39,6 +39,8 @@
 #endif
 
 static unsigned checks;
+static bool saves_enabled = true;
+bool cyc_host_saves_enabled(void) { return saves_enabled; }
 #define CHECK(x) do { ++checks; if (!(x)) { fprintf(stderr, "%s:%d: %s\n", __FILE__, __LINE__, #x); exit(1); } } while (0)
 
 /* cyc_recomp.h's program metadata, as a compiled FDS program has it */
@@ -78,6 +80,12 @@ static void edit_everything(RecompLauncherCSettings *io)
     io->enable_audio = 0;
     io->volume = 40;
     io->skip_launcher = 1;
+    io->hdpack_enabled = 0;
+    snprintf(io->hdpack_dir,sizeof io->hdpack_dir,"F:/HD Packs/Zelda");
+#ifdef RECOMP_LAUNCHER_HAS_ZAPPER_SETTINGS
+    io->zapper_mouse = -1;
+    io->zapper_crosshair = -1;
+#endif
     io->player_src[0] = 2;
     io->player_src[1] = 0;
     io->deadzone[0] = 12;
@@ -281,11 +289,26 @@ int main(int argc, char **argv)
     CHECK(seen_game.assist_default_pad_bind[0] == RECOMP_LAUNCHER_PAD_BUTTON(SDL_CONTROLLER_BUTTON_LEFTSHOULDER));
     CHECK(seen_game.default_settings && seen_game.default_settings->player_key_bind[0][4] == SDL_SCANCODE_Z);
     CHECK(seen_game.rom_cache_path && strstr(seen_game.rom_cache_path, "rom.cfg"));
+    /* An external config path must not move a password save away from the exe. */
+    char *base = SDL_GetBasePath();
+    char password_path[1100];
+    CHECK(base);
+    snprintf(password_path, sizeof(password_path), "%stest-password.srm", base);
+    SDL_free(base);
+    CHECK(seen_game.password_save_path && !strcmp(seen_game.password_save_path, password_path));
+    CHECK(!strcmp(seen_game.password_save_label, "Mantra"));
+    saves_enabled = false;
+    CHECK(cyc_ui_launcher(&s, cfg, NULL, &rom, true, NULL, NULL) == 1);
+    CHECK(!seen_game.password_save_path && !seen_game.password_save_label);
+    saves_enabled = true;
     /* the profile's button order (Up Down Left Right A B Start Select) */
     CHECK(seen_io.player_key_bind[0][0] == SDL_SCANCODE_UP && seen_io.player_key_bind[0][4] == SDL_SCANCODE_Z);
     CHECK(seen_io.player_key_bind[0][6] == SDL_SCANCODE_RETURN && seen_io.player_key_bind[0][7] == SDL_SCANCODE_BACKSLASH);
     CHECK(seen_io.player_pad_bind[0][5] == RECOMP_LAUNCHER_PAD_BUTTON(SDL_CONTROLLER_BUTTON_X));
     CHECK(seen_io.player_src[0] == 1 && seen_io.player_src[1] == 2 && seen_io.volume == 100);
+#ifdef RECOMP_LAUNCHER_HAS_ZAPPER_SETTINGS
+    CHECK(seen_io.zapper_mouse == 1 && seen_io.zapper_crosshair == 1);
+#endif
 #ifdef CYC_LAUNCHER_ROM_SHA256
     CHECK(seen_game.num_known_sha256 == 1 && seen_game.known_sha256[0][0] == 0xAB && seen_game.known_sha256[0][31] == 0x01);
 #endif
@@ -295,6 +318,12 @@ int main(int argc, char **argv)
     CHECK(seen_game.assist_binding_count == CYC_SC_COUNT - 1);
     CHECK(strcmp(seen_game.assist_binding_labels[0], cyc_shortcut_label(CYC_SC_DISK)));
     CHECK(seen_game.num_rom_patterns == 0);
+#ifdef NESRECOMP_CYCLE_HDPACK
+    CHECK(seen_game.hdpack_supported == 1);
+#else
+    CHECK(seen_game.hdpack_supported == 0);
+#endif
+    CHECK(seen_io.hdpack_enabled == 1);
 
     /* every edit comes back, then survives config.ini */
     cyc_settings_default(&s);
@@ -306,6 +335,10 @@ int main(int argc, char **argv)
     CHECK(!strcmp(rom, "F:/somewhere/else.fds"));
     CHECK(s.window_scale == 5 && s.fullscreen == 1 && s.integer_scale == 0 && s.linear_filter == 1);
     CHECK(s.audio_enabled == 0 && s.volume == 40 && s.skip_launcher == 1);
+    CHECK(!s.hdpack_enabled && !strcmp(s.hdpack_dir,"F:/HD Packs/Zelda"));
+#ifdef RECOMP_LAUNCHER_HAS_ZAPPER_SETTINGS
+    CHECK(!s.zapper_mouse && !s.zapper_crosshair);
+#endif
     CHECK(s.bind.source[0] == 2 && s.bind.source[1] == 0 && s.bind.deadzone[0] == 12);
     CHECK(!strcmp(s.bind.device[0], "030000005e0400008e02000000007801"));
     static const int SPEC_TO_CYC[8] = { 4, 5, 6, 7, 0, 1, 3, 2 };
@@ -325,6 +358,10 @@ int main(int argc, char **argv)
     cyc_settings_default(&back);
     CHECK(cyc_settings_load(&back, cfg, stderr, NULL));
     CHECK(!memcmp(&back.bind, &s.bind, sizeof(s.bind)) && back.volume == 40 && back.skip_launcher == 1);
+    CHECK(!back.hdpack_enabled && !strcmp(back.hdpack_dir,s.hdpack_dir));
+#ifdef RECOMP_LAUNCHER_HAS_ZAPPER_SETTINGS
+    CHECK(!back.zapper_mouse && !back.zapper_crosshair);
+#endif
     /* the edited settings go back into the launcher next time */
     script_edit = NULL;
     script_rom = NULL;

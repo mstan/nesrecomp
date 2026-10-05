@@ -1203,6 +1203,33 @@ the drive bar, the dev keys (F1 eject / insert, F2 recompiled code /
 interpreter, F3 next side, F4 the bar, F6 + n HLE axis n) and the coverage in
 the title bar. Production builds have none of them.
 
+**Zapper games** pass `ZAPPER_PORT 2` to `nesrecomp_add_cycle_game` (port 1 is
+also supported). This requires recomp-ui's `RECOMP_LAUNCHER_HAS_ZAPPER_SETTINGS`
+interface. The mouse aims within the hardware 256x240 picture, with letterbox
+bars treated as offscreen, and the left button pulls the trigger. The runtime
+Zapper section and launcher offer Mouse aiming and Crosshair. Both persist in
+`config.ini [Zapper]`; missing choices are imported from an existing
+`keybinds.ini [zapper]` without rewriting that legacy file. Closing the menu
+waits for the mouse button to be released before a gameplay trigger pull.
+
+Light detection uses pixels as the PPU draws them, a small aperture and a
+20-scanline decay. This is an optical approximation informed by
+[NESdev's Zapper research](https://www.nesdev.org/wiki/Zapper) and
+[Mesen2's input implementation](https://github.com/SourMesen/Mesen2/blob/master/Core/NES/Input/Zapper.h).
+Presentation crosshairs never enter the hardware picture or charge the sensor.
+Zapper states use version 3 with a required `ZAPP` section for aim, trigger and
+sensor history; matching older states remain loadable with no attached gun.
+Ordinary states retain version 2. `cyc_zapper_test` covers port polarity, beam
+locality, dark-screen rejection, decay, offscreen aim and state/snapshot safety.
+
+For deterministic headless routes, `--zapper-port 1|2` attaches the gun and
+`--zapper-input FILE` reads ordered `FRAME X Y TRIGGER` lines (trigger 0/1;
+offscreen `-1 -1`). `--zapper-port 0` restores the ordinary controller ports.
+The TCP `zapper` command supports aim, trigger, returning control to the mouse,
+and window-coordinate mapping. TriCNES has no Zapper oracle: compare gun routes
+between native and interpreter execution, validate actual hits/misses, and use
+the oracle separately for the unattached-controller machine.
+
 **Games** add to the window with `nesrecomp_add_cycle_game(... HOST_EXTRAS
 <sources>)` defining `cyc_host_extras()` (`cyc_host_extras.h`): a presented
 picture of their own size (widescreen), view modes for the menu's View mode
@@ -1247,13 +1274,17 @@ and write CPU RAM, PRG RAM and cartridge RAM. Between `cyc_mod_isolate_begin`
 and `cyc_mod_isolate_end`, `cyc_mod_call(routine, regs)` runs the program's
 own routine (a JSR to a sentinel return) on a machine whose cycles clock
 nothing: no PPU dots, APU, mapper counters or drive, no ring or trace events,
-hooks suspended. The end restores the whole machine from a snapshot (CPU,
+hooks suspended by default. The end restores the whole machine from a snapshot (CPU,
 RAM, cartridge and PRG RAM, CHR RAM, PPU, APU, mapper and expansion sound, FDS
 media and HLE, RAM view validity), so a mod can decode, simulate and draw with
 the game's own code without the game noticing. A budget (default 2,000,000
 CPU cycles per call), a stack check and a jam check fail a call loudly
 (`MOD_FAIL` ring event). `cyc_mod_call_commit` keeps a routine's memory effects
 instead, and refuses a routine that stores to a device register.
+
+Trusted game ports can opt into return observation and hooks inside one
+isolated scope. Input/event callbacks and the voxel presentation adapter are
+described in [CYCLE-MOD-ADAPTERS.md](../../docs/CYCLE-MOD-ADAPTERS.md).
 
 **Save states** (`cyc_state.h`). The whole machine, the host's section and
 every registered mod record (`runner/include/mod_savestate.h`), identified by
@@ -1333,12 +1364,10 @@ describes trace equality, while the printed test scores describe accuracy.
 
 ## Limits
 
-- The model targets NTSC; PAL/Dendy timing is not implemented. Mapper support
-  covers the board configurations above, not every variant sharing an iNES
-  mapper number: MMC1 outer PRG/WRAM banking and the original discrete
-  mappers' bus conflicts are not modeled. The new discrete boards listed in
-  [MAPPERS.md](MAPPERS.md) do model AND conflicts where specified.
-  Battery-backed RAM is not persisted by this host.
+- NTSC and PAL have separate CPU/PPU/APU timing and save-state clock phase.
+  Dendy timing is not implemented. Mapper support covers the board
+  configurations above, not every variant sharing a mapper number. Cartridge
+  battery RAM is persisted unless `--no-save` is active.
 
 - Mappers 0, 1, 2, 3, 4, 7 and 66. NROM, MMC1, UxROM, CNROM and MMC3 have
   each run a game against the oracle (see [Results](#results)); AxROM and

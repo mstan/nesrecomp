@@ -35,7 +35,12 @@
 extern "C" {
 #endif
 
+#ifndef CYC_INPUT_PLAYERS
 #define CYC_INPUT_PLAYERS 2
+#endif
+#if CYC_INPUT_PLAYERS < 2 || CYC_INPUT_PLAYERS > 4
+#error CYC_INPUT_PLAYERS must be between 2 and 4
+#endif
 #define CYC_INPUT_BUTTONS 8      /* NES bit order, MSB first: A B Select Start Up Down Left Right */
 #define CYC_INPUT_MAX_PADS 8
 #define CYC_INPUT_PAD_AXES 6     /* SDL_CONTROLLER_AXIS_MAX */

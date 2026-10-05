@@ -45,6 +45,17 @@ typedef struct {
 } Cpu6502;
 
 extern Cpu6502 cpu;
+/* Trusted host observation after a completed RTS, before its caller resumes.
+ * No bus activity is replaced. NULL unless a game installs an observer. */
+extern void (*cyc_cpu_rts_observer)(void);
+/* Trusted operand policy. The physical read already completed, including
+ * open bus and all cycles. Only the instruction's RAM data value may change;
+ * instruction fetches, dummy reads, RMW and I/O never use this callback. */
+extern uint8_t (*cyc_cpu_ram_read_policy)(uint16_t pc, uint16_t addr, uint8_t value);
+static inline uint8_t cpu_ram_read_value(uint16_t pc, uint16_t addr, uint8_t value) {
+    return addr < 0x2000 && cyc_cpu_ram_read_policy
+        ? cyc_cpu_ram_read_policy(pc, (uint16_t)(addr & 0x7ff), value) : value;
+}
 
 /* Flags for one CPU cycle. */
 enum {
@@ -102,7 +113,7 @@ static inline void cpu_trace_instruction(uint16_t pc) {
  * cpu_interrupt() with cpu.pc still at this instruction. The trace records
  * the instruction after any DMA cycles that delay the fetch. */
 static inline bool cpu_fetch_rom(uint16_t pc, uint8_t opcode) {
-    hw_cycle_start(pc, HW_READ);
+    hw_cycle_start(pc, HW_FETCH);
     if (cyc_trace_enabled) cpu_trace_instruction(pc);
     hw_read_rom(pc, opcode);
     hw_cycle_finish(false);
@@ -110,7 +121,7 @@ static inline bool cpu_fetch_rom(uint16_t pc, uint8_t opcode) {
 }
 
 static inline bool cpu_fetch(uint16_t pc, uint8_t *opcode) {
-    hw_cycle_start(pc, HW_READ);
+    hw_cycle_start(pc, HW_FETCH);
     if (cyc_trace_enabled) cpu_trace_instruction(pc);
     *opcode = hw_read(pc);
     hw_cycle_finish(false);

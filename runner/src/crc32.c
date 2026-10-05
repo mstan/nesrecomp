@@ -2,7 +2,7 @@
  * crc32.c — Simple CRC32 implementation (no external dependencies).
  * Uses the standard IEEE 802.3 polynomial 0xEDB88320.
  */
-#include "crc32.h"
+#include "../include/crc32.h"
 #include <stddef.h>
 
 static uint32_t s_table[256];

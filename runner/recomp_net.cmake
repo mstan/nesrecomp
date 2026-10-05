@@ -23,6 +23,8 @@
 # or configure with -DNESRECOMP_ENABLE_NET=ON and call it the same way.
 # NESRECOMP_GAME_VERSION: the release pin compared by the lobby and the
 # driver's IDENT handshake; defaults to `git describe` of the game repository.
+include_guard(GLOBAL)
+get_filename_component(NESRECOMP_NET_RUNNER_ROOT "${CMAKE_CURRENT_LIST_DIR}" ABSOLUTE)
 
 if(NOT NESRECOMP_RECOMP_NET_ROOT)
     get_filename_component(NESRECOMP_RECOMP_NET_ROOT
@@ -85,6 +87,7 @@ function(_nesrecomp_add_rbengine)
 endfunction()
 
 function(nesrecomp_enable_recomp_net target)
+    set(NESRECOMP_RUNNER_ROOT "${NESRECOMP_NET_RUNNER_ROOT}")
     if(NOT TARGET ${target})
         message(FATAL_ERROR "nesrecomp_enable_recomp_net: '${target}' is not a target")
     endif()
@@ -95,6 +98,18 @@ function(nesrecomp_enable_recomp_net target)
     set_target_properties(${target} PROPERTIES NESRECOMP_NET_ENABLED TRUE)
     _nesrecomp_add_recomp_net()
     _nesrecomp_add_rbengine()
+    get_target_property(_cycle ${target} NESRECOMP_CYCLE_BACKEND)
+    if(_cycle)
+        target_sources(${target} PRIVATE
+            "${NESRECOMP_RUNNER_ROOT}/cyc/cyc_net.c"
+            "${NESRECOMP_RUNNER_ROOT}/cyc/cyc_rb_state.c")
+        target_compile_definitions(${target} PRIVATE NESRECOMP_CYCLE_NET=1)
+        target_include_directories(${target} PRIVATE "${NESRECOMP_RUNNER_ROOT}/include")
+        # The facade uses SDL timers/events even in a headless game target.
+        list(APPEND CMAKE_PREFIX_PATH "${NESRECOMP_RUNNER_ROOT}/external/SDL2/cmake")
+        find_package(SDL2 CONFIG REQUIRED)
+        target_link_libraries(${target} PRIVATE SDL2::SDL2)
+    endif()
     target_sources(${target} PRIVATE
         "${NESRECOMP_RUNNER_ROOT}/src/netplay/nes_netplay.c"
         "${NESRECOMP_RUNNER_ROOT}/src/netplay/nes_netplay_rb.c"

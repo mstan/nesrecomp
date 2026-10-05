@@ -7,6 +7,9 @@
 
 #include <stdlib.h>
 #include <string.h>
+#ifdef NESRECOMP_NET
+#include "nes_netplay.h"
+#endif
 
 #ifndef NESRECOMP_ENABLE_MODS
 #define NESRECOMP_ENABLE_MODS 0
@@ -110,7 +113,12 @@ bool cyc_session_mods_start(const char *image_path, char *err, size_t err_len)
 {
 #if NESRECOMP_ENABLE_MODS
     if (!s_mods) return true;
-    if (!nes_mod_runtime_commit_c(image_path)) {
+    int online=0;
+#ifdef NESRECOMP_NET
+    NesNetplayConfig cfg;nes_netplay_config_defaults(&cfg);nes_netplay_config_apply_env(&cfg);
+    online=nes_netplay_pending()||cfg.enabled;
+#endif
+    if (!(online?nes_mod_runtime_commit_netplay_c(image_path):nes_mod_runtime_commit_c(image_path))) {
         snprintf(err, err_len, "mods: %s", nes_mod_runtime_last_error_c());
         return false;
     }
@@ -153,6 +161,25 @@ bool cyc_session_start(void)
     return true;
 }
 
+uint8_t g_logical_input[4];
+uint8_t nes_input_seat(int seat) {
+    return seat >= 1 && seat <= 4 ? g_logical_input[seat-1] : 0;
+}
+void cyc_session_logical_input(const uint8_t *buttons, unsigned seats) {
+    memset(g_logical_input,0,sizeof g_logical_input);
+    if (seats>4) seats=4;
+    if (buttons) memcpy(g_logical_input,buttons,seats);
+}
+void cyc_session_input(uint8_t buttons[2]) {
+    g_logical_input[0]=buttons[0]; g_logical_input[1]=buttons[1];
+    const CycHostExtras *x = cyc_session_extras();
+    if (x && x->input) x->input(x->ctx, buttons);
+}
+void cyc_session_event(const void *event, int player) {
+    const CycHostExtras *x = cyc_session_extras();
+    if (x && x->event) x->event(x->ctx, event, player);
+}
+
 void cyc_session_frame_begin(void)
 {
     const CycHostExtras *x = cyc_session_extras();
@@ -171,5 +198,15 @@ void cyc_session_frame_end(void)
 
 void cyc_session_state_loaded(void)
 {
+    const CycHostExtras *x=cyc_session_extras();
+    if(x&&x->state_loaded)x->state_loaded(x->ctx);
     cyc_render_frame_done();
+}
+unsigned cyc_session_audio_rate(unsigned fallback) {
+    const CycHostExtras *x=cyc_session_extras();
+    return x&&x->audio_rate?x->audio_rate:fallback;
+}
+void cyc_session_audio_mix(int16_t *samples,size_t count) {
+    const CycHostExtras *x=cyc_session_extras();
+    if(x&&x->audio_mix)x->audio_mix(x->ctx,samples,count);
 }

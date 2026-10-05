@@ -25,11 +25,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-enum { MODE_NONE, MODE_HOOKS, MODE_ISO, MODE_COMMIT };
+enum { MODE_NONE, MODE_HOOKS, MODE_ISO, MODE_COMMIT, MODE_OBSERVE };
 static int s_mode;
 static struct {
     uint32_t ova_fires, ova_x_bad, tail_handled, iso_ok, iso_bad, commit_refused, commit_ok, frames;
 } c;
+static unsigned s_returns,s_observe_ok,s_observe_bad;
+static void returned(void) {s_returns++;}
 
 static int ova_hook(uint16_t addr)
 {
@@ -77,12 +79,31 @@ static void commit_frame(void)
     if (cyc_mod_call_commit(s_calc, &q) && cyc_cpu_ram()[0x0440] == 16) c.commit_ok++;
 }
 
+static void observe_frame(void) {
+    uint8_t before[0x800];memcpy(before,cyc_cpu_ram(),sizeof before);
+    unsigned old=s_returns,tail=c.tail_handled;
+    if(!cyc_mod_isolate_begin()){s_observe_bad++;return;}
+    cyc_mod_allow_isolated_hooks(true);
+    nes_mod_set_function_hook_enabled("test.tail",1);
+    CycModRegs r={0,3,0,0xfd,0x24,0};
+    bool ok=cyc_mod_call(0x6400,&r) && cyc_mod_peek(0x0450)==0x77 && c.tail_handled==tail+1 && s_returns==old+1;
+    nes_mod_set_function_hook_enabled("test.tail",0);
+    cyc_mod_allow_isolated_hooks(false);
+    ok=cyc_mod_call(0x6400,&r) && cyc_mod_peek(0x0451)==0x88 && s_returns==old+1 && ok;
+    cyc_mod_allow_isolated_hooks(true);
+    ok=cyc_mod_call(s_calc,&r) && s_returns==old+2 && ok;
+    cyc_mod_isolate_end();
+    ok=!memcmp(before,cyc_cpu_ram(),sizeof before) && ok;
+    if(ok)s_observe_ok++;else s_observe_bad++;
+}
+
 static void frame_end(void *ctx)
 {
     (void)ctx;
     c.frames++;
     if (s_mode == MODE_ISO && cyc_cpu_ram()[0x0460]) iso_frame();   /* once the program runs */
     if (s_mode == MODE_COMMIT && c.frames == 5) commit_frame();
+    if (s_mode == MODE_OBSERVE && cyc_cpu_ram()[0x0460]) observe_frame();
 }
 
 static void report(void)
@@ -91,6 +112,7 @@ static void report(void)
            "commit_refused=%u commit_ok=%u\n", s_mode, c.frames, c.ova_fires, c.tail_handled, c.ova_x_bad, c.iso_ok,
            c.iso_bad, c.commit_refused, c.commit_ok);
     fflush(stdout);
+    if(s_mode==MODE_OBSERVE)printf("return-test: ok=%u bad=%u returns=%u\n",s_observe_ok,s_observe_bad,s_returns);
 }
 
 static void power_on(void *ctx)
@@ -111,10 +133,11 @@ static bool option(void *ctx, const char *name, const char *value)
     if (!strcmp(name, "--test-calc")) { s_calc = (uint16_t)strtoul(value, NULL, 16); s_dev = (uint16_t)(s_calc + 0x100); return true; }
     if (strcmp(name, "--test-mode")) return false;
     s_mode = !strcmp(value, "hooks") ? MODE_HOOKS : !strcmp(value, "iso") ? MODE_ISO
-           : !strcmp(value, "commit") ? MODE_COMMIT : !strcmp(value, "none") ? MODE_NONE : -1;
+           : !strcmp(value, "commit") ? MODE_COMMIT : !strcmp(value,"observe") ? MODE_OBSERVE : !strcmp(value, "none") ? MODE_NONE : -1;
     if (s_mode < 0) return false;
     nes_mod_set_function_hook_enabled("test.ova", s_mode == MODE_HOOKS);
     nes_mod_set_function_hook_enabled("test.tail", s_mode == MODE_HOOKS);
+    cyc_mod_set_return_hook(s_mode==MODE_OBSERVE?returned:NULL);
     return true;
 }
 

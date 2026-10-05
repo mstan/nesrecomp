@@ -20,6 +20,11 @@
 #include <string.h>
 
 HwMachine  hw;
+HwExtraTiming hw_extra_timing;
+HwRegionTiming hw_region_timing;
+static CycRegion region_request = CYC_REGION_NTSC;
+static bool cpu_opcode_fetch;
+HwZapper hw_zapper;
 HwCart     hw_cart;
 bool       hw_frame_done;
 int        hw_observe_line = -1;
@@ -40,7 +45,7 @@ CycRamInit cyc_ram_init = CYC_RAM_PATTERN;
 static uint32_t frame_argb[256 * 240];
 static void clock_cpu_devices(void)
 {
-    apu_cycle();
+    if (!hw_extra_timing.active) apu_cycle();
 }
 
 /* ------------------------------------------------------------------------- */
@@ -70,10 +75,38 @@ static inline void run_tick(unsigned k)
     if (k == 11 && hw_cart.clock_late) hw_cart_cpu_clock_late();
 }
 
+/* PAL transitions use doubled units inside each master tick so the second
+ * half of a /5 PPU dot occurs exactly 2.5 master clocks after its first half.
+ * NTSC retains its existing unrolled /12 clock path. */
+static inline void pal_ppu_edge(unsigned half_phase)
+{
+    if (half_phase == 0) ppu_dot();
+    else if (half_phase == 5) ppu_half_dot();
+}
+
+static inline void run_pal_tick(unsigned k)
+{
+    if (k == 0 && hw_cart.watch_cpu) hw_cart_cpu_clock();
+    /* 2A07 M2 is low for 6.5 clocks (2A03: 4.5); the CPU's sample
+     * positions move two master clocks later relative to M2's falling edge. */
+    if (k == 6) sample_nmi();
+    else if (k == 9) apu_sample_irq();
+    unsigned q = (2u * (hw_region_timing.phase + k)) % 10u;
+    pal_ppu_edge(q);
+    if (k == 0) clock_cpu_devices();
+    pal_ppu_edge(q + 1);
+    if (k == 15 && hw_cart.clock_late) hw_cart_cpu_clock_late();
+}
+
 void hw_clock_run_ticks(int n)
 {
     if (hw_isolated) return;
-    while (n-- > 0) run_tick(hw.tick++);
+    if (hw_pal()) {
+        /* PPU register reads finish at the CPU's data sample. The $2000
+         * latch delay (2 master clocks) belongs to the PPU and stays 2. */
+        if (n == 7) n = 9;
+        while (n-- > 0) run_pal_tick(hw.tick++);
+    } else while (n-- > 0) run_tick(hw.tick++);
 }
 
 /* run_tick(1) through run_tick(11), unrolled for each alignment: the usual
@@ -139,7 +172,8 @@ static inline void run_tick_0(void)
 void hw_cycle_start(uint16_t addr, HwCycleKind kind)
 {
     hw.cpu_addr = addr;
-    hw.cpu_reading = kind == HW_READ;
+    hw.cpu_reading = kind == HW_READ || kind == HW_FETCH;
+    cpu_opcode_fetch = kind == HW_FETCH;
     hw_dma_stalls = 0;
     if (hw_isolated) {
         /* a mod's isolated routine call: memory only, no time (hw_internal.h) */
@@ -147,17 +181,19 @@ void hw_cycle_start(uint16_t addr, HwCycleKind kind)
         return;
     }
     for (;;) {
-        if (hw.tick == 1) run_ticks_1_to_11();
-        else
-            while (hw.tick < 12) run_tick(hw.tick++);
+        if (hw_pal()) {
+            while (hw.tick < 16) run_pal_tick(hw.tick++);
+            hw_region_timing.phase = (uint8_t)((hw_region_timing.phase + 1) % 5);
+        } else if (hw.tick == 1) run_ticks_1_to_11();
+        else while (hw.tick < 12) run_tick(hw.tick++);
         hw.tick = 0;
-        if (!dma_wants_cycle()) return;
+        if ((hw_pal() && !cpu_opcode_fetch) || !dma_wants_cycle()) return;
         /* RDY: a DMA takes this read cycle; the CPU holds its address. */
         dma_cycle();
         dma_end_of_cycle();
         if (cyc_trace_enabled) cyc_trace_cycle_end(false, hw.data_bus);
         hw.cycles++;
-        run_tick(hw.tick++);
+        if (hw_pal()) run_pal_tick(hw.tick++); else run_tick(hw.tick++);
         hw_dma_stalls++;
     }
 }
@@ -192,7 +228,9 @@ void hw_cycle_finish(bool instruction_done)
     dma_end_of_cycle();
     if (cyc_trace_enabled) cyc_trace_cycle_end(instruction_done, hw.data_bus);
     hw.cycles++;
-    if (hw.tick == 0) {
+    if (hw_pal()) {
+        run_pal_tick(hw.tick++);
+    } else if (hw.tick == 0) {
         run_tick_0();
         hw.tick = 1;
     } else {
@@ -246,6 +284,9 @@ uint8_t hw_bus_read(uint16_t addr)
         }
         if (reg == 0x16 || reg == 0x17) {
             uint8_t value = (uint8_t)(apu_read_controller((int)reg - 0x16) | (hw.data_bus & 0xE0));
+            if (hw_zapper.port == reg - 0x15)
+                value = (uint8_t)((hw.data_bus & 0xE0) | (hw_zapper.trigger ? 0x10 : 0) |
+                                  (hw_zapper.dots < hw_zapper.light_until ? 0 : 0x08));
             if (hw_oam_dma_active() && hw.data_driven) {
                 /* A driven bus masks the controller bit. */
                 if (cyc_trace_enabled) cyc_trace_access(addr, hw.data_bus, false);
@@ -295,6 +336,8 @@ static uint8_t *alloc_padded(const uint8_t *src, size_t len, uint32_t *out_alloc
     return p;
 }
 
+bool hw_prg_modified;
+
 bool cyc_load_ines(const uint8_t *image, size_t size)
 {
     NesCartInfo info;
@@ -322,6 +365,7 @@ bool cyc_load_ines(const uint8_t *image, size_t size)
     free(hw_cart.chr);
     memset(&hw_cart, 0, sizeof(hw_cart));
     hw_cart.info = info;
+    hw_prg_modified = false;
     hw_cart.prg = prg;
     hw_cart.prg_len = info.prg_size;
     hw_cart.prg_slots = prg_alloc / 4096;
@@ -357,6 +401,7 @@ bool cyc_load_fds(const uint8_t *bios, size_t bios_size, const uint8_t *image, s
     free(hw_cart.chr);
     memset(&hw_cart, 0, sizeof(hw_cart));
     nes_fds_cart_info(&hw_cart.info);
+    hw_prg_modified = false;
     hw_cart.prg = prg;
     hw_cart.prg_len = NES_FDS_BIOS_BYTES;
     hw_cart.prg_slots = prg_alloc / 4096;
@@ -395,6 +440,12 @@ void cyc_power_on(uint8_t ppu_alignment)
         palette_ready = true;
     }
     memset(&hw, 0, sizeof(hw));
+    memset(&hw_extra_timing, 0, sizeof(hw_extra_timing));
+    memset(&hw_region_timing, 0, sizeof(hw_region_timing));
+    hw_region_timing.region = (uint8_t)region_request;
+    hw_region_timing.phase = hw_pal() ? ppu_alignment % 5 : 0;
+    memset(&hw_zapper, 0, sizeof(hw_zapper));
+    hw_zapper.x = hw_zapper.y = -1;
     hw.align = ppu_alignment & 3;
     cyc_ring_reset();
     /* CPU RAM at power-on: runs of $F0 and $0F (the pattern AccuracyCoin's
@@ -418,7 +469,11 @@ void cyc_power_on(uint8_t ppu_alignment)
      * cartridge's first M2 clock comes with the first CPU cycle, as in the
      * oracle; a free-running divider (the N163 sound generator) keeps the
      * oracle's phase, which CPU-readable RAM exposes. */
-    if (hw.align == 2) ppu_half_dot();
+    if (hw_pal()) {
+        unsigned q = 2u * hw_region_timing.phase;
+        /* As on NTSC, no first-dot transition precedes the reset cycle. */
+        if (q + 1 == 5) ppu_half_dot();
+    } else if (hw.align == 2) ppu_half_dot();
     apu_cycle();
     hw.tick = 1;
 }
@@ -471,6 +526,63 @@ bool cyc_debug_peek(uint16_t addr, uint8_t *value)
 void cyc_set_controller(int port, uint8_t buttons) { hw_set_controller(port, buttons); }
 
 uint64_t cyc_cycle_count(void) { return hw.cycles; }
+
+bool cyc_set_region(CycRegion region)
+{
+    if ((region != CYC_REGION_NTSC && region != CYC_REGION_PAL) ||
+        (region == CYC_REGION_PAL && cyc_is_fds())) return false;
+    region_request = region;
+    return true;
+}
+CycRegion cyc_region(void) { return (CycRegion)hw_region_timing.region; }
+CycRegion cyc_cart_region(void) { return hw_cart.info.nes2 && hw_cart.info.timing == 1 ? CYC_REGION_PAL : CYC_REGION_NTSC; }
+double cyc_cpu_hz(void) { return hw_pal() ? 26601712.5 / 16.0 : 21477272.0 / 12.0; }
+double cyc_frame_seconds(void) { return hw_pal() ? (341.0 * 312.0 * 5.0) / 26601712.5 : 1.0 / 60.0988; }
+
+bool cyc_extra_scanlines_supported(void) { return hw_cart.mapper == 4; }
+unsigned cyc_extra_scanlines(void) { return hw_extra_timing.extra_scanlines; }
+
+bool cyc_zapper_attach(unsigned port)
+{
+    if (port > 2) return false;
+    memset(&hw_zapper, 0, sizeof(hw_zapper));
+    hw_zapper.port = (uint8_t)port;
+    hw_zapper.x = hw_zapper.y = -1;
+    return true;
+}
+
+void cyc_set_zapper(int x, int y, bool trigger)
+{
+    bool inside = x >= 0 && x < 256 && y >= 0 && y < 240;
+    hw_zapper.x = inside ? (int16_t)x : -1;
+    hw_zapper.y = inside ? (int16_t)y : -1;
+    hw_zapper.trigger = trigger;
+}
+
+void cyc_zapper_state(CycZapperState *out)
+{
+    out->port = hw_zapper.port;
+    out->x = hw_zapper.x; out->y = hw_zapper.y;
+    out->trigger = hw_zapper.trigger != 0;
+    out->light = hw_zapper.dots < hw_zapper.light_until;
+}
+
+void hw_zapper_pixel(int x, int y, uint16_t color)
+{
+    if (!hw_zapper.port || hw_zapper.x < 0 || abs(x - hw_zapper.x) > 4 || abs(y - hw_zapper.y) > 4) return;
+    uint32_t rgb = hw_palette_argb[color & 0x1FF];
+    unsigned brightness = (77 * ((rgb >> 16) & 255) + 150 * ((rgb >> 8) & 255) + 29 * (rgb & 255)) >> 8;
+    /* Optical approximation: small aperture, 20-scanline decay. Only PPU
+     * pixels can charge it; crosshairs and compositors cannot. Polarity and
+     * scanline locality: NESdev Zapper research, Mesen2 Input/Zapper.h. */
+    if (brightness >= 85) hw_zapper.light_until = hw_zapper.dots + 20u * 341u;
+}
+bool cyc_set_extra_scanlines(unsigned lines)
+{
+    if (lines > 262 || (lines && !cyc_extra_scanlines_supported())) return false;
+    hw_extra_timing.extra_scanlines = (uint16_t)lines;
+    return true;
+}
 
 const uint16_t *cyc_frame_index(void) { return hw_frame_index; }
 
@@ -536,6 +648,16 @@ uint64_t cyc_hw_state_hash(void)
     acc = acc * 131 + hw.data_driven;
     acc = acc * 131 + hw.irq_line;
     h = cyc_trace_mix(h, acc);
+    if (hw_extra_timing.extra_scanlines || hw_extra_timing.active)
+        h = cyc_trace_mix(h, (uint64_t)hw_extra_timing.extra_scanlines |
+                         (uint64_t)hw_extra_timing.line << 16 | (uint64_t)hw_extra_timing.active << 32);
+    if (hw_zapper.port) {
+        h = cyc_trace_mix(h, hw_zapper.dots);
+        h = cyc_trace_mix(h, hw_zapper.light_until);
+        h = cyc_trace_mix(h, (uint16_t)hw_zapper.x | (uint64_t)(uint16_t)hw_zapper.y << 16 |
+                         (uint64_t)hw_zapper.port << 32 | (uint64_t)hw_zapper.trigger << 40);
+    }
+    if (hw_pal()) h = cyc_trace_mix(h, hw_region_timing.region | (uint64_t)hw_region_timing.phase << 8);
     h = hw_cart_state_hash(h);
     h = ppu_state_hash(h);
     return apu_state_hash(h);
@@ -548,7 +670,10 @@ void cyc_hw_state_dump(void *file)
                "hw.data_bus %02X\nhw.internal_bus %02X\nhw.data_driven %02X\nhw.irq_line %02X\n",
             hw.tick, hw.align, (unsigned long long)hw.cycles, hw.cpu_addr, hw.cpu_reading, hw.data_bus,
             hw.internal_bus, hw.data_driven, hw.irq_line);
+    if (hw_pal()) fprintf(f, "region.pal 1\nregion.phase %u\n", hw_region_timing.phase);
     hw_cart_state_dump(file);
+    fprintf(f, "extra.scanlines %u\nextra.line %u\nextra.active %u\n",
+            hw_extra_timing.extra_scanlines, hw_extra_timing.line, hw_extra_timing.active);
     ppu_state_dump(file);
     apu_state_dump(file);
 }

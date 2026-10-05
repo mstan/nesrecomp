@@ -33,6 +33,7 @@ typedef enum {
     HW_IDLE,   /* no bus access (the cycle before the power-on reset sequence) */
     HW_READ,   /* R/W high; a pending DMA takes the CPU's cycles first */
     HW_WRITE,  /* R/W low; DMAs wait for the next read */
+    HW_FETCH,  /* opcode read; PAL DMA waits for this instruction boundary */
 } HwCycleKind;
 
 void    hw_cycle_start(uint16_t addr, HwCycleKind kind);
@@ -76,6 +77,8 @@ unsigned hw_prg_bank4(uint16_t addr);
 /* PRG bytes cannot change from PPU activity until the CPU writes a register. */
 bool hw_prg_is_stable(void);
 bool hw_prg_is_rom(uint16_t addr);
+/* Trusted content tools edited PRG; generated ROM constants are invalid. */
+extern bool hw_prg_modified;
 
 #ifdef __cplusplus
 }

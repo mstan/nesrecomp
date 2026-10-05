@@ -10,9 +10,22 @@
  */
 #include "override_chr.h"
 #include "chr_codec.h"  /* chr_write_png, chr_load_cached */
+#ifdef CYC_CONTENT_TOOLS
+#include "cyc_mod.h"
+#include "cyc_ring.h"
+static unsigned s_cycle_increment = 1;
+#define g_ppuctrl (s_cycle_increment == 32 ? 4 : 0)
+#define g_frame_count cyc_ring_frame
+static void cycle_ppu_write(unsigned reg, uint16_t addr, uint8_t value, unsigned increment) {
+    s_cycle_increment = increment;
+    if (reg == 6) chr_override_on_ppuaddr(addr);
+    else if (reg == 7 && addr < 0x2000) chr_override_on_chr_write(addr, value);
+}
+#else
 #include "mapper.h"
 #include "nes_runtime.h"
-#include "crc32.h"
+#endif
+#include "../include/crc32.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -371,7 +384,11 @@ int chr_override_active(void) { return s_active; }
 
 void chr_override_init(void) {
     s_active = 1;
+#ifdef CYC_CONTENT_TOOLS
+    cyc_mod_set_ppu_write_hook(cycle_ppu_write);
+#else
     mapper_set_chr_callback(chr_rom_callback, NULL);
+#endif
     printf("[ChrOverride] Initialized\n");
 }
 
@@ -705,7 +722,11 @@ static void apply_override_for_transfer(uint16_t ppu_addr, const uint8_t *data, 
         if (ppu_addr + copy_len > 0x2000)
             copy_len = 0x2000 - ppu_addr;
 
+#ifdef CYC_CONTENT_TOOLS
+        for (int b = 0; b < copy_len; ++b) cyc_mod_chr_poke((uint16_t)(ppu_addr + b), e->data[b]);
+#else
         memcpy(g_chr_ram + ppu_addr, e->data, copy_len);
+#endif
         break; /* first match wins */
     }
 }

@@ -100,6 +100,12 @@ static const uint8_t length_table[32] = {
 static const uint16_t dmc_rate_table[16] = {
     428, 380, 340, 320, 286, 254, 226, 214, 190, 160, 142, 128, 106, 84, 72, 54,
 };
+static const uint16_t dmc_rate_table_pal[16] = {
+    398, 354, 316, 298, 276, 236, 210, 198, 176, 148, 132, 118, 98, 78, 66, 50,
+};
+static const uint16_t noise_period_table_pal[16] = {
+    4, 8, 14, 30, 60, 88, 118, 148, 188, 236, 354, 472, 708, 944, 1890, 3778,
+};
 static const uint16_t noise_period_table[16] = {
     4, 8, 16, 32, 64, 96, 128, 160, 202, 254, 380, 508, 762, 1016, 2034, 4068,
 };
@@ -177,7 +183,7 @@ void apu_audio_enable(bool on, int sample_rate)
 {
     audio.on = on && sample_rate > 0;
     if (!audio.on) return;
-    const double cpu_rate = 21477272.0 / 12.0;
+    const double cpu_rate = cyc_cpu_hz();
     audio.cycles_per_sample = cpu_rate / sample_rate;
     audio.phase = audio.acc = 0;
     audio.count = 0;
@@ -428,7 +434,7 @@ void apu_write(uint16_t addr, uint8_t value)
         apu.tri_linear_reload = 1;
         break;
     case 0x400E:
-        apu.noise_period = noise_period_table[value & 15];
+        apu.noise_period = (hw_pal() ? noise_period_table_pal : noise_period_table)[value & 15];
         break;
     case 0x400F:
         length_write(CH_NOISE, value);
@@ -437,7 +443,7 @@ void apu_write(uint16_t addr, uint8_t value)
     case 0x4010:
         apu.dmc_irq_enable = (value & 0x80) != 0;
         apu.dmc_loop = (value & 0x40) != 0;
-        apu.dmc_rate = dmc_rate_table[value & 15];
+        apu.dmc_rate = (hw_pal() ? dmc_rate_table_pal : dmc_rate_table)[value & 15];
         if (!apu.dmc_irq_enable) apu.dmc_irq = 0;
         break;
     case 0x4011:
@@ -627,21 +633,37 @@ void apu_cycle(void)
         if (apu.reset_delay & 0x80) apu.counter = 0;
     }
     apu.counter++;
-    switch (apu.counter) {
+    /* 2A07 frame sequencer, not a rescaled NTSC APU. Values follow the
+     * PAL frame-counter measurements (NESdev APU Frame Counter). */
+    unsigned counter = apu.counter;
+    if (hw_pal()) {
+        switch (counter) {
+        case 8313: counter = 7457; break;
+        case 16627: counter = 14913; break;
+        case 24939: counter = 22371; break;
+        case 33252: counter = 29828; break;
+        case 33253: counter = 29829; break;
+        case 33254: counter = 29830; break;
+        case 41565: counter = 37281; break;
+        case 41566: counter = 37282; break;
+        default: counter = 0; break;
+        }
+    }
+    switch (counter) {
     case 7457: apu.quarter = 1; break;
     case 14913: apu.quarter = apu.half = 1; break;
     case 22371: apu.quarter = 1; break;
     default:
         if (apu.five_step) {
-            if (apu.counter == 37281) apu.quarter = apu.half = 1;
-            else if (apu.counter == 37282) apu.counter = 0;
-        } else if (apu.counter == 29828) {
+            if (counter == 37281) apu.quarter = apu.half = 1;
+            else if (counter == 37282) apu.counter = 0;
+        } else if (counter == 29828) {
             apu.frame_irq = 1;
-        } else if (apu.counter == 29829) {
+        } else if (counter == 29829) {
             apu.quarter = apu.half = 1;
             apu.frame_irq = 1;
             if (!apu.irq_inhibit) apu.frame_irq_out = 1;
-        } else if (apu.counter == 29830) {
+        } else if (counter == 29830) {
             /* The flag is visible for these cycles even with IRQs inhibited. */
             apu.frame_irq = !apu.irq_inhibit;
             if (!apu.irq_inhibit) apu.frame_irq_out = 1;
@@ -743,12 +765,16 @@ static void dmc_dma_get(void)
 void dma_cycle(void)
 {
     if (cyc_trace_enabled) cyc_trace_dma(false);
+    /* Extra blank lines freeze the audio clock, including apu.put. The DMA
+     * bus still alternates with CPU cycles: a frozen put half otherwise holds
+     * a pending sample (or OAM) transfer until the entire budget expires. */
+    bool put = hw_extra_timing.active ? (hw.cycles & 1u) != 0 : apu.put != 0;
     if (apu.oam_dma && apu.oam_dma_first) {
         apu.oam_dma_first = 0;
-        if (!apu.put) apu.oam_dma_halt = 1;
+        if (!put) apu.oam_dma_halt = 1;
     }
     bool dmc = apu.dmc_dma, oam = apu.oam_dma;
-    if (apu.put) {
+    if (put) {
         if (dmc && oam) {
             if (apu.dmc_dma_halt && apu.oam_dma_halt) dma_halt();
             else if (apu.oam_dma_halt) dma_halt(); /* the sample DMA's put cycle */
@@ -800,7 +826,7 @@ void apu_power_on(void)
     memset(&apu, 0, sizeof(apu));
     apu.put = 1;
     apu.reset_delay = 0xFF;
-    apu.dmc_rate = 428;
+    apu.dmc_rate = hw_pal() ? dmc_rate_table_pal[0] : 428;
     apu.dmc_timer = 1022;
     apu.dmc_sample_addr = apu.dmc_addr = 0xC000;
     apu.dmc_sample_len = 1;

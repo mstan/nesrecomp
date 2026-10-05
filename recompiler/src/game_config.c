@@ -14,6 +14,7 @@
 
 void game_config_init_empty(GameConfig *cfg) {
     memset(cfg, 0, sizeof(*cfg));
+    cfg->cycle_accurate = true;
 }
 
 /* ── TOML helpers ────────────────────────────────────────────────────────── */

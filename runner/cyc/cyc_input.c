@@ -47,6 +47,7 @@ void cyc_bindings_default(CycBindings *b)
     b->source[0] = 1;
     b->source[1] = 2;
     for (int p = 0; p < CYC_INPUT_PLAYERS; ++p) {
+        if(p>1)b->source[p]=2;
         b->deadzone[p] = 30;
         for (int i = 0; i < CYC_INPUT_BUTTONS; ++i) {
             b->button[p][i].key = p == 0 ? KEYS[i] : 0;

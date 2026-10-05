@@ -14,6 +14,12 @@
 #include "cyc_run.h"
 #include "recomp_runtime_ui.h"
 #include "recomp_launcher.h"
+#ifdef NESRECOMP_NET
+#include "nes_netplay.h"
+#endif
+#if NESRECOMP_ENABLE_MODS
+#include "mod_runtime.h"
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -103,6 +109,10 @@ static void add_mod_rows(void)
         snprintf(m->key, sizeof(m->key), "cyc.mod.%d", s_mod_count);
         snprintf(m->label, sizeof(m->label), "%s", feat.name);
         snprintf(m->desc, sizeof(m->desc), "%s", feat.description);
+#if NESRECOMP_ENABLE_MODS
+        if (nes_mod_feature_requires_restart(feat.package_id, feat.id))
+            snprintf(m->desc, sizeof(m->desc), "Change this display mode in the launcher, then restart the game.");
+#endif
         m->type = -1;
         add(m->key, "Mods", m->label, m->desc, RECOMP_RUNTIME_UI_BOOL, 0, 1, 1, NULL, 0, NULL);
         s_mod_count++;
@@ -198,6 +208,9 @@ static int mod_set(const ModRow *m, int v)
 
 static int mod_enabled(const ModRow *m)
 {
+#if NESRECOMP_ENABLE_MODS
+    if (nes_mod_feature_requires_restart(m->package, m->feature)) return 0;
+#endif
     if (m->type < 0) return 1;
     RecompLauncherCModFeature feat;
     RecompLauncherCModOption o;
@@ -291,6 +304,8 @@ static int get_value(void *ctx, const RecompRuntimeUiItem *it, int *out)
     else if (is_key(it, RECOMP_RUNTIME_UI_KEY_LINEAR_FILTER)) *out = s->linear_filter;
     else if (is_key(it, RECOMP_RUNTIME_UI_KEY_AUDIO)) *out = s->audio_enabled;
     else if (is_key(it, RECOMP_RUNTIME_UI_KEY_VOLUME)) *out = s->volume;
+    else if (is_key(it, "cyc.zapper.mouse")) *out = s->zapper_mouse;
+    else if (is_key(it, "cyc.zapper.crosshair")) *out = s->zapper_crosshair;
     else if (is_key(it, RECOMP_RUNTIME_UI_KEY_VIEW_MODE)) *out = x && x->get_view_mode ? x->get_view_mode(x->ctx) : s->view_mode;
     else if (mod_row(it)) return mod_get(mod_row(it), out);
     else if (is_key(it, "cyc.disk.side")) {
@@ -306,6 +321,9 @@ static int get_value(void *ctx, const RecompRuntimeUiItem *it, int *out)
 
 static int set_value(void *ctx, const RecompRuntimeUiItem *it, int v)
 {
+#ifdef NESRECOMP_NET
+    if(nes_netplay_active()&&(mod_row(it)||game_row(it)||axis_of(it)>=0||is_key(it,"cyc.disk.side")||is_key(it,RECOMP_RUNTIME_UI_KEY_VIEW_MODE)))return 0;
+#endif
     (void)ctx;
     CycSettings *s = s_host.settings;
     const CycHostExtras *x = s_host.extras;
@@ -315,6 +333,8 @@ static int set_value(void *ctx, const RecompRuntimeUiItem *it, int v)
     else if (is_key(it, RECOMP_RUNTIME_UI_KEY_LINEAR_FILTER)) s->linear_filter = v != 0;
     else if (is_key(it, RECOMP_RUNTIME_UI_KEY_AUDIO)) s->audio_enabled = v != 0;
     else if (is_key(it, RECOMP_RUNTIME_UI_KEY_VOLUME)) s->volume = v < 0 ? 0 : v > 100 ? 100 : v;
+    else if (is_key(it, "cyc.zapper.mouse")) s->zapper_mouse = v != 0;
+    else if (is_key(it, "cyc.zapper.crosshair")) s->zapper_crosshair = v != 0;
     else if (is_key(it, RECOMP_RUNTIME_UI_KEY_VIEW_MODE)) {
         if (!x || !x->set_view_mode || !x->set_view_mode(x->ctx, v)) return 0;
         s->view_mode = v;
@@ -337,6 +357,9 @@ static int set_value(void *ctx, const RecompRuntimeUiItem *it, int v)
 
 static int run_action(void *ctx, const RecompRuntimeUiItem *it)
 {
+#ifdef NESRECOMP_NET
+    if(nes_netplay_active()&&(game_row(it)||is_key(it,RECOMP_RUNTIME_UI_KEY_LOAD_STATE)||is_key(it,RECOMP_RUNTIME_UI_KEY_SAVE_STATE)))return 0;
+#endif
     (void)ctx;
     const CycHostExtras *x = s_host.extras;
     long f = s_host.frames_done();
@@ -375,7 +398,11 @@ static int run_action(void *ctx, const RecompRuntimeUiItem *it)
         uint64_t now = s_host.now_ms();
         if (s_quit_armed && now - s_quit_armed < 3000) { s_host.quit(); return 1; }
         s_quit_armed = now;
-        recomp_runtime_ui_set_status(s_ui, "Press again to quit");
+        recomp_runtime_ui_set_status(s_ui,
+#ifdef NESRECOMP_NET
+            nes_netplay_active()?"Press again to leave the match":
+#endif
+            "Press again to quit");
         return 0;
     }
     if (game_row(it) && x && x->menu_callbacks && x->menu_callbacks->run_action)
@@ -385,6 +412,9 @@ static int run_action(void *ctx, const RecompRuntimeUiItem *it)
 
 static int is_enabled(void *ctx, const RecompRuntimeUiItem *it)
 {
+#ifdef NESRECOMP_NET
+    if(nes_netplay_active()&&(mod_row(it)||game_row(it)||axis_of(it)>=0||is_key(it,"cyc.disk.side")||is_key(it,RECOMP_RUNTIME_UI_KEY_VIEW_MODE)||is_key(it,RECOMP_RUNTIME_UI_KEY_LOAD_STATE)||is_key(it,RECOMP_RUNTIME_UI_KEY_SAVE_STATE)))return 0;
+#endif
     (void)ctx;
     const CycHostExtras *x = s_host.extras;
     if (it->key && !strncmp(it->key, "cyc.shortcut.", 13)) return 0;   /* information rows */
@@ -454,9 +484,18 @@ RecompRuntimeUi *cyc_ui_menu_create(const CycUiHost *host)
             RECOMP_RUNTIME_UI_ACTION, 0, 0, 0, NULL, 0, NULL);
     }
     if (x && x->menu_items)
+        /* Game-defined additions follow the host's controls. */
         for (size_t i = 0; i < x->menu_item_count; ++i)
             if (s_item_count < sizeof(s_items) / sizeof(s_items[0])) s_items[s_item_count++] = x->menu_items[i];
     add_mod_rows();
+    CycZapperState gun;
+    cyc_zapper_state(&gun);
+    if (gun.port) {
+        add("cyc.zapper.mouse", "Zapper", "Mouse aiming", "Aim with the mouse and fire with the left button.",
+            RECOMP_RUNTIME_UI_BOOL, 0, 1, 1, NULL, 0, NULL);
+        add("cyc.zapper.crosshair", "Zapper", "Crosshair", "Show the aiming marker.",
+            RECOMP_RUNTIME_UI_BOOL, 0, 1, 1, NULL, 0, NULL);
+    }
     add("cyc.quit", "System", "Quit", "Close the game (the disk save is written first).", RECOMP_RUNTIME_UI_ACTION,
         0, 0, 0, NULL, 0, NULL);
     refresh();

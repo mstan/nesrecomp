@@ -70,6 +70,8 @@ int      hdpack_recording(void);   /* 1 == renderer should fill hdpack_pixels() 
 /* Clear the side channel's per-pixel `has` flags for a new frame. Called by the
  * renderer at the start of an actually-rendered frame. */
 void hdpack_frame_begin(void);
+/* Derived condition caches must be recomputed after restoring guest state. */
+void hdpack_invalidate_conditions(void);
 
 /* Produce the HD framebuffer from the native one + side channel.
  * native_fb is native_w x 240 ARGB8888; hd_buf is (native_w*scale) x

@@ -13,6 +13,12 @@
 #include "cyc_recomp.h"
 #include "launcher_profile.h"
 #include "recomp_launcher.h"
+#ifdef NES_HOST_HAS_RECOMP_UI
+#include "nes_host_lobby.h"
+static int s_net_returned;
+static char s_net_error[96];
+void cyc_ui_net_returned(const char *why){s_net_returned=1;snprintf(s_net_error,sizeof s_net_error,"%s",why?why:"");}
+#endif
 
 #include <SDL.h>
 #include <stdio.h>
@@ -53,6 +59,15 @@ static void to_launcher(const CycSettings *s, RecompLauncherCSettings *io, const
     io->enable_audio = s->audio_enabled;
     io->volume = s->volume;
     io->skip_launcher = s->skip_launcher;
+    snprintf(io->netplay_player_name,sizeof io->netplay_player_name,"%s",s->netplay_player_name);
+    io->hdpack_enabled = s->hdpack_enabled;
+    snprintf(io->hdpack_dir,sizeof io->hdpack_dir,"%s",s->hdpack_dir);
+#ifdef RECOMP_LAUNCHER_HAS_ZAPPER_SETTINGS
+    io->zapper_mouse = s->zapper_mouse ? 1 : -1;
+    io->zapper_crosshair = s->zapper_crosshair ? 1 : -1;
+#elif defined(CYC_GAME_ZAPPER_PORT)
+#error Zapper builds require recomp-ui with host-owned Zapper settings
+#endif
     snprintf(io->bios_path, sizeof(io->bios_path), "%s", s->fds_bios);
     for (int p = 0; p < CYC_INPUT_PLAYERS; ++p) {
         io->player_src[p] = s->bind.source[p];
@@ -78,6 +93,13 @@ static void from_launcher(const RecompLauncherCSettings *io, CycSettings *s, con
     s->audio_enabled = io->enable_audio != 0;
     s->volume = io->volume < 0 ? 0 : io->volume > 100 ? 100 : io->volume;
     s->skip_launcher = io->skip_launcher != 0;
+    snprintf(s->netplay_player_name,sizeof s->netplay_player_name,"%s",io->netplay_player_name);
+    s->hdpack_enabled = io->hdpack_enabled != 0;
+    snprintf(s->hdpack_dir,sizeof s->hdpack_dir,"%s",io->hdpack_dir);
+#ifdef RECOMP_LAUNCHER_HAS_ZAPPER_SETTINGS
+    s->zapper_mouse = io->zapper_mouse >= 0;
+    s->zapper_crosshair = io->zapper_crosshair >= 0;
+#endif
     snprintf(s->fds_bios, sizeof(s->fds_bios), "%s", io->bios_path);
     for (int p = 0; p < CYC_INPUT_PLAYERS; ++p) {
         s->bind.source[p] = io->player_src[p] < 0 ? 0 : io->player_src[p] > 2 ? 2 : io->player_src[p];
@@ -175,15 +197,46 @@ int cyc_ui_launcher(CycSettings *settings, const char *settings_path, const CycH
     else if (cyc_native_program_name) snprintf(name, sizeof(name), "%s", cyc_native_program_name);
     else stem_of(*rom_path ? *rom_path : "NES", name, sizeof(name));
     gi.name = name;
+#ifdef NES_HOST_HAS_RECOMP_UI
+    gi.netplay=nes_host_lobby_init(name,*rom_path);
+    gi.netplay_supported=gi.netplay!=NULL;
+    if(s_net_returned){nes_host_lobby_returned(&gi,s_net_error);s_net_returned=0;}
+#endif
     gi.region = NULL;                 /* the identity is the image's SHA-256, not a region */
     gi.num_players = CYC_GAME_PLAYERS;
+#ifdef CYC_GAME_ZAPPER_PORT
+    gi.zapper = 1;
+#endif
     gi.has_renderer = 0;              /* the cycle host has one SDL renderer */
-    gi.hdpack_supported = 0;          /* HD packs are not ported to the cycle host */
+#if defined(NESRECOMP_CYCLE_HDPACK) && !defined(NESRECOMP_CYCLE_HDPACK_MODS)
+    gi.hdpack_supported = 1;
+#else
+    gi.hdpack_supported = 0;
+#endif
     gi.has_integer_scale = 1;
     /* a game's view modes are a runtime-menu row (live), not a launcher toggle */
     gi.widescreen_supported = 0;
     (void)extras;
     gi.config_path = settings_path;
+#ifdef CYC_GAME_PASSWORD_SAVE
+    /* --config must not redirect an existing mantra away from the executable. */
+    if (cyc_host_saves_enabled()) {
+        static char password_path[1100];
+        char *base = SDL_GetBasePath();
+        if (base) {
+            int n = snprintf(password_path, sizeof(password_path), "%s%s", base, CYC_GAME_PASSWORD_SAVE);
+            SDL_free(base);
+            if (n > 0 && (size_t)n < sizeof(password_path)) {
+                gi.password_save_path = password_path;
+#ifdef CYC_GAME_PASSWORD_SAVE_LABEL
+                gi.password_save_label = CYC_GAME_PASSWORD_SAVE_LABEL;
+#else
+                gi.password_save_label = "Password";
+#endif
+            }
+        }
+    }
+#endif
     /* the launcher's last-image memory beside config.ini, never in the cwd */
     static char rom_cache[1100];
     snprintf(rom_cache, sizeof(rom_cache), "%s", settings_path ? settings_path : "config.ini");
@@ -246,6 +299,12 @@ int cyc_ui_launcher(CycSettings *settings, const char *settings_path, const CycH
     int act = recomp_launcher_run_window(title, &io, &gi, ".", *rom_path ? *rom_path : "", out_rom, sizeof(out_rom));
     /* The edits come back whichever way the launcher closed. */
     from_launcher(&io, settings, shortcuts, count);
+#ifdef NES_HOST_HAS_RECOMP_UI
+    if(act==RECOMP_LAUNCHER_RESULT_LAUNCH && io.netplay_launch.enabled) {
+        NesNetplayConfig cfg;
+        if(nes_host_lobby_config_from_launch(&io.netplay_launch,&cfg))nes_netplay_set_pending_config(&cfg);
+    }
+#endif
     if (act == RECOMP_LAUNCHER_RESULT_LAUNCH && out_rom[0]) *rom_path = out_rom;
     return act == RECOMP_LAUNCHER_RESULT_LAUNCH ? 0 : act == RECOMP_LAUNCHER_RESULT_QUIT ? 1 : 2;
 }

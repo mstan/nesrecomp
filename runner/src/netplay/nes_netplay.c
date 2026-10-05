@@ -16,8 +16,21 @@
 #include "nes_session_config.h"
 #include "nes_netplay_rb.h"
 #include "nes_rb_state.h"
+#ifdef NESRECOMP_CYCLE_NET
+#include "cyc_net.h"
+#include "cyc_core.h"
+static const uint8_t *np_sram(size_t *len) { return cyc_net_sram(len); }
+static int np_sram_load(const void *p,size_t len) { return cyc_net_sram_load(p,len); }
+static int np_sram_active(void) { return cyc_nvram_size(0)||cyc_nvram_size(1); }
+#else
 #include "nes_runtime.h"
 #include "save_ram.h"
+static const uint8_t *np_sram(size_t *len) { *len=sizeof(g_sram);return g_sram; }
+static int np_sram_load(const void *p,size_t len) {
+    if(len!=sizeof(g_sram))return 0;memcpy(g_sram,p,len);save_ram_sync_snapshot();return 1;
+}
+static int np_sram_active(void) { return save_ram_active(); }
+#endif
 #include "logical_input.h"
 #include "recomp_net/recomp_net.h"
 
@@ -316,7 +329,9 @@ int nes_netplay_start(const NesNetplayConfig *cfg)
      * NES_NET_SRAM_SYNC=1 (how the transfer is exercised on SMB). */
     g_np.sram_needed = env_int("NES_NET_SRAM_SYNC", -1);
     if (g_np.local_slot != 0) {
+#ifndef NESRECOMP_CYCLE_NET
         save_ram_set_sandbox("netplay");
+#endif
         g_np.guest_sandbox = 1;
     }
 
@@ -388,14 +403,15 @@ static int np_sram_barrier_step(void)
     if (g_np.sram_done) return 1;
     if (g_np.local_slot == 0) {
         if (!g_np.sram_sent) {
-            if (rnet_session_state_begin(g_np.session, RNET_STATE_OP_SRAM, 0, g_sram,
-                                         sizeof(g_sram)) != 0) {
+            size_t bytes=0;const uint8_t *storage=np_sram(&bytes);
+            if (!storage || rnet_session_state_begin(g_np.session, RNET_STATE_OP_SRAM, 0, storage,
+                                         bytes) != 0) {
                 fprintf(stderr, "nes_netplay: SRAM transfer could not start\n");
                 return -1;
             }
             g_np.sram_sent = 1;
             fprintf(stderr, "nes_netplay: sending host SRAM (%u bytes)\n",
-                    (unsigned)sizeof(g_sram));
+                    (unsigned)bytes);
         }
         /* Done when the session hands the finished transfer back, and the
          * host must FINISH it (as the guest does): a transfer left open kept
@@ -406,14 +422,12 @@ static int np_sram_barrier_step(void)
             rnet_session_state_finish(g_np.session, 0);
             g_np.sram_done = 1;
             fprintf(stderr, "nes_netplay: host SRAM delivered to every peer (%u bytes)\n",
-                    (unsigned)sizeof(g_sram));
+                    (unsigned)size);
         }
         return g_np.sram_done;
     }
     if (rnet_session_state_take_ready(g_np.session, &op, &slot, &data, &size)) {
-        if (op == RNET_STATE_OP_SRAM && data && size == sizeof(g_sram)) {
-            memcpy(g_sram, data, size);
-            save_ram_sync_snapshot();
+        if (op == RNET_STATE_OP_SRAM && data && np_sram_load(data,size)) {
             g_np.sram_done = 1;
             fprintf(stderr, "nes_netplay: applied host SRAM (%u bytes) before boot\n",
                     (unsigned)size);
@@ -432,7 +446,7 @@ int nes_netplay_boot_barrier(void)
     const uint32_t timeout = (uint32_t)env_int("NES_NET_CONNECT_TIMEOUT_MS", 30000);
     if (!nes_netplay_active()) return 0;
     if (g_np.sram_needed < 0)
-        g_np.sram_needed = save_ram_active() ? 1 : 0;
+        g_np.sram_needed = np_sram_active() ? 1 : 0;
     if (!g_np.sram_needed) g_np.sram_done = 1;
     for (;;) {
         SDL_Event ev;
@@ -474,7 +488,9 @@ void nes_netplay_shutdown(void)
         rnet_session_destroy(g_np.session);
         g_np.session = NULL;
     }
+#ifndef NESRECOMP_CYCLE_NET
     if (g_np.guest_sandbox) save_ram_set_sandbox(NULL);
+#endif
     nes_netplay_session_restore();
     {
         char keep_err[96];

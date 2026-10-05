@@ -51,6 +51,8 @@ typedef struct {
 
 /* Initialize keybinds from INI file next to exe. Generates defaults if missing. */
 void keybinds_init(const char *exe_path);
+/* Load existing bindings or defaults, without creating a file. */
+void keybinds_init_readonly(const char *exe_path);
 
 /* Get current keybind configuration */
 const KeyBinds *keybinds_get(void);

@@ -23,6 +23,8 @@ void cyc_settings_default(CycSettings *s)
     s->volume = 100;
     s->skip_launcher = 0;
     s->view_mode = 0;
+    s->zapper_mouse = s->zapper_crosshair = 1;
+    s->hdpack_enabled = 1;
     s->fds_hle = NES_FDS_HLE_ASK_NONE;
     cyc_bindings_default(&s->bind);
 }
@@ -71,13 +73,13 @@ static bool parse_int(const char *v, int *out)
     return true;
 }
 
-typedef enum { SEC_NONE, SEC_DISPLAY, SEC_AUDIO, SEC_INPUT, SEC_LAUNCHER, SEC_FDS, SEC_KEYS, SEC_PADS, SEC_GAME } Section;
+typedef enum { SEC_NONE, SEC_DISPLAY, SEC_AUDIO, SEC_INPUT, SEC_LAUNCHER, SEC_FDS, SEC_KEYS, SEC_PADS, SEC_GAME, SEC_ZAPPER, SEC_NETPLAY } Section;
 
 bool cyc_settings_load(CycSettings *s, const char *path, FILE *log, const CycSettingsGame *game)
 {
     FILE *f = fopen(path, "r");
     if (!f) return false;
-    char line[512];
+    char line[1024];
     Section sec = SEC_NONE;
     int player = -1;           /* in [Keyboard.PlayerN] / [Gamepad.PlayerN]; -1: shortcuts */
     int lineno = 0;
@@ -92,9 +94,11 @@ bool cyc_settings_load(CycSettings *s, const char *path, FILE *log, const CycSet
             sec = SEC_NONE;
             player = -1;
             if (eq_ci(name, "Display")) sec = SEC_DISPLAY;
+            else if (eq_ci(name, "Zapper")) sec = SEC_ZAPPER;
             else if (eq_ci(name, "Audio")) sec = SEC_AUDIO;
             else if (eq_ci(name, "Input")) sec = SEC_INPUT;
             else if (eq_ci(name, "Launcher")) sec = SEC_LAUNCHER;
+            else if (eq_ci(name, "Netplay")) sec = SEC_NETPLAY;
             else if (eq_ci(name, "FDS")) sec = SEC_FDS;
             else if (eq_ci(name, "Game")) sec = SEC_GAME;
             else if (!strncmp(name, "Keyboard.", 9) || !strncmp(name, "Gamepad.", 8)) {
@@ -119,6 +123,8 @@ bool cyc_settings_load(CycSettings *s, const char *path, FILE *log, const CycSet
             else if (eq_ci(key, "Fullscreen")) bad = !parse_int(val, &v) || (s->fullscreen = clampi(v, 0, 2), 0);
             else if (eq_ci(key, "IntegerScale")) bad = !parse_int(val, &v) || (s->integer_scale = v != 0, 0);
             else if (eq_ci(key, "LinearFilter")) bad = !parse_int(val, &v) || (s->linear_filter = v != 0, 0);
+            else if (eq_ci(key, "HdPackEnabled")) bad = !parse_int(val, &v) || (s->hdpack_enabled = v != 0, 0);
+            else if (eq_ci(key, "HdPackDir")) snprintf(s->hdpack_dir,sizeof s->hdpack_dir,"%s",val);
             break;
         case SEC_AUDIO:
             if (eq_ci(key, "Volume")) bad = !parse_int(val, &v) || (s->volume = clampi(v, 0, 100), 0);
@@ -126,6 +132,9 @@ bool cyc_settings_load(CycSettings *s, const char *path, FILE *log, const CycSet
             break;
         case SEC_LAUNCHER:
             if (eq_ci(key, "SkipLauncher")) bad = !parse_int(val, &v) || (s->skip_launcher = v != 0, 0);
+            break;
+        case SEC_NETPLAY:
+            if (eq_ci(key,"PlayerName")) snprintf(s->netplay_player_name,sizeof s->netplay_player_name,"%s",val);
             break;
         case SEC_INPUT:
             if (!strncmp(key, "Player", 6) && key[6] >= '1' && key[6] < '1' + CYC_INPUT_PLAYERS) {
@@ -139,6 +148,13 @@ bool cyc_settings_load(CycSettings *s, const char *path, FILE *log, const CycSet
         case SEC_GAME:
             if (eq_ci(key, "ViewMode")) bad = !parse_int(val, &v) || (s->view_mode = clampi(v, 0, 2), 0);
             else if (game && game->load) game->load(game->ctx, key, val);
+            break;
+        case SEC_ZAPPER:
+            if (eq_ci(val, "true") || eq_ci(val, "on")) v = 1;
+            else if (eq_ci(val, "false") || eq_ci(val, "off")) v = 0;
+            else bad = !parse_int(val, &v);
+            if (!bad && eq_ci(key, "Mouse")) { s->zapper_mouse = v != 0; s->zapper_keys |= 1; }
+            else if (!bad && eq_ci(key, "Crosshair")) { s->zapper_crosshair = v != 0; s->zapper_keys |= 2; }
             break;
         case SEC_FDS: {
             if (eq_ci(key, "Bios")) {
@@ -191,12 +207,15 @@ bool cyc_settings_save(const CycSettings *s, const char *path, const CycSettings
                "# window write this file. Keys are SDL key and controller names.\n");
     fprintf(f, "[Display]\nWindowScale = %d\nFullscreen = %d\nIntegerScale = %d\nLinearFilter = %d\n",
             s->window_scale, s->fullscreen, s->integer_scale, s->linear_filter);
+    fprintf(f,"HdPackEnabled = %d\nHdPackDir = %s\n",s->hdpack_enabled,s->hdpack_dir);
     fprintf(f, "[Audio]\nEnabled = %d\nVolume = %d\n", s->audio_enabled, s->volume);
     fprintf(f, "[Input]\n");
     for (int p = 0; p < CYC_INPUT_PLAYERS; ++p)
         fprintf(f, "Player%dSource = %d\nPlayer%dDevice = %s\nPlayer%dDeadzone = %d\n", p + 1, s->bind.source[p], p + 1,
                 s->bind.device[p], p + 1, s->bind.deadzone[p]);
     fprintf(f, "[Launcher]\nSkipLauncher = %d\n", s->skip_launcher);
+    fprintf(f,"[Netplay]\nPlayerName = %s\n",s->netplay_player_name);
+    fprintf(f, "[Zapper]\nMouse = %d\nCrosshair = %d\n", s->zapper_mouse, s->zapper_crosshair);
     fprintf(f, "[FDS]\n# on, off, or default (the game's own setting)\n");
     unsigned n;
     const NesFdsHleAxis *ax = nes_fds_hle_axes(&n);

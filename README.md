@@ -6,7 +6,10 @@
 
 A static 6502 recompiler framework for NES games. Translates NES ROM machine code to C, which is then compiled to native machine code for direct execution on modern PCs.
 
-**This is NOT an emulator.** Each 6502 instruction is translated to equivalent C code at build time. JSR becomes a direct C function call, branches become gotos, and the NES hardware (PPU, APU, mapper) is simulated by the runner library.
+The default cycle backend translates ROM instructions to C that performs each
+CPU bus cycle against the NES hardware model. A generated interpreter handles
+code outside the compiled ROM views. The retained legacy backend uses direct
+C calls for guest subroutines and remains available explicitly.
 
 ## How to use NESRecomp
 
@@ -38,6 +41,10 @@ cd "C:\Projects\MyGameRecomp"
 This builds a static library. It does not create a playable game by itself.
 Each game still needs game-specific configuration and runner integration. Use
 one of the [Game Projects](#game-projects) as a starting point for a full port.
+Cycle output uses `generated/<name>_cyc*.c`. To generate the retained older
+backend, add `--legacy` (or `--backend legacy`). An explicit
+`[game] cycle_accurate = false` also selects legacy unless overridden with
+`--backend cycle`.
 
 If you already have a `game.toml`, pass it to the build command:
 
@@ -139,8 +146,8 @@ NES ROM (.nes)
 nesrecomp.exe build + optional game.toml
     |
     v
-generated/<game>_full.c      (recompiled 6502 -> C)
-generated/<game>_dispatch.c  (call_by_address runtime dispatch)
+generated/<game>_cyc.c       (compiled ROM-view dispatch)
+generated/<game>_cyc_b*.c    (6502 instructions expressed as CPU cycles)
     |
     v
 Game executable (linked with runner library + SDL2)
@@ -150,6 +157,9 @@ Game executable (linked with runner library + SDL2)
 
 | Component | Purpose |
 |-----------|---------|
+| `recompiler/src/cyc_codegen.c` | Default cycle-code emitter and generated fallback interpreter |
+| `runner/cyc/` | Cycle CPU, PPU, APU, mappers, host and enhancement adapters |
+| `runner/cyc/project.cmake` | Default game integration and build-time generation |
 | `recompiler/src/code_generator.c` | 6502-to-C emitter |
 | `recompiler/src/function_finder.c` | Static analysis: discovers functions via BFS from vectors |
 | `runner/src/runtime.c` | NES memory map, PPU register stubs, mapper |
@@ -400,22 +410,26 @@ See [CLAUDE.md](CLAUDE.md) for detailed instructions. In short:
 
 ## Cycle-Accurate Mode
 
-`--cycle-accurate` (or `[game] cycle_accurate = true`) is a separate output for
-programs that measure the hardware, such as test ROMs. It emits one block per
+Cycle-accurate generation is the default. `--cycle-accurate` explicitly selects
+it; `--legacy` selects the retained function/frame backend. An explicit
+`[game] cycle_accurate = false` also selects legacy, and a command-line backend
+selection takes precedence over the file. A missing key uses cycle mode.
+It emits one block per
 ROM instruction with every CPU cycle's bus activity spelled out, against
 NESRecomp's own cycle-accurate 6502; the fallback interpreter is generated from
 the same templates. The CPU, PPU, APU, DMAs and mappers are NESRecomp's own
 (`runner/cyc/hw_*.c`), and TriCNES's complete machine is kept only as a test
 oracle. The runner is `runner/cyc`.
 
-Mappers 0, 1, 2, 3, 4, 7 and 66 are supported: a block is generated per
+See [the mapper catalog](runner/cyc/MAPPERS.md) for supported cartridge boards.
+A block is generated per
 (PRG bank, CPU address) pair and entered only while the cartridge has that bank
 mapped there, since the bytes a block folded to constants depend on it. A
 recompiled AccuracyCoin passes 144/144, and scripted playthroughs of Super Mario
 Bros. 3 (MMC3), Mega Man 2 (MMC1), Mega Man (UxROM) and Donkey Kong Original
 Edition (CNROM) run at 100% native; all of them match the oracle on every bus
 access at all four CPU/PPU alignments. AxROM and GxROM have not been run with a
-game yet. See [runner/cyc/README.md](runner/cyc/README.md); AccuracyCoin is set
+game in the original qualification. See [runner/cyc/README.md](runner/cyc/README.md); AccuracyCoin is set
 up as a test in `runner/cyc/tests/accuracycoin`.
 
 ## Acknowledgements

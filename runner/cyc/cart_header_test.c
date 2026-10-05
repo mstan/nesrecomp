@@ -154,6 +154,29 @@ int main(void)
       h[6]=0x90; h[7]=0x10; CHECK(nes_cart_header(h,16,&c)); CHECK(c.mapper==25);
       nes_cart_known_dump(&c,vrc4b,4);
       CHECK(c.submapper==1 && c.prg_ram==2048 && !c.prg_nvram && nes_cart_variant_supported(&c)); }
+    /* SNROM's real 8 KiB save chip must accept legacy raw battery files.
+     * These synthetic payloads have Zelda USA's database CRC (3FE272FB).
+     * Unknown payloads retain the old compatibility allocation; explicit
+     * iNES RAM sizes and NES 2.0 metadata take precedence. */
+    {
+        const uint8_t zelda_crc[4] = {0x44,0x2B,0xA5,0x80};
+        uint8_t image[16+16384] = {'N','E','S',26,1,0,0x12};
+        const uint8_t tail[4] = {0xC2,0xD6,0x0B,0xB6};
+        CHECK(nes_crc32(0,zelda_crc,4)==0x3FE272FBu);
+        CHECK(nes_cart_header(image,sizeof(image),&c)); CHECK(c.prg_nvram==32768);
+        nes_cart_known_dump(&c,zelda_crc,4);
+        CHECK(c.prg_nvram==8192 && !c.prg_ram && c.battery);
+        memcpy(image+sizeof(image)-4,tail,4);
+        CHECK(nes_cart_image(image,sizeof(image),&c)); CHECK(c.prg_nvram==8192);
+        image[8]=2;
+        CHECK(nes_cart_image(image,sizeof(image),&c)); CHECK(c.prg_nvram==16384);
+        image[7]=8; image[8]=0; image[10]=0x90; image[11]=7;
+        CHECK(nes_cart_image(image,sizeof(image),&c)); CHECK(c.prg_nvram==32768);
+        image[7]=0; image[10]=image[11]=0; image[16]=1;
+        CHECK(nes_cart_image(image,sizeof(image),&c)); CHECK(c.prg_nvram==32768);
+        image[16]=0; image[6]=0;
+        CHECK(nes_cart_image(image,sizeof(image),&c)); CHECK(c.mapper==0 && !c.prg_nvram);
+    }
     puts("cartridge header contracts passed");
     return 0;
 }

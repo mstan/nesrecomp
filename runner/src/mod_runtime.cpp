@@ -98,6 +98,13 @@ struct ExternalRom {
     bool required = true;
 };
 
+struct HdPack {
+    std::string feature_id;
+    std::string directory;
+    std::string patch;
+    std::string patched_rom_crc32;
+};
+
 struct Package {
     uint32_t format_version = 0;
     std::string id;
@@ -111,6 +118,7 @@ struct Package {
     std::vector<Feature> features;
     std::vector<Option> options;
     std::vector<ExternalRom> external_roms;
+    std::vector<HdPack> hd_packs;
 };
 
 struct FeatureSelection {
@@ -186,6 +194,11 @@ struct Runtime {
      * not consult staged selections from a plugin API: the UI may have changed
      * them after the last successful commit. */
     std::map<std::string, std::string> committed_external_rom_paths;
+    std::string committed_hd_directory;
+    std::vector<uint8_t> committed_hd_payload;
+    NESModHdPack committed_hd{};
+    std::string committed_hd_key;
+    bool hd_locked = false;
     std::map<std::string, ResourceCache> resource_cache;
     std::string error;
     bool initialized = false;
@@ -219,6 +232,16 @@ std::string external_rom_key(const std::string& package_id,
 bool snapshot_committed_external_rom_paths(Runtime& runtime,
                                            const Validation& plan,
                                            std::string* error);
+bool snapshot_hd_pack(Runtime& runtime, const Validation& plan,
+                      const fs::path& rom, std::string* error);
+
+bool package_relative_path(const std::string& name) {
+    if (name.empty() || name.find(':') != std::string::npos ||
+        name.find('\\') != std::string::npos || name.front() == '/') return false;
+    for (const auto& part : fs::path(name))
+        if (part == ".." || part == ".") return false;
+    return true;
+}
 
 void set_error(std::string* out, const std::string& value) {
     if (out) *out = value;
@@ -420,6 +443,7 @@ bool read_manifest(const fs::path& path, Package& out, std::string* error) {
         Choice,
         Plugin,
         ExternalRom,
+        HdPack,
     };
     Section section = Section::Package;
     Target* target = nullptr;
@@ -427,6 +451,7 @@ bool read_manifest(const fs::path& path, Package& out, std::string* error) {
     Option* option = nullptr;
     Choice* choice = nullptr;
     ExternalRom* external_rom = nullptr;
+    HdPack* hd_pack = nullptr;
     std::string plugin_feature;
     std::string plugin_id;
     std::string plugin_when_option;
@@ -478,6 +503,7 @@ bool read_manifest(const fs::path& path, Package& out, std::string* error) {
             option = nullptr;
             choice = nullptr;
             external_rom = nullptr;
+            hd_pack = nullptr;
             if (name == "target") {
                 section = Section::Target;
                 out.targets.emplace_back();
@@ -505,6 +531,10 @@ bool read_manifest(const fs::path& path, Package& out, std::string* error) {
                 section = Section::ExternalRom;
                 out.external_roms.emplace_back();
                 external_rom = &out.external_roms.back();
+            } else if (name == "hd_pack") {
+                section = Section::HdPack;
+                out.hd_packs.emplace_back();
+                hd_pack = &out.hd_packs.back();
             } else {
                 set_error(error, "unsupported manifest section [[" + name + "]]");
                 return false;
@@ -630,6 +660,14 @@ bool read_manifest(const fs::path& path, Package& out, std::string* error) {
                     parsed = string_field(plugin_when_value);
                 else known = false;
                 break;
+            case Section::HdPack:
+                if (!hd_pack) parsed = false;
+                else if (key == "feature") parsed = string_field(hd_pack->feature_id);
+                else if (key == "directory") parsed = string_field(hd_pack->directory);
+                else if (key == "patch") parsed = string_field(hd_pack->patch);
+                else if (key == "patched_rom_crc32") parsed = string_field(hd_pack->patched_rom_crc32);
+                else known = false;
+                break;
             case Section::ExternalRom:
                 external_rom = out.external_roms.empty()
                     ? nullptr : &out.external_roms.back();
@@ -718,6 +756,22 @@ bool read_manifest(const fs::path& path, Package& out, std::string* error) {
         }
     }
     std::set<std::pair<std::string, std::string>> option_ids;
+    std::set<std::string> hd_features;
+    for (const HdPack& item : out.hd_packs) {
+        Feature* owner = nullptr;
+        for (Feature& feature : out.features)
+            if (feature.id == item.feature_id) owner = &feature;
+        if (!owner || !package_relative_path(item.directory) ||
+            (!item.patch.empty() && !package_relative_path(item.patch)) ||
+            (item.patch.empty() != item.patched_rom_crc32.empty()) ||
+            (!item.patch.empty() && !valid_crc32(item.patched_rom_crc32)) ||
+            !hd_features.insert(item.feature_id).second) {
+            set_error(error, "manifest has an invalid HD pack descriptor");
+            return false;
+        }
+        /* Packages select the shared, statically linked implementation. */
+        owner->plugins.push_back(PluginRef{"nesrecomp.hd-pack", {}, {}});
+    }
     for (const Option& item : out.options) {
         if (!find_feature(out, item.feature_id) || !valid_id(item.id) ||
             item.label.empty() ||
@@ -1235,6 +1289,138 @@ std::string sha1_hex(const std::vector<uint8_t>& input) {
     return out;
 }
 
+/* Validate every path component, including directory links, before opening
+ * package assets. The package root may be relocated without changing identity. */
+bool hd_asset_path(const Package& package, const std::string& relative,
+                   fs::path& out, std::string* error) {
+    if (!package_relative_path(relative)) {
+        set_error(error, "HD pack asset path must be relative to its package");
+        return false;
+    }
+    std::error_code ec;
+    out = package.root;
+    for (const auto& component : fs::path(relative)) {
+        out /= component;
+        const auto status = fs::symlink_status(out, ec);
+        if (ec || !fs::exists(status) || fs::is_symlink(status)) {
+            set_error(error, "HD pack asset is missing or is a link: " + relative);
+            return false;
+        }
+    }
+    return true;
+}
+
+/* IPS offsets address the complete iNES file. Size, header and trainer must
+ * remain unchanged: a mod cannot turn this compiled cartridge into a different
+ * board. Apply into a copy and verify its declared payload CRC before exposure. */
+bool hd_apply_ips(const std::vector<uint8_t>& patch, std::vector<uint8_t>& image,
+                  size_t payload_start, std::string* error) {
+    auto fail = [&]() { set_error(error, "Invalid or incompatible HD pack IPS patch"); return false; };
+    if (patch.size() < 8 || std::memcmp(patch.data(), "PATCH", 5)) return fail();
+    size_t p = 5;
+    while (p + 3 <= patch.size()) {
+        if (!std::memcmp(patch.data() + p, "EOF", 3)) {
+            p += 3;
+            if (p == patch.size()) return true;
+            if (patch.size() - p != 3) return fail();
+            const size_t size = ((size_t)patch[p] << 16) | ((size_t)patch[p+1] << 8) | patch[p+2];
+            return size == image.size() ? true : fail();
+        }
+        const size_t at = ((size_t)patch[p] << 16) | ((size_t)patch[p+1] << 8) | patch[p+2];
+        p += 3;
+        if (patch.size() - p < 2) return fail();
+        size_t size = ((size_t)patch[p] << 8) | patch[p+1]; p += 2;
+        bool rle = !size;
+        if (rle) {
+            if (patch.size() - p < 3) return fail();
+            size = ((size_t)patch[p] << 8) | patch[p+1]; p += 2;
+        }
+        if (!size || at < payload_start || at > image.size() ||
+            size > image.size() - at || patch.size() - p < (rle ? 1 : size)) return fail();
+        if (rle) { std::memset(image.data() + at, patch[p++], size); }
+        else { std::memcpy(image.data() + at, patch.data() + p, size); p += size; }
+    }
+    return fail();
+}
+
+bool snapshot_hd_pack(Runtime& runtime, const Validation& plan,
+                      const fs::path& rom, std::string* error) {
+    for (const ResolvedPlugin& plugin : plan.plugins) {
+        if (plugin.id != "nesrecomp.hd-pack") continue;
+        const Package* package = selected_package(runtime, plugin.package_id);
+        if (!package) return false;
+        const HdPack* descriptor = nullptr;
+        for (const HdPack& item : package->hd_packs)
+            if (item.feature_id == plugin.feature_id) descriptor = &item;
+        if (!descriptor) { set_error(error, "HD pack feature has no asset descriptor"); return false; }
+        fs::path directory;
+        if (!hd_asset_path(*package, descriptor->directory, directory, error)) return false;
+        std::error_code ec;
+        if (!fs::is_directory(directory, ec) || !fs::is_regular_file(directory / "hires.txt", ec)) {
+            set_error(error, "HD pack directory must contain hires.txt"); return false;
+        }
+        std::vector<fs::path> files;
+        uint64_t bytes = 0;
+        for (fs::recursive_directory_iterator it(directory, ec), end; it != end && !ec; it.increment(ec)) {
+            const auto status = it->symlink_status(ec);
+            if (ec || fs::is_symlink(status) || (!fs::is_regular_file(status) && !fs::is_directory(status))) {
+                set_error(error, "HD pack assets must be ordinary files and directories"); return false;
+            }
+            if (!fs::is_regular_file(status)) continue;
+            bytes += it->file_size(ec);
+            files.push_back(it->path());
+            if (ec || bytes > kMaxArchiveBytes || files.size() > kMaxArchiveFiles) {
+                set_error(error, "HD pack exceeds package asset limits"); return false;
+            }
+        }
+        if (ec) { set_error(error, "Cannot inspect HD pack assets: " + ec.message()); return false; }
+        std::sort(files.begin(), files.end());
+        std::vector<uint8_t> identity;
+        auto add = [&](const std::string& value) { identity.insert(identity.end(), value.begin(), value.end()); identity.push_back(0); };
+        add(package->id); add(package->version); add(plugin.feature_id);
+        add(runtime.game_id); add(runtime.rom_crc32);
+        add(descriptor->directory); add(descriptor->patched_rom_crc32);
+        std::vector<uint8_t> content;
+        for (const auto& file : files) {
+            if (!read_file(file, content, error)) return false;
+            add(file.lexically_relative(directory).generic_string()); add(sha1_hex(content));
+        }
+        std::vector<uint8_t> payload;
+        if (!descriptor->patch.empty()) {
+            fs::path patch_path;
+            std::vector<uint8_t> image;
+            if (!hd_asset_path(*package, descriptor->patch, patch_path, error) ||
+                !read_file(patch_path, content, error)) return false;
+            add(descriptor->patch); add(sha1_hex(content));
+            if (rom.empty() || !read_file(rom, image, error) || image.size() < 16 ||
+                std::memcmp(image.data(), "NES\x1a", 4)) {
+                set_error(error, "HD pack patch requires the verified stock iNES ROM"); return false;
+            }
+            const size_t start = 16 + ((image[6] & 4) ? 512 : 0);
+            if (start > image.size() || !hd_apply_ips(content, image, start, error)) return false;
+            char crc[9]; std::snprintf(crc, sizeof(crc), "%08x", crc32_compute(image.data()+16, image.size()-16));
+            if (descriptor->patched_rom_crc32 != crc) {
+                set_error(error, "HD pack patched ROM does not match its declared CRC32"); return false;
+            }
+            payload.assign(image.begin() + start, image.end());
+        }
+        const std::string hash = sha1_hex(identity);
+        runtime.committed_hd_directory = directory.string();
+        if (runtime.committed_hd_directory.size() >= 512) {
+            set_error(error, "HD pack directory path is too long for the renderer"); return false;
+        }
+        runtime.committed_hd_key = package->id + ":" + package->version + ":" + plugin.feature_id;
+        runtime.committed_hd_payload = std::move(payload);
+        runtime.committed_hd.directory = runtime.committed_hd_directory.c_str();
+        runtime.committed_hd.patched_payload = runtime.committed_hd_payload.empty() ? nullptr : runtime.committed_hd_payload.data();
+        runtime.committed_hd.payload_size = (uint32_t)runtime.committed_hd_payload.size();
+        for (unsigned i = 0; i < 20; ++i)
+            runtime.committed_hd.fingerprint[i] = (uint8_t)std::strtoul(hash.substr(i*2, 2).c_str(), nullptr, 16);
+        return true;
+    }
+    return true;
+}
+
 bool external_rom_selected(Runtime& runtime, const Package& package,
                            const ExternalRom& resource) {
     const PackageSelection& selection = package_selection(runtime, package);
@@ -1380,6 +1566,21 @@ bool feature_resources_valid(Runtime& runtime, const Package& package,
                              const Feature& feature, bool force,
                              std::vector<Diagnostic>* diagnostics) {
     bool valid = true;
+    for (const HdPack& pack : package.hd_packs) {
+        if (pack.feature_id != feature.id) continue;
+        fs::path path;
+        std::string error;
+        bool assets = hd_asset_path(package, pack.directory + "/hires.txt", path, &error);
+        std::error_code ec;
+        assets = assets && fs::is_regular_file(path, ec);
+        if (assets && !pack.patch.empty())
+            assets = hd_asset_path(package, pack.patch, path, &error) && fs::is_regular_file(path, ec);
+        if (!assets) {
+            valid = false;
+            if (diagnostics) diagnostics->push_back({package.id,feature.id,{},{},"hd-pack:assets",
+                error.empty() ? "HD pack assets are unavailable." : error});
+        }
+    }
     for (const ExternalRom& resource : package.external_roms) {
         if (resource.feature_id != feature.id) continue;
         if (!resource.required && !external_rom_selected(runtime, package,
@@ -2118,6 +2319,10 @@ int provider_commit(void*, const char* image_path) {
 
 int provider_commit_netplay(void*, const char* image_path) {
     Runtime& runtime = state();
+    if (runtime.hd_locked && !runtime.committed_hd_key.empty()) {
+        runtime.error = "Restart without the HD pack before starting online play.";
+        return 0;
+    }
     if (image_path && image_path[0]) {
         std::string digest;
         if (!crc32_file(image_path, digest, &runtime.error) ||
@@ -2132,6 +2337,10 @@ int provider_commit_netplay(void*, const char* image_path) {
      * offline selections. The next ordinary commit rebuilds this plan. */
     runtime.committed = {};
     runtime.committed_external_rom_paths.clear();
+    runtime.committed_hd = {};
+    runtime.committed_hd_key.clear();
+    runtime.committed_hd_directory.clear();
+    runtime.committed_hd_payload.clear();
     runtime.commit_succeeded = false;
     runtime.error.clear();
     return 1;
@@ -2231,6 +2440,10 @@ int provider_feature_choice_get(
 int provider_feature_enable(void*, const char* package_id,
                             const char* feature_id, int enabled) {
     if (!package_id || !feature_id) return 0;
+    if (nes_mod_feature_requires_restart(package_id, feature_id)) {
+        state().error = "Change the HD pack or its display mode in the launcher, then restart the game.";
+        return 0;
+    }
     const Package* package = selected_package(state(), package_id);
     const Feature* feature =
         package ? find_feature(*package, feature_id) : nullptr;
@@ -2476,8 +2689,27 @@ bool mod_runtime_initialize(const fs::path& root,
 bool mod_runtime_commit(const fs::path& rom_path, std::string* error) {
     Runtime& runtime = state();
     if (!runtime.initialized) return true;
+    if (runtime.hd_locked) {
+        const Validation pending = validate(runtime);
+        std::string key;
+        for (const ResolvedPlugin& plugin : pending.plugins) {
+            if (plugin.id != "nesrecomp.hd-pack") continue;
+            const Package* package = selected_package(runtime, plugin.package_id);
+            if (package) key = package->id + ":" + package->version + ":" + plugin.feature_id;
+        }
+        if (key != runtime.committed_hd_key) {
+            runtime.error = "Change the HD pack in the launcher, then restart the game.";
+            set_error(error, runtime.error); return false;
+        }
+    }
     runtime.committed = {};
     runtime.committed_external_rom_paths.clear();
+    if (!runtime.hd_locked) {
+        runtime.committed_hd = {};
+        runtime.committed_hd_key.clear();
+        runtime.committed_hd_directory.clear();
+        runtime.committed_hd_payload.clear();
+    }
     runtime.commit_succeeded = false;
     if (!rom_path.empty()) {
         std::string digest;
@@ -2513,8 +2745,14 @@ bool mod_runtime_commit(const fs::path& rom_path, std::string* error) {
         set_error(error, runtime.error);
         return false;
     }
+    if (!runtime.hd_locked && !snapshot_hd_pack(runtime, runtime.validation, rom_path, &runtime.error)) {
+        runtime.committed_external_rom_paths.clear();
+        set_error(error, runtime.error);
+        return false;
+    }
     if (!save_state(runtime, &runtime.error)) {
         runtime.committed_external_rom_paths.clear();
+        runtime.committed_hd = {};
         set_error(error, runtime.error);
         return false;
     }
@@ -2548,6 +2786,36 @@ extern "C" void nes_mod_set_local_only(const char* name, int required) {
     if (!name || !*name) return;
     if (required) NESRecomp::local_only_features.insert(name);
     else NESRecomp::local_only_features.erase(name);
+}
+
+extern "C" const NESModHdPack* nes_mod_hd_pack(void) {
+    const NESRecomp::Runtime& runtime = NESRecomp::state();
+    return runtime.commit_succeeded && runtime.committed_hd.directory
+        ? &runtime.committed_hd : nullptr;
+}
+
+extern "C" void nes_mod_lock_hd_pack(void) { NESRecomp::state().hd_locked = true; }
+
+extern "C" int nes_mod_feature_requires_restart(const char* package_id, const char* feature_id) {
+    using namespace NESRecomp;
+    Runtime& runtime = state();
+    if (!runtime.hd_locked || !package_id || !feature_id) return 0;
+    const Package* package = selected_package(runtime, package_id);
+    const Feature* feature = package ? find_feature(*package, feature_id) : nullptr;
+    if (!feature) return 0;
+    for (const HdPack& item : package->hd_packs)
+        if (item.feature_id == feature_id) return 1;
+    for (const ResolvedPlugin& plugin : runtime.committed.plugins) {
+        if (plugin.id != "nesrecomp.hd-pack") continue;
+        const Package* active = selected_package(runtime, plugin.package_id);
+        const Feature* hd = active ? find_feature(*active, plugin.feature_id) : nullptr;
+        if (!hd) continue;
+        std::set<std::string> groups(hd->exclusive_groups.begin(), hd->exclusive_groups.end());
+        if (!hd->exclusive_group.empty()) groups.insert(hd->exclusive_group);
+        if (groups.count(feature->exclusive_group)) return 1;
+        for (const auto& group : feature->exclusive_groups) if (groups.count(group)) return 1;
+    }
+    return 0;
 }
 
 extern "C" const char* nes_mod_local_only_reason(void) {
