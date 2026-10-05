@@ -13,6 +13,12 @@
 #include "cyc_recomp.h"
 #include "launcher_profile.h"
 #include "recomp_launcher.h"
+#ifdef NES_HOST_HAS_RECOMP_UI
+#include "nes_host_lobby.h"
+static int s_net_returned;
+static char s_net_error[96];
+void cyc_ui_net_returned(const char *why){s_net_returned=1;snprintf(s_net_error,sizeof s_net_error,"%s",why?why:"");}
+#endif
 
 #include <SDL.h>
 #include <stdio.h>
@@ -53,6 +59,7 @@ static void to_launcher(const CycSettings *s, RecompLauncherCSettings *io, const
     io->enable_audio = s->audio_enabled;
     io->volume = s->volume;
     io->skip_launcher = s->skip_launcher;
+    snprintf(io->netplay_player_name,sizeof io->netplay_player_name,"%s",s->netplay_player_name);
     io->hdpack_enabled = s->hdpack_enabled;
     snprintf(io->hdpack_dir,sizeof io->hdpack_dir,"%s",s->hdpack_dir);
 #ifdef RECOMP_LAUNCHER_HAS_ZAPPER_SETTINGS
@@ -86,6 +93,7 @@ static void from_launcher(const RecompLauncherCSettings *io, CycSettings *s, con
     s->audio_enabled = io->enable_audio != 0;
     s->volume = io->volume < 0 ? 0 : io->volume > 100 ? 100 : io->volume;
     s->skip_launcher = io->skip_launcher != 0;
+    snprintf(s->netplay_player_name,sizeof s->netplay_player_name,"%s",io->netplay_player_name);
     s->hdpack_enabled = io->hdpack_enabled != 0;
     snprintf(s->hdpack_dir,sizeof s->hdpack_dir,"%s",io->hdpack_dir);
 #ifdef RECOMP_LAUNCHER_HAS_ZAPPER_SETTINGS
@@ -189,6 +197,11 @@ int cyc_ui_launcher(CycSettings *settings, const char *settings_path, const CycH
     else if (cyc_native_program_name) snprintf(name, sizeof(name), "%s", cyc_native_program_name);
     else stem_of(*rom_path ? *rom_path : "NES", name, sizeof(name));
     gi.name = name;
+#ifdef NES_HOST_HAS_RECOMP_UI
+    gi.netplay=nes_host_lobby_init(name,*rom_path);
+    gi.netplay_supported=gi.netplay!=NULL;
+    if(s_net_returned){nes_host_lobby_returned(&gi,s_net_error);s_net_returned=0;}
+#endif
     gi.region = NULL;                 /* the identity is the image's SHA-256, not a region */
     gi.num_players = CYC_GAME_PLAYERS;
 #ifdef CYC_GAME_ZAPPER_PORT
@@ -286,6 +299,12 @@ int cyc_ui_launcher(CycSettings *settings, const char *settings_path, const CycH
     int act = recomp_launcher_run_window(title, &io, &gi, ".", *rom_path ? *rom_path : "", out_rom, sizeof(out_rom));
     /* The edits come back whichever way the launcher closed. */
     from_launcher(&io, settings, shortcuts, count);
+#ifdef NES_HOST_HAS_RECOMP_UI
+    if(act==RECOMP_LAUNCHER_RESULT_LAUNCH && io.netplay_launch.enabled) {
+        NesNetplayConfig cfg;
+        if(nes_host_lobby_config_from_launch(&io.netplay_launch,&cfg))nes_netplay_set_pending_config(&cfg);
+    }
+#endif
     if (act == RECOMP_LAUNCHER_RESULT_LAUNCH && out_rom[0]) *rom_path = out_rom;
     return act == RECOMP_LAUNCHER_RESULT_LAUNCH ? 0 : act == RECOMP_LAUNCHER_RESULT_QUIT ? 1 : 2;
 }

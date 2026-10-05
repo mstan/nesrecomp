@@ -73,7 +73,7 @@ static bool parse_int(const char *v, int *out)
     return true;
 }
 
-typedef enum { SEC_NONE, SEC_DISPLAY, SEC_AUDIO, SEC_INPUT, SEC_LAUNCHER, SEC_FDS, SEC_KEYS, SEC_PADS, SEC_GAME, SEC_ZAPPER } Section;
+typedef enum { SEC_NONE, SEC_DISPLAY, SEC_AUDIO, SEC_INPUT, SEC_LAUNCHER, SEC_FDS, SEC_KEYS, SEC_PADS, SEC_GAME, SEC_ZAPPER, SEC_NETPLAY } Section;
 
 bool cyc_settings_load(CycSettings *s, const char *path, FILE *log, const CycSettingsGame *game)
 {
@@ -98,6 +98,7 @@ bool cyc_settings_load(CycSettings *s, const char *path, FILE *log, const CycSet
             else if (eq_ci(name, "Audio")) sec = SEC_AUDIO;
             else if (eq_ci(name, "Input")) sec = SEC_INPUT;
             else if (eq_ci(name, "Launcher")) sec = SEC_LAUNCHER;
+            else if (eq_ci(name, "Netplay")) sec = SEC_NETPLAY;
             else if (eq_ci(name, "FDS")) sec = SEC_FDS;
             else if (eq_ci(name, "Game")) sec = SEC_GAME;
             else if (!strncmp(name, "Keyboard.", 9) || !strncmp(name, "Gamepad.", 8)) {
@@ -131,6 +132,9 @@ bool cyc_settings_load(CycSettings *s, const char *path, FILE *log, const CycSet
             break;
         case SEC_LAUNCHER:
             if (eq_ci(key, "SkipLauncher")) bad = !parse_int(val, &v) || (s->skip_launcher = v != 0, 0);
+            break;
+        case SEC_NETPLAY:
+            if (eq_ci(key,"PlayerName")) snprintf(s->netplay_player_name,sizeof s->netplay_player_name,"%s",val);
             break;
         case SEC_INPUT:
             if (!strncmp(key, "Player", 6) && key[6] >= '1' && key[6] < '1' + CYC_INPUT_PLAYERS) {
@@ -210,6 +214,7 @@ bool cyc_settings_save(const CycSettings *s, const char *path, const CycSettings
         fprintf(f, "Player%dSource = %d\nPlayer%dDevice = %s\nPlayer%dDeadzone = %d\n", p + 1, s->bind.source[p], p + 1,
                 s->bind.device[p], p + 1, s->bind.deadzone[p]);
     fprintf(f, "[Launcher]\nSkipLauncher = %d\n", s->skip_launcher);
+    fprintf(f,"[Netplay]\nPlayerName = %s\n",s->netplay_player_name);
     fprintf(f, "[Zapper]\nMouse = %d\nCrosshair = %d\n", s->zapper_mouse, s->zapper_crosshair);
     fprintf(f, "[FDS]\n# on, off, or default (the game's own setting)\n");
     unsigned n;

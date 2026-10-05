@@ -68,6 +68,9 @@
 #endif
 #include "cyc_ring.h"
 #include "cyc_state.h"
+#ifdef NESRECOMP_NET
+#include "cyc_net.h"
+#endif
 #include "cyc_tcp.h"
 #include "cyc_video.h"
 #include "../../common/nes_cart.h"
@@ -107,6 +110,15 @@ static int         s_key_hold[SDL_NUM_SCANCODES];   /* host loops a TCP-held key
 static bool        s_hidden;
 static bool        s_pause_unfocused;
 static char        s_image[1024];                   /* the image running (the save state slot's name) */
+bool cyc_sdl_force_launcher;
+#ifdef NESRECOMP_NET
+void cyc_sdl_net_name_store(const char *name) {
+    snprintf(s_set.netplay_player_name,sizeof s_set.netplay_player_name,"%s",name&&*name?name:"Player");
+}
+int cyc_sdl_net_name_load(char *out,size_t cap) {
+    snprintf(out,cap,"%s",s_set.netplay_player_name);return s_set.netplay_player_name[0]!=0;
+}
+#endif
 
 void cyc_sdl_image_path(const char *path) { snprintf(s_image, sizeof(s_image), "%s", path ? path : ""); }
 
@@ -189,7 +201,9 @@ int cyc_sdl_prelaunch(const char **rom_path, const char *cli_bios, NesFdsHleAsk 
     }
 #ifdef CYC_WITH_RECOMP_UI
     const char *no = getenv("NESRECOMP_NO_LAUNCHER");
-    if (!(no && *no && *no != '0') && !s_set.skip_launcher) {
+    extern bool cyc_sdl_force_launcher;
+    if (cyc_sdl_force_launcher || (!(no && *no && *no != '0') && !s_set.skip_launcher)) {
+        cyc_sdl_force_launcher=false;
         /* The launcher's BIOS state runs the host's own lookup (cyc_fds_bios.h);
          * its pick comes back in s_set.fds_bios. PLAY commits the Mods
          * screen's selection (the provider's commit) before it returns. */
@@ -285,11 +299,17 @@ static void state_slot(char *out, size_t n)
 
 static bool save_state_to(const char *path, char *err, size_t n)
 {
+#ifdef NESRECOMP_NET
+    if(nes_netplay_active()){snprintf(err,n,"Save states are unavailable during online play");return false;}
+#endif
     return cyc_state_save_file(path, err, n);
 }
 
 static bool load_state_from(const char *path, char *err, size_t n)
 {
+#ifdef NESRECOMP_NET
+    if(nes_netplay_active()){snprintf(err,n,"Load state is unavailable during online play");return false;}
+#endif
     if (!cyc_state_load_file(path, err, n)) return false;
     s_frames_done = (long)cyc_ring_frame;
     cyc_session_state_loaded();
@@ -747,6 +767,9 @@ static void tcp_load_state(int id, const char *line) { tcp_state_file(id, line, 
 
 static void tcp_video(int id, const char *line)
 {
+#ifdef NESRECOMP_NET
+    if(nes_netplay_active()){cyc_tcp_err(id,"The room sets the online width");return;}
+#endif
     char mode[16];
     if (cyc_tcp_str(line, "mode", mode, sizeof(mode))) {
         int m;
@@ -1149,6 +1172,7 @@ static bool menu_open(void)
 
 int cyc_sdl_main(const char *title_in, int scale)
 {
+    s_running=true;s_frames_done=(long)cyc_ring_frame;s_tex=NULL;s_pad_count=0;s_vpad_joy=NULL;
     /* a path names the game by its file's stem */
     char title[256];
     const char *base = title_in, *s1 = strrchr(title_in, '/'), *s2 = strrchr(title_in, '\\');
@@ -1210,6 +1234,9 @@ int cyc_sdl_main(const char *title_in, int scale)
     SDL_AudioDeviceID dev = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
     if (dev && cyc_audio_enable(have.freq)) SDL_PauseAudioDevice(dev, 0);
     else if (!dev) fprintf(stderr, "SDL audio: %s (continuing without sound)\n", SDL_GetError());
+#ifdef NESRECOMP_NET
+    if(cyc_net_boot()!=0)s_running=false;
+#endif
 
     if (s_vpad_path && vpad_load(s_vpad_path)) vpad_attach();
     tcp_setup();
@@ -1249,6 +1276,9 @@ int cyc_sdl_main(const char *title_in, int scale)
                         if (es.player_pad[p] >= 0 && SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(s_pads[es.player_pad[p]])) == ev.caxis.which)
                             player = p;
                 }
+#ifdef NESRECOMP_NET
+                if(!nes_netplay_active())
+#endif
                 cyc_session_event(&ev, player);
             }
             if (ev.type == SDL_QUIT) s_running = false;
@@ -1261,7 +1291,11 @@ int cyc_sdl_main(const char *title_in, int scale)
             else if (ev.type == SDL_CONTROLLERDEVICEADDED || ev.type == SDL_CONTROLLERDEVICEREMOVED) open_pads();
             else if (ev.type == SDL_KEYDOWN) {
 #ifdef CYC_DEV_UI
-                if (!ev.key.repeat && dev_key(ev.key.keysym.scancode)) continue;
+                if (!ev.key.repeat
+#ifdef NESRECOMP_NET
+                    && !nes_netplay_active()
+#endif
+                    && dev_key(ev.key.keysym.scancode)) continue;
 #endif
                 if (open) menu_nav_key(&ev.key);
             } else if (ev.type == SDL_CONTROLLERBUTTONDOWN && open) {
@@ -1339,38 +1373,57 @@ int cyc_sdl_main(const char *title_in, int scale)
 
         bool inactive = s_pause_unfocused && !s_hidden && !(SDL_GetWindowFlags(s_win) & SDL_WINDOW_INPUT_FOCUS);
         bool loading = false, fast = false;
-        if (!open && !inactive) {
+        bool online=false,replay=false;
+#ifdef NESRECOMP_NET
+        online=nes_netplay_active();
+        if(online&&cyc_net_leaving()){s_running=false;break;}
+#endif
+        if (online || (!open && !inactive)) {
             uint8_t pad0 = st.buttons[0], pad1 = st.buttons[1];
             if (hold_input) {
                 if (pad0 || pad1) pad0 = pad1 = 0;
                 else hold_input = false;
             }
-            cyc_host_disk_frame(now, s_frames_done);
             uint8_t buttons[2] = {pad0, pad1};
+#ifdef NESRECOMP_NET
+            if(online) {
+                int player=nes_netplay_input_player();if(player<0||player>=CYC_INPUT_PLAYERS)player=0;
+                int admit=cyc_net_admit(open||inactive||hold_input?0:st.buttons[player]);
+                if(!admit){SDL_Delay(1);continue;}
+                s_frames_done=(long)cyc_ring_frame;replay=cyc_net_replaying();cyc_net_input(buttons);
+            } else
+#endif
+            {
+            cyc_host_disk_frame(now, s_frames_done);
             cyc_session_logical_input(st.buttons,CYC_INPUT_PLAYERS);
             cyc_session_input(buttons);
             cyc_set_controller(0, buttons[0]);
             cyc_set_controller(1, buttons[1]);
             zapper_mouse_frame();
+            }
             cyc_session_frame_begin();
             cyc_run_frame();
             cyc_session_frame_end();
+#ifdef NESRECOMP_NET
+            if(online)cyc_net_finish();
+#endif
             frames++;
             cyc_host_frame_done(++s_frames_done);
             loading = s_fds && cyc_host_frame_unpaced();
-            fast = st.shortcut[CYC_SC_FAST_FORWARD] || loading;
+            fast = !online&&(st.shortcut[CYC_SC_FAST_FORWARD] || loading);
         }
         int16_t pcm[4096];
         size_t n;
         while ((n = cyc_audio_read(pcm, 4096)) > 0) {
             cyc_session_audio_mix(pcm,n);
             /* Keep latency bounded: skip a frame's audio if ~100 ms are queued. */
-            if (!dev || fast || open || inactive || !s_set.audio_enabled || SDL_GetQueuedAudioSize(dev) >= (Uint32)(have.freq / 10) * 2)
+            if (replay || !dev || fast || open || inactive || !s_set.audio_enabled || SDL_GetQueuedAudioSize(dev) >= (Uint32)(have.freq / 10) * 2)
                 continue;
             if (s_set.volume < 100)
                 for (size_t i = 0; i < n; ++i) pcm[i] = (int16_t)(pcm[i] * s_set.volume / 100);
             SDL_QueueAudio(dev, pcm, (Uint32)(n * sizeof(int16_t)));
         }
+        if(replay){next=SDL_GetPerformanceCounter();continue;}
 
         /* A fast-loaded frame is shown only if 1/60 s passed since the last one. */
         Uint64 tnow = SDL_GetPerformanceCounter();
@@ -1429,5 +1482,8 @@ int cyc_sdl_main(const char *title_in, int scale)
     SDL_DestroyRenderer(s_ren);
     SDL_DestroyWindow(s_win);
     SDL_Quit();
+#ifdef NESRECOMP_NET
+    if(nes_netplay_active())return 3;
+#endif
     return 0;
 }

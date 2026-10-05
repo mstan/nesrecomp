@@ -8,13 +8,21 @@ import shutil
 import subprocess
 import sys
 
+from cli import REQUIRED_HEADERS
+
 
 ARCHIVE_NAME = "nesrecomp-cli-windows-x86_64.zip"
 
 
 def run(command: list[str], cwd: Path) -> None:
     print("+", subprocess.list2cmdline(command))
-    subprocess.run(command, cwd=cwd, check=True)
+    startup = None
+    if sys.platform == "win32":
+        startup = subprocess.STARTUPINFO()
+        startup.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        startup.wShowWindow = 0
+    subprocess.run(command, cwd=cwd, check=True, startupinfo=startup,
+                   creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
 
 
 def main() -> int:
@@ -35,6 +43,8 @@ def main() -> int:
     dist = build_root / "dist"
     output = Path(args.output).resolve() if args.output else build_root
 
+    if not build_root.resolve().is_relative_to(root.resolve()):
+        raise SystemExit("CLI build directory is outside the source checkout.")
     if build_root.exists():
         shutil.rmtree(build_root)
     build_root.mkdir(parents=True)
@@ -60,6 +70,14 @@ def main() -> int:
     packaged_core = build_root / "NESRecomp-core.exe"
     shutil.copy2(core, packaged_core)
 
+    headers = build_root / "framework"
+    for backend, names in REQUIRED_HEADERS.items():
+        destination = headers / backend / "include"
+        destination.mkdir(parents=True)
+        source = root / "runner" / ("cyc" if backend == "cycle" else "include")
+        for name in names:
+            shutil.copy2(source / name, destination / name)
+
     separator = ";" if sys.platform == "win32" else ":"
     run(
         [
@@ -81,7 +99,7 @@ def main() -> int:
             "--add-binary",
             f"{packaged_core}{separator}.",
             "--add-data",
-            f"{root / 'runner' / 'include'}{separator}framework/include",
+            f"{headers}{separator}framework",
             str(root / "tools" / "cli.py"),
         ],
         root,

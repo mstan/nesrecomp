@@ -22,7 +22,13 @@
 #include <string.h>
 
 #include "nes_rb_state.h"
+#ifdef NESRECOMP_CYCLE_NET
+#include "cyc_core.h"
+#include "cyc_ring.h"
+#include "cpu6502.h"
+#else
 #include "nes_runtime.h"
+#endif
 #include "retcomm_rbengine/mono_ms.h"
 #include "retcomm_rbengine/snap_ring.h"
 
@@ -255,7 +261,11 @@ static void rb_host_boot_digest_noted(void *ctx)
     int charged = 0;
     (void)ctx;
     nes_rb_state_digest(&d);
+#ifdef NESRECOMP_CYCLE_NET
+    pc=cpu.pc;
+#else
     (void)runtime_get_savestate_resume(&pc, &charged);
+#endif
     fprintf(stderr,
             "nes_netplay: RB boot parts master=%08x cpu_wram=%08x ppu=%08x "
             "apu_io_mods=%08x\n",
@@ -264,7 +274,11 @@ static void rb_host_boot_digest_noted(void *ctx)
     fprintf(stderr,
             "nes_netplay: RB boot taken at frame=%llu cycles=%llu resume_pc=$%04X "
             "charged=%d\n",
+#ifdef NESRECOMP_CYCLE_NET
+            (unsigned long long)cyc_ring_frame, (unsigned long long)cyc_cycle_count(),
+#else
             (unsigned long long)g_frame_count, (unsigned long long)g_nes_cycles,
+#endif
             (unsigned)pc, charged);
 }
 

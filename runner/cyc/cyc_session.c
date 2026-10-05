@@ -7,6 +7,9 @@
 
 #include <stdlib.h>
 #include <string.h>
+#ifdef NESRECOMP_NET
+#include "nes_netplay.h"
+#endif
 
 #ifndef NESRECOMP_ENABLE_MODS
 #define NESRECOMP_ENABLE_MODS 0
@@ -110,7 +113,12 @@ bool cyc_session_mods_start(const char *image_path, char *err, size_t err_len)
 {
 #if NESRECOMP_ENABLE_MODS
     if (!s_mods) return true;
-    if (!nes_mod_runtime_commit_c(image_path)) {
+    int online=0;
+#ifdef NESRECOMP_NET
+    NesNetplayConfig cfg;nes_netplay_config_defaults(&cfg);nes_netplay_config_apply_env(&cfg);
+    online=nes_netplay_pending()||cfg.enabled;
+#endif
+    if (!(online?nes_mod_runtime_commit_netplay_c(image_path):nes_mod_runtime_commit_c(image_path))) {
         snprintf(err, err_len, "mods: %s", nes_mod_runtime_last_error_c());
         return false;
     }

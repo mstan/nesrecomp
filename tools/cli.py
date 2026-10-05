@@ -12,14 +12,14 @@ import shutil
 import subprocess
 import sys
 import time
+import tomllib
 
 
 VERSION = "0.3.0"
-REQUIRED_HEADERS = (
-    "coroutine.h",
-    "nes_runtime.h",
-    "recomp_stack.h",
-)
+REQUIRED_HEADERS = {
+    "legacy": ("coroutine.h", "nes_runtime.h", "recomp_stack.h", "mod_function_hooks.h"),
+    "cycle": ("cyc_recomp.h", "cpu6502.h", "cyc_trace.h", "cyc_hooks.h", "hw.h"),
+}
 
 
 def _resource_root() -> Path:
@@ -46,12 +46,12 @@ def _core_path() -> Path:
     raise FileNotFoundError("The bundled NESRecomp core executable is missing.")
 
 
-def _framework_include_path() -> Path:
+def _framework_include_path(backend: str) -> Path:
     root = _resource_root()
-    bundled = root / "framework" / "include"
+    bundled = root / "framework" / backend / "include"
     if bundled.is_dir():
         return bundled
-    source_tree = root / "runner" / "include"
+    source_tree = root / "runner" / ("cyc" if backend == "cycle" else "include")
     if source_tree.is_dir():
         return source_tree
     raise FileNotFoundError("The NESRecomp framework headers are missing.")
@@ -65,17 +65,25 @@ def _project_name(rom: Path, requested: str | None) -> str:
     return value[:80]
 
 
-def _write_project_files(output: Path, name: str, rom: Path, used_config: bool) -> None:
-    cmake = f'''cmake_minimum_required(VERSION 3.20)
-project({name}_recompiled C)
-
-set(NESRECOMP_GENERATED_SOURCES
+def _write_project_files(output: Path, name: str, rom: Path, used_config: bool, backend: str) -> None:
+    if backend == "cycle":
+        sources = f'''file(GLOB NESRECOMP_GENERATED_SOURCES CONFIGURE_DEPENDS
+    "${{CMAKE_CURRENT_SOURCE_DIR}}/generated/{name}_cyc*.c"
+)
+'''
+    else:
+        sources = f'''set(NESRECOMP_GENERATED_SOURCES
     "${{CMAKE_CURRENT_SOURCE_DIR}}/generated/{name}_full.c"
     "${{CMAKE_CURRENT_SOURCE_DIR}}/generated/{name}_dispatch.c"
 )
 file(GLOB NESRECOMP_BANK_SOURCES CONFIGURE_DEPENDS
     "${{CMAKE_CURRENT_SOURCE_DIR}}/generated/{name}_full_bank*.c"
 )
+'''
+    cmake = f'''cmake_minimum_required(VERSION 3.20)
+project({name}_recompiled C)
+
+{sources}
 
 add_library(nesrecomp_game STATIC
     ${{NESRECOMP_GENERATED_SOURCES}}
@@ -89,6 +97,9 @@ set_target_properties(nesrecomp_game PROPERTIES
     C_STANDARD 11
     C_STANDARD_REQUIRED YES
 )
+if(MSVC)
+    target_compile_options(nesrecomp_game PRIVATE /bigobj)
+endif()
 '''
     build_ps1 = '''$ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -103,7 +114,7 @@ cmake --build "$root/build"
 '''
     readme = f'''# {name} NESRecomp output
 
-This folder contains C source generated from `{rom.name}`.
+This folder contains {backend} backend C source generated from `{rom.name}`.
 
 ## Build the generated source
 
@@ -122,9 +133,11 @@ macOS or Linux:
 The build creates the `nesrecomp_game` static library. This confirms that the
 generated source compiles; it is not a complete playable port by itself.
 
-To make a playable port, add game-specific configuration and integrate the
-library with the NESRecomp runner. Existing game repositories are useful
-starting points: https://github.com/mstan/nesrecomp
+To make a playable port, add game-specific configuration and integrate with
+the corresponding NESRecomp runner. Cycle projects use
+`runner/cyc/project.cmake` and `nesrecomp_add_cycle_game`; see
+https://github.com/mstan/nesrecomp/blob/master/runner/cyc/PROJECTS.md.
+Existing game repositories are also useful starting points.
 '''
     metadata = {
         "format": 1,
@@ -133,6 +146,7 @@ starting points: https://github.com/mstan/nesrecomp
         "project_name": name,
         "source_rom_name": rom.name,
         "used_game_config": used_config,
+        "backend": backend,
         "generated_at_unix": int(time.time()),
     }
 
@@ -145,11 +159,11 @@ starting points: https://github.com/mstan/nesrecomp
     )
 
 
-def _copy_framework(output: Path) -> None:
-    source = _framework_include_path()
+def _copy_framework(output: Path, backend: str) -> None:
+    source = _framework_include_path(backend)
     destination = output / "framework" / "include"
     destination.mkdir(parents=True, exist_ok=True)
-    for header in REQUIRED_HEADERS:
+    for header in REQUIRED_HEADERS[backend]:
         source_file = source / header
         if not source_file.is_file():
             raise FileNotFoundError(f"Required framework header is missing: {header}")
@@ -157,6 +171,11 @@ def _copy_framework(output: Path) -> None:
 
 
 def _run_core(command: list[str], output: Path, verbose: bool) -> int:
+    startup = None
+    if os.name == "nt":
+        startup = subprocess.STARTUPINFO()
+        startup.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        startup.wShowWindow = 0
     process = subprocess.Popen(
         command,
         cwd=output,
@@ -164,6 +183,8 @@ def _run_core(command: list[str], output: Path, verbose: bool) -> int:
         stderr=subprocess.STDOUT,
         text=True,
         errors="replace",
+        startupinfo=startup,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
     assert process.stdout is not None
     recent: deque[str] = deque(maxlen=80)
@@ -206,12 +227,22 @@ def _build(args: argparse.Namespace) -> int:
         )
 
     name = _project_name(rom, args.name)
+    backend = args.backend
+    if backend is None:
+        cycle = True
+        if game:
+            with game.open("rb") as config:
+                cycle = tomllib.load(config).get("game", {}).get("cycle_accurate", True)
+            if not isinstance(cycle, bool):
+                raise ValueError("game.cycle_accurate must be true or false.")
+        backend = "cycle" if cycle else "legacy"
     output.mkdir(parents=True, exist_ok=True)
     command = [
         str(_core_path()),
         str(rom),
         "--output-prefix",
         name,
+        "--cycle-accurate" if backend == "cycle" else "--legacy",
     ]
     if game:
         command.extend(("--game", str(game)))
@@ -222,7 +253,7 @@ def _build(args: argparse.Namespace) -> int:
     if return_code:
         return return_code
 
-    expected = (
+    expected = (output / "generated" / f"{name}_cyc.c",) if backend == "cycle" else (
         output / "generated" / f"{name}_full.c",
         output / "generated" / f"{name}_dispatch.c",
     )
@@ -230,8 +261,8 @@ def _build(args: argparse.Namespace) -> int:
     if missing:
         raise RuntimeError("Recompiler completed without expected output: " + ", ".join(missing))
 
-    _copy_framework(output)
-    _write_project_files(output, name, rom, game is not None)
+    _copy_framework(output, backend)
+    _write_project_files(output, name, rom, game is not None, backend)
     print("[nesrecomp] Done. Generated source and build scripts are ready.")
     print(f"[nesrecomp] Next: powershell -File \"{output / 'build.ps1'}\"")
     return 0
@@ -250,6 +281,11 @@ def _parser() -> argparse.ArgumentParser:
     build.add_argument("--output", required=True, help="new folder for generated source")
     build.add_argument("--game", help="optional path to an existing game.toml")
     build.add_argument("--name", help="optional output/project name")
+    backend = build.add_mutually_exclusive_group()
+    backend.add_argument("--backend", choices=("cycle", "legacy"),
+                         help="override game.toml backend (default: cycle)")
+    backend.add_argument("--legacy", dest="backend", action="store_const", const="legacy",
+                         help="explicitly select the retained legacy backend")
     build.add_argument(
         "--force",
         action="store_true",
@@ -269,7 +305,7 @@ def main() -> int:
     args = parser.parse_args()
     try:
         return int(args.handler(args))
-    except (FileNotFoundError, RuntimeError, ValueError) as error:
+    except (FileNotFoundError, RuntimeError, ValueError, tomllib.TOMLDecodeError) as error:
         print(f"nesrecomp: error: {error}", file=sys.stderr)
         return 2
 

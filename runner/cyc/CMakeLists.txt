@@ -80,6 +80,8 @@ add_test(NAME cyc_disk_action_test COMMAND cyc_disk_action_test)
 find_package(Python3 3.11 REQUIRED COMPONENTS Interpreter)
 add_test(NAME cyc_bad_game_config COMMAND "${Python3_EXECUTABLE}"
     "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_bad_game_config.py" --compiler $<TARGET_FILE:NESRecomp>)
+add_test(NAME cyc_backend_default COMMAND "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_backend_default.py" --recompiler $<TARGET_FILE:NESRecomp>)
 list(APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../external/SDL2/cmake")
 find_package(SDL2 CONFIG QUIET)
 if(SDL2_FOUND)

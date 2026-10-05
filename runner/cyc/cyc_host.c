@@ -179,6 +179,13 @@
 #endif
 #include "cyc_state.h"
 #include "cyc_video.h"
+#ifdef NESRECOMP_NET
+#include "cyc_net.h"
+#include <SDL.h>
+#ifdef NES_HOST_HAS_RECOMP_UI
+#include "nes_host_lobby.h"
+#endif
+#endif
 #endif
 
 #include <stdio.h>
@@ -1167,6 +1174,15 @@ int main(int argc, char **argv) {
 #ifndef CYC_ORACLE
     s_saves_enabled = !no_save;
     if (!rom_path) rom_path = cyc_native_fds_image_path;   /* game.toml [fds] image */
+#ifdef NESRECOMP_NET
+    const char *offline_save_file=save_file,*offline_datach_save=datach_save;
+    bool online_from_lobby=false;
+#ifdef NES_HOST_HAS_RECOMP_UI
+    int lobby_round=1;
+#endif
+session_restart:
+    save_file=offline_save_file;datach_save=offline_datach_save;
+#endif
 #if defined(CYC_WITH_SDL)
     /* The window: its settings, and recomp-ui's launcher where the build has it. */
     if (!headless && cyc_sdl_prelaunch(&rom_path, fds_bios, &saved_hle, &saved_bios)) return 0;
@@ -1340,6 +1356,22 @@ int main(int argc, char **argv) {
     }
     if (no_save) save_file = datach_save = NULL;
 #endif
+#ifdef NESRECOMP_NET
+    NesNetplayConfig netcfg;
+#ifdef NES_HOST_HAS_RECOMP_UI
+    if(headless && nes_host_lobby_selftest_role()) {
+        if(!nes_host_lobby_init(cyc_native_display_name,rom_path)||nes_host_lobby_selftest_room(lobby_round,&netcfg)!=0)return 2;
+        nes_netplay_set_pending_config(&netcfg);
+    }
+#endif
+    online_from_lobby=nes_netplay_pending()!=0;cyc_net_prepare(&netcfg);
+    if(netcfg.enabled&&(fds||acccoin||spam_page>=0||input_file||load_state||zapper_input||barcode||disk_event_count||zapper_port>0)) {
+        fprintf(stderr,"[cycle netplay] input scripts, load states, disk games and light guns are unavailable online\n");return 2;
+    }
+    /* The guest never reads or writes its personal save. Cartridge storage
+     * arrives from the host before any CPU instruction executes. */
+    if(cyc_net_guest())save_file=datach_save=NULL;
+#endif
     if (!save_paths_distinct(save_file,rom_path) || !save_paths_distinct(datach_save,rom_path)) {
         fprintf(stderr,"save files must be different from the ROM image\n"); return 2;
     }
@@ -1392,6 +1424,19 @@ int main(int argc, char **argv) {
     fds_save_powered_on();
     cyc_state_set_host(&HOST_STATE);
     if (present_w > 0) cyc_video_window_resized(present_w, present_h);
+#ifdef NESRECOMP_NET
+    if(cyc_net_start(&netcfg,rom_path)!=0) {
+        char why[96];snprintf(why,sizeof why,"%s",nes_netplay_last_error());
+        fprintf(stderr,"[cycle netplay] start refused: %s\n",why);cyc_net_shutdown();
+#ifdef NES_HOST_HAS_RECOMP_UI
+        if(online_from_lobby&&!headless) {
+            extern bool cyc_sdl_force_launcher;void cyc_ui_net_returned(const char *reason);
+            cyc_ui_net_returned(why);cyc_sdl_force_launcher=true;free(image);goto session_restart;
+        }
+#endif
+        return 2;
+    }
+#endif
     if (!cyc_session_start()) return 2;
     if (extra_scanlines >= 0 && !cyc_set_extra_scanlines((unsigned)extra_scanlines)) {
         fprintf(stderr, "--extra-scanlines requires an MMC3 cartridge\n"); return 2;
@@ -1405,7 +1450,19 @@ int main(int argc, char **argv) {
         int result=cyc_sdl_main(cyc_native_display_name ? cyc_native_display_name
                                 : cyc_native_program_name ? cyc_native_program_name : rom_path, scale);
         bool disk_ok=fds_save_flush(CYC_FDS_SAVE_EXIT);
-        return save_write(save_file,0) && save_write(datach_save,1) && disk_ok?result:2;
+        bool saves_ok=save_write(save_file,0)&&save_write(datach_save,1)&&disk_ok;
+#ifdef NESRECOMP_NET
+        char net_error[96];snprintf(net_error,sizeof net_error,"%s",nes_netplay_last_error());
+        cyc_net_shutdown();
+#ifdef NES_HOST_HAS_RECOMP_UI
+        if(saves_ok&&result==3&&online_from_lobby) {
+            extern bool cyc_sdl_force_launcher;void cyc_ui_net_returned(const char *why);
+            cyc_ui_net_returned(net_error);cyc_sdl_force_launcher=true;free(image);goto session_restart;
+        }
+#endif
+        if(result==3)result=net_error[0]?2:0;
+#endif
+        return saves_ok?result:2;
     }
 #else
     (void)scale;
@@ -1446,6 +1503,9 @@ int main(int argc, char **argv) {
     unsigned WAV_RATE = 48000;
 #ifndef CYC_ORACLE
     WAV_RATE = cyc_session_audio_rate(WAV_RATE);
+#endif
+#ifdef NESRECOMP_NET
+    if(cyc_net_boot()!=0){cyc_net_shutdown();return 2;}
 #endif
     FILE *wav_f = NULL;
     uint32_t wav_samples = 0;
@@ -1498,12 +1558,23 @@ int main(int argc, char **argv) {
     long load_frames = 0;
 #endif
     for (;;) {
+        bool online=false,replay=false;
+#ifdef NESRECOMP_NET
+        online=nes_netplay_active();
+        if(online) {
+            if(frame>=frames)nes_netplay_request_quiesce();
+            if(cyc_net_leaving())break;
+            int admit=cyc_net_admit(0);
+            if(!admit){SDL_Delay(1);continue;}
+            frame=(long)cyc_ring_frame;replay=cyc_net_replaying();uint8_t buttons[2];cyc_net_input(buttons);
+        }
+#endif
         if (acccoin && drv.done) break;
-        if ((!acccoin || frames_given) && frame >= frames) break;
+        if (!online && (!acccoin || frames_given) && frame >= frames) break;
         if (barcode && frame==barcode_frame) cyc_scan_barcode(barcode,barcode_speed);
         if (spam_page >= 0) cyc_set_controller(0, acccoin_spam_tick(&spam, cyc_cpu_ram(), stdout));
         else if (acccoin) cyc_set_controller(0, acccoin_driver_tick(&drv, cyc_cpu_ram()));
-        else input_tick(frame);
+        else if(!online)input_tick(frame);
         cyc_trace_file = (trace_f && frame == trace_frame) ? trace_f : NULL;
 #ifdef CYC_ORACLE
         cyc_oracle_run_frame();
@@ -1516,12 +1587,15 @@ int main(int argc, char **argv) {
         cyc_session_frame_begin();
         cyc_run_frame();
         cyc_session_frame_end();
+#ifdef NESRECOMP_NET
+        if(online)cyc_net_finish();
+#endif
         fds_save_frame(frame + 1);
         if (cyc_is_fds() && cyc_fds_hle_loading()) {
             load_frames++;
             if (!realtime || cyc_host_frame_unpaced()) load_wall += wall_seconds() - frame_start;
         }
-        if (realtime) {
+        if (realtime && !replay) {
             /* The window's pacing: a frame is shown every 1/60.0988 s, except
              * that fast load runs load frames back to back. */
             if (cyc_host_frame_unpaced()) next_frame = wall_seconds();
@@ -1534,18 +1608,20 @@ int main(int argc, char **argv) {
         if (frame_log_f && !frame_log_mesen && frame >= log_first && (log_last < 0 || frame <= log_last))
             write_frame_log(frame_log_f, frame);
 #endif
-        if (hash_f) write_hash_line(hash_f, frame);
-        if (wav_f) {
+        if (hash_f && !replay) write_hash_line(hash_f, frame);
+        if (wav_f || online) {
             int16_t pcm[4096];
             size_t n;
             while ((n = cyc_audio_read(pcm, 4096)) > 0) {
 #ifndef CYC_ORACLE
                 cyc_session_audio_mix(pcm,n);
 #endif
-                fwrite(pcm, sizeof(int16_t), n, wav_f);
-                wav_samples += (uint32_t)n;
+                if(wav_f&&!replay){fwrite(pcm, sizeof(int16_t), n, wav_f);wav_samples += (uint32_t)n;}
             }
         }
+#ifndef CYC_ORACLE
+        if(replay){frame=(long)cyc_ring_frame;next_frame=wall_seconds();continue;}
+#endif
         if (state_out && frame == state_frame) {
             FILE *sf = fopen(state_out, "w");
             if (sf) {
@@ -1699,6 +1775,18 @@ int main(int argc, char **argv) {
     if (!disk_ok) return 2;
 #endif
     if (!save_write(save_file,0) || !save_write(datach_save,1)) return 2;
+#ifdef NESRECOMP_NET
+    bool net_failed=nes_netplay_last_error()[0]!=0;cyc_net_shutdown();
+    if(net_failed)return 2;
+#ifdef NES_HOST_HAS_RECOMP_UI
+    if(headless && nes_host_lobby_selftest_role()) {
+        const char *rounds=getenv("NES_LOBBY_SELFTEST_ROUNDS");int count=rounds?atoi(rounds):1;
+        nes_host_lobby_returned(NULL,NULL);nes_host_lobby_selftest_report(lobby_round);
+        if(lobby_round++<count){free(image);goto session_restart;}
+        nes_host_lobby_shutdown();
+    }
+#endif
+#endif
     if (acccoin) {
         const uint8_t *prg = image + cart_info.data_offset;
         size_t prg_len = (size_t)cart_info.prg_size;

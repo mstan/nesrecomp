@@ -1,5 +1,20 @@
 # Using the cycle backend in an existing game project
 
+Cycle is the compiler default. New games should use `nesrecomp_add_cycle_game`
+below, and migrated projects default `NESRECOMP_BACKEND` to `cycle`. Retain an
+explicit `legacy` branch in CMake when an older host is needed. Its generation
+command must pass `--legacy`; a missing backend choice now generates cycle code.
+
+Cycle targets can call `nesrecomp_enable_recomp_net(target)` after adding their
+game and launcher. This reuses the shared NES session facade, recomp-net's
+rollback driver and recomp-ui's lobby. Snapshots contain the complete cycle
+save domain and four logical seats; frame admission runs at returning frame
+boundaries. Replays suppress presentation and audio, online menus keep the
+match running and lock simulation settings, and guests use host-authoritative
+cartridge storage without touching their personal saves. The title must seal
+every enhancement setting it permits online. SMB1 carries the first binding;
+its separate-machine/WAN qualification is still pending.
+
 MMC3 projects can opt into extra CPU time with `cyc_set_extra_scanlines(128)`
 between frames, or with the host's `--extra-scanlines 128` option. Zero restores
 stock timing. This enhancement adds blank scanlines before NMI and pauses APU
@@ -24,6 +39,16 @@ Requires CMake 3.20+, a C11 compiler and Python 3.11+. The host recompiler is
 built automatically during configure. Cross builds must supply an already
 built host compiler with `NESRECOMP_HOST_COMPILER` or `RECOMPILER` below.
 
+Windows game repositories can call `tools/build_cycle_windows.ps1` with
+`-ProjectRoot`, `-Rom` and optional `-BuildDir`, `-EngineRoot`, `-RecompUi` and
+`-CMakeArgs`. It uses the installed CMake executable and hidden native
+processes, generates cycle code during configure and builds Release.
+`tools/package_cycle_windows.ps1` adds `-Target` and `-Title` and creates a
+ROM-free ZIP with SDL2, launcher assets, pristine preloaded packages and
+licenses. `-SkipBuild` requires an existing cycle production cache. Games
+with specialized assets or variant packaging should keep their own staging
+recipe; this helper is for the ordinary cartridge titles.
+
 ## Build alongside the existing project
 
 Configure this framework's standalone entry point with the existing game's
@@ -43,19 +68,24 @@ off to include SDL2 when available; running without headless options opens
 its window. Building or headless verification never launches a game window.
 The compiled program checks ROM identity before execution.
 
-## Add an opt-in target to the game's CMakeLists.txt
+## Default the game's CMakeLists.txt to cycle
 
 After `project(...)`, before any legacy SDL/UI dependency setup:
 
 ```cmake
-option(NESRECOMP_USE_CYCLE_BACKEND "Build the cycle backend" OFF)
-if(NESRECOMP_USE_CYCLE_BACKEND)
+set(NESRECOMP_BACKEND "cycle" CACHE STRING "CPU backend: cycle or legacy")
+set_property(CACHE NESRECOMP_BACKEND PROPERTY STRINGS cycle legacy)
+if(NESRECOMP_BACKEND STREQUAL "cycle")
     include("${NESRECOMP_ROOT}/runner/cyc/project.cmake")
     nesrecomp_add_cycle_game(MyGame
         ROM "${CMAKE_SOURCE_DIR}/Game.nes"
         GAME_CONFIG "${CMAKE_SOURCE_DIR}/game.toml")
     return()
 endif()
+if(NOT NESRECOMP_BACKEND STREQUAL "legacy")
+    message(FATAL_ERROR "Unknown NESRECOMP_BACKEND: ${NESRECOMP_BACKEND}")
+endif()
+# Existing legacy target follows here. Its generator must pass --legacy.
 ```
 
 Set `NESRECOMP_ROOT` before this block. The function also accepts `HEADLESS`,

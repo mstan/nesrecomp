@@ -54,8 +54,9 @@ set(NESRECOMP_CYC_SOURCES
     # mod_savestate.h): dependency-free C, linked whether or not a game has mods.
     ${NESRECOMP_CYC_DIR}/../src/mod_function_hooks.c
     ${NESRECOMP_CYC_DIR}/../src/mod_savestate.c
+    ${NESRECOMP_CYC_DIR}/../src/rollback/nes_session_config.c
 )
-set(NESRECOMP_CYC_INCLUDE_DIRS ${NESRECOMP_CYC_DIR})
+set(NESRECOMP_CYC_INCLUDE_DIRS ${NESRECOMP_CYC_DIR} ${NESRECOMP_CYC_DIR}/../include)
 # The scheduler and what it runs besides the machine (hook sites, isolated
 # mod calls and the snapshot they are undone with), for tests that link the
 # machine without a host.

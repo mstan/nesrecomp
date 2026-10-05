@@ -14,6 +14,9 @@
 #include "cyc_run.h"
 #include "recomp_runtime_ui.h"
 #include "recomp_launcher.h"
+#ifdef NESRECOMP_NET
+#include "nes_netplay.h"
+#endif
 #if NESRECOMP_ENABLE_MODS
 #include "mod_runtime.h"
 #endif
@@ -318,6 +321,9 @@ static int get_value(void *ctx, const RecompRuntimeUiItem *it, int *out)
 
 static int set_value(void *ctx, const RecompRuntimeUiItem *it, int v)
 {
+#ifdef NESRECOMP_NET
+    if(nes_netplay_active()&&(mod_row(it)||game_row(it)||axis_of(it)>=0||is_key(it,"cyc.disk.side")||is_key(it,RECOMP_RUNTIME_UI_KEY_VIEW_MODE)))return 0;
+#endif
     (void)ctx;
     CycSettings *s = s_host.settings;
     const CycHostExtras *x = s_host.extras;
@@ -351,6 +357,9 @@ static int set_value(void *ctx, const RecompRuntimeUiItem *it, int v)
 
 static int run_action(void *ctx, const RecompRuntimeUiItem *it)
 {
+#ifdef NESRECOMP_NET
+    if(nes_netplay_active()&&(game_row(it)||is_key(it,RECOMP_RUNTIME_UI_KEY_LOAD_STATE)||is_key(it,RECOMP_RUNTIME_UI_KEY_SAVE_STATE)))return 0;
+#endif
     (void)ctx;
     const CycHostExtras *x = s_host.extras;
     long f = s_host.frames_done();
@@ -389,7 +398,11 @@ static int run_action(void *ctx, const RecompRuntimeUiItem *it)
         uint64_t now = s_host.now_ms();
         if (s_quit_armed && now - s_quit_armed < 3000) { s_host.quit(); return 1; }
         s_quit_armed = now;
-        recomp_runtime_ui_set_status(s_ui, "Press again to quit");
+        recomp_runtime_ui_set_status(s_ui,
+#ifdef NESRECOMP_NET
+            nes_netplay_active()?"Press again to leave the match":
+#endif
+            "Press again to quit");
         return 0;
     }
     if (game_row(it) && x && x->menu_callbacks && x->menu_callbacks->run_action)
@@ -399,6 +412,9 @@ static int run_action(void *ctx, const RecompRuntimeUiItem *it)
 
 static int is_enabled(void *ctx, const RecompRuntimeUiItem *it)
 {
+#ifdef NESRECOMP_NET
+    if(nes_netplay_active()&&(mod_row(it)||game_row(it)||axis_of(it)>=0||is_key(it,"cyc.disk.side")||is_key(it,RECOMP_RUNTIME_UI_KEY_VIEW_MODE)||is_key(it,RECOMP_RUNTIME_UI_KEY_LOAD_STATE)||is_key(it,RECOMP_RUNTIME_UI_KEY_SAVE_STATE)))return 0;
+#endif
     (void)ctx;
     const CycHostExtras *x = s_host.extras;
     if (it->key && !strncmp(it->key, "cyc.shortcut.", 13)) return 0;   /* information rows */

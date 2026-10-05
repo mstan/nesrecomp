@@ -1,7 +1,8 @@
 /*
  * main_nes.c — NESRecomp entry point
  * Usage: NESRecomp.exe <rom.nes> [--game <path/to/game.toml>]
- * Output: generated/<prefix>_full.c + generated/<prefix>_dispatch.c
+ * Default output: generated/<prefix>_cyc.c and compiled bank views.
+ * --legacy retains <prefix>_full.c + <prefix>_dispatch.c.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -363,9 +364,11 @@ static void print_usage(void) {
         "                         per-bank split files never collide (e.g. zelda_stock /\n"
         "                         zelda_hd).\n"
         "  --proposal-out <path>  Write a proposed game.toml based on auto-discovery.\n"
-        "  --cycle-accurate       Emit generated/<prefix>_cyc.c (per-CPU-cycle code for\n"
+        "  --cycle-accurate       Default: emit generated/<prefix>_cyc.c (per-CPU-cycle code for\n"
         "                         runner/cyc) instead of the function-level output. Also\n"
-        "                         enabled by game.toml [game] cycle_accurate = true.\n"
+        "                         game.toml [game] cycle_accurate = true also selects it.\n"
+        "  --legacy               Explicitly select the older function/frame backend;\n"
+        "                         overrides game.toml. cycle_accurate = false also selects it.\n"
         "  --cycle-seed-file <path> Override the cycle seed file from game.toml.\n"
         "  --cycle-capture-file <path> Override the cycle RAM capture file from game.toml\n"
         "                         (the cycle host's --capture-log).\n"
@@ -396,8 +399,9 @@ static void print_usage(void) {
         "  --help, -h             Show this help message.\n"
         "\n"
         "Output:\n"
-        "  generated/<prefix>_full.c       All recompiled functions\n"
-        "  generated/<prefix>_dispatch.c   Address-to-function dispatch table\n"
+        "  generated/<prefix>_cyc*.c       Default cycle dispatch and bank views\n"
+        "  generated/<prefix>_full*.c      Legacy functions (--legacy)\n"
+        "  generated/<prefix>_dispatch.c  Legacy address dispatch (--legacy)\n"
         "\n"
         "  The output prefix comes from --output-prefix, else game.toml\n"
         "  [game]/output_prefix, else the ROM filename if no config is provided.\n"
@@ -664,7 +668,7 @@ int main(int argc, char *argv[]) {
     const char *proposal_out = NULL;
     const char *prefix_override = NULL;
     const char *cycle_seed_override = NULL, *cycle_capture_override = NULL;
-    bool cycle_accurate = false;
+    bool cycle_accurate = true, backend_selected = false;
     const char *fds_info_path = NULL;
     const char *fds_stream_args[3] = { NULL, NULL, NULL };
     NesFdsProfile fds_profile = NES_FDS_PROFILE_MESEN099;
@@ -696,7 +700,9 @@ int main(int argc, char *argv[]) {
         } else if (strcmp(argv[i], "--fds-bios") == 0 && i+1 < argc) {
             fds_bios_arg = argv[++i];
         } else if (strcmp(argv[i], "--cycle-accurate") == 0) {
-            cycle_accurate = true;
+            cycle_accurate = true; backend_selected = true;
+        } else if (strcmp(argv[i], "--legacy") == 0) {
+            cycle_accurate = false; backend_selected = true;
         } else if (strcmp(argv[i], "--emit-cycle-interpreter") == 0 && i+1 < argc) {
             return cyc_codegen_emit_interpreter(argv[++i]) ? 0 : 1;
         } else if (strcmp(argv[i], "--game") == 0 && i+1 < argc) {
@@ -788,6 +794,7 @@ int main(int argc, char *argv[]) {
      * never collide — e.g. zelda_stock_* vs zelda_hd_*), then game.toml's
      * output_prefix, else the ROM basename. */
     char output_prefix[128];
+    if (!backend_selected) cycle_accurate = cfg.cycle_accurate;
     if (prefix_override && prefix_override[0]) {
         snprintf(output_prefix, sizeof(output_prefix), "%s", prefix_override);
     } else if (cfg.output_prefix[0]) {
@@ -822,7 +829,7 @@ int main(int argc, char *argv[]) {
         strcpy(cfg.cycle_capture_file, cycle_capture_override);
     }
     if (fds_input) {
-        if (!(cycle_accurate || cfg.cycle_accurate)) {
+        if (!cycle_accurate) {
             fprintf(stderr, "[NESRecomp] '%s' is a Famicom Disk System image: FDS titles build on the cycle "
                             "backend only (--cycle-accurate or [game] cycle_accurate = true)\n", rom_path);
             return 1;
@@ -833,7 +840,7 @@ int main(int argc, char *argv[]) {
         rom_free(&rom);
         return ok ? 0 : 1;
     }
-    if (cycle_accurate || cfg.cycle_accurate)
+    if (cycle_accurate)
         return cyc_codegen_emit(&rom, &cfg, output_prefix, NULL) ? 0 : 1;
 
     /* Load annotations sidecar */

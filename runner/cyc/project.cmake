@@ -1,5 +1,6 @@
 # Opt-in cycle backend for existing game projects. See PROJECTS.md.
 include_guard(GLOBAL)
+include("${CMAKE_CURRENT_LIST_DIR}/../recomp_net.cmake")
 
 # recomp-ui (launcher + in-game menu, runner/cyc/cyc_ui.h) for windowed
 # targets. NESRECOMP_RECOMP_UI names a checkout; empty uses the calling
@@ -127,6 +128,7 @@ function(nesrecomp_add_cycle_game target)
         ${CYC_PROJECT_DEPENDS} "${root}/tools/cyc/prepare_project.py")
     include("${cyc_dir}/cyc.cmake")
     add_executable(${target} ${NESRECOMP_CYC_SOURCES} ${CYC_PROJECT_SOURCES})
+    set_property(TARGET ${target} PROPERTY NESRECOMP_CYCLE_BACKEND TRUE)
     target_compile_features(${target} PRIVATE c_std_11)
     target_include_directories(${target} PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})
     target_link_libraries(${target} PRIVATE ${NESRECOMP_CYC_LIBRARIES})
@@ -142,8 +144,10 @@ function(nesrecomp_add_cycle_game target)
             message(FATAL_ERROR "PLAYERS must be 1, 2, 3 or 4 (logical input seats; two physical NES ports)")
         endif()
         target_compile_definitions(${target} PRIVATE CYC_GAME_PLAYERS=${CYC_PLAYERS})
+        target_compile_definitions(${target} PRIVATE NESRECOMP_GAME_PLAYERS=${CYC_PLAYERS})
         if(CYC_PLAYERS GREATER 2)
             target_compile_definitions(${target} PRIVATE CYC_INPUT_PLAYERS=${CYC_PLAYERS})
+            target_compile_definitions(${target} PRIVATE NESRECOMP_INPUT_SEATS=${CYC_PLAYERS})
         endif()
     endif()
     if(CYC_HOST_EXTRAS)
