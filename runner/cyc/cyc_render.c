@@ -12,6 +12,8 @@ static int             s_margin_left = -1, s_margin_right = -1;
 static uint32_t        s_canvas[CYC_VIDEO_MAX_WIDTH * 240];
 static uint64_t        s_generation = 1, s_composed_generation;
 static int             s_composed_width;
+static int             s_origin, s_origin_request;
+static bool            s_origin_requested;
 static CycRenderStats  s_stats;
 
 void cyc_render_set_compositor(CycCompositorFn fn, void *user)
@@ -28,6 +30,19 @@ void cyc_render_set_margins(int left, int right)
     if (left != s_margin_left || right != s_margin_right) s_generation++;
     s_margin_left = left;
     s_margin_right = right;
+}
+
+void cyc_render_set_native_origin(int x0)
+{
+    s_origin_request = x0;
+    s_origin_requested = true;
+}
+
+int cyc_render_native_origin(int width)
+{
+    if (width <= 256) return 0;
+    if (width == s_composed_width && s_composed_generation) return s_origin;
+    return (width - 256) / 2;
 }
 
 void cyc_render_frame_done(void) { s_generation++; }
@@ -163,15 +178,19 @@ const uint32_t *cyc_render_present(int *width, int *height)
     const uint32_t *native = cyc_frame_argb();
     int x0 = (w - 256) / 2;
     for (int i = 0; i < w * 240; ++i) s_canvas[i] = 0xFF000000u;
+    s_origin_requested = false;
     int painted = s_fn ? s_fn(s_canvas, w, 240, x0, native, s_user) : 0;
+    s_origin = x0;
     if (!painted) {
         for (int y = 0; y < 240; ++y) memcpy(&s_canvas[y * w + x0], &native[y * 256], 256 * sizeof(uint32_t));
         s_stats.pillarboxed++;
     } else {
         s_stats.composed++;
+        if (s_origin_requested) s_origin = s_origin_request;
         if (s_margin_left >= 0 || s_margin_right >= 0) {
-            int left = s_margin_left >= 0 && s_margin_left < x0 ? x0 - s_margin_left : 0;
-            int right = s_margin_right >= 0 && x0 + 256 + s_margin_right < w ? x0 + 256 + s_margin_right : w;
+            int o = s_origin;
+            int left = s_margin_left >= 0 && s_margin_left < o ? o - s_margin_left : 0;
+            int right = s_margin_right >= 0 && o + 256 + s_margin_right < w ? o + 256 + s_margin_right : w;
             for (int y = 0; y < 240; ++y) {
                 for (int x = 0; x < left; ++x) s_canvas[y * w + x] = 0xFF000000u;
                 for (int x = right; x < w; ++x) s_canvas[y * w + x] = 0xFF000000u;

@@ -98,6 +98,10 @@
 
 static CycSettings s_set;
 static bool s_zapper_override, s_zapper_release;
+/* The mouse aim in picture columns/rows (-1: outside the picture), so the
+ * crosshair follows it over a wide compositor's margins, where the Zapper
+ * itself aims off the console's screen and sees no light. */
+static int  s_aim_x = -1, s_aim_y = -1;
 static char        s_set_path[1024];
 static bool        s_fds;
 static const CycHostExtras *s_extras;
@@ -255,8 +259,13 @@ static uint64_t now_ms(void) { return SDL_GetTicks64(); }
 static long     frames_done(void) { return s_frames_done; }
 static void     request_quit(void) { s_running = false; }
 
+/* Whether the last picture() came from cyc_render_present (the native frame or
+ * a game compositor's), whose native origin cyc_render_native_origin knows. */
+static bool s_picture_rendered;
+
 static const uint32_t *picture(int *w, int *h)
 {
+    s_picture_rendered = false;
 #ifdef NESRECOMP_CYCLE_HDPACK_MODS
     const uint32_t *hd = cyc_hdpack_mod_present(w, h);
     if (hd) return hd;
@@ -265,6 +274,7 @@ static const uint32_t *picture(int *w, int *h)
         const uint32_t *p = s_extras->present(s_extras->ctx, w, h);
         if (p && *w > 0 && *h > 0 && *w <= CYC_PRESENT_MAX_DIMENSION && *h <= CYC_PRESENT_MAX_DIMENSION) return p;
     }
+    s_picture_rendered = true;
     return cyc_render_present(w, h);
 }
 
@@ -832,13 +842,26 @@ static void tcp_ping(int id, const char *line)
     cyc_tcp_ok(id, f);
 }
 
-static void zapper_window_point(int wx, int wy, int *x, int *y)
+/* Where native column 0 sits in the last picture() of width w: the game
+ * compositor's declared origin (cyc_render.h), centered otherwise. */
+static int picture_native_origin(int w)
+{
+    if (w <= 256) return 0;
+    return s_picture_rendered ? cyc_render_native_origin(w) : (w - 256) / 2;
+}
+
+/* A window point as the Zapper's aim in native columns (-1 off the console's
+ * screen) and, through px/py when given, as picture coordinates (-1 outside). */
+static void zapper_window_point(int wx, int wy, int *x, int *y, int *px, int *py)
 {
     float lx, ly;
     SDL_RenderWindowToLogical(s_ren, wx, wy, &lx, &ly);
     int w, h;
     picture(&w, &h);
-    lx -= (float)(w - 256) / 2.0f;
+    bool inside = lx >= 0 && lx < (float)w && ly >= 0 && ly < (float)h;
+    if (px) *px = inside ? (int)lx : -1;
+    if (py) *py = inside ? (int)ly : -1;
+    lx -= (float)picture_native_origin(w);
     if (lx < 0 || lx >= 256 || ly < 0 || ly >= 240) *x = *y = -1;
     else { *x = (int)lx; *y = (int)ly; }
 }
@@ -856,7 +879,8 @@ static void zapper_mouse_frame(void)
         trigger = false;
     }
     bool aiming = s_set.zapper_mouse && (SDL_GetWindowFlags(s_win) & SDL_WINDOW_MOUSE_FOCUS);
-    if (aiming) zapper_window_point(wx, wy, &x, &y);
+    s_aim_x = s_aim_y = -1;
+    if (aiming) zapper_window_point(wx, wy, &x, &y, &s_aim_x, &s_aim_y);
     cyc_set_zapper(x, y, aiming && trigger);
 }
 
@@ -872,18 +896,20 @@ static void tcp_zapper(int id, const char *line)
     set |= cyc_tcp_bool(line, "trigger", &trigger);
     if (cyc_tcp_long(line, "window_x", &wx) && cyc_tcp_long(line, "window_y", &wy)) {
         int px, py;
-        zapper_window_point((int)wx, (int)wy, &px, &py);
+        zapper_window_point((int)wx, (int)wy, &px, &py, NULL, NULL);
         x = px; y = py; set = true;
     }
     if (set) { s_zapper_override = true; cyc_set_zapper((int)x, (int)y, trigger); }
     if (cyc_tcp_bool(line, "mouse", &mouse)) s_zapper_override = !mouse;
     cyc_zapper_state(&gun);
-    char fields[256];
+    int pw, ph;
+    picture(&pw, &ph);
+    char fields[320];
     snprintf(fields, sizeof(fields), "\"port\":%u,\"aim\":[%d,%d],\"trigger\":%s,\"light\":%s,\"mouse\":%s,"
-             "\"mouse_enabled\":%s,\"crosshair\":%s",
+             "\"mouse_enabled\":%s,\"crosshair\":%s,\"picture_width\":%d,\"native_origin\":%d",
              gun.port, gun.x, gun.y, gun.trigger ? "true" : "false", gun.light ? "true" : "false",
              s_zapper_override ? "false" : "true", s_set.zapper_mouse ? "true" : "false",
-             s_set.zapper_crosshair ? "true" : "false");
+             s_set.zapper_crosshair ? "true" : "false", pw, picture_native_origin(pw));
     cyc_tcp_ok(id, fields);
 }
 
@@ -1076,8 +1102,11 @@ static void show(bool loading, const char *toast_title, const char *toast_body)
     SDL_RenderCopy(s_ren, s_tex, NULL, &dst);
     CycZapperState gun;
     cyc_zapper_state(&gun);
-    if (gun.port && s_set.zapper_crosshair && gun.x >= 0 && !menu_open()) {
-        int x = gun.x + (w - 256) / 2, y = gun.y;
+    int aim_x = -1, aim_y = -1;
+    if (gun.port && !s_zapper_override) aim_x = s_aim_x, aim_y = s_aim_y;
+    else if (gun.port && gun.x >= 0) aim_x = gun.x + picture_native_origin(w), aim_y = gun.y;
+    if (gun.port && s_set.zapper_crosshair && aim_x >= 0 && aim_x < w && !menu_open()) {
+        int x = aim_x, y = aim_y;
         SDL_SetRenderDrawColor(s_ren, 0, 0, 0, 255);
         SDL_Rect back = {x - 5, y - 1, 11, 3}; SDL_RenderFillRect(s_ren, &back);
         back.x = x - 1; back.y = y - 5; back.w = 3; back.h = 11; SDL_RenderFillRect(s_ren, &back);

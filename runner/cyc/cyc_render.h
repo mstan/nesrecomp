@@ -49,6 +49,15 @@ typedef int (*CycCompositorFn)(uint32_t *out, int width, int height, int native_
 void cyc_render_set_compositor(CycCompositorFn fn, void *user);
 bool cyc_render_has_compositor(void);
 void cyc_render_set_margins(int left, int right);
+/* Called by a compositor that placed the native picture somewhere other than
+ * the native_x0 it was given (a camera anchored at an area's edge): the canvas
+ * column of native column 0 in the picture being painted. The host maps the
+ * Zapper's aim and draws its crosshair through it, and set_margins counts from
+ * it. A picture the compositor leaves to the native one is at native_x0. */
+void cyc_render_set_native_origin(int x0);
+/* Where native column 0 sits in the presented picture of that width: what the
+ * compositor declared for it, else the centered (width - 256) / 2, 0 at 256. */
+int  cyc_render_native_origin(int width);
 /* Exact background capture for host-drawn sprite replacements. Native sprite
  * evaluation, hits and overflow remain unchanged. The capture travels in a
  * separate presentation savestate record. */

@@ -1206,7 +1206,12 @@ the title bar. Production builds have none of them.
 **Zapper games** pass `ZAPPER_PORT 2` to `nesrecomp_add_cycle_game` (port 1 is
 also supported). This requires recomp-ui's `RECOMP_LAUNCHER_HAS_ZAPPER_SETTINGS`
 interface. The mouse aims within the hardware 256x240 picture, with letterbox
-bars treated as offscreen, and the left button pulls the trigger. The runtime
+bars treated as offscreen, and the left button pulls the trigger. With a wide
+game compositor (`cyc_render.h`) the native picture sits at the origin the
+compositor declares (`cyc_render_set_native_origin`, for a camera anchored at
+an area's edge; centered otherwise): the aim maps through it, and margins are
+offscreen to the gun (no light, so the game's own hit test decides) while the
+crosshair keeps following the mouse across them. The runtime
 Zapper section and launcher offer Mouse aiming and Crosshair. Both persist in
 `config.ini [Zapper]`; missing choices are imported from an existing
 `keybinds.ini [zapper]` without rewriting that legacy file. Closing the menu
@@ -1226,7 +1231,8 @@ For deterministic headless routes, `--zapper-port 1|2` attaches the gun and
 `--zapper-input FILE` reads ordered `FRAME X Y TRIGGER` lines (trigger 0/1;
 offscreen `-1 -1`). `--zapper-port 0` restores the ordinary controller ports.
 The TCP `zapper` command supports aim, trigger, returning control to the mouse,
-and window-coordinate mapping. TriCNES has no Zapper oracle: compare gun routes
+and window-coordinate mapping; its reply includes the presented width and the
+native origin that mapping used. TriCNES has no Zapper oracle: compare gun routes
 between native and interpreter execution, validate actual hits/misses, and use
 the oracle separately for the unattached-controller machine.
 

@@ -203,8 +203,9 @@ add_test(NAME cyc_fds_board_test COMMAND cyc_fds_board_test ${NESRECOMP_FDS_BOAR
 set_tests_properties(cyc_fds_board_test PROPERTIES FIXTURES_REQUIRED fds_board_fixtures)
 
 # The presented width (cyc_video.h, common/nes_video_geometry.h): every mode's
-# width, Fit's clamp, queuing after the window exists, the apply point.
-add_executable(cyc_video_test video_test.c cyc_video.c cpu6502.c cpu6502_interp.c hw_machine.c ${CYC_TEST_BOARD_SOURCES}
+# width, Fit's clamp, queuing after the window exists, the apply point, and a
+# compositor's declared native origin (cyc_render.h).
+add_executable(cyc_video_test video_test.c cyc_video.c cyc_render.c cpu6502.c cpu6502_interp.c hw_machine.c ${CYC_TEST_BOARD_SOURCES}
     hw_ppu.c hw_apu.c hw_palette.c cyc_trace.c cyc_ring.c ${NESRECOMP_CYC_SCHEDULER_SOURCES} cyc_native_none.c)
 target_include_directories(cyc_video_test PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})
 target_link_libraries(cyc_video_test PRIVATE ${NESRECOMP_CYC_LIBRARIES})
