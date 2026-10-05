@@ -153,7 +153,17 @@ bool cyc_session_start(void)
     return true;
 }
 
+uint8_t g_logical_input[4];
+uint8_t nes_input_seat(int seat) {
+    return seat >= 1 && seat <= 4 ? g_logical_input[seat-1] : 0;
+}
+void cyc_session_logical_input(const uint8_t *buttons, unsigned seats) {
+    memset(g_logical_input,0,sizeof g_logical_input);
+    if (seats>4) seats=4;
+    if (buttons) memcpy(g_logical_input,buttons,seats);
+}
 void cyc_session_input(uint8_t buttons[2]) {
+    g_logical_input[0]=buttons[0]; g_logical_input[1]=buttons[1];
     const CycHostExtras *x = cyc_session_extras();
     if (x && x->input) x->input(x->ctx, buttons);
 }
@@ -180,5 +190,15 @@ void cyc_session_frame_end(void)
 
 void cyc_session_state_loaded(void)
 {
+    const CycHostExtras *x=cyc_session_extras();
+    if(x&&x->state_loaded)x->state_loaded(x->ctx);
     cyc_render_frame_done();
+}
+unsigned cyc_session_audio_rate(unsigned fallback) {
+    const CycHostExtras *x=cyc_session_extras();
+    return x&&x->audio_rate?x->audio_rate:fallback;
+}
+void cyc_session_audio_mix(int16_t *samples,size_t count) {
+    const CycHostExtras *x=cyc_session_extras();
+    if(x&&x->audio_mix)x->audio_mix(x->ctx,samples,count);
 }

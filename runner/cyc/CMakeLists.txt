@@ -78,6 +78,8 @@ add_test(NAME cyc_disk_action_test COMMAND cyc_disk_action_test)
 
 # The window's input actions and their persistence (cyc_input.h, cyc_settings.h).
 find_package(Python3 3.11 REQUIRED COMPONENTS Interpreter)
+add_test(NAME cyc_bad_game_config COMMAND "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_bad_game_config.py" --compiler $<TARGET_FILE:NESRecomp>)
 list(APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../external/SDL2/cmake")
 find_package(SDL2 CONFIG QUIET)
 if(SDL2_FOUND)
@@ -93,6 +95,9 @@ if(SDL2_FOUND)
     add_test(NAME cyc_hdpack COMMAND "${Python3_EXECUTABLE}"
         "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_cyc_hdpack.py"
         --host $<TARGET_FILE:cyc_hdpack_probe> --out "${CMAKE_CURRENT_BINARY_DIR}/hdpack-test")
+    add_test(NAME cyc_hdpack_window COMMAND "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_cyc_hdpack_window.py"
+        --host $<TARGET_FILE:cyc_hdpack_probe> --out "${CMAKE_CURRENT_BINARY_DIR}/hdpack-window-test")
     add_executable(cyc_input_test input_test.c cyc_input.c cyc_settings.c)
     target_include_directories(cyc_input_test PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})
     target_link_libraries(cyc_input_test PRIVATE SDL2::SDL2)
@@ -105,6 +110,12 @@ if(SDL2_FOUND)
             COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:SDL2::SDL2> $<TARGET_FILE_DIR:cyc_input_test>)
     endif()
     add_test(NAME cyc_input_test COMMAND cyc_input_test ${CMAKE_CURRENT_BINARY_DIR})
+    add_executable(cyc_input_four_test input_test.c cyc_input.c cyc_settings.c)
+    target_include_directories(cyc_input_four_test PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})
+    target_link_libraries(cyc_input_four_test PRIVATE SDL2::SDL2)
+    target_compile_definitions(cyc_input_four_test PRIVATE SDL_MAIN_HANDLED CYC_INPUT_PLAYERS=4 _CRT_SECURE_NO_WARNINGS)
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/input-four")
+    add_test(NAME cyc_input_four_test COMMAND cyc_input_four_test "${CMAKE_CURRENT_BINARY_DIR}/input-four")
     # The window itself, on the standalone interpreter host: production and dev
     # builds, driven over TCP on a hidden window, SDL dummy video (never the desktop)
     # by tools/cyc/test_cyc_window.py. -DNESRECOMP_RECOMP_UI=<recomp-ui> adds the
@@ -403,3 +414,12 @@ if(MSVC)
     target_compile_definitions(cyc_return_test PRIVATE _CRT_SECURE_NO_WARNINGS)
 endif()
 add_test(NAME cyc_return_test COMMAND cyc_return_test)
+
+add_executable(cyc_ram_policy_test ram_policy_test.c cpu6502.c cpu6502_interp.c hw_machine.c ${CYC_TEST_BOARD_SOURCES}
+    hw_ppu.c hw_apu.c hw_palette.c cyc_trace.c cyc_ring.c ${NESRECOMP_CYC_SCHEDULER_SOURCES} cyc_native_none.c)
+target_include_directories(cyc_ram_policy_test PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})
+target_link_libraries(cyc_ram_policy_test PRIVATE ${NESRECOMP_CYC_LIBRARIES})
+if(MSVC)
+    target_compile_definitions(cyc_ram_policy_test PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()
+add_test(NAME cyc_ram_policy_test COMMAND cyc_ram_policy_test)

@@ -100,6 +100,11 @@ typedef struct CycHostExtras {
     /* Window gameplay events only. event is SDL_Event; player is the zero-
      * based owner of a controller axis event, or -1. No SDL dependency here. */
     void (*event)(void *ctx, const void *event, int player);
+    /* Trusted PCM/stream overlays. Produced on the emulation thread before
+     * SDL queues audio or headless writes WAV; zero rate keeps host defaults. */
+    unsigned audio_rate;
+    void (*audio_mix)(void *ctx, int16_t *samples, size_t count);
+    void (*state_loaded)(void *ctx);
 } CycHostExtras;
 
 const CycHostExtras *cyc_host_extras(void);

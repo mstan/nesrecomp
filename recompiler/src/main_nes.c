@@ -774,8 +774,10 @@ int main(int argc, char *argv[]) {
                    game_path, cfg.output_prefix,
                    cfg.trampoline_count, cfg.known_table_count,
                    cfg.known_split_table_count, cfg.extra_func_count);
-        else
-            fprintf(stderr, "[NESRecomp] Warning: could not load game config '%s'\n", game_path);
+        else {
+            fprintf(stderr, "[NESRecomp] Failed to load game config '%s'; no code generated\n", game_path);
+            return 1;
+        }
     } else {
         game_config_init_empty(&cfg);
         printf("[NESRecomp] No --game config; using empty dispatch tables\n");

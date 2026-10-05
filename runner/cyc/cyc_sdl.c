@@ -316,6 +316,20 @@ static bool load_state_slot(void)
 
 static int logical_h(void) { return s_tex_h + (s_bar ? BAR_ROWS : 0); }
 
+static void apply_picture_scale(void)
+{
+    int ow = 0, oh = 0;
+    SDL_GetRendererOutputSize(s_ren, &ow, &oh);
+    /* Integer scaling cannot fit a picture larger than the drawable. SDL2's
+     * accelerated renderer can produce a black frame with that negative
+     * viewport. Fit fractionally until the window is large enough, keeping
+     * the player's integer-scaling preference for subsequent enlargement. */
+    SDL_bool integer = s_set.integer_scale && ow >= s_tex_w && oh >= logical_h()
+                     ? SDL_TRUE : SDL_FALSE;
+    if (SDL_RenderGetIntegerScale(s_ren) != integer)
+        SDL_RenderSetIntegerScale(s_ren, integer);
+}
+
 static void apply_settings(void)
 {
     if (!s_win) return;
@@ -324,7 +338,7 @@ static void apply_settings(void)
         SDL_SetWindowFullscreen(s_win, fs);
     if (!fs) SDL_SetWindowSize(s_win, s_tex_w * s_set.window_scale, logical_h() * s_set.window_scale);
     SDL_RenderSetLogicalSize(s_ren, s_tex_w, logical_h());
-    SDL_RenderSetIntegerScale(s_ren, s_set.integer_scale ? SDL_TRUE : SDL_FALSE);
+    apply_picture_scale();
     if (s_tex) SDL_SetTextureScaleMode(s_tex, s_set.linear_filter ? SDL_ScaleModeLinear : SDL_ScaleModeNearest);
 }
 
@@ -337,6 +351,7 @@ static bool ensure_texture(int w, int h)
     s_tex_h = h;
     if (s_tex) SDL_SetTextureScaleMode(s_tex, s_set.linear_filter ? SDL_ScaleModeLinear : SDL_ScaleModeNearest);
     SDL_RenderSetLogicalSize(s_ren, s_tex_w, logical_h());
+    apply_picture_scale();
     return s_tex != NULL;
 }
 
@@ -1188,7 +1203,7 @@ int cyc_sdl_main(const char *title_in, int scale)
 
     /* Audio is queued as frames produce it; fast forward and the menu drop it. */
     SDL_AudioSpec want = { 0 }, have;
-    want.freq = AUDIO_RATE;
+    want.freq = (int)cyc_session_audio_rate(AUDIO_RATE);
     want.format = AUDIO_S16SYS;
     want.channels = 1;
     want.samples = 1024;
@@ -1240,6 +1255,7 @@ int cyc_sdl_main(const char *title_in, int scale)
             else if (ev.type == SDL_WINDOWEVENT && ev.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
                 int ow = 0, oh = 0;
                 SDL_GetRendererOutputSize(s_ren, &ow, &oh);
+                apply_picture_scale();
                 cyc_video_window_resized(ow, oh);
             }
             else if (ev.type == SDL_CONTROLLERDEVICEADDED || ev.type == SDL_CONTROLLERDEVICEREMOVED) open_pads();
@@ -1331,6 +1347,7 @@ int cyc_sdl_main(const char *title_in, int scale)
             }
             cyc_host_disk_frame(now, s_frames_done);
             uint8_t buttons[2] = {pad0, pad1};
+            cyc_session_logical_input(st.buttons,CYC_INPUT_PLAYERS);
             cyc_session_input(buttons);
             cyc_set_controller(0, buttons[0]);
             cyc_set_controller(1, buttons[1]);
@@ -1346,6 +1363,7 @@ int cyc_sdl_main(const char *title_in, int scale)
         int16_t pcm[4096];
         size_t n;
         while ((n = cyc_audio_read(pcm, 4096)) > 0) {
+            cyc_session_audio_mix(pcm,n);
             /* Keep latency bounded: skip a frame's audio if ~100 ms are queued. */
             if (!dev || fast || open || inactive || !s_set.audio_enabled || SDL_GetQueuedAudioSize(dev) >= (Uint32)(have.freq / 10) * 2)
                 continue;

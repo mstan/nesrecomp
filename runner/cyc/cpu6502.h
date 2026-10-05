@@ -48,6 +48,14 @@ extern Cpu6502 cpu;
 /* Trusted host observation after a completed RTS, before its caller resumes.
  * No bus activity is replaced. NULL unless a game installs an observer. */
 extern void (*cyc_cpu_rts_observer)(void);
+/* Trusted operand policy. The physical read already completed, including
+ * open bus and all cycles. Only the instruction's RAM data value may change;
+ * instruction fetches, dummy reads, RMW and I/O never use this callback. */
+extern uint8_t (*cyc_cpu_ram_read_policy)(uint16_t pc, uint16_t addr, uint8_t value);
+static inline uint8_t cpu_ram_read_value(uint16_t pc, uint16_t addr, uint8_t value) {
+    return addr < 0x2000 && cyc_cpu_ram_read_policy
+        ? cyc_cpu_ram_read_policy(pc, (uint16_t)(addr & 0x7ff), value) : value;
+}
 
 /* Flags for one CPU cycle. */
 enum {

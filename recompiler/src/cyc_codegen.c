@@ -1108,6 +1108,7 @@ static void emit_imm(Emit *e, const OpDef *d) {
 static void emit_read(Emit *e, const OpDef *d) {
     addressing(e, d->am, false, false);
     ln(e, "uint8_t v = cpu_read(ea, CYC_POLL | CYC_DONE);");
+    ln(e, "v = cpu_ram_read_value(%s, ea, v);", INTERP(e) ? "pc" : str("0x%04X", e->P));
     ln(e, "%s", d->body);
     go_next(e);
 }

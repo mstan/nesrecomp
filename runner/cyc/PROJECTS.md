@@ -65,8 +65,12 @@ paths are relative to the calling CMake source directory; a seed path inside
 `game.toml` is relative to that configuration file. `GAME_CONFIG` is optional.
 Existing legacy-generated C and `extras.c` are not cycle-backend inputs.
 
-`PLAYERS 1` or `PLAYERS 2` sets the launcher's controller count for the title;
-omitting it retains two controllers. Keep an explicit `legacy` selection in
+`PLAYERS 1` through `PLAYERS 4` sets the launcher's controller count for the title;
+omitting it retains two controllers. Seats three and four are independent
+host inputs for trusted Mods; the physical NES still has two controller ports.
+The hosts publish all seats before game callbacks, and `nes_input_seat(1..4)`
+reads their mapped buttons. Headless input files accept `3:` and `4:` seat
+prefixes. Keep an explicit `legacy` selection in
 projects migrating their default build, with separate build directories for
 the two backends. Enhancements using legacy runtime globals need a cycle
 adapter before the project's migration is complete.
@@ -132,6 +136,25 @@ save states); game.toml `[[mod_function_hook]]` sites give its plugins hooks
 into the program. See [README.md, Game mods](README.md#game-mods). The
 project needs `CXX` among its languages.
 
+Trusted character adapters can use `cyc_mod_set_ram_read_hook` to change a
+final RAM operand value at a specific instruction PC. The original read,
+bus value and clocks still occur. Opcode fetches, dummy reads, device reads,
+and read-modify-write operands bypass this policy. The callback must be pure;
+registering `NULL` restores ordinary reads. Generated code, compiled RAM
+views and the interpreter use the same policy.
+
+`cyc_render_capture_background(true)` optionally retains the actual physical
+background before the sprite priority mux. Sprite replacement can compose
+against it without changing hardware sprite evaluation or sprite-zero timing.
+Capture is off by default. Its registered save record and isolated-call
+snapshot preserve the current picture and output pipeline when enabled.
+
+Host extras can request `audio_rate` and provide `audio_mix` for trusted PCM
+or stream overlays. Both hosts mix on the emulation thread before SDL queues
+audio or the headless host writes WAV, including audio that the host drops
+while paused or fast-forwarding. `state_loaded` lets a game resynchronize
+its host-side presentation and audio after loading a complete cycle save.
+
 ## Optional HD texture packs
 
 New cycle integrations add `MODS HD_PACKS GAME_ID "my-game"` to
@@ -156,6 +179,8 @@ It records owned CHR content keys, mapped CHR ROM indices, palettes, flips
 and visible sprite priority without bus reads or additional guest cycles.
 Native pictures stay 256x240; HD presentation can be up to 2560x2400. An
 unmatched pack preserves every original pixel with nearest-neighbor scaling.
+When a window is smaller than its picture, SDL temporarily scales to fit;
+the saved integer-scaling preference resumes after the window is enlarged.
 Five validated save records preserve the current picture and in-flight
 metadata. Loading a state with a different HD enablement, scale or package
 asset/patch fingerprint is refused
@@ -203,8 +228,9 @@ completed runs with matching input, executable and output digests.
 This provides cartridge hardware, cycle timing, the cycle host's input/audio/
 video options, persistent cartridge saves, recomp-ui's launcher and runtime
 menu with host-owned bindings (above), save states, and game mods (packages,
-hook sites, isolated calls, custom renderer). Legacy HD rendering, custom
-`extras.c` hooks, Lua interfaces, netplay and the older runtime's save-state
+hook sites, isolated calls, custom renderer). The shared modern HD Mod provider
+above replaces game-specific HD integration. Custom `extras.c` hooks, Lua
+interfaces, netplay and the older runtime's save-state
 format use the older runtime APIs and are not automatically ported by this
 build switch; a game's additions go through `HOST_EXTRAS` instead of
 `extras.c`.

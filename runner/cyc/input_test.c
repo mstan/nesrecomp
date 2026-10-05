@@ -224,6 +224,52 @@ static void evaluation(void)
 }
 
 typedef struct { int loads; char value[32]; } GameKeys;
+
+static void logical_seats(void)
+{
+#if CYC_INPUT_PLAYERS == 4
+    CycBindings b;
+    CycInputState st;
+    cyc_bindings_default(&b);
+    CycInputFrame f = frame(4);
+    const char *guids[] = {"one", "two", "three", "four"};
+    const int buttons[] = {SDL_CONTROLLER_BUTTON_A, SDL_CONTROLLER_BUTTON_X,
+                           SDL_CONTROLLER_BUTTON_DPAD_LEFT, SDL_CONTROLLER_BUTTON_DPAD_RIGHT};
+    const uint8_t expected[] = {0x80, 0x40, 0x02, 0x01};
+    for (int p = 0; p < 4; ++p) {
+        b.source[p] = 2;
+        snprintf(b.device[p], sizeof b.device[p], "%s", guids[p]);
+        f.pad_guid[p] = guids[p];
+        f.pad_buttons[p] = 1u << buttons[p];
+    }
+    cyc_input_eval(&b, &f, &st);
+    for (int p = 0; p < 4; ++p) CHECK(st.player_pad[p] == p && st.buttons[p] == expected[p]);
+    /* Enumeration order changes when devices reconnect; GUID ownership wins. */
+    for (int p = 0; p < 4; ++p) {
+        f.pad_guid[3-p] = guids[p];
+        f.pad_buttons[3-p] = 1u << buttons[p];
+    }
+    cyc_input_eval(&b, &f, &st);
+    for (int p = 0; p < 4; ++p) CHECK(st.player_pad[p] == 3-p && st.buttons[p] == expected[p]);
+    /* With one device removed the other three retain their named ownership. */
+    f.pad_count = 3;
+    cyc_input_eval(&b, &f, &st);
+    CHECK(st.player_pad[0] == -1 && st.buttons[0] == 0);
+    for (int p = 1; p < 4; ++p) CHECK(st.player_pad[p] == 3-p && st.buttons[p] == expected[p]);
+    /* Four keyboard seats may have independent bindings too. */
+    f = frame(0);
+    memset(keys, 0, sizeof keys);
+    for (int p = 0; p < 4; ++p) {
+        b.source[p] = 1;
+        memset(b.button[p], 0, sizeof b.button[p]);
+        b.button[p][p].key = SDL_SCANCODE_1 + p;
+        keys[SDL_SCANCODE_1+p] = 1;
+    }
+    cyc_input_eval(&b, &f, &st);
+    for (int p = 0; p < 4; ++p) CHECK(st.buttons[p] == (0x80 >> p));
+    memset(keys, 0, sizeof keys);
+#endif
+}
 static void game_load(void *ctx, const char *key, const char *value)
 {
     GameKeys *g = ctx;
@@ -338,6 +384,7 @@ int main(int argc, char **argv)
     text_forms();
     defaults();
     evaluation();
+    logical_seats();
     persistence(argc > 1 ? argv[1] : ".");
     printf("input_test: %u checks passed\n", checks);
     return 0;

@@ -52,6 +52,11 @@ bool cyc_session_start(void);
 /* Before every frame: the game's frame_begin. */
 void cyc_session_frame_begin(void);
 void cyc_session_input(uint8_t buttons[2]);
+/* Publish all logical seats before input/frame callbacks. Physical NES ports
+ * still consume only the first two bytes. Other seats are for trusted mods. */
+void cyc_session_logical_input(const uint8_t *buttons, unsigned seats);
+unsigned cyc_session_audio_rate(unsigned fallback);
+void cyc_session_audio_mix(int16_t *samples, size_t count);
 void cyc_session_event(const void *event, int player);
 /* After every frame: a new picture to present, then the game's frame_end. */
 void cyc_session_frame_end(void);

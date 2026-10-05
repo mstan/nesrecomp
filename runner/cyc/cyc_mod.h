@@ -99,6 +99,10 @@ void cyc_mod_set_call_budget(uint64_t cycles);
  * scope end resets the permission. The game's callbacks must keep their own
  * speculative presentation/simulation state separate from live state. */
 void cyc_mod_set_return_hook(void (*hook)(void));
+/* Pure, optional RAM operand verdict at the actual instruction PC. Physical
+ * RAM, bus values and clocks are untouched. The callback must not mutate the
+ * machine or reenter guest execution. NULL restores unmodified reads. */
+void cyc_mod_set_ram_read_hook(uint8_t (*hook)(uint16_t pc, uint16_t addr, uint8_t value));
 void cyc_mod_allow_isolated_hooks(bool allow);
 bool cyc_mod_call_commit_hooked(uint16_t routine, CycModRegs *regs);
 bool cyc_mod_call_commit(uint16_t routine, CycModRegs *regs);

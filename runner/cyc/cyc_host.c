@@ -312,7 +312,7 @@ typedef struct {
 
 static InputStep *input_steps;
 static int        input_count, input_next;
-static uint8_t    input_held[2];
+static uint8_t    input_held[4];
 
 #ifndef CYC_ORACLE
 typedef struct { long frame; int x, y, trigger; } ZapperStep;
@@ -472,8 +472,7 @@ static bool load_input(const char *path) {
             continue;
         }
         uint8_t port = 0;
-        if (p[0] == '2' && p[1] == ':') port = 1, p += 2;
-        else if (p[0] == '1' && p[1] == ':') p += 2;
+        if (p[0] >= '1' && p[0] <= '4' && p[1] == ':') port = (uint8_t)(p[0]-'1'), p += 2;
         if (input_count == cap) {
             cap *= 2;
             input_steps = (InputStep *)realloc(input_steps, sizeof(InputStep) * cap);
@@ -495,6 +494,7 @@ static void input_tick(long frame) {
     }
     uint8_t buttons[2] = {input_held[0], input_held[1]};
 #ifndef CYC_ORACLE
+    cyc_session_logical_input(input_held,4);
     cyc_session_input(buttons);
 #endif
     cyc_set_controller(0, buttons[0]);
@@ -1443,7 +1443,10 @@ int main(int argc, char **argv) {
         }
     }
 #endif
-    enum { WAV_RATE = 48000 };
+    unsigned WAV_RATE = 48000;
+#ifndef CYC_ORACLE
+    WAV_RATE = cyc_session_audio_rate(WAV_RATE);
+#endif
     FILE *wav_f = NULL;
     uint32_t wav_samples = 0;
     if (wav_out) {
@@ -1536,6 +1539,9 @@ int main(int argc, char **argv) {
             int16_t pcm[4096];
             size_t n;
             while ((n = cyc_audio_read(pcm, 4096)) > 0) {
+#ifndef CYC_ORACLE
+                cyc_session_audio_mix(pcm,n);
+#endif
                 fwrite(pcm, sizeof(int16_t), n, wav_f);
                 wav_samples += (uint32_t)n;
             }

@@ -4,7 +4,8 @@
 #include "cyc_video.h"
 #include "hw_internal.h"
 #include <string.h>
-uint8_t *cyc_presentation_ram;
+/* Activation plugins may inspect RAM before the game's power_on callback. */
+uint8_t *cyc_presentation_ram=hw.ram;
 uint8_t g_ppu_oam[256], g_ppu_nt[2048], g_ppu_pal[32], g_chr_ram[8192];
 uint8_t g_ppuctrl, g_ppumask, g_controller1_buttons;
 uint32_t g_nes_palette[64];

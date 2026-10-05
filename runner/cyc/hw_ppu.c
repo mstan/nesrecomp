@@ -21,6 +21,7 @@
 
 #include "hw.h"
 #include "cyc_mod.h"
+#include "cyc_render.h"
 #ifdef NESRECOMP_CYCLE_HDPACK
 #include "cyc_hdpack.h"
 #endif
@@ -724,6 +725,7 @@ static void compute_pixel(void)
         if (color == 0) pal = 0;
     }
     hw_frame_bg[ppu.scanline * 256 + ppu.dot - 1] = color != 0;
+    uint8_t background_addr=(uint8_t)(pal<<2|color);
     if (ppu.show_spr && (ppu.dot > 8 || ppu.show_spr8) && !sprite_units_idle()) {
         int i;
         uint8_t sc = 0;
@@ -760,6 +762,8 @@ static void compute_pixel(void)
         corrupt_palettes(color);
     }
     ppu.color[0] = ppu.palette[addr] & 0x3F;
+    if(cyc_background_enabled)cyc_background_pipe[0]=ppu.palette[
+        rendering()&&ppu.scanline<240?background_addr:addr]&0x3f;
 #ifdef NESRECOMP_CYCLE_HDPACK
     cyc_hdpack_pixel(hd_bg_color,hd_bg_palette,hd_sprite,hd_sprite_color);
     if(!rendering())cyc_hdpack_blank(ppu.color[0]);
@@ -789,6 +793,7 @@ static void output_pixel(void)
         unsigned emphasis = ppu.emphasis;
         if (hw_pal()) emphasis = (emphasis & 4) | ((emphasis & 1) << 1) | ((emphasis & 2) >> 1);
         hw_frame_index[sl * 256 + dot - 4] = (uint16_t)(c | emphasis << 6);
+        if(cyc_background_enabled)cyc_render_background_output((unsigned)(sl*256+dot-4),emphasis,ppu.greyscale!=0);
 #ifdef NESRECOMP_CYCLE_HDPACK
         cyc_hdpack_output(dot-4,sl);
 #endif
@@ -993,6 +998,7 @@ static void blank_dot(void)
 #ifdef NESRECOMP_CYCLE_HDPACK
     cyc_hdpack_clock();
 #endif
+    if(cyc_background_enabled){cyc_background_pipe[3]=cyc_background_pipe[2];cyc_background_pipe[2]=cyc_background_pipe[1];cyc_background_pipe[1]=cyc_background_pipe[0];}
     ppu.color[3] = ppu.color[2];
     ppu.color[2] = ppu.color[1];
     ppu.color[1] = ppu.color[0];
@@ -1007,6 +1013,7 @@ static void blank_dot(void)
                     if ((addr & 3) == 0) addr &= 0x0F;
                 }
                 ppu.color[0] = ppu.palette[addr] & 0x3F;
+                if(cyc_background_enabled)cyc_background_pipe[0]=ppu.color[0];
 #ifdef NESRECOMP_CYCLE_HDPACK
                 cyc_hdpack_blank(ppu.color[0]);
 #endif
@@ -1140,6 +1147,7 @@ static void general_dot(void)
 #ifdef NESRECOMP_CYCLE_HDPACK
     cyc_hdpack_clock();
 #endif
+    if(cyc_background_enabled){cyc_background_pipe[3]=cyc_background_pipe[2];cyc_background_pipe[2]=cyc_background_pipe[1];cyc_background_pipe[1]=cyc_background_pipe[0];}
     ppu.color[3] = ppu.color[2];
     ppu.color[2] = ppu.color[1];
     ppu.color[1] = ppu.color[0];
