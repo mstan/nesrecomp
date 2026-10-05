@@ -49,11 +49,14 @@ try {
         Copy-Item -LiteralPath $preloaded -Destination (Join-Path $stage 'mods/packages') -Recurse
     }
     $licenses = @{
-        'Game-LICENSE.txt' = (Join-Path $ProjectRoot 'LICENSE')
         'NESRecomp-LICENSE.txt' = (Join-Path $EngineRoot 'LICENSE')
         'SDL2-COPYING.txt' = (Join-Path $EngineRoot 'runner/external/SDL2/COPYING.txt')
         'ImGui-LICENSE.txt' = (Join-Path $RecompUi 'src/third_party/imgui/LICENSE.txt')
     }
+    # Some local game projects do not yet carry a separate license file.
+    # Bundle it when declared; the required framework/dependency notices stay.
+    $gameLicense = Join-Path $ProjectRoot 'LICENSE'
+    if (Test-Path -LiteralPath $gameLicense) { $licenses['Game-LICENSE.txt'] = $gameLicense }
     New-Item -ItemType Directory -Path (Join-Path $stage 'licenses') | Out-Null
     foreach ($name in $licenses.Keys) {
         if (-not (Test-Path -LiteralPath $licenses[$name])) { throw "Missing license: $($licenses[$name])" }
