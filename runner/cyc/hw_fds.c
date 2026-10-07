@@ -78,6 +78,7 @@
 
 #include "cyc_core.h"
 #include "cyc_ring.h"
+#include "cyc_trace.h"
 #include "hw_internal.h"
 #include "../../common/nes_fds.h"
 

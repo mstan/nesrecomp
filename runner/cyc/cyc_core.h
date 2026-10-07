@@ -30,6 +30,8 @@ CycRegion cyc_region(void);
 CycRegion cyc_cart_region(void); /* NES 2.0 PAL, otherwise NTSC */
 double cyc_cpu_hz(void);
 double cyc_frame_seconds(void);
+/* Fixed PPU build identity; no runtime selector. */
+const char *cyc_ppu_implementation(void);
 
 /* Load an iNES/NES 2.0 image. Returns false on unsupported input; see MAPPERS.md. */
 bool cyc_load_ines(const uint8_t *image, size_t size);

@@ -31,6 +31,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include "ppu_implementation.h"
 
 #include "cyc_core.h"
 #include "hw_mapper.h"
@@ -380,7 +381,14 @@ typedef struct {
     uint16_t par_chr;                 /* pattern address register */
     uint8_t  fetch_data, commit;      /* commit: COMMIT_* fetched this dot */
     uint8_t  lo_plane, hi_plane, attribute, attr_latch;
+#if NESRECOMP_PPU_HLE
+    union {
+        struct { uint16_t bg_lo, bg_hi, attr_lo, attr_hi; }; /* diagnostic view only */
+        struct { uint32_t bg_pixels, attr_pixels; };
+    };
+#else
     uint16_t bg_lo, bg_hi, attr_lo, attr_hi;
+#endif
 
     /* ---- sprites ---- */
     uint8_t  oam2[32];
