@@ -8,6 +8,7 @@
  */
 #include "cyc_ui.h"
 #include "cyc_settings.h"
+#include "cyc_diagnostics.h"
 
 #include "cyc_input.h"
 #include "cyc_recomp.h"
@@ -247,7 +248,7 @@ int cyc_ui_launcher(CycSettings *settings, const char *settings_path, const CycH
     gi.rom_cache_path = rom_cache;
     gi.settings_bindings = 1;         /* every binding is the host's (config.ini) */
     /* The Mods screen (a game built with mods; recomp-ui's RECOMP_UI_ENABLE_MODS). */
-    gi.mods = (const RecompLauncherCModProvider *)mods;
+    gi.mods = (const RecompLauncherCModProvider *)cyc_diagnostics_provider(mods);
     gi.default_settings = &defaults;
     gi.assist_binding_labels = shortcut_labels;
     gi.assist_binding_count = count;
@@ -296,7 +297,9 @@ int cyc_ui_launcher(CycSettings *settings, const char *settings_path, const CycH
     recomp_launcher_set_preserve_sdl(1);
 #endif
     out_rom[0] = 0;
+    cyc_diagnostics_note("entering launcher");
     int act = recomp_launcher_run_window(title, &io, &gi, ".", *rom_path ? *rom_path : "", out_rom, sizeof(out_rom));
+    cyc_diagnostics_note("launcher returned action=%d", act);
     /* The edits come back whichever way the launcher closed. */
     from_launcher(&io, settings, shortcuts, count);
 #ifdef NES_HOST_HAS_RECOMP_UI

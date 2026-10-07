@@ -35,6 +35,7 @@ set(NESRECOMP_CYC_SOURCES
     ${NESRECOMP_CYC_DIR}/cyc_run.c
     ${NESRECOMP_CYC_DIR}/cyc_ramview.c
     ${NESRECOMP_CYC_DIR}/cyc_host.c
+    ${NESRECOMP_CYC_DIR}/cyc_diagnostics.c
     ${NESRECOMP_CYC_DIR}/cyc_accuracycoin.c
     ${NESRECOMP_CYC_DIR}/cyc_png.c
     ${NESRECOMP_CYC_DIR}/cyc_disk_action.c

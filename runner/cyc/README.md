@@ -1398,3 +1398,32 @@ describes trace equality, while the printed test scores describe accuracy.
   is the ceiling on optimising it. Compiled code against `--interp-only` is
   worth ~5% by comparison. Any work there has to keep AccuracyCoin at 144/144
   and both ROMs matching the oracle at all four alignments.
+
+## Opt-in startup and crash diagnostics
+
+A game may bundle a default-off `nesrecomp.developer.diagnostics` package with
+feature `diagnostics` and trusted plugin `nesrecomp.diagnostics`, targeting its
+own game ID and CRC32. The cycle host captures startup as soon as the player
+enables it through Mods, including first-time PLAY validation and launcher
+teardown. A persisted selection starts capture before the launcher opens.
+Disabling it closes the log and restores the previous host handlers.
+
+Timestamped logs live in `diagnostics` beside the executable. On Windows,
+read-only installations fall back to `%LOCALAPPDATA%\NESRecomp\diagnostics`.
+`NESRECOMP_DIAGNOSTICS_DIR` can select an existing writable directory for tests.
+No files or crash handlers are created while the feature is off. Inherited
+stdout/stderr file and pipe redirection is preserved. Headless catalog loading
+still requires `--mods-root`.
+
+Windows unhandled exceptions and aborts attempt `MiniDumpNormal` on a waiting
+worker thread, including the crashing thread's exception context. This also
+supports stack-overflow drills. Dumps are best effort; a forced kill or power
+loss cannot be captured. Keep the exact optimized release's PDB with its
+executable for analysis. Nothing uploads automatically, and dumps may contain
+local paths and process memory.
+
+The standalone `tests/diagnostics` CMake project tests first-enable provider
+wrapping, default-off behavior, redirection, re-enable, unwritable storage,
+ordinary failures and Windows access violation/abort/stack-overflow dumps.
+Configure it with `RECOMP_UI_ROOT`, then build and run CTest. Deliberate crash
+switches exist only in that test executable.

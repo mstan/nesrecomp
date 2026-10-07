@@ -1,5 +1,8 @@
 /* cyc_session.c - see cyc_session.h. */
 #include "cyc_session.h"
+#include "cyc_diagnostics.h"
+#include "cyc_core.h"
+#include "cyc_ring.h"
 
 #include "cyc_hooks.h"
 #include "cyc_mod.h"
@@ -89,6 +92,8 @@ bool cyc_session_mods_init(const char *root, char *err, size_t err_len)
         return false;
     }
     s_mods = true;
+    cyc_diagnostics_sync();
+    cyc_diagnostics_note("mod catalog ready game=%s target_crc32=%s", CYC_MOD_GAME_ID, CYC_MOD_ROM_CRC32);
     return true;
 #else
     (void)err;
@@ -111,6 +116,8 @@ const void *cyc_session_mods_provider(void)
 
 bool cyc_session_mods_start(const char *image_path, char *err, size_t err_len)
 {
+    cyc_diagnostics_sync();
+    cyc_diagnostics_note("starting selected mod plugins");
 #if NESRECOMP_ENABLE_MODS
     if (!s_mods) return true;
     int online=0;
@@ -134,6 +141,7 @@ bool cyc_session_mods_start(const char *image_path, char *err, size_t err_len)
 
 void cyc_session_mods_reapply(void)
 {
+    cyc_diagnostics_sync();
 #if NESRECOMP_ENABLE_MODS
     if (s_mods) nes_mod_runtime_activate_plugins_c();
 #endif
@@ -188,6 +196,10 @@ void cyc_session_frame_begin(void)
 
 void cyc_session_frame_end(void)
 {
+    if (cyc_diagnostics_active()) {
+        CycModRegs regs; cyc_mod_regs(&regs);
+        cyc_diagnostics_frame(cyc_ring_frame, cyc_cycle_count(), regs.pc);
+    }
     /* A new picture first: the game's frame_end may compose it
      * (cyc_render_present), the one the window presents next. */
     cyc_render_frame_done();

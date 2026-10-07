@@ -50,7 +50,7 @@ void     cyc_host_disk_select(unsigned side);
  * may change *rom_path), and hands back the player's saved FDS HLE choices
  * and FDS BIOS file (config.ini [FDS] Bios; NULL: none saved). cli_bios is
  * --fds-bios (NULL: none), which the launcher's BIOS state reflects.
- * Returns 0 to go on, 1 when the player quit the launcher. */
+ * Returns 0 to go on, 1 when the player quit the launcher, 2 on startup failure. */
 int cyc_sdl_prelaunch(const char **rom_path, const char *cli_bios, NesFdsHleAsk *saved_hle,
                       const char **saved_bios);
 /* A windowed start's fatal error (a missing FDS BIOS) as a message box, so a

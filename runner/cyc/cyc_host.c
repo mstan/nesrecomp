@@ -167,6 +167,7 @@
 #include "cyc_overlay.h"
 
 #ifndef CYC_ORACLE
+#include "cyc_diagnostics.h"
 #include "cyc_hooks.h"
 #include "cyc_mod.h"
 #include "cyc_ramview.h"
@@ -971,7 +972,11 @@ static bool s_saves_enabled = true;
 bool cyc_host_saves_enabled(void) { return s_saves_enabled; }
 #endif
 
+#ifdef CYC_ORACLE
 int main(int argc, char **argv) {
+#else
+static int host_main(int argc, char **argv) {
+#endif
     const char *rom_path = NULL, *hash_out = NULL, *trace_out = NULL, *screenshot = NULL, *state_out = NULL,
                *wav_out = NULL, *mem_out = NULL;
     const char *save_file=NULL, *datach_save=NULL, *barcode=NULL;
@@ -1174,6 +1179,12 @@ int main(int argc, char **argv) {
 #ifndef CYC_ORACLE
     s_saves_enabled = !no_save;
     if (!rom_path) rom_path = cyc_native_fds_image_path;   /* game.toml [fds] image */
+    if (headless && mods_root) {
+        char err[512];
+        if (!cyc_session_mods_init(mods_root, err, sizeof(err))) {
+            cyc_diagnostics_error("%s\n", err); return 2;
+        }
+    }
 #ifdef NESRECOMP_NET
     const char *offline_save_file=save_file,*offline_datach_save=datach_save;
     bool online_from_lobby=false;
@@ -1185,7 +1196,10 @@ session_restart:
 #endif
 #if defined(CYC_WITH_SDL)
     /* The window: its settings, and recomp-ui's launcher where the build has it. */
-    if (!headless && cyc_sdl_prelaunch(&rom_path, fds_bios, &saved_hle, &saved_bios)) return 0;
+    if (!headless) {
+        int launch = cyc_sdl_prelaunch(&rom_path, fds_bios, &saved_hle, &saved_bios);
+        if (launch) return launch == 1 ? 0 : 2;
+    }
 #endif
 #endif
     if (!rom_path) {
@@ -1218,6 +1232,9 @@ session_restart:
         return 2;
     }
     size_t size;
+#ifndef CYC_ORACLE
+    cyc_diagnostics_note("reading selected ROM");
+#endif
     uint8_t *image = read_file(rom_path, &size);
     NesCartInfo cart_info;
     NesFdsImage fds_image;
@@ -1329,17 +1346,30 @@ session_restart:
                cyc_fds_side() < 0 ? "empty" : "loaded");
 #endif
     } else if (!image || !nes_cart_image(image, size, &cart_info) || !cyc_load_ines(image, size)) {
-        fprintf(stderr, "cannot load %s (invalid or unsupported cartridge; see runner/cyc/MAPPERS.md)\n", rom_path);
+#ifndef CYC_ORACLE
+        cyc_diagnostics_error("cannot load selected ROM (invalid or unsupported cartridge)\n");
+#if defined(CYC_WITH_SDL)
+        if (!headless) cyc_sdl_error_box("Cannot start game", "Cannot read the selected ROM, or its cartridge format is unsupported. Select the original ROM again in the launcher.");
+#endif
+#else
+        fprintf(stderr, "cannot load %s (invalid or unsupported cartridge)\n", rom_path);
+#endif
         return 2;
     }
 #ifndef CYC_ORACLE
     if (cyc_native_program_name && nes_cart_identity(&cart_info) != cyc_native_cart_hash) {
-        fprintf(stderr, "Cartridge metadata differs from the compiled program; regenerate native code\n");
+        cyc_diagnostics_error("Cartridge metadata differs from the compiled program; regenerate native code\n");
+#if defined(CYC_WITH_SDL)
+        if (!headless) cyc_sdl_error_box("Cannot start game", "The ROM cartridge metadata differs from this build. Select the matching original ROM in the launcher.");
+#endif
         return 2;
     }
     if (cyc_native_program_name && cyc_prg_hash() != cyc_native_prg_hash) {
-        fprintf(stderr, "PRG ROM does not match the ROM '%s' was recompiled from (hash %08X, expected %08X)\n",
+        cyc_diagnostics_error("PRG ROM does not match the ROM '%s' was recompiled from (hash %08X, expected %08X)\n",
                 cyc_native_program_name, cyc_prg_hash(), cyc_native_prg_hash);
+#if defined(CYC_WITH_SDL)
+        if (!headless) cyc_sdl_error_box("Cannot start game", "The selected ROM's program data differs from this build. Select the matching original ROM in the launcher.");
+#endif
         return 2;
     }
 #endif
@@ -1388,9 +1418,8 @@ session_restart:
      * --mods-root. */
     if (headless) {
         char err[512];
-        if (!cyc_session_mods_init(mods_root, err, sizeof(err)) ||
-            !cyc_session_mods_start(rom_path, err, sizeof(err))) {
-            fprintf(stderr, "%s\n", err);
+        if (!cyc_session_mods_start(rom_path, err, sizeof(err))) {
+            cyc_diagnostics_error("%s\n", err);
             return 2;
         }
     }
@@ -1420,6 +1449,7 @@ session_restart:
 #endif
 #ifndef CYC_ORACLE
     if (zapper_port >= 0) cyc_zapper_attach((unsigned)zapper_port);
+    cyc_diagnostics_note("machine powered on mapper=%u native_prg_hash=%08X actual_prg_hash=%08X", cart_info.mapper, cyc_native_prg_hash, cyc_prg_hash());
     cyc_run_power_on();
     fds_save_powered_on();
     cyc_state_set_host(&HOST_STATE);
@@ -1437,7 +1467,9 @@ session_restart:
         return 2;
     }
 #endif
+    cyc_diagnostics_note("initializing game presentation");
     if (!cyc_session_start()) return 2;
+    cyc_diagnostics_note("game presentation ready");
     if (extra_scanlines >= 0 && !cyc_set_extra_scanlines((unsigned)extra_scanlines)) {
         fprintf(stderr, "--extra-scanlines requires an MMC3 cartridge\n"); return 2;
     }
@@ -1795,3 +1827,12 @@ session_restart:
     }
     return 0;
 }
+
+#ifndef CYC_ORACLE
+int main(int argc, char **argv)
+{
+    int result = host_main(argc, argv);
+    cyc_diagnostics_exit(result);
+    return result;
+}
+#endif

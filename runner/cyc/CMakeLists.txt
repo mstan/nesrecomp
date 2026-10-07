@@ -142,7 +142,7 @@ if(SDL2_FOUND)
         # The host's side of the launcher against a scripted launcher: what it
         # hands over, and every edit coming back into config.ini.
         foreach(t cyc_ui_launcher_test cyc_ui_launcher_hd_test)
-        add_executable(${t} ui_launcher_test.c cyc_ui_launcher.c cyc_settings.c cyc_input.c
+        add_executable(${t} ui_launcher_test.c cyc_ui_launcher.c cyc_settings.c cyc_input.c cyc_diagnostics.c
             cyc_fds_bios.c)
         target_include_directories(${t} PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS}
             "${NESRECOMP_RECOMP_UI}/src" "${NESRECOMP_RECOMP_UI}/src/common")
