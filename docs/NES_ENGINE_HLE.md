@@ -152,3 +152,32 @@ hashes, snapshots and screenshots. They include local ROM paths, not ROM data.
 Retain this experiment as a draft. A repeat on an available quiet host can
 resolve its performance disposition; broader scanline/event service work is
 still an estimated opportunity, not a measured success of this replacement.
+
+## Representative-workload discovery (2026-10-06)
+
+This is a three-title coverage pool, not an automatic benchmark matrix:
+SMB3 (MMC3 IRQ/banked graphics), SMB1 (NROM control), and Otocky (FDS disk/BIOS,
+mutable RAM code and expansion audio). Reuse evidence first; take one production
+configuration per selected workload only when it can change an HLE theory.
+The entire cross-system discovery pass permits at most six new captures total,
+not six per system or per configuration. These titles do not exhaust board,
+audio, peripheral or game behavior.
+
+The reused SMB3 evidence is
+`F:/Projects/nesrecomp/_hle-wtuu-20261006/cycle-route-functions-reviewed.json`
+and the corresponding `cycle-route-samples.csv`, documented in
+[SMB3_HLE_ATTRIBUTION.md](SMB3_HLE_ATTRIBUTION.md). The October 6 cycle pin
+`0c061070` capture has 731 main-thread self samples: the top three PPU symbols
+account for 54.993%, APU 5.746%, and clock start/finish 6.429%. Its 3,200-frame
+route is validated, but sampling includes startup and perturbs execution;
+periodic aliasing, inlining and absent worker/callback coverage prevent treating
+these percentages as recoverable savings. The broad PPU service remains the
+leading measured theory, while this packed-raster experiment's inconclusive
+whole-host result above remains unchanged.
+
+`SuperMarioBrosRecomp/game.toml` establishes NROM and optional presentation
+hooks; `OtockyRecomp/game.toml` establishes the cycle-only FDS/BIOS and captured
+RAM-code route. No current subsystem cost capture for either is used here.
+Their addition to the pool proposes diversity, not measured cost or qualified
+HLE behavior. Use stock presentation for discovery and separately record the
+actual board, audio and execution settings before interpreting a new capture.
