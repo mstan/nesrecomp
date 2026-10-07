@@ -290,11 +290,19 @@ completion requirements.
    deadlines where available. Record peak memory and code size, since constrained
    targets matter. Preserve normal renderer and audio production; a benchmark
    that omits presentation/audio is a core-only diagnostic, not end-to-end proof.
-   Normal capped play can show reduced CPU/frame even when FPS stays unchanged.
-   Uncapped throughput is optional corroboration only when it performs equivalent
-   rendering/audio work. Measure GPU completion/queue cost when work moves there;
-   a shorter submission call alone is not a win. Check actual movement/progress
-   and audio duration so changed guest timing cannot inflate the result.
+   The owner selected Windows first and authorized uncapping for useful
+   measurements. Prefer a finite uncapped comparison where it preserves the
+   same game, render and audio-synthesis work. Remove host frame-delay/VSync
+   waits only in isolated benchmark configuration; do not change the guest
+   timing model, resolution, effects, audio workload or HLE coverage between
+   builds. Report uncapped FPS and milliseconds/frame alongside total CPU/frame,
+   and verify completed render/audio work and game progress rather than trusting
+   a frame counter alone. A legacy benchmark that skips rendering/presentation
+   or audio remains core-only evidence; use a complete paced CPU/frame comparison
+   until that benchmark path can exercise equivalent work. Normal capped play
+   can show reduced CPU/frame even when FPS stays unchanged. Measure GPU
+   completion/queue cost when work moves there; a shorter submission call alone
+   is not a win. Keep the final owner-playtest package normally paced.
 5. **Use a fixed comparison budget.** The primary game gets LLE/HLE/HLE/LLE:
    two order-balanced pairs, four measured executions. Each of the two companion
    games gets one LLE/HLE pair, two executions each. That is eight measured runs
@@ -337,9 +345,10 @@ completion requirements.
    preserve its branch and draft PR with results, explain why, and choose a new
    boundary deliberately; an unsuccessful experiment is not a completed system.
 
-Initial measurements can use Windows x64 already available here. Choose the
-first constrained target with the owner, then carry only the winning candidate
-and the relevant route to that target. Measure there before claiming mobile or
-original-Xbox savings; desktop results do not establish a port's performance.
-A target-specific build/default is qualified separately rather than multiplying
-all hosts into the discovery matrix.
+The owner selected **Windows first; port measurements later**. Windows x64 is
+therefore the initial implementation, measurement, final-playtest and default
+scope. After automated checks, material gain and the owner's normal-paced feel
+approval, finish that Windows delivery; a mobile/Xbox port is not a new gate
+before closure. Later port work carries the winning candidate and relevant
+routes to the chosen target and measures there before claiming target savings.
+Do not multiply all hosts into the Windows discovery/comparison matrix.
