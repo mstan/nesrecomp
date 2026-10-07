@@ -1414,6 +1414,9 @@ session_restart:
 #ifdef NESRECOMP_CYCLE_HDPACK_MODS
     if (!cyc_hdpack_mod_prepare()) return 2;
 #endif
+#ifndef CYC_ORACLE
+    printf("ppu: implementation=%s (build-fixed)\n", cyc_ppu_implementation());
+#endif
     cyc_power_on((uint8_t)align);
 #ifdef CYC_GAME_ZAPPER_PORT
     cyc_zapper_attach(CYC_GAME_ZAPPER_PORT);

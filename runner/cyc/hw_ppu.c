@@ -22,6 +22,9 @@
 #include "hw.h"
 #include "cyc_mod.h"
 #include "cyc_render.h"
+#if NESRECOMP_PPU_HLE
+#include "ppu_hle_kernel.h"
+#endif
 #ifdef NESRECOMP_CYCLE_HDPACK
 #include "cyc_hdpack.h"
 #endif
@@ -30,6 +33,7 @@
 #include <string.h>
 
 HwPpu    ppu;
+const char *cyc_ppu_implementation(void) { return NESRECOMP_PPU_HLE ? "HLE" : "LLE"; }
 static CycModPpuWriteHook content_write_hook;
 void cyc_mod_set_ppu_write_hook(CycModPpuWriteHook hook) { content_write_hook = hook; }
 uint16_t hw_frame_index[256 * 240];
@@ -297,8 +301,12 @@ static void bg_commit(void)
     if (ppu.commit & COMMIT_LO) ppu.lo_plane = ppu.fetch_data;
     if (ppu.commit & COMMIT_HI) {
         ppu.hi_plane = ppu.fetch_data;
+#if NESRECOMP_PPU_HLE
+        ppu.bg_pixels = (ppu.bg_pixels & 0xffff0000u) | ppu_hle_row(ppu.lo_plane, ppu.hi_plane);
+#else
         ppu.bg_lo = (uint16_t)((ppu.bg_lo & 0xFF00) | ppu.lo_plane);
         ppu.bg_hi = (uint16_t)((ppu.bg_hi & 0xFF00) | ppu.hi_plane);
+#endif
         ppu.attr_latch = ppu.attribute;
 #ifdef NESRECOMP_CYCLE_HDPACK
         cyc_hdpack_bg_reload();
@@ -580,6 +588,16 @@ static inline bool sprite_units_idle(void)
 static void shift_sprites(void)
 {
     if (sprite_units_idle()) return;
+#if NESRECOMP_PPU_HLE
+    unsigned shifted = ppu_hle_sprite_shift(ppu.spr_x, ppu.spr_lo, ppu.spr_hi,
+                                            rendering(), ppu.skipped_dot != 0);
+#ifdef NESRECOMP_CYCLE_HDPACK
+    for (unsigned i = 0; i < 8; ++i)
+        if (shifted & (1u << i)) cyc_hdpack_sprite_shift(i);
+#else
+    (void)shifted;
+#endif
+#else
     for (int i = 0; i < 8; i++) {
         if (ppu.spr_x[i] > 0 && !ppu.skipped_dot) {
             ppu.spr_x[i]--;
@@ -591,6 +609,7 @@ static void shift_sprites(void)
             ppu.spr_hi[i] <<= 1;
         }
     }
+#endif
 }
 
 /* ---- palette corruption ---- */
@@ -717,8 +736,13 @@ static void compute_pixel(void)
 #endif
     if (ppu.show_bg && (ppu.dot > 8 || ppu.show_bg8)) {
         unsigned fx = ppu.fine_x;
+#if NESRECOMP_PPU_HLE
+        color = (uint8_t)((ppu.bg_pixels >> (30 - 2 * fx)) & 3);
+        pal = (uint8_t)((ppu.attr_pixels >> (14 - 2 * fx)) & 3);
+#else
         color = (uint8_t)(((ppu.bg_lo >> (15 - fx)) & 1) | (((ppu.bg_hi >> (15 - fx)) & 1) << 1));
         pal = (uint8_t)(((ppu.attr_lo >> (7 - fx)) & 1) | (((ppu.attr_hi >> (7 - fx)) & 1) << 1));
+#endif
 #ifdef NESRECOMP_CYCLE_HDPACK
         hd_bg_color=color;hd_bg_palette=pal;
 #endif
@@ -729,11 +753,18 @@ static void compute_pixel(void)
     if (ppu.show_spr && (ppu.dot > 8 || ppu.show_spr8) && !sprite_units_idle()) {
         int i;
         uint8_t sc = 0;
+#if NESRECOMP_PPU_HLE
+        unsigned sprites = ppu_hle_sprite_mask(ppu.spr_x, ppu.spr_lo, ppu.spr_hi,
+                                                ppu.skipped_dot != 0);
+        i = sprites ? (int)ppu_hle_first_sprite(sprites) : 8;
+        if (sprites) sc = (uint8_t)((ppu.spr_lo[i] >> 7) | ((ppu.spr_hi[i] >> 7) << 1));
+#else
         for (i = 0; i < 8; i++) {
             if (ppu.spr_x[i] != 0 && !ppu.skipped_dot) continue;
             sc = (uint8_t)((ppu.spr_lo[i] >> 7) | ((ppu.spr_hi[i] >> 7) << 1));
             if (sc) break;
         }
+#endif
         if (i == 0 && ppu.can_s0hit && ppu.cur_has_s0 && ppu.show_bg && ppu.show_spr && color && sc &&
             (ppu.show_spr8 || ppu.dot > 8) && ppu.dot < 256) {
             ppu.s0hit_pending1 = 1;
@@ -1171,13 +1202,18 @@ static void general_dot(void)
 static void general_half_dot(void)
 {
     if (render_line() && rendering() && ((ppu.dot >= 1 && ppu.dot <= 257) || (ppu.dot >= 321 && ppu.dot <= 336))) {
+#if NESRECOMP_PPU_HLE
+        ppu.bg_pixels = (ppu.bg_pixels << 2) | 2u;
+        ppu.attr_pixels = (ppu.attr_pixels << 2) | ppu.attr_latch;
+#else
         ppu.bg_lo = (uint16_t)(ppu.bg_lo << 1);
         ppu.bg_hi = (uint16_t)(ppu.bg_hi << 1 | 1);
+        ppu.attr_lo = (uint16_t)(ppu.attr_lo << 1 | (ppu.attr_latch & 1));
+        ppu.attr_hi = (uint16_t)(ppu.attr_hi << 1 | ((ppu.attr_latch >> 1) & 1));
+#endif
 #ifdef NESRECOMP_CYCLE_HDPACK
         cyc_hdpack_bg_shift();
 #endif
-        ppu.attr_lo = (uint16_t)(ppu.attr_lo << 1 | (ppu.attr_latch & 1));
-        ppu.attr_hi = (uint16_t)(ppu.attr_hi << 1 | ((ppu.attr_latch >> 1) & 1));
     }
     if (ppu.oam2_reset > 0 && --ppu.oam2_reset == 0) {
         ppu.oam2_addr = 0;
@@ -1454,9 +1490,21 @@ static const struct {
 
 uint64_t ppu_state_hash(uint64_t h)
 {
+#if NESRECOMP_PPU_HLE
+    /* Test-only observation: normalize private packed rows for the established
+     * differential trace schema. No second implementation executes. */
+    HwPpu observed = ppu;
+    observed.bg_lo = ppu_hle_plane(ppu.bg_pixels, 0);
+    observed.bg_hi = ppu_hle_plane(ppu.bg_pixels, 1);
+    observed.attr_lo = ppu_hle_plane(ppu.attr_pixels, 0);
+    observed.attr_hi = ppu_hle_plane(ppu.attr_pixels, 1);
+    const HwPpu *state = &observed;
+#else
+    const HwPpu *state = &ppu;
+#endif
     uint64_t acc = 0;
     for (size_t k = 0; k < sizeof(ppu_fields) / sizeof(ppu_fields[0]); k++) {
-        const uint8_t *b = (const uint8_t *)&ppu + ppu_fields[k].offset;
+        const uint8_t *b = (const uint8_t *)state + ppu_fields[k].offset;
         for (size_t i = 0; i < ppu_fields[k].size; i++) acc = acc * 131 + b[i];
     }
     return h ^ (acc + 0x9E3779B97F4A7C15ull + (h << 6) + (h >> 2));
@@ -1464,9 +1512,19 @@ uint64_t ppu_state_hash(uint64_t h)
 
 void ppu_state_dump(void *file)
 {
+#if NESRECOMP_PPU_HLE
+    HwPpu observed = ppu;
+    observed.bg_lo = ppu_hle_plane(ppu.bg_pixels, 0);
+    observed.bg_hi = ppu_hle_plane(ppu.bg_pixels, 1);
+    observed.attr_lo = ppu_hle_plane(ppu.attr_pixels, 0);
+    observed.attr_hi = ppu_hle_plane(ppu.attr_pixels, 1);
+    const HwPpu *state = &observed;
+#else
+    const HwPpu *state = &ppu;
+#endif
     FILE *f = (FILE *)file;
     for (size_t k = 0; k < sizeof(ppu_fields) / sizeof(ppu_fields[0]); k++) {
-        const uint8_t *b = (const uint8_t *)&ppu + ppu_fields[k].offset;
+        const uint8_t *b = (const uint8_t *)state + ppu_fields[k].offset;
         fprintf(f, "ppu.%s", ppu_fields[k].name);
         for (size_t i = 0; i < ppu_fields[k].size; i++) fprintf(f, "%s%02X", i % 32 ? "" : " ", b[i]);
         fputc('\n', f);

@@ -38,7 +38,11 @@ static uint32_t layout_signature(void)
     apu_state_ptr(&apu_size);
     fds_hle_state_ptr(&hle_size);
     const uint64_t sizes[] = { sizeof(Cpu6502), sizeof(HwMachine), sizeof(HwCart), sizeof(HwPpu), apu_size,
-                               hle_size, sizeof(CycLine), cyc_native_ram_view_count };
+                               hle_size, sizeof(CycLine), cyc_native_ram_view_count
+#if NESRECOMP_PPU_HLE
+                               , 0x505055484c450001ull /* packed PPU schema, HLE only */
+#endif
+                             };
     uint32_t h = 2166136261u;
     for (size_t i = 0; i < sizeof(sizes) / sizeof(sizes[0]); ++i)
         for (int k = 0; k < 8; ++k) h = (h ^ (uint8_t)(sizes[i] >> (8 * k))) * 16777619u;
