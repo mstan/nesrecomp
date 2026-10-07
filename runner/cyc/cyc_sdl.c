@@ -108,6 +108,7 @@ static const char *s_vpad_path;
 static int         s_tcp_port;
 static int         s_key_hold[SDL_NUM_SCANCODES];   /* host loops a TCP-held key stays down */
 static bool        s_hidden;
+static bool        s_uncapped; /* measurement pacing only; render and audio still run */
 static bool        s_pause_unfocused;
 static char        s_image[1024];                   /* the image running (the save state slot's name) */
 bool cyc_sdl_force_launcher;
@@ -129,6 +130,7 @@ void cyc_sdl_option(const char *name, const char *value)
     else if (!strcmp(name, "--config")) snprintf(s_set_path, sizeof(s_set_path), "%s", value);
     else if (!strcmp(name, "--tcp")) s_tcp_port = atoi(value);
     else if (!strcmp(name, "--hidden")) s_hidden = true;
+    else if (!strcmp(name, "--uncapped")) s_uncapped = true;
     else if (!strcmp(name, "--pause-unfocused")) s_pause_unfocused = true;
 }
 
@@ -1172,6 +1174,10 @@ static bool menu_open(void)
 
 int cyc_sdl_main(const char *title_in, int scale)
 {
+    if (s_uncapped && s_exit_after <= 0) {
+        fprintf(stderr, "--uncapped requires a positive --exit-after frame limit\n");
+        return 2;
+    }
     s_running=true;s_frames_done=(long)cyc_ring_frame;s_tex=NULL;s_pad_count=0;s_vpad_joy=NULL;
     /* a path names the game by its file's stem */
     char title[256];
@@ -1247,6 +1253,9 @@ int cyc_sdl_main(const char *title_in, int scale)
     const Uint64 freq = SDL_GetPerformanceFrequency();
     Uint64 next = SDL_GetPerformanceCounter();
     Uint64 fps_mark = next, shown = 0;
+    const Uint64 measurement_start = next;
+    const long measurement_first_frame = s_frames_done;
+    uint64_t audio_samples_produced = 0, audio_samples_queued = 0;
     uint64_t native_mark = cyc_run_native_cycles;
     uint64_t cycles_mark = cyc_cycle_count();
     int frames = 0, shot = 0;
@@ -1379,6 +1388,7 @@ int cyc_sdl_main(const char *title_in, int scale)
         if(online&&cyc_net_leaving()){s_running=false;break;}
 #endif
         if (online || (!open && !inactive)) {
+            cyc_host_window_replay(s_frames_done, st.buttons, CYC_INPUT_PLAYERS);
             uint8_t pad0 = st.buttons[0], pad1 = st.buttons[1];
             if (hold_input) {
                 if (pad0 || pad1) pad0 = pad1 = 0;
@@ -1416,12 +1426,14 @@ int cyc_sdl_main(const char *title_in, int scale)
         size_t n;
         while ((n = cyc_audio_read(pcm, 4096)) > 0) {
             cyc_session_audio_mix(pcm,n);
+            audio_samples_produced += n;
             /* Keep latency bounded: skip a frame's audio if ~100 ms are queued. */
             if (replay || !dev || fast || open || inactive || !s_set.audio_enabled || SDL_GetQueuedAudioSize(dev) >= (Uint32)(have.freq / 10) * 2)
                 continue;
             if (s_set.volume < 100)
                 for (size_t i = 0; i < n; ++i) pcm[i] = (int16_t)(pcm[i] * s_set.volume / 100);
             SDL_QueueAudio(dev, pcm, (Uint32)(n * sizeof(int16_t)));
+            audio_samples_queued += n;
         }
         if(replay){next=SDL_GetPerformanceCounter();continue;}
 
@@ -1456,7 +1468,7 @@ int cyc_sdl_main(const char *title_in, int scale)
 #endif
         if (s_exit_after >= 0 && s_frames_done >= s_exit_after) s_running = false;
 
-        if (fast) {
+        if (fast || s_uncapped) {
             next = tnow;
             continue;
         }
@@ -1470,6 +1482,15 @@ int cyc_sdl_main(const char *title_in, int scale)
         }
     }
 
+    if (s_uncapped) {
+        const double seconds = (double)(SDL_GetPerformanceCounter() - measurement_start) / (double)freq;
+        const long completed = s_frames_done - measurement_first_frame;
+        printf("window benchmark: ppu=%s frames=%ld seconds=%.6f fps=%.3f cycles=%llu native_cycles=%llu audio_device=%u audio_enabled=%u produced_samples=%llu queued_samples=%llu\n",
+               cyc_ppu_implementation(), completed, seconds, seconds > 0 ? completed / seconds : 0,
+               (unsigned long long)cyc_cycle_count(), (unsigned long long)cyc_run_native_cycles,
+               dev != 0, s_set.audio_enabled != 0,
+               (unsigned long long)audio_samples_produced, (unsigned long long)audio_samples_queued);
+    }
     save_settings();
     cyc_tcp_stop();
 #ifdef CYC_WITH_RECOMP_UI

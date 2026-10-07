@@ -17,6 +17,7 @@
 # The runtime is C11. Only the oracle and the recomp-ui glue are C++.
 
 set(NESRECOMP_CYC_DIR ${CMAKE_CURRENT_LIST_DIR})
+include(${NESRECOMP_CYC_DIR}/ppu_implementation.cmake)
 
 set(NESRECOMP_CYC_SOURCES
     ${NESRECOMP_CYC_DIR}/cpu6502.c

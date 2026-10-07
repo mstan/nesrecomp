@@ -6,6 +6,7 @@
 #include "../../common/nes_fds_hle.h"
 #include <stdbool.h>
 #include <stdint.h>
+#include <stddef.h>
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -62,6 +63,9 @@ bool cyc_sdl_error_box(const char *title, const char *text);
  * and presentation (fast load during a disk load). */
 double cyc_host_frame_seconds(void);
 bool   cyc_host_frame_unpaced(void);
+
+/* Optional fixed-route replay for the normal SDL render/audio loop. */
+bool cyc_host_window_replay(long frame, uint8_t *buttons, size_t count);
 
 #ifdef __cplusplus
 }
