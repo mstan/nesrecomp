@@ -12,9 +12,14 @@ The broader steady-render PPU event service passed 20 focused hardware and
 register-boundary cases. The corrected SMB3 route reached World 1-1 and gained
 8.50% full-runtime FPS with 7.95% less process CPU. The owner accepted normal
 paced SMB3 with adaptive widescreen: "Looks, sounds, and plays right."
-SMB1 improved in both run orders and Otocky improved in its bounded pair; their
-owner playchecks are pending. Foreign compiler activity limits the precision
-of these single-pair percentages; the raw results are recorded below.
+SMB3's Windows default is integrated in its title PR 1, using framework PR 63.
+SMB1 improved in both run orders, but the owner reported stale widescreen
+margins at one-way scrolling transitions. Its title-level camera fix is tracked
+in `beads-2dw.2.14`; a targeted recheck and owner acceptance remain outstanding.
+The owner explicitly excluded FDS games from further validation. Otocky's
+earlier measurement is retained as exploratory evidence only; it is not a
+pending playtest or a default-promotion candidate. Foreign compiler activity
+limits the precision of these single-pair percentages.
 
 The shared framework retains `NESRECOMP_PPU_IMPL=LLE`. Qualified Windows x64
 titles can select `HLE` by default while preserving an explicit
@@ -270,7 +275,10 @@ Owner-reported defects reopen that specific behavior, not an automatic campaign
 or comparison matrix. Mobile/Xbox claims need their own later measurements;
 they are not additional gates after this Windows handoff.
 
-## Current implementation work: steady-render event service
+## Implementation and measurement history: steady-render event service
+
+The entries below retain the experiment's progression; the current decision
+and owner feedback are summarized above.
 
 The new unmeasured HLE owns stable visible scanline spans (dots 9-253),
 removing repeated delayed-register, scroll-edge, blank/data-latch and VBlank
@@ -377,8 +385,9 @@ Together with focused boundary checks, coherent active-stage rendering and
 gain direction across the three selected SDL workloads, this supports the
 normal-paced owner handoff. It does not record subjective owner acceptance.
 Use the exact HLE binaries from `window-binary-manifest.json`; normal play uses
-no replay, frame limit, uncapping or hidden window. SMB3 and SMB1 support
-`--widescreen adaptive` (the shared geometry parser's Fit alias); Otocky uses
-native presentation and explicit BIOS / `--fds-hle off`. Exact arguments and
-controls are in sibling `owner-play-handoff.json`. Default remains LLE until
-positive owner feedback and scoped promotion; keep the LLE build opt-out.
+no replay, frame limit, uncapping or hidden window. SMB3 accepts
+`--widescreen adaptive`; the measured SMB1 binary requires `--widescreen fit`
+for adaptive framing and rejects the literal `adaptive` argument. Exact
+arguments and controls are in sibling `owner-play-handoff.json`. SMB3 is now
+accepted and promoted for Windows x64. SMB1 stays opt-in pending its reported
+margin fix and recheck. FDS games are excluded at the owner's request.
