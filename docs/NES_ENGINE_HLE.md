@@ -13,9 +13,12 @@ register-boundary cases. The corrected SMB3 route reached World 1-1 and gained
 8.50% full-runtime FPS with 7.95% less process CPU. The owner accepted normal
 paced SMB3 with adaptive widescreen: "Looks, sounds, and plays right."
 SMB3's Windows default is integrated in its title PR 1, using framework PR 63.
-SMB1 improved in both run orders, but the owner reported stale widescreen
-margins at one-way scrolling transitions. Its title-level camera fix is tracked
-in `beads-2dw.2.14`; a targeted recheck and owner acceptance remain outstanding.
+SMB1 improved in both run orders. Its title camera-phase fix passed directed
+wrap checks and a focused same-scroll replay; the owner accepted the final
+adaptive build: "Margins are fixed; looks and plays right." Title PR 8 merged
+the fix, and PR 9 enabled the Windows x64 HLE default with framework pin
+916e119. Explicit NESRECOMP_PPU_IMPL=LLE remains the correctness-reference
+opt-out and may lose performance.
 The owner explicitly excluded FDS games from further validation. Otocky's
 earlier measurement is retained as exploratory evidence only; it is not a
 pending playtest or a default-promotion candidate. Foreign compiler activity
@@ -389,5 +392,6 @@ no replay, frame limit, uncapping or hidden window. SMB3 accepts
 `--widescreen adaptive`; the measured SMB1 binary requires `--widescreen fit`
 for adaptive framing and rejects the literal `adaptive` argument. Exact
 arguments and controls are in sibling `owner-play-handoff.json`. SMB3 is now
-accepted and promoted for Windows x64. SMB1 stays opt-in pending its reported
-margin fix and recheck. FDS games are excluded at the owner's request.
+accepted and promoted for Windows x64. SMB1's focused margin fix and final
+owner recheck also passed; its Windows x64 default is integrated in title PR 9.
+FDS games are excluded at the owner's request.
