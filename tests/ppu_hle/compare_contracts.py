@@ -24,6 +24,33 @@ def run(executable, arguments, log, expected=0):
     return result.stdout + result.stderr
 
 
+def render_register_interrupt():
+    """Interrupt a stable rendering span with real CPU register transactions.
+
+    This specifically checks the new event-service cache invalidation and
+    alignment-dependent delayed writes, rather than adding game image sweeps.
+    """
+    name, image, seeds, expected = mmc3_irq_program(4, "render_register_interrupt")
+    image = bytearray(image)
+    handler = bytearray([0xa9, 0, 0x8d, 0, 0xe0])  # acknowledge IRQ
+    def store(addr, value):
+        handler.extend([0xa9, value, 0x8d, addr & 255, addr >> 8])
+    store(0x2001, 0x18)  # delayed mask write while stable rendering is active
+    store(0x2005, 5)
+    store(0x2005, 0)
+    handler.extend([0x2c, 2, 0x20])  # status read resets the address latch
+    store(0x2001, 0)
+    handler.extend([0xea] * 8)
+    store(0x2001, 0x18)
+    store(0x2006, 0x20)
+    store(0x2006, 0)
+    store(0x2007, 0x5a)  # force the VRAM data-port latch chain
+    handler.extend([0xe6, 0, 0x40])
+    for bank in range(16):
+        at = 16 + bank * 8192 + 0x100
+        image[at:at + len(handler)] = handler
+    return name, bytes(image), seeds, expected
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--lle", required=True, type=Path)
@@ -37,6 +64,7 @@ def main():
         mmc3_irq_program(4, "mmc3_irq"),
         mmc3_irq_program(118, "txsrom_irq"),
         mmc3_irq_program(119, "tqrom_irq", chr_kb=64),
+        render_register_interrupt(),
     ]
     checked = []
     for name, image, _, _ in cases:

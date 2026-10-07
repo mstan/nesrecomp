@@ -142,7 +142,10 @@
  *                          bindings end to end without a physical pad
  *     --present-out FILE / --present-every N   read back what the window
  *                          presented (picture, toast, menu, dev bar)
+ *     --window-input FILE replay the NES pad/disk --input format through SDL
  *     --exit-after N       close the window after N frames
+ *     --uncapped           omit pacing; requires --exit-after, retains normal
+ *                          rendering/audio synthesis and reports measured FPS
  *     --config FILE        the settings file (default <exe dir>/config.ini)
  *     --tcp PORT           the TCP debug server (cyc_tcp.h; also NESRECOMP_CYC_TCP,
  *                          or debug.ini beside the executable: port 4370): input,
@@ -319,6 +322,7 @@ typedef struct {
 
 static InputStep *input_steps;
 static int        input_count, input_next;
+static bool       window_scripted_input;
 static uint8_t    input_held[4];
 
 #ifndef CYC_ORACLE
@@ -537,6 +541,19 @@ static void disk_tick(long frame) {
     }
 }
 
+/* Replay the existing NES-pad/disk route through normal SDL presentation.
+ * The desktop loop still owns session input, rendering and audio production. */
+bool cyc_host_window_replay(long frame, uint8_t *buttons, size_t count)
+{
+    if (!window_scripted_input) return false;
+    while (input_next < input_count && input_steps[input_next].frame <= frame) {
+        input_held[input_steps[input_next].port] = input_steps[input_next].buttons;
+        ++input_next;
+    }
+    memcpy(buttons, input_held, count < 4 ? count : 4);
+    if (disk_event_count) disk_tick(frame);
+    return true;
+}
 /* ---- the FDS HLE tier: requests, capability facts, the plan ---- */
 static NesFdsHleRequest hle_req;
 static NesFdsHlePlan    hle_plan;
@@ -1017,6 +1034,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--spam-seed") && i + 1 < argc) spam_seed = (unsigned)strtoul(argv[++i], NULL, 10);
         else if (!strcmp(argv[i], "--spam-no-dpad")) spam_dpad = false;
         else if (!strcmp(argv[i], "--input") && i + 1 < argc) input_file = argv[++i], headless = true;
+        else if (!strcmp(argv[i], "--window-input") && i + 1 < argc) input_file = argv[++i];
         else if (!strcmp(argv[i], "--datach-save-file") && i+1<argc) datach_save=argv[++i];
         else if (!strcmp(argv[i], "--barcode") && i+1<argc) { barcode=argv[++i]; headless=true; }
         else if (!strcmp(argv[i], "--barcode-frame") && i+1<argc) barcode_frame=atol(argv[++i]);
@@ -1151,7 +1169,7 @@ int main(int argc, char **argv) {
 #endif
             ++i;
         }
-        else if (!strcmp(argv[i], "--hidden") || !strcmp(argv[i], "--pause-unfocused")) {
+        else if (!strcmp(argv[i], "--hidden") || !strcmp(argv[i], "--uncapped") || !strcmp(argv[i], "--pause-unfocused")) {
 #if defined(CYC_WITH_SDL)
             cyc_sdl_option(argv[i], "");
 #endif
@@ -1448,6 +1466,10 @@ session_restart:
 
 #if defined(CYC_WITH_SDL) && !defined(CYC_ORACLE)
     if (!headless) {
+        if (input_file) {
+            if (!load_input(input_file)) return 2;
+            window_scripted_input = true;
+        }
         cyc_sdl_present_out(present_out, present_every);
         cyc_sdl_image_path(rom_path);
         int result=cyc_sdl_main(cyc_native_display_name ? cyc_native_display_name

@@ -254,3 +254,116 @@ scope, retain documented build-time LLE opt-out, and close with the evidence.
 Owner-reported defects reopen that specific behavior, not an automatic campaign
 or comparison matrix. Mobile/Xbox claims need their own later measurements;
 they are not additional gates after this Windows handoff.
+
+## Current implementation work: steady-render event service
+
+The new unmeasured HLE owns stable visible scanline spans (dots 9-253),
+removing repeated delayed-register, scroll-edge, blank/data-latch and VBlank
+control checks. It retains real fetches and mapper /RD/A12 observations, OAM
+processing, pixel publication and sprite-zero status stages. Register access
+invalidates the span classification; pending writes/data-port work and scanline
+edges use the maintained event adapter. This replaces broader render/event
+work rather than only the packed arithmetic leaf. LLE remains the default.
+
+Focused machine fixtures pass 20 cases: the existing 16 and four alignments
+of a missing mid-render register-interruption case (mask disable/re-enable,
+scroll/address writes, status read and VRAM data-port transaction). These are
+boundary tests, not new game screenshot sweeps. Production game gain and owner
+acceptance have not yet been measured for this change.
+
+Matched SDL builds are being prepared in isolated SMB3/SMB1/Otocky title
+checkouts. `--window-input FILE` reuses the existing NES-pad/disk replay through
+normal rendering/audio; `--uncapped --exit-after N` removes pacing while keeping
+that work and reporting frames, FPS, console/native cycles, audio-device state
+and produced/queued samples. Queued playback remains latency-bounded, so an
+uncapped run is not real-time listening evidence. Normal-paced owner builds
+use neither flag. Headless-only timing will not be presented as a normal-game
+win. No gameplay, performance or visual run occurred during build preparation.
+
+### Initial steady-render production screen (2026-10-06)
+
+Six production Release runs used the ordinary SDL host with rendering/upload/
+present and audio generation/queueing enabled. `--uncapped` removed pacing;
+`--window-input` replayed the same logical controller/disk route within each
+pair. One LLE run then one HLE run per title, affinity mask 15, no automatic
+repeats. Audio device and audio enabled both reported 1 in every run.
+
+| Title | LLE FPS | HLE FPS | Frame-work reduction | Process CPU reduction |
+|---|---:|---:|---:|---:|
+| SMB3 | 178.315 | 214.546 | 16.89% | 15.34% |
+| SMB1 | 162.668 | 173.310 | 6.14% | 5.54% |
+| Otocky | 186.251 | 241.136 | 22.76% | 17.01% |
+
+Every pair exited 0 with equal completed frames, guest cycles, native cycles,
+and produced audio samples: SMB3 3,200 frames / 95,295,224 cycles / 2,555,727
+samples; SMB1 1,200 / 35,734,225 / 880,491; Otocky 12,000 / 357,363,740 /
+9,584,155. Otocky's disk eject/select/insert events were replayed. Queued audio
+samples differ because the ordinary uncapped host caps queued latency; this
+screen measures real audio production/drain work, not real-time listening.
+
+Foreign compiler activity was present. Before/after compiler-process counts
+were SMB3 LLE 10/10, HLE 9/9; SMB1 10/12 and 12/12; Otocky 12/9 and 4/4.
+These are initial favorable observations, not clean-host causal estimates;
+Otocky's wall improvement especially includes different contention. No
+statistical confidence or universal performance threshold follows from one
+pair. Process CPU includes all game threads, while FPS is elapsed host loop
+work including presentation; startup/teardown are excluded from that loop.
+
+The single basic HLE image inspection at SMB3 frame 2,451 was coherent and
+not garbled. It showed the World 1 map, exposing a useful-work gap in the
+inherited route: this SMB3 screen does not establish active-level performance.
+A corrected bounded active-level route is needed before claiming that scope.
+No owner feel acceptance has occurred for these new NES builds. LLE remains
+the default, and promotion remains subject to the completion gate above.
+
+Raw evidence is `F:/Projects/nesrecomp/_hle-o777-20261006/span-window-pairs/`
+(`runs.json`, six per-arm logs, `smb3-hle-current.png`, glance log). The exact
+six executable identities are in sibling `window-binary-manifest.json`;
+launch commands are in `window-launch-commands.txt`. The isolated Otocky
+checkout supplies a strong empty host-extras function to accommodate MinGW's
+PE weak-symbol fallback; the engine ABI is unchanged.
+One authorized reversed SMB1 pair addressed its smaller initial gain: HLE
+250.195 FPS / 4.796256 s, then LLE 209.316 FPS / 5.732959 s (16.34% frame-work
+reduction; process CPU 4.9375 versus 5.765625 s, 14.36% reduction). All useful
+counters remained equal. Foreign compiler counts were 6/6 and 6/5. Absolute
+speed changed substantially since the first pair, so the repeat supports the
+gain's direction rather than a precise stable percentage. Its raw logs and
+`runs.json` are in sibling `span-window-smb1-reversed/`.
+
+The historical reused `level.png` was itself a world-map picture. Extending
+the inherited one-frame A entry tap at frame 1,500 to twelve frames did not
+enter a stage in the single authorized progress check at frame 2,451. Its
+`smb3-active-stage-check.png` and log are in `span-window-pairs/`; no corrected
+SMB3 timing pair was run against that failed route. Further map-position/input
+entry diagnosis or an owner-driven route is needed; this is not an HLE-only
+rendering defect established by the available evidence.
+Read-only route diagnosis found no replay overwrite: the ordinary SDL host
+passes the scripted NES bitmask through session input to the core pad state,
+and SMB3's extras supplies no input override. The historical save held Mario
+at map x=$40/y=$40, tile=$4A, map operation=$0D: the junction below panel 1.
+A deliberate late UP (2,450..2,480) then A (2,600..2,612) corrected the location
+and timing. One authorized preparation check at frame 3,001 reached active
+World 1-1 with coherent Mario, enemies and HUD; its image/log are
+`span-window-pairs/smb3-ready-map-stage-check.*`. This is route-readiness
+evidence, not a performance measurement. The corrected 4,200-frame pair awaits
+the next serial timing window; engine source and all six binaries are unchanged.
+The authorized corrected SMB3 pair then completed 4,200 frames in ordinary
+SDL presentation/audio: LLE 260.398 FPS / 16.129169 s, HLE 282.532 FPS /
+14.865590 s (8.50% FPS gain, 7.83% frame-work reduction). Process CPU fell
+16.125 to 14.84375 s (7.95%). Both arms produced 125,075,723 guest cycles,
+120,641,750 native cycles and 3,354,411 audio samples, with audio device/enabled
+1 and exit 0. Compiler counts were 10/10 before/after in both arms; observed
+foreign contention still limits precision. This whole route includes boot,
+map entry and confirmed active World 1-1, not an isolated stage-only timing.
+Raw logs and `runs.json` are in sibling `span-window-smb3-active/`; the exact
+route is `smb3-active-route.txt`. No further repeats were run.
+
+Together with focused boundary checks, coherent active-stage rendering and
+gain direction across the three selected SDL workloads, this supports the
+normal-paced owner handoff. It does not record subjective owner acceptance.
+Use the exact HLE binaries from `window-binary-manifest.json`; normal play uses
+no replay, frame limit, uncapping or hidden window. SMB3 and SMB1 support
+`--widescreen adaptive` (the shared geometry parser's Fit alias); Otocky uses
+native presentation and explicit BIOS / `--fds-hle off`. Exact arguments and
+controls are in sibling `owner-play-handoff.json`. Default remains LLE until
+positive owner feedback and scoped promotion; keep the LLE build opt-out.

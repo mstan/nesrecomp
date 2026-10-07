@@ -989,7 +989,7 @@ HW_ALWAYS_INLINE void half_dot_status(void)
  * state machine) clears it. The general path runs otherwise, and
  * native/--interp-only comparisons cover both. */
 
-enum { DOT_UNKNOWN, DOT_BLANK, DOT_GENERAL };
+enum { DOT_UNKNOWN, DOT_BLANK, DOT_GENERAL, DOT_RENDER };
 static uint8_t dot_kind;
 
 static bool is_blank(void)
@@ -1225,6 +1225,87 @@ static void general_half_dot(void)
     data_sm_half();
 }
 
+#if NESRECOMP_PPU_HLE
+/* A native rendering span owns the stable interior of a visible scanline.
+ * Register access invalidates dot_kind, so no delayed CPU write/read or data
+ * port transaction is hidden by this classification. Edge dots retain the
+ * existing adapter (scroll copies, odd skip, VBlank and sprite loading).
+ * This is selected once as latches settle, not guarded afresh for each pixel. */
+static bool render_span_ready(void)
+{
+    return ppu.scanline < 240 && ppu.dot >= 8 && ppu.dot < 253 &&
+           rendering() && sm_rest && ppu.render_count == 5 &&
+           ppu.eval_bg == ppu.show_bg && ppu.eval_spr == ppu.show_spr &&
+           ppu.instant_bg == ppu.show_bg && ppu.instant_spr == ppu.show_spr &&
+           !(ppu.skipped_dot | ppu.w2001_delay | ppu.w2001_oam_delay |
+             ppu.w2001_emph_delay | ppu.w2005_delay | ppu.w2006_delay |
+             ppu.oamc_disabled | ppu.oamc_disabled_now | ppu.oamc_pending |
+             ppu.palc_disabled | ppu.palc_v_left | ppu.read2002 |
+             ppu.vset | ppu.vblank_pending) && ppu.vset_latch1;
+}
+
+static void render_span_dot(void)
+{
+    ++ppu.dot;
+    if (hw_zapper.port) ++hw_zapper.dots;
+    ppu.overflow_late = ppu.overflow;
+    ppu.blnk_latch = 0;
+    ppu.pal_enable = 0;
+    ppu.rd = ((ppu.dot - 1) & 1) != 0;
+    hw_cart_ppu_rd(ppu.rd != 0);
+    ppu.ale = !ppu.rd;
+    ppu.oam_latch = ppu.oam_buffer;
+    ppu.copy_v = 0;
+    if (ppu.oam2_reset > 0) --ppu.oam2_reset;
+    sprite_evaluation();
+    if (ppu.dot == 63) ppu.oam2_reset = 3;
+#ifdef NESRECOMP_CYCLE_HDPACK
+    cyc_hdpack_clock();
+#endif
+    if (cyc_background_enabled) {
+        cyc_background_pipe[3] = cyc_background_pipe[2];
+        cyc_background_pipe[2] = cyc_background_pipe[1];
+        cyc_background_pipe[1] = cyc_background_pipe[0];
+    }
+    ppu.color[3] = ppu.color[2];
+    ppu.color[2] = ppu.color[1];
+    ppu.color[1] = ppu.color[0];
+    bg_fetch();
+    compute_pixel();
+    shift_sprites();
+    output_pixel();
+    io_bus_decay();
+}
+
+static void render_span_half_dot(void)
+{
+    ppu.bg_pixels = (ppu.bg_pixels << 2) | 2u;
+    ppu.attr_pixels = (ppu.attr_pixels << 2) | ppu.attr_latch;
+#ifdef NESRECOMP_CYCLE_HDPACK
+    cyc_hdpack_bg_shift();
+#endif
+    if (ppu.oam2_reset > 0 && --ppu.oam2_reset == 0) {
+        ppu.oam2_addr = 0;
+        ppu.oam2_full = 0;
+    }
+    if (ppu.commit) bg_commit();
+    ppu.oam_buffer = ppu.oam_buffer_in;
+    /* VBlank has no edge inside this span, but sprite zero retains its two
+     * half-dot publication stages for CPU status consumers. */
+    ppu.vset_latch2 = 0;
+    ppu.s0hit_late = ppu.s0hit;
+    if (ppu.s0hit_pending2) {
+        ppu.s0hit_pending2 = 0;
+        ppu.s0hit = 1;
+    }
+    if (ppu.s0hit_pending1) {
+        ppu.s0hit_pending1 = 0;
+        ppu.s0hit_pending2 = 1;
+    }
+    ppu.ale = 0;
+    ppu.wr = 0;
+}
+#endif
 /* A general dot can only lead to a blank one once rendering is off: while it
  * is on, the classification stays until a register access. */
 /* A12-A13 are direct pins on the cartridge connector, so a mapper that
@@ -1243,9 +1324,16 @@ void ppu_dot(void)
     if (dot_kind == DOT_UNKNOWN) dot_kind = is_blank() ? DOT_BLANK : DOT_GENERAL;
     if (dot_kind == DOT_BLANK) {
         blank_dot();
+#if NESRECOMP_PPU_HLE
+    } else if (dot_kind == DOT_RENDER && ppu.dot < 253) {
+        render_span_dot();
+#endif
     } else {
         general_dot();
         if (!rendering()) dot_kind = DOT_UNKNOWN;
+#if NESRECOMP_PPU_HLE
+        else dot_kind = render_span_ready() ? DOT_RENDER : DOT_GENERAL;
+#endif
     }
     hw_cart_ppu_addr(ppu.vbus);
 }
@@ -1255,9 +1343,16 @@ void ppu_half_dot(void)
     if (dot_kind == DOT_UNKNOWN) dot_kind = is_blank() ? DOT_BLANK : DOT_GENERAL;
     if (dot_kind == DOT_BLANK) {
         blank_half_dot();
+#if NESRECOMP_PPU_HLE
+    } else if (dot_kind == DOT_RENDER) {
+        render_span_half_dot();
+#endif
     } else {
         general_half_dot();
         if (!rendering()) dot_kind = DOT_UNKNOWN;
+#if NESRECOMP_PPU_HLE
+        else if (render_span_ready()) dot_kind = DOT_RENDER;
+#endif
     }
 }
 
