@@ -4,11 +4,15 @@
 
 #undef NDEBUG
 #include <assert.h>
+#include <setjmp.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
 static int g_test_mapper_type = 0;
+static jmp_buf s_discarded_tail;
+static int s_tail_test_mode, s_tail_test_calls;
+enum { TAIL_COUNT, TAIL_DISCARD, TAIL_CYCLE, TAIL_NESTED_CALL };
 uint16_t g_rts_target = 0;
 uint16_t g_rti_target = 0;
 uint16_t g_rti_source = 0;
@@ -19,6 +23,8 @@ char g_exe_dir[260] = ".";
 int g_dot_ppu_on = 0;
 int g_render_width = 256;
 int g_ws_oam_sidecar = 0;
+int g_ws_obj_delta_min = -128;
+int g_ws_obj_delta_max = 127;
 int16_t g_oam_x16[64];
 int16_t g_ws_shadow_x16[64];
 int16_t g_ws_obj_true_rel = 0;
@@ -57,7 +63,20 @@ void nes_vblank_callback(void) {}
 void func_IRQ(void) {}
 int call_by_address(uint16_t addr) { (void)addr; return 0; }
 int call_by_address_cb(uint16_t addr, int caller_bank) {
-    (void)addr; (void)caller_bank; return 0;
+    if (addr != 0xC531) return 0;
+    s_tail_test_calls++;
+    if (s_tail_test_mode == TAIL_DISCARD)
+        longjmp(s_discarded_tail, 1);
+    if (s_tail_test_calls == 1) {
+        if (s_tail_test_mode == TAIL_CYCLE)
+            call_by_address_tail(addr, caller_bank);
+        else if (s_tail_test_mode == TAIL_NESTED_CALL) {
+            g_cpu.S -= 2;
+            call_by_address_tail(addr, caller_bank);
+            g_cpu.S += 2;
+        }
+    }
+    return 1;
 }
 int game_dispatch_override(uint16_t addr) { (void)addr; return 0; }
 uint8_t game_ram_read_hook(uint16_t pc, uint16_t addr, uint8_t value) {
@@ -109,9 +128,59 @@ static void test_unprojected_boundary_skips_resume_tick(void) {
     assert(g_nes_cycles == 205);
 }
 
-int main(void) {
+static int test_live_tail_cycles_still_iterate(void) {
+    runtime_prepare_guest_resume(0xC0CC, 0);
+    g_cpu.S = 0xFD;
+    s_tail_test_mode = TAIL_CYCLE;
+    s_tail_test_calls = 0;
+    call_by_address_tail(0xC531, -1);
+    if (s_tail_test_calls != 2) {
+        fprintf(stderr, "live tail cycle dispatched %d times, expected 2\n", s_tail_test_calls);
+        return 0;
+    }
+    s_tail_test_mode = TAIL_NESTED_CALL;
+    s_tail_test_calls = 0;
+    call_by_address_tail(0xC531, -1);
+    if (s_tail_test_calls != 2 || g_cpu.S != 0xFD) {
+        fputs("different guest stack was collapsed into a tail cycle\n", stderr);
+        return 0;
+    }
+    return 1;
+}
+
+static int test_resume_discards_abandoned_tail_ancestor(void) {
+    g_cpu.S = 0xFD;
+    s_tail_test_calls = 0;
+    s_tail_test_mode = TAIL_DISCARD;
+    if (setjmp(s_discarded_tail) == 0) {
+        /* Model the runner longjmp that discards a native C call chain
+         * after loading a state. The tail dispatcher cannot run cleanup. */
+        call_by_address_tail(0xC531, -1);
+        return 0;
+    }
+    s_tail_test_mode = TAIL_COUNT;
+    runtime_prepare_guest_resume(0xC0CC, 1);
+    call_by_address_tail(0xC531, -1);
+    if (s_tail_test_calls != 2) {
+        fprintf(stderr, "resumed transfer dispatched %d times, expected 2; stale tail ancestor\n", s_tail_test_calls);
+        return 0;
+    }
+    return 1;
+}
+
+int main(int argc, char **argv) {
+    if (argc == 2 && strcmp(argv[1], "--tail-resume") == 0) {
+        if (!test_live_tail_cycles_still_iterate() ||
+            !test_resume_discards_abandoned_tail_ancestor())
+            return 1;
+        puts("runtime tail resume self-test passed");
+        return 0;
+    }
     test_projected_boundary_skips_resume_tick();
     test_unprojected_boundary_skips_resume_tick();
+    if (!test_live_tail_cycles_still_iterate() ||
+        !test_resume_discards_abandoned_tail_ancestor())
+        return 1;
     puts("runtime boundary self-test passed");
     return 0;
 }
