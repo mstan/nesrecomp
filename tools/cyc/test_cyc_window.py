@@ -194,6 +194,9 @@ def production(exe, image, bios, out, recomp_ui):
     check(s['side'] == 0 and not s['toast']['visible'], f'a dev key acted in production: {s}')
     w.ok('key', name='F2', frames=3)
     check(w.wait_frames(5)['native'], 'F2 switched to the interpreter in production')
+    clean_ui = w.out / 'before_toast_ui.png'
+    w.ok('screenshot', layer='ui', path=str(clean_ui))
+    clean_width, clean_height, clean_rows = png_pixels(clean_ui)
     # peek: the toast, nothing else
     w.ok('key', name='D', frames=3)
     s = w.until(lambda s: s['toast']['visible'], 30, 'toast after the first press')
@@ -207,8 +210,8 @@ def production(exe, image, bios, out, recomp_ui):
     colors = {c for row in prows for c in row}
     check(len(colors) == 1, f'the picture holds more than the program\'s backdrop: {len(colors)} colors')
     uw, uh, urows = png_pixels(ui)
-    top = {c for row in urows[:uh // 4] for c in row}
-    check(len(top) > 4, f'the toast is not in the window\'s frame ({len(top)} colors in its top quarter)')
+    check((uw, uh) == (clean_width, clean_height), 'toast changed window dimensions')
+    check(urows[:uh // 4] != clean_rows[:uh // 4], 'the toast did not change the window frame')
     # swap: eject now, empty for the hold, side B in
     before = len(w.ring_sides())
     w.ok('key', name='D', frames=3)

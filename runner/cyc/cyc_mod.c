@@ -23,6 +23,37 @@
  * like everything else. */
 #define RETURN_PC 0x5FFFu
 
+/* ---- ROM read substitution (cyc_mod.h) ----
+ * A cheat set is a handful of entries at most, so a linear scan behind a NULL
+ * guard beats anything indexed: hw_machine.c calls this once per ROM read, and
+ * for every game that has not asked for a cheat it is one load and a branch. */
+#define CYC_MOD_READ_OVERRIDES_MAX 64
+static CycModReadOverride read_overrides[CYC_MOD_READ_OVERRIDES_MAX];
+static unsigned read_override_count;
+const CycModReadOverride *cyc_mod_rom_read_overrides;
+
+unsigned cyc_mod_rom_read_override_count(void) { return read_override_count; }
+
+bool cyc_mod_set_rom_read_override(uint16_t addr, uint8_t value)
+{
+    if (addr < 0x8000) return false;
+    for (unsigned i = 0; i < read_override_count; i++) {
+        if (read_overrides[i].addr == addr) { read_overrides[i].value = value; return true; }
+    }
+    if (read_override_count >= CYC_MOD_READ_OVERRIDES_MAX) return false;
+    read_overrides[read_override_count].addr = addr;
+    read_overrides[read_override_count].value = value;
+    read_override_count++;
+    cyc_mod_rom_read_overrides = read_overrides;
+    return true;
+}
+
+void cyc_mod_clear_rom_read_overrides(void)
+{
+    read_override_count = 0;
+    cyc_mod_rom_read_overrides = NULL;
+}
+
 bool cyc_background_enabled;
 uint8_t cyc_background_pipe[4];
 static uint16_t background_frame[256*240];

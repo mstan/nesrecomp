@@ -27,5 +27,7 @@ set_target_properties(NESRecomp PROPERTIES
 )
 
 if(MSVC)
-    target_compile_options(NESRecomp PRIVATE /W3 /WX-)
+    # /utf-8: sources are UTF-8; without it MSVC on a CJK code page (932/936/949)
+    # misreads multibyte chars and can swallow the newline ending a // comment.
+    target_compile_options(NESRecomp PRIVATE /W3 /WX- /utf-8)
 endif()

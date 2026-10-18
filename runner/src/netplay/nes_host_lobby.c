@@ -304,6 +304,11 @@ int nes_host_lobby_selftest_room(int round, NesNetplayConfig *cfg)
     const char *ws = getenv("NES_LOBBY_SELFTEST_EXPECT_SPECTATORS");
     const int want_spectators = ws ? atoi(ws) : 0;
     uint32_t next_move = 0;
+    const char *settle = getenv("NES_LOBBY_SELFTEST_SETTLE_MS");
+    int settle_ms = settle ? atoi(settle) : 0;
+    uint32_t start_after = 0;
+    if (settle_ms < 0) settle_ms = 0;
+    if (settle_ms > 10000) settle_ms = 10000;
 
     if (!cb || !role) return -1;
     if (!lobby || !lobby[0]) lobby = "nes-selftest";
@@ -367,6 +372,10 @@ int nes_host_lobby_selftest_room(int round, NesNetplayConfig *cfg)
                 RecompLauncherCNetplayLobby row;
                 if (cb->list_get(NULL, i, &row) && !strcmp(row.name, lobby)) {
                     char gb[64] = "";
+                    /* Multiple test guests on one machine need distinct
+                     * probe sockets before any match socket is opened. */
+                    const char *bind = getenv("NES_LOBBY_SELFTEST_GUEST_BIND");
+                    if (bind) snprintf(gb, sizeof(gb), "%s", bind);
                     if (cb->join(NULL, row.lobby_id, "", gb) == 0) {
                         joined = 1;
                         fprintf(stderr, "[lobby-selftest] guest joined %s\n", row.lobby_id);
@@ -388,9 +397,14 @@ int nes_host_lobby_selftest_room(int round, NesNetplayConfig *cfg)
         }
         if (is_host && ready_sent && !started && players_seated() >= seats &&
             spectators_seated() >= want_spectators && cb->all_ready(NULL)) {
-            started = cb->request_start(NULL, &settings) == 0;
-            fprintf(stderr, "[lobby-selftest] host round=%d start=%d members=%d\n",
-                    round, started, cb->member_count(NULL));
+            /* Optional harness delay lets waiting-room path probes settle
+             * before testing the server's host-relay / SFU decision. */
+            if (!start_after) start_after = st_now() + (uint32_t)settle_ms;
+            if (st_now() >= start_after) {
+                started = cb->request_start(NULL, &settings) == 0;
+                fprintf(stderr, "[lobby-selftest] host round=%d start=%d members=%d\n",
+                        round, started, cb->member_count(NULL));
+            }
         }
         {
             static uint32_t next_dbg;

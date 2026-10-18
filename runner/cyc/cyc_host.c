@@ -1225,7 +1225,7 @@ session_restart:
                         "            [--fds-hle auto-swap,fast-load|all|off] [--realtime]\n"
                         "       [--save-state F:FILE] [--load-state FILE] [--mods-root DIR]\n"
                         "       [--region ntsc|pal] (game default, or NES 2.0 header)\n"
-                        "       [--extra-scanlines N] MMC3 CPU budget enhancement, 0..262 (0: stock)\n"
+                        "       [--extra-scanlines N] MMC1/MMC3 CPU budget enhancement, 0..262 (0: stock)\n"
                         "       [--zapper-port N] [--zapper-input FILE] FRAME X Y TRIGGER schedule\n"
                         "       window: [--pause-unfocused] [--tcp PORT] [--config FILE]\n"
                         "       [--present-out FILE [--present-every N] [--present-size WxH]]\n",
@@ -1460,7 +1460,7 @@ session_restart:
 #endif
     if (!cyc_session_start()) return 2;
     if (extra_scanlines >= 0 && !cyc_set_extra_scanlines((unsigned)extra_scanlines)) {
-        fprintf(stderr, "--extra-scanlines requires an MMC3 cartridge\n"); return 2;
+        fprintf(stderr, "--extra-scanlines requires an MMC1 or MMC3 cartridge\n"); return 2;
     }
 #endif
 
@@ -1575,7 +1575,7 @@ session_restart:
     }
     /* An explicit command-line choice overrides a loaded state's selection. */
     if (extra_scanlines >= 0 && !cyc_set_extra_scanlines((unsigned)extra_scanlines)) {
-        fprintf(stderr, "--extra-scanlines requires an MMC3 cartridge\n"); return 2;
+        fprintf(stderr, "--extra-scanlines requires an MMC1 or MMC3 cartridge\n"); return 2;
     }
 #endif
 #ifndef CYC_ORACLE

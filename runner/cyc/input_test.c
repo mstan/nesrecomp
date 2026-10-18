@@ -139,23 +139,44 @@ static void evaluation(void)
     CHECK(st.buttons[0] == (0x80 | 0x10 | 0x08));
     memset(keys, 0, sizeof(keys));
 
-    /* player 2 on the first controller; player 1's keyboard does not read it */
+    /* one controller: player 1 plays on it as well as the keyboard */
     f = frame(1);
     f.pad_guid[0] = "pad-a";
     f.pad_buttons[0] = (1u << SDL_CONTROLLER_BUTTON_A) | (1u << SDL_CONTROLLER_BUTTON_DPAD_UP);
     cyc_input_eval(&b, &f, &st);
-    CHECK(st.player_pad[0] == -1 && st.player_pad[1] == 0);
-    CHECK(st.buttons[0] == 0 && st.buttons[1] == (0x80 | 0x08));
+    CHECK(st.player_pad[0] == 0 && st.player_pad[1] == -1);
+    CHECK(st.buttons[0] == (0x80 | 0x08) && st.buttons[1] == 0);
+    keys[SDL_SCANCODE_RETURN] = 1;                           /* the keyboard still counts */
+    cyc_input_eval(&b, &f, &st);
+    CHECK(st.buttons[0] == (0x80 | 0x10 | 0x08));
+    memset(keys, 0, sizeof(keys));
     /* the left stick works the D-pad past the deadzone only */
     f.pad_buttons[0] = 0;
     f.pad_axes[0][SDL_CONTROLLER_AXIS_LEFTX] = 32767 * 29 / 100;
     cyc_input_eval(&b, &f, &st);
-    CHECK(st.buttons[1] == 0);
+    CHECK(st.buttons[0] == 0);
     f.pad_axes[0][SDL_CONTROLLER_AXIS_LEFTX] = 32767 * 31 / 100;
     f.pad_axes[0][SDL_CONTROLLER_AXIS_LEFTY] = -32768;
     cyc_input_eval(&b, &f, &st);
-    CHECK(st.buttons[1] == (0x01 | 0x08));
+    CHECK(st.buttons[0] == (0x01 | 0x08));
     memset(f.pad_axes, 0, sizeof(f.pad_axes));
+    /* a second controller is player 2's */
+    f = frame(2);
+    f.pad_guid[0] = "pad-a";
+    f.pad_guid[1] = "pad-b";
+    f.pad_buttons[1] = 1u << SDL_CONTROLLER_BUTTON_A;
+    cyc_input_eval(&b, &f, &st);
+    CHECK(st.player_pad[0] == 0 && st.player_pad[1] == 1);
+    CHECK(st.buttons[0] == 0 && st.buttons[1] == 0x80);
+    /* player 2 naming the only controller keeps it (co-op on one pad) */
+    snprintf(b.device[1], sizeof(b.device[1]), "pad-a");
+    f = frame(1);
+    f.pad_guid[0] = "pad-a";
+    f.pad_buttons[0] = 1u << SDL_CONTROLLER_BUTTON_A;
+    cyc_input_eval(&b, &f, &st);
+    CHECK(st.player_pad[0] == -1 && st.player_pad[1] == 0);
+    CHECK(st.buttons[0] == 0 && st.buttons[1] == 0x80);
+    b.device[1][0] = 0;
 
     /* player 1 on a controller: its named device wins over order */
     b.source[0] = 2;
@@ -206,20 +227,20 @@ static void evaluation(void)
     cyc_bindings_default(&b);
     b.shortcut[CYC_SC_MENU].pad =
         CYC_PAD_COMBO((1u << SDL_CONTROLLER_BUTTON_BACK) | (1u << SDL_CONTROLLER_BUTTON_START));
-    f = frame(1);
+    f = frame(1);                                            /* the lone pad is player 1's */
     f.pad_buttons[0] = 1u << SDL_CONTROLLER_BUTTON_START;
     cyc_input_eval(&b, &f, &st);
-    CHECK(!st.shortcut[CYC_SC_MENU] && st.buttons[1] == 0x10);
+    CHECK(!st.shortcut[CYC_SC_MENU] && st.buttons[0] == 0x10);
     f.pad_buttons[0] |= 1u << SDL_CONTROLLER_BUTTON_BACK;
     cyc_input_eval(&b, &f, &st);
-    CHECK(st.shortcut[CYC_SC_MENU] && st.buttons[1] == 0);
+    CHECK(st.shortcut[CYC_SC_MENU] && st.buttons[0] == 0);
     /* an axis bound to a player button */
     cyc_bindings_default(&b);
-    b.button[1][0].pad = CYC_PAD_AXIS(SDL_CONTROLLER_AXIS_TRIGGERLEFT, 1);
+    b.button[0][0].pad = CYC_PAD_AXIS(SDL_CONTROLLER_AXIS_TRIGGERLEFT, 1);
     f = frame(1);
     f.pad_axes[0][SDL_CONTROLLER_AXIS_TRIGGERLEFT] = 30000;
     cyc_input_eval(&b, &f, &st);
-    CHECK(st.buttons[1] == 0x80);
+    CHECK(st.buttons[0] == 0x80);
     memset(keys, 0, sizeof(keys));
 }
 

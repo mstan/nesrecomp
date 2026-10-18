@@ -76,6 +76,9 @@ if(MSVC)
 endif()
 add_test(NAME cyc_disk_action_test COMMAND cyc_disk_action_test)
 
+add_executable(cyc_frame_pacing_test frame_pacing_test.c)
+add_test(NAME cyc_frame_pacing_test COMMAND cyc_frame_pacing_test)
+
 # The window's input actions and their persistence (cyc_input.h, cyc_settings.h).
 find_package(Python3 3.11 REQUIRED COMPONENTS Interpreter)
 add_test(NAME cyc_bad_game_config COMMAND "${Python3_EXECUTABLE}"
@@ -314,6 +317,12 @@ else()
 endif()
 file(WRITE ${NESRECOMP_NESTED_BUILD} "{\n${nested_fields}}\n")
 set(NESRECOMP_NESTED_BUILD_ARGS --toolchain ${NESRECOMP_NESTED_BUILD} --config "$<CONFIG>")
+
+add_test(NAME cyc_rom_read_override
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_cyc_rom_read_override.py
+        --recompiler $<TARGET_FILE:NESRecomp> --out ${CMAKE_CURRENT_BINARY_DIR}/rom-read-override
+        ${NESRECOMP_NESTED_BUILD_ARGS})
+set_tests_properties(cyc_rom_read_override PROPERTIES TIMEOUT 300)
 
 add_test(NAME cyc_ramview_test
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_cyc_ramviews.py

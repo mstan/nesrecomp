@@ -32,7 +32,8 @@ void cyc_bindings_default(CycBindings *b)
     memset(b, 0, sizeof(*b));
     /* nesrecomp's NES keyboard defaults (runner/src/keybinds.c, recomp-ui's
      * consoles/nes/nes_binds.c): Z = A, X = B, Backslash = Select, Return =
-     * Start, arrows. Player 1 plays on the keyboard, player 2 on a controller. */
+     * Start, arrows. Player 1 plays on the keyboard and the first controller,
+     * player 2 on the next controller (cyc_input_assign). */
     static const int KEYS[CYC_INPUT_BUTTONS] = {
         SDL_SCANCODE_Z, SDL_SCANCODE_X, SDL_SCANCODE_BACKSLASH, SDL_SCANCODE_RETURN,
         SDL_SCANCODE_UP, SDL_SCANCODE_DOWN, SDL_SCANCODE_LEFT, SDL_SCANCODE_RIGHT,
@@ -232,6 +233,11 @@ void cyc_input_assign(const CycBindings *b, const CycInputFrame *f, int player_p
                 break;
             }
     }
+    /* a keyboard player 1 also plays on the first controller nobody named, so
+     * plugging one in just works; the other gamepad players follow in order */
+    if (b->source[0] == 1)
+        for (int i = 0; i < pads; ++i)
+            if (!taken[i]) { player_pad[0] = i; taken[i] = true; break; }
     for (int p = 0; p < CYC_INPUT_PLAYERS; ++p) {
         if (b->source[p] != 2 || player_pad[p] >= 0) continue;
         for (int i = 0; i < pads; ++i)
@@ -274,16 +280,17 @@ void cyc_input_eval(const CycBindings *b, const CycInputFrame *f, CycInputState 
         for (int i = 0; i < CYC_INPUT_BUTTONS; ++i) {
             const CycBinding *pb = &b->button[p][i];
             bool on = false;
-            if (b->source[p] == 1) {
+            if (b->source[p] == 1)
                 on = key_down(f, pb->key) && !key_taken[pb->key];
-            } else if (b->source[p] == 2 && pad >= 0 && pb->pad) {
+            /* a keyboard player's pad (cyc_input_assign) adds to its keys */
+            if (!on && b->source[p] != 0 && pad >= 0 && pb->pad) {
                 uint32_t m;
                 on = pad_down(f, pad, pb->pad, threshold, &m) && !(m & pad_taken[pad]) &&
                      !(CYC_PAD_IS_AXIS(pb->pad) && axis_taken[pad] == pb->pad);
             }
             if (on) bits |= (uint8_t)(0x80 >> i);
         }
-        if (b->source[p] == 2 && pad >= 0) {
+        if (b->source[p] != 0 && pad >= 0) {
             /* the left stick also works the D-pad */
             if (axis_on(f, pad, SDL_CONTROLLER_AXIS_LEFTY, false, threshold)) bits |= 0x08;
             if (axis_on(f, pad, SDL_CONTROLLER_AXIS_LEFTY, true, threshold)) bits |= 0x04;

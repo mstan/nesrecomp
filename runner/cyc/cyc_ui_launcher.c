@@ -56,6 +56,9 @@ static void to_launcher(const CycSettings *s, RecompLauncherCSettings *io, const
     io->fullscreen = s->fullscreen;
     io->integer_scale = s->integer_scale;
     io->linear_filter = s->linear_filter;
+    /* The host's 1/0 predates the setting: always transfer an opinion, so the
+     * row shows ours rather than the model's ON seed. */
+    io->vsync = s->vsync ? RECOMP_LAUNCHER_VSYNC_ON : RECOMP_LAUNCHER_VSYNC_OFF;
     io->enable_audio = s->audio_enabled;
     io->volume = s->volume;
     io->skip_launcher = s->skip_launcher;
@@ -90,6 +93,9 @@ static void from_launcher(const RecompLauncherCSettings *io, CycSettings *s, con
     s->fullscreen = io->fullscreen < 0 ? 0 : io->fullscreen > 2 ? 2 : io->fullscreen;
     s->integer_scale = io->integer_scale != 0;
     s->linear_filter = io->linear_filter != 0;
+    /* SDL2 cannot do adaptive (no swap-interval API on the 2D renderer), so
+     * Adaptive and On both mean synced presents. */
+    s->vsync = io->vsync == RECOMP_LAUNCHER_VSYNC_ON || io->vsync == RECOMP_LAUNCHER_VSYNC_ADAPTIVE;
     s->audio_enabled = io->enable_audio != 0;
     s->volume = io->volume < 0 ? 0 : io->volume > 100 ? 100 : io->volume;
     s->skip_launcher = io->skip_launcher != 0;
@@ -214,6 +220,10 @@ int cyc_ui_launcher(CycSettings *settings, const char *settings_path, const CycH
     gi.hdpack_supported = 0;
 #endif
     gi.has_integer_scale = 1;
+    /* Driver vsync at present time: the launcher draws its Graphics row for
+     * it (psx is the only console that sets this today). The host builds its
+     * renderer with SDL_RENDERER_PRESENTVSYNC when the setting is on. */
+    gi.has_vsync = 1;
     /* a game's view modes are a runtime-menu row (live), not a launcher toggle */
     gi.widescreen_supported = 0;
     (void)extras;

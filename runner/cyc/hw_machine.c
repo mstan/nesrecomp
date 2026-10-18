@@ -9,6 +9,7 @@
 #include "hw_internal.h"
 
 #include "cyc_core.h"
+#include "cyc_mod.h"
 #include "cyc_ring.h"
 #include "cyc_trace.h"
 #include "hw.h"
@@ -203,9 +204,22 @@ uint8_t hw_read(uint16_t addr)
     return hw_bus_read(addr);
 }
 
+/* A cheat's read substitution (cyc_mod.h), applied last so it wins over the
+ * board: a cheat the mapper can undo is not a cheat. Empty for every game that
+ * has not asked for one, so this costs a load and a branch per ROM read. */
+static inline uint8_t hw_rom_read_override(uint16_t addr, uint8_t value)
+{
+    const CycModReadOverride *t = cyc_mod_rom_read_overrides;
+    if (!t) return value;
+    for (unsigned i = 0, n = cyc_mod_rom_read_override_count(); i < n; i++)
+        if (t[i].addr == addr) return t[i].value;
+    return value;
+}
+
 uint8_t hw_read_rom(uint16_t addr, uint8_t value)
 {
     hw_cart_cpu_read_snoop(addr,value);
+    value = hw_rom_read_override(addr, value);
     hw.data_driven = 1;
     hw.data_bus = hw.internal_bus = value;
     if (cyc_trace_enabled) cyc_trace_access(addr, value, false);
@@ -254,6 +268,7 @@ uint8_t hw_bus_read(uint16_t addr)
         hw.data_bus = hw_cart_prg_read(addr);
         hw.data_driven = !(hw_cart.prg_off[addr>>12&7]&MMC5_PRG_OPEN);
         hw_cart_cpu_read_snoop(addr,hw.data_bus);
+        hw.data_bus = hw_rom_read_override(addr,hw.data_bus);
     } else if (addr < 0x2000) {
         hw.data_bus = hw.ram[addr & 0x7FF];
         hw.data_driven = 1;
@@ -447,6 +462,11 @@ void cyc_power_on(uint8_t ppu_alignment)
     memset(&hw_zapper, 0, sizeof(hw_zapper));
     hw_zapper.x = hw_zapper.y = -1;
     hw.align = ppu_alignment & 3;
+    /* Traced sessions share this process when returning to the lobby. A new
+     * power-on must not inherit the previous match's diagnostic history:
+     * these fields are included in cycle snapshots and rollback digests. */
+    cyc_trace_hash = 0;
+    cyc_trace_cycle = 0;
     cyc_ring_reset();
     /* CPU RAM at power-on: runs of $F0 and $0F (the pattern AccuracyCoin's
      * power-on page shows on the reference console; not defined by the
@@ -539,7 +559,19 @@ CycRegion cyc_cart_region(void) { return hw_cart.info.nes2 && hw_cart.info.timin
 double cyc_cpu_hz(void) { return hw_pal() ? 26601712.5 / 16.0 : 21477272.0 / 12.0; }
 double cyc_frame_seconds(void) { return hw_pal() ? (341.0 * 312.0 * 5.0) / 26601712.5 : 1.0 / 60.0988; }
 
-bool cyc_extra_scanlines_supported(void) { return hw_cart.mapper == 4; }
+/* The added lines are blank (rendering is off above scanline 239) and the APU
+ * is paused across them, so they are inert for any mapper whose IRQ is not
+ * clocked by the PPU -- such a board just sees CPU time the game can spend
+ * before its NMI, which is the whole point of the enhancement.
+ *
+ * MMC3 (4) counts rising edges of PPU A12 (mmc3_clock_irq), so it is affected
+ * by what the PPU does on those lines and stays supported for its own sake.
+ * MMC1 (1) has no IRQ counter. Its serial register responds to CPU writes
+ * (bit 7 resets that register), so it needs no PPU-clocked IRQ adjustment.
+ *
+ * Only consulted when extra_scanlines is non-zero: at stock timing (0) this
+ * changes nothing for any game. */
+bool cyc_extra_scanlines_supported(void) { return hw_cart.mapper == 1 || hw_cart.mapper == 4; }
 unsigned cyc_extra_scanlines(void) { return hw_extra_timing.extra_scanlines; }
 
 bool cyc_zapper_attach(unsigned port)

@@ -60,6 +60,33 @@ uint8_t cyc_mod_peek(uint16_t addr);
 bool    cyc_mod_peek_ok(uint16_t addr, uint8_t *value);
 bool    cyc_mod_poke(uint16_t addr, uint8_t value);
 
+/* ---- ROM read substitution (Game Genie / code-patching cheats) ----
+ *
+ * A Game Genie code changes the VALUE the CPU reads at an address, which is how
+ * it patches a game's own code without rewriting the image. Both CPU read paths
+ * consult this: hw_bus_read() for a byte the recompiler left computed at run
+ * time, and hw_read_rom() for one it folded to a constant, so one override
+ * applies whichever way the address happens to be read.
+ *
+ * This substitutes on the value the bus delivers, and cannot reach what the
+ * recompiler already turned into C: an opcode is a goto and an address operand
+ * is a compile-time constant (recompiler/src/cyc_codegen.c). Immediates and
+ * data operands are read at run time, so those are what it can change.
+ *
+ * Host policy, not machine state: overrides are not serialized, and the host
+ * tears them down with cyc_mod_clear_rom_read_overrides(). Empty (NULL) unless
+ * a game sets one, so every other title pays a load and a branch per ROM read. */
+typedef struct {
+    uint16_t addr;   /* $8000-$FFFF */
+    uint8_t  value;
+} CycModReadOverride;
+extern const CycModReadOverride *cyc_mod_rom_read_overrides;
+unsigned cyc_mod_rom_read_override_count(void);
+/* Adds or replaces the override for addr. False when addr is not ROM, or the
+ * table is full (count tells you how full; CYC_MOD_READ_OVERRIDES_MAX). */
+bool cyc_mod_set_rom_read_override(uint16_t addr, uint8_t value);
+void cyc_mod_clear_rom_read_overrides(void);
+
 /* Optional trusted content tools. Obtaining writable PRG disables generated
  * ROM dispatch until another image is loaded: generated opcodes/operands and
  * folded NROM data may otherwise disagree with the edited image (also from

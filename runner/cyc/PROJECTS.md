@@ -15,7 +15,7 @@ cartridge storage without touching their personal saves. The title must seal
 every enhancement setting it permits online. SMB1 carries the first binding;
 its separate-machine/WAN qualification is still pending.
 
-MMC3 projects can opt into extra CPU time with `cyc_set_extra_scanlines(128)`
+MMC1 and MMC3 projects can opt into extra CPU time with `cyc_set_extra_scanlines(128)`
 between frames, or with the host's `--extra-scanlines 128` option. Zero restores
 stock timing. This enhancement adds blank scanlines before NMI and pauses APU
 clocks during those lines; the window continues at the normal frame rate. Keep

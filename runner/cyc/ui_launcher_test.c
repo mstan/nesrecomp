@@ -77,6 +77,7 @@ static void edit_everything(RecompLauncherCSettings *io)
     io->fullscreen = 1;
     io->integer_scale = 0;
     io->linear_filter = 1;
+    io->vsync = RECOMP_LAUNCHER_VSYNC_ADAPTIVE;
     io->enable_audio = 0;
     io->volume = 40;
     io->skip_launcher = 1;
@@ -279,6 +280,7 @@ int main(int argc, char **argv)
     CHECK(cyc_ui_launcher(&s, cfg, NULL, &rom, true, NULL, NULL) == 1);
     CHECK(!strcmp(seen_initial, image));
     CHECK(seen_game.settings_bindings == 1);
+    CHECK(seen_game.has_vsync == 1);
     CHECK(!strcmp(seen_game.theme, "nes") && !strcmp(seen_game.platform, "FAMICOM DISK SYSTEM"));
     CHECK(!strcmp(seen_game.rom_noun, "Disk") && seen_game.num_rom_patterns == 2);
     CHECK(!strcmp(seen_game.rom_patterns[0], "*.fds") && !strcmp(seen_game.rom_patterns[1], "*.qd"));
@@ -306,6 +308,7 @@ int main(int argc, char **argv)
     CHECK(seen_io.player_key_bind[0][6] == SDL_SCANCODE_RETURN && seen_io.player_key_bind[0][7] == SDL_SCANCODE_BACKSLASH);
     CHECK(seen_io.player_pad_bind[0][5] == RECOMP_LAUNCHER_PAD_BUTTON(SDL_CONTROLLER_BUTTON_X));
     CHECK(seen_io.player_src[0] == 1 && seen_io.player_src[1] == 2 && seen_io.volume == 100);
+    CHECK(seen_io.vsync == RECOMP_LAUNCHER_VSYNC_OFF);
 #ifdef RECOMP_LAUNCHER_HAS_ZAPPER_SETTINGS
     CHECK(seen_io.zapper_mouse == 1 && seen_io.zapper_crosshair == 1);
 #endif
@@ -334,6 +337,7 @@ int main(int argc, char **argv)
     CHECK(cyc_ui_launcher(&s, cfg, NULL, &rom, true, NULL, NULL) == 0);
     CHECK(!strcmp(rom, "F:/somewhere/else.fds"));
     CHECK(s.window_scale == 5 && s.fullscreen == 1 && s.integer_scale == 0 && s.linear_filter == 1);
+    CHECK(s.vsync == 1); /* Adaptive maps to this renderer's ordinary VSync. */
     CHECK(s.audio_enabled == 0 && s.volume == 40 && s.skip_launcher == 1);
     CHECK(!s.hdpack_enabled && !strcmp(s.hdpack_dir,"F:/HD Packs/Zelda"));
 #ifdef RECOMP_LAUNCHER_HAS_ZAPPER_SETTINGS

@@ -92,7 +92,7 @@ static inline uint8_t cpu_read(uint16_t addr, unsigned f) {
 static inline uint8_t cpu_read_rom(uint16_t addr, uint8_t value, unsigned f) {
     hw_cycle_start(addr, HW_READ);
     if (f & (CYC_POLL | CYC_POLL_BRANCH)) cpu_poll(f);
-    hw_read_rom(addr, value);
+    value = hw_read_rom(addr, value);
     hw_cycle_finish((f & CYC_DONE) != 0);
     return value;
 }

@@ -7,6 +7,8 @@
  *   the controller buttons of each player (A B Select Start Up Down Left Right),
  *   read from the keyboard or from a game controller as the player's source
  *   says (config.ini [Input] PlayerNSource: 0 none, 1 keyboard, 2 gamepad);
+ *   a keyboard player 1 also reads the first controller no player named, so a
+ *   pad plugged in works at once and player 2 takes the next one;
  *
  *   host shortcuts, read from the keyboard and from every open controller:
  *   Disk (the FDS side swap, cyc_disk_action.h; offered only for a disk

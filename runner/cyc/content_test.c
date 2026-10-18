@@ -1,7 +1,10 @@
 /* Content tools must honor mapped memory, isolation and generated-code validity. */
 #include "hw_internal.h"
 #include "hw.h"
+#include "cpu6502.h"
 #include "cyc_mod.h"
+#include "cyc_state.h"
+#include "cyc_trace.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -22,7 +25,55 @@ static void boot(bool chr_rom) {
     CHECK(cyc_load_ines(image, 16 + 16384 + (chr_rom ? 8192 : 0)));
     cyc_power_on(0);
 }
+static void traced_power_on(void) {
+    bool enabled = cyc_trace_enabled;
+    cyc_trace_enabled = true;
+    boot(false);
+    write_reg(0x2006, 0x12);
+    uint64_t fresh_hash = cyc_trace_hash;
+    uint32_t fresh_cycle = cyc_trace_cycle;
+    write_reg(0x2006, 0x34);
+    write_reg(0x2007, 0xA7);
+    boot(false);
+    write_reg(0x2006, 0x12);
+    CHECK(cyc_trace_hash == fresh_hash && cyc_trace_cycle == fresh_cycle);
+    cyc_trace_enabled = enabled;
+}
+static void rom_read_overrides(void) {
+    boot(false);
+    cyc_mod_clear_rom_read_overrides();
+    CHECK(cpu_read_rom(0x8000, 0, 0) == 0);
+    CHECK(cyc_mod_set_rom_read_override(0x8000, 0x42));
+    CHECK(cpu_read(0x8000, 0) == 0x42);
+    CHECK(cpu_read_rom(0x8000, 0, 0) == 0x42);
+    CHECK(cyc_mod_peek(0x8000) == 0); /* the image itself is unchanged */
+    CHECK(cyc_mod_set_rom_read_override(0x8000, 0x99));
+    CHECK(cyc_mod_rom_read_override_count() == 1);
+    CHECK(cpu_read_rom(0x8000, 0, 0) == 0x99);
+    /* Host policy survives machine-state restoration. */
+    CycSnapshot *snap = cyc_snapshot_new();
+    CHECK(snap != NULL);
+    if (snap) {
+        cyc_snapshot_take(snap);
+        CHECK(cyc_mod_set_rom_read_override(0x8000, 0x17));
+        cyc_snapshot_restore(snap);
+        CHECK(cpu_read_rom(0x8000, 0, 0) == 0x17);
+        cyc_snapshot_free(snap);
+    }
+    CHECK(!cyc_mod_set_rom_read_override(0x7FFF, 1));
+    for (unsigned i = 1; i < 64; ++i)
+        CHECK(cyc_mod_set_rom_read_override((uint16_t)(0x8000 + i), (uint8_t)i));
+    CHECK(cyc_mod_rom_read_override_count() == 64);
+    CHECK(!cyc_mod_set_rom_read_override(0x8040, 1));
+    CHECK(cyc_mod_set_rom_read_override(0x8000, 0x42));
+    CHECK(cpu_read_rom(0x8000, 0, 0) == 0x42);
+    cyc_mod_clear_rom_read_overrides();
+    CHECK(cyc_mod_rom_read_override_count() == 0);
+    CHECK(cpu_read(0x8000, 0) == 0 && cpu_read_rom(0x8000, 0, 0) == 0);
+}
 int main(void) {
+    traced_power_on();
+    rom_read_overrides();
     boot(false);
     CHECK(!hw_prg_modified);
     size_t n = 99;
