@@ -29,6 +29,7 @@ int                   g_mapper40_bank_c000_8k = 0;
  * for games that run in mode 1 (e.g. SMB3). */
 int                   g_mmc3_win_bank8k[4] = {0, 0, 0, 0};
 static int            s_mapper_type  = 0;
+static int            s_bus_conflicts = 0;
 static int            s_mirroring    = 3; /* default: horizontal */
 
 /* Debug: track $A000 mirroring writes */
@@ -283,6 +284,7 @@ void mapper_init(const uint8_t *prg_data, int prg_banks,
     s_prg_data    = prg_data;
     s_prg_banks   = prg_banks;
     s_mapper_type = mapper_type;
+    s_bus_conflicts = 0;
     g_current_bank = 0;
 
     /* Convert iNES mirroring flag (0=horizontal, 1=vertical) to renderer values
@@ -358,6 +360,10 @@ void mapper_init_chr(const uint8_t *chr_data, int chr_banks) {
     }
 }
 
+void mapper_set_bus_conflicts(int enabled) {
+    s_bus_conflicts = enabled != 0;
+}
+
 void mapper_write(uint16_t addr, uint8_t val) {
     switch (s_mapper_type) {
         case 0:
@@ -391,6 +397,9 @@ void mapper_write(uint16_t addr, uint8_t val) {
              * $8000-$BFFF. The last 16KB bank remains fixed at $C000-$FFFF. */
             if (addr < 0x8000 || s_prg_banks <= 0) return;
             {
+                /* ROM drives the bus from the OLD mapping, including writes
+                 * to the fixed window. Sample it before changing the latch. */
+                if (s_bus_conflicts) val &= mapper_peek_prg(addr);
                 int new_bank = val % s_prg_banks;
                 if (new_bank != g_current_bank) {
                     g_current_bank = new_bank;
