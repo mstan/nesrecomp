@@ -31,7 +31,7 @@ static void nonblock(sock_t s) { fcntl(s, F_SETFL, fcntl(s, F_GETFL, 0) | O_NONB
 #endif
 
 #define LINE_MAX_BYTES 8192
-#define MAX_COMMANDS 64
+#define MAX_COMMANDS 128
 
 typedef struct {
     const char *name, *summary;
@@ -175,6 +175,7 @@ static void help(int id, const char *line)
 void cyc_tcp_register(const char *name, const char *summary, CycTcpHandler handler)
 {
     if (s_ncmds < MAX_COMMANDS) s_cmds[s_ncmds++] = (Command){ name, summary ? summary : "", handler };
+    else fprintf(stderr, "[cyc tcp] command table full: %s is not served\n", name);
 }
 
 bool cyc_tcp_start(int port)

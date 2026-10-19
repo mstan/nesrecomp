@@ -1,0 +1,176 @@
+{
+  "name": "Mega Man 3",
+  "prefix": "!",
+  "chat": { "side": "right", "valign": "bottom", "offset": 4, "lines": 7, "ms": 20000 },
+  "vote": {
+    "mode": "both",
+    "options": 3,
+    "duration_ms": 20000,
+    "gap_ms": 15000,
+    "y": 12,
+    "title": "CHAT VOTE",
+    "pool": ["heal", "hurt", "drain", "regen", "oneup", "etank", "shoot", "hop", "invert", "nojump", "noshoot", "freeze"]
+  },
+  "cooldown_ms": 1500,
+  "user_cooldown_ms": 8000,
+  "command_cooldown_ms": 10000,
+  "conditions": {
+    "playing": [
+      { "addr": "0x00A2", "min": "0x81", "_": "Mega Man's HP ($80 + 0..28): in a stage and alive" }
+    ]
+  },
+  "aliases": {
+    "refill": "heal",
+    "1up": "oneup",
+    "e": "etank",
+    "reverse": "invert",
+    "poison": "drain"
+  },
+  "rewards": {},
+  "commands": {
+    "heal": {
+      "title": "FULL HEAL",
+      "help": "full health",
+      "cooldown_ms": 60000,
+      "when": "playing",
+      "banner": "{user} HEALED MEGA MAN!",
+      "steps": [
+        { "ram": { "addr": "0x00A2", "set": "0x9C" } }
+      ]
+    },
+    "hurt": {
+      "title": "ZAP -4",
+      "help": "4 damage (never the last point)",
+      "cooldown_ms": 30000,
+      "when": "playing",
+      "banner": "{user} ZAPPED MEGA MAN!",
+      "steps": [
+        { "ram": { "addr": "0x00A2", "add": -4, "min": "0x81", "max": "0x9C" } }
+      ]
+    },
+    "drain": {
+      "title": "POISON",
+      "help": "10 s of poison: -1 HP every half second (never the last point)",
+      "cooldown_ms": 90000,
+      "when": "playing",
+      "steps": [
+        { "ram": { "addr": "0x00A2", "add": -1, "min": "0x81", "max": "0x9C", "frames": 600, "every": 30, "label": "POISON" } }
+      ]
+    },
+    "regen": {
+      "title": "REGEN",
+      "help": "10 s of regeneration: +1 HP every third of a second",
+      "cooldown_ms": 90000,
+      "when": "playing",
+      "steps": [
+        { "ram": { "addr": "0x00A2", "add": 1, "min": "0x81", "max": "0x9C", "frames": 600, "every": 20, "label": "REGEN" } }
+      ]
+    },
+    "oneup": {
+      "title": "1-UP",
+      "help": "an extra life (up to 9)",
+      "cooldown_ms": 120000,
+      "when": "playing",
+      "banner": "{user}: 1-UP!",
+      "steps": [
+        { "ram": { "addr": "0x00AE", "add": 1, "max": 9 } }
+      ]
+    },
+    "etank": {
+      "title": "E-TANK",
+      "help": "an Energy Tank (up to 9)",
+      "cooldown_ms": 120000,
+      "when": "playing",
+      "banner": "{user}: E-TANK!",
+      "steps": [
+        { "ram": { "addr": "0x00AF", "add": 1, "max": 9 } }
+      ]
+    },
+    "jump": {
+      "help": "Mega Man jumps",
+      "cooldown_ms": 3000,
+      "when": "playing",
+      "steps": [
+        { "pad": { "buttons": "a", "mode": "press", "frames": 20 } }
+      ]
+    },
+    "shoot": {
+      "title": "RAPID FIRE",
+      "help": "2 s of rapid fire",
+      "cooldown_ms": 8000,
+      "when": "playing",
+      "steps": [
+        { "pad": { "buttons": "b", "mode": "tap", "frames": 120, "label": "RAPID FIRE" } }
+      ]
+    },
+    "slide": {
+      "help": "a slide",
+      "cooldown_ms": 3000,
+      "when": "playing",
+      "steps": [
+        { "pad": { "buttons": "down+a", "mode": "press", "frames": 12 } }
+      ]
+    },
+    "left": {
+      "help": "a push to the left",
+      "cooldown_ms": 3000,
+      "when": "playing",
+      "steps": [
+        { "pad": { "buttons": "left", "mode": "press", "frames": 40 } }
+      ]
+    },
+    "right": {
+      "help": "a push to the right",
+      "cooldown_ms": 3000,
+      "when": "playing",
+      "steps": [
+        { "pad": { "buttons": "right", "mode": "press", "frames": 40 } }
+      ]
+    },
+    "hop": {
+      "title": "BUNNY HOP",
+      "help": "5 s of bunny hops",
+      "cooldown_ms": 30000,
+      "when": "playing",
+      "steps": [
+        { "pad": { "buttons": "a", "mode": "tap", "frames": 300, "label": "BUNNY HOP" } }
+      ]
+    },
+    "invert": {
+      "title": "REVERSED",
+      "help": "10 s of left and right swapped",
+      "cooldown_ms": 60000,
+      "when": "playing",
+      "steps": [
+        { "pad": { "buttons": "left+right", "mode": "invert", "frames": 600, "label": "REVERSED" } }
+      ]
+    },
+    "nojump": {
+      "title": "NO JUMPING",
+      "help": "5 s without jumping",
+      "cooldown_ms": 60000,
+      "when": "playing",
+      "steps": [
+        { "pad": { "buttons": "a", "mode": "block", "frames": 300, "label": "NO JUMPING" } }
+      ]
+    },
+    "noshoot": {
+      "title": "BUSTER JAMMED",
+      "help": "5 s without shooting",
+      "cooldown_ms": 60000,
+      "when": "playing",
+      "steps": [
+        { "pad": { "buttons": "b", "mode": "block", "frames": 300, "label": "BUSTER JAMMED" } }
+      ]
+    },
+    "freeze": {
+      "title": "FREEZE",
+      "help": "1.5 s with no input at all",
+      "cooldown_ms": 45000,
+      "when": "playing",
+      "steps": [
+        { "pad": { "buttons": "a+b+left+right+up+down", "mode": "block", "frames": 90, "label": "FROZEN" } }
+      ]
+    }
+  }
+}
