@@ -42,6 +42,12 @@ static SDL_Scancode parse_host_key(const char *name) {
         {"KP8", SDL_SCANCODE_KP_8}, {"KP9", SDL_SCANCODE_KP_9},
         {"KP_PLUS", SDL_SCANCODE_KP_PLUS},
         {"KP_MINUS", SDL_SCANCODE_KP_MINUS},
+        {"F1", SDL_SCANCODE_F1},   {"F2", SDL_SCANCODE_F2},
+        {"F3", SDL_SCANCODE_F3},   {"F4", SDL_SCANCODE_F4},
+        {"F5", SDL_SCANCODE_F5},   {"F6", SDL_SCANCODE_F6},
+        {"F7", SDL_SCANCODE_F7},   {"F8", SDL_SCANCODE_F8},
+        {"F9", SDL_SCANCODE_F9},   {"F10", SDL_SCANCODE_F10},
+        {"F11", SDL_SCANCODE_F11}, {"F12", SDL_SCANCODE_F12},
     };
     for (unsigned i = 0; i < sizeof(keys) / sizeof(keys[0]); i++)
         if (strcmp(name, keys[i].name) == 0) return keys[i].scancode;
@@ -428,7 +434,17 @@ void script_tick(uint64_t frame, const uint8_t *ram) {
                 printf("[Script] TRIGGER_OFF\n");
                 break;
             case CMD_KEY_TAP: {
-                SDL_Scancode scancode = parse_host_key(c->sarg);
+                /* Optional "SHIFT+"/"CTRL+"/"ALT+" prefixes set the modifier
+                 * state the runner hotkeys inspect (e.g. Shift+F1 saves). */
+                const char *key = c->sarg;
+                Uint16 mod = KMOD_NONE;
+                for (;;) {
+                    if (strncmp(key, "SHIFT+", 6) == 0) { mod |= KMOD_SHIFT; key += 6; }
+                    else if (strncmp(key, "CTRL+", 5) == 0) { mod |= KMOD_CTRL; key += 5; }
+                    else if (strncmp(key, "ALT+", 4) == 0) { mod |= KMOD_ALT; key += 4; }
+                    else break;
+                }
+                SDL_Scancode scancode = parse_host_key(key);
                 SDL_Event key_event;
                 if (scancode == SDL_SCANCODE_UNKNOWN) {
                     fprintf(stderr, "[Script] Unknown host key: %s\n", c->sarg);
@@ -440,6 +456,7 @@ void script_tick(uint64_t frame, const uint8_t *ram) {
                 key_event.key.state = SDL_PRESSED;
                 key_event.key.keysym.scancode = scancode;
                 key_event.key.keysym.sym = SDL_GetKeyFromScancode(scancode);
+                key_event.key.keysym.mod = mod;
                 int pushed = SDL_PushEvent(&key_event) == 1;
                 key_event.type = SDL_KEYUP;
                 key_event.key.state = SDL_RELEASED;
