@@ -1446,6 +1446,18 @@ smoke_skip_input:
         if (nmi_will_run) {
             nes_dring_mark('n', (uint16_t)runtime_get_vblank_depth());
             runtime_set_vblank_firing(0);
+            /* Hardware race: the VBlank flag is set at vblank start and the
+             * NMI handler vectors in ~7 cycles later; a game tight-polling
+             * $2002 for vblank (Guardian Legend's $EDF9 LDA $2002/BPL sync
+             * after a nametable clear) lands a read inside the window before
+             * the handler's own $2002 read consumes the flag, so it observes
+             * the set. Recompiled NMI runs atomically inside the boundary
+             * call, so the handler always consumes the flag first and the
+             * game's wait loop would hang forever. Re-arm bit 7 after the
+             * handler so the interrupted game code observes the flag exactly
+             * as it does on hardware. Games whose handler never reads $2002
+             * are unaffected (the flag is still set — this is a no-op). */
+            g_ppustatus |= 0x80;
             /* On real 6502, plain RTI restores S and all registers back to
              * the interrupted context. If the handler hijacked RTI, though,
              * func_NMI has already run the hijacked post-NMI code as resumed
