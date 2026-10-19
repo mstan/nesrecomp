@@ -490,7 +490,13 @@ int script_wants_screenshot(char *buf, int buflen) {
         /* Relative names land in NESRECOMP_SHOT_DIR (default C:/temp), so
          * concurrent runs can keep their captures apart. */
         const char *dir = getenv("NESRECOMP_SHOT_DIR");
-        if (!dir || !dir[0]) dir = "C:/temp";
+        if (!dir || !dir[0]) {
+#ifdef _WIN32
+            dir = "C:/temp";
+#else
+            dir = ".";
+#endif
+        }
         size_t n = strlen(dir);
         int sep = dir[n-1] == '/' || dir[n-1] == '\\';
         snprintf(buf, buflen, "%s%s%s", dir, sep ? "" : "/", s_shot_pending);
