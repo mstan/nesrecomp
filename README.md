@@ -2,14 +2,51 @@
   <img src="docs/assets/nesrecomp-logo.png" alt="NESRecomp" width="640">
 </p>
 
-# NESRecomp
+# NESRecomp — Beta
 
-A static 6502 recompiler framework for NES games. Translates NES ROM machine code to C, which is then compiled to native machine code for direct execution on modern PCs.
+**A beta static-recompilation framework for NES and Famicom games.**
+NESRecomp translates 6502 code into native C and supplies the PPU, APU,
+mapper, input and save systems around it. Each port integrates and validates
+its own cartridge or disk revision.
 
-The default cycle backend translates ROM instructions to C that performs each
-CPU bus cycle against the NES hardware model. A generated interpreter handles
-code outside the compiled ROM views. The retained legacy backend uses direct
-C calls for guest subroutines and remains available explicitly.
+The ecosystem includes **four-player Mario co-op with rollback netplay,
+adaptive ultrawide views, optional voxel presentation, runtime translations
+and modern controller support**. Features are title-specific, and the
+framework's beta status does not make every game or mod complete.
+
+**[Play a game](#game-projects)** · **[Start a new port without AI](docs/GETTING_STARTED.md)**
+
+## Super Mario Bros.: four players, one adventure
+
+Mario, Luigi, Wario and Waluigi share the same level in the optional
+**Simultaneous Co-op** mod. Play with two to four people locally or through
+rollback netplay; the room settles the shared player count and rules before
+boot. Team lives, scarce pickups and a shared camera keep it one adventure.
+
+<p align="center">
+  <img src="docs/assets/games/super-mario-bros-four-player.png" alt="Mario, Luigi, Wario and Waluigi together in World 1-1" width="640">
+  <br><sub><b>Super Mario Bros. — four-player co-op.</b> Local capture of the same game mode available over netplay.</sub>
+</p>
+
+Co-op uses a shared **4:3** camera and excludes widescreen, voxel display and
+character-replacement mods. See the [co-op rules](https://github.com/mstan/SuperMarioBrosNESRecomp/blob/master/docs/SIMULTANEOUS_COOP.md)
+and [netplay setup and validation limits](https://github.com/mstan/SuperMarioBrosNESRecomp/blob/master/docs/NETPLAY.md).
+
+## Ultra-wide NES views
+
+Separately, Mario's experimental renderer offers **Fit window, 16:9, 21:9
+and 32:9**. It extends level terrain, authored enemy loading and independent
+platforms, with title-specific limits for special spawners and linked objects.
+Metroid has its own adaptive renderer, showing adjacent room scenery and
+optional viewport actors. These views preserve the original pixel artwork.
+
+<table>
+  <tr><td><img src="docs/assets/games/super-mario-bros-ultrawide.png" alt="Super Mario Bros. World 1-1 in 32:9, revealing pipes, terrain and enemies beyond the original viewport" width="100%"><br><sub><b>Super Mario Bros.</b> — 32:9 single-player view, separate from co-op.</sub></td></tr>
+  <tr><td><img src="docs/assets/games/metroid-widescreen.png" alt="Metroid in 32:9 with Samus, enemies and an item visible across the expanded room" width="100%"><br><sub><b>Metroid</b> — experimental 32:9 room view.</sub></td></tr>
+</table>
+
+Screenshot provenance and feature qualifications are recorded in
+[the showcase sources](docs/SHOWCASE_SOURCES.md).
 
 ## How to use NESRecomp
 
@@ -28,7 +65,8 @@ C calls for guest subroutines and remains available explicitly.
   --output "C:\Projects\MyGameRecomp"
 ```
 
-No BIOS file is needed. The output folder contains generated C source, a
+Cartridge projects need no BIOS. Famicom Disk System projects require their
+own supported disk-system BIOS. The output folder contains generated C source, a
 proposed `game.toml`, CMake files, and build scripts.
 
 To check that the generated source compiles:
@@ -75,35 +113,43 @@ port was contributed by [**Nat Budin (@nbudin)**](https://github.com/nbudin) in
 
 ## Game Projects
 
-| Game | Mapper | Status | Repository |
-|------|--------|--------|------------|
-| Super Mario Bros. | NROM (0) | Fully playable | [SuperMarioBrosNESRecomp](https://github.com/mstan/SuperMarioBrosNESRecomp) |
-| Duck Hunt | NROM (0) | Fully playable (mouse-as-Zapper) | [DuckHuntNESRecomp](https://github.com/mstan/DuckHuntNESRecomp) |
-| Dr. Mario | MMC1 (1) | Playable (1P tested) | [DrMarioNesRecomp](https://github.com/mstan/DrMarioNesRecomp) |
-| The Legend of Zelda | MMC1 (1) | Believed 100% playable | [LegendOfZeldaNESRecomp](https://github.com/mstan/LegendOfZeldaNESRecomp) |
-| Metroid | MMC1 (1) | Starting area playable, early foundation | [MetroidNESRecomp](https://github.com/mstan/MetroidNESRecomp) |
-| Faxanadu | MMC1 (1) | Fully playable, text override showcase | [FaxanaduRecomp](https://github.com/mstan/FaxanaduRecomp) |
-| Yoshi | MMC1 (1) | Believed fully playable | [YoshiNESRecomp](https://github.com/mstan/YoshiNESRecomp) |
-| Yoshi's Cookie | MMC3 (4) | Believed 100% playable | [YoshisCookieRecomp](https://github.com/mstan/YoshisCookieRecomp) |
-| Mega Man 3 | MMC3 (4) | Work in progress — title/menu/early stages playable | [Megaman3NESRecomp](https://github.com/mstan/Megaman3NESRecomp) |
-| Gumshoe | GxROM (66) | Playable end-to-end (mouse-as-Zapper, one HUD cosmetic bug) | [GumshoeNESRecomp](https://github.com/mstan/GumshoeNESRecomp) |
+These summaries were checked against public documentation and release notes
+on **21 October 2026**. Game/mapper coverage and enabled features vary by
+build; a title/menu check does not establish a complete playthrough.
+
+| Game | Project | Features and scope |
+|---|---|---|
+| *Super Mario Bros.* | [SuperMarioBrosNESRecomp](https://github.com/mstan/SuperMarioBrosNESRecomp) | Two-to-four-player local/online co-op; separate adaptive/ultrawide, voxel and donor-ROM character mods. |
+| *Duck Hunt* | [DuckHuntNESRecomp](https://github.com/mstan/DuckHuntNESRecomp) | Mouse-as-Zapper input and native game presentation. |
+| *Dr. Mario* | [DrMarioNesRecomp](https://github.com/mstan/DrMarioNesRecomp) | Playable puzzle port; consult current one/two-player validation notes. |
+| *The Legend of Zelda* | [LegendOfZeldaNESRecomp](https://github.com/mstan/LegendOfZeldaNESRecomp) | Overworld/dungeon gameplay, battery saves and optional voxel diorama; current cycle build still needs a fresh campaign audit. |
+| *Metroid* | [MetroidNESRecomp](https://github.com/mstan/MetroidNESRecomp) | USA/Europe builds, password saves, adaptive/32:9 room renderer and optional viewport actors/voxel view. |
+| *Faxanadu* | [FaxanaduRecomp](https://github.com/mstan/FaxanaduRecomp) | Action-RPG port and runtime text/localization override showcase. |
+| *Yoshi* | [YoshiNESRecomp](https://github.com/mstan/YoshiNESRecomp) | Native puzzle port; see its release notes for current testing scope. |
+| *Yoshi’s Cookie* | [YoshisCookieRecomp](https://github.com/mstan/YoshisCookieRecomp) | MMC3 puzzle port with desktop controls and saves. |
+| *Mega Man 3* | [Megaman3NESRecomp](https://github.com/mstan/Megaman3NESRecomp) | Development preview with title/menu and early-stage gameplay. |
+| *Gumshoe* | [GumshoeNESRecomp](https://github.com/mstan/GumshoeNESRecomp) | Mouse-as-Zapper action; end-to-end play reported, with title-specific cosmetic limits. |
+| *Super Mario Bros. 2 (Japan / The Lost Levels)* | [SuperMarioBros2JapanFDSRecomp](https://github.com/mstan/SuperMarioBros2JapanFDSRecomp) | Famicom Disk System development preview; exact disk and BIOS required. |
+| *Mother / EarthBound Beginnings* | [Mother1NESRecomp](https://github.com/mstan/Mother1NESRecomp) | Early standalone bring-up, largely untested beyond initial boot/basic play. |
+
+Public game downloads are linked from each project's README. Other local
+development targets include Super Mario Bros. 2/3 and Kirby's Adventure;
+they are not advertised here as public releases.
 
 ### Mapper Support
 
-| Mapper | Name | Supported | Games |
-|--------|------|-----------|-------|
-| 0 | NROM | Yes | Super Mario Bros., Duck Hunt |
-| 1 | MMC1 / SxROM | Yes | Zelda, Metroid, Dr. Mario, Faxanadu, Yoshi |
-| 2 | UxROM | Not yet | — |
-| 3 | CNROM | Not yet | — |
-| 4 | MMC3 / TxROM | Yes | Yoshi's Cookie, Mega Man 3 |
-| 7 | AxROM | Not yet | — |
-| 9 | MMC2 / PxROM | Not yet | — |
-| 66 | GxROM | Yes | Gumshoe |
-
-Mappers 0, 1, 4, and 66 cover roughly 78% of the licensed NES library.
+Public examples exercise NROM (Mario and Duck Hunt), MMC1 (Zelda,
+Metroid, Dr. Mario, Faxanadu and Yoshi), MMC3 (Yoshi's Cookie and Mega Man 3),
+GxROM (Gumshoe), and the Famicom Disk System path. A mapper implementation
+does not automatically qualify every board or game using it; follow the
+selected port's ROM and region requirements.
 
 ### Voxel 3D presentation
+
+<p align="center">
+  <img src="docs/assets/games/zelda-voxel.webp" alt="The Legend of Zelda overworld rendered as an optional voxel diorama" width="720">
+  <br><sub><b>The Legend of Zelda</b> — optional voxel presentation.</sub>
+</p>
 
 NESRecomp includes an opt-in, presentation-only Voxel 3D renderer for game
 projects that can describe their live tile map and sprites. It reconstructs
@@ -138,6 +184,11 @@ This enables localization, retranslation, and accessibility improvements without
 ROM hacking. See `override_text.h` in FaxanaduRecomp for the full API.
 
 ## Architecture
+
+The cycle backend is the default. It emits CPU-cycle execution against the
+cycle hardware runtime; see [the current host integration](runner/cyc/PROJECTS.md).
+The function-level pipeline and runner files below remain available for
+explicit legacy builds.
 
 ```
 NES ROM (.nes)
@@ -400,13 +451,11 @@ cmake --build build
 
 ## Adding a New Game
 
-See [CLAUDE.md](CLAUDE.md) for detailed instructions. In short:
-
-1. Copy [FaxanaduRecomp](https://github.com/mstan/FaxanaduRecomp) as a boilerplate
-2. Create `game.toml` with mapper, bank switch, and dispatch configuration
-3. Create `extras.c` implementing the `game_extras.h` hook interface
-4. Run `NESRecomp.exe <rom.nes> --game game.toml` to generate C code
-5. Build with CMake, linking against the runner library and SDL2
+Follow [Your first NESRecomp port](docs/GETTING_STARTED.md). It uses the
+default cycle backend, a separate game configuration and a baseline host.
+The [cycle-project reference](runner/cyc/PROJECTS.md) documents desktop/UI,
+hook and netplay integration. Keep title-specific addresses and behavior in
+the game repository; generated code stays in build output.
 
 ## Cycle-Accurate Mode
 
