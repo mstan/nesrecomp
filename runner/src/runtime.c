@@ -3144,6 +3144,11 @@ int nes_dispatch_indirect_continuation(uint16_t addr, int caller_bank,
 }
 
 int nes_jsr_stack_ok_after_call(uint8_t before_s, uint64_t before_interrupt_epoch) {
+    /* A deferred tail lap must unwind to its owning C frame even when the
+     * dispatcher consumed its JSR operand and restored S exactly. Equality
+     * alone would resume after that JSR, potentially executing inline table
+     * bytes (Guardian Legend $E6F0 -> $D6AE -> deferred $E85E). */
+    if (s_tail_pending >= 0) return 0;
     if (g_cpu.S == before_s) return 1;
 
     int8_t delta = (int8_t)(g_cpu.S - before_s);
