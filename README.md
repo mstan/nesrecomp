@@ -2,7 +2,7 @@
   <img src="docs/assets/nesrecomp-logo.png" alt="NESRecomp" width="640">
 </p>
 
-# NESRecomp — Beta
+# NESRecomp
 
 **A beta static-recompilation framework for NES and Famicom games.**
 NESRecomp translates 6502 code into native C and supplies the PPU, APU,
