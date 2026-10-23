@@ -393,6 +393,86 @@ static void load_brk_policy_from_env(void) {
  * Real BRK semantics (push PC+2, push P|B, dispatch via IRQ vector) are
  * not implemented; instead BRK_FATAL or BRK_TRAP gives the developer a
  * loud failure they can debug. */
+/* Opt-in derailment forensics (TGL_DERAIL_TRACE=1): ring of recent
+ * instruction boundaries (pc, S, bank, walker cursor $16/$17, frame),
+ * recorded from both native boundaries and interpreter steps because both
+ * funnel through nes_cpu_instruction_boundary. The trail dumps once when
+ * the PC enters the open-bus region ($2000-$7FFF, never executable on this
+ * mapper) or when a BRK fires below $8000 — both mean execution ran off
+ * the ROM into bus garbage. */
+#define DERAIL_RING 1024
+static uint16_t s_dr_pc[DERAIL_RING];
+static uint8_t  s_dr_s[DERAIL_RING];
+static uint8_t  s_dr_bank[DERAIL_RING];
+static uint16_t s_dr_cur[DERAIL_RING];
+static uint8_t  s_dr_a[DERAIL_RING];
+static uint8_t  s_dr_f6[DERAIL_RING];
+static uint8_t  s_dr_f7[DERAIL_RING];
+static uint32_t s_dr_frame[DERAIL_RING];
+static uint32_t s_dr_idx;
+static int      s_dr_on = -1;
+static int      s_dr_dumped;
+
+/* Write-watch on the stack page: PHA/JSR/RTS push/pop machinery writes
+ * g_ram directly, so anything landing in nes_write under $01F0-$01FF is a
+ * deliberate STA-class write into the live stack region — the usual way a
+ * pushed coroutine pointer gets clobbered. */
+#define DRW_RING 64
+static uint32_t s_drw_frame[DRW_RING];
+static uint16_t s_drw_pc[DRW_RING];
+static uint8_t  s_drw_addr[DRW_RING];
+static uint8_t  s_drw_val[DRW_RING];
+static uint32_t s_drw_idx;
+
+static void nes_derail_dump(const char *why, uint16_t at_pc) {
+    if (s_dr_dumped++) return;
+    uint32_t n = s_dr_idx < DERAIL_RING ? s_dr_idx : DERAIL_RING;
+    uint32_t show = n < 128 ? n : 128;
+    fprintf(stderr, "[derail] %s at $%04X (frame %llu) — last %u boundaries:\n",
+            why, at_pc, (unsigned long long)g_frame_count, show);
+    {
+        uint32_t wn = s_drw_idx < DRW_RING ? s_drw_idx : DRW_RING;
+        fprintf(stderr, "[derail] %u stack-page writes (last %u):\n",
+                s_drw_idx, wn);
+        for (uint32_t k = s_drw_idx > wn ? s_drw_idx - wn : 0; k < s_drw_idx; k++) {
+            uint32_t j = k & (DRW_RING - 1);
+            fprintf(stderr, "[derail]   W f=%u from pc=$%04X $%02X<-$%02X\n",
+                    s_drw_frame[j], s_drw_pc[j], s_drw_addr[j], s_drw_val[j]);
+        }
+    }
+    /* Walk the true tail of the ring: s_dr_idx is the monotonic write
+     * cursor, so the newest entries live at (s_dr_idx - show .. s_dr_idx). */
+    for (uint32_t k = s_dr_idx - show; k < s_dr_idx; k++) {
+        uint32_t i = k & (DERAIL_RING - 1);
+        fprintf(stderr, "[derail]   f=%u pc=$%04X S=%02X A=%02X bank=%d $16=$%04X [F6]=%02X [F7]=%02X\n",
+                s_dr_frame[i], s_dr_pc[i], s_dr_s[i], s_dr_a[i], s_dr_bank[i], s_dr_cur[i],
+                s_dr_f6[i], s_dr_f7[i]);
+    }
+    fflush(stderr);
+}
+
+static void nes_derail_record(uint16_t pc) {
+    uint32_t i = s_dr_idx++ & (DERAIL_RING - 1);
+    s_dr_pc[i] = pc;
+    s_dr_s[i] = g_cpu.S;
+    s_dr_bank[i] = (uint8_t)g_current_bank;
+    s_dr_cur[i] = (uint16_t)(g_ram[0x16] | (g_ram[0x17] << 8));
+    s_dr_a[i] = g_cpu.A;
+    s_dr_f6[i] = g_ram[0x1F6];
+    s_dr_f7[i] = g_ram[0x1F7];
+    s_dr_frame[i] = (uint32_t)g_frame_count;
+    if (pc >= 0x2000 && pc < 0x8000)
+        nes_derail_dump("PC entered open-bus region", pc);
+}
+
+static void nes_derail_watch_write(uint16_t from_pc, uint16_t addr, uint8_t val) {
+    uint32_t i = s_drw_idx++ & (DRW_RING - 1);
+    s_drw_frame[i] = (uint32_t)g_frame_count;
+    s_drw_pc[i] = from_pc;
+    s_drw_addr[i] = (uint8_t)addr;
+    s_drw_val[i] = val;
+}
+
 void nes_brk_executed(uint16_t pc) {
     static uint32_t last = 0xFFFFFFFF;
     uint32_t key = ((uint32_t)g_current_bank << 16) | pc;
@@ -402,6 +482,8 @@ void nes_brk_executed(uint16_t pc) {
     g_brk_last_pc = pc;
     g_brk_last_bank = g_current_bank;
     g_brk_last_frame = g_frame_count;
+    if (s_dr_on == 1 && pc < 0x8000)
+        nes_derail_dump("BRK below $8000 (bus garbage)", pc);
     if (first_for_key) {
         printf("[BRK] executed at $%04X bank=%d (frame %llu) — "
                "BRK is silently skipped under DIAG; consider real "
@@ -634,6 +716,10 @@ static int s_vblank_pending = 0;   /* VBlank waiting to fire at next safe point 
  * bytes as JSONL  {"f":<frame>,"adr":"0x<addr>","old":"0x<v>","val":"0x<v>"} ; frame 0
  * emits the full baseline. Offline first-divergence diff vs the Mesen "nesref" trace.
  * Pure snapshot+compare — does not touch emulation state or timing. */
+#ifndef NESRECOMP_COSIM
+#define NESRECOMP_COSIM 1 /* Preserve existing framework consumers. */
+#endif
+#if NESRECOMP_COSIM
 static FILE   *s_wram_trace_f = NULL;
 static int     s_wram_trace_state = -1;   /* -1 unqueried, 0 off, 1 on */
 static uint8_t s_wram_prev[0x800];
@@ -886,6 +972,13 @@ void nes_cosim_emit_boundary(void) {
     nes_ppumem_trace_frame();
     nes_cosim_hash_frame();
 }
+#else
+void nes_apply_freeze(void) {}
+void nes_wram_trace_frame(void) {}
+void nes_ppumem_trace_frame(void) {}
+void nes_cosim_hash_frame(void) {}
+void nes_cosim_emit_boundary(void) {}
+#endif
 
 /* ---- General pending-IRQ delivery hook ----------------------------------
  * The recompiler emits maybe_trigger_vblank() at every instruction boundary,
@@ -993,6 +1086,48 @@ static uint16_t     s_loop_last_pc = 0;
 void nes_cpu_instruction_boundary(uint16_t cpu_pc, int cycles) {
     if (s_unclocked_depth) return;
     set_guest_execution_point(cpu_pc, 1);
+    if (s_dr_on < 0) {
+        const char *e = getenv("TGL_DERAIL_TRACE");
+        s_dr_on = (e && *e && *e != '0') ? 1 : 0;
+    }
+    if (s_dr_on) nes_derail_record(cpu_pc);
+    /* Opt-in PC watchlist disk trace (NESRECOMP_PC_TRACE=<path>): forensic
+     * control-flow log for a hand-picked set of sites (frame, pc, S). */
+    {
+        static FILE *s_pt_f = NULL;
+        static int s_pt_init = 0;
+        if (!s_pt_init) {
+            s_pt_init = 1;
+            const char *e = getenv("NESRECOMP_PC_TRACE");
+            if (e && *e) s_pt_f = fopen(e, "w");
+        }
+        if (s_pt_f) {
+            static int s_pt_from = -1, s_pt_to = -1, s_pt_win_init = 0;
+            if (!s_pt_win_init) {
+                s_pt_win_init = 1;
+                const char *f = getenv("NESRECOMP_PC_TRACE_FROM");
+                const char *t = getenv("NESRECOMP_PC_TRACE_TO");
+                s_pt_from = f && *f ? atoi(f) : -1;
+                s_pt_to = t && *t ? atoi(t) : -2;
+            }
+            if (g_frame_count >= (uint64_t)s_pt_from && g_frame_count <= (uint64_t)s_pt_to) {
+                fprintf(s_pt_f, "%llu,$%04X,%02X\n",
+                        (unsigned long long)g_frame_count, cpu_pc, g_cpu.S);
+            } else {
+                switch (cpu_pc) {
+            case 0x81DD: case 0x81FF: case 0x8216: case 0x822D: case 0x8234:
+            case 0x8260: case 0x8266: case 0x829F: case 0x82AA: case 0x831A:
+            case 0x8335: case 0xD5CC: case 0xD5F8: case 0xD58A: case 0xD6D3:
+            case 0xD7C3: case 0xDB52: case 0xD4C7: case 0xD4D5: case 0xEDD1:
+            case 0xEDE5: case 0xEDF4: case 0xFF8B:
+                fprintf(s_pt_f, "%llu,$%04X,%02X\n",
+                        (unsigned long long)g_frame_count, cpu_pc, g_cpu.S);
+                break;
+            default: break;
+                }
+            }
+        }
+    }
     if (s_skip_next_boundary_tick && cpu_pc == s_guest_resume_pc) {
         s_skip_next_boundary_tick = 0;
         return;
@@ -1637,6 +1772,8 @@ void nes_trace_sram_fetch(uint16_t addr, uint8_t val) {
 void nes_write(uint16_t addr, uint8_t val) {
     bus_tick();
     s_open_bus = val;   /* writes also drive the data bus (open-bus tracking) */
+    if (s_dr_on == 1 && addr >= 0x01F0 && addr <= 0x01FF)
+        nes_derail_watch_write(s_guest_pc_valid ? s_guest_pc : 0xFFFF, addr, val);
 
     /* DIAGNOSTIC (env-gated): flag when the 6502 stack pointer descends into the
      * low stack page (where some games keep a VRAM update buffer) — once per
@@ -2930,6 +3067,20 @@ void nes_write_runtime_fault(const char *reason) {
 
 int nes_dispatch_call(uint16_t addr, int caller_bank) {
     dring_push(addr, caller_bank, 'C');
+    /* Opt-in per-dispatch disk trace (NESRECOMP_DISPATCH_TRACE=<path>) for
+     * forensics on which guest routines actually run across a transition. */
+    {
+        static FILE *s_dt_f = NULL;
+        static int s_dt_init = 0;
+        if (!s_dt_init) {
+            s_dt_init = 1;
+            const char *e = getenv("NESRECOMP_DISPATCH_TRACE");
+            if (e && *e) s_dt_f = fopen(e, "w");
+        }
+        if (s_dt_f)
+            fprintf(s_dt_f, "%llu,$%04X,%d\n",
+                    (unsigned long long)g_frame_count, addr, caller_bank);
+    }
     uint16_t save_wb = g_code_window_base;
     if (addr >= 0x8000 || (mapper_get_type() == 40 && addr >= 0x6000))
         g_code_window_base = addr & 0xE000;
@@ -2993,6 +3144,11 @@ int nes_dispatch_indirect_continuation(uint16_t addr, int caller_bank,
 }
 
 int nes_jsr_stack_ok_after_call(uint8_t before_s, uint64_t before_interrupt_epoch) {
+    /* A deferred tail lap must unwind to its owning C frame even when the
+     * dispatcher consumed its JSR operand and restored S exactly. Equality
+     * alone would resume after that JSR, potentially executing inline table
+     * bytes (Guardian Legend $E6F0 -> $D6AE -> deferred $E85E). */
+    if (s_tail_pending >= 0) return 0;
     if (g_cpu.S == before_s) return 1;
 
     int8_t delta = (int8_t)(g_cpu.S - before_s);
@@ -3428,6 +3584,7 @@ void runtime_get_last_sync(uint8_t *sx, uint8_t *sy, uint16_t *t, uint64_t *fram
 
 uint16_t runtime_get_ppu_t(void) { return s_ppu_t; }
 uint64_t runtime_get_ppu_v_write_epoch(void) { return s_ppu_v_write_epoch; }
+uint16_t runtime_get_ppu_v_at_write(void) { return s_ppu_v_at_2006; }
 uint8_t  runtime_get_ppu_fine_x(void) { return s_ppu_fine_x; }
 int      runtime_scroll_from_t_valid(void) { return s_scroll_2005_complete; }
 

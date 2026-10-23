@@ -569,6 +569,7 @@ uint16_t runtime_get_ppuaddr(void);
 void     runtime_set_ppuaddr(uint16_t addr);
 uint16_t runtime_get_ppu_t(void);
 uint64_t runtime_get_ppu_v_write_epoch(void);
+uint16_t runtime_get_ppu_v_at_write(void);
 int      runtime_scroll_from_t_valid(void);
 int      runtime_get_visible_frame_start(uint8_t *ctrl, uint8_t *sx,
                                          uint8_t *sy, uint16_t *t,
