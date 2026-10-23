@@ -23,6 +23,10 @@
 #  pragma comment(lib, "comdlg32.lib")
 #endif
 
+#ifdef __APPLE__
+#  include <CoreFoundation/CoreFoundation.h>
+#endif
+
 #include "game_extras.h"
 #include "crc32.h"
 #include "nes_runtime.h"
@@ -362,6 +366,15 @@ int main(int argc, char *argv[]) {
     setvbuf(stdout, NULL, _isatty(_fileno(stdout)) ? _IONBF : _IOFBF, BUFSIZ);
 #else
     setvbuf(stdout, NULL, _IONBF, 0);
+#endif
+#ifdef __APPLE__
+    /* macOS pops the press-and-hold accent panel (à-á-â) when a letter key
+     * is held, which hijacks held game keys (Z, X, arrows-as-letters, ...)
+     * and can swallow the hold. Opt out app-wide before any NSWindow or
+     * text-input context exists; this is the native equivalent of Electron's
+     * systemPreferences.setUserDefault("ApplePressAndHoldEnabled", false). */
+    CFPreferencesSetAppValue(CFSTR("ApplePressAndHoldEnabled"),
+                             kCFBooleanFalse, kCFPreferencesCurrentApplication);
 #endif
 #ifdef _WIN32
     SetUnhandledExceptionFilter(crash_handler);
