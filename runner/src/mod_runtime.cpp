@@ -21,6 +21,13 @@
 #include <utility>
 #include <vector>
 
+#if defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
+
 namespace fs = std::filesystem;
 
 namespace NESRecomp {
@@ -104,6 +111,13 @@ struct HdPack {
     std::string directory;
     std::string patch;
     std::string patched_rom_crc32;
+    /* A content-free recipe may import the player's original Mesen download.
+     * No native code or creator assets are supplied by this descriptor. */
+    std::string source;
+    std::string resource_id;
+    std::string label;
+    std::string description;
+    bool require_patch = false;
 };
 
 struct Package {
@@ -132,6 +146,7 @@ struct PackageSelection {
     std::string version;
     std::map<std::string, FeatureSelection> features;
     std::map<std::string, std::string> resources;
+    std::map<std::string, std::string> imported_resources;
 };
 
 struct Diagnostic {
@@ -173,6 +188,14 @@ struct ResourceCache {
     bool populated = false;
 };
 
+struct ImportedHdPack {
+    fs::path directory;
+    std::string patch;
+    std::string patch_rom_sha1;
+    std::vector<std::string> supported_roms;
+    std::string source_digest;
+};
+
 std::map<std::string, RegisteredPlugin>& registered_plugins() {
     static std::map<std::string, RegisteredPlugin> value;
     return value;
@@ -202,6 +225,7 @@ struct Runtime {
     bool hd_locked = false;
     std::set<std::pair<std::string, std::string>> locked_features;
     std::map<std::string, ResourceCache> resource_cache;
+    std::map<std::string, ImportedHdPack> imported_hd_packs;
     std::string error;
     bool initialized = false;
     bool commit_succeeded = false;
@@ -236,6 +260,10 @@ bool snapshot_committed_external_rom_paths(Runtime& runtime,
                                            std::string* error);
 bool snapshot_hd_pack(Runtime& runtime, const Validation& plan,
                       const fs::path& rom, std::string* error);
+ResourceVerdict verify_hd_source(Runtime& runtime, const Package& package,
+                                 const HdPack& descriptor, bool force);
+bool import_mesen_pack(Runtime& runtime, const fs::path& source,
+                       ImportedHdPack& out, std::string* error);
 
 bool package_relative_path(const std::string& name) {
     if (name.empty() || name.find(':') != std::string::npos ||
@@ -672,6 +700,11 @@ bool read_manifest(const fs::path& path, Package& out, std::string* error) {
                 else if (key == "directory") parsed = string_field(hd_pack->directory);
                 else if (key == "patch") parsed = string_field(hd_pack->patch);
                 else if (key == "patched_rom_crc32") parsed = string_field(hd_pack->patched_rom_crc32);
+                else if (key == "source") parsed = string_field(hd_pack->source);
+                else if (key == "resource_id") parsed = string_field(hd_pack->resource_id);
+                else if (key == "label") parsed = string_field(hd_pack->label);
+                else if (key == "description") parsed = string_field(hd_pack->description);
+                else if (key == "require_patch") parsed = parse_bool(value, hd_pack->require_patch);
                 else known = false;
                 break;
             case Section::ExternalRom:
@@ -767,10 +800,16 @@ bool read_manifest(const fs::path& path, Package& out, std::string* error) {
         Feature* owner = nullptr;
         for (Feature& feature : out.features)
             if (feature.id == item.feature_id) owner = &feature;
-        if (!owner || !package_relative_path(item.directory) ||
-            (!item.patch.empty() && !package_relative_path(item.patch)) ||
-            (item.patch.empty() != item.patched_rom_crc32.empty()) ||
-            (!item.patch.empty() && !valid_crc32(item.patched_rom_crc32)) ||
+        const bool external = item.source == "mesen";
+        const bool descriptor_valid = external
+            ? item.directory.empty() && item.patch.empty() && valid_id(item.resource_id) &&
+              !item.label.empty() && resource_ids.insert(item.resource_id).second &&
+              (item.patched_rom_crc32.empty() || valid_crc32(item.patched_rom_crc32))
+            : item.source.empty() && item.resource_id.empty() && !item.require_patch && package_relative_path(item.directory) &&
+              (item.patch.empty() || package_relative_path(item.patch)) &&
+              (item.patch.empty() == item.patched_rom_crc32.empty()) &&
+              (item.patch.empty() || valid_crc32(item.patched_rom_crc32));
+        if (!owner || !descriptor_valid ||
             !hd_features.insert(item.feature_id).second) {
             set_error(error, "manifest has an invalid HD pack descriptor");
             return false;
@@ -1154,6 +1193,9 @@ bool load_state(Runtime& runtime, std::string* error) {
                        !current_resource.empty() && parse_string(value, parsed)) {
                 runtime.selections[current_package]
                     .resources[current_resource] = parsed;
+            } else if (key == "imported" && !current_package.empty() &&
+                       !current_resource.empty() && parse_string(value, parsed) && valid_sha1(parsed)) {
+                runtime.selections[current_package].imported_resources[current_resource] = parsed;
             }
             continue;
         }
@@ -1211,6 +1253,9 @@ bool save_state(Runtime& runtime, std::string* error) {
             file << "\n[[resource]]\npackage_id = " << quote_toml(package_id)
                  << "\nid = " << quote_toml(resource_id)
                  << "\npath = " << quote_toml(path) << "\n";
+            const auto imported = selection.imported_resources.find(resource_id);
+            if (imported != selection.imported_resources.end())
+                file << "imported = " << quote_toml(imported->second) << "\n";
         }
     }
     file.close();
@@ -1297,6 +1342,18 @@ std::string sha1_hex(const std::vector<uint8_t>& input) {
 
 /* Validate every path component, including directory links, before opening
  * package assets. The package root may be relocated without changing identity. */
+bool hd_path_is_link(const fs::path& path, std::error_code& ec) {
+    if (fs::is_symlink(fs::symlink_status(path, ec)) || ec) return true;
+#if defined(_WIN32)
+    const DWORD attributes = GetFileAttributesW(path.c_str());
+    if (attributes == INVALID_FILE_ATTRIBUTES) {
+        ec = std::error_code((int)GetLastError(), std::system_category()); return true;
+    }
+    if (attributes & FILE_ATTRIBUTE_REPARSE_POINT) return true;
+#endif
+    return false;
+}
+
 bool hd_asset_path(const Package& package, const std::string& relative,
                    fs::path& out, std::string* error) {
     if (!package_relative_path(relative)) {
@@ -1305,10 +1362,13 @@ bool hd_asset_path(const Package& package, const std::string& relative,
     }
     std::error_code ec;
     out = package.root;
+    if (hd_path_is_link(out, ec)) {
+        set_error(error, "HD pack root is missing or is a link"); return false;
+    }
     for (const auto& component : fs::path(relative)) {
         out /= component;
         const auto status = fs::symlink_status(out, ec);
-        if (ec || !fs::exists(status) || fs::is_symlink(status)) {
+        if (ec || !fs::exists(status) || hd_path_is_link(out, ec)) {
             set_error(error, "HD pack asset is missing or is a link: " + relative);
             return false;
         }
@@ -1360,16 +1420,30 @@ bool snapshot_hd_pack(Runtime& runtime, const Validation& plan,
             if (item.feature_id == plugin.feature_id) descriptor = &item;
         if (!descriptor) { set_error(error, "HD pack feature has no asset descriptor"); return false; }
         fs::path directory;
-        if (!hd_asset_path(*package, descriptor->directory, directory, error)) return false;
+        ImportedHdPack imported;
+        std::string patch_relative = descriptor->patch;
+        if (descriptor->source == "mesen") {
+            const ResourceVerdict verdict = verify_hd_source(runtime, *package, *descriptor, false);
+            const std::string key = external_rom_key(package->id, descriptor->feature_id, descriptor->resource_id);
+            const auto ready = runtime.imported_hd_packs.find(key);
+            if (!verdict.verified || ready == runtime.imported_hd_packs.end()) {
+                set_error(error, descriptor->label + ": " + verdict.status); return false;
+            }
+            imported = ready->second;
+            directory = imported.directory;
+            patch_relative = imported.patch;
+        } else if (!hd_asset_path(*package, descriptor->directory, directory, error)) return false;
         std::error_code ec;
         if (!fs::is_directory(directory, ec) || !fs::is_regular_file(directory / "hires.txt", ec)) {
             set_error(error, "HD pack directory must contain hires.txt"); return false;
         }
         std::vector<fs::path> files;
         uint64_t bytes = 0;
+        size_t entries = 0;
         for (fs::recursive_directory_iterator it(directory, ec), end; it != end && !ec; it.increment(ec)) {
             const auto status = it->symlink_status(ec);
-            if (ec || fs::is_symlink(status) || (!fs::is_regular_file(status) && !fs::is_directory(status))) {
+            if (ec || hd_path_is_link(it->path(), ec) || it.depth() > 8 || ++entries > kMaxArchiveFiles ||
+                (!fs::is_regular_file(status) && !fs::is_directory(status))) {
                 set_error(error, "HD pack assets must be ordinary files and directories"); return false;
             }
             if (!fs::is_regular_file(status)) continue;
@@ -1392,23 +1466,36 @@ bool snapshot_hd_pack(Runtime& runtime, const Validation& plan,
             add(file.lexically_relative(directory).generic_string()); add(sha1_hex(content));
         }
         std::vector<uint8_t> payload;
-        if (!descriptor->patch.empty()) {
+        if (!patch_relative.empty()) {
             fs::path patch_path;
             std::vector<uint8_t> image;
-            if (!hd_asset_path(*package, descriptor->patch, patch_path, error) ||
+            Package asset_owner = *package;
+            if (descriptor->source == "mesen") asset_owner.root = directory;
+            if (!hd_asset_path(asset_owner, patch_relative, patch_path, error) ||
                 !read_file(patch_path, content, error)) return false;
-            add(descriptor->patch); add(sha1_hex(content));
+            add(patch_relative); add(sha1_hex(content));
             if (rom.empty() || !read_file(rom, image, error) || image.size() < 16 ||
                 std::memcmp(image.data(), "NES\x1a", 4)) {
                 set_error(error, "HD pack patch requires the verified stock iNES ROM"); return false;
             }
+            if (!imported.patch_rom_sha1.empty() && sha1_hex(image) != imported.patch_rom_sha1) {
+                set_error(error, "The selected Mesen pack requires a different original ROM revision"); return false;
+            }
             const size_t start = 16 + ((image[6] & 4) ? 512 : 0);
             if (start > image.size() || !hd_apply_ips(content, image, start, error)) return false;
             char crc[9]; std::snprintf(crc, sizeof(crc), "%08x", crc32_compute(image.data()+16, image.size()-16));
-            if (descriptor->patched_rom_crc32 != crc) {
+            if (!descriptor->patched_rom_crc32.empty() && descriptor->patched_rom_crc32 != crc) {
                 set_error(error, "HD pack patched ROM does not match its declared CRC32"); return false;
             }
             payload.assign(image.begin() + start, image.end());
+        } else if (descriptor->require_patch || !descriptor->patched_rom_crc32.empty()) {
+            set_error(error, "The selected Mesen pack is missing the IPS required by this compatibility recipe"); return false;
+        } else if (!imported.supported_roms.empty()) {
+            std::vector<uint8_t> image;
+            if (rom.empty() || !read_file(rom, image, error) ||
+                std::find(imported.supported_roms.begin(), imported.supported_roms.end(), sha1_hex(image)) == imported.supported_roms.end()) {
+                set_error(error, "The selected Mesen pack does not support this original ROM revision"); return false;
+            }
         }
         const std::string hash = sha1_hex(identity);
         runtime.committed_hd_directory = directory.string();
@@ -1574,6 +1661,15 @@ bool feature_resources_valid(Runtime& runtime, const Package& package,
     bool valid = true;
     for (const HdPack& pack : package.hd_packs) {
         if (pack.feature_id != feature.id) continue;
+        if (pack.source == "mesen") {
+            const ResourceVerdict verdict = verify_hd_source(runtime, package, pack, force);
+            if (!verdict.verified) {
+                valid = false;
+                if (diagnostics) diagnostics->push_back({package.id,feature.id,{},{},"hd-pack:source",
+                    pack.label + ": " + verdict.status});
+            }
+            continue;
+        }
         fs::path path;
         std::string error;
         bool assets = hd_asset_path(package, pack.directory + "/hires.txt", path, &error);
@@ -1651,10 +1747,19 @@ bool safe_archive_name(const std::string& name) {
     if (name.size() >= 2 &&
         std::isalpha((unsigned char)name[0]) && name[1] == ':')
         return false;
-    const fs::path path = fs::path(name).lexically_normal();
+    const fs::path path = fs::path(name);
     for (const auto& part : path) {
         const std::string text = part.string();
-        if (text == ".." || text == "." || text.empty()) return false;
+        if (text == ".." || text == "." || text == ".git" || text.empty() ||
+            text.back() == '.' || text.back() == ' ') return false;
+        if (std::any_of(text.begin(), text.end(), [](unsigned char c) {
+            return c < 32 || std::strchr("<>:\"|?*", c);
+        })) return false;
+        std::string base = text.substr(0, text.find('.'));
+        std::transform(base.begin(), base.end(), base.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+        if (base == "con" || base == "prn" || base == "aux" || base == "nul" ||
+            (base.size() == 4 && (base.substr(0, 3) == "com" || base.substr(0, 3) == "lpt") &&
+             base[3] >= '1' && base[3] <= '9')) return false;
     }
     return true;
 }
@@ -1688,6 +1793,7 @@ bool parse_zip(const std::vector<uint8_t>& bytes,
     }
     size_t at = central_offset;
     uint64_t expanded = 0;
+    std::set<std::string> names;
     for (uint32_t i = 0; i < count; ++i) {
         if (at + 46 > bytes.size() ||
             le32(bytes.data() + at) != 0x02014b50u) {
@@ -1719,7 +1825,11 @@ bool parse_zip(const std::vector<uint8_t>& bytes,
         entry.directory = !entry.name.empty() && entry.name.back() == '/';
         const std::string checked = entry.directory
             ? entry.name.substr(0, entry.name.size() - 1) : entry.name;
-        if (!safe_archive_name(checked)) {
+        std::string identity = checked;
+        std::transform(identity.begin(), identity.end(), identity.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+        const uint32_t attributes = le32(bytes.data() + at + 38);
+        if (!safe_archive_name(checked) || !names.insert(identity).second ||
+            ((attributes >> 16) & 0170000u) == 0120000u || (attributes & 0x400u)) {
             set_error(error, "unsafe ZIP path: " + entry.name);
             return false;
         }
@@ -2013,6 +2123,224 @@ bool extract_zip(const std::vector<uint8_t>& bytes,
         }
     }
     return true;
+}
+
+/* User downloads are imported privately; distributable .nesmod recipes contain
+ * only the integration contract. Discovery is by hires.txt, never a game or
+ * archive filename. A cache contains just the chosen pack and creator notices. */
+struct MesenBudget { uint64_t bytes = 0; size_t entries = 0; };
+
+bool mesen_files(const fs::path& root, std::vector<fs::path>& files,
+                 std::string* error) {
+    std::error_code ec;
+    if (hd_path_is_link(root, ec)) { set_error(error, "Mesen input directory must not be a link"); return false; }
+    uint64_t bytes = 0; size_t count = 0;
+    for (fs::recursive_directory_iterator it(root, ec), end; it != end && !ec; it.increment(ec)) {
+        const auto status = it->symlink_status(ec);
+        if (ec || hd_path_is_link(it->path(), ec) ||
+            (!fs::is_regular_file(status) && !fs::is_directory(status)) || it.depth() > 8 ||
+            ++count > kMaxArchiveFiles) {
+            set_error(error, "Mesen pack has links, unsupported files or too many directory entries"); return false;
+        }
+        if (!safe_archive_name(it->path().lexically_relative(root).generic_string())) {
+            set_error(error, "Mesen pack contains an unsafe asset path"); return false;
+        }
+        if (!fs::is_regular_file(status)) continue;
+        bytes += it->file_size(ec);
+        if (ec || bytes > kMaxArchiveBytes) { set_error(error, "Mesen pack exceeds the size limit"); return false; }
+        files.push_back(it->path());
+    }
+    if (ec) { set_error(error, "Cannot inspect Mesen pack: " + ec.message()); return false; }
+    std::sort(files.begin(), files.end());
+    return true;
+}
+
+bool extract_mesen_zip(const std::vector<uint8_t>& bytes, const fs::path& target,
+                       MesenBudget& budget, std::string* error) {
+    std::vector<ZipEntry> entries;
+    if (!parse_zip(bytes, entries, error)) return false;
+    budget.entries += entries.size();
+    for (const auto& entry : entries) budget.bytes += entry.size;
+    if (budget.entries > kMaxArchiveFiles || budget.bytes > kMaxArchiveBytes) {
+        set_error(error, "Nested Mesen download exceeds the total size/file limit"); return false;
+    }
+    return extract_zip(bytes, entries, target, error);
+}
+
+bool discover_mesen(const fs::path& directory, const fs::path& scratch,
+                     MesenBudget& budget, unsigned depth,
+                     std::vector<fs::path>& candidates, std::vector<fs::path>& notices,
+                     std::string* error) {
+    std::vector<fs::path> files;
+    if (!mesen_files(directory, files, error)) return false;
+    const size_t before = candidates.size();
+    for (const auto& file : files) {
+        if (file.filename() == "hires.txt") candidates.push_back(file.parent_path());
+        const std::string extension = file.extension().string();
+        if (file.filename() != "hires.txt" && (extension == ".txt" || extension == ".md" ||
+            file.filename() == "LICENSE" || file.filename() == "COPYING")) notices.push_back(file);
+    }
+    if (fs::is_regular_file(directory / "hires.txt")) {
+        candidates.resize(before); candidates.push_back(directory); return true;
+    }
+    if (candidates.size() != before) return true;
+    for (const auto& file : files) {
+        std::string extension = file.extension().string();
+        std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+        if (extension != ".zip") continue;
+        if (depth >= 3) { set_error(error, "Mesen download has too many nested ZIP levels"); return false; }
+        std::vector<uint8_t> bytes;
+        if (!read_file(file, bytes, error)) return false;
+        const fs::path target = scratch / ("nested-" + std::to_string(budget.entries));
+        if (!extract_mesen_zip(bytes, target, budget, error) ||
+            !discover_mesen(target, scratch, budget, depth + 1, candidates, notices, error)) return false;
+    }
+    return true;
+}
+
+bool mesen_metadata(const fs::path& directory, ImportedHdPack& out, std::string* error) {
+    std::ifstream input(directory / "hires.txt");
+    if (!input) { set_error(error, "The Mesen pack has no hires.txt"); return false; }
+    out.directory = directory; out.patch.clear(); out.patch_rom_sha1.clear(); out.supported_roms.clear();
+    bool version = false; std::string line;
+    while (std::getline(input, line)) {
+        line = trim(line);
+        if (line.compare(0, 3, "\xef\xbb\xbf") == 0) line.erase(0, 3);
+        if (line.rfind("<ver>", 0) == 0) version = true;
+        if (line.rfind("<supportedRom>", 0) == 0) {
+            std::string hash = trim(line.substr(14));
+            std::transform(hash.begin(), hash.end(), hash.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+            if (valid_sha1(hash)) out.supported_roms.push_back(hash);
+        }
+        if (line.rfind("<patch>", 0) != 0) continue;
+        const std::string value = line.substr(7);
+        const size_t comma = value.find(',');
+        if (!out.patch.empty() || comma == std::string::npos) {
+            set_error(error, "The Mesen pack must declare one valid IPS patch"); return false;
+        }
+        out.patch = trim(value.substr(0, comma)); out.patch_rom_sha1 = trim(value.substr(comma + 1));
+        std::transform(out.patch_rom_sha1.begin(), out.patch_rom_sha1.end(), out.patch_rom_sha1.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+        Package assets; assets.root = directory; fs::path patch;
+        if (!package_relative_path(out.patch) || !valid_sha1(out.patch_rom_sha1) ||
+            !hd_asset_path(assets, out.patch, patch, error) || !fs::is_regular_file(patch)) {
+            set_error(error, "The Mesen pack has an invalid or missing IPS patch"); return false;
+        }
+    }
+    if (!version) { set_error(error, "Selected download is not a Mesen HD pack"); return false; }
+    return true;
+}
+
+bool cached_mesen(Runtime& runtime, const std::string& digest, ImportedHdPack& out, std::string* error) {
+    if (!valid_sha1(digest)) return false;
+    Package cache; cache.root = runtime.root;
+    fs::path pack;
+    if (!hd_asset_path(cache, "imports/" + digest + "/pack/hires.txt", pack, error)) return false;
+    if (!mesen_metadata(pack.parent_path(), out, error)) return false;
+    out.source_digest = digest;
+    return true;
+}
+
+bool import_mesen_pack(Runtime& runtime, const fs::path& selected,
+                       ImportedHdPack& out, std::string* error) {
+    std::error_code ec;
+    fs::path source = selected;
+    if (source.filename() == "hires.txt") source = source.parent_path();
+    source = fs::absolute(source, ec);
+    if (ec || source == source.root_path()) { set_error(error, "Select one Mesen pack download"); return false; }
+    const fs::path imports = runtime.root / "imports";
+    fs::create_directories(imports, ec);
+    if (ec || hd_path_is_link(imports, ec)) {
+        set_error(error, "Cannot create private Mesen imports directory"); return false;
+    }
+    const fs::path scratch = imports / (".importing-" + std::to_string(
+        std::chrono::high_resolution_clock::now().time_since_epoch().count()));
+    if (!fs::create_directory(scratch, ec) || ec) { set_error(error, "Cannot create Mesen import staging"); return false; }
+    struct Cleanup { fs::path path; ~Cleanup() { std::error_code ignored; fs::remove_all(path, ignored); } } cleanup{scratch};
+    MesenBudget budget; std::vector<fs::path> candidates, notices;
+    std::string digest;
+    if (fs::is_directory(source, ec)) {
+        std::vector<fs::path> files;
+        if (!mesen_files(source, files, error)) return false;
+        std::vector<uint8_t> identity, content;
+        for (const auto& file : files) {
+            if (!read_file(file, content, error)) return false;
+            const std::string value = file.lexically_relative(source).generic_string() + ":" + sha1_hex(content);
+            identity.insert(identity.end(), value.begin(), value.end()); identity.push_back(0);
+        }
+        digest = sha1_hex(identity);
+        if (cached_mesen(runtime, digest, out, nullptr)) return true;
+        if (!discover_mesen(source, scratch, budget, 0, candidates, notices, error)) return false;
+    } else {
+        std::vector<uint8_t> bytes;
+        if (!read_file(source, bytes, error)) return false;
+        digest = sha1_hex(bytes);
+        if (cached_mesen(runtime, digest, out, nullptr)) return true;
+        const fs::path unpacked = scratch / "input";
+        if (!extract_mesen_zip(bytes, unpacked, budget, error)) return false;
+        bytes.clear(); bytes.shrink_to_fit();
+        if (!discover_mesen(unpacked, scratch, budget, 1, candidates, notices, error)) return false;
+    }
+    if (candidates.size() != 1) {
+        set_error(error, candidates.empty() ? "No Mesen HD pack found in this download" :
+            "Download contains multiple HD packs; select the desired inner pack ZIP"); return false;
+    }
+    ImportedHdPack metadata;
+    if (!mesen_metadata(candidates[0], metadata, error)) return false;
+    const fs::path ready = scratch / "ready";
+    fs::create_directories(ready / "pack", ec);
+    if (ec) { set_error(error, "Cannot prepare imported Mesen assets"); return false; }
+    std::vector<fs::path> files;
+    if (!mesen_files(candidates[0], files, error)) return false;
+    for (const auto& file : files) {
+        const auto relative = file.lexically_relative(candidates[0]);
+        const fs::path destination = ready / "pack" / relative;
+        fs::create_directories(destination.parent_path(), ec);
+        if (!ec) fs::copy_file(file, destination, ec);
+        if (ec) { set_error(error, "Cannot copy imported Mesen assets: " + ec.message()); return false; }
+    }
+    fs::create_directory(ready / "notices", ec);
+    size_t notice_index = 0;
+    for (const auto& notice : notices) {
+        fs::copy_file(notice, ready / "notices" / (std::to_string(notice_index++) + "-" + notice.filename().string()), ec);
+        if (ec) { set_error(error, "Cannot preserve Mesen creator notices: " + ec.message()); return false; }
+    }
+    const fs::path destination = imports / digest;
+    fs::rename(ready, destination, ec);
+    if (ec) { set_error(error, "Cannot publish private Mesen import: " + ec.message()); return false; }
+    return cached_mesen(runtime, digest, out, error);
+}
+
+ResourceVerdict verify_hd_source(Runtime& runtime, const Package& package,
+                                 const HdPack& descriptor, bool force) {
+    ResourceVerdict verdict;
+    auto& selection = package_selection(runtime, package);
+    const std::string key = external_rom_key(package.id, descriptor.feature_id, descriptor.resource_id);
+    const auto selected = selection.resources.find(descriptor.resource_id);
+    if (selected == selection.resources.end() || selected->second.empty()) {
+        verdict.status = "Choose your original Mesen pack download"; return verdict;
+    }
+    ResourceCache& ui_cache = runtime.resource_cache["hd-source:" + package.version + ":" + key];
+    if (!force && ui_cache.populated && ui_cache.path == selected->second) return ui_cache.verdict;
+    ImportedHdPack imported; std::string error;
+    const auto cached = selection.imported_resources.find(descriptor.resource_id);
+    bool ready = false;
+    try {
+        ready = cached != selection.imported_resources.end() && cached_mesen(runtime, cached->second, imported, &error);
+        if (!ready) ready = import_mesen_pack(runtime, fs::u8path(selected->second), imported, &error);
+    } catch (const fs::filesystem_error& failure) {
+        error = "Cannot import selected Mesen download: " + std::string(failure.what());
+    }
+    if (!ready || ((descriptor.require_patch || !descriptor.patched_rom_crc32.empty()) && imported.patch.empty())) {
+        verdict.status = !ready ? error : "This compatibility mod requires a pack with its IPS patch";
+        runtime.imported_hd_packs.erase(key);
+        ui_cache.path = selected->second; ui_cache.verdict = verdict; ui_cache.populated = true;
+        return verdict;
+    }
+    selection.imported_resources[descriptor.resource_id] = imported.source_digest;
+    runtime.imported_hd_packs[key] = std::move(imported);
+    verdict.verified = true; verdict.status = "Imported and ready";
+    ui_cache.path = selected->second; ui_cache.verdict = verdict; ui_cache.populated = true;
+    return verdict;
 }
 
 bool install_archive(Runtime& runtime, const fs::path& archive,
@@ -2511,7 +2839,8 @@ int provider_feature_resource_count(void*, const char* package_id,
         package->external_roms.begin(), package->external_roms.end(),
         [&](const ExternalRom& resource) {
             return resource.feature_id == feature_id;
-        });
+        }) + (int)std::count_if(package->hd_packs.begin(), package->hd_packs.end(),
+            [&](const HdPack& pack) { return pack.source == "mesen" && pack.feature_id == feature_id; });
 }
 
 int provider_feature_resource_get(
@@ -2548,6 +2877,22 @@ int provider_feature_resource_get(
         out->verified = verdict.verified ? 1 : 0;
         return 1;
     }
+    for (const HdPack& pack : package->hd_packs) {
+        if (pack.source != "mesen" || pack.feature_id != feature_id) continue;
+        if (index-- != 0) continue;
+        std::memset(out, 0, sizeof(*out));
+        copy_text(out->id, pack.resource_id); copy_text(out->label, pack.label);
+        copy_text(out->description, pack.description);
+        const auto& resources = package_selection(state(), *package).resources;
+        const auto selected = resources.find(pack.resource_id);
+        if (selected != resources.end()) copy_text(out->path, selected->second);
+        const ResourceVerdict verdict = verify_hd_source(state(), *package, pack, false);
+        copy_text(out->status, verdict.status);
+        copy_text(out->file_patterns, "*.zip,hires.txt");
+        copy_text(out->file_description, "Mesen HD pack downloads");
+        out->required = 1; out->verified = verdict.verified ? 1 : 0;
+        return 1;
+    }
     return 0;
 }
 
@@ -2557,6 +2902,21 @@ int provider_feature_resource_set_path(
     if (!package_id || !feature_id || !resource_id || !path) return 0;
     const Package* package = selected_package(state(), package_id);
     if (!package || !find_feature(*package, feature_id)) return 0;
+    for (const HdPack& pack : package->hd_packs) {
+        if (pack.source != "mesen" || pack.feature_id != feature_id || pack.resource_id != resource_id) continue;
+        if (nes_mod_feature_requires_restart(package_id, feature_id)) {
+            state().error = "Choose the HD pack in the launcher, then restart the game."; return 0;
+        }
+        auto& selection = package_selection(state(), *package);
+        selection.resources[resource_id] = path;
+        selection.imported_resources.erase(resource_id);
+        state().resource_cache.clear();
+        state().imported_hd_packs.erase(external_rom_key(package_id, feature_id, resource_id));
+        const ResourceVerdict verdict = verify_hd_source(state(), *package, pack, true);
+        refresh_validation();
+        state().error = verdict.verified ? std::string() : pack.label + ": " + verdict.status;
+        return verdict.verified ? 1 : 0;
+    }
     const auto resource = std::find_if(
         package->external_roms.begin(), package->external_roms.end(),
         [&](const ExternalRom& candidate) {
