@@ -56,7 +56,9 @@ static inline uint8_t cpu_ram_read_value(uint16_t pc, uint16_t addr, uint8_t val
     if (addr < 0x2000 && cyc_cpu_ram_read_policy) {
         /* The physical access precedes the trusted operand observer. Publish
          * its complete device time before the callback inspects the machine. */
+#if NESRECOMP_NATIVE_INTERVALS
         hw_native_flush();
+#endif
         return cyc_cpu_ram_read_policy(pc, (uint16_t)(addr & 0x7ff), value);
     }
     return value;

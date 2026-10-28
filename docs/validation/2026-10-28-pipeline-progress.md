@@ -197,3 +197,13 @@ baseline warnings do not disqualify the optimization. They remain recorded
 separately from new-path output equality and are not silently called passes.
 The remaining gates include the corrected final binary, other affected titles
 and real feature profiles, per-game non-regression, and final owner builds.
+
+## Unsupported-board cost
+
+Generated title projects now classify the immutable full NES2 mapper number
+once during preparation. NROM/MMC1 retain runtime deadline qualification;
+unsupported boards compile the per-access cursor checks, generic-cycle flush
+and dispatch setup out. Standalone multi-board hosts keep runtime qualification.
+This avoids charging SMB3/MMC3 for an optimization package it cannot yet use.
+Header fixtures cover NROM/MMC1/MMC3 and extended NES2 mapper numbers whose low
+byte resembles a supported board. Actual built-game neutrality remains a gate.

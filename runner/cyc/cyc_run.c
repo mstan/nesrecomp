@@ -83,9 +83,13 @@ static void dispatch(void) {
             cpu_jam_cycle();
         } else if (cyc_run_native && !hw_prg_modified && cyc_native_has(cpu.pc)) {
             uint64_t before = cyc_cycle_count();
+#if NESRECOMP_NATIVE_INTERVALS
             hw_native_begin();
+#endif
             cyc_native_run();
+#if NESRECOMP_NATIVE_INTERVALS
             hw_native_end();
+#endif
             cyc_run_native_cycles += cyc_cycle_count() - before;
         } else if (cyc_run_native && !hw_prg_modified && (view = cyc_ramview_find(cpu.pc)) >= 0) {
             /* Code in RAM that a compiled view covers, as RAM holds it now. */

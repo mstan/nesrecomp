@@ -194,7 +194,7 @@ unsigned hw_native_interval_limit(void)
 void hw_native_begin(void)
 {
     hw_native_interval.ram = hw.ram;
-    hw_native_interval.enabled = !hw_isolated && !cyc_trace_enabled &&
+    hw_native_interval.enabled = NESRECOMP_NATIVE_INTERVALS && !hw_isolated && !cyc_trace_enabled &&
         !hw_pal() && !hw_extra_timing.extra_scanlines &&
         (hw_cart.mapper == 0 || hw_cart.mapper == 1) &&
         !hw_prg_data_modified && !cyc_mod_rom_read_overrides &&
@@ -250,7 +250,9 @@ void hw_native_interval_run(unsigned cycles)
 
 void hw_cycle_start(uint16_t addr, HwCycleKind kind)
 {
+#if NESRECOMP_NATIVE_INTERVALS
     hw_native_flush();
+#endif
     hw.cpu_addr = addr;
     hw.cpu_reading = kind == HW_READ || kind == HW_FETCH;
     cpu_opcode_fetch = kind == HW_FETCH;
@@ -634,7 +636,14 @@ bool cyc_debug_peek(uint16_t addr, uint8_t *value)
 
 void cyc_set_controller(int port, uint8_t buttons) { hw_set_controller(port, buttons); }
 
-uint64_t cyc_cycle_count(void) { return hw.cycles + hw_native_interval.pending; }
+uint64_t cyc_cycle_count(void)
+{
+#if NESRECOMP_NATIVE_INTERVALS
+    return hw.cycles + hw_native_interval.pending;
+#else
+    return hw.cycles;
+#endif
+}
 
 bool cyc_set_region(CycRegion region)
 {

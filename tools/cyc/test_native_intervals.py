@@ -1,12 +1,32 @@
 """Compare active native device intervals with the coupled master clock."""
 import argparse
+from pathlib import Path
 import subprocess
+import tempfile
+
+from prepare_project import native_interval_board
+
+
+def check_build_time_boards():
+    with tempfile.TemporaryDirectory(prefix='nes-native-board-') as folder:
+        image = Path(folder) / 'fixture.nes'
+        for mapper, expected in ((0, '1'), (1, '1'), (4, '0'), (256, '0'), (257, '0')):
+            header = bytearray(16)
+            header[:4] = b'NES\x1a'
+            header[6] = (mapper & 15) << 4
+            header[7] = (mapper & 0xf0) | 0x08
+            header[8] = mapper >> 8
+            image.write_bytes(header)
+            assert native_interval_board(image, False) == expected, mapper
+        image.write_bytes(b'not an iNES image')
+        assert native_interval_board(image, False) == '0'
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--probe', required=True)
     args = parser.parse_args()
+    check_build_time_boards()
     for modes in (('--reference', ''), ('--cpu-reference', '--cpu')):
         outputs = []
         for mode in modes:

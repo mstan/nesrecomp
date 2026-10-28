@@ -25,6 +25,12 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+/* Generated title projects qualify their immutable board once at build time.
+ * Standalone multi-board hosts keep runtime qualification. */
+#ifndef NESRECOMP_NATIVE_INTERVALS
+#define NESRECOMP_NATIVE_INTERVALS 1
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -68,12 +74,16 @@ bool hw_native_prepare(void);
 
 static inline bool hw_native_reserve(void)
 {
+#if NESRECOMP_NATIVE_INTERVALS
     if (!hw_native_interval.enabled) return false;
     if (!hw_native_interval.credit && !hw_native_prepare()) return false;
     --hw_native_interval.credit;
     ++hw_native_interval.pending;
     hw_dma_stalls = 0;
     return true;
+#else
+    return false;
+#endif
 }
 
 static inline void hw_native_bus(uint16_t addr, uint8_t value, HwCycleKind kind)
