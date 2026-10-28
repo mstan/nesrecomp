@@ -60,6 +60,17 @@ add_test(NAME cyc_ppu_kernel_test COMMAND cyc_ppu_kernel_test)
 add_executable(cyc_hdpack_state_test tests/hdpack_state_selftest.c)
 add_test(NAME cyc_hdpack_state_test COMMAND cyc_hdpack_state_test)
 
+foreach(kind candidate reference)
+    add_executable(cyc_hdpack_plan_${kind} tests/hdpack_plan_probe.c)
+    target_include_directories(cyc_hdpack_plan_${kind} PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS}
+        ${CMAKE_CURRENT_SOURCE_DIR}/../src ${CMAKE_CURRENT_SOURCE_DIR}/../external)
+endforeach()
+target_compile_definitions(cyc_hdpack_plan_reference PRIVATE NESRECOMP_HDPACK_PLAN_REFERENCE=1)
+add_test(NAME cyc_hdpack_plans COMMAND ${Python3_EXECUTABLE}
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_hdpack_plan.py
+    --reference $<TARGET_FILE:cyc_hdpack_plan_reference>
+    --candidate $<TARGET_FILE:cyc_hdpack_plan_candidate>)
+
 # Every cartridge board source; each test that links the boards uses this list.
 set(CYC_TEST_BOARD_SOURCES hw_mapper.c hw_fds.c hw_fds_audio.c hw_fds_hle.c vendor/emu2413/emu2413.c)
 
@@ -107,6 +118,7 @@ if(SDL2_FOUND)
     add_test(NAME cyc_rb_digest_test COMMAND cyc_rb_digest_test)
     include("${CMAKE_CURRENT_SOURCE_DIR}/hdpack.cmake")
     add_executable(cyc_hdpack_probe ${NESRECOMP_CYC_SOURCES} cyc_native_none.c hdpack_probe.c cyc_presentation.c)
+    target_compile_definitions(cyc_hdpack_probe PRIVATE NESRECOMP_HDPACK_LAYER_PLANS=1)
     target_include_directories(cyc_hdpack_probe PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})
     target_link_libraries(cyc_hdpack_probe PRIVATE ${NESRECOMP_CYC_LIBRARIES})
     if(MSVC)

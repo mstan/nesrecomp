@@ -172,6 +172,12 @@ static int       s_hud_rows = 0;        /* top native rows masked by an opaque H
 
 /* ── Small helpers ────────────────────────────────────────────────────────── */
 
+#if defined(NESRECOMP_HDPACK_LAYER_PLANS) && NESRECOMP_HDPACK_LAYER_PLANS
+static void hd_layer_prepare(void);
+static void hd_layer_unload(void);
+static int hd_layer_upscale(const uint32_t *, int, uint32_t *, int, int, int);
+#endif
+
 static int clampi(int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi : v; }
 
 static int hex_nib(char c) {
@@ -727,6 +733,9 @@ int hdpack_resize(int native_w) {
 }
 
 void hdpack_unload(void) {
+#if defined(NESRECOMP_HDPACK_LAYER_PLANS) && NESRECOMP_HDPACK_LAYER_PLANS
+    hd_layer_unload();
+#endif
     for (int i = 0; i < HD_NBUCKETS; i++) {
         HdAlias *a = s_alias_buckets[i];
         while (a) { HdAlias *nx = a->next; free(a); a = nx; }
@@ -778,6 +787,9 @@ int hdpack_load(const char *dir, int is_chr_ram_game, int native_w) {
     while (fgets(line, sizeof(line), f)) parse_line(line);
     fclose(f);
     finalize_backgrounds();
+#if defined(NESRECOMP_HDPACK_LAYER_PLANS) && NESRECOMP_HDPACK_LAYER_PLANS
+    hd_layer_prepare();
+#endif
 
     if (s_all_count == 0 && s_bg_count == 0) {
         fprintf(stderr, "[HDPack] %s: no usable tiles or backgrounds "
@@ -1129,6 +1141,9 @@ void hdpack_upscale(const uint32_t *native_fb, int native_w, uint32_t *hd_buf) {
     int hide_orig = s_disable_orig || s_opt_hide_orig;
 
     eval_backgrounds_for_frame();
+#if defined(NESRECOMP_HDPACK_LAYER_PLANS) && NESRECOMP_HDPACK_LAYER_PLANS
+    if (hd_layer_upscale(native_fb, native_w, hd_buf, s, hd_w, hide_orig)) return;
+#endif
 
     for (int sy = 0; sy < 240; sy++) {
         for (int sx = 0; sx < native_w; sx++) {
@@ -1180,3 +1195,7 @@ void hdpack_upscale(const uint32_t *native_fb, int native_w, uint32_t *hd_buf) {
         }
     }
 }
+
+#if defined(NESRECOMP_HDPACK_LAYER_PLANS) && NESRECOMP_HDPACK_LAYER_PLANS
+#include "hdpack_layered.inc"
+#endif
