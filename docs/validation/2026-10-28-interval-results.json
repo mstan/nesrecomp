@@ -336,6 +336,480 @@
       "classification": "neutral-inconclusive",
       "reason": "Interval path compiled out, zero interval cycles; mixed pairs and large load drift mean raw +18.02% is not a demonstrated optimization gain.",
       "raw_file": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\local-smb3-interval-v1d\\evidence\\performance.json"
+    },
+    {
+      "batch": "NAS corrected package",
+      "title": "metroid",
+      "host": "SERVER",
+      "logical_processors": 4,
+      "affinity_mask": 4,
+      "preflight_core_busy": [
+        0.3125,
+        0.3515625,
+        0.30859375,
+        0.34375
+      ],
+      "first_frame": 1801,
+      "end_frame": 3001,
+      "median_cpu_seconds": {
+        "reference": 10.875,
+        "candidate": 9.328125
+      },
+      "raw_median_cpu_reduction_percent": 14.224137931034486,
+      "paired_cpu_reduction_percent": [
+        14.10071942446043,
+        14.347202295552364,
+        14.511494252873558,
+        16.315049226441637,
+        13.314037626628073
+      ],
+      "faster_candidate_pairs": 5,
+      "pairs": [
+        {
+          "pair": 0,
+          "reference_cpu_seconds": 10.859375,
+          "candidate_cpu_seconds": 9.328125,
+          "cpu_reduction_percent": 14.10071942446043,
+          "reference_wall_seconds": 11.308922199998051,
+          "candidate_wall_seconds": 10.135516799986362
+        },
+        {
+          "pair": 1,
+          "reference_cpu_seconds": 10.890625,
+          "candidate_cpu_seconds": 9.328125,
+          "cpu_reduction_percent": 14.347202295552364,
+          "reference_wall_seconds": 11.622963699977845,
+          "candidate_wall_seconds": 9.553518899949268
+        },
+        {
+          "pair": 2,
+          "reference_cpu_seconds": 10.875,
+          "candidate_cpu_seconds": 9.296875,
+          "cpu_reduction_percent": 14.511494252873558,
+          "reference_wall_seconds": 11.20036970009096,
+          "candidate_wall_seconds": 9.626117500010878
+        },
+        {
+          "pair": 3,
+          "reference_cpu_seconds": 11.109375,
+          "candidate_cpu_seconds": 9.296875,
+          "cpu_reduction_percent": 16.315049226441637,
+          "reference_wall_seconds": 11.710259500192478,
+          "candidate_wall_seconds": 9.928150200052187
+        },
+        {
+          "pair": 4,
+          "reference_cpu_seconds": 10.796875,
+          "candidate_cpu_seconds": 9.359375,
+          "cpu_reduction_percent": 13.314037626628073,
+          "reference_wall_seconds": 11.187911599874496,
+          "candidate_wall_seconds": 9.628840599907562
+        }
+      ],
+      "classification": "positive",
+      "reason": "Five order-balanced pairs faster, active interval participation and exact checked output.",
+      "raw_file": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\nas-metroid-current-v1d\\evidence\\performance.json"
+    },
+    {
+      "batch": "Workstation corrected package",
+      "title": "metroid",
+      "host": "DESKTOP-HN15M1H",
+      "logical_processors": 16,
+      "affinity_mask": 1,
+      "preflight_core_busy": [
+        0.69140625,
+        0.734375,
+        0.890625,
+        0.85546875,
+        0.79296875,
+        0.77734375,
+        0.76171875,
+        0.8203125,
+        0.87109375,
+        0.875,
+        0.78125,
+        0.81640625,
+        0.8359375,
+        0.9140625,
+        0.69921875,
+        0.71484375
+      ],
+      "first_frame": 1801,
+      "end_frame": 3001,
+      "median_cpu_seconds": {
+        "reference": 5.359375,
+        "candidate": 4.46875
+      },
+      "raw_median_cpu_reduction_percent": 16.618075801749267,
+      "paired_cpu_reduction_percent": [
+        17.201166180758023,
+        20.420420420420417,
+        17.101449275362324,
+        15.297450424929181,
+        -2.9325513196480912
+      ],
+      "faster_candidate_pairs": 4,
+      "pairs": [
+        {
+          "pair": 0,
+          "reference_cpu_seconds": 5.359375,
+          "candidate_cpu_seconds": 4.4375,
+          "cpu_reduction_percent": 17.201166180758023,
+          "reference_wall_seconds": 7.71630880003795,
+          "candidate_wall_seconds": 5.944704700028524
+        },
+        {
+          "pair": 1,
+          "reference_cpu_seconds": 5.203125,
+          "candidate_cpu_seconds": 4.140625,
+          "cpu_reduction_percent": 20.420420420420417,
+          "reference_wall_seconds": 6.457582200062461,
+          "candidate_wall_seconds": 5.14491079992149
+        },
+        {
+          "pair": 2,
+          "reference_cpu_seconds": 5.390625,
+          "candidate_cpu_seconds": 4.46875,
+          "cpu_reduction_percent": 17.101449275362324,
+          "reference_wall_seconds": 7.894606899935752,
+          "candidate_wall_seconds": 5.535347400000319
+        },
+        {
+          "pair": 3,
+          "reference_cpu_seconds": 5.515625,
+          "candidate_cpu_seconds": 4.671875,
+          "cpu_reduction_percent": 15.297450424929181,
+          "reference_wall_seconds": 7.183503499953076,
+          "candidate_wall_seconds": 6.740447500022128
+        },
+        {
+          "pair": 4,
+          "reference_cpu_seconds": 5.328125,
+          "candidate_cpu_seconds": 5.484375,
+          "cpu_reduction_percent": -2.9325513196480912,
+          "reference_wall_seconds": 7.075134999933653,
+          "candidate_wall_seconds": 7.855525400023907
+        }
+      ],
+      "classification": "neutral-inconclusive",
+      "reason": "Four substantial faster pairs and one candidate leg 2.9% slower; observed median reduction16.62% retained with changing-load caveat, not presented as an unqualified local win.",
+      "raw_file": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\local-metroid-interval-v1d\\evidence\\performance.json"
+    },
+    {
+      "batch": "NAS corrected package",
+      "title": "zelda",
+      "host": "SERVER",
+      "logical_processors": 4,
+      "affinity_mask": 4,
+      "preflight_core_busy": [
+        0.203125,
+        0.140625,
+        0.10546875,
+        0.171875
+      ],
+      "first_frame": 1801,
+      "end_frame": 3001,
+      "median_cpu_seconds": {
+        "reference": 12.5625,
+        "candidate": 11.34375
+      },
+      "raw_median_cpu_reduction_percent": 9.701492537313428,
+      "paired_cpu_reduction_percent": [
+        14.427860696517413,
+        7.810499359795131,
+        7.750952986022874,
+        9.813664596273297,
+        9.925558312655092
+      ],
+      "faster_candidate_pairs": 5,
+      "pairs": [
+        {
+          "pair": 0,
+          "reference_cpu_seconds": 12.5625,
+          "candidate_cpu_seconds": 10.75,
+          "cpu_reduction_percent": 14.427860696517413,
+          "reference_wall_seconds": 13.188741799909621,
+          "candidate_wall_seconds": 11.042614299803972
+        },
+        {
+          "pair": 1,
+          "reference_cpu_seconds": 12.203125,
+          "candidate_cpu_seconds": 11.25,
+          "cpu_reduction_percent": 7.810499359795131,
+          "reference_wall_seconds": 12.53957030014135,
+          "candidate_wall_seconds": 12.292111000046134
+        },
+        {
+          "pair": 2,
+          "reference_cpu_seconds": 12.296875,
+          "candidate_cpu_seconds": 11.34375,
+          "cpu_reduction_percent": 7.750952986022874,
+          "reference_wall_seconds": 12.949059200007468,
+          "candidate_wall_seconds": 11.951013499870896
+        },
+        {
+          "pair": 3,
+          "reference_cpu_seconds": 12.578125,
+          "candidate_cpu_seconds": 11.34375,
+          "cpu_reduction_percent": 9.813664596273297,
+          "reference_wall_seconds": 13.341881799977273,
+          "candidate_wall_seconds": 11.828804800054058
+        },
+        {
+          "pair": 4,
+          "reference_cpu_seconds": 12.59375,
+          "candidate_cpu_seconds": 11.34375,
+          "cpu_reduction_percent": 9.925558312655092,
+          "reference_wall_seconds": 13.363536499906331,
+          "candidate_wall_seconds": 12.782884699990973
+        }
+      ],
+      "classification": "positive",
+      "reason": "Five order-balanced pairs faster, active interval participation and exact checked output.",
+      "raw_file": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\nas-zelda-current-v1d\\evidence\\performance.json"
+    },
+    {
+      "batch": "Workstation corrected package",
+      "title": "zelda",
+      "host": "DESKTOP-HN15M1H",
+      "logical_processors": 16,
+      "affinity_mask": 16384,
+      "preflight_core_busy": [
+        0.26953125,
+        0.203125,
+        0.71484375,
+        0.41796875,
+        0.390625,
+        0.4453125,
+        0.3203125,
+        0.37890625,
+        0.53125,
+        0.48828125,
+        0.26171875,
+        0.3176470588235294,
+        0.640625,
+        0.6,
+        0.19215686274509802,
+        0.3984375
+      ],
+      "first_frame": 1801,
+      "end_frame": 3001,
+      "median_cpu_seconds": {
+        "reference": 5.8125,
+        "candidate": 5.0625
+      },
+      "raw_median_cpu_reduction_percent": 12.903225806451612,
+      "paired_cpu_reduction_percent": [
+        11.796246648793563,
+        14.324324324324323,
+        5.864197530864201,
+        21.123595505617978,
+        12.903225806451612
+      ],
+      "faster_candidate_pairs": 5,
+      "pairs": [
+        {
+          "pair": 0,
+          "reference_cpu_seconds": 5.828125,
+          "candidate_cpu_seconds": 5.140625,
+          "cpu_reduction_percent": 11.796246648793563,
+          "reference_wall_seconds": 6.200188999995589,
+          "candidate_wall_seconds": 5.5641536000184715
+        },
+        {
+          "pair": 1,
+          "reference_cpu_seconds": 5.78125,
+          "candidate_cpu_seconds": 4.953125,
+          "cpu_reduction_percent": 14.324324324324323,
+          "reference_wall_seconds": 6.024717099964619,
+          "candidate_wall_seconds": 5.180668500019237
+        },
+        {
+          "pair": 2,
+          "reference_cpu_seconds": 5.0625,
+          "candidate_cpu_seconds": 4.765625,
+          "cpu_reduction_percent": 5.864197530864201,
+          "reference_wall_seconds": 5.370584100019187,
+          "candidate_wall_seconds": 5.190144799998961
+        },
+        {
+          "pair": 3,
+          "reference_cpu_seconds": 6.953125,
+          "candidate_cpu_seconds": 5.484375,
+          "cpu_reduction_percent": 21.123595505617978,
+          "reference_wall_seconds": 9.342107699951157,
+          "candidate_wall_seconds": 6.339991600019857
+        },
+        {
+          "pair": 4,
+          "reference_cpu_seconds": 5.8125,
+          "candidate_cpu_seconds": 5.0625,
+          "cpu_reduction_percent": 12.903225806451612,
+          "reference_wall_seconds": 6.444692400051281,
+          "candidate_wall_seconds": 5.441690700012259
+        }
+      ],
+      "classification": "positive",
+      "reason": "Five order-balanced pairs faster, active interval participation and exact checked output.",
+      "raw_file": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\local-zelda-interval-v1d\\evidence\\performance.json"
+    },
+    {
+      "batch": "NAS corrected package",
+      "title": "gumshoe",
+      "host": "SERVER",
+      "logical_processors": 4,
+      "affinity_mask": 1,
+      "preflight_core_busy": [
+        0.17578125,
+        0.2421875,
+        0.1796875,
+        0.59375
+      ],
+      "first_frame": 601,
+      "end_frame": 1201,
+      "median_cpu_seconds": {
+        "reference": 4.828125,
+        "candidate": 4.765625
+      },
+      "raw_median_cpu_reduction_percent": 1.2944983818770184,
+      "paired_cpu_reduction_percent": [
+        -6.583072100313481,
+        0.9345794392523366,
+        0.9803921568627416,
+        1.2944983818770184,
+        -0.328947368421062
+      ],
+      "faster_candidate_pairs": 3,
+      "pairs": [
+        {
+          "pair": 0,
+          "reference_cpu_seconds": 4.984375,
+          "candidate_cpu_seconds": 5.3125,
+          "cpu_reduction_percent": -6.583072100313481,
+          "reference_wall_seconds": 5.522311300039291,
+          "candidate_wall_seconds": 5.938488299958408
+        },
+        {
+          "pair": 1,
+          "reference_cpu_seconds": 5.015625,
+          "candidate_cpu_seconds": 4.96875,
+          "cpu_reduction_percent": 0.9345794392523366,
+          "reference_wall_seconds": 5.940965500194579,
+          "candidate_wall_seconds": 6.496088200015947
+        },
+        {
+          "pair": 2,
+          "reference_cpu_seconds": 4.78125,
+          "candidate_cpu_seconds": 4.734375,
+          "cpu_reduction_percent": 0.9803921568627416,
+          "reference_wall_seconds": 5.094944800017402,
+          "candidate_wall_seconds": 4.949746900005266
+        },
+        {
+          "pair": 3,
+          "reference_cpu_seconds": 4.828125,
+          "candidate_cpu_seconds": 4.765625,
+          "cpu_reduction_percent": 1.2944983818770184,
+          "reference_wall_seconds": 5.027412900002673,
+          "candidate_wall_seconds": 4.952816899865866
+        },
+        {
+          "pair": 4,
+          "reference_cpu_seconds": 4.75,
+          "candidate_cpu_seconds": 4.765625,
+          "cpu_reduction_percent": -0.328947368421062,
+          "reference_wall_seconds": 5.058833200018853,
+          "candidate_wall_seconds": 5.015900699887425
+        }
+      ],
+      "classification": "neutral-inconclusive",
+      "reason": "Native interval path compiled out; unchanged fallback control. Mixed pairs and changing load make its raw median swing inconclusive.",
+      "raw_file": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\nas-gumshoe-current-v1d\\evidence\\performance.json"
+    },
+    {
+      "batch": "Workstation corrected package",
+      "title": "gumshoe",
+      "host": "DESKTOP-HN15M1H",
+      "logical_processors": 16,
+      "affinity_mask": 16384,
+      "preflight_core_busy": [
+        0.375,
+        0.2890625,
+        0.75,
+        0.77734375,
+        0.75390625,
+        0.7265625,
+        0.61328125,
+        0.546875,
+        0.77734375,
+        0.734375,
+        0.41015625,
+        0.38671875,
+        0.25,
+        0.296875,
+        0.1953125,
+        0.21875
+      ],
+      "first_frame": 601,
+      "end_frame": 1201,
+      "median_cpu_seconds": {
+        "reference": 2.546875,
+        "candidate": 2.328125
+      },
+      "raw_median_cpu_reduction_percent": 8.588957055214719,
+      "paired_cpu_reduction_percent": [
+        -3.6764705882353033,
+        6.358381502890175,
+        -4.929577464788726,
+        6.134969325153373,
+        30.1980198019802
+      ],
+      "faster_candidate_pairs": 3,
+      "pairs": [
+        {
+          "pair": 0,
+          "reference_cpu_seconds": 2.125,
+          "candidate_cpu_seconds": 2.203125,
+          "cpu_reduction_percent": -3.6764705882353033,
+          "reference_wall_seconds": 2.3736372999846935,
+          "candidate_wall_seconds": 2.5267352999653667
+        },
+        {
+          "pair": 1,
+          "reference_cpu_seconds": 2.703125,
+          "candidate_cpu_seconds": 2.53125,
+          "cpu_reduction_percent": 6.358381502890175,
+          "reference_wall_seconds": 2.9399539999431,
+          "candidate_wall_seconds": 2.799099500058219
+        },
+        {
+          "pair": 2,
+          "reference_cpu_seconds": 2.21875,
+          "candidate_cpu_seconds": 2.328125,
+          "cpu_reduction_percent": -4.929577464788726,
+          "reference_wall_seconds": 2.498461000039242,
+          "candidate_wall_seconds": 2.5856299999868497
+        },
+        {
+          "pair": 3,
+          "reference_cpu_seconds": 2.546875,
+          "candidate_cpu_seconds": 2.390625,
+          "cpu_reduction_percent": 6.134969325153373,
+          "reference_wall_seconds": 2.7678434998961166,
+          "candidate_wall_seconds": 2.5767884000670165
+        },
+        {
+          "pair": 4,
+          "reference_cpu_seconds": 3.15625,
+          "candidate_cpu_seconds": 2.203125,
+          "cpu_reduction_percent": 30.1980198019802,
+          "reference_wall_seconds": 3.3951281999470666,
+          "candidate_wall_seconds": 2.4844958999892697
+        }
+      ],
+      "classification": "neutral-inconclusive",
+      "reason": "Native interval path compiled out; unchanged fallback control. Mixed pairs and changing load make its raw median swing inconclusive.",
+      "raw_file": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\local-gumshoe-interval-v1d\\evidence\\performance.json"
     }
   ],
   "correctness": {
@@ -372,15 +846,153 @@
       },
       "participation": "compile-time unsupported-board fallback:0 interval cycles",
       "native_saves_written": false
+    },
+    "metroid": {
+      "status": "pass",
+      "hosts": {
+        "NAS": {
+          "status": "pass",
+          "untraced": true,
+          "hashes": {
+            "audio.wav": "5a194be5031b23943ac57e7d2edf4b26f5a56161fb4e0c77f81aa314165c774c",
+            "final.png": "8ecd3fd0ab3b0795f04c3207ce493d21be670705db54d8cdecffdde605c122af",
+            "frames.bin": "8eb5f8be5d71b3792b9eb68836b588b1dafb19ef165336c18333ccce054a1df6",
+            "hardware.txt": "7b8d0332d5f259ce2e5a9fd6be8eef05e922c486d6b9e7a610fd29e4f996ec1b",
+            "memory.txt": "3a9b3f6dbe6e23ef425e191ad13dd6957b62f8c8b38628b27df213cd7a4a897a"
+          },
+          "native_interval_cycles": 55772663,
+          "native_interval_spans": 1693751,
+          "binary_sha256": {
+            "reference": "7f4a7c96256c17ff1cafac8126aedf49c55b1f66ddab651ea580c7417fe180b7",
+            "candidate": "798056a24be785982de8e7587393a64d47df167fd9dcba50ecfd1e12d2af8322"
+          },
+          "native_saves_written": false
+        },
+        "Workstation": {
+          "status": "pass",
+          "untraced": true,
+          "hashes": {
+            "audio.wav": "5a194be5031b23943ac57e7d2edf4b26f5a56161fb4e0c77f81aa314165c774c",
+            "final.png": "8ecd3fd0ab3b0795f04c3207ce493d21be670705db54d8cdecffdde605c122af",
+            "frames.bin": "8eb5f8be5d71b3792b9eb68836b588b1dafb19ef165336c18333ccce054a1df6",
+            "hardware.txt": "7b8d0332d5f259ce2e5a9fd6be8eef05e922c486d6b9e7a610fd29e4f996ec1b",
+            "memory.txt": "3a9b3f6dbe6e23ef425e191ad13dd6957b62f8c8b38628b27df213cd7a4a897a"
+          },
+          "native_interval_cycles": 55772663,
+          "native_interval_spans": 1693751,
+          "binary_sha256": {
+            "reference": "7f4a7c96256c17ff1cafac8126aedf49c55b1f66ddab651ea580c7417fe180b7",
+            "candidate": "798056a24be785982de8e7587393a64d47df167fd9dcba50ecfd1e12d2af8322"
+          },
+          "native_saves_written": false
+        }
+      },
+      "cross_host_identical": true
+    },
+    "zelda": {
+      "status": "pass",
+      "hosts": {
+        "NAS": {
+          "status": "pass",
+          "untraced": true,
+          "hashes": {
+            "audio.wav": "b5c616b84dd092fcb96dcb69b15e8d37913c76592ebf8f3d6e2c796e0d58271d",
+            "final.png": "a9c4c485cfda300739881e4d97822d23871a65ad3fc599dc3d02201e016f98e4",
+            "frames.bin": "5c639386ba1de1005b800a2102c349e80557f0ee1211b8d587c147daceb1385a",
+            "hardware.txt": "3a80624aff39f84a8924db4098904d6daab0f1b5551e9f968bdb109437a198e2",
+            "memory.txt": "1a2fda3b8447d07df73e81f10b623c37b7c67aa14730ffe19e100d1d94cd19c5"
+          },
+          "native_interval_cycles": 51162311,
+          "native_interval_spans": 998659,
+          "binary_sha256": {
+            "reference": "6809253d5afe6127d03b79e692937c9ef03addb62e003a39f95041fcc82d1935",
+            "candidate": "ef83b77c4e6fca6fe11994303de25ca52175ca854e21c38215d7773c3580fc6b"
+          },
+          "native_saves_written": false
+        },
+        "Workstation": {
+          "status": "pass",
+          "untraced": true,
+          "hashes": {
+            "audio.wav": "b5c616b84dd092fcb96dcb69b15e8d37913c76592ebf8f3d6e2c796e0d58271d",
+            "final.png": "a9c4c485cfda300739881e4d97822d23871a65ad3fc599dc3d02201e016f98e4",
+            "frames.bin": "5c639386ba1de1005b800a2102c349e80557f0ee1211b8d587c147daceb1385a",
+            "hardware.txt": "3a80624aff39f84a8924db4098904d6daab0f1b5551e9f968bdb109437a198e2",
+            "memory.txt": "1a2fda3b8447d07df73e81f10b623c37b7c67aa14730ffe19e100d1d94cd19c5"
+          },
+          "native_interval_cycles": 51162311,
+          "native_interval_spans": 998659,
+          "binary_sha256": {
+            "reference": "6809253d5afe6127d03b79e692937c9ef03addb62e003a39f95041fcc82d1935",
+            "candidate": "ef83b77c4e6fca6fe11994303de25ca52175ca854e21c38215d7773c3580fc6b"
+          },
+          "native_saves_written": false
+        }
+      },
+      "cross_host_identical": true
+    },
+    "gumshoe": {
+      "status": "pass",
+      "hosts": {
+        "NAS": {
+          "status": "pass",
+          "untraced": true,
+          "hashes": {
+            "audio.wav": "a633241ff467162a0398e46c0dd60bdfb3a1686e8727dbfac99cf5df5c47b03d",
+            "final.png": "4767ea2e534326eb1cb0c8b97500c9b5f8100afbfd4f5d6511a521ed96a3a623",
+            "frames.bin": "b84f4ac144784d2b20568b74901e4aa5ab6cb520d062e100a99f2c698d2d9163",
+            "hardware.txt": "10d24fc77c0c3656f69772c58ff73ea88f2cae3da3cf2f58e9fdd32d1553dd29",
+            "memory.txt": "be0a42075f362f61abb3e9f613d8115ae7948dfd768627de24d6240cc3d1cc2a"
+          },
+          "native_interval_cycles": 0,
+          "native_interval_spans": 0,
+          "binary_sha256": {
+            "reference": "3fba43eab4972aec12799f1f968bb15cd9c678cc7aa69a3bb542bc5e9595f315",
+            "candidate": "aedb3fdc63c911f052c0a59d6ea68ab08c4da217f6ae93012241fa1b238fda43"
+          },
+          "native_saves_written": false
+        },
+        "Workstation": {
+          "status": "pass",
+          "untraced": true,
+          "hashes": {
+            "audio.wav": "a633241ff467162a0398e46c0dd60bdfb3a1686e8727dbfac99cf5df5c47b03d",
+            "final.png": "4767ea2e534326eb1cb0c8b97500c9b5f8100afbfd4f5d6511a521ed96a3a623",
+            "frames.bin": "b84f4ac144784d2b20568b74901e4aa5ab6cb520d062e100a99f2c698d2d9163",
+            "hardware.txt": "10d24fc77c0c3656f69772c58ff73ea88f2cae3da3cf2f58e9fdd32d1553dd29",
+            "memory.txt": "be0a42075f362f61abb3e9f613d8115ae7948dfd768627de24d6240cc3d1cc2a"
+          },
+          "native_interval_cycles": 0,
+          "native_interval_spans": 0,
+          "binary_sha256": {
+            "reference": "3fba43eab4972aec12799f1f968bb15cd9c678cc7aa69a3bb542bc5e9595f315",
+            "candidate": "aedb3fdc63c911f052c0a59d6ea68ab08c4da217f6ae93012241fa1b238fda43"
+          },
+          "native_saves_written": false
+        }
+      },
+      "cross_host_identical": true
     }
   },
   "cross_host_note": "Identical SMB1 untraced raster/memory/hardware/picture/PCM artifacts on Intel i5-4670 SERVER and Ryzen7 9800X3D workstation; this is not a cross-build netplay qualification.",
   "shared_baseline_defects": [
     "Both builds emit the same inactive Sonic/Samus/Link mod-state warnings and Smash64 reseed warning on current-build SDL state load."
   ],
-  "scope_remaining": "Metroid/Zelda/Gumshoe matched builds and checks, real affected feature profiles, and all remaining NES01-NES31 evaluations. No owner-ready handoff, merge or release.",
+  "scope_remaining": "Stock matched built-game suite measured on both hosts. Actual affected feature profiles and remaining NES01-NES31 evaluations continue; no owner handoff, merge or release.",
   "evidence_archives": {
     "nas_current": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\nas-evidence-current-v1d.zip",
-    "nas_current_sha256": "7fb54deb29f85c557b06a402571f6bb97eb495a423c919897b316987ff15fc48"
+    "nas_current_sha256": "7fb54deb29f85c557b06a402571f6bb97eb495a423c919897b316987ff15fc48",
+    "nas_metroid": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\nas-metroid-evidence-current-v1d.zip",
+      "sha256": "e4d0c821ffe1a597f6a8161b0c80ee51f7b5f624b09bef164aabd5fb8016b111"
+    },
+    "nas_zelda": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\nas-zelda-evidence-current-v1d.zip",
+      "sha256": "bc50faa65c3ec8e64a1fd2091066f9730ec31744c34d4130a57461f46e802ffc"
+    },
+    "nas_gumshoe": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\nas-gumshoe-evidence-current-v1d.zip",
+      "sha256": "dbb3e1fe94a300484d8d2754b85bb3aa82fbb884a61801ae492089fde0c78afa"
+    }
   }
 }

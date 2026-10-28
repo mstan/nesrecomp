@@ -215,3 +215,33 @@ fallback for arbitrary external RTS pointers. This removes another whole-game
 exclusion while preserving real callback timing; generated CPU sources need no
 observer-call rewrite. Active cursor fixtures include operand and return
 observers, and the existing real-RTS/isolated-permission contract test passes.
+
+## Corrected stock suite measured on both hosts
+
+The owner explicitly directed measuring despite concurrent work, including on
+the workstation. That supersedes earlier quiet-slot scheduling. Foreign jobs,
+reservations and shared services were preserved. All five matched game pairs
+are built from frozen reference `fc0bf3f` and runtime candidate `520a958`.
+
+The actual SDL/audio workload shows CPU reductions on SERVER i5-4670 of
+11.95% for SMB1, 14.22% for Metroid and 9.70% for Zelda. Each has five faster
+order-balanced pairs and exactly matching untraced checked output. Zelda also
+improves all five Ryzen 9800X3D workstation pairs, with a 12.90% median CPU
+reduction. Metroid's local observed median improves16.62%, but four pairs are
+faster and one is2.9% slower under changing load; that caveat stays attached.
+Earlier mixed SMB1 workstation batches are also retained, not cherry-picked.
+
+SMB3/MMC3 and Gumshoe/GxROM compile this interval service out. Their mixed
+timings remain neutral/inconclusive fallback controls; neither raw median
+swing is claimed as an optimization gain. Neutral titles do not disqualify
+the positive ones. All five games match their baseline raster, memory,
+hardware and PCM; the four games also checked on the NAS match across hosts.
+Identical baseline mod-state warnings remain separate shared defects.
+
+Raw pairs, source/binary identities, participation, host load and evidence
+archives are in [the measured results](2026-10-28-interval-results.json), with
+a readable [results table](2026-10-28-interval-results.md). Stock qualification
+is complete for this first package. Real enhancement profiles and the rest of
+NES01-NES31 still need their dispositions. No owner handoff, merge or release
+has occurred. The next work should address a demonstrated complete remaining
+path, without reinstating quiet-host waits as an admission requirement.
