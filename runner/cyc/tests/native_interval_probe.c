@@ -25,6 +25,18 @@ static void access_bus(uint16_t addr, uint8_t value, bool write)
 
 static void stimulus(unsigned i)
 {
+    if (hw_cart.mapper == 4) {
+        switch (i % 257) {
+        case 11: access_bus(0xc000, (uint8_t)(i >> 8), true); break;
+        case 12: access_bus(0xc001, 0, true); break;
+        case 13: access_bus(0xe001, 0, true); break;
+        case 14: access_bus(0xe000, 0, true); break;
+        case 15: access_bus(0x8000, (uint8_t)(i >> 8), true); break;
+        case 16: access_bus(0x8001, (uint8_t)(i >> 4), true); break;
+        }
+    } else if (hw_cart.mapper == 66 && i % 257 == 11) {
+        access_bus(0x8000, (uint8_t)((i >> 8) & 0x11), true);
+    }
     switch (i % 1031) {
     case 0: access_bus(0x2001, (i & 2048) ? 0x1e : 0, true); break;
     case 1: access_bus(0x2000, (uint8_t)((i >> 5) & 0x7f), true); break;
@@ -72,13 +84,18 @@ int main(int argc, char **argv)
 {
     bool reference = argc > 1 && strstr(argv[1], "reference") != NULL;
     bool cursor = argc > 1 && strstr(argv[1], "cpu") != NULL;
-    static uint8_t image[16 + 32768 + 8192];
-    memcpy(image, "NES\032", 4); image[4] = 2; image[5] = 1;
+    static uint8_t image[16 + 65536 + 16384];
+    static const unsigned mappers[] = { 0, 1, 4, 66 };
+    memcpy(image, "NES\032", 4);
     for (size_t i = 16; i < sizeof(image); ++i) image[i] = (uint8_t)(i * 37u + (i >> 3));
-    for (unsigned mapper = 0; mapper <= 1; ++mapper) {
+    for (unsigned board = 0; board < sizeof(mappers) / sizeof(mappers[0]); ++board) {
+        unsigned mapper = mappers[board];
+        image[4] = mapper >= 4 ? 4 : 2;
+        image[5] = mapper >= 4 ? 2 : 1;
         image[6] = (uint8_t)(mapper << 4);
+        image[7] = (uint8_t)(mapper & 0xf0);
         for (unsigned align = 0; align < 4; ++align) {
-            check(cyc_load_ines(image, sizeof(image)), "load fixture");
+            check(cyc_load_ines(image, 16u + image[4] * 16384u + image[5] * 8192u), "load fixture");
             check(cyc_set_region(CYC_REGION_NTSC), "region");
             cyc_power_on((uint8_t)align);
             check(cyc_audio_enable(44100), "audio");
@@ -128,9 +145,19 @@ int main(int argc, char **argv)
                     hw.irq_line = 1;
                     check(!hw_native_interval_limit(), "IRQ refusal");
                     hw.irq_line = 0;
-                    hw_cart.mapper = 4;
-                    check(!hw_native_interval_limit(), "IRQ board refusal");
+                    hw_cart.mapper = 48;
+                    check(!hw_native_interval_limit(), "unsupported IRQ board refusal");
                     hw_cart.mapper = (uint16_t)mapper;
+                    if (mapper == 4) {
+                        uint8_t saved_out = hw_cart.m.irq_out;
+                        hw_cart.m.irq_out = 1;
+                        check(!hw_native_interval_limit(), "unsampled mapper IRQ refusal");
+                        hw_cart.m.irq_out = saved_out;
+                        uint8_t saved_table = ppu.bg_table, saved_a12 = hw_cart.m.a12;
+                        ppu.bg_table = 1; hw_cart.m.a12 = 0;
+                        check(!hw_native_interval_limit(), "possible first A12 rise refusal");
+                        ppu.bg_table = saved_table; hw_cart.m.a12 = saved_a12;
+                    }
                     hw_extra_timing.extra_scanlines = 1;
                     check(!hw_native_interval_limit(), "extra timing refusal");
                     hw_extra_timing.extra_scanlines = 0;

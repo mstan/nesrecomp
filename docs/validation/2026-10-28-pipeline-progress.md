@@ -245,3 +245,28 @@ is complete for this first package. Real enhancement profiles and the rest of
 NES01-NES31 still need their dispositions. No owner handoff, merge or release
 has occurred. The next work should address a demonstrated complete remaining
 path, without reinstating quiet-host waits as an admission requirement.
+
+## Extending the service to the remaining stock boards
+
+The next prototype admits GxROM (CPU bank writes already close the cursor)
+and MMC3 stable background intervals. MMC3 requires both an unsampled mapper
+IRQ refusal and a proof that no qualified A12 rise can occur: background table
+zero remains low, while table one is admitted only after A12 is already high.
+Its subsequent four-dot low gaps stay below the three-CPU-cycle IRQ filter.
+The first rise after a long low remains coupled. Sprite-fetch/scanline edges,
+partial accesses, PAL, DMA and other device deadlines still use the general
+executor. No mapper address notification is removed.
+
+A dedicated MMC3 PPU operator publishes the original CPU cycle at each dot
+and half-dot event for all four alignments, preserving A12-low timestamps.
+The machine still owns the final counter increment. The simpler NROM/MMC1/
+GxROM dot loop does not pay a mapper-time branch for every dot.
+
+Paired primitive and CPU-cursor fixtures pass in LLE and HLE for all four
+boards and alignments, including MMC3 bank/latch/reload/enable/ack traffic,
+GxROM bank writes, unsampled IRQ and first-rise refusals, committed observers,
+device/bus/memory/picture/PCM and current-build replay. Full NES2 header checks
+qualify only the actual boards, not extended mapper numbers sharing a low byte.
+Built SMB3/Gumshoe performance is not yet measured for this extension. The
+first-package binaries/results remain immutable; do not relabel their zero-
+interval fallback measurements as participation in this new prototype.

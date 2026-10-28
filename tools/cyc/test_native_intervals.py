@@ -10,7 +10,8 @@ from prepare_project import native_interval_board
 def check_build_time_boards():
     with tempfile.TemporaryDirectory(prefix='nes-native-board-') as folder:
         image = Path(folder) / 'fixture.nes'
-        for mapper, expected in ((0, '1'), (1, '1'), (4, '0'), (256, '0'), (257, '0')):
+        for mapper, expected in ((0, '1'), (1, '1'), (4, '1'), (66, '1'),
+                                 (48, '0'), (256, '0'), (257, '0'), (260, '0'), (322, '0')):
             header = bytearray(16)
             header[:4] = b'NES\x1a'
             header[6] = (mapper & 15) << 4
@@ -40,7 +41,7 @@ def main():
             if before != after:
                 raise AssertionError(f'{modes}: first divergence at row {index}: {before!r} != {after!r}')
         assert len(outputs[0]) == len(outputs[1]), 'different checkpoint counts'
-    print('PASS: active NROM/MMC1 intervals, four NTSC alignments, device/bus/memory/'
+    print('PASS: active NROM/MMC1/MMC3/GxROM intervals, four NTSC alignments, device/bus/memory/'
           'picture checkpoints and PCM match; DMA, IRQ, delayed-register edges, '
           'trace and PAL refusal, CPU RAM/folded-ROM cursor and snapshot replay exercised')
 

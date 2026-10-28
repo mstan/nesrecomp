@@ -181,7 +181,9 @@ unsigned hw_native_interval_limit(void)
 {
     if (hw.tick != 1 || hw_pal() || hw_isolated || cyc_trace_enabled ||
         hw_extra_timing.extra_scanlines || hw_cart.watch_cpu || hw_cart.clock_late ||
-        (hw_cart.mapper != 0 && hw_cart.mapper != 1) || hw.irq_line ||
+        (hw_cart.mapper != 0 && hw_cart.mapper != 1 &&
+         hw_cart.mapper != 4 && hw_cart.mapper != 66) ||
+        hw.irq_line || (hw_cart.mapper == 4 && hw_cart.m.irq_out) ||
         cpu.nmi_input || cpu.nmi_edge || ppu_nmi_output() ||
         !apu_native_interval_ready()) return 0;
     /* On extended SxROM, PPU A12 can also select CPU PRG/RAM signals. Such
@@ -196,7 +198,8 @@ void hw_native_begin(void)
     hw_native_interval.ram = hw.ram;
     hw_native_interval.enabled = NESRECOMP_NATIVE_INTERVALS && !hw_isolated && !cyc_trace_enabled &&
         !hw_pal() && !hw_extra_timing.extra_scanlines &&
-        (hw_cart.mapper == 0 || hw_cart.mapper == 1) &&
+        (hw_cart.mapper == 0 || hw_cart.mapper == 1 ||
+         hw_cart.mapper == 4 || hw_cart.mapper == 66) &&
         !hw_prg_data_modified && !cyc_mod_rom_read_overrides &&
         (!cyc_cpu_rts_observer || cyc_cpu_rts_observer == cyc_mod_return_observer);
     /* Armed instruction hooks are safe: compiled code yields to dispatch,

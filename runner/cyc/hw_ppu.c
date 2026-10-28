@@ -1407,6 +1407,11 @@ static void render_clock_dot(void)
 unsigned ppu_native_interval_limit(void)
 {
 #if NESRECOMP_PPU_HLE || !NESRECOMP_PPU_LLE_REFERENCE
+    /* MMC3 can clock an IRQ at the first pattern fetch after a long A12-low
+     * interval. Leave that edge to the coupled clock. Once A12 is high, the
+     * background's four-dot low gaps stay below its three-CPU-cycle filter.
+     * Table zero never raises A12 in this stable background-only interval. */
+    if (hw_cart.mapper == 4 && ppu.bg_table && !hw_cart.m.a12) return 0;
     if (dot_kind == DOT_RENDER && ppu.dot < 249)
         return (249u - ppu.dot) / 3u;
 #endif
@@ -1416,6 +1421,45 @@ unsigned ppu_native_interval_limit(void)
 void ppu_native_interval_run(unsigned cycles, unsigned align)
 {
 #if NESRECOMP_PPU_HLE || !NESRECOMP_PPU_LLE_REFERENCE
+    if (hw_cart.mapper == 4) {
+        /* MMC3 timestamps each A12 falling edge in CPU cycles. Publish the
+         * original counter at every PPU event, including tick0 of the next
+         * cycle. The machine owns the final cycle-counter increment. Other
+         * boards keep the simpler dot loop below without per-dot checks. */
+        uint64_t start = hw.cycles;
+        switch (align) {
+        case 0:
+            while (cycles--) {
+                render_span_half_dot(); render_clock_dot();
+                render_span_half_dot(); render_clock_dot();
+                render_span_half_dot(); ++hw.cycles; render_clock_dot();
+            }
+            break;
+        case 1:
+            while (cycles--) {
+                render_span_half_dot(); render_clock_dot();
+                render_span_half_dot(); render_clock_dot();
+                render_span_half_dot(); render_clock_dot(); ++hw.cycles;
+            }
+            break;
+        case 2:
+            while (cycles--) {
+                render_clock_dot(); render_span_half_dot();
+                render_clock_dot(); render_span_half_dot();
+                render_clock_dot(); ++hw.cycles; render_span_half_dot();
+            }
+            break;
+        default:
+            while (cycles--) {
+                render_clock_dot(); render_span_half_dot();
+                render_clock_dot(); render_span_half_dot();
+                render_clock_dot(); render_span_half_dot(); ++hw.cycles;
+            }
+            break;
+        }
+        hw.cycles = start;
+        return;
+    }
     /* From tick 1 to the next tick 1, alignments 0/1 visit half then dot;
      * alignments 2/3 visit dot then half. Preserve every fetch, pixel,
      * sprite-evaluation step and cartridge pin notification in that order. */
