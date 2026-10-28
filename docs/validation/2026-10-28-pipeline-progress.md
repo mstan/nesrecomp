@@ -1,0 +1,127 @@
+# Native pipeline implementation progress
+
+Owner goal: execute all NES01–NES31 in the
+[remaining-opportunity register](2026-10-27-remaining-opportunities.md), evaluate
+every item, implement and measure useful coherent packages, and leave affected
+builds for owner visual approval before merging or releasing. The complete
+scope remains active. FDS stays parked under the earlier owner exclusion.
+
+Tracking: `beads-2dw.1.110`, related to audit `beads-2dw.1.109` and campaign
+`beads-2wy8.1`. Isolated branch `perf/pipeline-burndown-20261028`, based on
+`fc0bf3fa46a710464960c0a1f2d3b83b4d345600`. No implementation or performance
+win is qualified by this checkpoint. The audit's closure did not close the
+execution opportunities.
+
+## Frozen inputs and first attribution
+
+Evidence root: `G:/Temp/Codex/nesrecomp/pipeline-burndown-20261028`.
+`source-heads.json` freezes current remote title heads: SMB1 `45f9575`, SMB3
+`99e5d3b`, Metroid `caccee6` (main), Zelda `5d90eb7` and Gumshoe `867a009`.
+The reference engine is a separate detached worktree at the frozen engine
+base; candidate edits cannot silently rebuild the baseline. Recomp-ui
+`c11a4b6` and existing net dependencies remain read-only. New source worktrees
+preserve the owner's modified original checkouts and native saves/settings.
+
+A new compiler from the frozen reference and an optimized current SMB3 title
+were built through the supported generation/CMake pipeline with GCC15.2
+`-O2 -g1 -DNDEBUG`, HLE and actual SDL/software presentation. The baseline
+binary is identified in `checkpoint.json`; build/configuration logs, generated
+source inputs and compile commands are retained.
+
+One diagnostic main-thread IP capture covers current-route frames2401–3000,
+audio emulated/mixed/queued through dummy output, hidden SDL/software1280x720,
+pristine mods and no native-save writes. `initial.png` confirms World1-1.
+A separate bounded continuation's `endpoint.png` shows that Mario dies and
+returns to the world map by frame3000. Thus this is a gameplay/death interval,
+**not a level-only interval**. No stage completion or full-route correctness
+claim follows from these pictures. This distinction is preserved rather than
+adding a player-survival prerequisite to the optimization campaign.
+
+The corrected712-sample capture assigns370 samples to `hw_ppu.c` (51.97%),
+63 to `hw_apu.c` (8.85%),45 to `hw_machine.c` (6.32%) and35 to `hw_mapper.c`
+(4.92%). Another112 (15.73%) are outside the executable, including runtime,
+device and wait work. These are perturbed diagnostic source-ownership bins,
+not process-CPU attribution, inclusive call-stack cost, recoverable fractions,
+or before/after performance results. Inlined work follows its DWARF owner.
+They select the PPU/machine interval pipeline over CPU-coverage-only tuning;
+they do not forecast a percentage saving.
+
+Diagnostic corrections are explicit:
+
+- `--input` selects the headless path; actual SDL input requires
+  `--window-input`. Failed setup launches yielded no admitted samples.
+- The initial older route began at frame1801 on the map and was excluded.
+- The reused sampler's `-(20000 + rng % 20000)` negated an unsigned32-bit
+  expression, creating an expired absolute Windows timer rather than a
+  negative relative delay. The task-owned copy now casts to `LONGLONG` before
+  negation and checks timer waits. Earlier rapid/perturbed captures are
+  retained under `excluded-timer` and are not current cost evidence.
+- Final sampling used a verified new process, actual frame/load state and
+  cooperative host file locks; no foreign jobs/leases were stopped or removed.
+
+Previous campaign speedup measurements used uninstrumented games, not this
+sampler; this diagnostic correction does not revise their CPU-time results.
+
+## First coherent service: native stable intervals
+
+The next implementation owns a proven stable interval of ordinary CPU memory
+work and PPU/APU advancement together. Existing per-cycle clock calls are not
+the external contract. A faithful cycle executor remains the universal path
+for unsupported or observable edges. This is the first package within the full
+burndown, not a declaration that whole-row rendering or other families are
+finished.
+
+Implementation outline and obligations:
+
+1. Keep the frozen reference unchanged. Begin with scalar portable native
+   intervals on NROM/MMC1 ordinary mirrored RAM and folded immutable PRG reads.
+   Board/region/mod/observer capabilities determine eligibility. Unsupported
+   mappers, PAL, timing enhancements, active tracing/hooks/read substitutions,
+   writable code, DMA and uncertain interrupt conditions retain the old path.
+   Prefer compile-time board specialization for unsupported generated titles
+   so they do not pay a failed eligibility call on every CPU access.
+2. A derived interval cursor owns deferred CPU-cycle count and final bus state.
+   Native CPU helpers may use ordinary memory directly only while the cursor
+   proves no external observer can distinguish the interleaving. RAM code
+   write watches and data/cheat overlays remain binding; writes to watched
+   code or mapper/device registers flush before the real access.
+3. First prove conservative visible stable spans: NTSC tick1, settled raster
+   classification, no scanline/frame/host stop crossing, NMI input settled and
+   no pending NMI/reset/IRQ. APU capability/deadline queries must cover OAM and
+   DMC requests, delayed enables/aborts, frame IRQ and port state. A temporary
+   unsupported condition may reduce coverage; it must never change behavior.
+4. At a flush, independently advance eligible PPU and APU spans only after
+   proving they cannot exchange data or raise a CPU event within that span.
+   Initial NROM/MMC1 services have no expansion audio/CPU-clocked IRQ source;
+   MMC1 PPU-A12 RAM gating must still advance and must not permit a speculative
+   cartridge-RAM access. Keep mapper address events and final bus/private
+   machine state correct. Extend coverage through supported deadlines, not
+   unchecked elapsed-time jumps.
+5. The existing tick1 sequence gives three PPU dots and three half-dots per
+   deferred CPU cycle. Alignments0/1 have half-dot then dot order; alignments2/3
+   have dot then half-dot order. A native PPU interval owns that whole run and
+   can later own wider raster jobs. APU spans preserve timer, mixer, sample and
+   filter ordering. Merely multiplying floating-point accumulation would not
+   prove PCM equality.
+6. Generic cycle/I/O entry, native-service callbacks, snapshots/restores,
+   observation boundaries, isolation and power-on must close/discard the cursor
+   appropriately. The cycle-count API must report correct virtual elapsed
+   time. Never serialize a stale derived eligibility decision. Current-build
+   continuation remains correct; older states need no migration.
+7. Test the native interval primitive directly against the coupled reference
+   for all four NTSC alignments and relevant eligibility transitions, then
+   exercise actual optimized current-build gameplay. Traced runs that disable
+   the candidate are not evidence that its active fast path is correct.
+   Untraced endpoint hardware/memory, PCM/pictures and current-build replay
+   checks need counters proving the native service actually ran. Retain the
+   existing hardware fixtures for the fallback and affected bus edges.
+8. Measure ordinary built games without diagnostic sampling/observers. Label
+   which titles use native intervals and which retain the common fallback;
+   neutral games are acceptable. Reuse the campaign's balanced controls and
+   real feature profiles proportionately. After two failed improvement
+   experiments, reassess the architecture before more tuning.
+
+The first implementation is not yet present. The remaining opportunity JSON
+records selected design work for NES01/02/03/06, the FDS parked status and every
+other item still awaiting its implementation/evaluation disposition. No release,
+title pin update, merge to main/master or owner visual handoff has occurred.

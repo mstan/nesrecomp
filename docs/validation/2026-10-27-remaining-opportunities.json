@@ -39,7 +39,8 @@
       "next_decisive_check": "One post-delivery HLE SMB3 active-level inclusive profile; then prototype one complete stable interval and compare the built game against the already optimized HLE baseline.",
       "required_behavior": "Correct pixels/opacity, sprite-zero and overflow publication, register effects, mapper address/IRQ events, Zapper light and current-build continuation. LLE remains a separate working reference.",
       "prior_issue": null,
-      "measured_additional_gain": null
+      "measured_additional_gain": null,
+      "execution_status": "selected-first-package-design"
     },
     {
       "id": "NES02",
@@ -77,7 +78,8 @@
       "next_decisive_check": "Measure inclusive crossings in the same gameplay interval as NES01; implement a deadline-owned service rather than another callback-only fast path.",
       "required_behavior": "NMI edge and IRQ poll ordering, DMA readiness, open bus, mapper clocks, observable accesses and hook/stop deadlines. An unchanged number of helper calls is not a contract.",
       "prior_issue": null,
-      "measured_additional_gain": null
+      "measured_additional_gain": null,
+      "execution_status": "selected-first-package-design"
     },
     {
       "id": "NES03",
@@ -115,7 +117,8 @@
       "next_decisive_check": "Inspect one hot emitted block without editing it; attribute inclusive CPU/bus work after HLE and compare a regenerated fused-block experiment, not native coverage percentages.",
       "required_behavior": "Interrupt boundaries, mapper writes and slot changes, hooks/read substitutions, self-modifying code, DMA and portable fallback. Fix the generator, never emitted C.",
       "prior_issue": null,
-      "measured_additional_gain": null
+      "measured_additional_gain": null,
+      "execution_status": "selected-first-package-design"
     },
     {
       "id": "NES04",
@@ -146,7 +149,8 @@
       "next_decisive_check": "Reuse beads-2dw.1.105; first attribute host CPU for the copied routines. Then qualify visible mapping, byte writes/debug pokes and PPU-edge read-gate changes on the supported MMC1 board.",
       "required_behavior": "Every folded byte remains the visible byte, mapping/write changes exit or invalidate, restore revalidates and unsupported mappings interpret. Earlier 10.1% is emulated-cycle share, not possible CPU savings.",
       "prior_issue": "beads-2dw.1.105",
-      "measured_additional_gain": null
+      "measured_additional_gain": null,
+      "execution_status": "remaining-evaluation"
     },
     {
       "id": "NES05",
@@ -177,7 +181,8 @@
       "next_decisive_check": "Count and inclusively sample the active callbacks in the selected gameplay interval; only build a profile when it removes a material complete path.",
       "required_behavior": "Bank-qualified cheats, data overlays, MMC5 read snoops, actual active board devices and configuration changes. Do not silently specialize away supported mods.",
       "prior_issue": null,
-      "measured_additional_gain": null
+      "measured_additional_gain": null,
+      "execution_status": "remaining-evaluation"
     },
     {
       "id": "NES06",
@@ -208,7 +213,8 @@
       "next_decisive_check": "Use audio-on gameplay after the current cache, recording timer-event density and inclusive audio cost. Replace a whole interval, with rounding/accumulation handled deliberately.",
       "required_behavior": "PCM, phase, output filters, envelopes, frame IRQ, DMC bus steals and controller delays. Exact old floating-point accumulation may require a matching arithmetic formulation or conservative fallback.",
       "prior_issue": null,
-      "measured_additional_gain": null
+      "measured_additional_gain": null,
+      "execution_status": "selected-first-package-design"
     },
     {
       "id": "NES07",
@@ -239,7 +245,8 @@
       "next_decisive_check": "Attribute a real DMA-heavy interval; reuse collision fixtures and test a transfer service only if the post-HLE share warrants it.",
       "required_behavior": "Stolen cycles, CPU-held address, controller/register/open-bus reads, DMC/OAM collisions, interrupts and mapper observations.",
       "prior_issue": null,
-      "measured_additional_gain": null
+      "measured_additional_gain": null,
+      "execution_status": "remaining-evaluation"
     },
     {
       "id": "NES08",
@@ -270,7 +277,8 @@
       "next_decisive_check": "Identify the exact active wait on gameplay traces. Reject menu/boot-only counts as gameplay attribution; prove a complete loop service on one content-qualified loop.",
       "required_behavior": "Final registers/RAM, loop exit, side-effectful reads, interrupt sampling, device time and input latency. No arbitrary dropped cycles.",
       "prior_issue": null,
-      "measured_additional_gain": null
+      "measured_additional_gain": null,
+      "execution_status": "remaining-evaluation"
     },
     {
       "id": "NES09",
@@ -301,7 +309,8 @@
       "next_decisive_check": "Reuse bounded miss/capture logs from actual affected gameplay. Regenerate through the supported pipeline and measure the game; already near-100%-native SMB routes are not coverage projects.",
       "required_behavior": "Reachable content/byte identities, writes, fallback behavior and normal game progression; no percentage gain from a coverage counter alone.",
       "prior_issue": null,
-      "measured_additional_gain": null
+      "measured_additional_gain": null,
+      "execution_status": "remaining-evaluation"
     },
     {
       "id": "NES10",
@@ -332,7 +341,8 @@
       "next_decisive_check": "Choose a repeatedly expensive service from an actual title profile, verify the ROM/disassembly contract, and replace the complete job rather than selected opcodes.",
       "required_behavior": "Inputs/outputs, shared RAM, RNG, relevant timing/device effects and failure paths; unsupported content keeps the original path. No guessed game logic.",
       "prior_issue": null,
-      "measured_additional_gain": null
+      "measured_additional_gain": null,
+      "execution_status": "remaining-evaluation"
     },
     {
       "id": "NES11",
@@ -370,7 +380,8 @@
       "next_decisive_check": "Map every actual consumer of stock color, background opacity and line history in one widened profile; build one shared plan/output path with semantic fallback at unsupported raster effects.",
       "required_behavior": "Required screenshots/raw pixels, collision/status consumers, mid-frame effects, Zapper and mapper events. Avoiding duplicate work does not mean dropping those products.",
       "prior_issue": null,
-      "measured_additional_gain": null
+      "measured_additional_gain": null,
+      "execution_status": "remaining-evaluation"
     },
     {
       "id": "NES12",
@@ -401,7 +412,8 @@
       "next_decisive_check": "Measure repeated decode/preparation in the chosen full-view job; reuse previous CHR-shortcut prototypes only after auditing their invalidation and unqualified timing status.",
       "required_behavior": "CHR RAM writes/bank changes, palette/scanline state, flips, clipping, transparency, sprite order and restore invalidation.",
       "prior_issue": null,
-      "measured_additional_gain": null
+      "measured_additional_gain": null,
+      "execution_status": "remaining-evaluation"
     },
     {
       "id": "NES13",
@@ -439,7 +451,8 @@
       "next_decisive_check": "One real Zelda Remastered gameplay interval: separate recording from sampling cost, then replace the complete recording-to-sampler representation.",
       "required_behavior": "Bytes actually fetched across mid-tile bank/CHR changes, palette timing, sprite priority, masks/emphasis, exact native fallback and current-build saves.",
       "prior_issue": null,
-      "measured_additional_gain": null
+      "measured_additional_gain": null,
+      "execution_status": "remaining-evaluation"
     },
     {
       "id": "NES14",
@@ -477,7 +490,8 @@
       "next_decisive_check": "Use the same real-pack interval as NES13. Attribute recording/condition/lookup/blend costs and compare one complete render job with the existing sampler.",
       "required_behavior": "All supported condition semantics, sprite/background blending and fallback pixels; do not claim unsupported pack audio or conditions become implemented.",
       "prior_issue": null,
-      "measured_additional_gain": null
+      "measured_additional_gain": null,
+      "execution_status": "remaining-evaluation"
     },
     {
       "id": "NES15",
@@ -501,7 +515,8 @@
       "next_decisive_check": "Audit sync callers in one wide/voxel/HD frame, count repeated products and measure inclusive bridge plus consumer preparation.",
       "required_behavior": "Consumers see the correct completed-frame/mapping data, live bank/CHR changes and state restores; keep an adapter for unported consumers.",
       "prior_issue": null,
-      "measured_additional_gain": null
+      "measured_additional_gain": null,
+      "execution_status": "remaining-evaluation"
     },
     {
       "id": "NES16",
@@ -532,7 +547,8 @@
       "next_decisive_check": "Attribute a real 21:9/32:9 moving-camera interval and compare the full view, including changing window aspect and composed HUD.",
       "required_behavior": "Real margin content, entity visibility, priority, camera wrap, HUD placement and arbitrary Fit resize behavior; no black-margin speedup.",
       "prior_issue": null,
-      "measured_additional_gain": null
+      "measured_additional_gain": null,
+      "execution_status": "remaining-evaluation"
     },
     {
       "id": "NES17",
@@ -563,7 +579,8 @@
       "next_decisive_check": "One active voxel room with camera motion and animated terrain; distinguish geometry construction, rasterization and sprite assembly before choosing retained CPU meshes or an optional GPU backend.",
       "required_behavior": "Tile heights, clipping, transparent cards, actor grouping, proportional shadows, HUD and camera/input behavior. Shared Metroid restore defect remains separate.",
       "prior_issue": null,
-      "measured_additional_gain": null
+      "measured_additional_gain": null,
+      "execution_status": "remaining-evaluation"
     },
     {
       "id": "NES18",
@@ -594,7 +611,8 @@
       "next_decisive_check": "Reuse zelda_world_timing for ordinary Fit and atlas views; split room updates, isolation copies and guest execution. Compare the complete neighbor-update service with identical actors/ticks.",
       "required_behavior": "Visible/adjacent actors still update before entry, RNG and timers remain consistent, room handoffs/doors/portals and shared progress remain correct. Slowing simulation is not equivalent performance.",
       "prior_issue": "beads-2dw.18.4",
-      "measured_additional_gain": null
+      "measured_additional_gain": null,
+      "execution_status": "remaining-evaluation"
     },
     {
       "id": "NES19",
@@ -632,7 +650,8 @@
       "next_decisive_check": "Use the same Fit/atlas interval as NES18 and separate already-cached terrain from final draw/upload cost.",
       "required_behavior": "Bomb-wide flash, inventory/death/Continue framing, arbitrary aspect, palettes, changing tiles and dungeon doors remain correct. Do not reintroduce 4:3 transitions.",
       "prior_issue": null,
-      "measured_additional_gain": null
+      "measured_additional_gain": null,
+      "execution_status": "remaining-evaluation"
     },
     {
       "id": "NES20",
@@ -670,7 +689,8 @@
       "next_decisive_check": "Measure scopes and copied regions in NES18; compare one persistent service context rather than another allocation-only experiment.",
       "required_behavior": "No leaked device clocks, native saves, inventory/shared progress or media/audio changes; refusal of forbidden effects and exact authoritative host continuation.",
       "prior_issue": null,
-      "measured_additional_gain": null
+      "measured_additional_gain": null,
+      "execution_status": "remaining-evaluation"
     },
     {
       "id": "NES21",
@@ -701,7 +721,8 @@
       "next_decisive_check": "Measure a current-build rewind/snapshot-heavy workload, including active HD/world mods, copied bytes, resident memory and tail latency. Reuse rejected scratch/allocation evidence.",
       "required_behavior": "Current-build save/load/rewind correctness and malformed-input rejection; persistent native saves protected. Old-state compatibility, old layout and private cache byte identity are not requirements.",
       "prior_issue": null,
-      "measured_additional_gain": null
+      "measured_additional_gain": null,
+      "execution_status": "remaining-evaluation"
     },
     {
       "id": "NES22",
@@ -732,7 +753,8 @@
       "next_decisive_check": "Only if netplay is selected: one real delayed-peer workload with actual replay ticks and full endpoint-state/digest checks. Do not infer rollback cost from offline snapshots.",
       "required_behavior": "Deterministic peer input, current-build restore, all authoritative state and before-frame-0 capability/profile agreement; same-host checks do not establish cross-build compatibility.",
       "prior_issue": "beads-2dw.1.100",
-      "measured_additional_gain": null
+      "measured_additional_gain": null,
+      "execution_status": "remaining-evaluation"
     },
     {
       "id": "NES23",
@@ -763,7 +785,8 @@
       "next_decisive_check": "Measure offline history and actual netplay trace/digest cost separately after the larger ownership decision. Keep qualification observers out of timed binaries and verify required diagnostic/digest results separately.",
       "required_behavior": "Required fault information, ring consumers, hooks and agreed peer digests remain correct. Do not disable netplay hashing unilaterally; establish a common validated profile before changing its simulation identity.",
       "prior_issue": null,
-      "measured_additional_gain": null
+      "measured_additional_gain": null,
+      "execution_status": "remaining-evaluation"
     },
     {
       "id": "NES24",
@@ -794,7 +817,8 @@
       "next_decisive_check": "Measure actual active SDL/GPU presentation at stock and one expanded/HD size. Include upload, driver waits and UI composition; headless CRC throughput cannot select this.",
       "required_behavior": "Palette/emphasis, screenshots, filters, resize, UI/HUD and output latency; retain software presentation and supported-platform fallback.",
       "prior_issue": null,
-      "measured_additional_gain": null
+      "measured_additional_gain": null,
+      "execution_status": "remaining-evaluation"
     },
     {
       "id": "NES25",
@@ -825,7 +849,8 @@
       "next_decisive_check": "Observe queue depth, underruns and output-thread CPU on actual audio-on gameplay, separately from dummy-device simulation timing.",
       "required_behavior": "PCM, latency, pause/resume, volume and fast-forward behavior; muting or disabling emulation is not an optimization win.",
       "prior_issue": null,
-      "measured_additional_gain": null
+      "measured_additional_gain": null,
+      "execution_status": "remaining-evaluation"
     },
     {
       "id": "NES26",
@@ -856,7 +881,8 @@
       "next_decisive_check": "Reuse the negative receipt first; only test a materially different deadline design. Compare p95/p99 lateness, cadence and input latency as well as CPU.",
       "required_behavior": "No worse user-visible pacing/latency or broken fast-forward. Retain the earlier failed candidate as rejected, not an open ready-to-ship win.",
       "prior_issue": null,
-      "measured_additional_gain": null
+      "measured_additional_gain": null,
+      "execution_status": "remaining-evaluation"
     },
     {
       "id": "NES27",
@@ -887,7 +913,8 @@
       "next_decisive_check": "Reuse beads-2dw.1.106 and existing binaries. Diagnose the actual aliasing/lifetime/optimizer defect before global IPO; use current gameplay-trained PGO or layout candidates only after the larger pipeline decision.",
       "required_behavior": "Every affected game remains neutral or positive and correct; generated coverage/build size are not vetoes by themselves, but startup/memory costs must be recorded.",
       "prior_issue": "beads-2dw.1.106",
-      "measured_additional_gain": null
+      "measured_additional_gain": null,
+      "execution_status": "remaining-evaluation"
     },
     {
       "id": "NES28",
@@ -918,7 +945,8 @@
       "next_decisive_check": "Only after measuring a large parallelizable render job: compare complete frame latency, CPU and RSS against the simpler serial replacement.",
       "required_behavior": "Deterministic authoritative simulation, no races/lifetime errors, bounded queues and acceptable latency; serial portable fallback remains usable.",
       "prior_issue": null,
-      "measured_additional_gain": null
+      "measured_additional_gain": null,
+      "execution_status": "remaining-evaluation"
     },
     {
       "id": "NES29",
@@ -949,7 +977,8 @@
       "next_decisive_check": "Inventory only. Earlier owner instructions excluded further FDS validation; no FDS launch or promotion unless that scope is reopened. Then select one actual loading-to-gameplay interval.",
       "required_behavior": "Disk files/status/errors, writes/native progress, side routing, RAM publication and game-visible completion/interrupt timing; distinguish CPU savings from an elective faster-loading behavior change.",
       "prior_issue": "beads-2dw.1.74",
-      "measured_additional_gain": null
+      "measured_additional_gain": null,
+      "execution_status": "parked-owner-exclusion"
     },
     {
       "id": "NES30",
@@ -980,7 +1009,8 @@
       "next_decisive_check": "A matching supported board workload and one inclusive service attribution. Reuse existing board fixtures; no all-mapper matrix merely to rank a candidate.",
       "required_behavior": "Expansion PCM, board IRQ/read gating and register timing, device state and portable execution. FDS-specific work remains parked with NES29.",
       "prior_issue": null,
-      "measured_additional_gain": null
+      "measured_additional_gain": null,
+      "execution_status": "remaining-evaluation"
     },
     {
       "id": "NES31",
@@ -1011,7 +1041,20 @@
       "next_decisive_check": "Only if startup or first-use delay is reported or visible in the selected interval; distinguish generation/build time, launcher time and game runtime. No menu-only throughput campaign.",
       "required_behavior": "Same ROM/content validation, working fallback, actual game start and persistent settings/saves. Longer generation and a larger binary alone do not disqualify useful built-runtime gains.",
       "prior_issue": null,
-      "measured_additional_gain": null
+      "measured_additional_gain": null,
+      "execution_status": "remaining-evaluation"
     }
-  ]
+  ],
+  "execution": {
+    "issue": "beads-2dw.1.110",
+    "branch": "perf/pipeline-burndown-20261028",
+    "base": "fc0bf3fa46a710464960c0a1f2d3b83b4d345600",
+    "status": "in-progress",
+    "evidence_root": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028",
+    "checkpoint": "2026-10-28-pipeline-progress.md",
+    "first_selection": "Native stable-interval CPU/memory/PPU/APU service; whole-goal scope remains NES01-NES31",
+    "retained_implementations": [],
+    "new_performance_results": [],
+    "owner_handoff_ready": false
+  }
 }
