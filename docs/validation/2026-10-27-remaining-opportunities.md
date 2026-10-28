@@ -14,7 +14,11 @@ on both hosts. See [board/deadline results](2026-10-28-board-deadline-results.md
 [APU results](2026-10-28-apu-event-results.md). Zelda's enabled HD lookup and
 composition job is now qualified in its own module; other games keep the
 original HD runtime. See [HD results](2026-10-28-hd-plan-results.md), including
-the rejected universal packages and SMB's unchanged-runtime proof.
+the rejected universal packages and SMB's unchanged-runtime proof. Zelda's
+fixed SNROM SRAM code now joins the native deadline service; see
+[SRAM results](2026-10-28-sram-native-results.md). SERVER Fit improves5.128%
+and Remastered1.442%; stock is neutral/inconclusive. Six items now have
+qualified evaluation decisions; NES01 remains partial and NES29 parked.
 Remaining evaluations and the final combined feature handoff are still open. FDS remains
 parked. No main/master merge or new release is authorized before owner review.
 
@@ -160,7 +164,15 @@ close the per-pixel raster or APU-event algorithm work under NES01/NES06.
   Evidence: [recompiler/src/cyc_codegen.c:76](../../recompiler/src/cyc_codegen.c#L76), [runner/cyc/cpu6502.h:92](../../runner/cyc/cpu6502.h#L92), [runner/cyc/cyc_run.c:79](../../runner/cyc/cyc_run.c#L79).
 
 
-- [ ] **NES04 · P2 · Guarded native cartridge SRAM views** (`open-design-deferred`)
+- [x] **NES04 · P2 · Guarded native cartridge SRAM views**
+
+  Selected evaluation: engine111b264 and Zelda b602d26 qualify declared fixed
+  SNROM copies with physical-byte validation, CPU/mod/committed-write watches,
+  both A12 read gates and the device deadline cursor. HLE/LLE tests pass all
+  four alignments, including untraced cursor use. Stock/Fit/HD outputs and
+  Fit room/actor records match; SERVER Fit+5.128%, HD+1.442%, stock neutral.
+  [Evidence and limits](2026-10-28-sram-native-results.md). Other mappings
+  retain fallback. The paragraph below is the original audit hypothesis.
 
   The RAM-view physical mapping admits CPU RAM and FDS linear PRG RAM, not general cartridge RAM. Zelda copied routines remain a concrete candidate; a mapping-generation and write-watch contract can make them native without pretending SRAM is immutable.
 

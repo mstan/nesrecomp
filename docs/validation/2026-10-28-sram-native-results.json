@@ -1,0 +1,1419 @@
+{
+  "schema_version": 1,
+  "issue": "beads-2dw.1.105",
+  "execution_issue": "beads-2dw.1.110",
+  "campaign": "beads-2wy8.1",
+  "runtime_commit": "111b2640feb355d9690551b6442770b8d79403d0",
+  "title_commit": "b602d2606e2949d42b4a450d9326d989f3a1ed3f",
+  "branch": "perf/pipeline-burndown-20261028",
+  "comparison": "Incremental over selected113ec64 HD runtime/results7ec91ca, with the same sprite/APU/CPU packages. Not a cumulative master speedup.",
+  "binary_sha256": {
+    "reference": "dfd9805fa380cabd4df9fe14225cadbaa8b8936262124b58ed578d9879f46861",
+    "candidate": "69e94a24784f8453c981b77618d19ea34a8f2d285a0425742225a262f1f1b876"
+  },
+  "source_snapshot": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\source-sram-v2",
+  "products_manifest": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-sram-v2.json",
+  "retained_server_archive": {
+    "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\server-sram-v2-retained-evidence-structured.zip",
+    "sha256": "7c1b41cb7e4d3042ac1b0858fdd4806399aa2a45d2af5fdc5211f9adee593987"
+  },
+  "results": [
+    {
+      "game": "The Legend of Zelda (NES)",
+      "profile": "stock",
+      "host": "DESKTOP-HN15M1H",
+      "median_cpu_seconds": {
+        "reference": 6.75,
+        "candidate": 6.546875
+      },
+      "median_cpu_reduction_percent": 3.009259259259256,
+      "paired_reduction_percent": [
+        -0.22421524663676085,
+        -6.203473945409432,
+        5.773672055427248,
+        0.47505938242280443,
+        10.416666666666663
+      ],
+      "classification": "neutral/inconclusive; mixed under workstation contention",
+      "raw_samples": "G:\\Temp\\Codex\\nes110-sram-v2-20261028\\stock\\evidence\\performance.json",
+      "raw_sha256": "ec1e806ee0d4b72fb3f6a68a74944ce87367eea2651e824c53295351617b9b70",
+      "first_frame": 1801,
+      "end_frame": 3001,
+      "samples": [
+        {
+          "mode": "reference",
+          "index": "warmup",
+          "cpu_seconds": 6.671875,
+          "wall_seconds": 11.99445149989333,
+          "excluded_setup_cpu_seconds": 0.453125,
+          "excluded_setup_wall_seconds": 0.773851600009948,
+          "binary_sha256": "dfd9805fa380cabd4df9fe14225cadbaa8b8936262124b58ed578d9879f46861",
+          "affinity_mask": 8192
+        },
+        {
+          "mode": "candidate",
+          "index": "warmup",
+          "cpu_seconds": 6.75,
+          "wall_seconds": 14.188443200080656,
+          "excluded_setup_cpu_seconds": 0.359375,
+          "excluded_setup_wall_seconds": 1.0640155000146478,
+          "binary_sha256": "69e94a24784f8453c981b77618d19ea34a8f2d285a0425742225a262f1f1b876",
+          "affinity_mask": 8192
+        },
+        {
+          "mode": "reference",
+          "index": 0,
+          "cpu_seconds": 6.96875,
+          "wall_seconds": 10.820824599941261,
+          "excluded_setup_cpu_seconds": 0.40625,
+          "excluded_setup_wall_seconds": 0.7571984999813139,
+          "binary_sha256": "dfd9805fa380cabd4df9fe14225cadbaa8b8936262124b58ed578d9879f46861",
+          "affinity_mask": 8192
+        },
+        {
+          "mode": "candidate",
+          "index": 0,
+          "cpu_seconds": 6.984375,
+          "wall_seconds": 15.60928689991124,
+          "excluded_setup_cpu_seconds": 0.375,
+          "excluded_setup_wall_seconds": 0.8164054000517353,
+          "binary_sha256": "69e94a24784f8453c981b77618d19ea34a8f2d285a0425742225a262f1f1b876",
+          "affinity_mask": 8192
+        },
+        {
+          "mode": "candidate",
+          "index": 1,
+          "cpu_seconds": 6.6875,
+          "wall_seconds": 16.181183999986388,
+          "excluded_setup_cpu_seconds": 0.40625,
+          "excluded_setup_wall_seconds": 0.7560591000365093,
+          "binary_sha256": "69e94a24784f8453c981b77618d19ea34a8f2d285a0425742225a262f1f1b876",
+          "affinity_mask": 8192
+        },
+        {
+          "mode": "reference",
+          "index": 1,
+          "cpu_seconds": 6.296875,
+          "wall_seconds": 12.98754589993041,
+          "excluded_setup_cpu_seconds": 0.359375,
+          "excluded_setup_wall_seconds": 1.094776300014928,
+          "binary_sha256": "dfd9805fa380cabd4df9fe14225cadbaa8b8936262124b58ed578d9879f46861",
+          "affinity_mask": 8192
+        },
+        {
+          "mode": "reference",
+          "index": 2,
+          "cpu_seconds": 6.765625,
+          "wall_seconds": 10.004544700030237,
+          "excluded_setup_cpu_seconds": 0.375,
+          "excluded_setup_wall_seconds": 0.7500237000640482,
+          "binary_sha256": "dfd9805fa380cabd4df9fe14225cadbaa8b8936262124b58ed578d9879f46861",
+          "affinity_mask": 8192
+        },
+        {
+          "mode": "candidate",
+          "index": 2,
+          "cpu_seconds": 6.375,
+          "wall_seconds": 10.153059700038284,
+          "excluded_setup_cpu_seconds": 0.46875,
+          "excluded_setup_wall_seconds": 0.7444479999830946,
+          "binary_sha256": "69e94a24784f8453c981b77618d19ea34a8f2d285a0425742225a262f1f1b876",
+          "affinity_mask": 8192
+        },
+        {
+          "mode": "candidate",
+          "index": 3,
+          "cpu_seconds": 6.546875,
+          "wall_seconds": 8.9963675000472,
+          "excluded_setup_cpu_seconds": 0.4375,
+          "excluded_setup_wall_seconds": 0.8001841999357566,
+          "binary_sha256": "69e94a24784f8453c981b77618d19ea34a8f2d285a0425742225a262f1f1b876",
+          "affinity_mask": 8192
+        },
+        {
+          "mode": "reference",
+          "index": 3,
+          "cpu_seconds": 6.578125,
+          "wall_seconds": 9.518990600015968,
+          "excluded_setup_cpu_seconds": 0.390625,
+          "excluded_setup_wall_seconds": 0.7664477999787778,
+          "binary_sha256": "dfd9805fa380cabd4df9fe14225cadbaa8b8936262124b58ed578d9879f46861",
+          "affinity_mask": 8192
+        },
+        {
+          "mode": "reference",
+          "index": 4,
+          "cpu_seconds": 6.75,
+          "wall_seconds": 11.13089160004165,
+          "excluded_setup_cpu_seconds": 0.453125,
+          "excluded_setup_wall_seconds": 0.7247032000450417,
+          "binary_sha256": "dfd9805fa380cabd4df9fe14225cadbaa8b8936262124b58ed578d9879f46861",
+          "affinity_mask": 8192
+        },
+        {
+          "mode": "candidate",
+          "index": 4,
+          "cpu_seconds": 6.046875,
+          "wall_seconds": 8.816848499933258,
+          "excluded_setup_cpu_seconds": 0.515625,
+          "excluded_setup_wall_seconds": 0.7784788000863045,
+          "binary_sha256": "69e94a24784f8453c981b77618d19ea34a8f2d285a0425742225a262f1f1b876",
+          "affinity_mask": 8192
+        }
+      ],
+      "scope": "SDL software1280x720, audio emulated and dummy-queued; current-build paused state, setup excluded; five alternating pairs plus excluded warmups"
+    },
+    {
+      "game": "The Legend of Zelda (NES)",
+      "profile": "world",
+      "host": "DESKTOP-HN15M1H",
+      "median_cpu_seconds": {
+        "reference": 2.875,
+        "candidate": 2.53125
+      },
+      "median_cpu_reduction_percent": 11.956521739130432,
+      "paired_reduction_percent": [
+        -8.904109589041088,
+        15.384615384615385,
+        0.5434782608695676,
+        15.18324607329843,
+        8.556149732620321
+      ],
+      "classification": "mixed local samples; positive supported independently on SERVER",
+      "raw_samples": "G:\\Temp\\Codex\\nes110-sram-v2-20261028\\world\\evidence\\performance.json",
+      "raw_sha256": "e63cc35331d64117fb1e93dcad10100607d6847a0b750d10b9ab1e82a8245df7",
+      "first_frame": 1801,
+      "end_frame": 2101,
+      "samples": [
+        {
+          "mode": "reference",
+          "index": "warmup",
+          "cpu_seconds": 2.375,
+          "wall_seconds": 3.960429699975066,
+          "excluded_setup_cpu_seconds": 0.453125,
+          "excluded_setup_wall_seconds": 0.8989008000353351,
+          "binary_sha256": "dfd9805fa380cabd4df9fe14225cadbaa8b8936262124b58ed578d9879f46861",
+          "affinity_mask": 16384
+        },
+        {
+          "mode": "candidate",
+          "index": "warmup",
+          "cpu_seconds": 2.421875,
+          "wall_seconds": 4.757347099948674,
+          "excluded_setup_cpu_seconds": 0.625,
+          "excluded_setup_wall_seconds": 1.319475800031796,
+          "binary_sha256": "69e94a24784f8453c981b77618d19ea34a8f2d285a0425742225a262f1f1b876",
+          "affinity_mask": 16384
+        },
+        {
+          "mode": "reference",
+          "index": 0,
+          "cpu_seconds": 2.28125,
+          "wall_seconds": 4.644064599997364,
+          "excluded_setup_cpu_seconds": 0.28125,
+          "excluded_setup_wall_seconds": 0.9312629000050947,
+          "binary_sha256": "dfd9805fa380cabd4df9fe14225cadbaa8b8936262124b58ed578d9879f46861",
+          "affinity_mask": 16384
+        },
+        {
+          "mode": "candidate",
+          "index": 0,
+          "cpu_seconds": 2.484375,
+          "wall_seconds": 4.939754599938169,
+          "excluded_setup_cpu_seconds": 0.546875,
+          "excluded_setup_wall_seconds": 0.8438615000341088,
+          "binary_sha256": "69e94a24784f8453c981b77618d19ea34a8f2d285a0425742225a262f1f1b876",
+          "affinity_mask": 16384
+        },
+        {
+          "mode": "candidate",
+          "index": 1,
+          "cpu_seconds": 2.40625,
+          "wall_seconds": 5.217639199923724,
+          "excluded_setup_cpu_seconds": 0.375,
+          "excluded_setup_wall_seconds": 0.8632411999860778,
+          "binary_sha256": "69e94a24784f8453c981b77618d19ea34a8f2d285a0425742225a262f1f1b876",
+          "affinity_mask": 16384
+        },
+        {
+          "mode": "reference",
+          "index": 1,
+          "cpu_seconds": 2.84375,
+          "wall_seconds": 5.403175999992527,
+          "excluded_setup_cpu_seconds": 0.40625,
+          "excluded_setup_wall_seconds": 0.9925359999760985,
+          "binary_sha256": "dfd9805fa380cabd4df9fe14225cadbaa8b8936262124b58ed578d9879f46861",
+          "affinity_mask": 16384
+        },
+        {
+          "mode": "reference",
+          "index": 2,
+          "cpu_seconds": 2.875,
+          "wall_seconds": 6.875850399956107,
+          "excluded_setup_cpu_seconds": 0.625,
+          "excluded_setup_wall_seconds": 0.9806260999757797,
+          "binary_sha256": "dfd9805fa380cabd4df9fe14225cadbaa8b8936262124b58ed578d9879f46861",
+          "affinity_mask": 16384
+        },
+        {
+          "mode": "candidate",
+          "index": 2,
+          "cpu_seconds": 2.859375,
+          "wall_seconds": 5.889838800067082,
+          "excluded_setup_cpu_seconds": 0.515625,
+          "excluded_setup_wall_seconds": 1.4607642999617383,
+          "binary_sha256": "69e94a24784f8453c981b77618d19ea34a8f2d285a0425742225a262f1f1b876",
+          "affinity_mask": 16384
+        },
+        {
+          "mode": "candidate",
+          "index": 3,
+          "cpu_seconds": 2.53125,
+          "wall_seconds": 5.612323200097308,
+          "excluded_setup_cpu_seconds": 0.4375,
+          "excluded_setup_wall_seconds": 0.8712192999664694,
+          "binary_sha256": "69e94a24784f8453c981b77618d19ea34a8f2d285a0425742225a262f1f1b876",
+          "affinity_mask": 16384
+        },
+        {
+          "mode": "reference",
+          "index": 3,
+          "cpu_seconds": 2.984375,
+          "wall_seconds": 7.293861599988304,
+          "excluded_setup_cpu_seconds": 0.484375,
+          "excluded_setup_wall_seconds": 0.9773416999960318,
+          "binary_sha256": "dfd9805fa380cabd4df9fe14225cadbaa8b8936262124b58ed578d9879f46861",
+          "affinity_mask": 16384
+        },
+        {
+          "mode": "reference",
+          "index": 4,
+          "cpu_seconds": 2.921875,
+          "wall_seconds": 5.818968600011431,
+          "excluded_setup_cpu_seconds": 0.40625,
+          "excluded_setup_wall_seconds": 1.0417701000114903,
+          "binary_sha256": "dfd9805fa380cabd4df9fe14225cadbaa8b8936262124b58ed578d9879f46861",
+          "affinity_mask": 16384
+        },
+        {
+          "mode": "candidate",
+          "index": 4,
+          "cpu_seconds": 2.671875,
+          "wall_seconds": 5.725280000013299,
+          "excluded_setup_cpu_seconds": 0.625,
+          "excluded_setup_wall_seconds": 1.5812974999425933,
+          "binary_sha256": "69e94a24784f8453c981b77618d19ea34a8f2d285a0425742225a262f1f1b876",
+          "affinity_mask": 16384
+        }
+      ],
+      "scope": "SDL software1280x720, audio emulated and dummy-queued; current-build paused state, setup excluded; five alternating pairs plus excluded warmups"
+    },
+    {
+      "game": "The Legend of Zelda (NES)",
+      "profile": "stock",
+      "host": "SERVER",
+      "median_cpu_seconds": {
+        "reference": 9.890625,
+        "candidate": 9.84375
+      },
+      "median_cpu_reduction_percent": 0.4739336492891044,
+      "paired_reduction_percent": [
+        0.0,
+        -1.4018691588784993,
+        0.4739336492891044,
+        -0.9771986970684043,
+        1.5974440894568676
+      ],
+      "classification": "neutral/inconclusive: two faster, two slower, one tie",
+      "raw_samples": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\server-sram-v2-stock-resolution.json",
+      "raw_sha256": "68c85cdc5e181bb1a0b58fa70471b8a9735f2d0cc303e327dc18b6fa1771d806",
+      "first_frame": 1801,
+      "end_frame": 3001,
+      "samples": [
+        {
+          "mode": "reference",
+          "index": "warmup",
+          "cpu_seconds": 9.96875,
+          "wall_seconds": 13.099771900102496,
+          "excluded_setup_cpu_seconds": 0.859375,
+          "excluded_setup_wall_seconds": 1.2594845998100936,
+          "binary_sha256": "dfd9805fa380cabd4df9fe14225cadbaa8b8936262124b58ed578d9879f46861",
+          "affinity_mask": 2
+        },
+        {
+          "mode": "candidate",
+          "index": "warmup",
+          "cpu_seconds": 9.859375,
+          "wall_seconds": 11.288985699880868,
+          "excluded_setup_cpu_seconds": 0.984375,
+          "excluded_setup_wall_seconds": 1.331434200052172,
+          "binary_sha256": "69e94a24784f8453c981b77618d19ea34a8f2d285a0425742225a262f1f1b876",
+          "affinity_mask": 2
+        },
+        {
+          "mode": "reference",
+          "index": 0,
+          "cpu_seconds": 10.046875,
+          "wall_seconds": 11.826068399939686,
+          "excluded_setup_cpu_seconds": 0.984375,
+          "excluded_setup_wall_seconds": 1.194848099956289,
+          "binary_sha256": "dfd9805fa380cabd4df9fe14225cadbaa8b8936262124b58ed578d9879f46861",
+          "affinity_mask": 2
+        },
+        {
+          "mode": "candidate",
+          "index": 0,
+          "cpu_seconds": 10.046875,
+          "wall_seconds": 11.598476199898869,
+          "excluded_setup_cpu_seconds": 0.796875,
+          "excluded_setup_wall_seconds": 0.8484141000080854,
+          "binary_sha256": "69e94a24784f8453c981b77618d19ea34a8f2d285a0425742225a262f1f1b876",
+          "affinity_mask": 2
+        },
+        {
+          "mode": "candidate",
+          "index": 1,
+          "cpu_seconds": 10.171875,
+          "wall_seconds": 12.110755699919537,
+          "excluded_setup_cpu_seconds": 0.859375,
+          "excluded_setup_wall_seconds": 0.9597388999536633,
+          "binary_sha256": "69e94a24784f8453c981b77618d19ea34a8f2d285a0425742225a262f1f1b876",
+          "affinity_mask": 2
+        },
+        {
+          "mode": "reference",
+          "index": 1,
+          "cpu_seconds": 10.03125,
+          "wall_seconds": 11.584140799939632,
+          "excluded_setup_cpu_seconds": 0.796875,
+          "excluded_setup_wall_seconds": 1.0545773000922054,
+          "binary_sha256": "dfd9805fa380cabd4df9fe14225cadbaa8b8936262124b58ed578d9879f46861",
+          "affinity_mask": 2
+        },
+        {
+          "mode": "reference",
+          "index": 2,
+          "cpu_seconds": 9.890625,
+          "wall_seconds": 10.948848800035194,
+          "excluded_setup_cpu_seconds": 0.71875,
+          "excluded_setup_wall_seconds": 0.8820344000123441,
+          "binary_sha256": "dfd9805fa380cabd4df9fe14225cadbaa8b8936262124b58ed578d9879f46861",
+          "affinity_mask": 2
+        },
+        {
+          "mode": "candidate",
+          "index": 2,
+          "cpu_seconds": 9.84375,
+          "wall_seconds": 11.793603300116956,
+          "excluded_setup_cpu_seconds": 0.828125,
+          "excluded_setup_wall_seconds": 0.9355955000501126,
+          "binary_sha256": "69e94a24784f8453c981b77618d19ea34a8f2d285a0425742225a262f1f1b876",
+          "affinity_mask": 2
+        },
+        {
+          "mode": "candidate",
+          "index": 3,
+          "cpu_seconds": 9.6875,
+          "wall_seconds": 10.558530200039968,
+          "excluded_setup_cpu_seconds": 0.90625,
+          "excluded_setup_wall_seconds": 0.9433279000222683,
+          "binary_sha256": "69e94a24784f8453c981b77618d19ea34a8f2d285a0425742225a262f1f1b876",
+          "affinity_mask": 2
+        },
+        {
+          "mode": "reference",
+          "index": 3,
+          "cpu_seconds": 9.59375,
+          "wall_seconds": 10.607018199982122,
+          "excluded_setup_cpu_seconds": 0.875,
+          "excluded_setup_wall_seconds": 0.9496083001140505,
+          "binary_sha256": "dfd9805fa380cabd4df9fe14225cadbaa8b8936262124b58ed578d9879f46861",
+          "affinity_mask": 2
+        },
+        {
+          "mode": "reference",
+          "index": 4,
+          "cpu_seconds": 9.78125,
+          "wall_seconds": 10.569308900041506,
+          "excluded_setup_cpu_seconds": 0.890625,
+          "excluded_setup_wall_seconds": 0.9402046999894083,
+          "binary_sha256": "dfd9805fa380cabd4df9fe14225cadbaa8b8936262124b58ed578d9879f46861",
+          "affinity_mask": 2
+        },
+        {
+          "mode": "candidate",
+          "index": 4,
+          "cpu_seconds": 9.625,
+          "wall_seconds": 10.372425799956545,
+          "excluded_setup_cpu_seconds": 0.84375,
+          "excluded_setup_wall_seconds": 0.9257163999136537,
+          "binary_sha256": "69e94a24784f8453c981b77618d19ea34a8f2d285a0425742225a262f1f1b876",
+          "affinity_mask": 2
+        }
+      ],
+      "scope": "SDL software1280x720, audio emulated and dummy-queued; current-build paused state, setup excluded; five alternating pairs plus excluded warmups"
+    },
+    {
+      "game": "The Legend of Zelda (NES)",
+      "profile": "world",
+      "host": "SERVER",
+      "median_cpu_seconds": {
+        "reference": 4.265625,
+        "candidate": 4.046875
+      },
+      "median_cpu_reduction_percent": 5.128205128205132,
+      "paired_reduction_percent": [
+        5.474452554744524,
+        4.029304029304026,
+        0.7633587786259555,
+        6.296296296296299,
+        10.622710622710619
+      ],
+      "classification": "positive: five of five faster",
+      "raw_samples": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\server-sram-v2-world-resolution.json",
+      "raw_sha256": "3fc3389dd74413b2146b51d07e8ce939fad731f287e417da3e79e20fdb6cc717",
+      "first_frame": 1801,
+      "end_frame": 2101,
+      "samples": [
+        {
+          "mode": "reference",
+          "index": "warmup",
+          "cpu_seconds": 4.21875,
+          "wall_seconds": 4.595334799960256,
+          "excluded_setup_cpu_seconds": 1.0,
+          "excluded_setup_wall_seconds": 1.4239835999906063,
+          "binary_sha256": "dfd9805fa380cabd4df9fe14225cadbaa8b8936262124b58ed578d9879f46861",
+          "affinity_mask": 1
+        },
+        {
+          "mode": "candidate",
+          "index": "warmup",
+          "cpu_seconds": 4.0,
+          "wall_seconds": 4.614541599992663,
+          "excluded_setup_cpu_seconds": 1.0,
+          "excluded_setup_wall_seconds": 1.274677500128746,
+          "binary_sha256": "69e94a24784f8453c981b77618d19ea34a8f2d285a0425742225a262f1f1b876",
+          "affinity_mask": 1
+        },
+        {
+          "mode": "reference",
+          "index": 0,
+          "cpu_seconds": 4.28125,
+          "wall_seconds": 6.645663199946284,
+          "excluded_setup_cpu_seconds": 0.921875,
+          "excluded_setup_wall_seconds": 1.206468699965626,
+          "binary_sha256": "dfd9805fa380cabd4df9fe14225cadbaa8b8936262124b58ed578d9879f46861",
+          "affinity_mask": 1
+        },
+        {
+          "mode": "candidate",
+          "index": 0,
+          "cpu_seconds": 4.046875,
+          "wall_seconds": 5.957455599913374,
+          "excluded_setup_cpu_seconds": 0.953125,
+          "excluded_setup_wall_seconds": 1.488613700028509,
+          "binary_sha256": "69e94a24784f8453c981b77618d19ea34a8f2d285a0425742225a262f1f1b876",
+          "affinity_mask": 1
+        },
+        {
+          "mode": "candidate",
+          "index": 1,
+          "cpu_seconds": 4.09375,
+          "wall_seconds": 7.969893200090155,
+          "excluded_setup_cpu_seconds": 0.96875,
+          "excluded_setup_wall_seconds": 1.2854690998792648,
+          "binary_sha256": "69e94a24784f8453c981b77618d19ea34a8f2d285a0425742225a262f1f1b876",
+          "affinity_mask": 1
+        },
+        {
+          "mode": "reference",
+          "index": 1,
+          "cpu_seconds": 4.265625,
+          "wall_seconds": 5.077039400115609,
+          "excluded_setup_cpu_seconds": 0.84375,
+          "excluded_setup_wall_seconds": 1.5577475999016315,
+          "binary_sha256": "dfd9805fa380cabd4df9fe14225cadbaa8b8936262124b58ed578d9879f46861",
+          "affinity_mask": 1
+        },
+        {
+          "mode": "reference",
+          "index": 2,
+          "cpu_seconds": 4.09375,
+          "wall_seconds": 4.550660900073126,
+          "excluded_setup_cpu_seconds": 0.984375,
+          "excluded_setup_wall_seconds": 1.0700274999253452,
+          "binary_sha256": "dfd9805fa380cabd4df9fe14225cadbaa8b8936262124b58ed578d9879f46861",
+          "affinity_mask": 1
+        },
+        {
+          "mode": "candidate",
+          "index": 2,
+          "cpu_seconds": 4.0625,
+          "wall_seconds": 4.628719999920577,
+          "excluded_setup_cpu_seconds": 0.984375,
+          "excluded_setup_wall_seconds": 1.0490552999544889,
+          "binary_sha256": "69e94a24784f8453c981b77618d19ea34a8f2d285a0425742225a262f1f1b876",
+          "affinity_mask": 1
+        },
+        {
+          "mode": "candidate",
+          "index": 3,
+          "cpu_seconds": 3.953125,
+          "wall_seconds": 4.808122499845922,
+          "excluded_setup_cpu_seconds": 1.015625,
+          "excluded_setup_wall_seconds": 1.0877342000603676,
+          "binary_sha256": "69e94a24784f8453c981b77618d19ea34a8f2d285a0425742225a262f1f1b876",
+          "affinity_mask": 1
+        },
+        {
+          "mode": "reference",
+          "index": 3,
+          "cpu_seconds": 4.21875,
+          "wall_seconds": 5.1392640999984,
+          "excluded_setup_cpu_seconds": 0.765625,
+          "excluded_setup_wall_seconds": 1.1251145000569522,
+          "binary_sha256": "dfd9805fa380cabd4df9fe14225cadbaa8b8936262124b58ed578d9879f46861",
+          "affinity_mask": 1
+        },
+        {
+          "mode": "reference",
+          "index": 4,
+          "cpu_seconds": 4.265625,
+          "wall_seconds": 4.824557400075719,
+          "excluded_setup_cpu_seconds": 1.0625,
+          "excluded_setup_wall_seconds": 1.1542042999062687,
+          "binary_sha256": "dfd9805fa380cabd4df9fe14225cadbaa8b8936262124b58ed578d9879f46861",
+          "affinity_mask": 1
+        },
+        {
+          "mode": "candidate",
+          "index": 4,
+          "cpu_seconds": 3.8125,
+          "wall_seconds": 4.412873399909586,
+          "excluded_setup_cpu_seconds": 0.953125,
+          "excluded_setup_wall_seconds": 1.0753566999919713,
+          "binary_sha256": "69e94a24784f8453c981b77618d19ea34a8f2d285a0425742225a262f1f1b876",
+          "affinity_mask": 1
+        }
+      ],
+      "scope": "SDL software1280x720, audio emulated and dummy-queued; current-build paused state, setup excluded; five alternating pairs plus excluded warmups"
+    },
+    {
+      "game": "The Legend of Zelda (NES)",
+      "profile": "hd",
+      "host": "SERVER",
+      "median_cpu_seconds": {
+        "reference": 6.5,
+        "candidate": 6.40625
+      },
+      "median_cpu_reduction_percent": 1.4423076923076872,
+      "paired_reduction_percent": [
+        3.8461538461538436,
+        0.24752475247524774,
+        3.263403263403264,
+        0.24330900243308973,
+        1.674641148325362
+      ],
+      "classification": "small positive: five of five faster",
+      "raw_samples": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\server-sram-v2-hd-performance.json",
+      "raw_sha256": "61a253b2300f24c25ea242f1a72bd7b9c8ccf31bb7fd58da574c7e809f89f4cb",
+      "first_frame": 1801,
+      "end_frame": 2101,
+      "samples": [
+        {
+          "mode": "reference",
+          "index": "warmup",
+          "cpu_seconds": 6.1875,
+          "wall_seconds": 6.914286599960178,
+          "excluded_setup_cpu_seconds": 5.109375,
+          "excluded_setup_wall_seconds": 5.769016100093722,
+          "binary_sha256": "dfd9805fa380cabd4df9fe14225cadbaa8b8936262124b58ed578d9879f46861",
+          "affinity_mask": 4
+        },
+        {
+          "mode": "candidate",
+          "index": "warmup",
+          "cpu_seconds": 6.265625,
+          "wall_seconds": 6.6559903000015765,
+          "excluded_setup_cpu_seconds": 5.15625,
+          "excluded_setup_wall_seconds": 5.587182299932465,
+          "binary_sha256": "69e94a24784f8453c981b77618d19ea34a8f2d285a0425742225a262f1f1b876",
+          "affinity_mask": 4
+        },
+        {
+          "mode": "reference",
+          "index": 0,
+          "cpu_seconds": 6.5,
+          "wall_seconds": 7.505921700038016,
+          "excluded_setup_cpu_seconds": 4.84375,
+          "excluded_setup_wall_seconds": 5.14562249998562,
+          "binary_sha256": "dfd9805fa380cabd4df9fe14225cadbaa8b8936262124b58ed578d9879f46861",
+          "affinity_mask": 4
+        },
+        {
+          "mode": "candidate",
+          "index": 0,
+          "cpu_seconds": 6.25,
+          "wall_seconds": 7.14651730004698,
+          "excluded_setup_cpu_seconds": 4.953125,
+          "excluded_setup_wall_seconds": 5.357785000000149,
+          "binary_sha256": "69e94a24784f8453c981b77618d19ea34a8f2d285a0425742225a262f1f1b876",
+          "affinity_mask": 4
+        },
+        {
+          "mode": "candidate",
+          "index": 1,
+          "cpu_seconds": 6.296875,
+          "wall_seconds": 6.770825299900025,
+          "excluded_setup_cpu_seconds": 4.96875,
+          "excluded_setup_wall_seconds": 5.556316199945286,
+          "binary_sha256": "69e94a24784f8453c981b77618d19ea34a8f2d285a0425742225a262f1f1b876",
+          "affinity_mask": 4
+        },
+        {
+          "mode": "reference",
+          "index": 1,
+          "cpu_seconds": 6.3125,
+          "wall_seconds": 7.319693599827588,
+          "excluded_setup_cpu_seconds": 5.09375,
+          "excluded_setup_wall_seconds": 5.805163700133562,
+          "binary_sha256": "dfd9805fa380cabd4df9fe14225cadbaa8b8936262124b58ed578d9879f46861",
+          "affinity_mask": 4
+        },
+        {
+          "mode": "reference",
+          "index": 2,
+          "cpu_seconds": 6.703125,
+          "wall_seconds": 7.913228200050071,
+          "excluded_setup_cpu_seconds": 5.15625,
+          "excluded_setup_wall_seconds": 6.472570999991149,
+          "binary_sha256": "dfd9805fa380cabd4df9fe14225cadbaa8b8936262124b58ed578d9879f46861",
+          "affinity_mask": 4
+        },
+        {
+          "mode": "candidate",
+          "index": 2,
+          "cpu_seconds": 6.484375,
+          "wall_seconds": 7.15114440000616,
+          "excluded_setup_cpu_seconds": 5.21875,
+          "excluded_setup_wall_seconds": 5.7333401998039335,
+          "binary_sha256": "69e94a24784f8453c981b77618d19ea34a8f2d285a0425742225a262f1f1b876",
+          "affinity_mask": 4
+        },
+        {
+          "mode": "candidate",
+          "index": 3,
+          "cpu_seconds": 6.40625,
+          "wall_seconds": 7.122699299827218,
+          "excluded_setup_cpu_seconds": 5.328125,
+          "excluded_setup_wall_seconds": 5.699461900163442,
+          "binary_sha256": "69e94a24784f8453c981b77618d19ea34a8f2d285a0425742225a262f1f1b876",
+          "affinity_mask": 4
+        },
+        {
+          "mode": "reference",
+          "index": 3,
+          "cpu_seconds": 6.421875,
+          "wall_seconds": 7.1324275999795645,
+          "excluded_setup_cpu_seconds": 5.296875,
+          "excluded_setup_wall_seconds": 5.7729700999334455,
+          "binary_sha256": "dfd9805fa380cabd4df9fe14225cadbaa8b8936262124b58ed578d9879f46861",
+          "affinity_mask": 4
+        },
+        {
+          "mode": "reference",
+          "index": 4,
+          "cpu_seconds": 6.53125,
+          "wall_seconds": 7.400241200113669,
+          "excluded_setup_cpu_seconds": 5.125,
+          "excluded_setup_wall_seconds": 5.548727300018072,
+          "binary_sha256": "dfd9805fa380cabd4df9fe14225cadbaa8b8936262124b58ed578d9879f46861",
+          "affinity_mask": 4
+        },
+        {
+          "mode": "candidate",
+          "index": 4,
+          "cpu_seconds": 6.421875,
+          "wall_seconds": 7.066896599950269,
+          "excluded_setup_cpu_seconds": 5.5625,
+          "excluded_setup_wall_seconds": 6.049652900081128,
+          "binary_sha256": "69e94a24784f8453c981b77618d19ea34a8f2d285a0425742225a262f1f1b876",
+          "affinity_mask": 4
+        }
+      ],
+      "scope": "SDL software1280x720, audio emulated and dummy-queued; current-build paused state, setup excluded; five alternating pairs plus excluded warmups"
+    }
+  ],
+  "correctness": {
+    "stock": {
+      "path": "G:\\Temp\\Codex\\nes110-sram-v2-20261028\\stock\\evidence\\correctness.json",
+      "sha256": "7898dc23cdd452c08607924e7fe18066f3cfac79851d180d3094faef8e05440e",
+      "hashes": {
+        "audio.wav": "b5c616b84dd092fcb96dcb69b15e8d37913c76592ebf8f3d6e2c796e0d58271d",
+        "final.png": "a9c4c485cfda300739881e4d97822d23871a65ad3fc599dc3d02201e016f98e4",
+        "frames.bin": "5c639386ba1de1005b800a2102c349e80557f0ee1211b8d587c147daceb1385a",
+        "hardware.txt": "3a80624aff39f84a8924db4098904d6daab0f1b5551e9f968bdb109437a198e2",
+        "memory.txt": "1a2fda3b8447d07df73e81f10b623c37b7c67aa14730ffe19e100d1d94cd19c5",
+        "present.png": "a9c4c485cfda300739881e4d97822d23871a65ad3fc599dc3d02201e016f98e4",
+        "present_00000.png": "2706fa38e24aba8ec98ac71bfb6d887451d77fe5cb78ce3bf8c4151e87fe9f9e",
+        "present_00300.png": "9adfd8e72e95f170c444ee23facf318d817c59bec06d21348e66f5dec50d95cb",
+        "present_00600.png": "b023f92381877c40dec6549a75d42562a770c64b4460bd079f20dcad989364e8",
+        "present_00900.png": "12ee523323336ab9e88e41d427856d2e419f0ea96881b8b9a27949dbabf6a28a",
+        "present_01200.png": "63f9f4400cdf4dd6cdbd6819351aeaa9cd73ec25b496b04b99a43859def4e8de",
+        "present_01500.png": "7a9d3933d6a221d09a7e0c1b197b24f2cbcbf09de6284fb5d42ff242cd7232d8",
+        "present_01800.png": "7a9d3933d6a221d09a7e0c1b197b24f2cbcbf09de6284fb5d42ff242cd7232d8",
+        "present_02100.png": "9e55d8e73ddd6455fdbafae3085070e58d271fd04e83ee131d5efe08e327f282",
+        "present_02400.png": "bf53d0e92092a4a0ab1e0fffc17c2bf4057b1b35eae32b9345b8c4d421257cf5",
+        "present_02700.png": "bf5a1b62e92bfef9b32a88130b27b9f24fbd66be11384b67a020de7c01003b51",
+        "present_03000.png": "a9c4c485cfda300739881e4d97822d23871a65ad3fc599dc3d02201e016f98e4",
+        "mid_mod:cyc.hdpack.0": "7911f8f5921c37681c27636e5d0866e2f7e7debc87507b89de918c2008c94fb8",
+        "mid_mod:cyc.hdpack.1": "3390f6fc2ed15aa2560f073ccba24da27706a47c9d6450db9b68007cf77700f2",
+        "mid_mod:cyc.hdpack.2": "53d52c8586303738000e3349c54f35b32fc76e768e66f10e1e4700231b5011bf",
+        "mid_mod:cyc.hdpack.3": "8117f62f02a46ea0af6ca043e833e4514f38da13393d2516862b0089f137312d",
+        "mid_mod:cyc.hdpack.4": "4f4bc193b47257eabd7cc2193df9e0b006fb21cf5e5645bcc21c0f64e908fabc",
+        "mid_mod:zelda.world.rooms": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "mid_mod:zelda.world.portal-view": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "mid_mod:zelda.cycle.voxel": "ac053cd23cdfbff47dbbeec988a173df23a22555894038ff934b58ac5c978b1b",
+        "end_mod:cyc.hdpack.0": "7911f8f5921c37681c27636e5d0866e2f7e7debc87507b89de918c2008c94fb8",
+        "end_mod:cyc.hdpack.1": "3390f6fc2ed15aa2560f073ccba24da27706a47c9d6450db9b68007cf77700f2",
+        "end_mod:cyc.hdpack.2": "53d52c8586303738000e3349c54f35b32fc76e768e66f10e1e4700231b5011bf",
+        "end_mod:cyc.hdpack.3": "8117f62f02a46ea0af6ca043e833e4514f38da13393d2516862b0089f137312d",
+        "end_mod:cyc.hdpack.4": "4f4bc193b47257eabd7cc2193df9e0b006fb21cf5e5645bcc21c0f64e908fabc",
+        "end_mod:zelda.world.rooms": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "end_mod:zelda.world.portal-view": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "end_mod:zelda.cycle.voxel": "ac053cd23cdfbff47dbbeec988a173df23a22555894038ff934b58ac5c978b1b"
+      }
+    },
+    "world": {
+      "path": "G:\\Temp\\Codex\\nes110-sram-v2-20261028\\world\\evidence\\correctness.json",
+      "sha256": "34cd830e560ce95c48867ae308c80edbd6d1cb88d35838587c8a8d39c0cf4c40",
+      "hashes": {
+        "audio.wav": "103440c6460794597906443e0f14877142cd94522e525147b10eaf36a45e53c2",
+        "final.png": "b3206e39aab84308e8880ec8ec2ad2d34a2a44fa99bc077cfc7a73915d70863e",
+        "frames.bin": "00a96417aac33933b09d340628d83a29315540353acb0b934f39d9b7d7f2c146",
+        "hardware.txt": "2d7a9869f04c737ac5b2cf93f2ffd21716debc0899a022bda762758945360911",
+        "memory.txt": "a058af56603eb653ed007b7d8b77041ea2d13934a900f305d869a7ba3124d0d3",
+        "present.png": "f9b6148ea62cdaf1456f321bd26c52495ff93cab88d66615335a85facb18c339",
+        "present_00000.png": "2706fa38e24aba8ec98ac71bfb6d887451d77fe5cb78ce3bf8c4151e87fe9f9e",
+        "present_00300.png": "9adfd8e72e95f170c444ee23facf318d817c59bec06d21348e66f5dec50d95cb",
+        "present_00600.png": "b023f92381877c40dec6549a75d42562a770c64b4460bd079f20dcad989364e8",
+        "present_00900.png": "12ee523323336ab9e88e41d427856d2e419f0ea96881b8b9a27949dbabf6a28a",
+        "present_01200.png": "90e401da76c01c3c67ce907c466f1dc0ca7f6558c85a8709f9c7b7739422a3cc",
+        "present_01500.png": "cfba77e51e0505458aa78220b501d0b673e49b41ba61e8913b260128a8df7837",
+        "present_01800.png": "4849a0621dffb37e61b8d1f8736bf6870f0fef432087500996a2bca11c39c547",
+        "present_02100.png": "f9b6148ea62cdaf1456f321bd26c52495ff93cab88d66615335a85facb18c339",
+        "mid_mod:cyc.hdpack.0": "7911f8f5921c37681c27636e5d0866e2f7e7debc87507b89de918c2008c94fb8",
+        "mid_mod:cyc.hdpack.1": "3390f6fc2ed15aa2560f073ccba24da27706a47c9d6450db9b68007cf77700f2",
+        "mid_mod:cyc.hdpack.2": "53d52c8586303738000e3349c54f35b32fc76e768e66f10e1e4700231b5011bf",
+        "mid_mod:cyc.hdpack.3": "8117f62f02a46ea0af6ca043e833e4514f38da13393d2516862b0089f137312d",
+        "mid_mod:cyc.hdpack.4": "4f4bc193b47257eabd7cc2193df9e0b006fb21cf5e5645bcc21c0f64e908fabc",
+        "mid_mod:zelda.world.rooms": "e9606f6018444e3b67d51da123fc6bf1cb99c1eb0536a0f257c14d44f0941e0b",
+        "mid_mod:zelda.world.portal-view": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "mid_mod:zelda.cycle.voxel": "ac053cd23cdfbff47dbbeec988a173df23a22555894038ff934b58ac5c978b1b",
+        "end_mod:cyc.hdpack.0": "7911f8f5921c37681c27636e5d0866e2f7e7debc87507b89de918c2008c94fb8",
+        "end_mod:cyc.hdpack.1": "3390f6fc2ed15aa2560f073ccba24da27706a47c9d6450db9b68007cf77700f2",
+        "end_mod:cyc.hdpack.2": "53d52c8586303738000e3349c54f35b32fc76e768e66f10e1e4700231b5011bf",
+        "end_mod:cyc.hdpack.3": "8117f62f02a46ea0af6ca043e833e4514f38da13393d2516862b0089f137312d",
+        "end_mod:cyc.hdpack.4": "4f4bc193b47257eabd7cc2193df9e0b006fb21cf5e5645bcc21c0f64e908fabc",
+        "end_mod:zelda.world.rooms": "04e39cc14e066a0abfcc356633aa5ccc5798707b80b81bd94377a0f5d20eb22d",
+        "end_mod:zelda.world.portal-view": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "end_mod:zelda.cycle.voxel": "ac053cd23cdfbff47dbbeec988a173df23a22555894038ff934b58ac5c978b1b"
+      }
+    },
+    "hd": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\server-sram-v2-hd-correctness.json",
+      "sha256": "143a080a288e3b3432b924dacd9333de6d15da1d5f04309f4f8f992be7a0e642",
+      "hashes": {
+        "audio.wav": "2989051a49b464eb307ef7fcffa0bfa9527714c4160aa4a346f0b32a4ee5cf54",
+        "final.png": "52fbc78ffe2628c54f4fd1abc8925a72dd68e9161bba95b51d37a950280eda48",
+        "frames.bin": "5fd6164c1252c53987c19dd7c6221525a91a12f4c841677385986781c4736fc3",
+        "hardware.txt": "6cd99f5d5426d943c1f1831152bbc17816377f11144bd73d03e6b7ee2a4744ab",
+        "memory.txt": "8017287ab1344a3a3d3147be502cbbe0be073cbe05bda1e4a0b157551df785fb",
+        "present.png": "c775afb04f321f85c005992cce49a1644ade2a8bbbe3e4dcfa128fcaa0290707",
+        "present_00000.png": "ec885f6a8b005c9938b898ff149c17a4d6d50799703a56720fa76864abffaae3",
+        "present_00300.png": "022934d13263a73304c4c829f04325ef07d19e8ff59b4e0943719f3c51c44ea1",
+        "present_00600.png": "09e682fedd210152600001160bf84cfc7a1aed1fcaf6b4c8501de7a32708247a",
+        "present_00900.png": "61f8c5bef42d6ca15bb066c5097c5c6e9a9c1b4e466bdb4aa0369a90744babcc",
+        "present_01200.png": "72239622e8489b5d4c54181bab9cf730c8d2e1974483d02dc41a33fcb38745aa",
+        "present_01500.png": "b4f41f61de4afb4435c9fcf72dd948663b66ec0963673c1aba6eb19c7fa36291",
+        "present_01800.png": "b4f41f61de4afb4435c9fcf72dd948663b66ec0963673c1aba6eb19c7fa36291",
+        "present_02100.png": "c775afb04f321f85c005992cce49a1644ade2a8bbbe3e4dcfa128fcaa0290707",
+        "mid_mod:cyc.hdpack.0": "ee2358bd94285de483a63164427aabfb252d97d079391867197d1ad37fed9bf5",
+        "mid_mod:cyc.hdpack.1": "f1a55936474eeb3ae2654bebfcad3a3abd2cf605b329da5f67d049a40f7b48be",
+        "mid_mod:cyc.hdpack.2": "c555826b578851c29c347b250509711e2a2959d3bafe12f0225cca84ce44a207",
+        "mid_mod:cyc.hdpack.3": "3072dad9d0bffa5b5bd8c1a6f071ec55967823eb405e0978678acabc134f465d",
+        "mid_mod:cyc.hdpack.4": "4d4ba805e6fe8515ffe5833751c8b2b354c63ec8db5fa39630ca60722ed3654e",
+        "mid_mod:zelda.world.rooms": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "mid_mod:zelda.world.portal-view": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "mid_mod:zelda.cycle.voxel": "ac053cd23cdfbff47dbbeec988a173df23a22555894038ff934b58ac5c978b1b",
+        "end_mod:cyc.hdpack.0": "7f3a2c16c3fc15ff45cb23ff8f369b37184cd9c20a4bf11a1023fdc31baf5731",
+        "end_mod:cyc.hdpack.1": "dc0b4e0ce4b76a21ce54d2a01fdc6b784e6ff566c03b0899cc298e8a17a30eaf",
+        "end_mod:cyc.hdpack.2": "85e0bf436a449d2acc3e20b821d2665bf041e18440748c51d734b61d7c49563a",
+        "end_mod:cyc.hdpack.3": "436cd5d47e0f88f8b53f60b3d3d734c63044087627f338b52a21564f51aaee50",
+        "end_mod:cyc.hdpack.4": "113717b908c7e6250df8845cadabd957e4225d7be45ebfb9b6d3f76404a66a87",
+        "end_mod:zelda.world.rooms": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "end_mod:zelda.world.portal-view": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "end_mod:zelda.cycle.voxel": "ac053cd23cdfbff47dbbeec988a173df23a22555894038ff934b58ac5c978b1b"
+      }
+    }
+  },
+  "tests": {
+    "HLE": {
+      "results": {
+        "selfmod": [
+          {
+            "views": 1,
+            "usable": 1,
+            "entries": 1887,
+            "validated": 1886,
+            "rejected": 1886,
+            "invalidated": 1886,
+            "exits": 1886,
+            "interpreted": 11346,
+            "native_rom": 0,
+            "native_ram": 11439
+          },
+          {
+            "views": 1,
+            "usable": 1,
+            "entries": 1887,
+            "validated": 1886,
+            "rejected": 1886,
+            "invalidated": 1886,
+            "exits": 1886,
+            "interpreted": 11346,
+            "native_rom": 0,
+            "native_ram": 11439
+          },
+          {
+            "views": 1,
+            "usable": 1,
+            "entries": 1887,
+            "validated": 1886,
+            "rejected": 1886,
+            "invalidated": 1886,
+            "exits": 1886,
+            "interpreted": 11346,
+            "native_rom": 0,
+            "native_ram": 11439
+          },
+          {
+            "views": 1,
+            "usable": 1,
+            "entries": 1887,
+            "validated": 1886,
+            "rejected": 1886,
+            "invalidated": 1886,
+            "exits": 1886,
+            "interpreted": 11346,
+            "native_rom": 0,
+            "native_ram": 11439
+          }
+        ],
+        "stable": [
+          {
+            "views": 1,
+            "usable": 1,
+            "entries": 1896,
+            "validated": 1896,
+            "rejected": 1896,
+            "invalidated": 1896,
+            "exits": 1896,
+            "interpreted": 11406,
+            "native_rom": 0,
+            "native_ram": 11376
+          },
+          {
+            "views": 1,
+            "usable": 1,
+            "entries": 1896,
+            "validated": 1896,
+            "rejected": 1896,
+            "invalidated": 1896,
+            "exits": 1896,
+            "interpreted": 11406,
+            "native_rom": 0,
+            "native_ram": 11376
+          },
+          {
+            "views": 1,
+            "usable": 1,
+            "entries": 1896,
+            "validated": 1896,
+            "rejected": 1896,
+            "invalidated": 1896,
+            "exits": 1896,
+            "interpreted": 11406,
+            "native_rom": 0,
+            "native_ram": 11376
+          },
+          {
+            "views": 1,
+            "usable": 1,
+            "entries": 1896,
+            "validated": 1896,
+            "rejected": 1896,
+            "invalidated": 1896,
+            "exits": 1896,
+            "interpreted": 11406,
+            "native_rom": 0,
+            "native_ram": 11376
+          }
+        ],
+        "gate": [
+          {
+            "views": 1,
+            "usable": 1,
+            "entries": 5,
+            "validated": 1,
+            "rejected": 0,
+            "invalidated": 0,
+            "exits": 0,
+            "interpreted": 50398,
+            "native_rom": 0,
+            "native_ram": 30
+          },
+          {
+            "views": 1,
+            "usable": 1,
+            "entries": 5,
+            "validated": 1,
+            "rejected": 0,
+            "invalidated": 0,
+            "exits": 0,
+            "interpreted": 50398,
+            "native_rom": 0,
+            "native_ram": 30
+          },
+          {
+            "views": 1,
+            "usable": 1,
+            "entries": 5,
+            "validated": 1,
+            "rejected": 0,
+            "invalidated": 0,
+            "exits": 0,
+            "interpreted": 50398,
+            "native_rom": 0,
+            "native_ram": 30
+          },
+          {
+            "views": 1,
+            "usable": 1,
+            "entries": 5,
+            "validated": 1,
+            "rejected": 0,
+            "invalidated": 0,
+            "exits": 0,
+            "interpreted": 50398,
+            "native_rom": 0,
+            "native_ram": 30
+          }
+        ],
+        "a12": [
+          {
+            "views": 1,
+            "usable": 1,
+            "entries": 0,
+            "validated": 0,
+            "rejected": 0,
+            "invalidated": 0,
+            "exits": 0,
+            "interpreted": 6,
+            "native_rom": 0,
+            "native_ram": 0
+          },
+          {
+            "views": 1,
+            "usable": 1,
+            "entries": 0,
+            "validated": 0,
+            "rejected": 0,
+            "invalidated": 0,
+            "exits": 0,
+            "interpreted": 7,
+            "native_rom": 0,
+            "native_ram": 0
+          },
+          {
+            "views": 1,
+            "usable": 1,
+            "entries": 0,
+            "validated": 0,
+            "rejected": 0,
+            "invalidated": 0,
+            "exits": 0,
+            "interpreted": 7,
+            "native_rom": 0,
+            "native_ram": 0
+          },
+          {
+            "views": 1,
+            "usable": 1,
+            "entries": 0,
+            "validated": 0,
+            "rejected": 0,
+            "invalidated": 0,
+            "exits": 0,
+            "interpreted": 7,
+            "native_rom": 0,
+            "native_ram": 0
+          }
+        ],
+        "banked": [
+          {
+            "views": 1,
+            "usable": 0,
+            "entries": 0,
+            "validated": 0,
+            "rejected": 0,
+            "invalidated": 0,
+            "exits": 0,
+            "interpreted": 13443,
+            "native_rom": 0,
+            "native_ram": 0
+          },
+          {
+            "views": 1,
+            "usable": 0,
+            "entries": 0,
+            "validated": 0,
+            "rejected": 0,
+            "invalidated": 0,
+            "exits": 0,
+            "interpreted": 13444,
+            "native_rom": 0,
+            "native_ram": 0
+          },
+          {
+            "views": 1,
+            "usable": 0,
+            "entries": 0,
+            "validated": 0,
+            "rejected": 0,
+            "invalidated": 0,
+            "exits": 0,
+            "interpreted": 13444,
+            "native_rom": 0,
+            "native_ram": 0
+          },
+          {
+            "views": 1,
+            "usable": 0,
+            "entries": 0,
+            "validated": 0,
+            "rejected": 0,
+            "invalidated": 0,
+            "exits": 0,
+            "interpreted": 13444,
+            "native_rom": 0,
+            "native_ram": 0
+          }
+        ]
+      },
+      "guards": "PASS: code writes, isolated/committed deltas, snapshots, A12 gates and PRG overlays at four alignments\n"
+    },
+    "LLE": {
+      "results": {
+        "selfmod": [
+          {
+            "views": 1,
+            "usable": 1,
+            "entries": 1887,
+            "validated": 1886,
+            "rejected": 1886,
+            "invalidated": 1886,
+            "exits": 1886,
+            "interpreted": 11346,
+            "native_rom": 0,
+            "native_ram": 11439
+          },
+          {
+            "views": 1,
+            "usable": 1,
+            "entries": 1887,
+            "validated": 1886,
+            "rejected": 1886,
+            "invalidated": 1886,
+            "exits": 1886,
+            "interpreted": 11346,
+            "native_rom": 0,
+            "native_ram": 11439
+          },
+          {
+            "views": 1,
+            "usable": 1,
+            "entries": 1887,
+            "validated": 1886,
+            "rejected": 1886,
+            "invalidated": 1886,
+            "exits": 1886,
+            "interpreted": 11346,
+            "native_rom": 0,
+            "native_ram": 11439
+          },
+          {
+            "views": 1,
+            "usable": 1,
+            "entries": 1887,
+            "validated": 1886,
+            "rejected": 1886,
+            "invalidated": 1886,
+            "exits": 1886,
+            "interpreted": 11346,
+            "native_rom": 0,
+            "native_ram": 11439
+          }
+        ],
+        "stable": [
+          {
+            "views": 1,
+            "usable": 1,
+            "entries": 1896,
+            "validated": 1896,
+            "rejected": 1896,
+            "invalidated": 1896,
+            "exits": 1896,
+            "interpreted": 11406,
+            "native_rom": 0,
+            "native_ram": 11376
+          },
+          {
+            "views": 1,
+            "usable": 1,
+            "entries": 1896,
+            "validated": 1896,
+            "rejected": 1896,
+            "invalidated": 1896,
+            "exits": 1896,
+            "interpreted": 11406,
+            "native_rom": 0,
+            "native_ram": 11376
+          },
+          {
+            "views": 1,
+            "usable": 1,
+            "entries": 1896,
+            "validated": 1896,
+            "rejected": 1896,
+            "invalidated": 1896,
+            "exits": 1896,
+            "interpreted": 11406,
+            "native_rom": 0,
+            "native_ram": 11376
+          },
+          {
+            "views": 1,
+            "usable": 1,
+            "entries": 1896,
+            "validated": 1896,
+            "rejected": 1896,
+            "invalidated": 1896,
+            "exits": 1896,
+            "interpreted": 11406,
+            "native_rom": 0,
+            "native_ram": 11376
+          }
+        ],
+        "gate": [
+          {
+            "views": 1,
+            "usable": 1,
+            "entries": 5,
+            "validated": 1,
+            "rejected": 0,
+            "invalidated": 0,
+            "exits": 0,
+            "interpreted": 50398,
+            "native_rom": 0,
+            "native_ram": 30
+          },
+          {
+            "views": 1,
+            "usable": 1,
+            "entries": 5,
+            "validated": 1,
+            "rejected": 0,
+            "invalidated": 0,
+            "exits": 0,
+            "interpreted": 50398,
+            "native_rom": 0,
+            "native_ram": 30
+          },
+          {
+            "views": 1,
+            "usable": 1,
+            "entries": 5,
+            "validated": 1,
+            "rejected": 0,
+            "invalidated": 0,
+            "exits": 0,
+            "interpreted": 50398,
+            "native_rom": 0,
+            "native_ram": 30
+          },
+          {
+            "views": 1,
+            "usable": 1,
+            "entries": 5,
+            "validated": 1,
+            "rejected": 0,
+            "invalidated": 0,
+            "exits": 0,
+            "interpreted": 50398,
+            "native_rom": 0,
+            "native_ram": 30
+          }
+        ],
+        "a12": [
+          {
+            "views": 1,
+            "usable": 1,
+            "entries": 0,
+            "validated": 0,
+            "rejected": 0,
+            "invalidated": 0,
+            "exits": 0,
+            "interpreted": 6,
+            "native_rom": 0,
+            "native_ram": 0
+          },
+          {
+            "views": 1,
+            "usable": 1,
+            "entries": 0,
+            "validated": 0,
+            "rejected": 0,
+            "invalidated": 0,
+            "exits": 0,
+            "interpreted": 7,
+            "native_rom": 0,
+            "native_ram": 0
+          },
+          {
+            "views": 1,
+            "usable": 1,
+            "entries": 0,
+            "validated": 0,
+            "rejected": 0,
+            "invalidated": 0,
+            "exits": 0,
+            "interpreted": 7,
+            "native_rom": 0,
+            "native_ram": 0
+          },
+          {
+            "views": 1,
+            "usable": 1,
+            "entries": 0,
+            "validated": 0,
+            "rejected": 0,
+            "invalidated": 0,
+            "exits": 0,
+            "interpreted": 7,
+            "native_rom": 0,
+            "native_ram": 0
+          }
+        ],
+        "banked": [
+          {
+            "views": 1,
+            "usable": 0,
+            "entries": 0,
+            "validated": 0,
+            "rejected": 0,
+            "invalidated": 0,
+            "exits": 0,
+            "interpreted": 13443,
+            "native_rom": 0,
+            "native_ram": 0
+          },
+          {
+            "views": 1,
+            "usable": 0,
+            "entries": 0,
+            "validated": 0,
+            "rejected": 0,
+            "invalidated": 0,
+            "exits": 0,
+            "interpreted": 13444,
+            "native_rom": 0,
+            "native_ram": 0
+          },
+          {
+            "views": 1,
+            "usable": 0,
+            "entries": 0,
+            "validated": 0,
+            "rejected": 0,
+            "invalidated": 0,
+            "exits": 0,
+            "interpreted": 13444,
+            "native_rom": 0,
+            "native_ram": 0
+          },
+          {
+            "views": 1,
+            "usable": 0,
+            "entries": 0,
+            "validated": 0,
+            "rejected": 0,
+            "invalidated": 0,
+            "exits": 0,
+            "interpreted": 13444,
+            "native_rom": 0,
+            "native_ram": 0
+          }
+        ]
+      },
+      "guards": "PASS: code writes, isolated/committed deltas, snapshots, A12 gates and PRG overlays at four alignments\n"
+    }
+  },
+  "capacity_receipts": {
+    "pool-sram-v2-stock-receipt.json": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\pool-sram-v2-stock-receipt.json",
+      "sha256": "2660a3fb7af7fd786cfee4bc79da1469a6033249e65b21a5bc3c2ede35b3cccc"
+    },
+    "pool-sram-v2-world-receipt.json": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\pool-sram-v2-world-receipt.json",
+      "sha256": "49dc501f01ad3da8346f935405edd0f9b5842401451fd12249af2cdf85f69711"
+    },
+    "pool-sram-v2-hd-receipt.json": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\pool-sram-v2-hd-receipt.json",
+      "sha256": "49b9eb4ec28e2397be10e1f39cf6be4eacfd2dc6b40bb1377ce4d53693e4df56"
+    },
+    "pool-sram-v2-resolution-receipt.json": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\pool-sram-v2-resolution-receipt.json",
+      "sha256": "fab20abb67171a478d51b753f391c1a8f38882a3d80559fe256fbb5281e0377a"
+    },
+    "pool-sram-v2-fixture-one-lp-receipt.json": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\pool-sram-v2-fixture-one-lp-receipt.json",
+      "sha256": "9a79094248d4f0287d4eccc596edf3fdcee50c3b8384266ccd04de15fe8b9a53"
+    }
+  },
+  "earlier_v1": {
+    "status": "not selected; replaced by the device-deadline integrated package",
+    "server_median_cpu_reduction_percent": {
+      "stock": -0.7987220447284393,
+      "world": 4.150943396226414,
+      "hd": -1.7412935323383172
+    },
+    "note": "Stock and HD are mixed/inconclusive, not asserted proven regressions. All three correctness captures matched."
+  },
+  "shared_defects": [
+    "Remastered missing selectscreen.png/unsupported pack rules remain shared with reference; not introduced failures."
+  ],
+  "next_audit": {
+    "kind": "read-only code dependency audit; no speedup claim",
+    "baseline_prg_sha256": "085e5397a3487357c263dfa159fb0fe20a5f3ea8ef82d7af6a7e848d3b9364e8",
+    "patch_sha256": "f6b72eb7f6e1b13c59a7d3bbdebd899d348fbefec557a4946957112e3222e091",
+    "prg_bytes": 131072,
+    "changed_prg_bytes": 2902,
+    "changed_compiled_bytes": 79,
+    "compiled_physical_1KiB_chunks": 42,
+    "conservatively_invalidated_chunks": 8,
+    "unchanged_chunks": 34,
+    "note": "Union of all bank/slot instruction dependencies, including immediates. Predecessor edge conservatively covers up to two operand bytes crossing a1KiB chunk. This is not final dispatch metadata or coverage/performance qualification."
+  },
+  "remaining": "Final combined five-title regeneration/feature qualification and owner visual approval remain open. No main merge/release. NES09 guarded-ROM investigation is not implemented or measured yet."
+}
