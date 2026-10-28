@@ -1,0 +1,2051 @@
+{
+  "schema_version": 1,
+  "issue": "beads-2dw.1.110",
+  "campaign": "beads-2wy8.1",
+  "opportunity": "NES14",
+  "runtime_commit": "113ec6476a3a12cd91f5675b42026e708151c7ae",
+  "zelda_feature_branch_commit": "769aeec56b90731a6796593acd9886ebb17cc243",
+  "reference_runtime_commit": "9bbb04aa1ec5a8dc176c82a2ce829177319d8528",
+  "package_policy": "NESRECOMP_HDPACK_LAYER_PLANS=1 only in qualified Zelda cycle target. Other games compile the original direct sampler; SMB code/data/loadable executable sections are identical to their selected APU/sprite control.",
+  "source_snapshot": {
+    "parent": "dce5801",
+    "source_sha256": {
+      "runner/src/hdpack.c": "a226d86ae29cb657319a67b4fc8b0c545d2665320813f6000d886d534dd15e0c",
+      "runner/src/hdpack_layered.inc": "84c0c3301528a587bfe2fc42d2a2cf682caa87abd1d695a74a8cebd69d9b1d00",
+      "runner/cyc/CMakeLists.txt": "5d529fc7695136640e8cffb525665d3191a8642983dfa132dde5ede6a4b702b9",
+      "runner/cyc/tests/hdpack_plan_probe.c": "f7f701bd81ddbd6366a12545c6927300a494d9f10bf96393f86c1f0d66c30192",
+      "tools/cyc/test_hdpack_plan.py": "6e1559ce4ca50ff8684231d69522272a3828f3791d84ae46c96fb98a64326264"
+    },
+    "zelda_CMakeLists_sha256": "8cdbddb19976d86377c07b22609c2e4b58e445af080f1d873195523893e2f541",
+    "patch_sha256": "667005d769267d2b206908cee5ccb3d241e7729983be002c8c33ad8b29138622",
+    "policy": "New layered service compiled only for qualified Zelda target. Other titles retain original direct sampler; no new implementation in their runtime."
+  },
+  "products": {
+    "smb": {
+      "reference": {
+        "title": "smb",
+        "mode": "reference",
+        "build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\smb-hd-assets",
+        "target": "SuperMarioBrosRecomp",
+        "engine": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\deadline-candidate-v2",
+        "engine_head": "0a80b31af371d6038fc07b9dc0d13fd0fa617b71+source-snapshot",
+        "title_head": "45f95754f8ad6e04fc39966505c94af9783bd787",
+        "rom": "F:\\Projects\\nesrecomp\\SuperMarioBrosRecomp\\baserom.nes",
+        "rom_sha256": "f61548fdf1670cffefcc4f0b7bdcdd9eaba0c226e3b74f8666071496988248de",
+        "configure": [
+          "-S",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\smb",
+          "-B",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-smb-candidate-v2",
+          "-G",
+          "Ninja",
+          "-DCMAKE_BUILD_TYPE=Release",
+          "-DCMAKE_C_COMPILER=C:/msys64/mingw64/bin/gcc.exe",
+          "-DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe",
+          "-DCMAKE_MAKE_PROGRAM=C:/msys64/mingw64/bin/ninja.exe",
+          "-DCMAKE_RC_COMPILER=C:/msys64/mingw64/bin/windres.exe",
+          "-DCMAKE_C_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+          "-DCMAKE_CXX_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+          "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+          "-DPython3_EXECUTABLE=C:/Users/Matthew/AppData/Local/Programs/Python/Python312/python.exe",
+          "-DNESRECOMP_ROOT=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\deadline-candidate-v2",
+          "-DNESRECOMP_HOST_COMPILER=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028/build-cli/NESRecomp.exe",
+          "-DNESRECOMP_ROM=F:\\Projects\\nesrecomp\\SuperMarioBrosRecomp\\baserom.nes",
+          "-DNESRECOMP_RECOMP_UI=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+          "-DRECOMP_UI_ROOT=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+          "-DSDL2_DIR=G:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/cmake",
+          "-DNESRECOMP_RECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+          "-DRECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+          "-DNESRECOMP_RBENGINE_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/retcomm-rbengine",
+          "-DNESRECOMP_BACKEND=cycle",
+          "-DNESRECOMP_PPU_IMPL=HLE"
+        ],
+        "reuse_reference": false,
+        "owner_authorized_shared_host": true,
+        "exe": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\smb-hd-assets\\SuperMarioBrosRecomp.exe",
+        "sha256": "dc700ee819d824882a41eb436986fd780caf016be623c8ca2601d4586b7101af",
+        "bytes": 15675630,
+        "package": "committed-apu-and-sprite-real-LyonHrt-control",
+        "source_snapshot": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\source-apu-event-v1",
+        "source_sha256": {
+          "runner/cyc/hw_apu.c": "17a21f75c8a88f2bba9637cdff19e929e6417419edac0566580558d342f62d62",
+          "runner/cyc/cyc_host.c": "9679255669e6cd38ed9783f9dcc09ab7e1cf9ab2e7256881de406fb5608bed4b",
+          "runner/cyc/hw.h": "c3d7222c09c9ed4efda54f44098e17c056056dfc3fe6f452026c9c16db6afde3",
+          "runner/cyc/tests/native_interval_probe.c": "45506b93ec4a8eb7956495907a5c59690efd1d25e7254d8f7743de11db8fa280"
+        },
+        "original_build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-smb-candidate-v2",
+        "relink_manifest": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-apu-event-v1\\smb\\candidate\\manifest.json",
+        "selected_ppu_object": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-sprite-span-v1\\smb\\candidate\\hw_ppu.c.obj",
+        "selected_ppu_object_sha256": "9ba335fef6d295b7c6ec86562e79c3006cd16bfd1b6aa77dc92b99dce83713cf"
+      },
+      "candidate": {
+        "title": "smb",
+        "mode": "candidate",
+        "build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-hd-plan-v4\\smb\\candidate",
+        "target": "SuperMarioBrosRecomp",
+        "engine": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\deadline-candidate-v2",
+        "engine_head": "0a80b31af371d6038fc07b9dc0d13fd0fa617b71+source-snapshot",
+        "title_head": "45f95754f8ad6e04fc39966505c94af9783bd787",
+        "rom": "F:\\Projects\\nesrecomp\\SuperMarioBrosRecomp\\baserom.nes",
+        "rom_sha256": "f61548fdf1670cffefcc4f0b7bdcdd9eaba0c226e3b74f8666071496988248de",
+        "configure": [
+          "-S",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\smb",
+          "-B",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-smb-candidate-v2",
+          "-G",
+          "Ninja",
+          "-DCMAKE_BUILD_TYPE=Release",
+          "-DCMAKE_C_COMPILER=C:/msys64/mingw64/bin/gcc.exe",
+          "-DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe",
+          "-DCMAKE_MAKE_PROGRAM=C:/msys64/mingw64/bin/ninja.exe",
+          "-DCMAKE_RC_COMPILER=C:/msys64/mingw64/bin/windres.exe",
+          "-DCMAKE_C_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+          "-DCMAKE_CXX_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+          "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+          "-DPython3_EXECUTABLE=C:/Users/Matthew/AppData/Local/Programs/Python/Python312/python.exe",
+          "-DNESRECOMP_ROOT=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\deadline-candidate-v2",
+          "-DNESRECOMP_HOST_COMPILER=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028/build-cli/NESRecomp.exe",
+          "-DNESRECOMP_ROM=F:\\Projects\\nesrecomp\\SuperMarioBrosRecomp\\baserom.nes",
+          "-DNESRECOMP_RECOMP_UI=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+          "-DRECOMP_UI_ROOT=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+          "-DSDL2_DIR=G:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/cmake",
+          "-DNESRECOMP_RECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+          "-DRECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+          "-DNESRECOMP_RBENGINE_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/retcomm-rbengine",
+          "-DNESRECOMP_BACKEND=cycle",
+          "-DNESRECOMP_PPU_IMPL=HLE"
+        ],
+        "reuse_reference": false,
+        "owner_authorized_shared_host": true,
+        "exe": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-hd-plan-v4\\smb\\candidate\\SuperMarioBrosRecomp.exe",
+        "sha256": "b648d2e2cd7ea567479127b6552ef5846e9fc2a840938960b0ab5a797e10c009",
+        "bytes": 15675630,
+        "package": "selected-APU-sprite-control-original-HD-runtime",
+        "source_snapshot": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\source-hd-plan-v4",
+        "source_sha256": {
+          "runner/src/hdpack.c": "a226d86ae29cb657319a67b4fc8b0c545d2665320813f6000d886d534dd15e0c",
+          "runner/src/hdpack_layered.inc": "84c0c3301528a587bfe2fc42d2a2cf682caa87abd1d695a74a8cebd69d9b1d00",
+          "runner/cyc/CMakeLists.txt": "5d529fc7695136640e8cffb525665d3191a8642983dfa132dde5ede6a4b702b9",
+          "runner/cyc/tests/hdpack_plan_probe.c": "f7f701bd81ddbd6366a12545c6927300a494d9f10bf96393f86c1f0d66c30192",
+          "tools/cyc/test_hdpack_plan.py": "6e1559ce4ca50ff8684231d69522272a3828f3791d84ae46c96fb98a64326264"
+        },
+        "original_build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-smb-candidate-v2",
+        "relink_manifest": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-hd-plan-v4\\smb\\candidate\\manifest.json",
+        "selected_ppu_object": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-sprite-span-v1\\smb\\candidate\\hw_ppu.c.obj",
+        "selected_ppu_object_sha256": "9ba335fef6d295b7c6ec86562e79c3006cd16bfd1b6aa77dc92b99dce83713cf",
+        "render_service": "direct-pixels",
+        "compile_extra": []
+      }
+    },
+    "zelda": {
+      "reference": {
+        "title": "zelda",
+        "mode": "reference",
+        "build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\hd-assets",
+        "target": "LegendOfZeldaNESRecomp",
+        "engine": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\deadline-candidate-v2",
+        "engine_head": "0a80b31af371d6038fc07b9dc0d13fd0fa617b71+source-snapshot",
+        "title_head": "5d90eb7a10e13f5dd5c693a0204b29f7917ec198",
+        "rom": "F:\\Projects\\nesrecomp\\LegendOfZeldaNESRecomp\\Legend of Zelda.NES",
+        "rom_sha256": "8f72dc2e98572eb4ba7c3a902bca5f69c448fc4391837e5f8f0d4556280440ac",
+        "configure": [
+          "-S",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\zelda",
+          "-B",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-zelda-candidate-v2",
+          "-G",
+          "Ninja",
+          "-DCMAKE_BUILD_TYPE=Release",
+          "-DCMAKE_C_COMPILER=C:/msys64/mingw64/bin/gcc.exe",
+          "-DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe",
+          "-DCMAKE_MAKE_PROGRAM=C:/msys64/mingw64/bin/ninja.exe",
+          "-DCMAKE_RC_COMPILER=C:/msys64/mingw64/bin/windres.exe",
+          "-DCMAKE_C_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+          "-DCMAKE_CXX_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+          "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+          "-DPython3_EXECUTABLE=C:/Users/Matthew/AppData/Local/Programs/Python/Python312/python.exe",
+          "-DNESRECOMP_ROOT=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\deadline-candidate-v2",
+          "-DNESRECOMP_HOST_COMPILER=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028/build-cli/NESRecomp.exe",
+          "-DNESRECOMP_ROM=F:\\Projects\\nesrecomp\\LegendOfZeldaNESRecomp\\Legend of Zelda.NES",
+          "-DNESRECOMP_RECOMP_UI=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+          "-DRECOMP_UI_ROOT=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+          "-DSDL2_DIR=G:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/cmake",
+          "-DNESRECOMP_RECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+          "-DRECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+          "-DNESRECOMP_RBENGINE_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/retcomm-rbengine",
+          "-DNESRECOMP_BACKEND=cycle",
+          "-DNESRECOMP_PPU_IMPL=HLE"
+        ],
+        "reuse_reference": false,
+        "owner_authorized_shared_host": true,
+        "exe": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\hd-assets\\LegendOfZeldaNESRecomp.exe",
+        "sha256": "ad531cf870b3f50744c542ace5945625284e5b11db04287c1b4f24ee8f5239a2",
+        "bytes": 11764503,
+        "package": "committed-apu-and-sprite-real-Remastered-control",
+        "source_snapshot": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\source-apu-event-v1",
+        "source_sha256": {
+          "runner/cyc/hw_apu.c": "17a21f75c8a88f2bba9637cdff19e929e6417419edac0566580558d342f62d62",
+          "runner/cyc/cyc_host.c": "9679255669e6cd38ed9783f9dcc09ab7e1cf9ab2e7256881de406fb5608bed4b",
+          "runner/cyc/hw.h": "c3d7222c09c9ed4efda54f44098e17c056056dfc3fe6f452026c9c16db6afde3",
+          "runner/cyc/tests/native_interval_probe.c": "45506b93ec4a8eb7956495907a5c59690efd1d25e7254d8f7743de11db8fa280"
+        },
+        "original_build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-zelda-candidate-v2",
+        "relink_manifest": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-apu-event-v1\\zelda\\candidate\\manifest.json",
+        "selected_ppu_object": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-sprite-span-v1\\zelda\\candidate\\hw_ppu.c.obj",
+        "selected_ppu_object_sha256": "60d101481f166d388c0fc19c62b176a0edda5632d82ef9d15c8152630ce5c3a1"
+      },
+      "candidate": {
+        "title": "zelda",
+        "mode": "candidate",
+        "build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-hd-plan-v4\\zelda\\candidate",
+        "target": "LegendOfZeldaNESRecomp",
+        "engine": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\deadline-candidate-v2",
+        "engine_head": "0a80b31af371d6038fc07b9dc0d13fd0fa617b71+source-snapshot",
+        "title_head": "5d90eb7a10e13f5dd5c693a0204b29f7917ec198",
+        "rom": "F:\\Projects\\nesrecomp\\LegendOfZeldaNESRecomp\\Legend of Zelda.NES",
+        "rom_sha256": "8f72dc2e98572eb4ba7c3a902bca5f69c448fc4391837e5f8f0d4556280440ac",
+        "configure": [
+          "-S",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\zelda",
+          "-B",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-zelda-candidate-v2",
+          "-G",
+          "Ninja",
+          "-DCMAKE_BUILD_TYPE=Release",
+          "-DCMAKE_C_COMPILER=C:/msys64/mingw64/bin/gcc.exe",
+          "-DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe",
+          "-DCMAKE_MAKE_PROGRAM=C:/msys64/mingw64/bin/ninja.exe",
+          "-DCMAKE_RC_COMPILER=C:/msys64/mingw64/bin/windres.exe",
+          "-DCMAKE_C_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+          "-DCMAKE_CXX_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+          "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+          "-DPython3_EXECUTABLE=C:/Users/Matthew/AppData/Local/Programs/Python/Python312/python.exe",
+          "-DNESRECOMP_ROOT=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\deadline-candidate-v2",
+          "-DNESRECOMP_HOST_COMPILER=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028/build-cli/NESRecomp.exe",
+          "-DNESRECOMP_ROM=F:\\Projects\\nesrecomp\\LegendOfZeldaNESRecomp\\Legend of Zelda.NES",
+          "-DNESRECOMP_RECOMP_UI=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+          "-DRECOMP_UI_ROOT=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+          "-DSDL2_DIR=G:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/cmake",
+          "-DNESRECOMP_RECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+          "-DRECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+          "-DNESRECOMP_RBENGINE_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/retcomm-rbengine",
+          "-DNESRECOMP_BACKEND=cycle",
+          "-DNESRECOMP_PPU_IMPL=HLE"
+        ],
+        "reuse_reference": false,
+        "owner_authorized_shared_host": true,
+        "exe": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-hd-plan-v4\\zelda\\candidate\\LegendOfZeldaNESRecomp.exe",
+        "sha256": "a941f3f6d46402a269d61f2a5bc8e170b8ed016fc71011b4d5c623128063851f",
+        "bytes": 11764503,
+        "package": "Zelda-qualified-layered-HD-module-v4",
+        "source_snapshot": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\source-hd-plan-v4",
+        "source_sha256": {
+          "runner/src/hdpack.c": "a226d86ae29cb657319a67b4fc8b0c545d2665320813f6000d886d534dd15e0c",
+          "runner/src/hdpack_layered.inc": "84c0c3301528a587bfe2fc42d2a2cf682caa87abd1d695a74a8cebd69d9b1d00",
+          "runner/cyc/CMakeLists.txt": "5d529fc7695136640e8cffb525665d3191a8642983dfa132dde5ede6a4b702b9",
+          "runner/cyc/tests/hdpack_plan_probe.c": "f7f701bd81ddbd6366a12545c6927300a494d9f10bf96393f86c1f0d66c30192",
+          "tools/cyc/test_hdpack_plan.py": "6e1559ce4ca50ff8684231d69522272a3828f3791d84ae46c96fb98a64326264"
+        },
+        "original_build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-zelda-candidate-v2",
+        "relink_manifest": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-hd-plan-v4\\zelda\\candidate\\manifest.json",
+        "selected_ppu_object": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-sprite-span-v1\\zelda\\candidate\\hw_ppu.c.obj",
+        "selected_ppu_object_sha256": "60d101481f166d388c0fc19c62b176a0edda5632d82ef9d15c8152630ce5c3a1",
+        "render_service": "layer-row-plan",
+        "compile_extra": [
+          "-DNESRECOMP_HDPACK_LAYER_PLANS=1"
+        ]
+      }
+    }
+  },
+  "accepted": [
+    {
+      "title": "zelda",
+      "host_label": "nas",
+      "package": "Zelda-qualified-layered-HD-module-v4",
+      "decision": "selected-qualified-Zelda-layered-module",
+      "host": "SERVER",
+      "logical_processors": 4,
+      "affinity_mask": 2,
+      "preflight_core_busy": [
+        0.203125,
+        0.11328125,
+        0.140625,
+        0.26953125
+      ],
+      "first_frame": 1801,
+      "end_frame": 2101,
+      "median_cpu_seconds": {
+        "reference": 11.03125,
+        "candidate": 6.359375
+      },
+      "raw_median_cpu_reduction_percent": 42.35127478753541,
+      "faster_candidate_pairs": 5,
+      "pairs": [
+        {
+          "pair": 0,
+          "reference_cpu_seconds": 11.09375,
+          "candidate_cpu_seconds": 6.34375,
+          "cpu_reduction_percent": 42.816901408450704,
+          "reference_wall_seconds": 14.261764599941671,
+          "candidate_wall_seconds": 7.561638599960133
+        },
+        {
+          "pair": 1,
+          "reference_cpu_seconds": 11.03125,
+          "candidate_cpu_seconds": 6.359375,
+          "cpu_reduction_percent": 42.35127478753541,
+          "reference_wall_seconds": 12.954172200057656,
+          "candidate_wall_seconds": 7.528353499947116
+        },
+        {
+          "pair": 2,
+          "reference_cpu_seconds": 10.796875,
+          "candidate_cpu_seconds": 6.421875,
+          "cpu_reduction_percent": 40.520984081041966,
+          "reference_wall_seconds": 13.570504599949345,
+          "candidate_wall_seconds": 7.482522099977359
+        },
+        {
+          "pair": 3,
+          "reference_cpu_seconds": 11.171875,
+          "candidate_cpu_seconds": 6.359375,
+          "cpu_reduction_percent": 43.07692307692308,
+          "reference_wall_seconds": 13.108143900055438,
+          "candidate_wall_seconds": 7.271519400179386
+        },
+        {
+          "pair": 4,
+          "reference_cpu_seconds": 10.9375,
+          "candidate_cpu_seconds": 6.375,
+          "cpu_reduction_percent": 41.714285714285715,
+          "reference_wall_seconds": 13.229563199914992,
+          "candidate_wall_seconds": 7.468217599904165
+        }
+      ],
+      "excluded_setup_cpu_median_seconds": {
+        "reference": 4.984375,
+        "candidate": 5.078125
+      },
+      "correctness_hashes": {
+        "audio.wav": "2989051a49b464eb307ef7fcffa0bfa9527714c4160aa4a346f0b32a4ee5cf54",
+        "final.png": "52fbc78ffe2628c54f4fd1abc8925a72dd68e9161bba95b51d37a950280eda48",
+        "frames.bin": "5fd6164c1252c53987c19dd7c6221525a91a12f4c841677385986781c4736fc3",
+        "hardware.txt": "6cd99f5d5426d943c1f1831152bbc17816377f11144bd73d03e6b7ee2a4744ab",
+        "memory.txt": "8017287ab1344a3a3d3147be502cbbe0be073cbe05bda1e4a0b157551df785fb",
+        "hd.png": "c775afb04f321f85c005992cce49a1644ade2a8bbbe3e4dcfa128fcaa0290707",
+        "hd_00000.png": "ec885f6a8b005c9938b898ff149c17a4d6d50799703a56720fa76864abffaae3",
+        "hd_00300.png": "022934d13263a73304c4c829f04325ef07d19e8ff59b4e0943719f3c51c44ea1",
+        "hd_00600.png": "09e682fedd210152600001160bf84cfc7a1aed1fcaf6b4c8501de7a32708247a",
+        "hd_00900.png": "61f8c5bef42d6ca15bb066c5097c5c6e9a9c1b4e466bdb4aa0369a90744babcc",
+        "hd_01200.png": "72239622e8489b5d4c54181bab9cf730c8d2e1974483d02dc41a33fcb38745aa",
+        "hd_01500.png": "b4f41f61de4afb4435c9fcf72dd948663b66ec0963673c1aba6eb19c7fa36291",
+        "hd_01800.png": "b4f41f61de4afb4435c9fcf72dd948663b66ec0963673c1aba6eb19c7fa36291",
+        "hd_02100.png": "c775afb04f321f85c005992cce49a1644ade2a8bbbe3e4dcfa128fcaa0290707"
+      },
+      "binary_sha256": {
+        "reference": "ad531cf870b3f50744c542ace5945625284e5b11db04287c1b4f24ee8f5239a2",
+        "candidate": "a941f3f6d46402a269d61f2a5bc8e170b8ed016fc71011b4d5c623128063851f"
+      },
+      "raw_file": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\nas-zelda-hd-plan-v4\\evidence\\performance.json"
+    },
+    {
+      "title": "zelda",
+      "host_label": "local",
+      "package": "Zelda-qualified-layered-HD-module-v4",
+      "decision": "selected-qualified-Zelda-layered-module",
+      "host": "DESKTOP-HN15M1H",
+      "logical_processors": 16,
+      "affinity_mask": 2,
+      "preflight_core_busy": [
+        0.86328125,
+        0.828125,
+        0.9375,
+        0.94140625,
+        0.921875,
+        0.93359375,
+        0.8984375,
+        0.90625,
+        0.92578125,
+        0.953125,
+        0.87890625,
+        0.890625,
+        0.91015625,
+        0.90625,
+        0.85546875,
+        1.0
+      ],
+      "first_frame": 1801,
+      "end_frame": 2101,
+      "median_cpu_seconds": {
+        "reference": 8.140625,
+        "candidate": 5.09375
+      },
+      "raw_median_cpu_reduction_percent": 37.428023032629554,
+      "faster_candidate_pairs": 5,
+      "pairs": [
+        {
+          "pair": 0,
+          "reference_cpu_seconds": 7.90625,
+          "candidate_cpu_seconds": 5.171875,
+          "cpu_reduction_percent": 34.58498023715415,
+          "reference_wall_seconds": 26.042580500012264,
+          "candidate_wall_seconds": 28.731070499983616
+        },
+        {
+          "pair": 1,
+          "reference_cpu_seconds": 8.703125,
+          "candidate_cpu_seconds": 5.765625,
+          "cpu_reduction_percent": 33.75224416517055,
+          "reference_wall_seconds": 31.126368000055663,
+          "candidate_wall_seconds": 20.82842839998193
+        },
+        {
+          "pair": 2,
+          "reference_cpu_seconds": 8.140625,
+          "candidate_cpu_seconds": 4.828125,
+          "cpu_reduction_percent": 40.690978886756234,
+          "reference_wall_seconds": 20.128027600003406,
+          "candidate_wall_seconds": 16.14848929992877
+        },
+        {
+          "pair": 3,
+          "reference_cpu_seconds": 6.765625,
+          "candidate_cpu_seconds": 4.078125,
+          "cpu_reduction_percent": 39.72286374133949,
+          "reference_wall_seconds": 11.839031900046393,
+          "candidate_wall_seconds": 6.6369224000955
+        },
+        {
+          "pair": 4,
+          "reference_cpu_seconds": 8.296875,
+          "candidate_cpu_seconds": 5.09375,
+          "cpu_reduction_percent": 38.60640301318268,
+          "reference_wall_seconds": 14.64845229999628,
+          "candidate_wall_seconds": 14.886589100002311
+        }
+      ],
+      "excluded_setup_cpu_median_seconds": {
+        "reference": 3.640625,
+        "candidate": 3.90625
+      },
+      "correctness_hashes": {
+        "audio.wav": "2989051a49b464eb307ef7fcffa0bfa9527714c4160aa4a346f0b32a4ee5cf54",
+        "final.png": "52fbc78ffe2628c54f4fd1abc8925a72dd68e9161bba95b51d37a950280eda48",
+        "frames.bin": "5fd6164c1252c53987c19dd7c6221525a91a12f4c841677385986781c4736fc3",
+        "hardware.txt": "6cd99f5d5426d943c1f1831152bbc17816377f11144bd73d03e6b7ee2a4744ab",
+        "memory.txt": "8017287ab1344a3a3d3147be502cbbe0be073cbe05bda1e4a0b157551df785fb",
+        "hd.png": "c775afb04f321f85c005992cce49a1644ade2a8bbbe3e4dcfa128fcaa0290707",
+        "hd_00000.png": "ec885f6a8b005c9938b898ff149c17a4d6d50799703a56720fa76864abffaae3",
+        "hd_00300.png": "022934d13263a73304c4c829f04325ef07d19e8ff59b4e0943719f3c51c44ea1",
+        "hd_00600.png": "09e682fedd210152600001160bf84cfc7a1aed1fcaf6b4c8501de7a32708247a",
+        "hd_00900.png": "61f8c5bef42d6ca15bb066c5097c5c6e9a9c1b4e466bdb4aa0369a90744babcc",
+        "hd_01200.png": "72239622e8489b5d4c54181bab9cf730c8d2e1974483d02dc41a33fcb38745aa",
+        "hd_01500.png": "b4f41f61de4afb4435c9fcf72dd948663b66ec0963673c1aba6eb19c7fa36291",
+        "hd_01800.png": "b4f41f61de4afb4435c9fcf72dd948663b66ec0963673c1aba6eb19c7fa36291",
+        "hd_02100.png": "c775afb04f321f85c005992cce49a1644ade2a8bbbe3e4dcfa128fcaa0290707"
+      },
+      "binary_sha256": {
+        "reference": "ad531cf870b3f50744c542ace5945625284e5b11db04287c1b4f24ee8f5239a2",
+        "candidate": "a941f3f6d46402a269d61f2a5bc8e170b8ed016fc71011b4d5c623128063851f"
+      },
+      "raw_file": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\local-zelda-hd-plan-v4\\evidence\\performance.json"
+    }
+  ],
+  "rejected_universal_packages": [
+    {
+      "title": "zelda",
+      "host_label": "nas",
+      "package": "immutable-HD-key-groups-frame-conditions-and-layer-row-plan-v1",
+      "decision": "rejected-as-universal-package-SMB-regression",
+      "host": "SERVER",
+      "logical_processors": 4,
+      "affinity_mask": 4,
+      "preflight_core_busy": [
+        0.22265625,
+        0.203125,
+        0.140625,
+        0.19140625
+      ],
+      "first_frame": 1801,
+      "end_frame": 2101,
+      "median_cpu_seconds": {
+        "reference": 10.484375,
+        "candidate": 6.109375
+      },
+      "raw_median_cpu_reduction_percent": 41.72876304023845,
+      "faster_candidate_pairs": 5,
+      "pairs": [
+        {
+          "pair": 0,
+          "reference_cpu_seconds": 10.59375,
+          "candidate_cpu_seconds": 6.4375,
+          "cpu_reduction_percent": 39.233038348082594,
+          "reference_wall_seconds": 10.858170199906453,
+          "candidate_wall_seconds": 6.9424850000068545
+        },
+        {
+          "pair": 1,
+          "reference_cpu_seconds": 10.46875,
+          "candidate_cpu_seconds": 6.109375,
+          "cpu_reduction_percent": 41.64179104477612,
+          "reference_wall_seconds": 10.772830199915916,
+          "candidate_wall_seconds": 6.319914999883622
+        },
+        {
+          "pair": 2,
+          "reference_cpu_seconds": 10.484375,
+          "candidate_cpu_seconds": 6.109375,
+          "cpu_reduction_percent": 41.72876304023845,
+          "reference_wall_seconds": 10.830358900129795,
+          "candidate_wall_seconds": 6.369472699938342
+        },
+        {
+          "pair": 3,
+          "reference_cpu_seconds": 10.234375,
+          "candidate_cpu_seconds": 6.125,
+          "cpu_reduction_percent": 40.15267175572519,
+          "reference_wall_seconds": 10.544692100025713,
+          "candidate_wall_seconds": 6.346066199941561
+        },
+        {
+          "pair": 4,
+          "reference_cpu_seconds": 10.765625,
+          "candidate_cpu_seconds": 6.109375,
+          "cpu_reduction_percent": 43.25108853410741,
+          "reference_wall_seconds": 11.233921400038525,
+          "candidate_wall_seconds": 6.415164300007746
+        }
+      ],
+      "excluded_setup_cpu_median_seconds": {
+        "reference": 4.90625,
+        "candidate": 4.90625
+      },
+      "correctness_hashes": {
+        "audio.wav": "2989051a49b464eb307ef7fcffa0bfa9527714c4160aa4a346f0b32a4ee5cf54",
+        "final.png": "52fbc78ffe2628c54f4fd1abc8925a72dd68e9161bba95b51d37a950280eda48",
+        "frames.bin": "5fd6164c1252c53987c19dd7c6221525a91a12f4c841677385986781c4736fc3",
+        "hardware.txt": "6cd99f5d5426d943c1f1831152bbc17816377f11144bd73d03e6b7ee2a4744ab",
+        "memory.txt": "8017287ab1344a3a3d3147be502cbbe0be073cbe05bda1e4a0b157551df785fb",
+        "hd.png": "c775afb04f321f85c005992cce49a1644ade2a8bbbe3e4dcfa128fcaa0290707",
+        "hd_00000.png": "ec885f6a8b005c9938b898ff149c17a4d6d50799703a56720fa76864abffaae3",
+        "hd_00300.png": "022934d13263a73304c4c829f04325ef07d19e8ff59b4e0943719f3c51c44ea1",
+        "hd_00600.png": "09e682fedd210152600001160bf84cfc7a1aed1fcaf6b4c8501de7a32708247a",
+        "hd_00900.png": "61f8c5bef42d6ca15bb066c5097c5c6e9a9c1b4e466bdb4aa0369a90744babcc",
+        "hd_01200.png": "72239622e8489b5d4c54181bab9cf730c8d2e1974483d02dc41a33fcb38745aa",
+        "hd_01500.png": "b4f41f61de4afb4435c9fcf72dd948663b66ec0963673c1aba6eb19c7fa36291",
+        "hd_01800.png": "b4f41f61de4afb4435c9fcf72dd948663b66ec0963673c1aba6eb19c7fa36291",
+        "hd_02100.png": "c775afb04f321f85c005992cce49a1644ade2a8bbbe3e4dcfa128fcaa0290707"
+      },
+      "binary_sha256": {
+        "reference": "ad531cf870b3f50744c542ace5945625284e5b11db04287c1b4f24ee8f5239a2",
+        "candidate": "695ddea5ff766e1cb0f1739f98a5d742e5ea835949aea898e0dc2e98904c7e5e"
+      },
+      "raw_file": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\nas-zelda-hd-plan-v1\\evidence\\performance.json"
+    },
+    {
+      "title": "zelda",
+      "host_label": "local",
+      "package": "immutable-HD-key-groups-frame-conditions-and-layer-row-plan-v1",
+      "decision": "rejected-as-universal-package-SMB-regression",
+      "host": "DESKTOP-HN15M1H",
+      "logical_processors": 16,
+      "affinity_mask": 16384,
+      "preflight_core_busy": [
+        0.65625,
+        0.59375,
+        0.875,
+        0.77734375,
+        0.78125,
+        0.8203125,
+        0.8046875,
+        0.85546875,
+        0.828125,
+        0.80859375,
+        0.76171875,
+        0.7109375,
+        0.607843137254902,
+        0.57421875,
+        0.54296875,
+        0.56640625
+      ],
+      "first_frame": 1801,
+      "end_frame": 2101,
+      "median_cpu_seconds": {
+        "reference": 6.921875,
+        "candidate": 4.5
+      },
+      "raw_median_cpu_reduction_percent": 34.988713318284425,
+      "faster_candidate_pairs": 5,
+      "pairs": [
+        {
+          "pair": 0,
+          "reference_cpu_seconds": 6.75,
+          "candidate_cpu_seconds": 4.703125,
+          "cpu_reduction_percent": 30.32407407407407,
+          "reference_wall_seconds": 7.426839599967934,
+          "candidate_wall_seconds": 6.522851000074297
+        },
+        {
+          "pair": 1,
+          "reference_cpu_seconds": 6.90625,
+          "candidate_cpu_seconds": 4.5,
+          "cpu_reduction_percent": 34.841628959276015,
+          "reference_wall_seconds": 8.240754600032233,
+          "candidate_wall_seconds": 5.848291500005871
+        },
+        {
+          "pair": 2,
+          "reference_cpu_seconds": 6.921875,
+          "candidate_cpu_seconds": 4.375,
+          "cpu_reduction_percent": 36.79458239277652,
+          "reference_wall_seconds": 8.519723300007172,
+          "candidate_wall_seconds": 4.972640599939041
+        },
+        {
+          "pair": 3,
+          "reference_cpu_seconds": 6.984375,
+          "candidate_cpu_seconds": 4.515625,
+          "cpu_reduction_percent": 35.34675615212528,
+          "reference_wall_seconds": 8.03720969997812,
+          "candidate_wall_seconds": 6.579731800011359
+        },
+        {
+          "pair": 4,
+          "reference_cpu_seconds": 7.296875,
+          "candidate_cpu_seconds": 4.171875,
+          "cpu_reduction_percent": 42.82655246252677,
+          "reference_wall_seconds": 9.551682200049981,
+          "candidate_wall_seconds": 5.068279700004496
+        }
+      ],
+      "excluded_setup_cpu_median_seconds": {
+        "reference": 3.703125,
+        "candidate": 3.734375
+      },
+      "correctness_hashes": {
+        "audio.wav": "2989051a49b464eb307ef7fcffa0bfa9527714c4160aa4a346f0b32a4ee5cf54",
+        "final.png": "52fbc78ffe2628c54f4fd1abc8925a72dd68e9161bba95b51d37a950280eda48",
+        "frames.bin": "5fd6164c1252c53987c19dd7c6221525a91a12f4c841677385986781c4736fc3",
+        "hardware.txt": "6cd99f5d5426d943c1f1831152bbc17816377f11144bd73d03e6b7ee2a4744ab",
+        "memory.txt": "8017287ab1344a3a3d3147be502cbbe0be073cbe05bda1e4a0b157551df785fb",
+        "hd.png": "c775afb04f321f85c005992cce49a1644ade2a8bbbe3e4dcfa128fcaa0290707",
+        "hd_00000.png": "ec885f6a8b005c9938b898ff149c17a4d6d50799703a56720fa76864abffaae3",
+        "hd_00300.png": "022934d13263a73304c4c829f04325ef07d19e8ff59b4e0943719f3c51c44ea1",
+        "hd_00600.png": "09e682fedd210152600001160bf84cfc7a1aed1fcaf6b4c8501de7a32708247a",
+        "hd_00900.png": "61f8c5bef42d6ca15bb066c5097c5c6e9a9c1b4e466bdb4aa0369a90744babcc",
+        "hd_01200.png": "72239622e8489b5d4c54181bab9cf730c8d2e1974483d02dc41a33fcb38745aa",
+        "hd_01500.png": "b4f41f61de4afb4435c9fcf72dd948663b66ec0963673c1aba6eb19c7fa36291",
+        "hd_01800.png": "b4f41f61de4afb4435c9fcf72dd948663b66ec0963673c1aba6eb19c7fa36291",
+        "hd_02100.png": "c775afb04f321f85c005992cce49a1644ade2a8bbbe3e4dcfa128fcaa0290707"
+      },
+      "binary_sha256": {
+        "reference": "ad531cf870b3f50744c542ace5945625284e5b11db04287c1b4f24ee8f5239a2",
+        "candidate": "695ddea5ff766e1cb0f1739f98a5d742e5ea835949aea898e0dc2e98904c7e5e"
+      },
+      "raw_file": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\local-zelda-hd-plan-v1\\evidence\\performance.json"
+    },
+    {
+      "title": "smb",
+      "host_label": "nas",
+      "package": "immutable-HD-key-groups-frame-conditions-and-layer-row-plan-v1",
+      "decision": "rejected-as-universal-package-SMB-regression",
+      "host": "SERVER",
+      "logical_processors": 4,
+      "affinity_mask": 8,
+      "preflight_core_busy": [
+        0.2334630350194552,
+        0.2684824902723736,
+        0.1867704280155642,
+        0.15234375
+      ],
+      "first_frame": 361,
+      "end_frame": 961,
+      "median_cpu_seconds": {
+        "reference": 8.328125,
+        "candidate": 8.515625
+      },
+      "raw_median_cpu_reduction_percent": -2.251407129455907,
+      "faster_candidate_pairs": 1,
+      "pairs": [
+        {
+          "pair": 0,
+          "reference_cpu_seconds": 8.359375,
+          "candidate_cpu_seconds": 8.515625,
+          "cpu_reduction_percent": -1.869158878504673,
+          "reference_wall_seconds": 8.543271999806166,
+          "candidate_wall_seconds": 8.797557900194079
+        },
+        {
+          "pair": 1,
+          "reference_cpu_seconds": 8.296875,
+          "candidate_cpu_seconds": 8.578125,
+          "cpu_reduction_percent": -3.3898305084745672,
+          "reference_wall_seconds": 8.598138799890876,
+          "candidate_wall_seconds": 8.801544100046158
+        },
+        {
+          "pair": 2,
+          "reference_cpu_seconds": 8.859375,
+          "candidate_cpu_seconds": 8.515625,
+          "cpu_reduction_percent": 3.880070546737213,
+          "reference_wall_seconds": 10.253662299830467,
+          "candidate_wall_seconds": 8.761438000015914
+        },
+        {
+          "pair": 3,
+          "reference_cpu_seconds": 8.28125,
+          "candidate_cpu_seconds": 8.4375,
+          "cpu_reduction_percent": -1.8867924528301883,
+          "reference_wall_seconds": 8.56516950018704,
+          "candidate_wall_seconds": 8.761847499990836
+        },
+        {
+          "pair": 4,
+          "reference_cpu_seconds": 8.328125,
+          "candidate_cpu_seconds": 8.5625,
+          "cpu_reduction_percent": -2.814258911819878,
+          "reference_wall_seconds": 8.551681699929759,
+          "candidate_wall_seconds": 8.988290100125596
+        }
+      ],
+      "excluded_setup_cpu_median_seconds": {
+        "reference": 0.9375,
+        "candidate": 0.953125
+      },
+      "correctness_hashes": {
+        "audio.wav": "ca7d8ff3a7f4b95ed9d2e77414a30964d82f8c4ea88e05f9f5d3db74078238f1",
+        "final.png": "cbab6112ae24cabdfb808975d475d49076c479b8944f7ec187ce225a360e630e",
+        "frames.bin": "a27af7ae2bc79000ef48b3afe5924f05674aef15f28fe883d28a84d8ee044b39",
+        "hardware.txt": "35ad311a3c07ca0d69d272854e69f5d2ccdd5a884f485c79fd1c7e4c25cd97cf",
+        "memory.txt": "ddb4b2d74a188f1ff8e1aefd89a86f1e39e93c31d7b4dcedec8340137e4ee2bc",
+        "hd.png": "51cec69ccbc7793f37cc127e85f9abb5dc9cee6bce37b792a671054c4cdf5c84",
+        "hd_00000.png": "aeac69108e6af37f307a22c92f2fdf031ab1d1a3ced169b6a84a6ba6e9f2e1e0",
+        "hd_00300.png": "c572d04378c1e612a2021f3341013bda0b993c85842c8055f107d064a548c586",
+        "hd_00600.png": "f236077d23902210aaaf92b7218d1cb5a1131eee19f5b387d3aa8a25f87c6cfc",
+        "hd_00900.png": "d2a7114fdedbcb57ceb5e28b392d4827e8f6aae973a0256e5e169e6f3de19cb0",
+        "hd_01200.png": "51cec69ccbc7793f37cc127e85f9abb5dc9cee6bce37b792a671054c4cdf5c84"
+      },
+      "binary_sha256": {
+        "reference": "dc700ee819d824882a41eb436986fd780caf016be623c8ca2601d4586b7101af",
+        "candidate": "45109ee427fd45a5a851d203a3d6cad2333b87ce669b26afc7ce56083178349d"
+      },
+      "raw_file": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\nas-smb-hd-plan-v1b\\evidence\\performance.json"
+    },
+    {
+      "title": "smb",
+      "host_label": "local",
+      "package": "immutable-HD-key-groups-frame-conditions-and-layer-row-plan-v1",
+      "decision": "rejected-as-universal-package-SMB-regression",
+      "host": "DESKTOP-HN15M1H",
+      "logical_processors": 16,
+      "affinity_mask": 4096,
+      "preflight_core_busy": [
+        0.3359375,
+        0.296875,
+        0.71484375,
+        0.56640625,
+        0.66015625,
+        0.45703125,
+        0.51171875,
+        0.44140625,
+        0.71484375,
+        0.4921875,
+        0.3671875,
+        0.37890625,
+        0.2578125,
+        0.375,
+        0.515625,
+        0.3046875
+      ],
+      "first_frame": 361,
+      "end_frame": 961,
+      "median_cpu_seconds": {
+        "reference": 3.921875,
+        "candidate": 3.828125
+      },
+      "raw_median_cpu_reduction_percent": 2.39043824701195,
+      "faster_candidate_pairs": 2,
+      "pairs": [
+        {
+          "pair": 0,
+          "reference_cpu_seconds": 4.109375,
+          "candidate_cpu_seconds": 3.640625,
+          "cpu_reduction_percent": 11.406844106463875,
+          "reference_wall_seconds": 5.073061799979769,
+          "candidate_wall_seconds": 4.063980799983256
+        },
+        {
+          "pair": 1,
+          "reference_cpu_seconds": 3.921875,
+          "candidate_cpu_seconds": 3.984375,
+          "cpu_reduction_percent": -1.5936254980079667,
+          "reference_wall_seconds": 4.237877700012177,
+          "candidate_wall_seconds": 4.37629799998831
+        },
+        {
+          "pair": 2,
+          "reference_cpu_seconds": 4.078125,
+          "candidate_cpu_seconds": 3.828125,
+          "cpu_reduction_percent": 6.130268199233713,
+          "reference_wall_seconds": 4.419229399994947,
+          "candidate_wall_seconds": 4.123456300003454
+        },
+        {
+          "pair": 3,
+          "reference_cpu_seconds": 3.484375,
+          "candidate_cpu_seconds": 3.78125,
+          "cpu_reduction_percent": -8.520179372197312,
+          "reference_wall_seconds": 3.7240386999910697,
+          "candidate_wall_seconds": 4.20959910005331
+        },
+        {
+          "pair": 4,
+          "reference_cpu_seconds": 3.890625,
+          "candidate_cpu_seconds": 4.078125,
+          "cpu_reduction_percent": -4.819277108433728,
+          "reference_wall_seconds": 4.171745800063945,
+          "candidate_wall_seconds": 4.554338899906725
+        }
+      ],
+      "excluded_setup_cpu_median_seconds": {
+        "reference": 0.5625,
+        "candidate": 0.546875
+      },
+      "correctness_hashes": {
+        "audio.wav": "ca7d8ff3a7f4b95ed9d2e77414a30964d82f8c4ea88e05f9f5d3db74078238f1",
+        "final.png": "cbab6112ae24cabdfb808975d475d49076c479b8944f7ec187ce225a360e630e",
+        "frames.bin": "a27af7ae2bc79000ef48b3afe5924f05674aef15f28fe883d28a84d8ee044b39",
+        "hardware.txt": "35ad311a3c07ca0d69d272854e69f5d2ccdd5a884f485c79fd1c7e4c25cd97cf",
+        "memory.txt": "ddb4b2d74a188f1ff8e1aefd89a86f1e39e93c31d7b4dcedec8340137e4ee2bc",
+        "hd.png": "51cec69ccbc7793f37cc127e85f9abb5dc9cee6bce37b792a671054c4cdf5c84",
+        "hd_00000.png": "aeac69108e6af37f307a22c92f2fdf031ab1d1a3ced169b6a84a6ba6e9f2e1e0",
+        "hd_00300.png": "c572d04378c1e612a2021f3341013bda0b993c85842c8055f107d064a548c586",
+        "hd_00600.png": "f236077d23902210aaaf92b7218d1cb5a1131eee19f5b387d3aa8a25f87c6cfc",
+        "hd_00900.png": "d2a7114fdedbcb57ceb5e28b392d4827e8f6aae973a0256e5e169e6f3de19cb0",
+        "hd_01200.png": "51cec69ccbc7793f37cc127e85f9abb5dc9cee6bce37b792a671054c4cdf5c84"
+      },
+      "binary_sha256": {
+        "reference": "dc700ee819d824882a41eb436986fd780caf016be623c8ca2601d4586b7101af",
+        "candidate": "45109ee427fd45a5a851d203a3d6cad2333b87ce669b26afc7ce56083178349d"
+      },
+      "raw_file": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\local-smb-hd-plan-v1b\\evidence\\performance.json"
+    },
+    {
+      "title": "zelda",
+      "host_label": "nas",
+      "package": "qualified-layered-HD-key-condition-row-plan-v2",
+      "decision": "rejected-as-universal-package-SMB-regression",
+      "host": "SERVER",
+      "logical_processors": 4,
+      "affinity_mask": 1,
+      "preflight_core_busy": [
+        0.13671875,
+        0.18359375,
+        0.19921875,
+        0.1484375
+      ],
+      "first_frame": 1801,
+      "end_frame": 2101,
+      "median_cpu_seconds": {
+        "reference": 10.640625,
+        "candidate": 6.15625
+      },
+      "raw_median_cpu_reduction_percent": 42.143906020558,
+      "faster_candidate_pairs": 5,
+      "pairs": [
+        {
+          "pair": 0,
+          "reference_cpu_seconds": 10.734375,
+          "candidate_cpu_seconds": 6.40625,
+          "cpu_reduction_percent": 40.32023289665211,
+          "reference_wall_seconds": 11.116872399812564,
+          "candidate_wall_seconds": 6.890703500015661
+        },
+        {
+          "pair": 1,
+          "reference_cpu_seconds": 10.546875,
+          "candidate_cpu_seconds": 6.140625,
+          "cpu_reduction_percent": 41.77777777777778,
+          "reference_wall_seconds": 10.833115000044927,
+          "candidate_wall_seconds": 6.386378699913621
+        },
+        {
+          "pair": 2,
+          "reference_cpu_seconds": 10.40625,
+          "candidate_cpu_seconds": 6.171875,
+          "cpu_reduction_percent": 40.69069069069069,
+          "reference_wall_seconds": 10.728961299872026,
+          "candidate_wall_seconds": 6.60628079995513
+        },
+        {
+          "pair": 3,
+          "reference_cpu_seconds": 10.9375,
+          "candidate_cpu_seconds": 6.15625,
+          "cpu_reduction_percent": 43.714285714285715,
+          "reference_wall_seconds": 11.56310009979643,
+          "candidate_wall_seconds": 6.446314399829134
+        },
+        {
+          "pair": 4,
+          "reference_cpu_seconds": 10.640625,
+          "candidate_cpu_seconds": 6.015625,
+          "cpu_reduction_percent": 43.46549192364171,
+          "reference_wall_seconds": 10.875414100009948,
+          "candidate_wall_seconds": 6.441376900067553
+        }
+      ],
+      "excluded_setup_cpu_median_seconds": {
+        "reference": 4.84375,
+        "candidate": 4.9375
+      },
+      "correctness_hashes": {
+        "audio.wav": "2989051a49b464eb307ef7fcffa0bfa9527714c4160aa4a346f0b32a4ee5cf54",
+        "final.png": "52fbc78ffe2628c54f4fd1abc8925a72dd68e9161bba95b51d37a950280eda48",
+        "frames.bin": "5fd6164c1252c53987c19dd7c6221525a91a12f4c841677385986781c4736fc3",
+        "hardware.txt": "6cd99f5d5426d943c1f1831152bbc17816377f11144bd73d03e6b7ee2a4744ab",
+        "memory.txt": "8017287ab1344a3a3d3147be502cbbe0be073cbe05bda1e4a0b157551df785fb",
+        "hd.png": "c775afb04f321f85c005992cce49a1644ade2a8bbbe3e4dcfa128fcaa0290707",
+        "hd_00000.png": "ec885f6a8b005c9938b898ff149c17a4d6d50799703a56720fa76864abffaae3",
+        "hd_00300.png": "022934d13263a73304c4c829f04325ef07d19e8ff59b4e0943719f3c51c44ea1",
+        "hd_00600.png": "09e682fedd210152600001160bf84cfc7a1aed1fcaf6b4c8501de7a32708247a",
+        "hd_00900.png": "61f8c5bef42d6ca15bb066c5097c5c6e9a9c1b4e466bdb4aa0369a90744babcc",
+        "hd_01200.png": "72239622e8489b5d4c54181bab9cf730c8d2e1974483d02dc41a33fcb38745aa",
+        "hd_01500.png": "b4f41f61de4afb4435c9fcf72dd948663b66ec0963673c1aba6eb19c7fa36291",
+        "hd_01800.png": "b4f41f61de4afb4435c9fcf72dd948663b66ec0963673c1aba6eb19c7fa36291",
+        "hd_02100.png": "c775afb04f321f85c005992cce49a1644ade2a8bbbe3e4dcfa128fcaa0290707"
+      },
+      "binary_sha256": {
+        "reference": "ad531cf870b3f50744c542ace5945625284e5b11db04287c1b4f24ee8f5239a2",
+        "candidate": "69639696d64d775384fa2336ec24321e5e43a43b36c491d2d2d3649d231dff55"
+      },
+      "raw_file": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\nas-zelda-hd-plan-v2\\evidence\\performance.json"
+    },
+    {
+      "title": "zelda",
+      "host_label": "local",
+      "package": "qualified-layered-HD-key-condition-row-plan-v2",
+      "decision": "rejected-as-universal-package-SMB-regression",
+      "host": "DESKTOP-HN15M1H",
+      "logical_processors": 16,
+      "affinity_mask": 32768,
+      "preflight_core_busy": [
+        0.59375,
+        0.61328125,
+        0.7734375,
+        0.72265625,
+        0.63671875,
+        0.7421875,
+        0.68359375,
+        0.6796875,
+        0.7109375,
+        0.7578125,
+        0.58984375,
+        0.703125,
+        0.80859375,
+        0.80859375,
+        0.5625,
+        0.48828125
+      ],
+      "first_frame": 1801,
+      "end_frame": 2101,
+      "median_cpu_seconds": {
+        "reference": 6.984375,
+        "candidate": 4.296875
+      },
+      "raw_median_cpu_reduction_percent": 38.478747203579424,
+      "faster_candidate_pairs": 5,
+      "pairs": [
+        {
+          "pair": 0,
+          "reference_cpu_seconds": 6.5625,
+          "candidate_cpu_seconds": 4.03125,
+          "cpu_reduction_percent": 38.57142857142857,
+          "reference_wall_seconds": 7.847878300002776,
+          "candidate_wall_seconds": 5.594036499969661
+        },
+        {
+          "pair": 1,
+          "reference_cpu_seconds": 6.984375,
+          "candidate_cpu_seconds": 4.296875,
+          "cpu_reduction_percent": 38.478747203579424,
+          "reference_wall_seconds": 8.76564779994078,
+          "candidate_wall_seconds": 5.208155700005591
+        },
+        {
+          "pair": 2,
+          "reference_cpu_seconds": 7.328125,
+          "candidate_cpu_seconds": 4.734375,
+          "cpu_reduction_percent": 35.394456289978685,
+          "reference_wall_seconds": 9.638031400041655,
+          "candidate_wall_seconds": 6.323173000011593
+        },
+        {
+          "pair": 3,
+          "reference_cpu_seconds": 7.078125,
+          "candidate_cpu_seconds": 4.21875,
+          "cpu_reduction_percent": 40.39735099337748,
+          "reference_wall_seconds": 9.219548500026576,
+          "candidate_wall_seconds": 5.102052900008857
+        },
+        {
+          "pair": 4,
+          "reference_cpu_seconds": 6.890625,
+          "candidate_cpu_seconds": 4.640625,
+          "cpu_reduction_percent": 32.6530612244898,
+          "reference_wall_seconds": 9.470882300054654,
+          "candidate_wall_seconds": 6.0916872000088915
+        }
+      ],
+      "excluded_setup_cpu_median_seconds": {
+        "reference": 3.359375,
+        "candidate": 3.4375
+      },
+      "correctness_hashes": {
+        "audio.wav": "2989051a49b464eb307ef7fcffa0bfa9527714c4160aa4a346f0b32a4ee5cf54",
+        "final.png": "52fbc78ffe2628c54f4fd1abc8925a72dd68e9161bba95b51d37a950280eda48",
+        "frames.bin": "5fd6164c1252c53987c19dd7c6221525a91a12f4c841677385986781c4736fc3",
+        "hardware.txt": "6cd99f5d5426d943c1f1831152bbc17816377f11144bd73d03e6b7ee2a4744ab",
+        "memory.txt": "8017287ab1344a3a3d3147be502cbbe0be073cbe05bda1e4a0b157551df785fb",
+        "hd.png": "c775afb04f321f85c005992cce49a1644ade2a8bbbe3e4dcfa128fcaa0290707",
+        "hd_00000.png": "ec885f6a8b005c9938b898ff149c17a4d6d50799703a56720fa76864abffaae3",
+        "hd_00300.png": "022934d13263a73304c4c829f04325ef07d19e8ff59b4e0943719f3c51c44ea1",
+        "hd_00600.png": "09e682fedd210152600001160bf84cfc7a1aed1fcaf6b4c8501de7a32708247a",
+        "hd_00900.png": "61f8c5bef42d6ca15bb066c5097c5c6e9a9c1b4e466bdb4aa0369a90744babcc",
+        "hd_01200.png": "72239622e8489b5d4c54181bab9cf730c8d2e1974483d02dc41a33fcb38745aa",
+        "hd_01500.png": "b4f41f61de4afb4435c9fcf72dd948663b66ec0963673c1aba6eb19c7fa36291",
+        "hd_01800.png": "b4f41f61de4afb4435c9fcf72dd948663b66ec0963673c1aba6eb19c7fa36291",
+        "hd_02100.png": "c775afb04f321f85c005992cce49a1644ade2a8bbbe3e4dcfa128fcaa0290707"
+      },
+      "binary_sha256": {
+        "reference": "ad531cf870b3f50744c542ace5945625284e5b11db04287c1b4f24ee8f5239a2",
+        "candidate": "69639696d64d775384fa2336ec24321e5e43a43b36c491d2d2d3649d231dff55"
+      },
+      "raw_file": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\local-zelda-hd-plan-v2\\evidence\\performance.json"
+    },
+    {
+      "title": "smb",
+      "host_label": "nas",
+      "package": "qualified-layered-HD-key-condition-row-plan-v2",
+      "decision": "rejected-as-universal-package-SMB-regression",
+      "host": "SERVER",
+      "logical_processors": 4,
+      "affinity_mask": 4,
+      "preflight_core_busy": [
+        0.18359375,
+        0.1484375,
+        0.140625,
+        0.21484375
+      ],
+      "first_frame": 361,
+      "end_frame": 961,
+      "median_cpu_seconds": {
+        "reference": 8.578125,
+        "candidate": 8.765625
+      },
+      "raw_median_cpu_reduction_percent": -2.1857923497267784,
+      "faster_candidate_pairs": 0,
+      "pairs": [
+        {
+          "pair": 0,
+          "reference_cpu_seconds": 8.25,
+          "candidate_cpu_seconds": 8.609375,
+          "cpu_reduction_percent": -4.356060606060597,
+          "reference_wall_seconds": 8.77807050012052,
+          "candidate_wall_seconds": 8.945743200136349
+        },
+        {
+          "pair": 1,
+          "reference_cpu_seconds": 8.4375,
+          "candidate_cpu_seconds": 8.6875,
+          "cpu_reduction_percent": -2.9629629629629672,
+          "reference_wall_seconds": 8.78951340005733,
+          "candidate_wall_seconds": 9.072152900043875
+        },
+        {
+          "pair": 2,
+          "reference_cpu_seconds": 8.671875,
+          "candidate_cpu_seconds": 8.9375,
+          "cpu_reduction_percent": -3.063063063063054,
+          "reference_wall_seconds": 9.371151599800214,
+          "candidate_wall_seconds": 9.843427099986002
+        },
+        {
+          "pair": 3,
+          "reference_cpu_seconds": 8.578125,
+          "candidate_cpu_seconds": 8.875,
+          "cpu_reduction_percent": -3.4608378870673917,
+          "reference_wall_seconds": 9.02251369995065,
+          "candidate_wall_seconds": 9.132999900029972
+        },
+        {
+          "pair": 4,
+          "reference_cpu_seconds": 8.640625,
+          "candidate_cpu_seconds": 8.765625,
+          "cpu_reduction_percent": -1.4466546112115841,
+          "reference_wall_seconds": 9.092494399985299,
+          "candidate_wall_seconds": 9.286151299951598
+        }
+      ],
+      "excluded_setup_cpu_median_seconds": {
+        "reference": 0.953125,
+        "candidate": 0.953125
+      },
+      "correctness_hashes": {
+        "audio.wav": "ca7d8ff3a7f4b95ed9d2e77414a30964d82f8c4ea88e05f9f5d3db74078238f1",
+        "final.png": "cbab6112ae24cabdfb808975d475d49076c479b8944f7ec187ce225a360e630e",
+        "frames.bin": "a27af7ae2bc79000ef48b3afe5924f05674aef15f28fe883d28a84d8ee044b39",
+        "hardware.txt": "35ad311a3c07ca0d69d272854e69f5d2ccdd5a884f485c79fd1c7e4c25cd97cf",
+        "memory.txt": "ddb4b2d74a188f1ff8e1aefd89a86f1e39e93c31d7b4dcedec8340137e4ee2bc",
+        "hd.png": "51cec69ccbc7793f37cc127e85f9abb5dc9cee6bce37b792a671054c4cdf5c84",
+        "hd_00000.png": "aeac69108e6af37f307a22c92f2fdf031ab1d1a3ced169b6a84a6ba6e9f2e1e0",
+        "hd_00300.png": "c572d04378c1e612a2021f3341013bda0b993c85842c8055f107d064a548c586",
+        "hd_00600.png": "f236077d23902210aaaf92b7218d1cb5a1131eee19f5b387d3aa8a25f87c6cfc",
+        "hd_00900.png": "d2a7114fdedbcb57ceb5e28b392d4827e8f6aae973a0256e5e169e6f3de19cb0",
+        "hd_01200.png": "51cec69ccbc7793f37cc127e85f9abb5dc9cee6bce37b792a671054c4cdf5c84"
+      },
+      "binary_sha256": {
+        "reference": "dc700ee819d824882a41eb436986fd780caf016be623c8ca2601d4586b7101af",
+        "candidate": "f8a5d084ba4d95aa26e5fd1443dfd057d9a1f393ca1fbae66f9eabbc9edf2c76"
+      },
+      "raw_file": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\nas-smb-hd-plan-v2\\evidence\\performance.json"
+    },
+    {
+      "title": "smb",
+      "host_label": "local",
+      "package": "qualified-layered-HD-key-condition-row-plan-v2",
+      "decision": "rejected-as-universal-package-SMB-regression",
+      "host": "DESKTOP-HN15M1H",
+      "logical_processors": 16,
+      "affinity_mask": 2,
+      "preflight_core_busy": [
+        0.6875,
+        0.65625,
+        0.87109375,
+        0.8359375,
+        0.765625,
+        0.7421875,
+        0.7734375,
+        0.77734375,
+        0.83203125,
+        0.83984375,
+        0.703125,
+        0.71484375,
+        0.7421875,
+        0.765625,
+        0.6953125,
+        1.0
+      ],
+      "first_frame": 361,
+      "end_frame": 961,
+      "median_cpu_seconds": {
+        "reference": 5.234375,
+        "candidate": 4.703125
+      },
+      "raw_median_cpu_reduction_percent": 10.149253731343288,
+      "faster_candidate_pairs": 3,
+      "pairs": [
+        {
+          "pair": 0,
+          "reference_cpu_seconds": 5.265625,
+          "candidate_cpu_seconds": 4.703125,
+          "cpu_reduction_percent": 10.682492581602377,
+          "reference_wall_seconds": 8.16422319994308,
+          "candidate_wall_seconds": 6.586082499939948
+        },
+        {
+          "pair": 1,
+          "reference_cpu_seconds": 4.28125,
+          "candidate_cpu_seconds": 4.28125,
+          "cpu_reduction_percent": 0.0,
+          "reference_wall_seconds": 5.866005800082348,
+          "candidate_wall_seconds": 6.267923300038092
+        },
+        {
+          "pair": 2,
+          "reference_cpu_seconds": 4.421875,
+          "candidate_cpu_seconds": 6.5,
+          "cpu_reduction_percent": -46.996466431095406,
+          "reference_wall_seconds": 9.847857199958526,
+          "candidate_wall_seconds": 16.315992000047117
+        },
+        {
+          "pair": 3,
+          "reference_cpu_seconds": 5.234375,
+          "candidate_cpu_seconds": 5.1875,
+          "cpu_reduction_percent": 0.8955223880596996,
+          "reference_wall_seconds": 9.75115490006283,
+          "candidate_wall_seconds": 8.251738300081342
+        },
+        {
+          "pair": 4,
+          "reference_cpu_seconds": 5.40625,
+          "candidate_cpu_seconds": 4.53125,
+          "cpu_reduction_percent": 16.184971098265898,
+          "reference_wall_seconds": 9.433319099945948,
+          "candidate_wall_seconds": 5.4069481999613345
+        }
+      ],
+      "excluded_setup_cpu_median_seconds": {
+        "reference": 0.484375,
+        "candidate": 0.484375
+      },
+      "correctness_hashes": {
+        "audio.wav": "ca7d8ff3a7f4b95ed9d2e77414a30964d82f8c4ea88e05f9f5d3db74078238f1",
+        "final.png": "cbab6112ae24cabdfb808975d475d49076c479b8944f7ec187ce225a360e630e",
+        "frames.bin": "a27af7ae2bc79000ef48b3afe5924f05674aef15f28fe883d28a84d8ee044b39",
+        "hardware.txt": "35ad311a3c07ca0d69d272854e69f5d2ccdd5a884f485c79fd1c7e4c25cd97cf",
+        "memory.txt": "ddb4b2d74a188f1ff8e1aefd89a86f1e39e93c31d7b4dcedec8340137e4ee2bc",
+        "hd.png": "51cec69ccbc7793f37cc127e85f9abb5dc9cee6bce37b792a671054c4cdf5c84",
+        "hd_00000.png": "aeac69108e6af37f307a22c92f2fdf031ab1d1a3ced169b6a84a6ba6e9f2e1e0",
+        "hd_00300.png": "c572d04378c1e612a2021f3341013bda0b993c85842c8055f107d064a548c586",
+        "hd_00600.png": "f236077d23902210aaaf92b7218d1cb5a1131eee19f5b387d3aa8a25f87c6cfc",
+        "hd_00900.png": "d2a7114fdedbcb57ceb5e28b392d4827e8f6aae973a0256e5e169e6f3de19cb0",
+        "hd_01200.png": "51cec69ccbc7793f37cc127e85f9abb5dc9cee6bce37b792a671054c4cdf5c84"
+      },
+      "binary_sha256": {
+        "reference": "dc700ee819d824882a41eb436986fd780caf016be623c8ca2601d4586b7101af",
+        "candidate": "f8a5d084ba4d95aa26e5fd1443dfd057d9a1f393ca1fbae66f9eabbc9edf2c76"
+      },
+      "raw_file": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\local-smb-hd-plan-v2\\evidence\\performance.json"
+    },
+    {
+      "title": "zelda",
+      "host_label": "nas",
+      "package": "sidecar-layered-HD-key-condition-row-plan-v3",
+      "decision": "rejected-as-universal-package-SMB-regression",
+      "host": "SERVER",
+      "logical_processors": 4,
+      "affinity_mask": 4,
+      "preflight_core_busy": [
+        0.375,
+        0.38671875,
+        0.3671875,
+        0.4296875
+      ],
+      "first_frame": 1801,
+      "end_frame": 2101,
+      "median_cpu_seconds": {
+        "reference": 10.515625,
+        "candidate": 6.15625
+      },
+      "raw_median_cpu_reduction_percent": 41.45616641901931,
+      "faster_candidate_pairs": 5,
+      "pairs": [
+        {
+          "pair": 0,
+          "reference_cpu_seconds": 10.609375,
+          "candidate_cpu_seconds": 6.15625,
+          "cpu_reduction_percent": 41.97349042709867,
+          "reference_wall_seconds": 10.940426500048488,
+          "candidate_wall_seconds": 6.462354099843651
+        },
+        {
+          "pair": 1,
+          "reference_cpu_seconds": 10.34375,
+          "candidate_cpu_seconds": 6.109375,
+          "cpu_reduction_percent": 40.93655589123867,
+          "reference_wall_seconds": 10.726468699984252,
+          "candidate_wall_seconds": 6.306830300018191
+        },
+        {
+          "pair": 2,
+          "reference_cpu_seconds": 10.84375,
+          "candidate_cpu_seconds": 6.15625,
+          "cpu_reduction_percent": 43.22766570605188,
+          "reference_wall_seconds": 11.33151809987612,
+          "candidate_wall_seconds": 6.331001900136471
+        },
+        {
+          "pair": 3,
+          "reference_cpu_seconds": 10.390625,
+          "candidate_cpu_seconds": 6.234375,
+          "cpu_reduction_percent": 40.0,
+          "reference_wall_seconds": 10.726686100009829,
+          "candidate_wall_seconds": 6.360222900053486
+        },
+        {
+          "pair": 4,
+          "reference_cpu_seconds": 10.515625,
+          "candidate_cpu_seconds": 6.078125,
+          "cpu_reduction_percent": 42.19910846953938,
+          "reference_wall_seconds": 10.90053079999052,
+          "candidate_wall_seconds": 6.279658699873835
+        }
+      ],
+      "excluded_setup_cpu_median_seconds": {
+        "reference": 4.953125,
+        "candidate": 4.859375
+      },
+      "correctness_hashes": {
+        "audio.wav": "2989051a49b464eb307ef7fcffa0bfa9527714c4160aa4a346f0b32a4ee5cf54",
+        "final.png": "52fbc78ffe2628c54f4fd1abc8925a72dd68e9161bba95b51d37a950280eda48",
+        "frames.bin": "5fd6164c1252c53987c19dd7c6221525a91a12f4c841677385986781c4736fc3",
+        "hardware.txt": "6cd99f5d5426d943c1f1831152bbc17816377f11144bd73d03e6b7ee2a4744ab",
+        "memory.txt": "8017287ab1344a3a3d3147be502cbbe0be073cbe05bda1e4a0b157551df785fb",
+        "hd.png": "c775afb04f321f85c005992cce49a1644ade2a8bbbe3e4dcfa128fcaa0290707",
+        "hd_00000.png": "ec885f6a8b005c9938b898ff149c17a4d6d50799703a56720fa76864abffaae3",
+        "hd_00300.png": "022934d13263a73304c4c829f04325ef07d19e8ff59b4e0943719f3c51c44ea1",
+        "hd_00600.png": "09e682fedd210152600001160bf84cfc7a1aed1fcaf6b4c8501de7a32708247a",
+        "hd_00900.png": "61f8c5bef42d6ca15bb066c5097c5c6e9a9c1b4e466bdb4aa0369a90744babcc",
+        "hd_01200.png": "72239622e8489b5d4c54181bab9cf730c8d2e1974483d02dc41a33fcb38745aa",
+        "hd_01500.png": "b4f41f61de4afb4435c9fcf72dd948663b66ec0963673c1aba6eb19c7fa36291",
+        "hd_01800.png": "b4f41f61de4afb4435c9fcf72dd948663b66ec0963673c1aba6eb19c7fa36291",
+        "hd_02100.png": "c775afb04f321f85c005992cce49a1644ade2a8bbbe3e4dcfa128fcaa0290707"
+      },
+      "binary_sha256": {
+        "reference": "ad531cf870b3f50744c542ace5945625284e5b11db04287c1b4f24ee8f5239a2",
+        "candidate": "8f951f40e1175bafc4da29607001716fca9a2ac8357df92ddd5bed8ec9449712"
+      },
+      "raw_file": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\nas-zelda-hd-plan-v3\\evidence\\performance.json"
+    },
+    {
+      "title": "zelda",
+      "host_label": "local",
+      "package": "sidecar-layered-HD-key-condition-row-plan-v3",
+      "decision": "rejected-as-universal-package-SMB-regression",
+      "host": "DESKTOP-HN15M1H",
+      "logical_processors": 16,
+      "affinity_mask": 2,
+      "preflight_core_busy": [
+        0.5390625,
+        0.43359375,
+        0.8125,
+        0.65625,
+        0.671875,
+        0.609375,
+        0.6171875,
+        0.578125,
+        0.77734375,
+        0.6875,
+        0.52734375,
+        0.5234375,
+        0.6171875,
+        0.64453125,
+        0.58984375,
+        1.0
+      ],
+      "first_frame": 1801,
+      "end_frame": 2101,
+      "median_cpu_seconds": {
+        "reference": 5.53125,
+        "candidate": 3.65625
+      },
+      "raw_median_cpu_reduction_percent": 33.89830508474576,
+      "faster_candidate_pairs": 5,
+      "pairs": [
+        {
+          "pair": 0,
+          "reference_cpu_seconds": 5.4375,
+          "candidate_cpu_seconds": 3.3125,
+          "cpu_reduction_percent": 39.08045977011494,
+          "reference_wall_seconds": 8.770298200077377,
+          "candidate_wall_seconds": 3.975432200008072
+        },
+        {
+          "pair": 1,
+          "reference_cpu_seconds": 5.875,
+          "candidate_cpu_seconds": 3.484375,
+          "cpu_reduction_percent": 40.691489361702125,
+          "reference_wall_seconds": 6.790322200045921,
+          "candidate_wall_seconds": 5.028451699996367
+        },
+        {
+          "pair": 2,
+          "reference_cpu_seconds": 5.53125,
+          "candidate_cpu_seconds": 3.921875,
+          "cpu_reduction_percent": 29.096045197740118,
+          "reference_wall_seconds": 6.783141799969599,
+          "candidate_wall_seconds": 6.160900699906051
+        },
+        {
+          "pair": 3,
+          "reference_cpu_seconds": 5.5,
+          "candidate_cpu_seconds": 3.71875,
+          "cpu_reduction_percent": 32.38636363636363,
+          "reference_wall_seconds": 9.224483900004998,
+          "candidate_wall_seconds": 5.174029800109565
+        },
+        {
+          "pair": 4,
+          "reference_cpu_seconds": 5.671875,
+          "candidate_cpu_seconds": 3.65625,
+          "cpu_reduction_percent": 35.537190082644635,
+          "reference_wall_seconds": 7.331315999967046,
+          "candidate_wall_seconds": 4.973694999935105
+        }
+      ],
+      "excluded_setup_cpu_median_seconds": {
+        "reference": 3.1875,
+        "candidate": 3.1875
+      },
+      "correctness_hashes": {
+        "audio.wav": "2989051a49b464eb307ef7fcffa0bfa9527714c4160aa4a346f0b32a4ee5cf54",
+        "final.png": "52fbc78ffe2628c54f4fd1abc8925a72dd68e9161bba95b51d37a950280eda48",
+        "frames.bin": "5fd6164c1252c53987c19dd7c6221525a91a12f4c841677385986781c4736fc3",
+        "hardware.txt": "6cd99f5d5426d943c1f1831152bbc17816377f11144bd73d03e6b7ee2a4744ab",
+        "memory.txt": "8017287ab1344a3a3d3147be502cbbe0be073cbe05bda1e4a0b157551df785fb",
+        "hd.png": "c775afb04f321f85c005992cce49a1644ade2a8bbbe3e4dcfa128fcaa0290707",
+        "hd_00000.png": "ec885f6a8b005c9938b898ff149c17a4d6d50799703a56720fa76864abffaae3",
+        "hd_00300.png": "022934d13263a73304c4c829f04325ef07d19e8ff59b4e0943719f3c51c44ea1",
+        "hd_00600.png": "09e682fedd210152600001160bf84cfc7a1aed1fcaf6b4c8501de7a32708247a",
+        "hd_00900.png": "61f8c5bef42d6ca15bb066c5097c5c6e9a9c1b4e466bdb4aa0369a90744babcc",
+        "hd_01200.png": "72239622e8489b5d4c54181bab9cf730c8d2e1974483d02dc41a33fcb38745aa",
+        "hd_01500.png": "b4f41f61de4afb4435c9fcf72dd948663b66ec0963673c1aba6eb19c7fa36291",
+        "hd_01800.png": "b4f41f61de4afb4435c9fcf72dd948663b66ec0963673c1aba6eb19c7fa36291",
+        "hd_02100.png": "c775afb04f321f85c005992cce49a1644ade2a8bbbe3e4dcfa128fcaa0290707"
+      },
+      "binary_sha256": {
+        "reference": "ad531cf870b3f50744c542ace5945625284e5b11db04287c1b4f24ee8f5239a2",
+        "candidate": "8f951f40e1175bafc4da29607001716fca9a2ac8357df92ddd5bed8ec9449712"
+      },
+      "raw_file": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\local-zelda-hd-plan-v3\\evidence\\performance.json"
+    },
+    {
+      "title": "smb",
+      "host_label": "nas",
+      "package": "sidecar-layered-HD-key-condition-row-plan-v3",
+      "decision": "rejected-as-universal-package-SMB-regression",
+      "host": "SERVER",
+      "logical_processors": 4,
+      "affinity_mask": 8,
+      "preflight_core_busy": [
+        0.15234375,
+        0.17578125,
+        0.203125,
+        0.12109375
+      ],
+      "first_frame": 361,
+      "end_frame": 961,
+      "median_cpu_seconds": {
+        "reference": 8.296875,
+        "candidate": 8.390625
+      },
+      "raw_median_cpu_reduction_percent": -1.1299435028248483,
+      "faster_candidate_pairs": 1,
+      "pairs": [
+        {
+          "pair": 0,
+          "reference_cpu_seconds": 8.296875,
+          "candidate_cpu_seconds": 8.453125,
+          "cpu_reduction_percent": -1.883239171374762,
+          "reference_wall_seconds": 8.552540700184181,
+          "candidate_wall_seconds": 8.675339600071311
+        },
+        {
+          "pair": 1,
+          "reference_cpu_seconds": 8.265625,
+          "candidate_cpu_seconds": 8.390625,
+          "cpu_reduction_percent": -1.512287334593565,
+          "reference_wall_seconds": 8.751951500074938,
+          "candidate_wall_seconds": 8.642559299943969
+        },
+        {
+          "pair": 2,
+          "reference_cpu_seconds": 8.390625,
+          "candidate_cpu_seconds": 8.5,
+          "cpu_reduction_percent": -1.3035381750465591,
+          "reference_wall_seconds": 8.761119799921289,
+          "candidate_wall_seconds": 8.884681599913165
+        },
+        {
+          "pair": 3,
+          "reference_cpu_seconds": 8.25,
+          "candidate_cpu_seconds": 8.359375,
+          "cpu_reduction_percent": -1.325757575757569,
+          "reference_wall_seconds": 8.590617900015786,
+          "candidate_wall_seconds": 8.595288600074127
+        },
+        {
+          "pair": 4,
+          "reference_cpu_seconds": 8.6875,
+          "candidate_cpu_seconds": 8.3125,
+          "cpu_reduction_percent": 4.316546762589923,
+          "reference_wall_seconds": 9.483681600075215,
+          "candidate_wall_seconds": 8.540477299829945
+        }
+      ],
+      "excluded_setup_cpu_median_seconds": {
+        "reference": 0.96875,
+        "candidate": 1.0
+      },
+      "correctness_hashes": {
+        "audio.wav": "ca7d8ff3a7f4b95ed9d2e77414a30964d82f8c4ea88e05f9f5d3db74078238f1",
+        "final.png": "cbab6112ae24cabdfb808975d475d49076c479b8944f7ec187ce225a360e630e",
+        "frames.bin": "a27af7ae2bc79000ef48b3afe5924f05674aef15f28fe883d28a84d8ee044b39",
+        "hardware.txt": "35ad311a3c07ca0d69d272854e69f5d2ccdd5a884f485c79fd1c7e4c25cd97cf",
+        "memory.txt": "ddb4b2d74a188f1ff8e1aefd89a86f1e39e93c31d7b4dcedec8340137e4ee2bc",
+        "hd.png": "51cec69ccbc7793f37cc127e85f9abb5dc9cee6bce37b792a671054c4cdf5c84",
+        "hd_00000.png": "aeac69108e6af37f307a22c92f2fdf031ab1d1a3ced169b6a84a6ba6e9f2e1e0",
+        "hd_00300.png": "c572d04378c1e612a2021f3341013bda0b993c85842c8055f107d064a548c586",
+        "hd_00600.png": "f236077d23902210aaaf92b7218d1cb5a1131eee19f5b387d3aa8a25f87c6cfc",
+        "hd_00900.png": "d2a7114fdedbcb57ceb5e28b392d4827e8f6aae973a0256e5e169e6f3de19cb0",
+        "hd_01200.png": "51cec69ccbc7793f37cc127e85f9abb5dc9cee6bce37b792a671054c4cdf5c84"
+      },
+      "binary_sha256": {
+        "reference": "dc700ee819d824882a41eb436986fd780caf016be623c8ca2601d4586b7101af",
+        "candidate": "57fda593ae58641263d205124d6645843070f02d8c2ff434594fa0a05fcb26a9"
+      },
+      "raw_file": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\nas-smb-hd-plan-v3\\evidence\\performance.json"
+    },
+    {
+      "title": "smb",
+      "host_label": "local",
+      "package": "sidecar-layered-HD-key-condition-row-plan-v3",
+      "decision": "rejected-as-universal-package-SMB-regression",
+      "host": "DESKTOP-HN15M1H",
+      "logical_processors": 16,
+      "affinity_mask": 2,
+      "preflight_core_busy": [
+        0.73046875,
+        0.66796875,
+        0.828125,
+        0.859375,
+        0.7890625,
+        0.83203125,
+        0.87890625,
+        0.875,
+        0.859375,
+        0.8828125,
+        0.84375,
+        0.8359375,
+        0.859375,
+        0.875,
+        0.78125,
+        1.0
+      ],
+      "first_frame": 361,
+      "end_frame": 961,
+      "median_cpu_seconds": {
+        "reference": 3.9375,
+        "candidate": 4.15625
+      },
+      "raw_median_cpu_reduction_percent": -5.555555555555558,
+      "faster_candidate_pairs": 3,
+      "pairs": [
+        {
+          "pair": 0,
+          "reference_cpu_seconds": 5.828125,
+          "candidate_cpu_seconds": 5.234375,
+          "cpu_reduction_percent": 10.187667560321712,
+          "reference_wall_seconds": 13.144468700047582,
+          "candidate_wall_seconds": 9.021530799916945
+        },
+        {
+          "pair": 1,
+          "reference_cpu_seconds": 4.140625,
+          "candidate_cpu_seconds": 5.21875,
+          "cpu_reduction_percent": -26.0377358490566,
+          "reference_wall_seconds": 4.931939800037071,
+          "candidate_wall_seconds": 10.43780370010063
+        },
+        {
+          "pair": 2,
+          "reference_cpu_seconds": 3.734375,
+          "candidate_cpu_seconds": 3.65625,
+          "cpu_reduction_percent": 2.092050209205021,
+          "reference_wall_seconds": 4.247201399994083,
+          "candidate_wall_seconds": 4.4444730000104755
+        },
+        {
+          "pair": 3,
+          "reference_cpu_seconds": 3.9375,
+          "candidate_cpu_seconds": 3.90625,
+          "cpu_reduction_percent": 0.7936507936507908,
+          "reference_wall_seconds": 4.72856080008205,
+          "candidate_wall_seconds": 4.351599299930967
+        },
+        {
+          "pair": 4,
+          "reference_cpu_seconds": 3.765625,
+          "candidate_cpu_seconds": 4.15625,
+          "cpu_reduction_percent": -10.373443983402497,
+          "reference_wall_seconds": 4.313935499987565,
+          "candidate_wall_seconds": 4.8393649000208825
+        }
+      ],
+      "excluded_setup_cpu_median_seconds": {
+        "reference": 0.53125,
+        "candidate": 0.546875
+      },
+      "correctness_hashes": {
+        "audio.wav": "ca7d8ff3a7f4b95ed9d2e77414a30964d82f8c4ea88e05f9f5d3db74078238f1",
+        "final.png": "cbab6112ae24cabdfb808975d475d49076c479b8944f7ec187ce225a360e630e",
+        "frames.bin": "a27af7ae2bc79000ef48b3afe5924f05674aef15f28fe883d28a84d8ee044b39",
+        "hardware.txt": "35ad311a3c07ca0d69d272854e69f5d2ccdd5a884f485c79fd1c7e4c25cd97cf",
+        "memory.txt": "ddb4b2d74a188f1ff8e1aefd89a86f1e39e93c31d7b4dcedec8340137e4ee2bc",
+        "hd.png": "51cec69ccbc7793f37cc127e85f9abb5dc9cee6bce37b792a671054c4cdf5c84",
+        "hd_00000.png": "aeac69108e6af37f307a22c92f2fdf031ab1d1a3ced169b6a84a6ba6e9f2e1e0",
+        "hd_00300.png": "c572d04378c1e612a2021f3341013bda0b993c85842c8055f107d064a548c586",
+        "hd_00600.png": "f236077d23902210aaaf92b7218d1cb5a1131eee19f5b387d3aa8a25f87c6cfc",
+        "hd_00900.png": "d2a7114fdedbcb57ceb5e28b392d4827e8f6aae973a0256e5e169e6f3de19cb0",
+        "hd_01200.png": "51cec69ccbc7793f37cc127e85f9abb5dc9cee6bce37b792a671054c4cdf5c84"
+      },
+      "binary_sha256": {
+        "reference": "dc700ee819d824882a41eb436986fd780caf016be623c8ca2601d4586b7101af",
+        "candidate": "57fda593ae58641263d205124d6645843070f02d8c2ff434594fa0a05fcb26a9"
+      },
+      "raw_file": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\local-smb-hd-plan-v3\\evidence\\performance.json"
+    }
+  ],
+  "SMB_direct_runtime_identity": {
+    "preprocessed_program_equal": true,
+    "preprocessed_sha256": "209196e334f94c2c9df334ffc4a0b01887d613b11a3ad16e56a966cbdd3f1dd8",
+    "object_runtime_sections_equal": true,
+    "sections": {
+      ".text": {
+        "size": 16608,
+        "sha256": "b6a9499e300c98c91da61a7d0cb7f65477d47d9fbe5bd5b4ce493adde21e931b"
+      },
+      ".data": {
+        "size": 16,
+        "sha256": "c9cb04ba987a95a535a8ba7d18b3815d0f04b47add63f2b18ed0a66f9a6d617a"
+      },
+      ".bss": {
+        "size": 131808,
+        "sha256": "74aa820a48459c5949b6db67201c7cc9f0dbe63dc2b29951299edf565b6ebd64"
+      },
+      ".xdata": {
+        "size": 320,
+        "sha256": "ab9c038032c02c0734d18313cff8e630c0ffaa4770d6316bd027ca2a01ad5c94"
+      },
+      ".pdata": {
+        "size": 324,
+        "sha256": "79b9ccd42208170f6d6689d2cb271ed5e846c85fe58a089f8ac69a7b79853c3d"
+      },
+      ".rdata": {
+        "size": 1440,
+        "sha256": "2623a14aad31e49fbfc9e45e47278e88a6db8b820fa3d5a02f7dd85c37a0b83c"
+      }
+    },
+    "old_object": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-smb-candidate-v2\\CMakeFiles\\SuperMarioBrosRecomp.dir\\G_\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\deadline-candidate-v2\\runner\\src\\hdpack.c.obj",
+    "new_object": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-hd-plan-v4\\smb\\candidate\\hdpack.c.obj",
+    "exe_runtime_sections_equal": true,
+    "exe_runtime_before": {
+      ".text": {
+        "rva": 4096,
+        "size": 5224960,
+        "sha256": "8c7f5ac2d18a5d494cac8c64a1d011cdf53efaa844ce624e5911f0e31b8003e4"
+      },
+      ".data": {
+        "rva": 5230592,
+        "size": 468992,
+        "sha256": "3c34e1ddfec1ebbe74124d25c66385d19146c1e222ef4c501d6dba65afa81517"
+      },
+      ".rdata": {
+        "rva": 5701632,
+        "size": 781312,
+        "sha256": "4a10239343d27ebf21a9f8a373172ae3578f9e84e25e46a9ed78e963e118437a"
+      },
+      ".pdata": {
+        "rva": 6483968,
+        "size": 67072,
+        "sha256": "018fabce0edd2b2f7e691c335521021f9479f599297996a3ea4024859058500f"
+      },
+      ".xdata": {
+        "rva": 6553600,
+        "size": 74240,
+        "sha256": "899dae8553a8c5fafd914a9a57c587c950e37fe1ab507b7ca4aa4193d9e27d45"
+      },
+      ".bss": {
+        "rva": 6631424,
+        "size": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      ".idata": {
+        "rva": 25612288,
+        "size": 26624,
+        "sha256": "080973672626a13570a29c8a18a9cefe76a03ec1504a044e050a24480c3f3f25"
+      },
+      ".tls": {
+        "rva": 25640960,
+        "size": 512,
+        "sha256": "076a27c79e5ace2a3d47f9dd2e83e4ff6ea8872b3c2218f66c92b89b55f36560"
+      },
+      ".rsrc": {
+        "rva": 25645056,
+        "size": 1536,
+        "sha256": "a3b473f9709d87f33ff4ab57206dc8644f62c59c17c36300125993c6f4dbc16d"
+      },
+      ".reloc": {
+        "rva": 25649152,
+        "size": 5632,
+        "sha256": "3c50f8c1c2d3b0ba0e2cb04cfff89172c5bdec306274f1cebf24f8ee2688800d"
+      }
+    },
+    "exe_runtime_after": {
+      ".text": {
+        "rva": 4096,
+        "size": 5224960,
+        "sha256": "8c7f5ac2d18a5d494cac8c64a1d011cdf53efaa844ce624e5911f0e31b8003e4"
+      },
+      ".data": {
+        "rva": 5230592,
+        "size": 468992,
+        "sha256": "3c34e1ddfec1ebbe74124d25c66385d19146c1e222ef4c501d6dba65afa81517"
+      },
+      ".rdata": {
+        "rva": 5701632,
+        "size": 781312,
+        "sha256": "4a10239343d27ebf21a9f8a373172ae3578f9e84e25e46a9ed78e963e118437a"
+      },
+      ".pdata": {
+        "rva": 6483968,
+        "size": 67072,
+        "sha256": "018fabce0edd2b2f7e691c335521021f9479f599297996a3ea4024859058500f"
+      },
+      ".xdata": {
+        "rva": 6553600,
+        "size": 74240,
+        "sha256": "899dae8553a8c5fafd914a9a57c587c950e37fe1ab507b7ca4aa4193d9e27d45"
+      },
+      ".bss": {
+        "rva": 6631424,
+        "size": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      ".idata": {
+        "rva": 25612288,
+        "size": 26624,
+        "sha256": "080973672626a13570a29c8a18a9cefe76a03ec1504a044e050a24480c3f3f25"
+      },
+      ".tls": {
+        "rva": 25640960,
+        "size": 512,
+        "sha256": "076a27c79e5ace2a3d47f9dd2e83e4ff6ea8872b3c2218f66c92b89b55f36560"
+      },
+      ".rsrc": {
+        "rva": 25645056,
+        "size": 1536,
+        "sha256": "a3b473f9709d87f33ff4ab57206dc8644f62c59c17c36300125993c6f4dbc16d"
+      },
+      ".reloc": {
+        "rva": 25649152,
+        "size": 5632,
+        "sha256": "3c50f8c1c2d3b0ba0e2cb04cfff89172c5bdec306274f1cebf24f8ee2688800d"
+      }
+    }
+  },
+  "real_pack_provenance": {
+    "hd-assets": {
+      "original_archive": "F:\\Projects\\nesrecomp\\_ws-hdpack\\_hdpacks\\zelda_remastered.zip",
+      "original_archive_sha256": "03b5eeab7914560ffb6ca0bfea04fa78525d7dad5663903a8b5d8098c10c19ea",
+      "inner_zip_sha256": "95ffd3da963a98942ac94293632b35d75db48319cb22d01bdc482628027b1af2",
+      "uncompressed_bytes": 60373328,
+      "pack": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\hd-assets\\original-pack",
+      "hires_sha256": "8b734893e21adf36d0798e0cd21aef05b0b11b780d86afa2795fef443a6106ba",
+      "private_assets": true,
+      "cleanup": "Retained only for ongoing NES110 enabled-pack comparison; remove generated staging on completion. Preserve original archive."
+    },
+    "smb-hd-assets": {
+      "original_folder": "F:\\Projects\\nesrecomp\\_ws-hdpack\\_hdpacks\\smb_lyonhrt",
+      "package_sha256": "8343689fd4a1e8ba5d5bd6e016a191613892730600a236f6c22531e266a08090",
+      "hires_sha256": "8a38a522bdfd7b27f7edc968db7c76257eb4eebcacb16171cd06161fbd29f297",
+      "private_assets": true,
+      "cleanup": "Remove generated task staging after campaign. Preserve original user pack."
+    }
+  },
+  "profiling": {
+    "before": {
+      "samples": 1900,
+      "kind": "diagnostic ownership samples only; no speedup result",
+      "functions": [
+        {
+          "function": "key_eq",
+          "samples": 348,
+          "percent": 18.31578947368421
+        },
+        {
+          "function": "blend_bg_block",
+          "samples": 337,
+          "percent": 17.736842105263158
+        },
+        {
+          "function": "outside executable",
+          "samples": 170,
+          "percent": 8.947368421052632
+        },
+        {
+          "function": "eval_backgrounds_for_frame",
+          "samples": 102,
+          "percent": 5.368421052631579
+        },
+        {
+          "function": "find_tile",
+          "samples": 94,
+          "percent": 4.947368421052632
+        },
+        {
+          "function": "cond_eval",
+          "samples": 92,
+          "percent": 4.842105263157895
+        },
+        {
+          "function": "tile_matches",
+          "samples": 65,
+          "percent": 3.4210526315789473
+        },
+        {
+          "function": "tile_conds_pass",
+          "samples": 39,
+          "percent": 2.0526315789473686
+        },
+        {
+          "function": "apu_cycle",
+          "samples": 33,
+          "percent": 1.736842105263158
+        },
+        {
+          "function": "hdpack_upscale",
+          "samples": 27,
+          "percent": 1.4210526315789473
+        },
+        {
+          "function": "compute_pixel",
+          "samples": 24,
+          "percent": 1.263157894736842
+        },
+        {
+          "function": "cyc_hdpack_pixel",
+          "samples": 23,
+          "percent": 1.2105263157894737
+        },
+        {
+          "function": "bg_fetch",
+          "samples": 23,
+          "percent": 1.2105263157894737
+        },
+        {
+          "function": "cyc_hdpack_clock",
+          "samples": 22,
+          "percent": 1.1578947368421053
+        },
+        {
+          "function": "render_span_prefix",
+          "samples": 21,
+          "percent": 1.105263157894737
+        },
+        {
+          "function": "key_hash",
+          "samples": 20,
+          "percent": 1.0526315789473684
+        },
+        {
+          "function": "eval_objects",
+          "samples": 20,
+          "percent": 1.0526315789473684
+        },
+        {
+          "function": "output_pixel",
+          "samples": 20,
+          "percent": 1.0526315789473684
+        },
+        {
+          "function": "audio_cycle",
+          "samples": 17,
+          "percent": 0.8947368421052632
+        },
+        {
+          "function": "hw_cart_chr_index",
+          "samples": 17,
+          "percent": 0.8947368421052632
+        },
+        {
+          "function": "render_span_half_dot",
+          "samples": 16,
+          "percent": 0.8421052631578947
+        },
+        {
+          "function": "general_dot",
+          "samples": 15,
+          "percent": 0.7894736842105263
+        },
+        {
+          "function": "cyc_hdpack_output",
+          "samples": 15,
+          "percent": 0.7894736842105263
+        },
+        {
+          "function": "??",
+          "samples": 11,
+          "percent": 0.5789473684210527
+        },
+        {
+          "function": "vram_fetch",
+          "samples": 11,
+          "percent": 0.5789473684210527
+        },
+        {
+          "function": "shift_sprites",
+          "samples": 11,
+          "percent": 0.5789473684210527
+        },
+        {
+          "function": "sprite_evaluation",
+          "samples": 11,
+          "percent": 0.5789473684210527
+        },
+        {
+          "function": "eval_load",
+          "samples": 11,
+          "percent": 0.5789473684210527
+        },
+        {
+          "function": "cyc_hdpack_present",
+          "samples": 11,
+          "percent": 0.5789473684210527
+        },
+        {
+          "function": "cyc_render_chr",
+          "samples": 10,
+          "percent": 0.5263157894736842
+        }
+      ],
+      "files": [
+        {
+          "file": "G:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/deadline-candidate-v2/runner/src/hdpack.c",
+          "samples": 1165,
+          "percent": 61.31578947368421
+        },
+        {
+          "file": "G:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/hw_ppu.c",
+          "samples": 250,
+          "percent": 13.157894736842104
+        },
+        {
+          "file": "runtime/device/wait",
+          "samples": 170,
+          "percent": 8.947368421052632
+        },
+        {
+          "file": "G:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/deadline-candidate-v2/runner/cyc/cyc_hdpack.c",
+          "samples": 90,
+          "percent": 4.7368421052631575
+        },
+        {
+          "file": "G:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/hw_apu.c",
+          "samples": 64,
+          "percent": 3.3684210526315788
+        },
+        {
+          "file": "G:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/deadline-candidate-v2/runner/cyc/hw_machine.c",
+          "samples": 45,
+          "percent": 2.3684210526315788
+        },
+        {
+          "file": "G:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/hw_internal.h",
+          "samples": 21,
+          "percent": 1.105263157894737
+        },
+        {
+          "file": "G:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/deadline-candidate-v2/runner/cyc/hw_internal.h",
+          "samples": 21,
+          "percent": 1.105263157894737
+        },
+        {
+          "file": "G:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/deadline-candidate-v2/runner/cyc/hw_mapper.c",
+          "samples": 20,
+          "percent": 1.0526315789473684
+        },
+        {
+          "file": "C:/msys64/mingw64/lib/gcc/x86_64-w64-mingw32/15.2.0/include/emmintrin.h",
+          "samples": 12,
+          "percent": 0.631578947368421
+        },
+        {
+          "file": "G:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/deadline-candidate-v2/runner/cyc/cpu6502.h",
+          "samples": 11,
+          "percent": 0.5789473684210527
+        },
+        {
+          "file": "G:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/deadline-candidate-v2/runner/cyc/cyc_render.c",
+          "samples": 10,
+          "percent": 0.5263157894736842
+        },
+        {
+          "file": "G:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/deadline-candidate-v2/runner/cyc/cyc_state_ui.cpp",
+          "samples": 6,
+          "percent": 0.3157894736842105
+        },
+        {
+          "file": "G:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/deadline-candidate-v2/runner/cyc/cyc_run.c",
+          "samples": 6,
+          "percent": 0.3157894736842105
+        },
+        {
+          "file": "G:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/deadline-candidate-v2/runner/cyc/cpu6502_interp.c",
+          "samples": 3,
+          "percent": 0.15789473684210525
+        },
+        {
+          "file": "G:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/deadline-candidate-v2/runner/cyc/cyc_sdl.c",
+          "samples": 2,
+          "percent": 0.10526315789473684
+        },
+        {
+          "file": "G:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/ppu_hle_kernel.h",
+          "samples": 2,
+          "percent": 0.10526315789473684
+        },
+        {
+          "file": "G:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/deadline-candidate-v2/runner/cyc/cyc_ring.c",
+          "samples": 1,
+          "percent": 0.05263157894736842
+        },
+        {
+          "file": "G:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/zelda/src/zelda_voxel.c",
+          "samples": 1,
+          "percent": 0.05263157894736842
+        }
+      ]
+    },
+    "scope": "1900 diagnostic IP samples select lookup/conditions/composition at61.32%, versus recording4.74%. No speedup derived from sample percentages."
+  },
+  "tests": {
+    "full_reference_pictures": 192,
+    "whole_machine_ppu": [
+      "HLE",
+      "LLE"
+    ],
+    "ntsc_alignments": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "actual_HD_checkpoint_pictures": 7,
+    "all_native_frame_memory_hardware_PCM_equal": true
+  },
+  "shared_defects": "Original and candidate both report missing selectscreen.png,29 unsupported conditional tiles and existing unsupported/missing backgrounds in the supplied Remastered pack. These remain shared limitations, not introduced regressions.",
+  "remaining": "Native PRG patch still disables dispatch in Remastered; observed native cycles0 on both sides. Native intervals/APU/sprite packages get no new credit here. NES13/15, world/isolation and remaining opportunities are not claimed complete. Final supported regeneration, combined feature checks and human handoff remain. No main/master merge or release.",
+  "archives": {
+    "zelda-hd-plan-v1": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\nas-zelda-evidence-hd-plan-v1.zip",
+      "sha256": "f4d6939ebd0bfff5013196b363948c92eda1fbace2d9283f799b393d700e75ae"
+    },
+    "smb-hd-plan-v1b": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\nas-smb-evidence-hd-plan-v1b.zip",
+      "sha256": "e3305f0f895d6be1326956600b26e279d7b9e386d00c576b4a6d2e927911afab"
+    },
+    "smb-hd-plan-v2": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\nas-smb-evidence-hd-plan-v2.zip",
+      "sha256": "c467dda2600801d18eaf1321c01d4a15bf088e20c1c7a2815b53769c9ac5f864"
+    },
+    "zelda-hd-plan-v2": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\nas-zelda-evidence-hd-plan-v2.zip",
+      "sha256": "e52b68732470b13c2b8d3c03150526f1b78f1514f7fcd717f11d178282339c18"
+    },
+    "smb-hd-plan-v3": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\nas-smb-evidence-hd-plan-v3.zip",
+      "sha256": "db7fd1b4dfa556bb902546a6648273e2f91e5d8981ddf8aed9ced4a57931b432"
+    },
+    "zelda-hd-plan-v3": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\nas-zelda-evidence-hd-plan-v3.zip",
+      "sha256": "438b03e7470794fc3262f386ba45b30987d12dbea9fb7f1ce7dd16c4f1adc0ba"
+    },
+    "zelda-hd-plan-v4": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\nas-zelda-evidence-hd-plan-v4.zip",
+      "sha256": "aa55155c033c63283d3bd6aa1021a49c60e9945eb96b550857b25a5c2d429643"
+    }
+  }
+}

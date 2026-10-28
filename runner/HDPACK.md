@@ -28,6 +28,30 @@ pixels and fresh-process continuation on all four NTSC alignments.
 
 The remaining renderer description below refers to the legacy backend.
 
+### Qualified layered render service
+
+The cycle Zelda target defines `NESRECOMP_HDPACK_LAYER_PLANS=1` after its
+enabled Remastered gameplay qualification. This includes `hdpack_layered.inc`:
+immutable tile-key groups, render-local frame-condition plans and clipped
+layer-row composition. Pixel-dependent conditions and per-pixel layer order
+remain exact; derived plans are rebuilt rather than serialized. Packs without
+background layers keep the direct compositor.
+
+Other targets keep the original `hdpack.c` implementation by default. Broad
+versions slowed the simple SMB1 LyonHrt pack, so their aggregate gains were
+rejected. The qualified module leaves the default preprocessed program and
+SMB1's compiled/runtime sections identical to its control. See the
+[per-game results](../docs/validation/2026-10-28-hd-plan-results.md) for the
+selected package, negative receipts and source/binary identities. New title
+adopters must measure their real enabled packs before selecting this build
+definition; it is not a user-facing setting.
+
+`cyc_hdpack_plans` compares192 complete pictures against the retained direct
+lookup/compositor, including both CHR dialects, scales1/2/3/10, conditional
+priority/negation, aliases, nearby/origin/mirror tests, layer blends, clipping,
+same-frame invalidation and fallback. Whole-machine HD tests retain the fetch,
+bank, flip, native-output and current-build continuation checks above.
+
 The native PPU renderer (`ppu_renderer.c`) is **unchanged in behavior** — it
 still produces the authentic 256×240 (or widescreen) ARGB framebuffer. When a
 pack is active it *additionally* records, per visible pixel, the tile identity

@@ -11,8 +11,11 @@ Selected implementations now include the native CPU/device interval service
 (NES06 stage). Five stock games have matched output checks and raw A/B samples
 on both hosts. See [board/deadline results](2026-10-28-board-deadline-results.md),
 [sprite results](2026-10-28-sprite-span-results.md) and
-[APU results](2026-10-28-apu-event-results.md). Enabled HD work is next;
-enhancement profiles and the remaining evaluations are still open. FDS remains
+[APU results](2026-10-28-apu-event-results.md). Zelda's enabled HD lookup and
+composition job is now qualified in its own module; other games keep the
+original HD runtime. See [HD results](2026-10-28-hd-plan-results.md), including
+the rejected universal packages and SMB's unchanged-runtime proof.
+Remaining evaluations and the final combined feature handoff are still open. FDS remains
 parked. No main/master merge or new release is authorized before owner review.
 
 Source checkpoint: engine `957e9902de9b91107e61bc981f2ca871c8740446`;
@@ -97,9 +100,12 @@ to the view plus adjacent rooms; do not claim those existing features anew.
 
 ## Burndown
 
-Every unchecked item remains open or explicitly parked. No item is closed just
-because a local implementation exists, a helper was optimized, or validation
-passed. The machine-readable companion records evidence, status, next check
+Checked items have a measured evaluation/selection decision for this campaign's
+qualified scope; they do not claim architectural exhaustion. Final combined
+build/feature and owner checks remain separate. Every unchecked item still
+needs a decision or remains explicitly parked. A local implementation or
+passing fixture alone does not complete an evaluation. The machine-readable
+companion records evidence, status, next check
 and behavior contract for each stable ID:
 [remaining opportunities JSON](2026-10-27-remaining-opportunities.json).
 
@@ -128,7 +134,7 @@ close the per-pixel raster or APU-event algorithm work under NES01/NES06.
   Evidence: [runner/cyc/hw_ppu.c:1273](../../runner/cyc/hw_ppu.c#L1273), [runner/cyc/hw_ppu.c:1306](../../runner/cyc/hw_ppu.c#L1306).
 
 
-- [ ] **NES02 · P1 · One CPU/device deadline service across multiple CPU cycles**
+- [x] **NES02 · P1 · One CPU/device deadline service across multiple CPU cycles**
 
   Generated CPU accesses still enter start/read-or-write/finish coordination. The existing optimization covers a tail within one CPU cycle. Consolidate ordinary execution and PPU/APU/mapper progress until the next actual bus/device/interrupt/host deadline.
 
@@ -141,7 +147,7 @@ close the per-pixel raster or APU-event algorithm work under NES01/NES06.
   Evidence: [runner/cyc/hw_machine.c:177](../../runner/cyc/hw_machine.c#L177), [runner/cyc/hw_machine.c:62](../../runner/cyc/hw_machine.c#L62), [runner/cyc/cpu6502.h:83](../../runner/cyc/cpu6502.h#L83).
 
 
-- [ ] **NES03 · P1 · Integrated generated CPU blocks and ordinary memory service**
+- [x] **NES03 · P1 · Integrated generated CPU blocks and ordinary memory service**
 
   Static targets already use native gotos and ROM constants; RAM is already direct inside the bus router. Remaining work is cross-unit state traffic, instruction/chunk boundaries and repeated clock/bus guards. Revisit block/register ownership and observer-aware code generation as a coherent package.
 
@@ -167,7 +173,7 @@ close the per-pixel raster or APU-event algorithm work under NES01/NES06.
   Evidence: [runner/cyc/cyc_ramview.c:19](../../runner/cyc/cyc_ramview.c#L19), [runner/cyc/cyc_ramview.c:30](../../runner/cyc/cyc_ramview.c#L30). Reuse `beads-2dw.1.105`.
 
 
-- [ ] **NES05 · P2 · Board and observer capabilities chosen at stable boundaries**
+- [x] **NES05 · P2 · Board and observer capabilities chosen at stable boundaries**
 
   MMC1 map stability and inert read guards are already delivered. Remaining repeated ROM-snoop, board, cheat/data-overlay and device-observer decisions can be consolidated into a qualified service profile with invalidation when configuration changes.
 
@@ -180,7 +186,7 @@ close the per-pixel raster or APU-event algorithm work under NES01/NES06.
   Evidence: [runner/cyc/hw_machine.c:227](../../runner/cyc/hw_machine.c#L227), [runner/cyc/hw_mapper.c:1301](../../runner/cyc/hw_mapper.c#L1301).
 
 
-- [ ] **NES06 · P1 · Complete event-driven APU synthesis spans**
+- [x] **NES06 · P1 · Complete event-driven APU synthesis spans**
 
   The accepted cache avoids recalculating base-channel level, but timers, sequencer/DMC checks, expansion sampling and accumulation still advance every CPU cycle. Give the next channel/register/DMC/sample event one owner and synthesize the interval.
 
@@ -290,7 +296,7 @@ close the per-pixel raster or APU-event algorithm work under NES01/NES06.
   Evidence: [runner/cyc/cyc_hdpack.c:77](../../runner/cyc/cyc_hdpack.c#L77), [runner/cyc/cyc_hdpack.c:81](../../runner/cyc/cyc_hdpack.c#L81), [runner/cyc/cyc_hdpack.c:98](../../runner/cyc/cyc_hdpack.c#L98).
 
 
-- [ ] **NES14 · P1 · HD lookup, conditions and composition as one render job**
+- [x] **NES14 · P1 · HD lookup, conditions and composition as one render job**
 
   A full recorded frame is adapted into shared pixel descriptors and then sampled/upscaled. Consolidate tile-key lookup, condition dependency evaluation, background layers and output runs; GPU-resident pack composition is a possible backend, not a requirement.
 

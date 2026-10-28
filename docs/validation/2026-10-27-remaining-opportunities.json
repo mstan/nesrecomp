@@ -7,6 +7,9 @@
   "branch": "docs/remaining-native-opportunities-20261027",
   "scope": "Source/evidence audit only. No new game launches, implementations, stress tests or speedup measurements.",
   "status": "audit-complete-opportunities-open",
+  "execution_issue": "beads-2dw.1.110",
+  "execution_branch": "perf/pipeline-burndown-20261028",
+  "current_results": ["2026-10-28-board-deadline-results.json", "2026-10-28-sprite-span-results.json", "2026-10-28-apu-event-results.json", "2026-10-28-hd-plan-results.json"],
   "priorities": "Order expresses expected scope and evidence, not measured recoverable cost. Overlapping packages are not additive.",
   "acceptance": "Each game neutral or positive. Small mixed samples inconclusive. Shared original/candidate defects are separate. Native saves protected; old save-state compatibility never required.",
   "opportunities": [
@@ -150,7 +153,7 @@
       "required_behavior": "Every folded byte remains the visible byte, mapping/write changes exit or invalidate, restore revalidates and unsupported mappings interpret. Earlier 10.1% is emulated-cycle share, not possible CPU savings.",
       "prior_issue": "beads-2dw.1.105",
       "measured_additional_gain": null,
-      "execution_status": "remaining-evaluation"
+      "execution_status": "reopened-existing-105-guarded-SRAM-investigation-context-profile179-of531-execution-samples"
     },
     {
       "id": "NES05",
@@ -491,7 +494,7 @@
       "required_behavior": "All supported condition semantics, sprite/background blending and fallback pixels; do not claim unsupported pack audio or conditions become implemented.",
       "prior_issue": null,
       "measured_additional_gain": null,
-      "execution_status": "remaining-evaluation"
+      "execution_status": "evaluated-selected-qualified-Zelda-layered-module-others-original-runtime"
     },
     {
       "id": "NES15",
