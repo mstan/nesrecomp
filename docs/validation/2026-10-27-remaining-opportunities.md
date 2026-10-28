@@ -92,6 +92,14 @@ passed. The machine-readable companion records evidence, status, next check
 and behavior contract for each stable ID:
 [remaining opportunities JSON](2026-10-27-remaining-opportunities.json).
 
+Execution update, October28: the native CPU/memory/device interval package
+advancing NES02/NES03/NES05 is now stock-qualified across all five titles on
+both hosts. The same engine package includes NROM, MMC1, MMC3 and GxROM;
+current per-game measurements are in the
+[board-deadline results](2026-10-28-board-deadline-results.md). Enhancement
+profiles and the other opportunity evaluations remain open. This does not
+close the per-pixel raster or APU-event algorithm work under NES01/NES06.
+
 
 ### Native execution and machine intervals
 

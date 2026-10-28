@@ -47,7 +47,7 @@
       "package": "machine-intervals",
       "priority": "P1",
       "title": "One CPU/device deadline service across multiple CPU cycles",
-      "status": "open-unmeasured",
+      "status": "open-enhancement-profile-qualification",
       "evidence": [
         {
           "file": "runner/cyc/hw_machine.c",
@@ -79,14 +79,14 @@
       "required_behavior": "NMI edge and IRQ poll ordering, DMA readiness, open bus, mapper clocks, observable accesses and hook/stop deadlines. An unchanged number of helper calls is not a contract.",
       "prior_issue": null,
       "measured_additional_gain": null,
-      "execution_status": "prototype-implemented-fixtures-pass-gameplay-ab-pending"
+      "execution_status": "selected-stock-qualified-five-title-native-interval-package-v2"
     },
     {
       "id": "NES03",
       "package": "machine-intervals",
       "priority": "P1",
       "title": "Integrated generated CPU blocks and ordinary memory service",
-      "status": "open-unmeasured",
+      "status": "open-enhancement-profile-qualification",
       "evidence": [
         {
           "file": "recompiler/src/cyc_codegen.c",
@@ -118,7 +118,7 @@
       "required_behavior": "Interrupt boundaries, mapper writes and slot changes, hooks/read substitutions, self-modifying code, DMA and portable fallback. Fix the generator, never emitted C.",
       "prior_issue": null,
       "measured_additional_gain": null,
-      "execution_status": "prototype-implemented-fixtures-pass-gameplay-ab-pending"
+      "execution_status": "selected-stock-qualified-five-title-native-interval-package-v2"
     },
     {
       "id": "NES04",
@@ -157,7 +157,7 @@
       "package": "machine-intervals",
       "priority": "P2",
       "title": "Board and observer capabilities chosen at stable boundaries",
-      "status": "open-unmeasured",
+      "status": "open-enhancement-profile-qualification",
       "evidence": [
         {
           "file": "runner/cyc/hw_machine.c",
@@ -182,7 +182,7 @@
       "required_behavior": "Bank-qualified cheats, data overlays, MMC5 read snoops, actual active board devices and configuration changes. Do not silently specialize away supported mods.",
       "prior_issue": null,
       "measured_additional_gain": null,
-      "execution_status": "remaining-evaluation"
+      "execution_status": "selected-stock-qualified-five-title-native-interval-package-v2"
     },
     {
       "id": "NES06",

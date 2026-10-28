@@ -267,6 +267,23 @@ boards and alignments, including MMC3 bank/latch/reload/enable/ack traffic,
 GxROM bank writes, unsampled IRQ and first-rise refusals, committed observers,
 device/bus/memory/picture/PCM and current-build replay. Full NES2 header checks
 qualify only the actual boards, not extended mapper numbers sharing a low byte.
-Built SMB3/Gumshoe performance is not yet measured for this extension. The
-first-package binaries/results remain immutable; do not relabel their zero-
-interval fallback measurements as participation in this new prototype.
+The first-package binaries/results remain immutable; do not relabel their
+zero-interval fallback measurements as participation in this extension.
+
+All five rebuilt candidates from frozen `021c540` now exercise active intervals
+and pass untraced frame memory/raster, endpoint hardware/memory/picture and PCM
+comparison on both hosts. Checked artifacts also match across hosts. SERVER
+CPU median reductions versus `fc0bf3f`: SMB1 12.24%, SMB3 11.04%, Metroid14.45%,
+Zelda10.14% and Gumshoe15.61%, with five faster alternating pairs for every
+game. On the workstation Metroid14.69%, Zelda14.56% and Gumshoe28.27% have
+five faster pairs. Local SMB1 and SMB3 have mixed pairs and remain inconclusive;
+their raw medians and contention are retained, not hidden or pooled.
+
+The [current package results](2026-10-28-board-deadline-results.md) and
+[raw numerical records](2026-10-28-board-deadline-results.json) identify the
+same package for all five games, immutable source/binary identities, all ten
+batches and compressed evidence locations. These are CPU-time reductions for
+the bounded stock workloads, not guaranteed FPS gains or all-feature claims.
+NES02/NES03/NES05 now record stock qualification; enhancement profiles and the
+other opportunities remain open. No owner visual handoff, merge or release
+has occurred.
