@@ -39,6 +39,9 @@ extern const char    *cyc_native_fds_hle;
  * (0 = the board's default, 1 = nes, 2 = famicom); --console overrides it. */
 extern const uint8_t  cyc_native_console;
 bool cyc_native_has(uint16_t addr);
+#if NESRECOMP_NATIVE_PRG_GUARDS
+bool cyc_native_prg_guard_available(void);
+#endif
 /* Union of opcode and operand bytes over every compiled ROM bank/slot view. */
 bool cyc_native_prg_code_byte(uint32_t offset);
 void cyc_native_run(void);

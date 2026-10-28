@@ -22,6 +22,9 @@ bool cyc_native_has(uint16_t addr) {
     (void)addr;
     return false;
 }
+#if NESRECOMP_NATIVE_PRG_GUARDS
+bool cyc_native_prg_guard_available(void) { return false; }
+#endif
 
 void cyc_native_run(void) {
 }

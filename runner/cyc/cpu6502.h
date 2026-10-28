@@ -125,6 +125,23 @@ static inline void cpu_write(uint16_t addr, uint8_t value, unsigned f) {
     hw_cycle_finish((f & CYC_DONE) != 0);
 }
 
+/* External ROM data in a byte-validated compiled chunk is not necessarily
+ * unchanged code. Read its current mapping; only the instruction's own
+ * guarded bytes may retain their expected constants. */
+#if NESRECOMP_NATIVE_PRG_GUARDS
+static inline uint8_t cpu_read_checked_rom(uint16_t addr, uint8_t expected, unsigned f) {
+    (void)expected; /* Only the checked dispatch family uses this helper. */
+    if (hw_native_reserve()) {
+        uint8_t value = hw_native_interval.prg[(addr >> 12) & 7][addr & 0xfff];
+        hw_native_bus(addr, value, HW_READ);
+        return value;
+    }
+    return cpu_read(addr, f);
+}
+#else
+#define cpu_read_checked_rom cpu_read_rom
+#endif
+
 /* The RAM-view scheduler owns the physical-byte and stable-read-gate proof.
  * These accesses still run all device/DMA/interrupt cycles. RAM instruction
  * bytes must not use ROM data overlays or ROM-only read substitutions. */

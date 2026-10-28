@@ -81,10 +81,19 @@ static void dispatch(void) {
     {
         if (cpu.jammed) {
             cpu_jam_cycle();
-        } else if (cyc_run_native && !hw_prg_modified && cyc_native_has(cpu.pc)) {
+        } else if (cyc_run_native &&
+                   (!hw_prg_modified
+#if NESRECOMP_NATIVE_PRG_GUARDS
+                    || cyc_native_prg_guard_available()
+#endif
+                   ) && cyc_native_has(cpu.pc)) {
             uint64_t before = cyc_cycle_count();
 #if NESRECOMP_NATIVE_INTERVALS
+#if NESRECOMP_NATIVE_PRG_GUARDS
+            hw_native_begin_checked_rom();
+#else
             hw_native_begin();
+#endif
 #endif
             cyc_native_run();
 #if NESRECOMP_NATIVE_INTERVALS

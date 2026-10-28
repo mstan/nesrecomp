@@ -164,6 +164,9 @@ uint8_t *cyc_mod_prg_data_rw(size_t *size) {
     if (size) *size = 0;
     if (s_open || hw_cart.mapper == NES_FDS_MAPPER || !hw_cart.prg) return NULL;
     hw_prg_modified = true;
+#if NESRECOMP_NATIVE_PRG_GUARDS
+    hw_prg_guard_write(true);
+#endif
     if (size) *size = hw_cart.prg_len;
     return hw_cart.prg;
 }
@@ -173,6 +176,9 @@ bool cyc_mod_apply_cart_payload(const uint8_t *payload, size_t size) {
        size!=(size_t)hw_cart.prg_len+chr_rom || (chr_rom && !hw_cart.chr))return false;
     if(memcmp(hw_cart.prg,payload,hw_cart.prg_len)) {
         memcpy(hw_cart.prg,payload,hw_cart.prg_len);hw_prg_modified=true;
+#if NESRECOMP_NATIVE_PRG_GUARDS
+        hw_prg_guard_write(false);
+#endif
     }
     if(chr_rom) {
         memcpy(hw_cart.chr,payload+hw_cart.prg_len,chr_rom);
@@ -193,6 +199,9 @@ bool cyc_mod_apply_cart_data_payload(const uint8_t *payload, size_t size) {
     if (changed) {
         memcpy(hw_cart.prg, payload, hw_cart.prg_len);
         hw_prg_data_modified = true;
+#if NESRECOMP_NATIVE_PRG_GUARDS
+        hw_prg_guard_write(false);
+#endif
     }
     if (chr_rom) {
         memcpy(hw_cart.chr, payload + hw_cart.prg_len, chr_rom);

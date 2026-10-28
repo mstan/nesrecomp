@@ -767,6 +767,7 @@ typedef struct {
     const RamView    *view;
     const RamProgram *ram;
     bool              live;
+    bool              checked_prg;
 } Emit;
 
 #define INTERP(e) ((e)->p == NULL)
@@ -860,9 +861,13 @@ static bool cart_ram_view(const Emit *e) {
 
 static const char *read_const(Emit *e, uint16_t addr, int f) {
     uint8_t v;
-    if (!LIVE(e) && known_byte(e, addr, &v))
+    if (!LIVE(e) && known_byte(e, addr, &v)) {
+        const char *reader = cart_ram_view(e) ? "cpu_read_code_ram" : "cpu_read_rom";
+        if (e->checked_prg && !e->view && (uint16_t)(addr - e->P) >= (uint16_t)op_length(e->opcode))
+            reader = "cpu_read_checked_rom";
         return str("%s(0x%04X, 0x%02X, %s)",
-                   cart_ram_view(e) ? "cpu_read_code_ram" : "cpu_read_rom", addr, v, flags(f));
+                   reader, addr, v, flags(f));
+    }
     return str("cpu_read(0x%04X, %s)", addr, flags(f));
 }
 
@@ -1446,57 +1451,68 @@ static void emit_bank_file(const Program *p, const char *path, uint32_t bank) {
     e.p = p;
     e.at.bank = bank;
 
-    for (uint32_t slot = 0; slot < SLOT_COUNT; slot++) {
-        if (!slot_used(p, bank, slot)) continue;
-        const uint8_t *insn = &p->is_insn[POS_PACK(bank, slot, 0)];
-        uint16_t base_addr = (uint16_t)(0x8000 + (slot << SLOT_SHIFT));
+    /* Keep ordinary ROM chunks free of per-data-read patch policy. A second
+     * optional family reads the current image and is selected per dispatch. */
+    for (unsigned checked = 0; checked < 2; ++checked) {
+        const char *suffix = checked ? "_checked" : "";
+        e.checked_prg = checked != 0;
+        if (checked) fprintf(f, "#if NESRECOMP_NATIVE_PRG_GUARDS\n");
+        for (uint32_t slot = 0; slot < SLOT_COUNT; slot++) {
+            if (!slot_used(p, bank, slot)) continue;
+            const uint8_t *insn = &p->is_insn[POS_PACK(bank, slot, 0)];
+            uint16_t base_addr = (uint16_t)(0x8000 + (slot << SLOT_SHIFT));
 
-        bool used[CHUNKS_PER_SLOT] = { false };
-        for (uint32_t k = 0; k < SLOT_SIZE; k++)
-            if (insn[k]) used[k >> CHUNK_SHIFT] = true;
+            bool used[CHUNKS_PER_SLOT] = { false };
+            for (uint32_t k = 0; k < SLOT_SIZE; k++)
+                if (insn[k]) used[k >> CHUNK_SHIFT] = true;
 
-        for (uint32_t c = 0; c < CHUNKS_PER_SLOT; c++)
-            if (used[c])
-                fprintf(f, "static void chunk_s%u_%04X(void);\n", slot,
-                        (unsigned)(base_addr + (c << CHUNK_SHIFT)));
+            for (uint32_t c = 0; c < CHUNKS_PER_SLOT; c++)
+                if (used[c])
+                    fprintf(f, "static void chunk%s_s%u_%04X(void);\n", suffix, slot,
+                            (unsigned)(base_addr + (c << CHUNK_SHIFT)));
 
-        fprintf(f, "\nconst uint8_t cyc_bits_b%02X_s%u[%u] = {", bank, slot, SLOT_SIZE / 8);
-        for (uint32_t i = 0; i < SLOT_SIZE / 8; i++) {
-            uint8_t bits = 0;
-            for (uint32_t b = 0; b < 8; b++)
-                if (insn[i * 8 + b]) bits |= (uint8_t)(1u << b);
-            fprintf(f, "%s0x%02X,", (i % 16) ? "" : "\n    ", bits);
-        }
-        fprintf(f, "\n};\n\nvoid (*const cyc_chunks_b%02X_s%u[%u])(void) = {\n", bank, slot, CHUNKS_PER_SLOT);
-        for (uint32_t c = 0; c < CHUNKS_PER_SLOT; c++) {
-            if (used[c])
-                fprintf(f, "    chunk_s%u_%04X,\n", slot, (unsigned)(base_addr + (c << CHUNK_SHIFT)));
-            else
-                fprintf(f, "    0,\n");
-        }
-        fprintf(f, "};\n\n");
-
-        e.at.slot = slot;
-        for (uint32_t c = 0; c < CHUNKS_PER_SLOT; c++) {
-            if (!used[c]) continue;
-            e.chunk = c;
-            uint32_t k0 = c << CHUNK_SHIFT;
-            fprintf(f, "static void chunk_s%u_%04X(void) {\n    switch (cpu.pc) {\n", slot,
-                    (unsigned)(base_addr + k0));
-            for (uint32_t k = k0; k < k0 + (1u << CHUNK_SHIFT); k++)
-                if (insn[k])
-                    fprintf(f, "    case 0x%04X: goto L_%04X;\n", (unsigned)(base_addr + k),
-                            (unsigned)(base_addr + k));
-            fprintf(f, "    default: return;\n    }\n");
-            for (uint32_t k = k0; k < k0 + (1u << CHUNK_SHIFT); k++) {
-                if (!insn[k]) continue;
-                e.at.k = k;
-                e.P = (uint16_t)(base_addr + k);
-                e.opcode = prg_byte(p, bank, k);
-                emit_instruction(&e);
+            if (!checked) {
+                fprintf(f, "\nconst uint8_t cyc_bits_b%02X_s%u[%u] = {", bank, slot, SLOT_SIZE / 8);
+                for (uint32_t i = 0; i < SLOT_SIZE / 8; i++) {
+                    uint8_t bits = 0;
+                    for (uint32_t b = 0; b < 8; b++)
+                        if (insn[i * 8 + b]) bits |= (uint8_t)(1u << b);
+                    fprintf(f, "%s0x%02X,", (i % 16) ? "" : "\n    ", bits);
+                }
+                fprintf(f, "\n};\n");
             }
-            fprintf(f, "}\n\n");
+            fprintf(f, "\nvoid (*const cyc_chunks%s_b%02X_s%u[%u])(void) = {\n", suffix, bank, slot, CHUNKS_PER_SLOT);
+            for (uint32_t c = 0; c < CHUNKS_PER_SLOT; c++) {
+                if (used[c])
+                    fprintf(f, "    chunk%s_s%u_%04X,\n", suffix, slot, (unsigned)(base_addr + (c << CHUNK_SHIFT)));
+                else
+                    fprintf(f, "    0,\n");
+            }
+            fprintf(f, "};\n\n");
+
+            e.at.slot = slot;
+            for (uint32_t c = 0; c < CHUNKS_PER_SLOT; c++) {
+                if (!used[c]) continue;
+                e.chunk = c;
+                uint32_t k0 = c << CHUNK_SHIFT;
+                fprintf(f, "static void chunk%s_s%u_%04X(void) {\n    switch (cpu.pc) {\n", suffix, slot,
+                        (unsigned)(base_addr + k0));
+                for (uint32_t k = k0; k < k0 + (1u << CHUNK_SHIFT); k++)
+                    if (insn[k])
+                        fprintf(f, "    case 0x%04X: goto L_%04X;\n", (unsigned)(base_addr + k),
+                                (unsigned)(base_addr + k));
+                fprintf(f, "    default: return;\n    }\n");
+                for (uint32_t k = k0; k < k0 + (1u << CHUNK_SHIFT); k++) {
+                    if (!insn[k]) continue;
+                    e.at.k = k;
+                    e.P = (uint16_t)(base_addr + k);
+                    e.opcode = prg_byte(p, bank, k);
+                    emit_instruction(&e);
+                }
+                fprintf(f, "}\n\n");
+            }
         }
+        if (checked) fprintf(f, "#endif\n");
     }
     fclose(f);
 }
@@ -1530,8 +1546,12 @@ static void emit_umbrella(const Program *p, const char *path, const char *prefix
         for (uint32_t slot = 0; slot < SLOT_COUNT; slot++)
             if (slot_used(p, bank, slot))
                 fprintf(f, "extern const uint8_t cyc_bits_b%02X_s%u[%u];\n"
-                           "extern void (*const cyc_chunks_b%02X_s%u[%u])(void);\n",
-                        bank, slot, SLOT_SIZE / 8, bank, slot, CHUNKS_PER_SLOT);
+                           "extern void (*const cyc_chunks_b%02X_s%u[%u])(void);\n"
+                           "#if NESRECOMP_NATIVE_PRG_GUARDS\n"
+                           "extern void (*const cyc_chunks_checked_b%02X_s%u[%u])(void);\n"
+                           "#endif\n",
+                        bank, slot, SLOT_SIZE / 8, bank, slot, CHUNKS_PER_SLOT,
+                        bank, slot, CHUNKS_PER_SLOT);
 
     fprintf(f, "\n#define CYC_BANKS %uu\n\nstatic const CycNativeView VIEWS[CYC_BANKS][%u] = {\n", p->banks,
             SLOT_COUNT);
@@ -1546,6 +1566,19 @@ static void emit_umbrella(const Program *p, const char *path, const char *prefix
         fprintf(f, " },\n");
     }
     fprintf(f, "};\n\n");
+
+    fprintf(f, "#if NESRECOMP_NATIVE_PRG_GUARDS\nstatic const CycNativeView CHECKED_VIEWS[CYC_BANKS][%u] = {\n", SLOT_COUNT);
+    for (uint32_t bank = 0; bank < p->banks; bank++) {
+        fprintf(f, "    {");
+        for (uint32_t slot = 0; slot < SLOT_COUNT; slot++) {
+            if (slot_used(p, bank, slot))
+                fprintf(f, " { cyc_bits_b%02X_s%u, cyc_chunks_checked_b%02X_s%u },", bank, slot, bank, slot);
+            else
+                fprintf(f, " { 0, 0 },");
+        }
+        fprintf(f, " },\n");
+    }
+    fprintf(f, "};\n#endif\n\n");
 
     /* Physical byte dependencies, including operands, across ALL compiled
      * mappings. Trusted data overlays may never change one of these bytes. */
@@ -1570,6 +1603,43 @@ static void emit_umbrella(const Program *p, const char *path, const char *prefix
     free(dependency);
     fprintf(f, "\n};\nbool cyc_native_prg_code_byte(uint32_t offset) {\n"
                "    return offset < %uu && ((PRG_CODE_BYTES[offset >> 3] >> (offset & 7)) & 1);\n}\n\n", p->prg_len);
+
+    /* Optional exact-byte admission for atomic mod payloads. The physical
+     * dependency union is conservative across all slot views. Each chunk's
+     * two-byte tail includes operands crossing its1KiB boundary. */
+    fprintf(f, "#if NESRECOMP_NATIVE_PRG_GUARDS\n"
+               "static const uint8_t PRG_EXPECTED[%u] = {", p->prg_len);
+    for (uint32_t i = 0; i < p->prg_len; ++i) {
+        if (!(i % 32)) fputc('\n', f);
+        fprintf(f, "0x%02X,", p->rom->prg_data[i]);
+    }
+    fprintf(f, "\n};\n"
+               "static uint64_t prg_guard_epoch[%u];\n"
+               "static uint8_t prg_guard_valid[%u];\n"
+               "bool cyc_native_prg_guard_available(void) {\n"
+               "    size_t size; return hw_prg_guard_image(&size) && size == sizeof(PRG_EXPECTED);\n"
+               "}\n"
+               "static bool guarded_chunk_matches(unsigned bank, unsigned k) {\n"
+               "    size_t size; const uint8_t *image = hw_prg_guard_image(&size);\n"
+               "    if (!image || size != sizeof(PRG_EXPECTED)) return false;\n"
+               "    unsigned begin = bank * %uu + (k & ~%uu);\n"
+               "    if (begin >= sizeof(PRG_EXPECTED)) return false;\n"
+               "    unsigned index = begin >> %u;\n"
+               "    if (prg_guard_epoch[index] == hw_prg_guard_epoch) return prg_guard_valid[index] != 0;\n"
+               "    unsigned end = begin + %uu;\n"
+               "    unsigned bank_end = (bank + 1) * %uu;\n"
+               "    if (end > bank_end) end = bank_end;\n"
+               "    if (end > sizeof(PRG_EXPECTED)) end = sizeof(PRG_EXPECTED);\n"
+               "    bool valid = true;\n"
+               "    for (unsigned i = begin; i < end; ++i)\n"
+               "        if (((PRG_CODE_BYTES[i >> 3] >> (i & 7)) & 1) && image[i] != PRG_EXPECTED[i]) { valid = false; break; }\n"
+               "    prg_guard_valid[index] = valid; prg_guard_epoch[index] = hw_prg_guard_epoch;\n"
+               "    return valid;\n"
+               "}\n#endif\n\n",
+               (p->prg_len + (1u << CHUNK_SHIFT) - 1) >> CHUNK_SHIFT,
+               (p->prg_len + (1u << CHUNK_SHIFT) - 1) >> CHUNK_SHIFT,
+               SLOT_SIZE, (1u << CHUNK_SHIFT) - 1, CHUNK_SHIFT,
+               (1u << CHUNK_SHIFT) + 2, SLOT_SIZE);
 
     uint32_t prg_hash = 2166136261u;
     fprintf(f, "const uint32_t cyc_native_cart_hash = 0x%08Xu;\n", nes_cart_identity(&p->rom->cart));
@@ -1596,7 +1666,11 @@ static void emit_umbrella(const Program *p, const char *path, const char *prefix
         "    unsigned slot = (addr >> %d) & %u;\n"
         "    unsigned bank = hw_prg_bank4(addr);\n"
         "    if (bank >= CYC_BANKS) return 0;\n"
+        "#if NESRECOMP_NATIVE_PRG_GUARDS\n"
+        "    const CycNativeView *v = (hw_prg_modified || hw_prg_data_modified) ? &CHECKED_VIEWS[bank][slot] : &VIEWS[bank][slot];\n"
+        "#else\n"
         "    const CycNativeView *v = &VIEWS[bank][slot];\n"
+        "#endif\n"
         "    *out_k = addr & %uu;\n"
         "    return v->bits ? v : 0;\n"
         "}\n\n"
@@ -1604,6 +1678,9 @@ static void emit_umbrella(const Program *p, const char *path, const char *prefix
         "    if (!hw_prg_is_rom(addr) || !hw_prg_is_stable()) return false;\n"
         "    unsigned k;\n"
         "    const CycNativeView *v = view_at(addr, &k);\n"
+        "#if NESRECOMP_NATIVE_PRG_GUARDS\n"
+        "    if (hw_prg_modified && (!v || !guarded_chunk_matches(hw_prg_bank4(addr), k))) return false;\n"
+        "#endif\n"
         "    return v && ((v->bits[k >> 3] >> (k & 7)) & 1);\n"
         "}\n\n"
         "/* Run compiled instructions from cpu.pc until execution leaves compiled\n"
@@ -1618,6 +1695,9 @@ static void emit_umbrella(const Program *p, const char *path, const char *prefix
         "        unsigned k;\n"
         "        const CycNativeView *v = view_at(pc, &k);\n"
         "        if (!v || !((v->bits[k >> 3] >> (k & 7)) & 1)) return;\n"
+        "#if NESRECOMP_NATIVE_PRG_GUARDS\n"
+        "        if (hw_prg_modified && !guarded_chunk_matches(hw_prg_bank4(pc), k)) return;\n"
+        "#endif\n"
         "        void (*chunk)(void) = v->chunks[k >> %d];\n"
         "        if (!chunk) return;\n"
         "        chunk();\n"

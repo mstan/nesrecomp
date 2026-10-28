@@ -62,6 +62,9 @@ static void map_prg4(unsigned slot, int bank)
 {
     unsigned n = hw_cart.prg_slots;
     hw_cart.prg_off[slot & 7] = ((unsigned)bank & (n - 1)) * 0x1000u;
+#if NESRECOMP_NATIVE_PRG_GUARDS
+    hw_native_interval.prg[slot & 7] = hw_cart.prg + hw_cart.prg_off[slot & 7];
+#endif
 }
 
 static void map_prg8(unsigned slot, int bank)

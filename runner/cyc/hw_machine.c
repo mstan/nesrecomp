@@ -195,6 +195,9 @@ unsigned hw_native_interval_limit(void)
 
 void hw_native_begin(void)
 {
+#if NESRECOMP_NATIVE_PRG_GUARDS
+    hw_native_interval.checked_prg = false;
+#endif
     hw_native_interval.ram = hw.ram;
     hw_native_interval.enabled = NESRECOMP_NATIVE_INTERVALS && !hw_isolated && !cyc_trace_enabled &&
         !hw_pal() && !hw_extra_timing.extra_scanlines &&
@@ -207,6 +210,25 @@ void hw_native_begin(void)
      * Operand observers close at cpu_ram_read_value; registered RTS observers
      * close in the mod adapter. Unwrapped external RTS observers fall back. */
 }
+
+#if NESRECOMP_NATIVE_PRG_GUARDS
+void hw_native_begin_checked_rom(void)
+{
+    hw_native_begin();
+    if (!hw_prg_modified && !hw_prg_data_modified) return;
+    hw_native_interval.checked_prg = true;
+    hw_native_interval.enabled = NESRECOMP_NATIVE_INTERVALS && !hw_isolated && !cyc_trace_enabled &&
+        !hw_pal() && !hw_extra_timing.extra_scanlines &&
+        (hw_cart.mapper == 0 || hw_cart.mapper == 1 || hw_cart.mapper == 4 || hw_cart.mapper == 66) &&
+        !cyc_mod_rom_read_overrides &&
+        (!cyc_cpu_rts_observer || cyc_cpu_rts_observer == cyc_mod_return_observer);
+    /* Unsupported mappers can encode RAM/open-bus flags in prg_off. Never
+     * form a ROM pointer for those mappings, including on scalar fallback. */
+    if (hw_native_interval.enabled)
+        for (unsigned slot = 0; slot < 8; ++slot)
+            hw_native_interval.prg[slot] = hw_cart.prg + hw_cart.prg_off[slot];
+}
+#endif
 
 void hw_native_flush(void)
 {
@@ -235,7 +257,11 @@ bool hw_native_prepare(void)
     hw_native_flush();
     if ((cpu.do_nmi | cpu.do_irq | cpu.do_reset) ||
         (cyc_cpu_rts_observer && cyc_cpu_rts_observer != cyc_mod_return_observer) ||
-        hw_prg_data_modified || cyc_mod_rom_read_overrides) return false;
+        (hw_prg_data_modified
+#if NESRECOMP_NATIVE_PRG_GUARDS
+         && !hw_native_interval.checked_prg
+#endif
+        ) || cyc_mod_rom_read_overrides) return false;
     hw_native_interval.credit = hw_native_interval_limit();
     hw_native_interval.driven = hw.data_driven;
     return hw_native_interval.credit != 0;
@@ -452,6 +478,31 @@ static uint8_t *alloc_padded(const uint8_t *src, size_t len, uint32_t *out_alloc
 bool hw_prg_modified;
 bool hw_prg_data_modified;
 
+#if NESRECOMP_NATIVE_PRG_GUARDS
+uint64_t hw_prg_guard_epoch;
+static bool prg_guard_untracked, prg_guard_exhausted;
+
+void hw_prg_guard_write(bool untracked)
+{
+    prg_guard_untracked |= untracked;
+    if (hw_prg_guard_epoch == UINT64_MAX) prg_guard_exhausted = true;
+    else ++hw_prg_guard_epoch;
+}
+void hw_prg_guard_load(void)
+{
+    prg_guard_untracked = false;
+    hw_prg_guard_write(false); /* never reuse an epoch from a previous image */
+}
+const uint8_t *hw_prg_guard_image(size_t *size)
+{
+    *size = hw_cart.prg_len;
+    if (!hw_prg_guard_epoch || prg_guard_untracked || prg_guard_exhausted ||
+        (hw_cart.mapper != 0 && hw_cart.mapper != 1 && hw_cart.mapper != 4 && hw_cart.mapper != 66))
+        return NULL;
+    return hw_cart.prg;
+}
+#endif
+
 bool cyc_load_ines(const uint8_t *image, size_t size)
 {
     NesCartInfo info;
@@ -481,6 +532,9 @@ bool cyc_load_ines(const uint8_t *image, size_t size)
     hw_cart.info = info;
     hw_prg_modified = false;
     hw_prg_data_modified = false;
+#if NESRECOMP_NATIVE_PRG_GUARDS
+    hw_prg_guard_load();
+#endif
     hw_cart.prg = prg;
     hw_cart.prg_len = info.prg_size;
     hw_cart.prg_slots = prg_alloc / 4096;

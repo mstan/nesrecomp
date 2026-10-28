@@ -101,7 +101,9 @@ void cyc_mod_clear_rom_read_overrides(void);
  * and never fold external ROM data. Image files on disk are never changed. */
 uint8_t *cyc_mod_prg_data_rw(size_t *size);
 /* Replace a geometry-preserving PRG+CHR-ROM payload atomically after its
- * package verification. CHR RAM is retained; changed PRG disables native code.
+ * package verification. CHR RAM is retained; changed PRG disables ordinary
+ * native dispatch. Qualified NESRECOMP_NATIVE_PRG_GUARDS builds can admit
+ * exact-byte validated chunks; escaped writable pointers remain excluded.
  * Refused for FDS, incomplete payloads and isolated calls. */
 bool cyc_mod_apply_cart_payload(const uint8_t *payload, size_t size);
 /* Data-only variant: transactionally refuses any changed PRG opcode or operand
