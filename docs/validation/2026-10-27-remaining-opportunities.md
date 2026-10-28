@@ -4,6 +4,17 @@ Tracking: `beads-2dw.1.109`, related to `beads-2dw.1.101` and optimization
 campaign `beads-2wy8.1`. Isolated branch:
 `docs/remaining-native-opportunities-20261027`.
 
+Current execution: `beads-2dw.1.110`, branch
+`perf/pipeline-burndown-20261028`. The source/evidence audit below is historical.
+Selected implementations now include the native CPU/device interval service
+(NES02/03/05), sprite-output spans (NES01 stage), and base-APU event spans
+(NES06 stage). Five stock games have matched output checks and raw A/B samples
+on both hosts. See [board/deadline results](2026-10-28-board-deadline-results.md),
+[sprite results](2026-10-28-sprite-span-results.md) and
+[APU results](2026-10-28-apu-event-results.md). Enabled HD work is next;
+enhancement profiles and the remaining evaluations are still open. FDS remains
+parked. No main/master merge or new release is authorized before owner review.
+
 Source checkpoint: engine `957e9902de9b91107e61bc981f2ca871c8740446`;
 Zelda `5d90eb7a10e13f5dd5c693a0204b29f7917ec198`. This is a source and retained
 evidence audit. No optimization implementation, game launch, stress testing or
@@ -541,8 +552,9 @@ close the per-pixel raster or APU-event algorithm work under NES01/NES06.
   all-title/all-mode benchmark matrix or artificial minimum percentage.
 - Qualify directly affected contracts and representative consumers using
   existing deterministic routes; compare A/B without observers in timed runs.
-  Quiet-host admission is required for timing, not for useful static analysis
-  or continuing independent implementation. After two failed improvement
+  The owner explicitly authorized measurements on shared hosts, including the
+  workstation. Record contention and retain raw samples; do not reinstate a
+  quiet-host admission gate or alter foreign jobs/leases. After two failed improvement
   experiments, reassess the architecture before more tuning.
 - A game can be neutral while another improves. Reject/fix a reproducible
   per-game slowdown; mixed changes inside variation remain inconclusive.

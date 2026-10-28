@@ -1,0 +1,1553 @@
+{
+  "schema_version": 1,
+  "issue": "beads-2dw.1.110",
+  "campaign": "beads-2wy8.1",
+  "opportunity": "NES06",
+  "runtime_candidate_commit": "9bbb04aa1ec5a8dc176c82a2ce829177319d8528",
+  "runtime_reference_commit": "935033d63cf1091eaedc7e489db297ffd481d8fd",
+  "package": "native-apu-constant-output-events-v1-incremental-to-sprite",
+  "compiler": "GCC15.2 -O2 -g1 -DNDEBUG HLE",
+  "owner_authorized_concurrent_measurement": true,
+  "source_snapshot": {
+    "parent": "0a80b31af371d6038fc07b9dc0d13fd0fa617b71",
+    "source_sha256": {
+      "runner/cyc/hw_apu.c": "17a21f75c8a88f2bba9637cdff19e929e6417419edac0566580558d342f62d62",
+      "runner/cyc/cyc_host.c": "9679255669e6cd38ed9783f9dcc09ab7e1cf9ab2e7256881de406fb5608bed4b",
+      "runner/cyc/hw.h": "c3d7222c09c9ed4efda54f44098e17c056056dfc3fe6f452026c9c16db6afde3",
+      "runner/cyc/tests/native_interval_probe.c": "45506b93ec4a8eb7956495907a5c59690efd1d25e7254d8f7743de11db8fa280"
+    },
+    "patch_sha256": "22f0b10cc7ccc9ce39a97c4b60c3167d7c810ddfb3c7226d7693e1b53f2768be"
+  },
+  "build_method": "Recorded CMake/Ninja runtime-only relink replacing APU/diagnostic host objects and retaining the selected935033d PPU object explicitly; other objects and generated units unchanged. Prototype identity remains the previous QA build, not final delivery or netplay qualification.",
+  "batches": [
+    {
+      "title": "smb",
+      "host_label": "nas",
+      "host": "SERVER",
+      "logical_processors": 4,
+      "affinity_mask": 4,
+      "preflight_core_busy": [
+        0.34375,
+        0.4202334630350194,
+        0.2996108949416343,
+        0.3046875
+      ],
+      "first_frame": 361,
+      "end_frame": 1201,
+      "median_cpu_seconds": {
+        "reference": 6.546875,
+        "candidate": 6.46875
+      },
+      "raw_median_cpu_reduction_percent": 1.1933174224343701,
+      "faster_candidate_pairs": 5,
+      "pairs": [
+        {
+          "pair": 0,
+          "reference_cpu_seconds": 6.609375,
+          "candidate_cpu_seconds": 6.59375,
+          "cpu_reduction_percent": 0.23640661938534313,
+          "reference_wall_seconds": 7.210056399926543,
+          "candidate_wall_seconds": 7.120110800024122
+        },
+        {
+          "pair": 1,
+          "reference_cpu_seconds": 6.625,
+          "candidate_cpu_seconds": 6.46875,
+          "cpu_reduction_percent": 2.358490566037741,
+          "reference_wall_seconds": 7.0460455000866205,
+          "candidate_wall_seconds": 6.710306700086221
+        },
+        {
+          "pair": 2,
+          "reference_cpu_seconds": 6.546875,
+          "candidate_cpu_seconds": 6.46875,
+          "cpu_reduction_percent": 1.1933174224343701,
+          "reference_wall_seconds": 6.8626362001523376,
+          "candidate_wall_seconds": 6.827664399985224
+        },
+        {
+          "pair": 3,
+          "reference_cpu_seconds": 6.515625,
+          "candidate_cpu_seconds": 6.40625,
+          "cpu_reduction_percent": 1.6786570743405282,
+          "reference_wall_seconds": 6.827937100082636,
+          "candidate_wall_seconds": 6.71832300000824
+        },
+        {
+          "pair": 4,
+          "reference_cpu_seconds": 6.546875,
+          "candidate_cpu_seconds": 6.46875,
+          "cpu_reduction_percent": 1.1933174224343701,
+          "reference_wall_seconds": 6.830236100126058,
+          "candidate_wall_seconds": 6.698553499998525
+        }
+      ],
+      "classification": "positive",
+      "reason": "Small positive change: all five alternating pairs faster, retain raw magnitude without a minimum gain floor.",
+      "raw_file": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\nas-smb-apu-v1\\evidence\\performance.json"
+    },
+    {
+      "title": "smb",
+      "host_label": "local",
+      "host": "DESKTOP-HN15M1H",
+      "logical_processors": 16,
+      "affinity_mask": 16384,
+      "preflight_core_busy": [
+        0.7734375,
+        0.6953125,
+        0.921875,
+        0.859375,
+        0.84375,
+        0.84375,
+        0.82421875,
+        0.82421875,
+        0.87109375,
+        0.8984375,
+        0.77734375,
+        0.8359375,
+        0.75,
+        0.7421875,
+        0.6875,
+        1.0
+      ],
+      "first_frame": 361,
+      "end_frame": 1201,
+      "median_cpu_seconds": {
+        "reference": 4.78125,
+        "candidate": 4.546875
+      },
+      "raw_median_cpu_reduction_percent": 4.90196078431373,
+      "faster_candidate_pairs": 3,
+      "pairs": [
+        {
+          "pair": 0,
+          "reference_cpu_seconds": 4.921875,
+          "candidate_cpu_seconds": 4.515625,
+          "cpu_reduction_percent": 8.253968253968258,
+          "reference_wall_seconds": 7.001810000045225,
+          "candidate_wall_seconds": 5.5015283999964595
+        },
+        {
+          "pair": 1,
+          "reference_cpu_seconds": 4.78125,
+          "candidate_cpu_seconds": 5.046875,
+          "cpu_reduction_percent": -5.555555555555558,
+          "reference_wall_seconds": 6.562768200063147,
+          "candidate_wall_seconds": 7.291078599984758
+        },
+        {
+          "pair": 2,
+          "reference_cpu_seconds": 4.78125,
+          "candidate_cpu_seconds": 4.703125,
+          "cpu_reduction_percent": 1.6339869281045805,
+          "reference_wall_seconds": 6.323413999984041,
+          "candidate_wall_seconds": 5.781793600064702
+        },
+        {
+          "pair": 3,
+          "reference_cpu_seconds": 4.5,
+          "candidate_cpu_seconds": 4.546875,
+          "cpu_reduction_percent": -1.041666666666674,
+          "reference_wall_seconds": 5.3216620000312105,
+          "candidate_wall_seconds": 5.066461200010963
+        },
+        {
+          "pair": 4,
+          "reference_cpu_seconds": 4.6875,
+          "candidate_cpu_seconds": 4.515625,
+          "cpu_reduction_percent": 3.6666666666666625,
+          "reference_wall_seconds": 5.215267000021413,
+          "candidate_wall_seconds": 4.855236100032926
+        }
+      ],
+      "classification": "neutral-inconclusive",
+      "reason": "Mixed/tied pairs under shared-host variation; retain raw medians as neutral/inconclusive, not a proven gain or regression.",
+      "raw_file": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\local-smb-apu-v1\\evidence\\performance.json"
+    },
+    {
+      "title": "smb3",
+      "host_label": "nas",
+      "host": "SERVER",
+      "logical_processors": 4,
+      "affinity_mask": 1,
+      "preflight_core_busy": [
+        0.25680933852140075,
+        0.30350194552529186,
+        0.296875,
+        0.4241245136186771
+      ],
+      "first_frame": 2401,
+      "end_frame": 3001,
+      "median_cpu_seconds": {
+        "reference": 4.28125,
+        "candidate": 4.25
+      },
+      "raw_median_cpu_reduction_percent": 0.7299270072992692,
+      "faster_candidate_pairs": 3,
+      "pairs": [
+        {
+          "pair": 0,
+          "reference_cpu_seconds": 4.234375,
+          "candidate_cpu_seconds": 4.25,
+          "cpu_reduction_percent": -0.36900369003689537,
+          "reference_wall_seconds": 5.183623099932447,
+          "candidate_wall_seconds": 4.735827399883419
+        },
+        {
+          "pair": 1,
+          "reference_cpu_seconds": 4.28125,
+          "candidate_cpu_seconds": 4.234375,
+          "cpu_reduction_percent": 1.0948905109489093,
+          "reference_wall_seconds": 4.6081679000053555,
+          "candidate_wall_seconds": 4.464369500055909
+        },
+        {
+          "pair": 2,
+          "reference_cpu_seconds": 4.34375,
+          "candidate_cpu_seconds": 4.28125,
+          "cpu_reduction_percent": 1.4388489208633115,
+          "reference_wall_seconds": 4.56032170006074,
+          "candidate_wall_seconds": 4.629425399936736
+        },
+        {
+          "pair": 3,
+          "reference_cpu_seconds": 4.28125,
+          "candidate_cpu_seconds": 4.265625,
+          "cpu_reduction_percent": 0.36496350364964014,
+          "reference_wall_seconds": 4.529220399912447,
+          "candidate_wall_seconds": 4.489656100049615
+        },
+        {
+          "pair": 4,
+          "reference_cpu_seconds": 4.25,
+          "candidate_cpu_seconds": 4.25,
+          "cpu_reduction_percent": 0.0,
+          "reference_wall_seconds": 4.534246100112796,
+          "candidate_wall_seconds": 4.546767899999395
+        }
+      ],
+      "classification": "neutral-inconclusive",
+      "reason": "Mixed/tied pairs under shared-host variation; retain raw medians as neutral/inconclusive, not a proven gain or regression.",
+      "raw_file": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\nas-smb3-apu-v1\\evidence\\performance.json"
+    },
+    {
+      "title": "smb3",
+      "host_label": "local",
+      "host": "DESKTOP-HN15M1H",
+      "logical_processors": 16,
+      "affinity_mask": 32768,
+      "preflight_core_busy": [
+        0.89453125,
+        0.8125,
+        0.91796875,
+        0.93359375,
+        0.86328125,
+        0.91796875,
+        0.875,
+        0.91015625,
+        0.9375,
+        0.9453125,
+        0.87890625,
+        0.89453125,
+        0.828125,
+        0.83984375,
+        0.84375,
+        0.77734375
+      ],
+      "first_frame": 2401,
+      "end_frame": 3001,
+      "median_cpu_seconds": {
+        "reference": 2.703125,
+        "candidate": 2.5625
+      },
+      "raw_median_cpu_reduction_percent": 5.202312138728327,
+      "faster_candidate_pairs": 3,
+      "pairs": [
+        {
+          "pair": 0,
+          "reference_cpu_seconds": 2.703125,
+          "candidate_cpu_seconds": 2.453125,
+          "cpu_reduction_percent": 9.248554913294793,
+          "reference_wall_seconds": 3.3149540000595152,
+          "candidate_wall_seconds": 2.9378775999648497
+        },
+        {
+          "pair": 1,
+          "reference_cpu_seconds": 2.921875,
+          "candidate_cpu_seconds": 2.578125,
+          "cpu_reduction_percent": 11.764705882352944,
+          "reference_wall_seconds": 3.7879211000399664,
+          "candidate_wall_seconds": 3.2414065999910235
+        },
+        {
+          "pair": 2,
+          "reference_cpu_seconds": 2.671875,
+          "candidate_cpu_seconds": 2.34375,
+          "cpu_reduction_percent": 12.28070175438597,
+          "reference_wall_seconds": 3.079678100068122,
+          "candidate_wall_seconds": 2.6620403000852093
+        },
+        {
+          "pair": 3,
+          "reference_cpu_seconds": 2.734375,
+          "candidate_cpu_seconds": 3.15625,
+          "cpu_reduction_percent": -15.428571428571436,
+          "reference_wall_seconds": 3.3701384000014514,
+          "candidate_wall_seconds": 4.210126499994658
+        },
+        {
+          "pair": 4,
+          "reference_cpu_seconds": 2.421875,
+          "candidate_cpu_seconds": 2.5625,
+          "cpu_reduction_percent": -5.8064516129032295,
+          "reference_wall_seconds": 2.881963900057599,
+          "candidate_wall_seconds": 2.8964294999605045
+        }
+      ],
+      "classification": "neutral-inconclusive",
+      "reason": "Mixed/tied pairs under shared-host variation; retain raw medians as neutral/inconclusive, not a proven gain or regression.",
+      "raw_file": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\local-smb3-apu-v1\\evidence\\performance.json"
+    },
+    {
+      "title": "metroid",
+      "host_label": "nas",
+      "host": "SERVER",
+      "logical_processors": 4,
+      "affinity_mask": 4,
+      "preflight_core_busy": [
+        0.40234375,
+        0.42578125,
+        0.37109375,
+        0.44140625
+      ],
+      "first_frame": 1801,
+      "end_frame": 3001,
+      "median_cpu_seconds": {
+        "reference": 8.671875,
+        "candidate": 8.515625
+      },
+      "raw_median_cpu_reduction_percent": 1.8018018018018056,
+      "faster_candidate_pairs": 4,
+      "pairs": [
+        {
+          "pair": 0,
+          "reference_cpu_seconds": 8.890625,
+          "candidate_cpu_seconds": 8.609375,
+          "cpu_reduction_percent": 3.1634446397188043,
+          "reference_wall_seconds": 11.17641369998455,
+          "candidate_wall_seconds": 9.431196500081569
+        },
+        {
+          "pair": 1,
+          "reference_cpu_seconds": 8.671875,
+          "candidate_cpu_seconds": 8.515625,
+          "cpu_reduction_percent": 1.8018018018018056,
+          "reference_wall_seconds": 9.34950300003402,
+          "candidate_wall_seconds": 9.043530599912629
+        },
+        {
+          "pair": 2,
+          "reference_cpu_seconds": 8.75,
+          "candidate_cpu_seconds": 8.5,
+          "cpu_reduction_percent": 2.857142857142858,
+          "reference_wall_seconds": 9.224820000119507,
+          "candidate_wall_seconds": 9.245405399939045
+        },
+        {
+          "pair": 3,
+          "reference_cpu_seconds": 8.640625,
+          "candidate_cpu_seconds": 8.90625,
+          "cpu_reduction_percent": -3.074141048824597,
+          "reference_wall_seconds": 9.185589799890295,
+          "candidate_wall_seconds": 10.358868099981919
+        },
+        {
+          "pair": 4,
+          "reference_cpu_seconds": 8.65625,
+          "candidate_cpu_seconds": 8.4375,
+          "cpu_reduction_percent": 2.527075812274371,
+          "reference_wall_seconds": 9.318654799833894,
+          "candidate_wall_seconds": 9.104783199960366
+        }
+      ],
+      "classification": "neutral-inconclusive",
+      "reason": "Mixed/tied pairs under shared-host variation; retain raw medians as neutral/inconclusive, not a proven gain or regression.",
+      "raw_file": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\nas-metroid-apu-v1\\evidence\\performance.json"
+    },
+    {
+      "title": "metroid",
+      "host_label": "local",
+      "host": "DESKTOP-HN15M1H",
+      "logical_processors": 16,
+      "affinity_mask": 32768,
+      "preflight_core_busy": [
+        0.375,
+        0.3359375,
+        0.62890625,
+        0.56640625,
+        0.5546875,
+        0.5234375,
+        0.4453125,
+        0.56640625,
+        0.53125,
+        0.6015625,
+        0.38671875,
+        0.41015625,
+        0.57421875,
+        0.48046875,
+        0.3046875,
+        0.2890625
+      ],
+      "first_frame": 1801,
+      "end_frame": 3001,
+      "median_cpu_seconds": {
+        "reference": 5.015625,
+        "candidate": 4.859375
+      },
+      "raw_median_cpu_reduction_percent": 3.1152647975077885,
+      "faster_candidate_pairs": 2,
+      "pairs": [
+        {
+          "pair": 0,
+          "reference_cpu_seconds": 4.203125,
+          "candidate_cpu_seconds": 4.25,
+          "cpu_reduction_percent": -1.1152416356877248,
+          "reference_wall_seconds": 4.514029899961315,
+          "candidate_wall_seconds": 4.868724499945529
+        },
+        {
+          "pair": 1,
+          "reference_cpu_seconds": 4.5,
+          "candidate_cpu_seconds": 4.171875,
+          "cpu_reduction_percent": 7.2916666666666625,
+          "reference_wall_seconds": 5.050038199988194,
+          "candidate_wall_seconds": 4.805498800007626
+        },
+        {
+          "pair": 2,
+          "reference_cpu_seconds": 5.015625,
+          "candidate_cpu_seconds": 5.140625,
+          "cpu_reduction_percent": -2.492211838006231,
+          "reference_wall_seconds": 6.024611600092612,
+          "candidate_wall_seconds": 7.081878999946639
+        },
+        {
+          "pair": 3,
+          "reference_cpu_seconds": 5.3125,
+          "candidate_cpu_seconds": 5.8125,
+          "cpu_reduction_percent": -9.411764705882364,
+          "reference_wall_seconds": 6.8664631000719965,
+          "candidate_wall_seconds": 8.232002399978228
+        },
+        {
+          "pair": 4,
+          "reference_cpu_seconds": 5.390625,
+          "candidate_cpu_seconds": 4.859375,
+          "cpu_reduction_percent": 9.85507246376811,
+          "reference_wall_seconds": 6.786341600003652,
+          "candidate_wall_seconds": 5.845265300013125
+        }
+      ],
+      "classification": "neutral-inconclusive",
+      "reason": "Mixed/tied pairs under shared-host variation; retain raw medians as neutral/inconclusive, not a proven gain or regression.",
+      "raw_file": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\local-metroid-apu-v1\\evidence\\performance.json"
+    },
+    {
+      "title": "zelda",
+      "host_label": "nas",
+      "host": "SERVER",
+      "logical_processors": 4,
+      "affinity_mask": 1,
+      "preflight_core_busy": [
+        0.34765625,
+        0.48046875,
+        0.41015625,
+        0.40625
+      ],
+      "first_frame": 1801,
+      "end_frame": 3001,
+      "median_cpu_seconds": {
+        "reference": 10.03125,
+        "candidate": 9.8125
+      },
+      "raw_median_cpu_reduction_percent": 2.180685358255452,
+      "faster_candidate_pairs": 5,
+      "pairs": [
+        {
+          "pair": 0,
+          "reference_cpu_seconds": 10.03125,
+          "candidate_cpu_seconds": 9.796875,
+          "cpu_reduction_percent": 2.336448598130836,
+          "reference_wall_seconds": 10.549587100045756,
+          "candidate_wall_seconds": 10.091457200003788
+        },
+        {
+          "pair": 1,
+          "reference_cpu_seconds": 10.21875,
+          "candidate_cpu_seconds": 9.984375,
+          "cpu_reduction_percent": 2.2935779816513735,
+          "reference_wall_seconds": 11.078135299962014,
+          "candidate_wall_seconds": 10.66813990008086
+        },
+        {
+          "pair": 2,
+          "reference_cpu_seconds": 10.078125,
+          "candidate_cpu_seconds": 9.859375,
+          "cpu_reduction_percent": 2.170542635658912,
+          "reference_wall_seconds": 10.695040199905634,
+          "candidate_wall_seconds": 10.974019499961287
+        },
+        {
+          "pair": 3,
+          "reference_cpu_seconds": 10.0,
+          "candidate_cpu_seconds": 9.8125,
+          "cpu_reduction_percent": 1.8750000000000044,
+          "reference_wall_seconds": 10.442317500011995,
+          "candidate_wall_seconds": 10.319214300019667
+        },
+        {
+          "pair": 4,
+          "reference_cpu_seconds": 10.015625,
+          "candidate_cpu_seconds": 9.796875,
+          "cpu_reduction_percent": 2.1840873634945357,
+          "reference_wall_seconds": 10.388028899906203,
+          "candidate_wall_seconds": 10.406565699959174
+        }
+      ],
+      "classification": "positive",
+      "reason": "Small positive change: all five alternating pairs faster, retain raw magnitude without a minimum gain floor.",
+      "raw_file": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\nas-zelda-apu-v1\\evidence\\performance.json"
+    },
+    {
+      "title": "zelda",
+      "host_label": "local",
+      "host": "DESKTOP-HN15M1H",
+      "logical_processors": 16,
+      "affinity_mask": 4096,
+      "preflight_core_busy": [
+        0.4453125,
+        0.4140625,
+        0.7421875,
+        0.62890625,
+        0.67578125,
+        0.58984375,
+        0.546875,
+        0.5859375,
+        0.72265625,
+        0.640625,
+        0.46484375,
+        0.48046875,
+        0.40625,
+        0.4609375,
+        0.48828125,
+        1.0
+      ],
+      "first_frame": 1801,
+      "end_frame": 3001,
+      "median_cpu_seconds": {
+        "reference": 4.90625,
+        "candidate": 4.71875
+      },
+      "raw_median_cpu_reduction_percent": 3.821656050955413,
+      "faster_candidate_pairs": 3,
+      "pairs": [
+        {
+          "pair": 0,
+          "reference_cpu_seconds": 5.53125,
+          "candidate_cpu_seconds": 5.09375,
+          "cpu_reduction_percent": 7.909604519774016,
+          "reference_wall_seconds": 6.021180200041272,
+          "candidate_wall_seconds": 5.518535500043072
+        },
+        {
+          "pair": 1,
+          "reference_cpu_seconds": 4.875,
+          "candidate_cpu_seconds": 5.015625,
+          "cpu_reduction_percent": -2.8846153846153744,
+          "reference_wall_seconds": 5.2784792999736965,
+          "candidate_wall_seconds": 5.532152800005861
+        },
+        {
+          "pair": 2,
+          "reference_cpu_seconds": 5.0,
+          "candidate_cpu_seconds": 4.65625,
+          "cpu_reduction_percent": 6.874999999999998,
+          "reference_wall_seconds": 5.319736800040118,
+          "candidate_wall_seconds": 4.951627700007521
+        },
+        {
+          "pair": 3,
+          "reference_cpu_seconds": 4.71875,
+          "candidate_cpu_seconds": 4.71875,
+          "cpu_reduction_percent": 0.0,
+          "reference_wall_seconds": 5.080420300015248,
+          "candidate_wall_seconds": 5.209816199960187
+        },
+        {
+          "pair": 4,
+          "reference_cpu_seconds": 4.90625,
+          "candidate_cpu_seconds": 4.609375,
+          "cpu_reduction_percent": 6.050955414012737,
+          "reference_wall_seconds": 5.155433699954301,
+          "candidate_wall_seconds": 4.972082099993713
+        }
+      ],
+      "classification": "neutral-inconclusive",
+      "reason": "Mixed/tied pairs under shared-host variation; retain raw medians as neutral/inconclusive, not a proven gain or regression.",
+      "raw_file": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\local-zelda-apu-v1\\evidence\\performance.json"
+    },
+    {
+      "title": "gumshoe",
+      "host_label": "nas",
+      "host": "SERVER",
+      "logical_processors": 4,
+      "affinity_mask": 4,
+      "preflight_core_busy": [
+        0.34765625,
+        0.40234375,
+        0.3125,
+        0.31640625
+      ],
+      "first_frame": 601,
+      "end_frame": 1201,
+      "median_cpu_seconds": {
+        "reference": 4.0,
+        "candidate": 3.96875
+      },
+      "raw_median_cpu_reduction_percent": 0.78125,
+      "faster_candidate_pairs": 4,
+      "pairs": [
+        {
+          "pair": 0,
+          "reference_cpu_seconds": 4.0,
+          "candidate_cpu_seconds": 3.9375,
+          "cpu_reduction_percent": 1.5625,
+          "reference_wall_seconds": 4.1953582998830825,
+          "candidate_wall_seconds": 4.057575799990445
+        },
+        {
+          "pair": 1,
+          "reference_cpu_seconds": 4.0625,
+          "candidate_cpu_seconds": 4.03125,
+          "cpu_reduction_percent": 0.7692307692307665,
+          "reference_wall_seconds": 4.240581599995494,
+          "candidate_wall_seconds": 4.2637269999831915
+        },
+        {
+          "pair": 2,
+          "reference_cpu_seconds": 4.0625,
+          "candidate_cpu_seconds": 3.984375,
+          "cpu_reduction_percent": 1.9230769230769273,
+          "reference_wall_seconds": 4.262307000113651,
+          "candidate_wall_seconds": 4.203010899946094
+        },
+        {
+          "pair": 3,
+          "reference_cpu_seconds": 3.96875,
+          "candidate_cpu_seconds": 3.96875,
+          "cpu_reduction_percent": 0.0,
+          "reference_wall_seconds": 4.247627499978989,
+          "candidate_wall_seconds": 4.209097900195047
+        },
+        {
+          "pair": 4,
+          "reference_cpu_seconds": 3.953125,
+          "candidate_cpu_seconds": 3.9375,
+          "cpu_reduction_percent": 0.39525691699604515,
+          "reference_wall_seconds": 4.155155900167301,
+          "candidate_wall_seconds": 4.1152794000227
+        }
+      ],
+      "classification": "neutral-inconclusive",
+      "reason": "Mixed/tied pairs under shared-host variation; retain raw medians as neutral/inconclusive, not a proven gain or regression.",
+      "raw_file": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\nas-gumshoe-apu-v1\\evidence\\performance.json"
+    },
+    {
+      "title": "gumshoe",
+      "host_label": "local",
+      "host": "DESKTOP-HN15M1H",
+      "logical_processors": 16,
+      "affinity_mask": 16384,
+      "preflight_core_busy": [
+        0.73828125,
+        0.73046875,
+        0.89453125,
+        0.86328125,
+        0.84375,
+        0.8046875,
+        0.8203125,
+        0.82421875,
+        0.8828125,
+        0.90625,
+        0.80078125,
+        0.79296875,
+        0.78515625,
+        0.74609375,
+        0.69140625,
+        0.70703125
+      ],
+      "first_frame": 601,
+      "end_frame": 1201,
+      "median_cpu_seconds": {
+        "reference": 1.875,
+        "candidate": 1.828125
+      },
+      "raw_median_cpu_reduction_percent": 2.500000000000002,
+      "faster_candidate_pairs": 3,
+      "pairs": [
+        {
+          "pair": 0,
+          "reference_cpu_seconds": 1.875,
+          "candidate_cpu_seconds": 1.796875,
+          "cpu_reduction_percent": 4.1666666666666625,
+          "reference_wall_seconds": 2.1763778999447823,
+          "candidate_wall_seconds": 2.1076120999641716
+        },
+        {
+          "pair": 1,
+          "reference_cpu_seconds": 2.0,
+          "candidate_cpu_seconds": 1.953125,
+          "cpu_reduction_percent": 2.34375,
+          "reference_wall_seconds": 2.3323056999361143,
+          "candidate_wall_seconds": 2.3168515000725165
+        },
+        {
+          "pair": 2,
+          "reference_cpu_seconds": 1.78125,
+          "candidate_cpu_seconds": 2.0,
+          "cpu_reduction_percent": -12.280701754385959,
+          "reference_wall_seconds": 2.0542041999287903,
+          "candidate_wall_seconds": 2.3632390000857413
+        },
+        {
+          "pair": 3,
+          "reference_cpu_seconds": 1.734375,
+          "candidate_cpu_seconds": 1.8125,
+          "cpu_reduction_percent": -4.504504504504503,
+          "reference_wall_seconds": 2.0680151999695227,
+          "candidate_wall_seconds": 2.141729399911128
+        },
+        {
+          "pair": 4,
+          "reference_cpu_seconds": 1.9375,
+          "candidate_cpu_seconds": 1.828125,
+          "cpu_reduction_percent": 5.645161290322576,
+          "reference_wall_seconds": 2.1554565000114962,
+          "candidate_wall_seconds": 1.986329699982889
+        }
+      ],
+      "classification": "neutral-inconclusive",
+      "reason": "Mixed/tied pairs under shared-host variation; retain raw medians as neutral/inconclusive, not a proven gain or regression.",
+      "raw_file": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\local-gumshoe-apu-v1\\evidence\\performance.json"
+    }
+  ],
+  "correctness": {
+    "smb": {
+      "status": "pass",
+      "untraced": true,
+      "cross_host_identical": true,
+      "hosts": {
+        "nas": {
+          "status": "pass",
+          "hashes": {
+            "audio.wav": "ee79cf07fe6b2548d3c87a491e58e7007abea7b5f71a685e7f1cf4280d131b1c",
+            "final.png": "21eef6a153b9edfd252ec68c25846c86fb8327d021771a0fa99a2b3da3b0f084",
+            "frames.bin": "a27af7ae2bc79000ef48b3afe5924f05674aef15f28fe883d28a84d8ee044b39",
+            "hardware.txt": "d5a777885ef65890785aa1376032d66fca864796472862850cd8806c618e62fe",
+            "memory.txt": "f6c9e8b2ebd38fde7e114bd51172832af169c34635313d9b6447bf22cf48072d"
+          },
+          "apu_event_spans": 1339498,
+          "apu_event_cycles": 23985732,
+          "binary_sha256": {
+            "reference": "6df67980ea49556de9a778f14d91752eee2d81f01d43a698fde1c9cb806c4d8f",
+            "candidate": "dc700ee819d824882a41eb436986fd780caf016be623c8ca2601d4586b7101af"
+          }
+        },
+        "local": {
+          "status": "pass",
+          "hashes": {
+            "audio.wav": "ee79cf07fe6b2548d3c87a491e58e7007abea7b5f71a685e7f1cf4280d131b1c",
+            "final.png": "21eef6a153b9edfd252ec68c25846c86fb8327d021771a0fa99a2b3da3b0f084",
+            "frames.bin": "a27af7ae2bc79000ef48b3afe5924f05674aef15f28fe883d28a84d8ee044b39",
+            "hardware.txt": "d5a777885ef65890785aa1376032d66fca864796472862850cd8806c618e62fe",
+            "memory.txt": "f6c9e8b2ebd38fde7e114bd51172832af169c34635313d9b6447bf22cf48072d"
+          },
+          "apu_event_spans": 1339498,
+          "apu_event_cycles": 23985732,
+          "binary_sha256": {
+            "reference": "6df67980ea49556de9a778f14d91752eee2d81f01d43a698fde1c9cb806c4d8f",
+            "candidate": "dc700ee819d824882a41eb436986fd780caf016be623c8ca2601d4586b7101af"
+          }
+        }
+      }
+    },
+    "smb3": {
+      "status": "pass",
+      "untraced": true,
+      "cross_host_identical": true,
+      "hosts": {
+        "nas": {
+          "status": "pass",
+          "hashes": {
+            "audio.wav": "70d145e7720aca4db4be7b926ef8ab51a9eff881177c696fa5eed34c91c268de",
+            "final.png": "288019d61d35c73d5efff0c6b58a872588da30b1882fa39bd62f0aa63a5528a7",
+            "frames.bin": "f3eb7b64060c89724d9daa57d87cb839168dc0e4b39d6f3bf8a7c218849158c8",
+            "hardware.txt": "5834a68e6586ff9f993062e43904d05d3748fbb7e11af16b86d61daeaf4ec118",
+            "memory.txt": "f597b266336243293265792aca7386dcc13ef551a5174a26fb664b65030074b2"
+          },
+          "apu_event_spans": 2246188,
+          "apu_event_cycles": 39436957,
+          "binary_sha256": {
+            "reference": "5da5150b98498f4272eb17277ed69b84526c287694bf2ffca60e1460723b6e9b",
+            "candidate": "ce1414cb880b1b0794893c07e9ac4a1c73d89c07e75654014452cc3b95a4e5de"
+          }
+        },
+        "local": {
+          "status": "pass",
+          "hashes": {
+            "audio.wav": "70d145e7720aca4db4be7b926ef8ab51a9eff881177c696fa5eed34c91c268de",
+            "final.png": "288019d61d35c73d5efff0c6b58a872588da30b1882fa39bd62f0aa63a5528a7",
+            "frames.bin": "f3eb7b64060c89724d9daa57d87cb839168dc0e4b39d6f3bf8a7c218849158c8",
+            "hardware.txt": "5834a68e6586ff9f993062e43904d05d3748fbb7e11af16b86d61daeaf4ec118",
+            "memory.txt": "f597b266336243293265792aca7386dcc13ef551a5174a26fb664b65030074b2"
+          },
+          "apu_event_spans": 2246188,
+          "apu_event_cycles": 39436957,
+          "binary_sha256": {
+            "reference": "5da5150b98498f4272eb17277ed69b84526c287694bf2ffca60e1460723b6e9b",
+            "candidate": "ce1414cb880b1b0794893c07e9ac4a1c73d89c07e75654014452cc3b95a4e5de"
+          }
+        }
+      }
+    },
+    "metroid": {
+      "status": "pass",
+      "untraced": true,
+      "cross_host_identical": true,
+      "hosts": {
+        "nas": {
+          "status": "pass",
+          "hashes": {
+            "audio.wav": "5a194be5031b23943ac57e7d2edf4b26f5a56161fb4e0c77f81aa314165c774c",
+            "final.png": "8ecd3fd0ab3b0795f04c3207ce493d21be670705db54d8cdecffdde605c122af",
+            "frames.bin": "8eb5f8be5d71b3792b9eb68836b588b1dafb19ef165336c18333ccce054a1df6",
+            "hardware.txt": "7b8d0332d5f259ce2e5a9fd6be8eef05e922c486d6b9e7a610fd29e4f996ec1b",
+            "memory.txt": "3a9b3f6dbe6e23ef425e191ad13dd6957b62f8c8b38628b27df213cd7a4a897a"
+          },
+          "apu_event_spans": 3177941,
+          "apu_event_cycles": 49158185,
+          "binary_sha256": {
+            "reference": "bd519804e7dfa68a3b04fde2c4f7ac5d6d9660f62965d344b64ed87818889e19",
+            "candidate": "578466822bf4e0a44f66be3b1ca6aa497e532c9b70d97299015c9dcb204f41b5"
+          }
+        },
+        "local": {
+          "status": "pass",
+          "hashes": {
+            "audio.wav": "5a194be5031b23943ac57e7d2edf4b26f5a56161fb4e0c77f81aa314165c774c",
+            "final.png": "8ecd3fd0ab3b0795f04c3207ce493d21be670705db54d8cdecffdde605c122af",
+            "frames.bin": "8eb5f8be5d71b3792b9eb68836b588b1dafb19ef165336c18333ccce054a1df6",
+            "hardware.txt": "7b8d0332d5f259ce2e5a9fd6be8eef05e922c486d6b9e7a610fd29e4f996ec1b",
+            "memory.txt": "3a9b3f6dbe6e23ef425e191ad13dd6957b62f8c8b38628b27df213cd7a4a897a"
+          },
+          "apu_event_spans": 3177941,
+          "apu_event_cycles": 49158185,
+          "binary_sha256": {
+            "reference": "bd519804e7dfa68a3b04fde2c4f7ac5d6d9660f62965d344b64ed87818889e19",
+            "candidate": "578466822bf4e0a44f66be3b1ca6aa497e532c9b70d97299015c9dcb204f41b5"
+          }
+        }
+      }
+    },
+    "zelda": {
+      "status": "pass",
+      "untraced": true,
+      "cross_host_identical": true,
+      "hosts": {
+        "nas": {
+          "status": "pass",
+          "hashes": {
+            "audio.wav": "b5c616b84dd092fcb96dcb69b15e8d37913c76592ebf8f3d6e2c796e0d58271d",
+            "final.png": "a9c4c485cfda300739881e4d97822d23871a65ad3fc599dc3d02201e016f98e4",
+            "frames.bin": "5c639386ba1de1005b800a2102c349e80557f0ee1211b8d587c147daceb1385a",
+            "hardware.txt": "3a80624aff39f84a8924db4098904d6daab0f1b5551e9f968bdb109437a198e2",
+            "memory.txt": "1a2fda3b8447d07df73e81f10b623c37b7c67aa14730ffe19e100d1d94cd19c5"
+          },
+          "apu_event_spans": 2187531,
+          "apu_event_cycles": 46203865,
+          "binary_sha256": {
+            "reference": "8e16c798d135c24ab7b8bbad57d719386d0ef961a7d481dfb16809ac71652e9c",
+            "candidate": "ad531cf870b3f50744c542ace5945625284e5b11db04287c1b4f24ee8f5239a2"
+          }
+        },
+        "local": {
+          "status": "pass",
+          "hashes": {
+            "audio.wav": "b5c616b84dd092fcb96dcb69b15e8d37913c76592ebf8f3d6e2c796e0d58271d",
+            "final.png": "a9c4c485cfda300739881e4d97822d23871a65ad3fc599dc3d02201e016f98e4",
+            "frames.bin": "5c639386ba1de1005b800a2102c349e80557f0ee1211b8d587c147daceb1385a",
+            "hardware.txt": "3a80624aff39f84a8924db4098904d6daab0f1b5551e9f968bdb109437a198e2",
+            "memory.txt": "1a2fda3b8447d07df73e81f10b623c37b7c67aa14730ffe19e100d1d94cd19c5"
+          },
+          "apu_event_spans": 2187531,
+          "apu_event_cycles": 46203865,
+          "binary_sha256": {
+            "reference": "8e16c798d135c24ab7b8bbad57d719386d0ef961a7d481dfb16809ac71652e9c",
+            "candidate": "ad531cf870b3f50744c542ace5945625284e5b11db04287c1b4f24ee8f5239a2"
+          }
+        }
+      }
+    },
+    "gumshoe": {
+      "status": "pass",
+      "untraced": true,
+      "cross_host_identical": true,
+      "hosts": {
+        "nas": {
+          "status": "pass",
+          "hashes": {
+            "audio.wav": "a633241ff467162a0398e46c0dd60bdfb3a1686e8727dbfac99cf5df5c47b03d",
+            "final.png": "4767ea2e534326eb1cb0c8b97500c9b5f8100afbfd4f5d6511a521ed96a3a623",
+            "frames.bin": "b84f4ac144784d2b20568b74901e4aa5ab6cb520d062e100a99f2c698d2d9163",
+            "hardware.txt": "10d24fc77c0c3656f69772c58ff73ea88f2cae3da3cf2f58e9fdd32d1553dd29",
+            "memory.txt": "be0a42075f362f61abb3e9f613d8115ae7948dfd768627de24d6240cc3d1cc2a"
+          },
+          "apu_event_spans": 1619715,
+          "apu_event_cycles": 30413688,
+          "binary_sha256": {
+            "reference": "1b82dca6b0b04cf2791155d3e18d16ef5bf2de6fb7be950dd8ea4f6237cde025",
+            "candidate": "d42ce25ab643bd7c64233909551308b010d3c570c0cb79bc6297ee06a86f4756"
+          }
+        },
+        "local": {
+          "status": "pass",
+          "hashes": {
+            "audio.wav": "a633241ff467162a0398e46c0dd60bdfb3a1686e8727dbfac99cf5df5c47b03d",
+            "final.png": "4767ea2e534326eb1cb0c8b97500c9b5f8100afbfd4f5d6511a521ed96a3a623",
+            "frames.bin": "b84f4ac144784d2b20568b74901e4aa5ab6cb520d062e100a99f2c698d2d9163",
+            "hardware.txt": "10d24fc77c0c3656f69772c58ff73ea88f2cae3da3cf2f58e9fdd32d1553dd29",
+            "memory.txt": "be0a42075f362f61abb3e9f613d8115ae7948dfd768627de24d6240cc3d1cc2a"
+          },
+          "apu_event_spans": 1619715,
+          "apu_event_cycles": 30413688,
+          "binary_sha256": {
+            "reference": "1b82dca6b0b04cf2791155d3e18d16ef5bf2de6fb7be950dd8ea4f6237cde025",
+            "candidate": "d42ce25ab643bd7c64233909551308b010d3c570c0cb79bc6297ee06a86f4756"
+          }
+        }
+      }
+    }
+  },
+  "archives": {
+    "smb": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\nas-smb-evidence-apu-v1.zip",
+      "sha256": "ea7ae32e573f4692b84b2a47dc96bcec0afc4c27d4637915900b40be5d9daca7"
+    },
+    "smb3": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\nas-smb3-evidence-apu-v1.zip",
+      "sha256": "7f72a42a5143ed186a9195a1e51151b3596e1b82dae94474956c67983282434e"
+    },
+    "metroid": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\nas-metroid-evidence-apu-v1.zip",
+      "sha256": "e80cb3558848bb8f1ee35e0b05d6a5fb7526bb29ae6b5ca0691e6e98aeb2c4f3"
+    },
+    "zelda": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\nas-zelda-evidence-apu-v1.zip",
+      "sha256": "ed78900cd31fd0a7072795e30fae46e05ce3c6e1ee581ba176c2ac13d1897f6a"
+    },
+    "gumshoe": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\nas-gumshoe-evidence-apu-v1.zip",
+      "sha256": "1b0d7ad4e3163b3eba914905a1a5420afaa7329c009cb0b5a2768b1f5a9616fb"
+    }
+  },
+  "products": {
+    "metroid": {
+      "reference": {
+        "title": "metroid",
+        "mode": "reference",
+        "build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-sprite-span-v1\\metroid\\candidate",
+        "target": "MetroidNESRecomp",
+        "engine": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\deadline-candidate-v2",
+        "engine_head": "bd9ffbf1544f29db53fdfb00aa214cab73d029ea+source-snapshot",
+        "title_head": "caccee62a67daea083fac8af36b1d0065b902071",
+        "rom": "F:\\Projects\\nesrecomp\\MetroidNESRecomp\\metroid.nes",
+        "rom_sha256": "e6e6b7014685adae447ebb3833242815747bc1e5df83ade79f693fb67cf565b6",
+        "configure": [
+          "-S",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\metroid",
+          "-B",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-metroid-candidate-v2",
+          "-G",
+          "Ninja",
+          "-DCMAKE_BUILD_TYPE=Release",
+          "-DCMAKE_C_COMPILER=C:/msys64/mingw64/bin/gcc.exe",
+          "-DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe",
+          "-DCMAKE_MAKE_PROGRAM=C:/msys64/mingw64/bin/ninja.exe",
+          "-DCMAKE_RC_COMPILER=C:/msys64/mingw64/bin/windres.exe",
+          "-DCMAKE_C_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+          "-DCMAKE_CXX_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+          "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+          "-DPython3_EXECUTABLE=C:/Users/Matthew/AppData/Local/Programs/Python/Python312/python.exe",
+          "-DNESRECOMP_ROOT=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\deadline-candidate-v2",
+          "-DNESRECOMP_HOST_COMPILER=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028/build-cli/NESRecomp.exe",
+          "-DNESRECOMP_ROM=F:\\Projects\\nesrecomp\\MetroidNESRecomp\\metroid.nes",
+          "-DNESRECOMP_RECOMP_UI=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+          "-DRECOMP_UI_ROOT=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+          "-DSDL2_DIR=G:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/cmake",
+          "-DNESRECOMP_RECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+          "-DRECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+          "-DNESRECOMP_RBENGINE_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/retcomm-rbengine",
+          "-DNESRECOMP_BACKEND=cycle",
+          "-DNESRECOMP_PPU_IMPL=HLE"
+        ],
+        "reuse_reference": false,
+        "owner_authorized_shared_host": true,
+        "exe": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-sprite-span-v1\\metroid\\candidate\\MetroidNESRecomp.exe",
+        "sha256": "bd519804e7dfa68a3b04fde2c4f7ac5d6d9660f62965d344b64ed87818889e19",
+        "bytes": 16457603,
+        "package": "committed-sprite-output-span-control",
+        "source_snapshot": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\source-sprite-span-v1",
+        "source_sha256": {
+          "runner/cyc/hw_ppu.c": "2eaba394fce6cc3bbd19d4d5351def68629487a30cea3e40604055806b5fd785",
+          "runner/cyc/cyc_host.c": "1667f3f58a886feabb80d2724fe6d98520cc9e9d0e2f24b45ca7c33600d21134",
+          "runner/cyc/hw.h": "5a7e7b756eb2bd76f39cbf960891b8c1544e545374759c4f8c4caa689201d6dd",
+          "runner/cyc/tests/native_interval_probe.c": "4c6340dd1e5134cfe7ac04c50673bd5d8551d6b74a6cedd0bdb21430335e59aa"
+        },
+        "original_build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-metroid-candidate-v2",
+        "relink_manifest": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-sprite-span-v1\\metroid\\candidate\\manifest.json"
+      },
+      "candidate": {
+        "title": "metroid",
+        "mode": "candidate",
+        "build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-apu-event-v1\\metroid\\candidate",
+        "target": "MetroidNESRecomp",
+        "engine": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\deadline-candidate-v2",
+        "engine_head": "0a80b31af371d6038fc07b9dc0d13fd0fa617b71+source-snapshot",
+        "title_head": "caccee62a67daea083fac8af36b1d0065b902071",
+        "rom": "F:\\Projects\\nesrecomp\\MetroidNESRecomp\\metroid.nes",
+        "rom_sha256": "e6e6b7014685adae447ebb3833242815747bc1e5df83ade79f693fb67cf565b6",
+        "configure": [
+          "-S",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\metroid",
+          "-B",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-metroid-candidate-v2",
+          "-G",
+          "Ninja",
+          "-DCMAKE_BUILD_TYPE=Release",
+          "-DCMAKE_C_COMPILER=C:/msys64/mingw64/bin/gcc.exe",
+          "-DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe",
+          "-DCMAKE_MAKE_PROGRAM=C:/msys64/mingw64/bin/ninja.exe",
+          "-DCMAKE_RC_COMPILER=C:/msys64/mingw64/bin/windres.exe",
+          "-DCMAKE_C_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+          "-DCMAKE_CXX_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+          "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+          "-DPython3_EXECUTABLE=C:/Users/Matthew/AppData/Local/Programs/Python/Python312/python.exe",
+          "-DNESRECOMP_ROOT=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\deadline-candidate-v2",
+          "-DNESRECOMP_HOST_COMPILER=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028/build-cli/NESRecomp.exe",
+          "-DNESRECOMP_ROM=F:\\Projects\\nesrecomp\\MetroidNESRecomp\\metroid.nes",
+          "-DNESRECOMP_RECOMP_UI=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+          "-DRECOMP_UI_ROOT=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+          "-DSDL2_DIR=G:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/cmake",
+          "-DNESRECOMP_RECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+          "-DRECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+          "-DNESRECOMP_RBENGINE_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/retcomm-rbengine",
+          "-DNESRECOMP_BACKEND=cycle",
+          "-DNESRECOMP_PPU_IMPL=HLE"
+        ],
+        "reuse_reference": false,
+        "owner_authorized_shared_host": true,
+        "exe": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-apu-event-v1\\metroid\\candidate\\MetroidNESRecomp.exe",
+        "sha256": "578466822bf4e0a44f66be3b1ca6aa497e532c9b70d97299015c9dcb204f41b5",
+        "bytes": 16461551,
+        "package": "native-apu-constant-output-events-v1-incremental-to-sprite",
+        "source_snapshot": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\source-apu-event-v1",
+        "source_sha256": {
+          "runner/cyc/hw_apu.c": "17a21f75c8a88f2bba9637cdff19e929e6417419edac0566580558d342f62d62",
+          "runner/cyc/cyc_host.c": "9679255669e6cd38ed9783f9dcc09ab7e1cf9ab2e7256881de406fb5608bed4b",
+          "runner/cyc/hw.h": "c3d7222c09c9ed4efda54f44098e17c056056dfc3fe6f452026c9c16db6afde3",
+          "runner/cyc/tests/native_interval_probe.c": "45506b93ec4a8eb7956495907a5c59690efd1d25e7254d8f7743de11db8fa280"
+        },
+        "original_build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-metroid-candidate-v2",
+        "relink_manifest": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-apu-event-v1\\metroid\\candidate\\manifest.json",
+        "selected_ppu_object": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-sprite-span-v1\\metroid\\candidate\\hw_ppu.c.obj",
+        "selected_ppu_object_sha256": "2f49689737768560f7e2a0e3d9c3f88871cd92e0a8f75adb06d2909cf8943ca3"
+      }
+    },
+    "smb3": {
+      "reference": {
+        "title": "smb3",
+        "mode": "reference",
+        "build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-sprite-span-v1\\smb3\\candidate",
+        "target": "SuperMarioBros3Recomp",
+        "engine": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\deadline-candidate-v2",
+        "engine_head": "bd9ffbf1544f29db53fdfb00aa214cab73d029ea+source-snapshot",
+        "title_head": "99e5d3b852eb8ace6a9344583cb53990ac8e29cb",
+        "rom": "F:\\Projects\\nesrecomp\\SuperMarioBros3Recomp\\Super Mario Bros. 3 (USA).nes",
+        "rom_sha256": "6ea0777ca520ba7ad7b0ea0f6452140d59aa0b1dffe5045cb1e8020dde10c267",
+        "configure": [
+          "-S",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\smb3",
+          "-B",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-smb3-candidate-v2",
+          "-G",
+          "Ninja",
+          "-DCMAKE_BUILD_TYPE=Release",
+          "-DCMAKE_C_COMPILER=C:/msys64/mingw64/bin/gcc.exe",
+          "-DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe",
+          "-DCMAKE_MAKE_PROGRAM=C:/msys64/mingw64/bin/ninja.exe",
+          "-DCMAKE_RC_COMPILER=C:/msys64/mingw64/bin/windres.exe",
+          "-DCMAKE_C_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+          "-DCMAKE_CXX_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+          "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+          "-DPython3_EXECUTABLE=C:/Users/Matthew/AppData/Local/Programs/Python/Python312/python.exe",
+          "-DNESRECOMP_ROOT=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\deadline-candidate-v2",
+          "-DNESRECOMP_HOST_COMPILER=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028/build-cli/NESRecomp.exe",
+          "-DNESRECOMP_ROM=F:\\Projects\\nesrecomp\\SuperMarioBros3Recomp\\Super Mario Bros. 3 (USA).nes",
+          "-DNESRECOMP_RECOMP_UI=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+          "-DRECOMP_UI_ROOT=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+          "-DSDL2_DIR=G:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/cmake",
+          "-DNESRECOMP_RECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+          "-DRECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+          "-DNESRECOMP_RBENGINE_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/retcomm-rbengine",
+          "-DNESRECOMP_BACKEND=cycle",
+          "-DNESRECOMP_PPU_IMPL=HLE"
+        ],
+        "reuse_reference": false,
+        "owner_authorized_shared_host": true,
+        "exe": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-sprite-span-v1\\smb3\\candidate\\SuperMarioBros3Recomp.exe",
+        "sha256": "5da5150b98498f4272eb17277ed69b84526c287694bf2ffca60e1460723b6e9b",
+        "bytes": 26071270,
+        "package": "committed-sprite-output-span-control",
+        "source_snapshot": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\source-sprite-span-v1",
+        "source_sha256": {
+          "runner/cyc/hw_ppu.c": "2eaba394fce6cc3bbd19d4d5351def68629487a30cea3e40604055806b5fd785",
+          "runner/cyc/cyc_host.c": "1667f3f58a886feabb80d2724fe6d98520cc9e9d0e2f24b45ca7c33600d21134",
+          "runner/cyc/hw.h": "5a7e7b756eb2bd76f39cbf960891b8c1544e545374759c4f8c4caa689201d6dd",
+          "runner/cyc/tests/native_interval_probe.c": "4c6340dd1e5134cfe7ac04c50673bd5d8551d6b74a6cedd0bdb21430335e59aa"
+        },
+        "original_build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-smb3-candidate-v2",
+        "relink_manifest": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-sprite-span-v1\\smb3\\candidate\\manifest.json"
+      },
+      "candidate": {
+        "title": "smb3",
+        "mode": "candidate",
+        "build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-apu-event-v1\\smb3\\candidate",
+        "target": "SuperMarioBros3Recomp",
+        "engine": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\deadline-candidate-v2",
+        "engine_head": "0a80b31af371d6038fc07b9dc0d13fd0fa617b71+source-snapshot",
+        "title_head": "99e5d3b852eb8ace6a9344583cb53990ac8e29cb",
+        "rom": "F:\\Projects\\nesrecomp\\SuperMarioBros3Recomp\\Super Mario Bros. 3 (USA).nes",
+        "rom_sha256": "6ea0777ca520ba7ad7b0ea0f6452140d59aa0b1dffe5045cb1e8020dde10c267",
+        "configure": [
+          "-S",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\smb3",
+          "-B",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-smb3-candidate-v2",
+          "-G",
+          "Ninja",
+          "-DCMAKE_BUILD_TYPE=Release",
+          "-DCMAKE_C_COMPILER=C:/msys64/mingw64/bin/gcc.exe",
+          "-DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe",
+          "-DCMAKE_MAKE_PROGRAM=C:/msys64/mingw64/bin/ninja.exe",
+          "-DCMAKE_RC_COMPILER=C:/msys64/mingw64/bin/windres.exe",
+          "-DCMAKE_C_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+          "-DCMAKE_CXX_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+          "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+          "-DPython3_EXECUTABLE=C:/Users/Matthew/AppData/Local/Programs/Python/Python312/python.exe",
+          "-DNESRECOMP_ROOT=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\deadline-candidate-v2",
+          "-DNESRECOMP_HOST_COMPILER=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028/build-cli/NESRecomp.exe",
+          "-DNESRECOMP_ROM=F:\\Projects\\nesrecomp\\SuperMarioBros3Recomp\\Super Mario Bros. 3 (USA).nes",
+          "-DNESRECOMP_RECOMP_UI=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+          "-DRECOMP_UI_ROOT=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+          "-DSDL2_DIR=G:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/cmake",
+          "-DNESRECOMP_RECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+          "-DRECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+          "-DNESRECOMP_RBENGINE_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/retcomm-rbengine",
+          "-DNESRECOMP_BACKEND=cycle",
+          "-DNESRECOMP_PPU_IMPL=HLE"
+        ],
+        "reuse_reference": false,
+        "owner_authorized_shared_host": true,
+        "exe": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-apu-event-v1\\smb3\\candidate\\SuperMarioBros3Recomp.exe",
+        "sha256": "ce1414cb880b1b0794893c07e9ac4a1c73d89c07e75654014452cc3b95a4e5de",
+        "bytes": 26075218,
+        "package": "native-apu-constant-output-events-v1-incremental-to-sprite",
+        "source_snapshot": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\source-apu-event-v1",
+        "source_sha256": {
+          "runner/cyc/hw_apu.c": "17a21f75c8a88f2bba9637cdff19e929e6417419edac0566580558d342f62d62",
+          "runner/cyc/cyc_host.c": "9679255669e6cd38ed9783f9dcc09ab7e1cf9ab2e7256881de406fb5608bed4b",
+          "runner/cyc/hw.h": "c3d7222c09c9ed4efda54f44098e17c056056dfc3fe6f452026c9c16db6afde3",
+          "runner/cyc/tests/native_interval_probe.c": "45506b93ec4a8eb7956495907a5c59690efd1d25e7254d8f7743de11db8fa280"
+        },
+        "original_build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-smb3-candidate-v2",
+        "relink_manifest": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-apu-event-v1\\smb3\\candidate\\manifest.json",
+        "selected_ppu_object": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-sprite-span-v1\\smb3\\candidate\\hw_ppu.c.obj",
+        "selected_ppu_object_sha256": "438b44c45a6f8eeadc57324e4ca7499897aa6d7027f1e8a0c4c9881980f32ceb"
+      }
+    },
+    "smb": {
+      "reference": {
+        "title": "smb",
+        "mode": "reference",
+        "build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-sprite-span-v1\\smb\\candidate",
+        "target": "SuperMarioBrosRecomp",
+        "engine": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\deadline-candidate-v2",
+        "engine_head": "bd9ffbf1544f29db53fdfb00aa214cab73d029ea+source-snapshot",
+        "title_head": "45f95754f8ad6e04fc39966505c94af9783bd787",
+        "rom": "F:\\Projects\\nesrecomp\\SuperMarioBrosRecomp\\baserom.nes",
+        "rom_sha256": "f61548fdf1670cffefcc4f0b7bdcdd9eaba0c226e3b74f8666071496988248de",
+        "configure": [
+          "-S",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\smb",
+          "-B",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-smb-candidate-v2",
+          "-G",
+          "Ninja",
+          "-DCMAKE_BUILD_TYPE=Release",
+          "-DCMAKE_C_COMPILER=C:/msys64/mingw64/bin/gcc.exe",
+          "-DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe",
+          "-DCMAKE_MAKE_PROGRAM=C:/msys64/mingw64/bin/ninja.exe",
+          "-DCMAKE_RC_COMPILER=C:/msys64/mingw64/bin/windres.exe",
+          "-DCMAKE_C_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+          "-DCMAKE_CXX_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+          "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+          "-DPython3_EXECUTABLE=C:/Users/Matthew/AppData/Local/Programs/Python/Python312/python.exe",
+          "-DNESRECOMP_ROOT=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\deadline-candidate-v2",
+          "-DNESRECOMP_HOST_COMPILER=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028/build-cli/NESRecomp.exe",
+          "-DNESRECOMP_ROM=F:\\Projects\\nesrecomp\\SuperMarioBrosRecomp\\baserom.nes",
+          "-DNESRECOMP_RECOMP_UI=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+          "-DRECOMP_UI_ROOT=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+          "-DSDL2_DIR=G:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/cmake",
+          "-DNESRECOMP_RECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+          "-DRECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+          "-DNESRECOMP_RBENGINE_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/retcomm-rbengine",
+          "-DNESRECOMP_BACKEND=cycle",
+          "-DNESRECOMP_PPU_IMPL=HLE"
+        ],
+        "reuse_reference": false,
+        "owner_authorized_shared_host": true,
+        "exe": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-sprite-span-v1\\smb\\candidate\\SuperMarioBrosRecomp.exe",
+        "sha256": "6df67980ea49556de9a778f14d91752eee2d81f01d43a698fde1c9cb806c4d8f",
+        "bytes": 15672706,
+        "package": "committed-sprite-output-span-control",
+        "source_snapshot": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\source-sprite-span-v1",
+        "source_sha256": {
+          "runner/cyc/hw_ppu.c": "2eaba394fce6cc3bbd19d4d5351def68629487a30cea3e40604055806b5fd785",
+          "runner/cyc/cyc_host.c": "1667f3f58a886feabb80d2724fe6d98520cc9e9d0e2f24b45ca7c33600d21134",
+          "runner/cyc/hw.h": "5a7e7b756eb2bd76f39cbf960891b8c1544e545374759c4f8c4caa689201d6dd",
+          "runner/cyc/tests/native_interval_probe.c": "4c6340dd1e5134cfe7ac04c50673bd5d8551d6b74a6cedd0bdb21430335e59aa"
+        },
+        "original_build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-smb-candidate-v2",
+        "relink_manifest": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-sprite-span-v1\\smb\\candidate\\manifest.json"
+      },
+      "candidate": {
+        "title": "smb",
+        "mode": "candidate",
+        "build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-apu-event-v1\\smb\\candidate",
+        "target": "SuperMarioBrosRecomp",
+        "engine": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\deadline-candidate-v2",
+        "engine_head": "0a80b31af371d6038fc07b9dc0d13fd0fa617b71+source-snapshot",
+        "title_head": "45f95754f8ad6e04fc39966505c94af9783bd787",
+        "rom": "F:\\Projects\\nesrecomp\\SuperMarioBrosRecomp\\baserom.nes",
+        "rom_sha256": "f61548fdf1670cffefcc4f0b7bdcdd9eaba0c226e3b74f8666071496988248de",
+        "configure": [
+          "-S",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\smb",
+          "-B",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-smb-candidate-v2",
+          "-G",
+          "Ninja",
+          "-DCMAKE_BUILD_TYPE=Release",
+          "-DCMAKE_C_COMPILER=C:/msys64/mingw64/bin/gcc.exe",
+          "-DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe",
+          "-DCMAKE_MAKE_PROGRAM=C:/msys64/mingw64/bin/ninja.exe",
+          "-DCMAKE_RC_COMPILER=C:/msys64/mingw64/bin/windres.exe",
+          "-DCMAKE_C_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+          "-DCMAKE_CXX_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+          "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+          "-DPython3_EXECUTABLE=C:/Users/Matthew/AppData/Local/Programs/Python/Python312/python.exe",
+          "-DNESRECOMP_ROOT=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\deadline-candidate-v2",
+          "-DNESRECOMP_HOST_COMPILER=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028/build-cli/NESRecomp.exe",
+          "-DNESRECOMP_ROM=F:\\Projects\\nesrecomp\\SuperMarioBrosRecomp\\baserom.nes",
+          "-DNESRECOMP_RECOMP_UI=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+          "-DRECOMP_UI_ROOT=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+          "-DSDL2_DIR=G:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/cmake",
+          "-DNESRECOMP_RECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+          "-DRECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+          "-DNESRECOMP_RBENGINE_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/retcomm-rbengine",
+          "-DNESRECOMP_BACKEND=cycle",
+          "-DNESRECOMP_PPU_IMPL=HLE"
+        ],
+        "reuse_reference": false,
+        "owner_authorized_shared_host": true,
+        "exe": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-apu-event-v1\\smb\\candidate\\SuperMarioBrosRecomp.exe",
+        "sha256": "dc700ee819d824882a41eb436986fd780caf016be623c8ca2601d4586b7101af",
+        "bytes": 15675630,
+        "package": "native-apu-constant-output-events-v1-incremental-to-sprite",
+        "source_snapshot": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\source-apu-event-v1",
+        "source_sha256": {
+          "runner/cyc/hw_apu.c": "17a21f75c8a88f2bba9637cdff19e929e6417419edac0566580558d342f62d62",
+          "runner/cyc/cyc_host.c": "9679255669e6cd38ed9783f9dcc09ab7e1cf9ab2e7256881de406fb5608bed4b",
+          "runner/cyc/hw.h": "c3d7222c09c9ed4efda54f44098e17c056056dfc3fe6f452026c9c16db6afde3",
+          "runner/cyc/tests/native_interval_probe.c": "45506b93ec4a8eb7956495907a5c59690efd1d25e7254d8f7743de11db8fa280"
+        },
+        "original_build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-smb-candidate-v2",
+        "relink_manifest": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-apu-event-v1\\smb\\candidate\\manifest.json",
+        "selected_ppu_object": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-sprite-span-v1\\smb\\candidate\\hw_ppu.c.obj",
+        "selected_ppu_object_sha256": "9ba335fef6d295b7c6ec86562e79c3006cd16bfd1b6aa77dc92b99dce83713cf"
+      }
+    },
+    "zelda": {
+      "reference": {
+        "title": "zelda",
+        "mode": "reference",
+        "build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-sprite-span-v1\\zelda\\candidate",
+        "target": "LegendOfZeldaNESRecomp",
+        "engine": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\deadline-candidate-v2",
+        "engine_head": "bd9ffbf1544f29db53fdfb00aa214cab73d029ea+source-snapshot",
+        "title_head": "5d90eb7a10e13f5dd5c693a0204b29f7917ec198",
+        "rom": "F:\\Projects\\nesrecomp\\LegendOfZeldaNESRecomp\\Legend of Zelda.NES",
+        "rom_sha256": "8f72dc2e98572eb4ba7c3a902bca5f69c448fc4391837e5f8f0d4556280440ac",
+        "configure": [
+          "-S",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\zelda",
+          "-B",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-zelda-candidate-v2",
+          "-G",
+          "Ninja",
+          "-DCMAKE_BUILD_TYPE=Release",
+          "-DCMAKE_C_COMPILER=C:/msys64/mingw64/bin/gcc.exe",
+          "-DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe",
+          "-DCMAKE_MAKE_PROGRAM=C:/msys64/mingw64/bin/ninja.exe",
+          "-DCMAKE_RC_COMPILER=C:/msys64/mingw64/bin/windres.exe",
+          "-DCMAKE_C_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+          "-DCMAKE_CXX_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+          "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+          "-DPython3_EXECUTABLE=C:/Users/Matthew/AppData/Local/Programs/Python/Python312/python.exe",
+          "-DNESRECOMP_ROOT=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\deadline-candidate-v2",
+          "-DNESRECOMP_HOST_COMPILER=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028/build-cli/NESRecomp.exe",
+          "-DNESRECOMP_ROM=F:\\Projects\\nesrecomp\\LegendOfZeldaNESRecomp\\Legend of Zelda.NES",
+          "-DNESRECOMP_RECOMP_UI=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+          "-DRECOMP_UI_ROOT=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+          "-DSDL2_DIR=G:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/cmake",
+          "-DNESRECOMP_RECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+          "-DRECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+          "-DNESRECOMP_RBENGINE_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/retcomm-rbengine",
+          "-DNESRECOMP_BACKEND=cycle",
+          "-DNESRECOMP_PPU_IMPL=HLE"
+        ],
+        "reuse_reference": false,
+        "owner_authorized_shared_host": true,
+        "exe": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-sprite-span-v1\\zelda\\candidate\\LegendOfZeldaNESRecomp.exe",
+        "sha256": "8e16c798d135c24ab7b8bbad57d719386d0ef961a7d481dfb16809ac71652e9c",
+        "bytes": 11760555,
+        "package": "committed-sprite-output-span-control",
+        "source_snapshot": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\source-sprite-span-v1",
+        "source_sha256": {
+          "runner/cyc/hw_ppu.c": "2eaba394fce6cc3bbd19d4d5351def68629487a30cea3e40604055806b5fd785",
+          "runner/cyc/cyc_host.c": "1667f3f58a886feabb80d2724fe6d98520cc9e9d0e2f24b45ca7c33600d21134",
+          "runner/cyc/hw.h": "5a7e7b756eb2bd76f39cbf960891b8c1544e545374759c4f8c4caa689201d6dd",
+          "runner/cyc/tests/native_interval_probe.c": "4c6340dd1e5134cfe7ac04c50673bd5d8551d6b74a6cedd0bdb21430335e59aa"
+        },
+        "original_build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-zelda-candidate-v2",
+        "relink_manifest": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-sprite-span-v1\\zelda\\candidate\\manifest.json"
+      },
+      "candidate": {
+        "title": "zelda",
+        "mode": "candidate",
+        "build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-apu-event-v1\\zelda\\candidate",
+        "target": "LegendOfZeldaNESRecomp",
+        "engine": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\deadline-candidate-v2",
+        "engine_head": "0a80b31af371d6038fc07b9dc0d13fd0fa617b71+source-snapshot",
+        "title_head": "5d90eb7a10e13f5dd5c693a0204b29f7917ec198",
+        "rom": "F:\\Projects\\nesrecomp\\LegendOfZeldaNESRecomp\\Legend of Zelda.NES",
+        "rom_sha256": "8f72dc2e98572eb4ba7c3a902bca5f69c448fc4391837e5f8f0d4556280440ac",
+        "configure": [
+          "-S",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\zelda",
+          "-B",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-zelda-candidate-v2",
+          "-G",
+          "Ninja",
+          "-DCMAKE_BUILD_TYPE=Release",
+          "-DCMAKE_C_COMPILER=C:/msys64/mingw64/bin/gcc.exe",
+          "-DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe",
+          "-DCMAKE_MAKE_PROGRAM=C:/msys64/mingw64/bin/ninja.exe",
+          "-DCMAKE_RC_COMPILER=C:/msys64/mingw64/bin/windres.exe",
+          "-DCMAKE_C_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+          "-DCMAKE_CXX_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+          "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+          "-DPython3_EXECUTABLE=C:/Users/Matthew/AppData/Local/Programs/Python/Python312/python.exe",
+          "-DNESRECOMP_ROOT=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\deadline-candidate-v2",
+          "-DNESRECOMP_HOST_COMPILER=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028/build-cli/NESRecomp.exe",
+          "-DNESRECOMP_ROM=F:\\Projects\\nesrecomp\\LegendOfZeldaNESRecomp\\Legend of Zelda.NES",
+          "-DNESRECOMP_RECOMP_UI=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+          "-DRECOMP_UI_ROOT=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+          "-DSDL2_DIR=G:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/cmake",
+          "-DNESRECOMP_RECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+          "-DRECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+          "-DNESRECOMP_RBENGINE_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/retcomm-rbengine",
+          "-DNESRECOMP_BACKEND=cycle",
+          "-DNESRECOMP_PPU_IMPL=HLE"
+        ],
+        "reuse_reference": false,
+        "owner_authorized_shared_host": true,
+        "exe": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-apu-event-v1\\zelda\\candidate\\LegendOfZeldaNESRecomp.exe",
+        "sha256": "ad531cf870b3f50744c542ace5945625284e5b11db04287c1b4f24ee8f5239a2",
+        "bytes": 11764503,
+        "package": "native-apu-constant-output-events-v1-incremental-to-sprite",
+        "source_snapshot": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\source-apu-event-v1",
+        "source_sha256": {
+          "runner/cyc/hw_apu.c": "17a21f75c8a88f2bba9637cdff19e929e6417419edac0566580558d342f62d62",
+          "runner/cyc/cyc_host.c": "9679255669e6cd38ed9783f9dcc09ab7e1cf9ab2e7256881de406fb5608bed4b",
+          "runner/cyc/hw.h": "c3d7222c09c9ed4efda54f44098e17c056056dfc3fe6f452026c9c16db6afde3",
+          "runner/cyc/tests/native_interval_probe.c": "45506b93ec4a8eb7956495907a5c59690efd1d25e7254d8f7743de11db8fa280"
+        },
+        "original_build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-zelda-candidate-v2",
+        "relink_manifest": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-apu-event-v1\\zelda\\candidate\\manifest.json",
+        "selected_ppu_object": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-sprite-span-v1\\zelda\\candidate\\hw_ppu.c.obj",
+        "selected_ppu_object_sha256": "60d101481f166d388c0fc19c62b176a0edda5632d82ef9d15c8152630ce5c3a1"
+      }
+    },
+    "gumshoe": {
+      "reference": {
+        "title": "gumshoe",
+        "mode": "reference",
+        "build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-sprite-span-v1\\gumshoe\\candidate",
+        "target": "GumshoeRecomp",
+        "engine": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\deadline-candidate-v2",
+        "engine_head": "bd9ffbf1544f29db53fdfb00aa214cab73d029ea+source-snapshot",
+        "title_head": "867a0091f3e2381d5507df3a95f24acb1b133465",
+        "rom": "F:\\Projects\\nesrecomp\\GumshoeNESRecomp\\Gumshoe (USA, Europe).nes",
+        "rom_sha256": "f62529ff98015d8feb6b7288200a4d8a3acfd2fbcbb90ce0b4a6379be342f38a",
+        "configure": [
+          "-S",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\gumshoe",
+          "-B",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-gumshoe-candidate-v2",
+          "-G",
+          "Ninja",
+          "-DCMAKE_BUILD_TYPE=Release",
+          "-DCMAKE_C_COMPILER=C:/msys64/mingw64/bin/gcc.exe",
+          "-DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe",
+          "-DCMAKE_MAKE_PROGRAM=C:/msys64/mingw64/bin/ninja.exe",
+          "-DCMAKE_RC_COMPILER=C:/msys64/mingw64/bin/windres.exe",
+          "-DCMAKE_C_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+          "-DCMAKE_CXX_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+          "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+          "-DPython3_EXECUTABLE=C:/Users/Matthew/AppData/Local/Programs/Python/Python312/python.exe",
+          "-DNESRECOMP_ROOT=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\deadline-candidate-v2",
+          "-DNESRECOMP_HOST_COMPILER=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028/build-cli/NESRecomp.exe",
+          "-DNESRECOMP_ROM=F:\\Projects\\nesrecomp\\GumshoeNESRecomp\\Gumshoe (USA, Europe).nes",
+          "-DNESRECOMP_RECOMP_UI=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+          "-DRECOMP_UI_ROOT=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+          "-DSDL2_DIR=G:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/cmake",
+          "-DNESRECOMP_RECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+          "-DRECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+          "-DNESRECOMP_RBENGINE_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/retcomm-rbengine",
+          "-DNESRECOMP_BACKEND=cycle",
+          "-DNESRECOMP_PPU_IMPL=HLE"
+        ],
+        "reuse_reference": false,
+        "owner_authorized_shared_host": true,
+        "exe": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-sprite-span-v1\\gumshoe\\candidate\\GumshoeRecomp.exe",
+        "sha256": "1b82dca6b0b04cf2791155d3e18d16ef5bf2de6fb7be950dd8ea4f6237cde025",
+        "bytes": 12677228,
+        "package": "committed-sprite-output-span-control",
+        "source_snapshot": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\source-sprite-span-v1",
+        "source_sha256": {
+          "runner/cyc/hw_ppu.c": "2eaba394fce6cc3bbd19d4d5351def68629487a30cea3e40604055806b5fd785",
+          "runner/cyc/cyc_host.c": "1667f3f58a886feabb80d2724fe6d98520cc9e9d0e2f24b45ca7c33600d21134",
+          "runner/cyc/hw.h": "5a7e7b756eb2bd76f39cbf960891b8c1544e545374759c4f8c4caa689201d6dd",
+          "runner/cyc/tests/native_interval_probe.c": "4c6340dd1e5134cfe7ac04c50673bd5d8551d6b74a6cedd0bdb21430335e59aa"
+        },
+        "original_build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-gumshoe-candidate-v2",
+        "relink_manifest": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-sprite-span-v1\\gumshoe\\candidate\\manifest.json"
+      },
+      "candidate": {
+        "title": "gumshoe",
+        "mode": "candidate",
+        "build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-apu-event-v1\\gumshoe\\candidate",
+        "target": "GumshoeRecomp",
+        "engine": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\deadline-candidate-v2",
+        "engine_head": "0a80b31af371d6038fc07b9dc0d13fd0fa617b71+source-snapshot",
+        "title_head": "867a0091f3e2381d5507df3a95f24acb1b133465",
+        "rom": "F:\\Projects\\nesrecomp\\GumshoeNESRecomp\\Gumshoe (USA, Europe).nes",
+        "rom_sha256": "f62529ff98015d8feb6b7288200a4d8a3acfd2fbcbb90ce0b4a6379be342f38a",
+        "configure": [
+          "-S",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\gumshoe",
+          "-B",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-gumshoe-candidate-v2",
+          "-G",
+          "Ninja",
+          "-DCMAKE_BUILD_TYPE=Release",
+          "-DCMAKE_C_COMPILER=C:/msys64/mingw64/bin/gcc.exe",
+          "-DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe",
+          "-DCMAKE_MAKE_PROGRAM=C:/msys64/mingw64/bin/ninja.exe",
+          "-DCMAKE_RC_COMPILER=C:/msys64/mingw64/bin/windres.exe",
+          "-DCMAKE_C_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+          "-DCMAKE_CXX_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+          "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+          "-DPython3_EXECUTABLE=C:/Users/Matthew/AppData/Local/Programs/Python/Python312/python.exe",
+          "-DNESRECOMP_ROOT=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\deadline-candidate-v2",
+          "-DNESRECOMP_HOST_COMPILER=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028/build-cli/NESRecomp.exe",
+          "-DNESRECOMP_ROM=F:\\Projects\\nesrecomp\\GumshoeNESRecomp\\Gumshoe (USA, Europe).nes",
+          "-DNESRECOMP_RECOMP_UI=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+          "-DRECOMP_UI_ROOT=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+          "-DSDL2_DIR=G:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/cmake",
+          "-DNESRECOMP_RECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+          "-DRECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+          "-DNESRECOMP_RBENGINE_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/retcomm-rbengine",
+          "-DNESRECOMP_BACKEND=cycle",
+          "-DNESRECOMP_PPU_IMPL=HLE"
+        ],
+        "reuse_reference": false,
+        "owner_authorized_shared_host": true,
+        "exe": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-apu-event-v1\\gumshoe\\candidate\\GumshoeRecomp.exe",
+        "sha256": "d42ce25ab643bd7c64233909551308b010d3c570c0cb79bc6297ee06a86f4756",
+        "bytes": 12680664,
+        "package": "native-apu-constant-output-events-v1-incremental-to-sprite",
+        "source_snapshot": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\source-apu-event-v1",
+        "source_sha256": {
+          "runner/cyc/hw_apu.c": "17a21f75c8a88f2bba9637cdff19e929e6417419edac0566580558d342f62d62",
+          "runner/cyc/cyc_host.c": "9679255669e6cd38ed9783f9dcc09ab7e1cf9ab2e7256881de406fb5608bed4b",
+          "runner/cyc/hw.h": "c3d7222c09c9ed4efda54f44098e17c056056dfc3fe6f452026c9c16db6afde3",
+          "runner/cyc/tests/native_interval_probe.c": "45506b93ec4a8eb7956495907a5c59690efd1d25e7254d8f7743de11db8fa280"
+        },
+        "original_build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-gumshoe-candidate-v2",
+        "relink_manifest": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-apu-event-v1\\gumshoe\\candidate\\manifest.json",
+        "selected_ppu_object": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-sprite-span-v1\\gumshoe\\candidate\\hw_ppu.c.obj",
+        "selected_ppu_object_sha256": "18eede29b9c34905e8dc6db193df2ed27e3cc3c6fb401b1f2020fb53ba5e876b"
+      }
+    }
+  },
+  "earlier_results": "2026-10-28-sprite-span-results.json",
+  "scope_remaining": "Base APU stable NTSC spans selected; short/dense/device/expansion intervals retain the ordinary portable executor. Enhanced profiles and the other burndown evaluations remain. FDS parked. No merge/release.",
+  "fixtures": {
+    "status": "pass",
+    "ppu_implementations": [
+      "HLE",
+      "LLE"
+    ],
+    "boards": [
+      0,
+      1,
+      4,
+      66
+    ],
+    "ntsc_alignments": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "sample_rates": [
+      44100,
+      48000
+    ],
+    "expanded_five_step_cycles_per_case": 80000,
+    "expanded_probe_sha256": "f8eb15fcdc9595d42ebd3a3fc3ddd88f88cb75227d30b62c6cad02b3e3960c45",
+    "coverage": "Mixed register/DMA/DMC/IRQ/controller/bus traffic, pulse/triangle/noise timer periods including dense/zero cases; two uninterrupted five-step frame sequences; current-build snapshot replay; CPU cursor and PAL/trace/unsupported-board refusal."
+  }
+}
