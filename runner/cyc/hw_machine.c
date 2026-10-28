@@ -198,11 +198,11 @@ void hw_native_begin(void)
         !hw_pal() && !hw_extra_timing.extra_scanlines &&
         (hw_cart.mapper == 0 || hw_cart.mapper == 1) &&
         !hw_prg_data_modified && !cyc_mod_rom_read_overrides &&
-        !cyc_cpu_rts_observer;
+        (!cyc_cpu_rts_observer || cyc_cpu_rts_observer == cyc_mod_return_observer);
     /* Armed instruction hooks are safe: compiled code yields to dispatch,
      * which closes this cursor before the scheduler invokes any callback.
-     * Operand observers close at cpu_ram_read_value. Inline RTS observers
-     * still require their own flush boundary. */
+     * Operand observers close at cpu_ram_read_value; registered RTS observers
+     * close in the mod adapter. Unwrapped external RTS observers fall back. */
 }
 
 void hw_native_flush(void)
@@ -230,7 +230,8 @@ void hw_native_end(void)
 bool hw_native_prepare(void)
 {
     hw_native_flush();
-    if ((cpu.do_nmi | cpu.do_irq | cpu.do_reset) || cyc_cpu_rts_observer ||
+    if ((cpu.do_nmi | cpu.do_irq | cpu.do_reset) ||
+        (cyc_cpu_rts_observer && cyc_cpu_rts_observer != cyc_mod_return_observer) ||
         hw_prg_data_modified || cyc_mod_rom_read_overrides) return false;
     hw_native_interval.credit = hw_native_interval_limit();
     hw_native_interval.driven = hw.data_driven;

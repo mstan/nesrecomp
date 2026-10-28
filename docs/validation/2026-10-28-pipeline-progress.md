@@ -207,3 +207,11 @@ and dispatch setup out. Standalone multi-board hosts keep runtime qualification.
 This avoids charging SMB3/MMC3 for an optimization package it cannot yet use.
 Header fixtures cover NROM/MMC1/MMC3 and extended NES2 mapper numbers whose low
 byte resembles a supported board. Actual built-game neutrality remains a gate.
+## Registered return observers
+
+The registered RTS observer now closes native time in the mod adapter before
+calling the game. Runtime qualification accepts that known wrapper and keeps
+fallback for arbitrary external RTS pointers. This removes another whole-game
+exclusion while preserving real callback timing; generated CPU sources need no
+observer-call rewrite. Active cursor fixtures include operand and return
+observers, and the existing real-RTS/isolated-permission contract test passes.

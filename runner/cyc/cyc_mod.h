@@ -145,6 +145,9 @@ void cyc_mod_set_call_budget(uint64_t cycles);
  * scope end resets the permission. The game's callbacks must keep their own
  * speculative presentation/simulation state separate from live state. */
 void cyc_mod_set_return_hook(void (*hook)(void));
+/* CPU adapter installed above: commits native device time before invoking
+ * the trusted game callback. Other external RTS observers retain fallback. */
+void cyc_mod_return_observer(void);
 /* Pure, optional RAM operand verdict at the actual instruction PC. Physical
  * RAM, bus values and clocks are untouched. The callback must not mutate the
  * machine or reenter guest execution. NULL restores unmodified reads. */

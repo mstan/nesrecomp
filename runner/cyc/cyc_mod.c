@@ -122,12 +122,15 @@ static size_t       s_snap_chr;
 static bool         s_open;
 static bool         s_isolated_hooks;
 static void (*s_return_hook)(void);
-static void returned(void) {
+void cyc_mod_return_observer(void) {
+#if NESRECOMP_NATIVE_INTERVALS
+    hw_native_flush();
+#endif
     if (s_return_hook && (!s_open || s_isolated_hooks)) s_return_hook();
 }
 void cyc_mod_set_return_hook(void (*hook)(void)) {
     s_return_hook = hook;
-    cyc_cpu_rts_observer = hook ? returned : NULL;
+    cyc_cpu_rts_observer = hook ? cyc_mod_return_observer : NULL;
 }
 void cyc_mod_set_ram_read_hook(uint8_t (*hook)(uint16_t pc, uint16_t addr, uint8_t value)) {
     cyc_cpu_ram_read_policy = hook;

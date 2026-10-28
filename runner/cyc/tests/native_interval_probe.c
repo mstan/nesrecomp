@@ -5,6 +5,7 @@
 #include "hw.h"
 #include "cpu6502.h"
 #include "cyc_state.h"
+#include "cyc_mod.h"
 #include "cyc_trace.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -57,7 +58,14 @@ static void cursor_stimulus(unsigned i)
     value = cpu_ram_read_value(0x8123, addr, value);
     cpu_write(addr, (uint8_t)(value + i), CYC_DONE);
     (void)cpu_read_rom(0x8124, 0x8c, CYC_POLL | CYC_DONE);
+    if (i % 17 == 0 && cyc_cpu_rts_observer) cyc_cpu_rts_observer();
     if (i % 37 == 0) stimulus(i);
+}
+
+static void return_observer(void)
+{
+    check(!hw_native_interval.pending && !hw_native_interval.credit,
+          "return observer sees committed hardware");
 }
 
 int main(int argc, char **argv)
@@ -84,6 +92,7 @@ int main(int argc, char **argv)
             access_bus(0x2001, 0x1e, true);
             cpu.do_reset = cpu.power_on = 0;
             cyc_cpu_ram_read_policy = cursor ? operand_observer : NULL;
+            cyc_mod_set_return_hook(cursor ? return_observer : NULL);
             unsigned spans = 0, cycles = 0;
             printf("case mapper=%u align=%u\n", mapper, align);
             if (cursor && !reference) hw_native_begin();
