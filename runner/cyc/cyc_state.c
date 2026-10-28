@@ -103,6 +103,7 @@ static void set_err(char *err, size_t n, const char *msg)
 
 bool cyc_state_save(uint8_t **out, size_t *len, char *err, size_t err_len)
 {
+    hw_native_flush();
     Buf b = { 0 };
     Header h;
     memset(&h, 0, sizeof(h));
@@ -347,6 +348,8 @@ bool cyc_state_load(const uint8_t *data, size_t len, char *err, size_t err_len)
 
     /* Apply: the machine, then the host, then the mods (which see the loaded
      * machine). */
+    hw_native_interval.pending = hw_native_interval.credit = 0;
+    hw_native_interval.enabled = false;
     memcpy(&cpu, ccpu->data, sizeof(cpu));
     memcpy(&hw, chw->data, sizeof(hw));
     hw_extra_timing = timing;
@@ -495,6 +498,7 @@ void cyc_snapshot_free(CycSnapshot *s)
 
 void cyc_snapshot_take(CycSnapshot *s)
 {
+    hw_native_flush();
     size_t n;
     s->cpu = cpu;
     s->hw = hw;
@@ -529,6 +533,10 @@ const uint8_t *cyc_snapshot_cart_ram(const CycSnapshot *s, size_t *len)
 
 void cyc_snapshot_restore(const CycSnapshot *s)
 {
+    /* Restoring discards the current execution, including any uncommitted
+     * device work. Do not publish pixels/audio from the discarded future. */
+    hw_native_interval.pending = hw_native_interval.credit = 0;
+    hw_native_interval.enabled = false;
     size_t n;
     cpu = s->cpu;
     hw = s->hw;

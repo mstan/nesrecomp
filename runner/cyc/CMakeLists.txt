@@ -455,6 +455,18 @@ add_test(NAME cyc_ppu_spans COMMAND ${Python3_EXECUTABLE}
     --candidate $<TARGET_FILE:cyc_ppu_span_candidate>)
 set_tests_properties(cyc_ppu_spans PROPERTIES TIMEOUT 180)
 
+add_executable(cyc_native_interval_probe tests/native_interval_probe.c hw_ppu.c hw_apu.c
+    $<TARGET_OBJECTS:cyc_ppu_span_runtime>)
+target_include_directories(cyc_native_interval_probe PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})
+target_link_libraries(cyc_native_interval_probe PRIVATE ${NESRECOMP_CYC_LIBRARIES})
+if(MSVC)
+    target_compile_definitions(cyc_native_interval_probe PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()
+add_test(NAME cyc_native_intervals COMMAND ${Python3_EXECUTABLE}
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_native_intervals.py
+    --probe $<TARGET_FILE:cyc_native_interval_probe>)
+set_tests_properties(cyc_native_intervals PROPERTIES TIMEOUT 180)
+
 add_executable(cyc_content_test content_test.c cpu6502.c cpu6502_interp.c hw_machine.c ${CYC_TEST_BOARD_SOURCES}
     hw_ppu.c hw_apu.c hw_palette.c cyc_trace.c cyc_ring.c ${NESRECOMP_CYC_SCHEDULER_SOURCES} cyc_native_none.c)
 target_include_directories(cyc_content_test PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})

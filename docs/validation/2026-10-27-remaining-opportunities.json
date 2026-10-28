@@ -40,7 +40,7 @@
       "required_behavior": "Correct pixels/opacity, sprite-zero and overflow publication, register effects, mapper address/IRQ events, Zapper light and current-build continuation. LLE remains a separate working reference.",
       "prior_issue": null,
       "measured_additional_gain": null,
-      "execution_status": "selected-first-package-design"
+      "execution_status": "independent-service-infrastructure-present-full-algorithm-open"
     },
     {
       "id": "NES02",
@@ -79,7 +79,7 @@
       "required_behavior": "NMI edge and IRQ poll ordering, DMA readiness, open bus, mapper clocks, observable accesses and hook/stop deadlines. An unchanged number of helper calls is not a contract.",
       "prior_issue": null,
       "measured_additional_gain": null,
-      "execution_status": "selected-first-package-design"
+      "execution_status": "prototype-implemented-fixtures-pass-gameplay-ab-pending"
     },
     {
       "id": "NES03",
@@ -118,7 +118,7 @@
       "required_behavior": "Interrupt boundaries, mapper writes and slot changes, hooks/read substitutions, self-modifying code, DMA and portable fallback. Fix the generator, never emitted C.",
       "prior_issue": null,
       "measured_additional_gain": null,
-      "execution_status": "selected-first-package-design"
+      "execution_status": "prototype-implemented-fixtures-pass-gameplay-ab-pending"
     },
     {
       "id": "NES04",
@@ -214,7 +214,7 @@
       "required_behavior": "PCM, phase, output filters, envelopes, frame IRQ, DMC bus steals and controller delays. Exact old floating-point accumulation may require a matching arithmetic formulation or conservative fallback.",
       "prior_issue": null,
       "measured_additional_gain": null,
-      "execution_status": "selected-first-package-design"
+      "execution_status": "independent-service-infrastructure-present-full-algorithm-open"
     },
     {
       "id": "NES07",

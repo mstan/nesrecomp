@@ -121,7 +121,79 @@ Implementation outline and obligations:
    real feature profiles proportionately. After two failed improvement
    experiments, reassess the architecture before more tuning.
 
-The first implementation is not yet present. The remaining opportunity JSON
+At the initial design checkpoint no implementation was present. The opportunity JSON
 records selected design work for NES01/02/03/06, the FDS parked status and every
 other item still awaiting its implementation/evaluation disposition. No release,
 title pin update, merge to main/master or owner visual handoff has occurred.
+
+## Prototype now implemented (not yet performance-qualified)
+
+The first runtime prototype owns a stable visible NTSC interval on NROM/MMC1:
+ordinary mirrored CPU RAM and folded immutable PRG accesses consume a derived
+cursor, then PPU and APU services advance independently in their original
+internal order. CPU I/O and mapper accesses, watched code writes, native dispatch
+returns, operand-policy callbacks and state capture close the interval. Restore
+and power-on discard derived credit. Every DMA, fetch, pixel, sprite, controller
+and PCM obligation remains; unsupported deadlines use the coupled executor.
+The fast bus also resets the per-cycle DMA-stall result, which undocumented
+store instructions inspect immediately.
+
+Paired machine fixtures pass all four NTSC alignments for NROM/MMC1 in both LLE
+and HLE builds, with active-interval assertions, hardware/bus/memory/raster and
+PCM comparisons, mixed delayed-register/DMA/IRQ traffic, explicit eligibility
+refusals, operand observers and current-build snapshot replay. Existing return
+observer and RAM-policy tests pass. These are correctness results, not runtime
+speedup evidence. The source remains portable C11, without a new host ISA path.
+
+Actual SMB1 integration exposed two overly broad initial guards. Instruction
+hooks are armed during ordinary play, but run after dispatch closes the cursor;
+they need not disable it. SMB1 also permanently registers a Smash64 RAM operand
+policy, including when that enhancement is inactive. The policy must observe
+completed physical hardware time, so its call now flushes the cursor rather
+than excluding the entire game. Captures made with either blanket guard had
+zero native-interval cycles and are excluded from fast-path validation. Inline
+RTS observers still retain the conservative fallback until an actual callback
+boundary is implemented and qualified.
+
+New SMB1 reference/candidate builds use frozen title `45f9575`, reference engine
+`fc0bf3f`, HLE, GCC15.2 `-O2 -g1 -DNDEBUG` and the supported generation pipeline.
+Raw input/settings, commands, logs and binary SHA-256 identities are retained.
+The local campaign reservation is held by another process and is preserved.
+The authorized NAS SERVER (i5-4670) had an available cooperative reservation and
+idle disks; its bounded task directory is
+`G:/Temp/Codex/nes110-interval-20261028`. Matched muted untraced gameplay/output
+checks and ordinary SDL process-CPU samples are in progress there. NAS samples
+must remain labeled as that host, never compared directly with earlier local
+campaign percentages. The copied private ROM is temporary and must be removed
+with the disposable remote inputs after retaining evidence.
+
+This prototype directly advances NES02/NES03. NES01 still needs a replacement
+for the per-pixel raster algorithm, and NES06 still needs substantive APU event
+or channel spans; independent service ownership alone does not close either.
+Every other register entry remains open for evaluation, with NES29 parked.
+No owner handoff, main/master merge, title pin update or release has occurred.
+
+## First active game scout
+
+SMB1 now exercises29,376,956 native-interval cycles in1,438,160 runs over the
+finite1801-frame route. Untraced frame360..1000 memory/raster records, endpoint
+frame1800 hardware/memory/picture and full PCM are byte-identical to the frozen
+reference. The endpoint is a World1-1 death/retry screen; no level-only or
+stage-completion claim is made.
+
+Five order-balanced ordinary SDL gameplay/death pairs on SERVER use less CPU
+in every candidate leg. Medians are8.578125s reference and7.5625s candidate,
+an observed11.84% reduction. This is a **busy-host intermediate scout**, not
+final package qualification: preflight per-core load was41..51%, and the
+candidate preceded the per-fast-cycle DMA-stall-result correction. The result
+selects continued implementation rather than an immediate merge or release.
+Raw leg times, binary identities, settings, output hashes and caveats are in
+[the machine-readable scout](2026-10-28-interval-scout.json); the complete
+4MB evidence archive is retained in the task root.
+
+Current-build state loading emits warnings for inactive Sonic/Samus/Link mod
+records and a Smash64 reseed in **both** reference and candidate. These shared
+baseline warnings do not disqualify the optimization. They remain recorded
+separately from new-path output equality and are not silently called passes.
+The remaining gates include the corrected final binary, other affected titles
+and real feature profiles, per-game non-regression, and final owner builds.

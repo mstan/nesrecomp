@@ -1669,6 +1669,9 @@ int cyc_sdl_main(const char *title_in, int scale)
                (unsigned long long)cyc_cycle_count(), (unsigned long long)cyc_run_native_cycles,
                dev != 0, s_set.audio_enabled != 0,
                (unsigned long long)audio_samples_produced, (unsigned long long)audio_samples_queued);
+        printf("native_intervals: cycles=%llu spans=%llu\n",
+               (unsigned long long)hw_native_interval_cycles,
+               (unsigned long long)hw_native_interval_spans);
     }
     cyc_diagnostics_note("game loop ended; releasing SDL resources");
     save_settings();

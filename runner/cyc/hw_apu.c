@@ -741,6 +741,25 @@ void apu_cycle(void)
  * /IRQ is one open-drain line shared with the cartridge, so a mapper's
  * interrupt (MMC3's scanline counter) is wired in parallel: a handler that
  * acknowledges the APU still sees the line held by the cartridge. */
+bool apu_native_interval_ready(void)
+{
+    /* No memory transfer may be requested during an independent run. The
+     * DMC output unit can keep shifting its already-owned bytes normally.
+     * The frame sequencer may clock envelopes/lengths, but cannot raise IRQ. */
+    return !(apu.oam_dma | apu.dmc_dma | apu.dmc_bytes |
+             apu.dmc_enable_delay | apu.dmc_start_delay |
+             apu.implicit_abort | apu.implicit_abort_armed |
+             apu.frame_irq_out | apu.dmc_irq) &&
+           (apu.irq_inhibit || (apu.five_step && !apu.frame_irq));
+}
+
+void apu_native_interval_run(unsigned cycles)
+{
+    /* Keep floating-point mixer/filter accumulation in its original order;
+     * this service owns a run, not an approximation of elapsed audio time. */
+    while (cycles--) apu_cycle();
+}
+
 void apu_sample_irq(void)
 {
     hw.irq_line = apu.frame_irq_out | apu.dmc_irq | (uint8_t)hw_cart_irq();

@@ -1404,6 +1404,32 @@ static void render_clock_dot(void)
 }
 #endif
 
+unsigned ppu_native_interval_limit(void)
+{
+#if NESRECOMP_PPU_HLE || !NESRECOMP_PPU_LLE_REFERENCE
+    if (dot_kind == DOT_RENDER && ppu.dot < 249)
+        return (249u - ppu.dot) / 3u;
+#endif
+    return 0;
+}
+
+void ppu_native_interval_run(unsigned cycles, unsigned align)
+{
+#if NESRECOMP_PPU_HLE || !NESRECOMP_PPU_LLE_REFERENCE
+    /* From tick 1 to the next tick 1, alignments 0/1 visit half then dot;
+     * alignments 2/3 visit dot then half. Preserve every fetch, pixel,
+     * sprite-evaluation step and cartridge pin notification in that order. */
+    unsigned dots = cycles * 3u;
+    if (align < 2) {
+        while (dots--) { render_span_half_dot(); render_clock_dot(); }
+    } else {
+        while (dots--) { render_clock_dot(); render_span_half_dot(); }
+    }
+#else
+    (void)cycles; (void)align;
+#endif
+}
+
 bool ppu_clock_cpu_tail(unsigned align)
 {
 #if NESRECOMP_PPU_HLE || !NESRECOMP_PPU_LLE_REFERENCE

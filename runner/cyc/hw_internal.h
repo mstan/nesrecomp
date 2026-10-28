@@ -428,6 +428,13 @@ void    ppu_half_dot(void);
  * all its PPU events, including the original NMI/IRQ sample positions.
  * False leaves the machine untouched for the general master-clock path. */
 bool    ppu_clock_cpu_tail(unsigned align);
+/* Stable tick-1 intervals: no register access or scanline edge may occur.
+ * The machine proves that CPU/APU/board observers cannot distinguish the
+ * independent device runs before calling the executor. */
+unsigned ppu_native_interval_limit(void);
+void    ppu_native_interval_run(unsigned cycles, unsigned align);
+unsigned hw_native_interval_limit(void);
+void    hw_native_interval_run(unsigned cycles);
 uint8_t ppu_read(uint16_t addr);
 void    ppu_write(uint16_t addr, uint8_t value);
 /* /NMI as the PPU drives it (active high here). */
@@ -440,6 +447,8 @@ HW_INLINE bool ppu_nmi_output(void) { return ppu.nmi_enable && ppu.vblank; }
 void    apu_power_on(void);
 /* The APU's once-per-CPU-cycle clock (tick 0). */
 void    apu_cycle(void);
+bool    apu_native_interval_ready(void);
+void    apu_native_interval_run(unsigned cycles);
 /* Tick 7: the IRQ input the CPU will poll, and the frame IRQ re-assertion. */
 void    apu_sample_irq(void);
 /* Register writes ($4000-$4017). */

@@ -7,6 +7,7 @@
  * See hw_internal.h for the timing model.
  */
 #include "hw_internal.h"
+#include "cpu6502.h"
 
 #include "cyc_core.h"
 #include "cyc_mod.h"
@@ -34,6 +35,8 @@ bool       hw_frame_end_hit;
 int        hw_dma_stalls;
 uint8_t    hw_code_watch[HW_CODE_BYTES];
 bool       hw_isolated;
+HwNativeInterval hw_native_interval;
+uint64_t hw_native_interval_cycles, hw_native_interval_spans;
 uint64_t   hw_isolated_cycles, hw_isolated_budget, hw_isolated_io_writes;
 static void no_code_write(unsigned phys, uint8_t value) { (void)phys; (void)value; }
 void     (*hw_code_write)(unsigned phys, uint8_t value) = no_code_write;
@@ -174,8 +177,80 @@ static inline void run_tick_0(void)
 /* hw.h                                                                      */
 /* ------------------------------------------------------------------------- */
 
+unsigned hw_native_interval_limit(void)
+{
+    if (hw.tick != 1 || hw_pal() || hw_isolated || cyc_trace_enabled ||
+        hw_extra_timing.extra_scanlines || hw_cart.watch_cpu || hw_cart.clock_late ||
+        (hw_cart.mapper != 0 && hw_cart.mapper != 1) || hw.irq_line ||
+        cpu.nmi_input || cpu.nmi_edge || ppu_nmi_output() ||
+        !apu_native_interval_ready()) return 0;
+    /* On extended SxROM, PPU A12 can also select CPU PRG/RAM signals. Such
+     * boards need a bank-selection deadline before admitting CPU ROM reads. */
+    if (hw_cart.mapper == 1 && (hw_cart.m.ctrl & 0x10) &&
+        ((hw_cart.m.chr0 ^ hw_cart.m.chr1) & 0x1c)) return 0;
+    return ppu_native_interval_limit();
+}
+
+void hw_native_begin(void)
+{
+    hw_native_interval.ram = hw.ram;
+    hw_native_interval.enabled = !hw_isolated && !cyc_trace_enabled &&
+        !hw_pal() && !hw_extra_timing.extra_scanlines &&
+        (hw_cart.mapper == 0 || hw_cart.mapper == 1) &&
+        !hw_prg_data_modified && !cyc_mod_rom_read_overrides &&
+        !cyc_cpu_rts_observer;
+    /* Armed instruction hooks are safe: compiled code yields to dispatch,
+     * which closes this cursor before the scheduler invokes any callback.
+     * Operand observers close at cpu_ram_read_value. Inline RTS observers
+     * still require their own flush boundary. */
+}
+
+void hw_native_flush(void)
+{
+    unsigned n = hw_native_interval.pending;
+    if (n) {
+        hw_native_interval_run(n);
+        hw.cpu_addr = hw_native_interval.addr;
+        hw.cpu_reading = hw_native_interval.kind != HW_WRITE;
+        cpu_opcode_fetch = hw_native_interval.kind == HW_FETCH;
+        hw.data_bus = hw.internal_bus = hw_native_interval.value;
+        hw.data_driven = hw_native_interval.driven;
+        hw_native_interval_cycles += n;
+        ++hw_native_interval_spans;
+    }
+    hw_native_interval.pending = hw_native_interval.credit = 0;
+}
+
+void hw_native_end(void)
+{
+    hw_native_flush();
+    hw_native_interval.enabled = false;
+}
+
+bool hw_native_prepare(void)
+{
+    hw_native_flush();
+    if ((cpu.do_nmi | cpu.do_irq | cpu.do_reset) || cyc_cpu_rts_observer ||
+        hw_prg_data_modified || cyc_mod_rom_read_overrides) return false;
+    hw_native_interval.credit = hw_native_interval_limit();
+    hw_native_interval.driven = hw.data_driven;
+    return hw_native_interval.credit != 0;
+}
+
+void hw_native_interval_run(unsigned cycles)
+{
+    ppu_native_interval_run(cycles, hw.align);
+    apu_native_interval_run(cycles);
+    /* Both sampled inputs are proven constant throughout this interval. */
+    cpu_nmi_input(false);
+    apu_sample_irq();
+    hw.cycles += cycles;
+    hw_dma_stalls = 0;
+}
+
 void hw_cycle_start(uint16_t addr, HwCycleKind kind)
 {
+    hw_native_flush();
     hw.cpu_addr = addr;
     hw.cpu_reading = kind == HW_READ || kind == HW_FETCH;
     cpu_opcode_fetch = kind == HW_FETCH;
@@ -466,6 +541,8 @@ void cyc_power_on(uint8_t ppu_alignment)
         hw_palette_init();
         palette_ready = true;
     }
+    memset(&hw_native_interval, 0, sizeof(hw_native_interval));
+    hw_native_interval_cycles = hw_native_interval_spans = 0;
     memset(&hw, 0, sizeof(hw));
     memset(&hw_extra_timing, 0, sizeof(hw_extra_timing));
     memset(&hw_region_timing, 0, sizeof(hw_region_timing));
@@ -557,7 +634,7 @@ bool cyc_debug_peek(uint16_t addr, uint8_t *value)
 
 void cyc_set_controller(int port, uint8_t buttons) { hw_set_controller(port, buttons); }
 
-uint64_t cyc_cycle_count(void) { return hw.cycles; }
+uint64_t cyc_cycle_count(void) { return hw.cycles + hw_native_interval.pending; }
 
 bool cyc_set_region(CycRegion region)
 {

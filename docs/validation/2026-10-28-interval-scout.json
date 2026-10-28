@@ -1,0 +1,117 @@
+{
+  "status": "preliminary-busy-host-scout-not-final-package-qualification",
+  "package": "native-stable-interval-v1c",
+  "owning_issue": "beads-2dw.1.110",
+  "campaign": "beads-2wy8.1",
+  "host": "SERVER / Intel i5-4670 / Windows / pinned logical core0",
+  "engine_baseline": "fc0bf3fa46a710464960c0a1f2d3b83b4d345600",
+  "title": "Super Mario Bros.",
+  "title_head": "45f95754f8ad6e04fc39966505c94af9783bd787",
+  "features": "HLE stock; actual SDL/software1280x720; audio emulated/mixed/queued to dummy; no native saves",
+  "interval": "Loaded frame361 through end1201; gameplay/death route, not a level-only or stage-completion check",
+  "binary_sha256": {
+    "reference": "04e32583399a363f851575d5e0a38a32817e8f99030627346fa6e5f192d0c31f",
+    "candidate": "f26d9bf8baf48b509f86462487034d4cd1d512d4a7965a2f21e46d83892f82d9"
+  },
+  "correctness": "Untraced per-frame memory/raster360..1000, endpoint1800 hardware/memory/picture and full PCM byte-identical; 29376956 CPU cycles in 1438160 native intervals; traced fallback alone not used as proof",
+  "correctness_hashes": {
+    "audio.wav": "ee79cf07fe6b2548d3c87a491e58e7007abea7b5f71a685e7f1cf4280d131b1c",
+    "final.png": "21eef6a153b9edfd252ec68c25846c86fb8327d021771a0fa99a2b3da3b0f084",
+    "frames.bin": "55212483ef6680f38d65e40a48a50697a0f9eb0a7f73a409224283dc9fc4af0c",
+    "hardware.txt": "d5a777885ef65890785aa1376032d66fca864796472862850cd8806c618e62fe",
+    "memory.txt": "f6c9e8b2ebd38fde7e114bd51172832af169c34635313d9b6447bf22cf48072d"
+  },
+  "preflight_core_busy": [
+    0.41015625,
+    0.4296875,
+    0.51171875,
+    0.45703125
+  ],
+  "samples": [
+    {
+      "mode": "reference",
+      "index": "warmup",
+      "cpu_seconds": 8.625,
+      "wall_seconds": 10.034631000133231
+    },
+    {
+      "mode": "candidate",
+      "index": "warmup",
+      "cpu_seconds": 7.515625,
+      "wall_seconds": 8.516376200132072
+    },
+    {
+      "mode": "reference",
+      "index": 0,
+      "cpu_seconds": 8.578125,
+      "wall_seconds": 9.613675799919292
+    },
+    {
+      "mode": "candidate",
+      "index": 0,
+      "cpu_seconds": 7.640625,
+      "wall_seconds": 8.458308199886233
+    },
+    {
+      "mode": "candidate",
+      "index": 1,
+      "cpu_seconds": 7.5625,
+      "wall_seconds": 8.298010900150985
+    },
+    {
+      "mode": "reference",
+      "index": 1,
+      "cpu_seconds": 8.609375,
+      "wall_seconds": 9.355628099991009
+    },
+    {
+      "mode": "reference",
+      "index": 2,
+      "cpu_seconds": 8.5625,
+      "wall_seconds": 10.060255700023845
+    },
+    {
+      "mode": "candidate",
+      "index": 2,
+      "cpu_seconds": 7.71875,
+      "wall_seconds": 9.467183300061151
+    },
+    {
+      "mode": "candidate",
+      "index": 3,
+      "cpu_seconds": 7.53125,
+      "wall_seconds": 8.436184300109744
+    },
+    {
+      "mode": "reference",
+      "index": 3,
+      "cpu_seconds": 8.8125,
+      "wall_seconds": 10.934634000062943
+    },
+    {
+      "mode": "reference",
+      "index": 4,
+      "cpu_seconds": 8.421875,
+      "wall_seconds": 9.573120099958032
+    },
+    {
+      "mode": "candidate",
+      "index": 4,
+      "cpu_seconds": 7.546875,
+      "wall_seconds": 8.501120700035244
+    }
+  ],
+  "median_cpu_seconds": {
+    "reference": 8.578125,
+    "candidate": 7.5625
+  },
+  "observed_median_cpu_reduction_percent": 11.839708561020036,
+  "limitations": [
+    "Background preflight41..51% per core; these are observed busy-host CPU-time results, not a quiet-host qualification",
+    "The candidate preceded the immediate per-fast-cycle DMA-stall bookkeeping correction. Final source/build qualification pending",
+    "Inactive Sonic/Samus/Link mod-state warnings and Smash64 reseed warning occur equally in reference and candidate and remain shared baseline defects"
+  ],
+  "evidence_root": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\nas-v1c",
+  "evidence_archive_sha256": "312300cbf22f293f06cc5ce394a9d1e5aa880750f449281d9b3a5ad79866bb07",
+  "owner_handoff_ready": false
+}

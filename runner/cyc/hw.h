@@ -44,8 +44,46 @@ uint8_t hw_read_rom(uint16_t addr, uint8_t value);
 void    hw_write(uint16_t addr, uint8_t value);
 void    hw_cycle_finish(bool instruction_done);
 
-/* CPU cycles DMAs took inside the most recent hw_cycle_start(). */
-extern int  hw_dma_stalls;
+/* CPU cycles DMAs took inside the most recent bus-cycle start. */
+extern int hw_dma_stalls;
+
+/* A derived cursor scoped to one compiled ROM dispatch. Ordinary RAM and
+ * folded ROM accesses may consume credit only after the machine proves a
+ * stable, unobserved interval. All device/general accesses flush first.
+ * This cursor is never serialized; dispatch closes it before host callbacks. */
+typedef struct {
+    uint8_t *ram;
+    unsigned credit, pending;
+    uint16_t addr;
+    uint8_t value, kind, driven;
+    bool enabled;
+} HwNativeInterval;
+extern HwNativeInterval hw_native_interval;
+extern uint8_t hw_code_watch[];
+extern uint64_t hw_native_interval_cycles, hw_native_interval_spans;
+void hw_native_begin(void);
+void hw_native_end(void);
+void hw_native_flush(void);
+bool hw_native_prepare(void);
+
+static inline bool hw_native_reserve(void)
+{
+    if (!hw_native_interval.enabled) return false;
+    if (!hw_native_interval.credit && !hw_native_prepare()) return false;
+    --hw_native_interval.credit;
+    ++hw_native_interval.pending;
+    hw_dma_stalls = 0;
+    return true;
+}
+
+static inline void hw_native_bus(uint16_t addr, uint8_t value, HwCycleKind kind)
+{
+    hw_native_interval.addr = addr;
+    hw_native_interval.value = value;
+    hw_native_interval.kind = (uint8_t)kind;
+    if (kind != HW_WRITE) hw_native_interval.driven = 1;
+}
+
 /* The IRQ input (level-sensitive), as last sampled by the CPU. */
 bool hw_irq_line(void);
 /* Provided by the CPU (cpu6502.c) and called by the hardware once per CPU

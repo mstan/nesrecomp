@@ -1735,6 +1735,9 @@ session_restart:
            cyc_run_native ? "native" : "interp-only", frame, (unsigned long long)cycles,
            (unsigned long long)cyc_run_native_cycles, cycles ? 100.0 * (double)cyc_run_native_cycles / (double)cycles : 0.0,
            acccoin && drv.timed_out ? " TIMEOUT" : "");
+    printf("native_intervals: cycles=%llu spans=%llu\n",
+           (unsigned long long)hw_native_interval_cycles,
+           (unsigned long long)hw_native_interval_spans);
     /* Where the cycles went, so a coverage gap can be acted on: ROM cycles
      * become native by seeding them (cycle_seed_file), RAM code by capturing
      * it (cycle_capture_file) when no compiled view of it exists yet. */

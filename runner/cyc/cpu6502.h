@@ -53,8 +53,13 @@ extern void (*cyc_cpu_rts_observer)(void);
  * instruction fetches, dummy reads, RMW and I/O never use this callback. */
 extern uint8_t (*cyc_cpu_ram_read_policy)(uint16_t pc, uint16_t addr, uint8_t value);
 static inline uint8_t cpu_ram_read_value(uint16_t pc, uint16_t addr, uint8_t value) {
-    return addr < 0x2000 && cyc_cpu_ram_read_policy
-        ? cyc_cpu_ram_read_policy(pc, (uint16_t)(addr & 0x7ff), value) : value;
+    if (addr < 0x2000 && cyc_cpu_ram_read_policy) {
+        /* The physical access precedes the trusted operand observer. Publish
+         * its complete device time before the callback inspects the machine. */
+        hw_native_flush();
+        return cyc_cpu_ram_read_policy(pc, (uint16_t)(addr & 0x7ff), value);
+    }
+    return value;
 }
 
 /* Flags for one CPU cycle. */
@@ -81,6 +86,11 @@ static inline void cpu_poll(unsigned f) {
 }
 
 static inline uint8_t cpu_read(uint16_t addr, unsigned f) {
+    if (addr < 0x2000 && hw_native_reserve()) {
+        uint8_t value = hw_native_interval.ram[addr & 0x7ff];
+        hw_native_bus(addr, value, HW_READ);
+        return value;
+    }
     hw_cycle_start(addr, HW_READ);
     if (f & (CYC_POLL | CYC_POLL_BRANCH)) cpu_poll(f);
     uint8_t value = hw_read(addr);
@@ -90,6 +100,10 @@ static inline uint8_t cpu_read(uint16_t addr, unsigned f) {
 
 /* cpu_read() of a PRG ROM byte the recompiler folded to a constant. */
 static inline uint8_t cpu_read_rom(uint16_t addr, uint8_t value, unsigned f) {
+    if (hw_native_reserve()) {
+        hw_native_bus(addr, value, HW_READ);
+        return value;
+    }
     hw_cycle_start(addr, HW_READ);
     if (f & (CYC_POLL | CYC_POLL_BRANCH)) cpu_poll(f);
     value = hw_read_rom(addr, value);
@@ -98,6 +112,11 @@ static inline uint8_t cpu_read_rom(uint16_t addr, uint8_t value, unsigned f) {
 }
 
 static inline void cpu_write(uint16_t addr, uint8_t value, unsigned f) {
+    if (addr < 0x2000 && !hw_code_watch[addr & 0x7ff] && hw_native_reserve()) {
+        hw_native_interval.ram[addr & 0x7ff] = value;
+        hw_native_bus(addr, value, HW_WRITE);
+        return;
+    }
     hw_cycle_start(addr, HW_WRITE);
     if (f & CYC_POLL) cpu_poll(f);
     hw_write(addr, value);
@@ -113,6 +132,10 @@ static inline void cpu_trace_instruction(uint16_t pc) {
  * cpu_interrupt() with cpu.pc still at this instruction. The trace records
  * the instruction after any DMA cycles that delay the fetch. */
 static inline bool cpu_fetch_rom(uint16_t pc, uint8_t opcode) {
+    if (hw_native_reserve()) {
+        hw_native_bus(pc, opcode, HW_FETCH);
+        return false;
+    }
     hw_cycle_start(pc, HW_FETCH);
     if (cyc_trace_enabled) cpu_trace_instruction(pc);
     hw_read_rom(pc, opcode);
