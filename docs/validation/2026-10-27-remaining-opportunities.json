@@ -9,7 +9,14 @@
   "status": "audit-complete-opportunities-open",
   "execution_issue": "beads-2dw.1.110",
   "execution_branch": "perf/pipeline-burndown-20261028",
-  "current_results": ["2026-10-28-board-deadline-results.json", "2026-10-28-sprite-span-results.json", "2026-10-28-apu-event-results.json", "2026-10-28-hd-plan-results.json", "2026-10-28-sram-native-results.json"],
+  "current_results": [
+    "2026-10-28-board-deadline-results.json",
+    "2026-10-28-sprite-span-results.json",
+    "2026-10-28-apu-event-results.json",
+    "2026-10-28-hd-plan-results.json",
+    "2026-10-28-sram-native-results.json",
+    "2026-10-28-guarded-rom-results.json"
+  ],
   "priorities": "Order expresses expected scope and evidence, not measured recoverable cost. Overlapping packages are not additive.",
   "acceptance": "Each game neutral or positive. Small mixed samples inconclusive. Shared original/candidate defects are separate. Native saves protected; old save-state compatibility never required.",
   "opportunities": [
@@ -313,7 +320,9 @@
       "required_behavior": "Reachable content/byte identities, writes, fallback behavior and normal game progression; no percentage gain from a coverage counter alone.",
       "prior_issue": null,
       "measured_additional_gain": null,
-      "execution_status": "remaining-evaluation"
+      "execution_status": "evaluated-selected-qualified-Zelda-atomic-PRG-guarded-native-ROM-two-dispatch-families",
+      "execution_result": "2026-10-28-guarded-rom-results.json",
+      "execution_next": "Further native coverage only when built gameplay shows meaningful remaining interpreted cost; final combined regeneration and owner handoff remain."
     },
     {
       "id": "NES10",
@@ -1059,5 +1068,16 @@
     "retained_implementations": [],
     "new_performance_results": [],
     "owner_handoff_ready": false
+  },
+  "execution_summary": {
+    "evaluated_decisions": 7,
+    "partial_ids": [
+      "NES01"
+    ],
+    "parked_ids": [
+      "NES29"
+    ],
+    "other_unresolved": 22,
+    "note": "Qualified scope decisions, not architectural exhaustion or a wall-clock completion estimate. Final combined builds and owner approval remain separate."
   }
 }

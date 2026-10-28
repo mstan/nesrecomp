@@ -17,8 +17,10 @@ original HD runtime. See [HD results](2026-10-28-hd-plan-results.md), including
 the rejected universal packages and SMB's unchanged-runtime proof. Zelda's
 fixed SNROM SRAM code now joins the native deadline service; see
 [SRAM results](2026-10-28-sram-native-results.md). SERVER Fit improves5.128%
-and Remastered1.442%; stock is neutral/inconclusive. Six items now have
+and Remastered1.442%; stock is neutral/inconclusive. Seven items now have
 qualified evaluation decisions; NES01 remains partial and NES29 parked.
+Guarded native ROM is now evaluated under NES09; see
+[guarded ROM results](2026-10-28-guarded-rom-results.md).
 Remaining evaluations and the final combined feature handoff are still open. FDS remains
 parked. No main/master merge or new release is authorized before owner review.
 
@@ -240,7 +242,16 @@ close the per-pixel raster or APU-event algorithm work under NES01/NES06.
 ### Native content and whole game services
 
 
-- [ ] **NES09 · P2 · Remaining hot ROM and RAM execution coverage**
+- [x] **NES09 · P2 · Remaining hot ROM and RAM execution coverage**
+
+  Selected evaluation: engine `e358f81` / Zelda `cf52e97` admit exact-byte
+  guarded native ROM under atomic patches, using separate ordinary/checked
+  dispatch families. The selected run has Fit +4.902% (four faster, one tie),
+  stock neutral, and mixed HD +2.813% (inconclusive). All outputs and current-
+  build replay match; other targets retain default-off code. No five-of-five
+  win rule is imposed. [Evidence and limits](2026-10-28-guarded-rom-results.md).
+  Further missed-code investigation is conditional on demonstrated hot cost.
+  The paragraph below is the original audit hypothesis.
 
   Gumshoe received 2635 seeds in its accepted combined package. Other routes, titles, overlays and RAM images remain candidates only where meaningful hot execution still interprets.
 
