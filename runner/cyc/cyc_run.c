@@ -91,7 +91,10 @@ static void dispatch(void) {
             hw_native_end();
 #endif
             cyc_run_native_cycles += cyc_cycle_count() - before;
-        } else if (cyc_run_native && !hw_prg_modified && (view = cyc_ramview_find(cpu.pc)) >= 0) {
+        } else if (cyc_run_native &&
+                   (!hw_prg_modified || (cpu.pc >= 0x6000 && cpu.pc < 0x8000 &&
+                                         hw_cart_code_ram_supported())) &&
+                   (view = cyc_ramview_find(cpu.pc)) >= 0) {
             /* Code in RAM that a compiled view covers, as RAM holds it now. */
             uint64_t before = cyc_cycle_count();
             cyc_ramview_run(view);

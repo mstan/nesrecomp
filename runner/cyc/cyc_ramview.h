@@ -3,7 +3,7 @@
  *
  * Code a program runs from RAM (a disk file the FDS BIOS loaded, a routine it
  * copied) is compiled ahead of time from every image of RAM the compiler
- * knows: the disk's files at their load addresses, and snapshots a run
+ * knows: declared ROM-to-SRAM copies, disk files at their load addresses, and snapshots a run
  * captured (--capture-log, game.toml [game] cycle_capture_file). A view folds
  * only its own instruction bytes. It is entered only while RAM holds them:
  *
@@ -43,7 +43,7 @@ typedef struct {
 } CycRamViewStats;
 extern CycRamViewStats cyc_ramview_stats;
 
-/* Views this board can use (PRG RAM views only on the FDS). */
+/* Views this board can use (linear FDS RAM or qualified fixed SNROM SRAM). */
 uint32_t cyc_ramview_count(void);
 /* Build the lookup tables for the loaded board and mark every view UNKNOWN
  * (cyc_run_power_on). */

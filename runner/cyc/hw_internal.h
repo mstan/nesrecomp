@@ -315,10 +315,21 @@ void    hw_bus_write(uint16_t addr, uint8_t value);
 #define HW_CODE_BYTES   (HW_CODE_PRG_RAM + 0x8000u)
 extern uint8_t hw_code_watch[HW_CODE_BYTES];
 extern void (*hw_code_write)(unsigned phys, uint8_t value);
+/* Qualified fixed physical cartridge RAM, independent of its current /CE.
+ * ready additionally proves that PPU A12 cannot change the visible bytes. */
+bool hw_cart_code_ram_supported(void);
+bool hw_cart_code_ram_ready(void);
+extern bool hw_code_cart_watch;
 HW_ALWAYS_INLINE void hw_code_store(uint8_t *cell, unsigned phys, uint8_t value)
 {
     if (hw_code_watch[phys] && *cell != value) hw_code_write(phys, value);
     *cell = value;
+}
+HW_ALWAYS_INLINE void hw_cart_wram_store(unsigned offset, uint8_t value)
+{
+    if (hw_code_cart_watch && offset < HW_CODE_BYTES - HW_CODE_PRG_RAM)
+        hw_code_store(&hw_cart.wram[offset], HW_CODE_PRG_RAM + offset, value);
+    else hw_cart.wram[offset] = value;
 }
 
 /* ------------------------------------------------------------------------- */

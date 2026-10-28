@@ -324,6 +324,15 @@ Numeric values may be given in hex (`0xC000`) or decimal. Address-only directive
 are TOML arrays of tables; per-bank lists under `[functions]` and
 `[force_interp]` accept plain integer arrays.
 
+Cycle builds can also use `[[sram_map]]` to declare a ROM copy into fixed
+SNROM SRAM. `bank` selects a16KiB input PRG bank; `rom_start & 0x3FFF`
+selects its offset. The compiler discovers entry points from ROM calls and
+jumps and compiles the copied image. Runtime validates folded code bytes,
+watches code stores and admits only the supported fixed8KiB MMC1 read
+profile. Changed code or unqualified/banked RAM interprets. Qualified views
+share device deadlines with native ROM execution and retain general bus,
+DMA, interrupt and observer fallbacks. Native saves remain ordinary SRAM.
+
 ### Optional Cross-Bank Function Deduplication
 
 Banked games can opt into a conservative post-processing pass that shares

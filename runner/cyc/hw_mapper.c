@@ -21,6 +21,30 @@
 #include <stdlib.h>
 #include <string.h>
 
+enum { MMC1_CTRL_MIRROR = 3, MMC1_CTRL_PRG_MODE = 0x0C, MMC1_CTRL_CHR_4K = 0x10 };
+
+bool hw_code_cart_watch;
+
+bool hw_cart_code_ram_supported(void)
+{
+    /* Fixed8 KiB SNROM aperture only. Banked SOROM/SXROM/SZROM, extended
+     * submappers and other boards keep the existing interpreter contract. */
+    return hw_cart.mapper == 1 && hw_cart.info.submapper == 0 &&
+           hw_cart.has_wram && hw_cart.wram_len == 8192 && hw_cart.chr_ram &&
+           hw_cart.chr_pages <= 8 && hw_cart.prg_slots <= 64;
+}
+
+bool hw_cart_code_ram_ready(void)
+{
+    if (!hw_cart_code_ram_supported() || !hw_cart.wram_readable || hw_cart.wram_bank)
+        return false;
+    /* Both4 KiB CHR selectors must leave SRAM /CE enabled. Merely checking
+     * the current A12-selected gate is unsafe within a folded instruction. */
+    unsigned chr = hw_cart.m.chr0;
+    if (hw_cart.m.ctrl & MMC1_CTRL_CHR_4K) chr |= hw_cart.m.chr1;
+    return !(hw_cart.m.prg & 16) && !(chr & 16);
+}
+
 /* ------------------------------------------------------------------------- */
 /* Bank tables                                                               */
 /* ------------------------------------------------------------------------- */
@@ -181,8 +205,6 @@ static void gxrom_write(uint8_t value)
  * The chip only accepts one write per two CPU cycles: an RMW instruction's
  * two writes (games use DEC/INC on a ROM address deliberately) count as one.
  * hw.cycles is the CPU cycle counter, DMA cycles included. */
-
-enum { MMC1_CTRL_MIRROR = 3, MMC1_CTRL_PRG_MODE = 0x0C, MMC1_CTRL_CHR_4K = 0x10 };
 
 /* CHR A16/A15/A14 are also CPU memory signals on SxROM. Their source
  * changes with PPU A12 even when /RD is high or rendering is disabled. */
@@ -1067,7 +1089,8 @@ void hw_cart_cpu_write(uint16_t addr, uint8_t value)
         return;
     }
     if (addr >= 0x6000 && addr < 0x8000) {
-        if (hw_cart.has_wram && hw_cart.wram_writable) hw_cart.wram[(hw_cart.wram_bank + (addr & 0x1FFF)) % hw_cart.wram_len] = value;
+        if (hw_cart.has_wram && hw_cart.wram_writable)
+            hw_cart_wram_store((hw_cart.wram_bank + (addr & 0x1FFF)) % hw_cart.wram_len, value);
         return;
     }
     if (addr < 0x8000) return;   /* low-address registers were handled above */

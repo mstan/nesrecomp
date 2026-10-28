@@ -125,6 +125,21 @@ static inline void cpu_write(uint16_t addr, uint8_t value, unsigned f) {
     hw_cycle_finish((f & CYC_DONE) != 0);
 }
 
+/* The RAM-view scheduler owns the physical-byte and stable-read-gate proof.
+ * These accesses still run all device/DMA/interrupt cycles. RAM instruction
+ * bytes must not use ROM data overlays or ROM-only read substitutions. */
+static inline uint8_t cpu_read_code_ram(uint16_t addr, uint8_t value, unsigned f) {
+    if (hw_native_reserve()) {
+        hw_native_bus(addr, value, HW_READ);
+        return value;
+    }
+    hw_cycle_start(addr, HW_READ);
+    if (f & (CYC_POLL | CYC_POLL_BRANCH)) cpu_poll(f);
+    value = hw_read_code_ram(addr, value);
+    hw_cycle_finish((f & CYC_DONE) != 0);
+    return value;
+}
+
 static inline void cpu_trace_instruction(uint16_t pc) {
     cyc_trace_instruction(pc, cpu.a, cpu.x, cpu.y, cpu.s, (uint8_t)(cpu_get_p(0) & 0xCF));
 }
@@ -149,6 +164,18 @@ static inline bool cpu_fetch(uint16_t pc, uint8_t *opcode) {
     hw_cycle_start(pc, HW_FETCH);
     if (cyc_trace_enabled) cpu_trace_instruction(pc);
     *opcode = hw_read(pc);
+    hw_cycle_finish(false);
+    return (cpu.do_nmi | cpu.do_irq | cpu.do_reset) != 0;
+}
+
+static inline bool cpu_fetch_code_ram(uint16_t pc, uint8_t opcode) {
+    if (hw_native_reserve()) {
+        hw_native_bus(pc, opcode, HW_FETCH);
+        return false;
+    }
+    hw_cycle_start(pc, HW_FETCH);
+    if (cyc_trace_enabled) cpu_trace_instruction(pc);
+    hw_read_code_ram(pc, opcode);
     hw_cycle_finish(false);
     return (cpu.do_nmi | cpu.do_irq | cpu.do_reset) != 0;
 }

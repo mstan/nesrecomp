@@ -47,14 +47,17 @@ uint8_t hw_read(uint16_t addr);
 /* A read of a byte the recompiler folded to a constant (NROM PRG ROM): the
  * same bus effects as hw_read() on $8000-$FFFF, without decoding. */
 uint8_t hw_read_rom(uint16_t addr, uint8_t value);
+/* A validated RAM instruction byte, with ordinary cycle/bus publication but
+ * no ROM substitution or cartridge ROM-read observer. */
+uint8_t hw_read_code_ram(uint16_t addr, uint8_t value);
 void    hw_write(uint16_t addr, uint8_t value);
 void    hw_cycle_finish(bool instruction_done);
 
 /* CPU cycles DMAs took inside the most recent bus-cycle start. */
 extern int hw_dma_stalls;
 
-/* A derived cursor scoped to one compiled ROM dispatch. Ordinary RAM and
- * folded ROM accesses may consume credit only after the machine proves a
+/* A derived cursor scoped to one compiled ROM dispatch or qualified SRAM
+ * view. Ordinary RAM and folded code accesses consume credit only after a
  * stable, unobserved interval. All device/general accesses flush first.
  * This cursor is never serialized; dispatch closes it before host callbacks. */
 typedef struct {

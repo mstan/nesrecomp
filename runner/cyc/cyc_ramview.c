@@ -17,6 +17,7 @@ uint8_t cyc_ram_code_dirty;
 enum { RV_UNKNOWN, RV_VALID, RV_INVALID, RV_UNUSABLE };
 
 static bool      prg_ram;          /* the board has the FDS's linear PRG RAM */
+static bool      cart_ram;         /* qualified fixed8 KiB physical SRAM */
 static uint32_t  view_count, usable_count;
 static uint8_t  *state;            /* per view */
 static uint32_t *cand_off, *cand;  /* CSR: views with an instruction start at a physical byte */
@@ -30,6 +31,7 @@ static uint32_t  frame_entries, frame_validated;
 static inline int phys_of(uint16_t a)
 {
     if (a < 0x800) return a;
+    if (cart_ram && a >= 0x6000 && a < 0x8000) return (int)(HW_CODE_PRG_RAM + a - 0x6000u);
     if (prg_ram && a >= 0x6000 && a < 0xE000) return (int)(HW_CODE_PRG_RAM + (a - 0x6000u));
     return -1;
 }
@@ -137,6 +139,8 @@ void cyc_ramview_power_on(void)
     frame_entries = frame_validated = 0;
     cyc_ram_code_dirty = 0;
     prg_ram = hw_cart.mapper == NES_FDS_MAPPER;
+    cart_ram = hw_cart_code_ram_supported();
+    hw_code_cart_watch = false;
     view_count = cyc_native_ram_view_count;
     free(state); free(cand_off); free(cand); free(watch_off); free(watch); free(watch_byte);
     state = NULL; cand_off = cand = watch_off = watch = NULL;
@@ -158,6 +162,7 @@ void cyc_ramview_power_on(void)
         state[i] = view_usable(v) ? RV_UNKNOWN : RV_UNUSABLE;
         if (state[i] == RV_UNUSABLE) continue;
         usable_count++;
+        if (cart_ram && v->entry_count && v->entries[0] >= 0x6000) hw_code_cart_watch = true;
         for (unsigned e = 0; e < v->entry_count; ++e) cand_off[phys_of(v->entries[e]) + 1]++, entries++;
         for (unsigned r = 0; r < v->run_count; ++r)
             for (unsigned k = 0; k < v->runs[2 * r + 1]; ++k)
@@ -206,6 +211,8 @@ static bool matches(const CycRamView *v)
 
 int cyc_ramview_find(uint16_t pc)
 {
+    if (hw_prg_modified && !(cart_ram && pc >= 0x6000 && pc < 0x8000)) return -1;
+    if (cart_ram && pc >= 0x6000 && !hw_cart_code_ram_ready()) return -1;
     int phys = phys_of(pc);
     if (phys < 0 || !cand_off) return -1;
     uint32_t lo = cand_off[phys], hi = cand_off[phys + 1];
@@ -235,7 +242,13 @@ void cyc_ramview_run(int index)
         cyc_ram_code_dirty = 0;
         cyc_ramview_stats.entries++;
         frame_entries++;
+        /* The SRAM view already proved its folded bytes and both read gates.
+         * Share the ROM service's device deadlines; general accesses, mapper
+         * stores and all callbacks commit the cursor before observing state. */
+        bool native_cart = cart_ram && cpu.pc >= 0x6000 && cpu.pc < 0x8000;
+        if (native_cart) hw_native_begin();
         cyc_native_ram_views[index]->fn();
+        if (native_cart) hw_native_end();
         if (cyc_ram_code_dirty) {
             cyc_ramview_stats.code_write_exits++;
             cyc_ring_push(CYC_EV_VIEW_EXIT, cpu.pc, (uint32_t)index);
@@ -380,9 +393,11 @@ void cyc_ramview_interp(uint16_t pc)
     if (!capturing) return;
     int phys = phys_of(pc);
     if (phys < 0 || (pc >= 0x100 && pc < 0x200)) return;
+    if (cart_ram && pc >= 0x6000 && !hw_cart_code_ram_ready()) return;
     uint8_t b[3];
     b[0] = peek(pc);
     uint8_t len = cpu6502_op_length[b[0]];
+    if (!len || len > sizeof(b)) return;
     for (unsigned k = 1; k < len; ++k) b[k] = peek((uint16_t)(pc + k));
     add_insn((unsigned)phys, b, len, 1);
     add_group_pc((unsigned)phys / 1024u, pc, NULL, b, len, 1);

@@ -96,8 +96,9 @@ void cyc_mod_clear_rom_read_overrides(void);
 
 /* Optional trusted content tools. Obtaining writable PRG disables generated
  * ROM dispatch until another image is loaded: generated opcodes/operands and
- * folded NROM data may otherwise disagree with the edited image (also from
- * compiled RAM views). Image files on disk are never changed. */
+ * folded NROM data may otherwise disagree with the edited image. Qualified
+ * SNROM SRAM views remain eligible because they validate physical RAM bytes
+ * and never fold external ROM data. Image files on disk are never changed. */
 uint8_t *cyc_mod_prg_data_rw(size_t *size);
 /* Replace a geometry-preserving PRG+CHR-ROM payload atomically after its
  * package verification. CHR RAM is retained; changed PRG disables native code.

@@ -316,6 +316,14 @@ uint8_t hw_read_rom(uint16_t addr, uint8_t value)
     return value;
 }
 
+uint8_t hw_read_code_ram(uint16_t addr, uint8_t value)
+{
+    hw.data_driven = 1;
+    hw.data_bus = hw.internal_bus = value;
+    if (cyc_trace_enabled) cyc_trace_access(addr, value, false);
+    return value;
+}
+
 void hw_write(uint16_t addr, uint8_t value)
 {
     /* an isolated routine that talks to a device (cyc_mod.h): counted, so a

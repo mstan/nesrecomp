@@ -240,7 +240,7 @@ bool cyc_mod_poke(uint16_t addr, uint8_t value)
         return false;
     }
     if (addr >= 0x6000 && addr < 0x8000 && hw_cart.has_wram && hw_cart.wram_len) {
-        hw_cart.wram[(hw_cart.wram_bank + (addr & 0x1FFF)) % hw_cart.wram_len] = value;
+        hw_cart_wram_store((hw_cart.wram_bank + (addr & 0x1FFF)) % hw_cart.wram_len, value);
         return true;
     }
     return false;
@@ -410,7 +410,7 @@ static bool call_commit(uint16_t routine, CycModRegs *regs, bool hooked)
     for (size_t i = 0; i < cart_len; ++i) {
         if (cart[i] == before_cart_copy[i]) continue;
         if (fds) hw_code_store(&hw_cart.wram[i], (unsigned)(HW_CODE_PRG_RAM + i), cart[i]);
-        else hw_cart.wram[i] = cart[i];
+        else hw_cart_wram_store((unsigned)i, cart[i]);
     }
     cpu.a = out.a;
     cpu.x = out.x;

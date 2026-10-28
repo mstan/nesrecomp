@@ -505,3 +505,12 @@ if(MSVC)
     target_compile_definitions(cyc_ram_policy_test PRIVATE _CRT_SECURE_NO_WARNINGS)
 endif()
 add_test(NAME cyc_ram_policy_test COMMAND cyc_ram_policy_test)
+
+# Declared SNROM copies: byte-validated native SRAM, stable read gates, every
+# alignment, public code writes/commits and current-build snapshot replay.
+add_test(NAME cyc_cart_ramviews_test
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_cyc_cart_ramviews.py
+            --recompiler $<TARGET_FILE:NESRecomp>
+            --out ${CMAKE_CURRENT_BINARY_DIR}/cart_ramviews_test
+            --ppu ${NESRECOMP_PPU_IMPL} ${NESRECOMP_NESTED_BUILD_ARGS})
+set_tests_properties(cyc_cart_ramviews_test PROPERTIES TIMEOUT 900)

@@ -552,6 +552,7 @@ typedef struct {
 
 typedef struct {
     bool       fds;            /* PRG RAM $6000-$DFFF exists */
+    bool       cartridge;      /* captured MMC1 SRAM, runtime-qualified */
     RamImage  *img;
     int        nimg, capimg;
     RamView   *view;
@@ -853,10 +854,15 @@ static bool known_byte(const Emit *e, uint16_t addr, uint8_t *out) {
     return true;
 }
 
+static bool cart_ram_view(const Emit *e) {
+    return e->view && e->ram->cartridge && e->P >= 0x6000 && e->P < 0x8000;
+}
+
 static const char *read_const(Emit *e, uint16_t addr, int f) {
     uint8_t v;
     if (!LIVE(e) && known_byte(e, addr, &v))
-        return str("cpu_read_rom(0x%04X, 0x%02X, %s)", addr, v, flags(f));
+        return str("%s(0x%04X, 0x%02X, %s)",
+                   cart_ram_view(e) ? "cpu_read_code_ram" : "cpu_read_rom", addr, v, flags(f));
     return str("cpu_read(0x%04X, %s)", addr, flags(f));
 }
 
@@ -960,8 +966,9 @@ static unsigned mapper_write_floor(int mapper) {
 }
 
 static WriteReach write_reach(Emit *e, AddrMode am) {
-    /* A RAM view folds no ROM byte, so a bank switch cannot stale it. */
-    if (LIVE(e) || e->view || !e->p->banked) return WR_NEVER;
+    /* CPU/FDS RAM bytes survive ROM bank switches. Cartridge SRAM also has
+     * read gates: its compiled function must yield after mapper writes. */
+    if (LIVE(e) || (e->view && !cart_ram_view(e)) || !e->p->banked) return WR_NEVER;
     unsigned floor = mapper_write_floor(e->p->mapper);
     switch (am) {
     case AM_ZP: case AM_ZPX: case AM_ZPY:
@@ -1387,11 +1394,14 @@ static bool hook_site_here(const Emit *e) {
 static void emit_instruction(Emit *e) {
     const OpDef *d = &OPS[e->opcode];
     out(e, "L_%04X: /* %02X %s%s */\n", e->P, e->opcode, d->name, mode_suffix(d->am));
-    out(e, "    if (hw_frame_done) { cpu.pc = 0x%04X; return; }\n", e->P);
+    if (cart_ram_view(e))
+        out(e, "    if (hw_frame_done | cyc_ram_code_dirty) { cpu.pc = 0x%04X; return; }\n", e->P);
+    else
+        out(e, "    if (hw_frame_done) { cpu.pc = 0x%04X; return; }\n", e->P);
     if (hook_site_here(e))
         out(e, "    if (cyc_hook_stop(0x%04X)) { cpu.pc = 0x%04X; return; }   /* mod hook site */\n", e->P, e->P);
-    out(e, "    if (cpu_fetch_rom(0x%04X, 0x%02X)) { cpu.pc = 0x%04X; cpu_interrupt(false); return; }\n", e->P,
-        e->opcode, e->P);
+    out(e, "    if (%s(0x%04X, 0x%02X)) { cpu.pc = 0x%04X; cpu_interrupt(false); return; }\n",
+        cart_ram_view(e) ? "cpu_fetch_code_ram" : "cpu_fetch_rom", e->P, e->opcode, e->P);
     out(e, "    {\n");
     if (e->live) ln(e, "const uint16_t pc = 0x%04X; uint8_t b1 = 0, b2 = 0; (void)pc; (void)b1; (void)b2;   /* operands vary */", e->P);
     emit_body(e);
@@ -1778,7 +1788,7 @@ static const char *mapper_name(int mapper) {
  * $6000-$DFFF. Mirrors of CPU RAM are other addresses and are interpreted. */
 static bool ram_addr_ok(const RamProgram *r, uint32_t a) {
     if (a < 0x800) return a < 0x100 || a >= 0x200;
-    return r->fds && a >= 0x6000 && a < 0xE000;
+    return a >= 0x6000 && ((r->fds && a < 0xE000) || (r->cartridge && a < 0x8000));
 }
 
 /* Every byte of the instruction in one RAM window, none in the stack page. */
@@ -1829,6 +1839,39 @@ static void ram_add_gseed(RamProgram *r, uint32_t a) {
         r->gseed = (uint16_t *)realloc(r->gseed, sizeof(uint16_t) * r->capgseed);
     }
     r->gseed[r->ngseed++] = (uint16_t)a;
+}
+
+/* Declared copies use the owner's input ROM, not an embedded game payload.
+ * Runtime still validates every folded byte and its physical read profile. */
+static int ram_add_cartridge_images(RamProgram *r, const Program *p, const GameConfig *cfg) {
+    if (!r->cartridge) return 0;
+    int count = 0;
+    for (int i = 0; i < cfg->sram_map_count; ++i) {
+        const SramMap *m = &cfg->sram_maps[i];
+        uint64_t offset = (uint64_t)(unsigned)m->bank * 0x4000u + (m->rom_start & 0x3fffu);
+        if (m->bank < 0 || m->rom_start < 0x8000 || !m->size ||
+            offset + m->size > p->prg_len || m->sram_start < 0x6000 ||
+            (uint32_t)m->sram_start + m->size > 0x8000) {
+            fprintf(stderr, "[cyc] invalid [[sram_map]] %d: fixed cartridge RAM must fit $6000-$7FFF and input PRG\n", i);
+            exit(1);
+        }
+        RamImage *im = ram_add_image(r, m->sram_start, p->rom->prg_data + offset, m->size, false,
+                                    "ROM bank %d $%04X -> SRAM $%04X", m->bank, m->rom_start, m->sram_start);
+        im->seed[0] = 1;
+        ++count;
+    }
+    if (!count) return 0;
+    /* ROM discovery already ran. Direct calls/jumps supply SRAM entry points;
+     * dynamic targets retain the existing capture and seed-file support. */
+    for (uint32_t bank = 0; bank < p->banks; ++bank)
+        for (uint32_t slot = 0; slot < SLOT_COUNT; ++slot)
+            for (uint32_t k = 0; k < SLOT_SIZE; ++k) {
+                if (!p->is_insn[POS_PACK(bank, slot, k)]) continue;
+                const OpDef *op = &OPS[prg_byte(p, bank, k)];
+                if ((op->kind == K_JSR || op->kind == K_JMP) && op->am == AM_ABS)
+                    ram_add_gseed(r, prg_byte(p, bank, k + 1) | (uint32_t)prg_byte(p, bank, k + 2) << 8);
+            }
+    return count;
 }
 
 static void ram_add_variant(RamProgram *r, uint16_t a, const uint8_t *b, uint8_t len) {
@@ -2211,11 +2254,14 @@ static RamProgram *ram_build(const Program *p, const GameConfig *cfg, const CycF
                              int *nrom) {
     RamProgram *r = (RamProgram *)calloc(1, sizeof(RamProgram));
     r->fds = p->mapper == 20;
+    r->cartridge = p->mapper == 1;
     int caprom = 0, disk_files = 0, cap_images = 0, cap_insns = -1, ngroups = 0;
     *rom_seeds = NULL;
     *nrom = 0;
     if (fds && fds->image_path[0]) disk_files = ram_add_fds_images(r, fds->image_path);
     int disk_images = r->nimg;
+    int cartridge_images = ram_add_cartridge_images(r, p, cfg);
+    int source_images = r->nimg;
     RamCapGroup *groups = NULL;
     if (cfg->cycle_capture_file[0]) {
         cap_insns = ram_load_captures(r, cfg->cycle_capture_file, &groups, &ngroups);
@@ -2229,7 +2275,7 @@ static RamProgram *ram_build(const Program *p, const GameConfig *cfg, const CycF
         if (!r->nvar[a]) continue;
         r->var_on_disk[a] = (uint8_t *)calloc(r->nvar[a], 1);
         for (unsigned v = 0; v < r->nvar[a]; ++v)
-            for (int k = 0; k < disk_images && !r->var_on_disk[a][v]; ++k) {
+            for (int k = 0; k < source_images && !r->var_on_disk[a][v]; ++k) {
                 const RamImage *im = &r->img[k];
                 uint32_t off = a - im->base;
                 if (a >= im->base && off + r->var[a][v].len <= im->len && !memcmp(&im->bytes[off], r->var[a][v].b, r->var[a][v].len))
@@ -2243,7 +2289,8 @@ static RamProgram *ram_build(const Program *p, const GameConfig *cfg, const CycF
      * disk file's merge. */
     for (int g = 0; g < ngroups; ++g) {
         RamCapGroup *G = &groups[g];
-        uint32_t end = G->base < 0x800 ? 0x800u : 0xE000u, len = end - G->base < 1026u ? end - G->base : 1026u;
+        uint32_t end = G->base < 0x800 ? 0x800u : r->fds ? 0xE000u : 0x8000u;
+        uint32_t len = end - G->base < 1026u ? end - G->base : 1026u;
         if (!ram_addr_ok(r, G->base)) continue;
         RamImage *im = ram_add_image(r, G->base, G->data, len, true, "capture $%04X #%d", G->base, g);
         for (uint32_t i = 0; i < G->n; ++i) im->seed[G->pcs[i] - G->base] = 1;
@@ -2271,7 +2318,7 @@ static RamProgram *ram_build(const Program *p, const GameConfig *cfg, const CycF
     }
     for (uint32_t a = 0; a < 0x10000; ++a)
         for (unsigned v = 0; v < r->nvar[a]; ++v)
-            for (int k = 0; k < disk_images; ++k)
+            for (int k = 0; k < source_images; ++k)
                 if (ram_image_holds(r, &r->img[k], (uint16_t)a, r->var[a][v].b, r->var[a][v].len))
                     r->img[k].seed[a - r->img[k].base] = 1;
     /* Mod hook sites in RAM are entry points of every disk file that holds the
@@ -2282,7 +2329,7 @@ static RamProgram *ram_build(const Program *p, const GameConfig *cfg, const CycF
         if (!hook_in_ram(p->mapper, a)) continue;
         const ModHookKey *key = hook_key(i);
         int held = 0;
-        for (int k = 0; k < disk_images && key->len; ++k) {
+        for (int k = 0; k < source_images && key->len; ++k) {
             RamImage *im = &r->img[k];
             uint32_t off = (uint32_t)(a - im->base);
             if (a < im->base || off >= im->len || !key_holds(key, &im->bytes[off], im->len - off)) continue;
@@ -2339,7 +2386,11 @@ static RamProgram *ram_build(const Program *p, const GameConfig *cfg, const CycF
     for (uint32_t a = 0; a < 0x10000; ++a) r->code_prefix[a + 1] = r->code_prefix[a] + r->code[a];
     uint32_t instructions = 0;
     for (int i = 0; i < r->nview; ++i) instructions += r->view[i].n;
-    if (r->nimg || cap_insns >= 0)
+    if (cartridge_images)
+        printf("[NESRecomp] RAM code: %d image%s (%d declared ROM-to-SRAM, %d captured snapshots), %u instructions "
+               "discovered, %d views (%u instructions) after merging identical ones\n",
+               r->nimg, r->nimg == 1 ? "" : "s", cartridge_images, cap_images, total, r->nview, instructions);
+    else if (r->nimg || cap_insns >= 0)
         printf("[NESRecomp] RAM code: %d image%s (%d from %d disk file%s, %d captured snapshot%s), %u instructions "
                "discovered, %d views (%u instructions) after merging identical ones\n",
                r->nimg, r->nimg == 1 ? "" : "s", disk_images, disk_files < 0 ? 0 : disk_files, disk_files == 1 ? "" : "s",
