@@ -80,11 +80,46 @@ static void return_observer(void)
           "return observer sees committed hardware");
 }
 
+/* Cross two complete five-step sequences with no writes in between. This
+ * covers the long gap after22371 and the adjacent37281/37282 events. */
+static void apu_five_step_cases(bool reference)
+{
+    access_bus(0x4017, 0xc0, true);
+    access_bus(0x2001, 0x1e, true);
+    for (unsigned i = 0; i < 80000;) {
+        unsigned n = hw_native_interval_limit();
+        if (!n || reference) { access_bus(0, 0, false); ++i; }
+        else {
+            if (n > 80000 - i) n = 80000 - i;
+            unsigned checkpoint = 4096 - i % 4096;
+            if (n > checkpoint) n = checkpoint;
+            hw.cpu_addr = 0; hw.cpu_reading = 1;
+            hw.data_driven = 1; hw.data_bus = hw.internal_bus = hw.ram[0];
+            hw_native_interval_run(n); i += n;
+        }
+        if (i % 4096 == 0)
+            printf("five-step %u %016llx %016llx\n", i,
+                   (unsigned long long)cyc_hw_state_hash(),
+                   (unsigned long long)cyc_mem_state_hash());
+    }
+    printf("five-step %016llx %016llx\n",
+           (unsigned long long)cyc_hw_state_hash(),
+           (unsigned long long)cyc_mem_state_hash());
+}
+
 static void sprite_output_cases(bool reference)
 {
     static const uint8_t positions[] = { 0, 1, 2, 7, 8, 9, 15, 16, 239, 240, 255 };
     static const uint8_t planes[] = { 0, 0xff, 0x80, 0x01, 0xaa, 0x55, 0x81 };
     for (unsigned q = 0; q < 96; ++q) {
+        static const unsigned periods[] = { 0, 1, 2, 7, 8, 23, 127, 2047 };
+        unsigned period = periods[q % 8];
+        access_bus(0x4002, (uint8_t)period, true);
+        access_bus(0x4003, (uint8_t)(0x80 | period >> 8), true);
+        access_bus(0x400a, (uint8_t)period, true);
+        access_bus(0x400b, (uint8_t)(0x80 | period >> 8), true);
+        access_bus(0x400e, (uint8_t)(q & 15), true);
+        access_bus(0x400f, 0x80, true);
         access_bus(0x2001, q % 3 == 0 ? 0x0a : q % 3 == 1 ? 0x14 : 0x1e, true);
         unsigned limit = 0, wait;
         for (wait = 0; wait < 100000; ++wait) {
@@ -121,7 +156,10 @@ static void sprite_output_cases(bool reference)
                (unsigned long long)cyc_hw_state_hash(),
                (unsigned long long)cyc_mem_state_hash());
     }
-    if (!reference) check(ppu_native_sprite_spans > 10, "prepared sprite output exercised");
+    if (!reference) {
+        check(ppu_native_sprite_spans > 10, "prepared sprite output exercised");
+        check(apu_native_event_spans > 10, "APU event spans exercised");
+    }
 }
 
 int main(int argc, char **argv)
@@ -142,7 +180,7 @@ int main(int argc, char **argv)
             check(cyc_load_ines(image, 16u + image[4] * 16384u + image[5] * 8192u), "load fixture");
             check(cyc_set_region(CYC_REGION_NTSC), "region");
             cyc_power_on((uint8_t)align);
-            check(cyc_audio_enable(44100), "audio");
+            check(cyc_audio_enable(align & 1 ? 48000 : 44100), "audio");
             check(cyc_zapper_attach(2), "Zapper");
             cyc_set_zapper(120, 100, true);
             access_bus(0x4017, 0x40, true);
@@ -157,6 +195,7 @@ int main(int argc, char **argv)
             unsigned spans = 0, cycles = 0;
             printf("case mapper=%u align=%u\n", mapper, align);
             sprite_output_cases(reference);
+            apu_five_step_cases(reference);
             if (cursor && !reference) hw_native_begin();
             for (unsigned i = 1; i <= 50000; ++i) {
                 if (cursor) {

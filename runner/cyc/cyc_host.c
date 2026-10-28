@@ -1741,6 +1741,9 @@ session_restart:
     printf("sprite_output_spans: spans=%llu dots=%llu\n",
            (unsigned long long)ppu_native_sprite_spans,
            (unsigned long long)ppu_native_sprite_dots);
+    printf("apu_event_spans: spans=%llu cycles=%llu\n",
+           (unsigned long long)apu_native_event_spans,
+           (unsigned long long)apu_native_event_cycles);
     /* Where the cycles went, so a coverage gap can be acted on: ROM cycles
      * become native by seeding them (cycle_seed_file), RAM code by capturing
      * it (cycle_capture_file) when no compiled view of it exists yet. */

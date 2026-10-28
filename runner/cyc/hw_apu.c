@@ -98,6 +98,7 @@ typedef struct {
 } HwApu;
 
 static HwApu apu;
+uint64_t apu_native_event_spans, apu_native_event_cycles;
 
 static const uint8_t length_table[32] = {
     10, 254, 20, 2, 40, 4, 80, 6, 160, 8, 60, 10, 14, 12, 26, 14,
@@ -753,10 +754,114 @@ bool apu_native_interval_ready(void)
            (apu.irq_inhibit || (apu.five_step && !apu.frame_irq));
 }
 
+#if !NESRECOMP_APU_LEVEL_REFERENCE
+/* Advance a periodic countdown without walking its non-event clocks. A zero
+ * countdown expires on the next clock and reloads period, exactly as above. */
+static unsigned advance_timer(uint16_t *timer, unsigned period, unsigned clocks)
+{
+    if (clocks <= *timer) { *timer = (uint16_t)(*timer - clocks); return 0; }
+    unsigned after = clocks - *timer - 1;
+    *timer = (uint16_t)(period - after % (period + 1));
+    return 1 + after / (period + 1);
+}
+
+static unsigned constant_output_limit(unsigned limit)
+{
+    if (audio.level_dirty || audio.level_dmc != apu.dmc_level ||
+        apu.strobed || apu.shift_delay[0] || apu.shift_delay[1] ||
+        apu.frame_irq_clear || !(apu.reset_delay & 0x80) ||
+        apu.quarter || apu.half || apu.dmc_dma_cooldown ||
+        apu.len[0].reload || apu.len[1].reload || apu.len[2].reload || apu.len[3].reload)
+        return 0;
+    /* Every sequencer event retains the ordinary event-cycle implementation,
+     * including raw IRQ-flag changes when IRQ output is inhibited. */
+    static const unsigned frame_events[] = { 7457, 14913, 22371, 29828, 29829, 29830 };
+    unsigned terminal = apu.five_step ? 37282 : 29830;
+    if (apu.counter >= terminal) return 0;
+    unsigned next = terminal;
+    for (unsigned i = 0; i < (apu.five_step ? 3u : 6u); ++i)
+        if (frame_events[i] > apu.counter) { next = frame_events[i]; break; }
+    if (apu.five_step && next == terminal && apu.counter < 37281) next = 37281;
+    unsigned n = next - apu.counter - 1;
+    if (n < limit) limit = n;
+    /* DMC's output unit still runs after its DMA has stopped. An odd debug
+     * countdown cannot reach zero under subtract2; zero wraps to65536. */
+    if (!(apu.dmc_timer & 1)) {
+        n = (apu.dmc_timer ? apu.dmc_timer : 65536u) - 2 + apu.put;
+        if (n < limit) limit = n;
+    }
+    for (unsigned ch = 0; ch < 2; ++ch) {
+        const Pulse *p = &apu.pulse[ch];
+        if (apu.len[ch].count && p->period >= 8 && sweep_target((int)ch) <= 0x7ff) {
+            n = 2u * p->timer + apu.put;
+            if (n < limit) limit = n;
+        }
+    }
+    if (apu.tri_period >= 2) {
+        uint8_t level = (uint8_t)(apu.tri_step < 16 ? 15 - apu.tri_step : apu.tri_step - 16);
+        if (level != apu.tri_out) return 0;
+        if (apu.len[CH_TRIANGLE].count && apu.tri_linear && apu.tri_timer < limit)
+            limit = apu.tri_timer;
+    }
+    if (apu.len[CH_NOISE].count && apu.noise_timer < limit) limit = apu.noise_timer;
+    /* Stop conservatively before sampling. The remaining loop keeps each
+     * acc+=level and phase+=1.0 operation in the original scalar order. */
+    double room = audio.cycles_per_sample - audio.phase;
+    if (!(room >= 2.0) || room > 2147483647.0) return 0;
+    n = (unsigned)room - 1;
+    return n < limit ? n : limit;
+}
+
+static void constant_output_run(unsigned cycles)
+{
+    unsigned gets = (cycles + 1u - apu.put) / 2u;
+    for (unsigned ch = 0; ch < 2; ++ch) {
+        Pulse *p = &apu.pulse[ch];
+        unsigned steps = advance_timer(&p->timer, p->period, gets);
+        p->step = (uint8_t)((p->step + steps) & 7);
+    }
+    unsigned steps = advance_timer(&apu.tri_timer, apu.tri_period, cycles);
+    if (apu.len[CH_TRIANGLE].count && apu.tri_linear)
+        apu.tri_step = (uint8_t)((apu.tri_step + steps) & 31);
+    unsigned noise = advance_timer(&apu.noise_timer, (uint16_t)(apu.noise_period - 1u), cycles);
+    unsigned tap = (apu.reg[14] & 0x80) ? 6 : 1;
+    while (noise--) {
+        unsigned feedback = (apu.noise_lfsr ^ (apu.noise_lfsr >> tap)) & 1;
+        apu.noise_lfsr = (uint16_t)((apu.noise_lfsr >> 1) | (feedback << 14));
+    }
+    apu.dmc_timer = (uint16_t)(apu.dmc_timer - 2u * gets);
+    apu.counter = (uint16_t)(apu.counter + cycles);
+    apu.len[CH_PULSE1].halt = (apu.reg[0] & 0x20) != 0;
+    apu.len[CH_PULSE2].halt = (apu.reg[4] & 0x20) != 0;
+    apu.len[CH_TRIANGLE].halt = (apu.reg[8] & 0x80) != 0;
+    apu.len[CH_NOISE].halt = (apu.reg[12] & 0x20) != 0;
+    for (unsigned i = 0; i < cycles; ++i) {
+        audio.acc += audio.base_level;
+        audio.phase += 1.0;
+    }
+    audio.count += cycles;
+    apu.put ^= cycles & 1;
+    ++apu_native_event_spans;
+    apu_native_event_cycles += cycles;
+}
+#endif
+
 void apu_native_interval_run(unsigned cycles)
 {
-    /* Keep floating-point mixer/filter accumulation in its original order;
-     * this service owns a run, not an approximation of elapsed audio time. */
+#if !NESRECOMP_APU_LEVEL_REFERENCE
+    /* The machine proved no DMA/IRQ deadline and no expansion device on these
+     * boards. Dense audible timers and short runs keep the simpler executor. */
+    if (cycles >= 8 && audio.on && !apu.strobe &&
+        (hw_cart.mapper == 0 || hw_cart.mapper == 1 || hw_cart.mapper == 4 || hw_cart.mapper == 66) &&
+        !(apu.len[CH_TRIANGLE].count && apu.tri_linear && apu.tri_period >= 2 && apu.tri_period < 8) &&
+        !(apu.len[CH_NOISE].count && apu.noise_period < 8)) {
+        while (cycles >= 4) {
+            unsigned n = constant_output_limit(cycles);
+            if (n >= 4) { constant_output_run(n); cycles -= n; }
+            else { apu_cycle(); --cycles; }
+        }
+    }
+#endif
     while (cycles--) apu_cycle();
 }
 
@@ -886,6 +991,7 @@ void *apu_state_ptr(size_t *size)
 
 void apu_power_on(void)
 {
+    apu_native_event_spans = apu_native_event_cycles = 0;
     audio.level_dirty = 1;
     memset(&apu, 0, sizeof(apu));
     apu.put = 1;
