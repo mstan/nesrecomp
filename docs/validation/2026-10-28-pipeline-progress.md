@@ -287,3 +287,28 @@ the bounded stock workloads, not guaranteed FPS gains or all-feature claims.
 NES02/NES03/NES05 now record stock qualification; enhancement profiles and the
 other opportunities remain open. No owner visual handoff, merge or release
 has occurred.
+
+## Selected sprite-output interval operator (NES01)
+
+Runtime `935033d` prepares current-line sprite pixels and final unit counters
+once per stable interval, replacing per-pixel eight-unit selection/shifting.
+Other fetch, OAM, status, palette, mapper and Zapper events remain scheduled.
+Short spans and active HD recording keep the ordinary raster operator.
+
+Measured incrementally against `021c540`, NAS CPU reductions are SMB1 11.69%,
+SMB3 6.98%, Metroid6.29% and Zelda11.88%, each five faster alternating pairs.
+Gumshoe is mixed/inconclusive on both hosts, including a negative workstation
+median amid very large contention. It is not a proven win or reproducible
+regression; its full negative samples remain. All five games match untraced
+machine/memory/raster/PCM output and cross-host artifacts. Controlled sprite
+overlap/priority/transparency/phase cases pass on all four boards/alignments
+in both HLE and LLE, with current-build replay.
+
+See [sprite measurements](2026-10-28-sprite-span-results.md) and
+[raw records](2026-10-28-sprite-span-results.json), with recorded object/link
+identities. These are incremental results, not percentages to add to v2. The
+same native CPU-generated units are retained in these isolated runtime relinks;
+final production regeneration remains before the human handoff. NES01 still
+has background/fetch/OAM work, and feature profiles remain open. Next selected
+experiment is NES06 constant-output APU event spans. No main/master merge,
+owner handoff or release has occurred.

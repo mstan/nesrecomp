@@ -1,0 +1,965 @@
+{
+  "schema_version": 1,
+  "issue": "beads-2dw.1.110",
+  "campaign": "beads-2wy8.1",
+  "opportunity": "NES01",
+  "runtime_candidate_commit": "935033d63cf1091eaedc7e489db297ffd481d8fd",
+  "runtime_reference_commit": "021c540f1370d6cd0bbf96c1c24c3679379e3752",
+  "package": "native-sprite-output-span-v1-incremental-to-v2",
+  "compiler": "GCC15.2 -O2 -g1 -DNDEBUG HLE",
+  "owner_authorized_concurrent_measurement": true,
+  "source_snapshot": {
+    "parent": "bd9ffbf1544f29db53fdfb00aa214cab73d029ea",
+    "source_sha256": {
+      "runner/cyc/hw_ppu.c": "2eaba394fce6cc3bbd19d4d5351def68629487a30cea3e40604055806b5fd785",
+      "runner/cyc/cyc_host.c": "1667f3f58a886feabb80d2724fe6d98520cc9e9d0e2f24b45ca7c33600d21134",
+      "runner/cyc/hw.h": "5a7e7b756eb2bd76f39cbf960891b8c1544e545374759c4f8c4caa689201d6dd",
+      "runner/cyc/tests/native_interval_probe.c": "4c6340dd1e5134cfe7ac04c50673bd5d8551d6b74a6cedd0bdb21430335e59aa"
+    },
+    "patch_sha256": "b6ad90a4759d0707d08312dbbf9fc4bc4fbd825f010ffd82181d269cb39cf7a4"
+  },
+  "build_method": "Runtime-only relink using the recorded supported CMake/Ninja compile/link recipe; only PPU and diagnostic host objects replaced, all other objects/generated units unchanged. Final production regeneration remains before human handoff.",
+  "batches": [
+    {
+      "title": "smb",
+      "host_label": "nas",
+      "host": "SERVER",
+      "logical_processors": 4,
+      "affinity_mask": 4,
+      "preflight_core_busy": [
+        0.2265625,
+        0.09375,
+        0.0546875,
+        0.1640625
+      ],
+      "first_frame": 361,
+      "end_frame": 1201,
+      "median_cpu_seconds": {
+        "reference": 7.21875,
+        "candidate": 6.375
+      },
+      "raw_median_cpu_reduction_percent": 11.688311688311693,
+      "faster_candidate_pairs": 5,
+      "pairs": [
+        {
+          "pair": 0,
+          "reference_cpu_seconds": 7.234375,
+          "candidate_cpu_seconds": 6.296875,
+          "cpu_reduction_percent": 12.958963282937363,
+          "reference_wall_seconds": 7.4332604999653995,
+          "candidate_wall_seconds": 6.6244312999770045
+        },
+        {
+          "pair": 1,
+          "reference_cpu_seconds": 7.28125,
+          "candidate_cpu_seconds": 6.5625,
+          "cpu_reduction_percent": 9.871244635193133,
+          "reference_wall_seconds": 7.726523800054565,
+          "candidate_wall_seconds": 7.119184700073674
+        },
+        {
+          "pair": 2,
+          "reference_cpu_seconds": 7.15625,
+          "candidate_cpu_seconds": 6.34375,
+          "cpu_reduction_percent": 11.353711790393017,
+          "reference_wall_seconds": 7.327673499938101,
+          "candidate_wall_seconds": 6.49367589992471
+        },
+        {
+          "pair": 3,
+          "reference_cpu_seconds": 7.21875,
+          "candidate_cpu_seconds": 6.375,
+          "cpu_reduction_percent": 11.688311688311693,
+          "reference_wall_seconds": 7.399316800059751,
+          "candidate_wall_seconds": 6.619108000071719
+        },
+        {
+          "pair": 4,
+          "reference_cpu_seconds": 7.21875,
+          "candidate_cpu_seconds": 6.515625,
+          "cpu_reduction_percent": 9.740259740259738,
+          "reference_wall_seconds": 7.450782099971548,
+          "candidate_wall_seconds": 6.781433600001037
+        }
+      ],
+      "classification": "positive",
+      "reason": "All five alternating pairs faster.",
+      "raw_file": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\nas-smb-sprite-v1\\evidence\\performance.json"
+    },
+    {
+      "title": "smb",
+      "host_label": "local",
+      "host": "DESKTOP-HN15M1H",
+      "logical_processors": 16,
+      "affinity_mask": 16384,
+      "preflight_core_busy": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        0.99609375,
+        1.0
+      ],
+      "first_frame": 361,
+      "end_frame": 1201,
+      "median_cpu_seconds": {
+        "reference": 5.625,
+        "candidate": 4.90625
+      },
+      "raw_median_cpu_reduction_percent": 12.777777777777777,
+      "faster_candidate_pairs": 5,
+      "pairs": [
+        {
+          "pair": 0,
+          "reference_cpu_seconds": 5.625,
+          "candidate_cpu_seconds": 4.8125,
+          "cpu_reduction_percent": 14.444444444444448,
+          "reference_wall_seconds": 8.163028999930248,
+          "candidate_wall_seconds": 6.874581799958833
+        },
+        {
+          "pair": 1,
+          "reference_cpu_seconds": 5.28125,
+          "candidate_cpu_seconds": 4.609375,
+          "cpu_reduction_percent": 12.72189349112426,
+          "reference_wall_seconds": 7.005704799899831,
+          "candidate_wall_seconds": 5.642220700043254
+        },
+        {
+          "pair": 2,
+          "reference_cpu_seconds": 5.328125,
+          "candidate_cpu_seconds": 4.90625,
+          "cpu_reduction_percent": 7.917888563049857,
+          "reference_wall_seconds": 6.283833299996331,
+          "candidate_wall_seconds": 7.224445299943909
+        },
+        {
+          "pair": 3,
+          "reference_cpu_seconds": 5.765625,
+          "candidate_cpu_seconds": 5.015625,
+          "cpu_reduction_percent": 13.008130081300816,
+          "reference_wall_seconds": 8.035076800035313,
+          "candidate_wall_seconds": 6.957711199996993
+        },
+        {
+          "pair": 4,
+          "reference_cpu_seconds": 5.859375,
+          "candidate_cpu_seconds": 4.90625,
+          "cpu_reduction_percent": 16.266666666666662,
+          "reference_wall_seconds": 7.930602900101803,
+          "candidate_wall_seconds": 6.608428000006825
+        }
+      ],
+      "classification": "positive",
+      "reason": "All five alternating pairs faster.",
+      "raw_file": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\local-smb-sprite-v1\\evidence\\performance.json"
+    },
+    {
+      "title": "smb3",
+      "host_label": "nas",
+      "host": "SERVER",
+      "logical_processors": 4,
+      "affinity_mask": 8,
+      "preflight_core_busy": [
+        0.21011673151750976,
+        0.30350194552529186,
+        0.1712062256809338,
+        0.16342412451361865
+      ],
+      "first_frame": 2401,
+      "end_frame": 3001,
+      "median_cpu_seconds": {
+        "reference": 4.703125,
+        "candidate": 4.375
+      },
+      "raw_median_cpu_reduction_percent": 6.976744186046513,
+      "faster_candidate_pairs": 5,
+      "pairs": [
+        {
+          "pair": 0,
+          "reference_cpu_seconds": 4.609375,
+          "candidate_cpu_seconds": 4.359375,
+          "cpu_reduction_percent": 5.423728813559325,
+          "reference_wall_seconds": 4.919515700079501,
+          "candidate_wall_seconds": 4.640135100111365
+        },
+        {
+          "pair": 1,
+          "reference_cpu_seconds": 4.703125,
+          "candidate_cpu_seconds": 4.375,
+          "cpu_reduction_percent": 6.976744186046513,
+          "reference_wall_seconds": 4.930687899934128,
+          "candidate_wall_seconds": 4.662075100000948
+        },
+        {
+          "pair": 2,
+          "reference_cpu_seconds": 4.640625,
+          "candidate_cpu_seconds": 4.328125,
+          "cpu_reduction_percent": 6.734006734006737,
+          "reference_wall_seconds": 4.801159900147468,
+          "candidate_wall_seconds": 4.699869100004435
+        },
+        {
+          "pair": 3,
+          "reference_cpu_seconds": 4.8125,
+          "candidate_cpu_seconds": 4.390625,
+          "cpu_reduction_percent": 8.766233766233766,
+          "reference_wall_seconds": 5.497074799844995,
+          "candidate_wall_seconds": 4.746121200034395
+        },
+        {
+          "pair": 4,
+          "reference_cpu_seconds": 4.765625,
+          "candidate_cpu_seconds": 4.40625,
+          "cpu_reduction_percent": 7.540983606557372,
+          "reference_wall_seconds": 5.135557499947026,
+          "candidate_wall_seconds": 4.585109200095758
+        }
+      ],
+      "classification": "positive",
+      "reason": "All five alternating pairs faster.",
+      "raw_file": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\nas-smb3-sprite-v1\\evidence\\performance.json"
+    },
+    {
+      "title": "smb3",
+      "host_label": "local",
+      "host": "DESKTOP-HN15M1H",
+      "logical_processors": 16,
+      "affinity_mask": 2048,
+      "preflight_core_busy": [
+        0.98828125,
+        0.9921875,
+        0.9921875,
+        0.99609375,
+        0.98828125,
+        1.0,
+        0.9921875,
+        0.99609375,
+        0.99609375,
+        0.99609375,
+        0.98828125,
+        0.984375,
+        0.98828125,
+        1.0,
+        0.9921875,
+        0.98828125
+      ],
+      "first_frame": 2401,
+      "end_frame": 3001,
+      "median_cpu_seconds": {
+        "reference": 3.296875,
+        "candidate": 3.25
+      },
+      "raw_median_cpu_reduction_percent": 1.4218009478673022,
+      "faster_candidate_pairs": 2,
+      "pairs": [
+        {
+          "pair": 0,
+          "reference_cpu_seconds": 3.5,
+          "candidate_cpu_seconds": 3.109375,
+          "cpu_reduction_percent": 11.16071428571429,
+          "reference_wall_seconds": 5.246733199921437,
+          "candidate_wall_seconds": 5.060038900002837
+        },
+        {
+          "pair": 1,
+          "reference_cpu_seconds": 3.171875,
+          "candidate_cpu_seconds": 3.25,
+          "cpu_reduction_percent": -2.4630541871921263,
+          "reference_wall_seconds": 4.329472600016743,
+          "candidate_wall_seconds": 4.427823100006208
+        },
+        {
+          "pair": 2,
+          "reference_cpu_seconds": 3.171875,
+          "candidate_cpu_seconds": 3.25,
+          "cpu_reduction_percent": -2.4630541871921263,
+          "reference_wall_seconds": 4.646148500032723,
+          "candidate_wall_seconds": 5.84209789999295
+        },
+        {
+          "pair": 3,
+          "reference_cpu_seconds": 3.40625,
+          "candidate_cpu_seconds": 3.0625,
+          "cpu_reduction_percent": 10.09174311926605,
+          "reference_wall_seconds": 6.056008000043221,
+          "candidate_wall_seconds": 5.988158899941482
+        },
+        {
+          "pair": 4,
+          "reference_cpu_seconds": 3.296875,
+          "candidate_cpu_seconds": 3.359375,
+          "cpu_reduction_percent": -1.8957345971563955,
+          "reference_wall_seconds": 5.163285200018436,
+          "candidate_wall_seconds": 5.189352200017311
+        }
+      ],
+      "classification": "neutral-inconclusive",
+      "reason": "Mixed pairs under changing shared-host contention; raw median retained, neither an unqualified gain nor a reproducible regression.",
+      "raw_file": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\local-smb3-sprite-v1\\evidence\\performance.json"
+    },
+    {
+      "title": "metroid",
+      "host_label": "nas",
+      "host": "SERVER",
+      "logical_processors": 4,
+      "affinity_mask": 8,
+      "preflight_core_busy": [
+        0.61328125,
+        0.34765625,
+        0.29296875,
+        0.24609375
+      ],
+      "first_frame": 1801,
+      "end_frame": 3001,
+      "median_cpu_seconds": {
+        "reference": 9.4375,
+        "candidate": 8.84375
+      },
+      "raw_median_cpu_reduction_percent": 6.29139072847682,
+      "faster_candidate_pairs": 5,
+      "pairs": [
+        {
+          "pair": 0,
+          "reference_cpu_seconds": 9.125,
+          "candidate_cpu_seconds": 8.84375,
+          "cpu_reduction_percent": 3.082191780821919,
+          "reference_wall_seconds": 10.02970389998518,
+          "candidate_wall_seconds": 10.681406799936667
+        },
+        {
+          "pair": 1,
+          "reference_cpu_seconds": 9.484375,
+          "candidate_cpu_seconds": 8.9375,
+          "cpu_reduction_percent": 5.766062602965405,
+          "reference_wall_seconds": 10.140166100114584,
+          "candidate_wall_seconds": 10.43272430007346
+        },
+        {
+          "pair": 2,
+          "reference_cpu_seconds": 9.4375,
+          "candidate_cpu_seconds": 8.875,
+          "cpu_reduction_percent": 5.960264900662249,
+          "reference_wall_seconds": 9.812906499952078,
+          "candidate_wall_seconds": 9.279704899992794
+        },
+        {
+          "pair": 3,
+          "reference_cpu_seconds": 9.515625,
+          "candidate_cpu_seconds": 8.828125,
+          "cpu_reduction_percent": 7.224958949096882,
+          "reference_wall_seconds": 9.89305069996044,
+          "candidate_wall_seconds": 9.40459269983694
+        },
+        {
+          "pair": 4,
+          "reference_cpu_seconds": 9.28125,
+          "candidate_cpu_seconds": 8.8125,
+          "cpu_reduction_percent": 5.05050505050505,
+          "reference_wall_seconds": 9.9190923999995,
+          "candidate_wall_seconds": 9.332214799942449
+        }
+      ],
+      "classification": "positive",
+      "reason": "All five alternating pairs faster.",
+      "raw_file": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\nas-metroid-sprite-v1\\evidence\\performance.json"
+    },
+    {
+      "title": "metroid",
+      "host_label": "local",
+      "host": "DESKTOP-HN15M1H",
+      "logical_processors": 16,
+      "affinity_mask": 2048,
+      "preflight_core_busy": [
+        0.9921875,
+        1.0,
+        0.99609375,
+        1.0,
+        1.0,
+        1.0,
+        0.99609375,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        0.98828125,
+        1.0,
+        1.0,
+        0.99609375,
+        0.9921875
+      ],
+      "first_frame": 1801,
+      "end_frame": 3001,
+      "median_cpu_seconds": {
+        "reference": 6.421875,
+        "candidate": 6.015625
+      },
+      "raw_median_cpu_reduction_percent": 6.3260340632603445,
+      "faster_candidate_pairs": 4,
+      "pairs": [
+        {
+          "pair": 0,
+          "reference_cpu_seconds": 6.5625,
+          "candidate_cpu_seconds": 6.015625,
+          "cpu_reduction_percent": 8.333333333333337,
+          "reference_wall_seconds": 7.61718679999467,
+          "candidate_wall_seconds": 7.67777519999072
+        },
+        {
+          "pair": 1,
+          "reference_cpu_seconds": 6.421875,
+          "candidate_cpu_seconds": 6.328125,
+          "cpu_reduction_percent": 1.4598540145985384,
+          "reference_wall_seconds": 8.328838299959898,
+          "candidate_wall_seconds": 8.644011400057934
+        },
+        {
+          "pair": 2,
+          "reference_cpu_seconds": 6.609375,
+          "candidate_cpu_seconds": 6.203125,
+          "cpu_reduction_percent": 6.14657210401891,
+          "reference_wall_seconds": 8.26435459998902,
+          "candidate_wall_seconds": 7.189218500046991
+        },
+        {
+          "pair": 3,
+          "reference_cpu_seconds": 5.15625,
+          "candidate_cpu_seconds": 5.796875,
+          "cpu_reduction_percent": -12.424242424242426,
+          "reference_wall_seconds": 5.669129699934274,
+          "candidate_wall_seconds": 6.849296700092964
+        },
+        {
+          "pair": 4,
+          "reference_cpu_seconds": 5.421875,
+          "candidate_cpu_seconds": 4.625,
+          "cpu_reduction_percent": 14.69740634005764,
+          "reference_wall_seconds": 5.795637700008228,
+          "candidate_wall_seconds": 5.119760899920948
+        }
+      ],
+      "classification": "neutral-inconclusive",
+      "reason": "Mixed pairs under changing shared-host contention; raw median retained, neither an unqualified gain nor a reproducible regression.",
+      "raw_file": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\local-metroid-sprite-v1\\evidence\\performance.json"
+    },
+    {
+      "title": "zelda",
+      "host_label": "nas",
+      "host": "SERVER",
+      "logical_processors": 4,
+      "affinity_mask": 8,
+      "preflight_core_busy": [
+        0.30078125,
+        0.234375,
+        0.2578125,
+        0.19140625
+      ],
+      "first_frame": 1801,
+      "end_frame": 3001,
+      "median_cpu_seconds": {
+        "reference": 11.3125,
+        "candidate": 9.96875
+      },
+      "raw_median_cpu_reduction_percent": 11.878453038674031,
+      "faster_candidate_pairs": 5,
+      "pairs": [
+        {
+          "pair": 0,
+          "reference_cpu_seconds": 11.359375,
+          "candidate_cpu_seconds": 10.03125,
+          "cpu_reduction_percent": 11.691884456671254,
+          "reference_wall_seconds": 12.463646800024435,
+          "candidate_wall_seconds": 10.51838029990904
+        },
+        {
+          "pair": 1,
+          "reference_cpu_seconds": 11.296875,
+          "candidate_cpu_seconds": 9.921875,
+          "cpu_reduction_percent": 12.171507607192256,
+          "reference_wall_seconds": 11.649779099971056,
+          "candidate_wall_seconds": 10.556937499903142
+        },
+        {
+          "pair": 2,
+          "reference_cpu_seconds": 11.234375,
+          "candidate_cpu_seconds": 9.96875,
+          "cpu_reduction_percent": 11.265646731571632,
+          "reference_wall_seconds": 11.925811500055715,
+          "candidate_wall_seconds": 10.266801299992949
+        },
+        {
+          "pair": 3,
+          "reference_cpu_seconds": 11.3125,
+          "candidate_cpu_seconds": 9.921875,
+          "cpu_reduction_percent": 12.29281767955801,
+          "reference_wall_seconds": 11.624306699959561,
+          "candidate_wall_seconds": 10.532344700070098
+        },
+        {
+          "pair": 4,
+          "reference_cpu_seconds": 11.4375,
+          "candidate_cpu_seconds": 10.125,
+          "cpu_reduction_percent": 11.475409836065575,
+          "reference_wall_seconds": 12.516915100160986,
+          "candidate_wall_seconds": 10.474866900127381
+        }
+      ],
+      "classification": "positive",
+      "reason": "All five alternating pairs faster.",
+      "raw_file": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\nas-zelda-sprite-v1\\evidence\\performance.json"
+    },
+    {
+      "title": "zelda",
+      "host_label": "local",
+      "host": "DESKTOP-HN15M1H",
+      "logical_processors": 16,
+      "affinity_mask": 1,
+      "preflight_core_busy": [
+        0.55859375,
+        0.68359375,
+        0.8046875,
+        0.81640625,
+        0.765625,
+        0.8203125,
+        0.75,
+        0.73046875,
+        0.828125,
+        0.87890625,
+        0.71875,
+        0.765625,
+        0.5703125,
+        0.63671875,
+        0.61328125,
+        1.0
+      ],
+      "first_frame": 1801,
+      "end_frame": 3001,
+      "median_cpu_seconds": {
+        "reference": 7.578125,
+        "candidate": 5.875
+      },
+      "raw_median_cpu_reduction_percent": 22.47422680412371,
+      "faster_candidate_pairs": 5,
+      "pairs": [
+        {
+          "pair": 0,
+          "reference_cpu_seconds": 7.609375,
+          "candidate_cpu_seconds": 6.4375,
+          "cpu_reduction_percent": 15.400410677618071,
+          "reference_wall_seconds": 18.444157700054348,
+          "candidate_wall_seconds": 12.054217400029302
+        },
+        {
+          "pair": 1,
+          "reference_cpu_seconds": 7.6875,
+          "candidate_cpu_seconds": 6.375,
+          "cpu_reduction_percent": 17.07317073170732,
+          "reference_wall_seconds": 15.967604699893855,
+          "candidate_wall_seconds": 12.222054699901491
+        },
+        {
+          "pair": 2,
+          "reference_cpu_seconds": 7.578125,
+          "candidate_cpu_seconds": 5.828125,
+          "cpu_reduction_percent": 23.092783505154635,
+          "reference_wall_seconds": 15.46293749997858,
+          "candidate_wall_seconds": 7.804287199978717
+        },
+        {
+          "pair": 3,
+          "reference_cpu_seconds": 6.640625,
+          "candidate_cpu_seconds": 5.875,
+          "cpu_reduction_percent": 11.529411764705877,
+          "reference_wall_seconds": 9.296328899916261,
+          "candidate_wall_seconds": 8.587543100002222
+        },
+        {
+          "pair": 4,
+          "reference_cpu_seconds": 6.40625,
+          "candidate_cpu_seconds": 5.40625,
+          "cpu_reduction_percent": 15.609756097560979,
+          "reference_wall_seconds": 9.38881529995706,
+          "candidate_wall_seconds": 8.668017599964514
+        }
+      ],
+      "classification": "positive",
+      "reason": "All five alternating pairs faster.",
+      "raw_file": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\local-zelda-sprite-v1\\evidence\\performance.json"
+    },
+    {
+      "title": "gumshoe",
+      "host_label": "nas",
+      "host": "SERVER",
+      "logical_processors": 4,
+      "affinity_mask": 1,
+      "preflight_core_busy": [
+        0.11328125,
+        0.5291828793774319,
+        0.6031128404669261,
+        0.17898832684824906
+      ],
+      "first_frame": 601,
+      "end_frame": 1201,
+      "median_cpu_seconds": {
+        "reference": 4.265625,
+        "candidate": 4.03125
+      },
+      "raw_median_cpu_reduction_percent": 5.494505494505497,
+      "faster_candidate_pairs": 4,
+      "pairs": [
+        {
+          "pair": 0,
+          "reference_cpu_seconds": 4.25,
+          "candidate_cpu_seconds": 4.0,
+          "cpu_reduction_percent": 5.882352941176472,
+          "reference_wall_seconds": 5.156512300018221,
+          "candidate_wall_seconds": 4.435011700028554
+        },
+        {
+          "pair": 1,
+          "reference_cpu_seconds": 4.34375,
+          "candidate_cpu_seconds": 4.265625,
+          "cpu_reduction_percent": 1.7985611510791366,
+          "reference_wall_seconds": 5.702784799970686,
+          "candidate_wall_seconds": 5.119326299987733
+        },
+        {
+          "pair": 2,
+          "reference_cpu_seconds": 4.265625,
+          "candidate_cpu_seconds": 3.953125,
+          "cpu_reduction_percent": 7.326007326007322,
+          "reference_wall_seconds": 5.181687400210649,
+          "candidate_wall_seconds": 4.358981200028211
+        },
+        {
+          "pair": 3,
+          "reference_cpu_seconds": 4.171875,
+          "candidate_cpu_seconds": 4.25,
+          "cpu_reduction_percent": -1.8726591760299671,
+          "reference_wall_seconds": 4.490849800175056,
+          "candidate_wall_seconds": 5.17283029993996
+        },
+        {
+          "pair": 4,
+          "reference_cpu_seconds": 4.296875,
+          "candidate_cpu_seconds": 4.03125,
+          "cpu_reduction_percent": 6.181818181818177,
+          "reference_wall_seconds": 5.120399100007489,
+          "candidate_wall_seconds": 4.352119999937713
+        }
+      ],
+      "classification": "neutral-inconclusive",
+      "reason": "Mixed pairs under changing shared-host contention; raw median retained, neither an unqualified gain nor a reproducible regression.",
+      "raw_file": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\nas-gumshoe-sprite-v1\\evidence\\performance.json"
+    },
+    {
+      "title": "gumshoe",
+      "host_label": "local",
+      "host": "DESKTOP-HN15M1H",
+      "logical_processors": 16,
+      "affinity_mask": 2,
+      "preflight_core_busy": [
+        0.52734375,
+        0.4921875,
+        0.80078125,
+        0.74609375,
+        0.66796875,
+        0.77734375,
+        0.65234375,
+        0.6640625,
+        0.7265625,
+        0.7578125,
+        0.640625,
+        0.5836575875486381,
+        0.515625,
+        0.5546875,
+        0.671875,
+        1.0
+      ],
+      "first_frame": 601,
+      "end_frame": 1201,
+      "median_cpu_seconds": {
+        "reference": 2.203125,
+        "candidate": 2.40625
+      },
+      "raw_median_cpu_reduction_percent": -9.219858156028371,
+      "faster_candidate_pairs": 3,
+      "pairs": [
+        {
+          "pair": 0,
+          "reference_cpu_seconds": 2.0,
+          "candidate_cpu_seconds": 1.96875,
+          "cpu_reduction_percent": 1.5625,
+          "reference_wall_seconds": 2.6717713000252843,
+          "candidate_wall_seconds": 2.4839884000830352
+        },
+        {
+          "pair": 1,
+          "reference_cpu_seconds": 2.0,
+          "candidate_cpu_seconds": 1.78125,
+          "cpu_reduction_percent": 10.9375,
+          "reference_wall_seconds": 2.7318186999764293,
+          "candidate_wall_seconds": 2.5461162999272346
+        },
+        {
+          "pair": 2,
+          "reference_cpu_seconds": 2.203125,
+          "candidate_cpu_seconds": 2.71875,
+          "cpu_reduction_percent": -23.404255319148938,
+          "reference_wall_seconds": 3.452464299974963,
+          "candidate_wall_seconds": 8.268230799934827
+        },
+        {
+          "pair": 3,
+          "reference_cpu_seconds": 2.734375,
+          "candidate_cpu_seconds": 2.96875,
+          "cpu_reduction_percent": -8.571428571428562,
+          "reference_wall_seconds": 7.454485800000839,
+          "candidate_wall_seconds": 11.608703800011426
+        },
+        {
+          "pair": 4,
+          "reference_cpu_seconds": 2.515625,
+          "candidate_cpu_seconds": 2.40625,
+          "cpu_reduction_percent": 4.347826086956519,
+          "reference_wall_seconds": 4.573685699957423,
+          "candidate_wall_seconds": 4.955278699984774
+        }
+      ],
+      "classification": "neutral-inconclusive",
+      "reason": "Mixed pairs under changing shared-host contention; raw median retained, neither an unqualified gain nor a reproducible regression. Candidate wall legs range2.48..11.61s with CPU1.78..2.97s; median-9.22% is inside this large variation. Three pairs faster/two slower; do not hide negative samples.",
+      "raw_file": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\local-gumshoe-sprite-v1\\evidence\\performance.json"
+    }
+  ],
+  "correctness": {
+    "smb": {
+      "status": "pass",
+      "untraced": true,
+      "cross_host_identical": true,
+      "hosts": {
+        "nas": {
+          "status": "pass",
+          "hashes": {
+            "audio.wav": "ee79cf07fe6b2548d3c87a491e58e7007abea7b5f71a685e7f1cf4280d131b1c",
+            "final.png": "21eef6a153b9edfd252ec68c25846c86fb8327d021771a0fa99a2b3da3b0f084",
+            "frames.bin": "a27af7ae2bc79000ef48b3afe5924f05674aef15f28fe883d28a84d8ee044b39",
+            "hardware.txt": "d5a777885ef65890785aa1376032d66fca864796472862850cd8806c618e62fe",
+            "memory.txt": "f6c9e8b2ebd38fde7e114bd51172832af169c34635313d9b6447bf22cf48072d"
+          },
+          "sprite_output_spans": 735785,
+          "sprite_output_dots": 77583612,
+          "binary_sha256": {
+            "reference": "80710ea7c74cd81eda87c7e894966dba92528dbd43c7be459259efb066a3f852",
+            "candidate": "6df67980ea49556de9a778f14d91752eee2d81f01d43a698fde1c9cb806c4d8f"
+          }
+        },
+        "local": {
+          "status": "pass",
+          "hashes": {
+            "audio.wav": "ee79cf07fe6b2548d3c87a491e58e7007abea7b5f71a685e7f1cf4280d131b1c",
+            "final.png": "21eef6a153b9edfd252ec68c25846c86fb8327d021771a0fa99a2b3da3b0f084",
+            "frames.bin": "a27af7ae2bc79000ef48b3afe5924f05674aef15f28fe883d28a84d8ee044b39",
+            "hardware.txt": "d5a777885ef65890785aa1376032d66fca864796472862850cd8806c618e62fe",
+            "memory.txt": "f6c9e8b2ebd38fde7e114bd51172832af169c34635313d9b6447bf22cf48072d"
+          },
+          "sprite_output_spans": 735785,
+          "sprite_output_dots": 77583612,
+          "binary_sha256": {
+            "reference": "80710ea7c74cd81eda87c7e894966dba92528dbd43c7be459259efb066a3f852",
+            "candidate": "6df67980ea49556de9a778f14d91752eee2d81f01d43a698fde1c9cb806c4d8f"
+          }
+        }
+      }
+    },
+    "smb3": {
+      "status": "pass",
+      "untraced": true,
+      "cross_host_identical": true,
+      "hosts": {
+        "nas": {
+          "status": "pass",
+          "hashes": {
+            "audio.wav": "70d145e7720aca4db4be7b926ef8ab51a9eff881177c696fa5eed34c91c268de",
+            "final.png": "288019d61d35c73d5efff0c6b58a872588da30b1882fa39bd62f0aa63a5528a7",
+            "frames.bin": "f3eb7b64060c89724d9daa57d87cb839168dc0e4b39d6f3bf8a7c218849158c8",
+            "hardware.txt": "5834a68e6586ff9f993062e43904d05d3748fbb7e11af16b86d61daeaf4ec118",
+            "memory.txt": "f597b266336243293265792aca7386dcc13ef551a5174a26fb664b65030074b2"
+          },
+          "sprite_output_spans": 859795,
+          "sprite_output_dots": 145599558,
+          "binary_sha256": {
+            "reference": "48701d782cd0c83bb409ef705bc20daef48a8363f66f037673501ac2c654005c",
+            "candidate": "5da5150b98498f4272eb17277ed69b84526c287694bf2ffca60e1460723b6e9b"
+          }
+        },
+        "local": {
+          "status": "pass",
+          "hashes": {
+            "audio.wav": "70d145e7720aca4db4be7b926ef8ab51a9eff881177c696fa5eed34c91c268de",
+            "final.png": "288019d61d35c73d5efff0c6b58a872588da30b1882fa39bd62f0aa63a5528a7",
+            "frames.bin": "f3eb7b64060c89724d9daa57d87cb839168dc0e4b39d6f3bf8a7c218849158c8",
+            "hardware.txt": "5834a68e6586ff9f993062e43904d05d3748fbb7e11af16b86d61daeaf4ec118",
+            "memory.txt": "f597b266336243293265792aca7386dcc13ef551a5174a26fb664b65030074b2"
+          },
+          "sprite_output_spans": 859795,
+          "sprite_output_dots": 145599558,
+          "binary_sha256": {
+            "reference": "48701d782cd0c83bb409ef705bc20daef48a8363f66f037673501ac2c654005c",
+            "candidate": "5da5150b98498f4272eb17277ed69b84526c287694bf2ffca60e1460723b6e9b"
+          }
+        }
+      }
+    },
+    "metroid": {
+      "status": "pass",
+      "untraced": true,
+      "cross_host_identical": true,
+      "hosts": {
+        "nas": {
+          "status": "pass",
+          "hashes": {
+            "audio.wav": "5a194be5031b23943ac57e7d2edf4b26f5a56161fb4e0c77f81aa314165c774c",
+            "final.png": "8ecd3fd0ab3b0795f04c3207ce493d21be670705db54d8cdecffdde605c122af",
+            "frames.bin": "8eb5f8be5d71b3792b9eb68836b588b1dafb19ef165336c18333ccce054a1df6",
+            "hardware.txt": "7b8d0332d5f259ce2e5a9fd6be8eef05e922c486d6b9e7a610fd29e4f996ec1b",
+            "memory.txt": "3a9b3f6dbe6e23ef425e191ad13dd6957b62f8c8b38628b27df213cd7a4a897a"
+          },
+          "sprite_output_spans": 1396823,
+          "sprite_output_dots": 163561947,
+          "binary_sha256": {
+            "reference": "fb330eb578d42e42ca39b2468928b280046eab9e6ad042d82867267b841af24b",
+            "candidate": "bd519804e7dfa68a3b04fde2c4f7ac5d6d9660f62965d344b64ed87818889e19"
+          }
+        },
+        "local": {
+          "status": "pass",
+          "hashes": {
+            "audio.wav": "5a194be5031b23943ac57e7d2edf4b26f5a56161fb4e0c77f81aa314165c774c",
+            "final.png": "8ecd3fd0ab3b0795f04c3207ce493d21be670705db54d8cdecffdde605c122af",
+            "frames.bin": "8eb5f8be5d71b3792b9eb68836b588b1dafb19ef165336c18333ccce054a1df6",
+            "hardware.txt": "7b8d0332d5f259ce2e5a9fd6be8eef05e922c486d6b9e7a610fd29e4f996ec1b",
+            "memory.txt": "3a9b3f6dbe6e23ef425e191ad13dd6957b62f8c8b38628b27df213cd7a4a897a"
+          },
+          "sprite_output_spans": 1396823,
+          "sprite_output_dots": 163561947,
+          "binary_sha256": {
+            "reference": "fb330eb578d42e42ca39b2468928b280046eab9e6ad042d82867267b841af24b",
+            "candidate": "bd519804e7dfa68a3b04fde2c4f7ac5d6d9660f62965d344b64ed87818889e19"
+          }
+        }
+      }
+    },
+    "zelda": {
+      "status": "pass",
+      "untraced": true,
+      "cross_host_identical": true,
+      "hosts": {
+        "nas": {
+          "status": "pass",
+          "hashes": {
+            "audio.wav": "b5c616b84dd092fcb96dcb69b15e8d37913c76592ebf8f3d6e2c796e0d58271d",
+            "final.png": "a9c4c485cfda300739881e4d97822d23871a65ad3fc599dc3d02201e016f98e4",
+            "frames.bin": "5c639386ba1de1005b800a2102c349e80557f0ee1211b8d587c147daceb1385a",
+            "hardware.txt": "3a80624aff39f84a8924db4098904d6daab0f1b5551e9f968bdb109437a198e2",
+            "memory.txt": "1a2fda3b8447d07df73e81f10b623c37b7c67aa14730ffe19e100d1d94cd19c5"
+          },
+          "sprite_output_spans": 800458,
+          "sprite_output_dots": 150434292,
+          "binary_sha256": {
+            "reference": "51f0d1070f8dda2612b4a504094cc4556723335931a0963fced6a071f051b404",
+            "candidate": "8e16c798d135c24ab7b8bbad57d719386d0ef961a7d481dfb16809ac71652e9c"
+          }
+        },
+        "local": {
+          "status": "pass",
+          "hashes": {
+            "audio.wav": "b5c616b84dd092fcb96dcb69b15e8d37913c76592ebf8f3d6e2c796e0d58271d",
+            "final.png": "a9c4c485cfda300739881e4d97822d23871a65ad3fc599dc3d02201e016f98e4",
+            "frames.bin": "5c639386ba1de1005b800a2102c349e80557f0ee1211b8d587c147daceb1385a",
+            "hardware.txt": "3a80624aff39f84a8924db4098904d6daab0f1b5551e9f968bdb109437a198e2",
+            "memory.txt": "1a2fda3b8447d07df73e81f10b623c37b7c67aa14730ffe19e100d1d94cd19c5"
+          },
+          "sprite_output_spans": 800458,
+          "sprite_output_dots": 150434292,
+          "binary_sha256": {
+            "reference": "51f0d1070f8dda2612b4a504094cc4556723335931a0963fced6a071f051b404",
+            "candidate": "8e16c798d135c24ab7b8bbad57d719386d0ef961a7d481dfb16809ac71652e9c"
+          }
+        }
+      }
+    },
+    "gumshoe": {
+      "status": "pass",
+      "untraced": true,
+      "cross_host_identical": true,
+      "hosts": {
+        "nas": {
+          "status": "pass",
+          "hashes": {
+            "audio.wav": "a633241ff467162a0398e46c0dd60bdfb3a1686e8727dbfac99cf5df5c47b03d",
+            "final.png": "4767ea2e534326eb1cb0c8b97500c9b5f8100afbfd4f5d6511a521ed96a3a623",
+            "frames.bin": "b84f4ac144784d2b20568b74901e4aa5ab6cb520d062e100a99f2c698d2d9163",
+            "hardware.txt": "10d24fc77c0c3656f69772c58ff73ea88f2cae3da3cf2f58e9fdd32d1553dd29",
+            "memory.txt": "be0a42075f362f61abb3e9f613d8115ae7948dfd768627de24d6240cc3d1cc2a"
+          },
+          "sprite_output_spans": 925425,
+          "sprite_output_dots": 97741185,
+          "binary_sha256": {
+            "reference": "24aa3361e1468aedb82c0e1527b15b3927b5cce64579e6357d09cdab34ccadc9",
+            "candidate": "1b82dca6b0b04cf2791155d3e18d16ef5bf2de6fb7be950dd8ea4f6237cde025"
+          }
+        },
+        "local": {
+          "status": "pass",
+          "hashes": {
+            "audio.wav": "a633241ff467162a0398e46c0dd60bdfb3a1686e8727dbfac99cf5df5c47b03d",
+            "final.png": "4767ea2e534326eb1cb0c8b97500c9b5f8100afbfd4f5d6511a521ed96a3a623",
+            "frames.bin": "b84f4ac144784d2b20568b74901e4aa5ab6cb520d062e100a99f2c698d2d9163",
+            "hardware.txt": "10d24fc77c0c3656f69772c58ff73ea88f2cae3da3cf2f58e9fdd32d1553dd29",
+            "memory.txt": "be0a42075f362f61abb3e9f613d8115ae7948dfd768627de24d6240cc3d1cc2a"
+          },
+          "sprite_output_spans": 925425,
+          "sprite_output_dots": 97741185,
+          "binary_sha256": {
+            "reference": "24aa3361e1468aedb82c0e1527b15b3927b5cce64579e6357d09cdab34ccadc9",
+            "candidate": "1b82dca6b0b04cf2791155d3e18d16ef5bf2de6fb7be950dd8ea4f6237cde025"
+          }
+        }
+      }
+    }
+  },
+  "archives": {
+    "smb": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\nas-smb-evidence-sprite-v1.zip",
+      "sha256": "84e443e215bcc0724dff9ec12241d52f313c4e56866ee2f2beb8fb56dfd6891f"
+    },
+    "smb3": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\nas-smb3-evidence-sprite-v1.zip",
+      "sha256": "77f705c95911c05b60e3361d34f651f1199ca17e13c41949eb14f3dac3eb99c1"
+    },
+    "metroid": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\nas-metroid-evidence-sprite-v1.zip",
+      "sha256": "a1c816153cae73d8eeec6ec55f312cba9cf2173dcf88563df838887ab2556d1c"
+    },
+    "zelda": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\nas-zelda-evidence-sprite-v1.zip",
+      "sha256": "24689f7dfb4c41422e911fe9475011f27c3035f4cb5db521bdeb0233def988ac"
+    },
+    "gumshoe": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\nas-gumshoe-evidence-sprite-v1.zip",
+      "sha256": "2a4b2afd76b6476ab295e5e3069c64967182d57d5adef4cdf0cfc8a84a3a0480"
+    }
+  },
+  "earlier_results": "2026-10-28-board-deadline-results.json",
+  "scope_remaining": "NES01 background/fetch/OAM work and feature profiles remain; this selects the sprite-output stage, not a complete raster rewrite. Other burndown items remain open; FDS parked. No merge/release."
+}

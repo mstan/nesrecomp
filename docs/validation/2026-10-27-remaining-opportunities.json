@@ -40,7 +40,7 @@
       "required_behavior": "Correct pixels/opacity, sprite-zero and overflow publication, register effects, mapper address/IRQ events, Zapper light and current-build continuation. LLE remains a separate working reference.",
       "prior_issue": null,
       "measured_additional_gain": null,
-      "execution_status": "independent-service-infrastructure-present-full-algorithm-open"
+      "execution_status": "selected-sprite-output-stock-qualified-full-raster-and-features-open"
     },
     {
       "id": "NES02",
