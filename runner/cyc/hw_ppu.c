@@ -35,12 +35,14 @@
 #endif
 #ifdef NESRECOMP_CYCLE_HDPACK
 #include "cyc_hdpack.h"
+#include "hdpack.h"
 #endif
 
 #include <stdio.h>
 #include <string.h>
 
 HwPpu    ppu;
+uint64_t ppu_native_sprite_spans, ppu_native_sprite_dots;
 const char *cyc_ppu_implementation(void) { return NESRECOMP_PPU_HLE ? "HLE" : "LLE"; }
 static CycModPpuWriteHook content_write_hook;
 void cyc_mod_set_ppu_write_hook(CycModPpuWriteHook hook) { content_write_hook = hook; }
@@ -1270,7 +1272,7 @@ static bool render_span_ready(void)
              ppu.vset | ppu.vblank_pending) && ppu.vset_latch1;
 }
 
-static void render_span_dot(void)
+static inline void render_span_prefix(void)
 {
     ++ppu.dot;
     if (hw_zapper.port) ++hw_zapper.dots;
@@ -1297,6 +1299,11 @@ static void render_span_dot(void)
     ppu.color[2] = ppu.color[1];
     ppu.color[1] = ppu.color[0];
     bg_fetch();
+}
+
+static void render_span_dot(void)
+{
+    render_span_prefix();
     compute_pixel();
     shift_sprites();
     output_pixel();
@@ -1418,9 +1425,136 @@ unsigned ppu_native_interval_limit(void)
     return 0;
 }
 
+#if NESRECOMP_PPU_HLE || !NESRECOMP_PPU_LLE_REFERENCE
+typedef struct {
+    uint8_t pixel[240]; /* zero, or the highest-priority slot * 4 + color */
+    uint8_t x[8], lo[8], hi[8];
+} SpriteOutputSpan;
+
+/* No current-line output unit reloads before dot257. Decode each unit's
+ * at-most-eight pixels once, resolve slot priority, and advance its counters
+ * once for this unobserved interval. OAM evaluation still owns the next line. */
+static void prepare_sprite_output(SpriteOutputSpan *s, unsigned dots)
+{
+    memset(s->pixel, 0, dots);
+    for (int i = 7; i >= 0; --i) {
+        unsigned x = ppu.spr_x[i], lo = ppu.spr_lo[i], hi = ppu.spr_hi[i];
+        unsigned shifts = dots > x ? dots - x : 0;
+        if (ppu.show_spr && shifts && (lo | hi)) {
+            unsigned count = shifts < 8 ? shifts : 8;
+            for (unsigned j = 0; j < count; ++j) {
+                unsigned color = ((lo >> (7 - j)) & 1) | (((hi >> (7 - j)) & 1) << 1);
+                if (color) s->pixel[x + j] = (uint8_t)(i * 4 + color);
+            }
+        }
+        s->x[i] = (uint8_t)(x > dots ? x - dots : 0);
+        s->lo[i] = shifts >= 8 ? 0 : (uint8_t)(lo << shifts);
+        s->hi[i] = shifts >= 8 ? 0 : (uint8_t)(hi << shifts);
+    }
+}
+
+/* The stable interior has no clipping edge, palette corruption or blanking.
+ * Background fetch/shift, status publication and output retain their event
+ * schedule; only current-sprite selection comes from the interval product.
+ * Active HD recording uses the ordinary raster executor and its metadata. */
+static void render_prepared_sprite_dot(uint8_t sprite)
+{
+    render_span_prefix();
+    uint8_t color = 0, pal = 0;
+    if (ppu.show_bg) {
+        unsigned fx = ppu.fine_x;
+#if NESRECOMP_PPU_HLE
+        color = (uint8_t)((ppu.bg_pixels >> (30 - 2 * fx)) & 3);
+        pal = (uint8_t)((ppu.attr_pixels >> (14 - 2 * fx)) & 3);
+#else
+        color = (uint8_t)(((ppu.bg_lo >> (15 - fx)) & 1) | (((ppu.bg_hi >> (15 - fx)) & 1) << 1));
+        pal = (uint8_t)(((ppu.attr_lo >> (7 - fx)) & 1) | (((ppu.attr_hi >> (7 - fx)) & 1) << 1));
+#endif
+        if (!color) pal = 0;
+    }
+    hw_frame_bg[ppu.scanline * 256 + ppu.dot - 1] = color != 0;
+    uint8_t background_addr = (uint8_t)(pal << 2 | color);
+    if (sprite) {
+        unsigned slot = sprite >> 2, sc = sprite & 3;
+        if (!slot && ppu.can_s0hit && ppu.cur_has_s0 && color) {
+            ppu.s0hit_pending1 = 1;
+            ppu.can_s0hit = 0;
+        }
+        if (!color || !(ppu.spr_attr[slot] & 0x20)) {
+            color = (uint8_t)sc;
+            pal = (uint8_t)((ppu.spr_attr[slot] & 3) | 4);
+        }
+    }
+    ppu.color[0] = ppu.palette[pal << 2 | color] & 0x3f;
+    if (cyc_background_enabled) cyc_background_pipe[0] = ppu.palette[background_addr] & 0x3f;
+    output_pixel();
+    io_bus_decay();
+    hw_cart_ppu_addr(ppu.vbus);
+}
+
+static void run_sprite_output_span(unsigned cycles, unsigned align)
+{
+    SpriteOutputSpan span;
+    unsigned dots = cycles * 3u;
+    prepare_sprite_output(&span, dots);
+    const uint8_t *pixel = span.pixel;
+    if (hw_cart.mapper == 4) {
+        uint64_t start = hw.cycles;
+        switch (align) {
+        case 0:
+            while (cycles--) {
+                render_span_half_dot(); render_prepared_sprite_dot(*pixel++);
+                render_span_half_dot(); render_prepared_sprite_dot(*pixel++);
+                render_span_half_dot(); ++hw.cycles; render_prepared_sprite_dot(*pixel++);
+            }
+            break;
+        case 1:
+            while (cycles--) {
+                render_span_half_dot(); render_prepared_sprite_dot(*pixel++);
+                render_span_half_dot(); render_prepared_sprite_dot(*pixel++);
+                render_span_half_dot(); render_prepared_sprite_dot(*pixel++); ++hw.cycles;
+            }
+            break;
+        case 2:
+            while (cycles--) {
+                render_prepared_sprite_dot(*pixel++); render_span_half_dot();
+                render_prepared_sprite_dot(*pixel++); render_span_half_dot();
+                render_prepared_sprite_dot(*pixel++); ++hw.cycles; render_span_half_dot();
+            }
+            break;
+        default:
+            while (cycles--) {
+                render_prepared_sprite_dot(*pixel++); render_span_half_dot();
+                render_prepared_sprite_dot(*pixel++); render_span_half_dot();
+                render_prepared_sprite_dot(*pixel++); render_span_half_dot(); ++hw.cycles;
+            }
+            break;
+        }
+        hw.cycles = start;
+    } else if (align < 2) {
+        for (unsigned j = 0; j < dots; ++j) { render_span_half_dot(); render_prepared_sprite_dot(*pixel++); }
+    } else {
+        for (unsigned j = 0; j < dots; ++j) { render_prepared_sprite_dot(*pixel++); render_span_half_dot(); }
+    }
+    memcpy(ppu.spr_x, span.x, 8);
+    memcpy(ppu.spr_lo, span.lo, 8);
+    memcpy(ppu.spr_hi, span.hi, 8);
+    ++ppu_native_sprite_spans;
+    ppu_native_sprite_dots += dots;
+}
+#endif
+
 void ppu_native_interval_run(unsigned cycles, unsigned align)
 {
 #if NESRECOMP_PPU_HLE || !NESRECOMP_PPU_LLE_REFERENCE
+    if (cycles >= 8
+#ifdef NESRECOMP_CYCLE_HDPACK
+        && !hdpack_recording()
+#endif
+    ) {
+        run_sprite_output_span(cycles, align);
+        return;
+    }
     if (hw_cart.mapper == 4) {
         /* MMC3 timestamps each A12 falling edge in CPU cycles. Publish the
          * original counter at every PPU event, including tick0 of the next
@@ -1696,6 +1830,7 @@ void ppu_state_reloaded(void)
 
 void ppu_power_on(void)
 {
+    ppu_native_sprite_spans = ppu_native_sprite_dots = 0;
     memset(&ppu, 0, sizeof(ppu));
     sm_rest = false;
     dot_kind = DOT_UNKNOWN;

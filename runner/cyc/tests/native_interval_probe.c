@@ -80,6 +80,50 @@ static void return_observer(void)
           "return observer sees committed hardware");
 }
 
+static void sprite_output_cases(bool reference)
+{
+    static const uint8_t positions[] = { 0, 1, 2, 7, 8, 9, 15, 16, 239, 240, 255 };
+    static const uint8_t planes[] = { 0, 0xff, 0x80, 0x01, 0xaa, 0x55, 0x81 };
+    for (unsigned q = 0; q < 96; ++q) {
+        access_bus(0x2001, q % 3 == 0 ? 0x0a : q % 3 == 1 ? 0x14 : 0x1e, true);
+        unsigned limit = 0, wait;
+        for (wait = 0; wait < 100000; ++wait) {
+            limit = hw_native_interval_limit();
+            if (limit >= 12) break;
+            access_bus(0, 0, false);
+        }
+        check(wait < 100000, "reach stable sprite fixture");
+        for (unsigned i = 0; i < 8; ++i) {
+            ppu.spr_x[i] = q % 4 ? positions[(q + i * 3) % sizeof(positions)] : (uint8_t)(q % 9);
+            ppu.spr_lo[i] = planes[(q + i) % sizeof(planes)];
+            ppu.spr_hi[i] = planes[(q * 3 + i) % sizeof(planes)];
+            ppu.spr_attr[i] = (uint8_t)(q * 29u + i * 11u);
+        }
+        ppu.fine_x = (uint8_t)(q & 7);
+#if NESRECOMP_PPU_HLE
+        ppu.bg_pixels = 0x924936c9u ^ (q * 0x01020408u);
+        ppu.attr_pixels = 0xe4e4e4e4u;
+#else
+        ppu.bg_lo = 0xa57c; ppu.bg_hi = 0x65a3;
+        ppu.attr_lo = 0x5a; ppu.attr_hi = 0xa5;
+#endif
+        ppu.can_s0hit = ppu.cur_has_s0 = 1;
+        ppu.s0hit = ppu.s0hit_late = ppu.s0hit_pending1 = ppu.s0hit_pending2 = 0;
+        unsigned n = q % 4 == 0 ? limit : (q % limit) + 1;
+        if (reference) {
+            for (unsigned j = 0; j < n; ++j) access_bus(0, 0, false);
+        } else {
+            hw.cpu_addr = 0; hw.cpu_reading = 1;
+            hw.data_driven = 1; hw.data_bus = hw.internal_bus = hw.ram[0];
+            hw_native_interval_run(n);
+        }
+        printf("sprite %u %016llx %016llx\n", q,
+               (unsigned long long)cyc_hw_state_hash(),
+               (unsigned long long)cyc_mem_state_hash());
+    }
+    if (!reference) check(ppu_native_sprite_spans > 10, "prepared sprite output exercised");
+}
+
 int main(int argc, char **argv)
 {
     bool reference = argc > 1 && strstr(argv[1], "reference") != NULL;
@@ -112,6 +156,7 @@ int main(int argc, char **argv)
             cyc_mod_set_return_hook(cursor ? return_observer : NULL);
             unsigned spans = 0, cycles = 0;
             printf("case mapper=%u align=%u\n", mapper, align);
+            sprite_output_cases(reference);
             if (cursor && !reference) hw_native_begin();
             for (unsigned i = 1; i <= 50000; ++i) {
                 if (cursor) {
