@@ -3,7 +3,7 @@
   "issue": "beads-2dw.1.110",
   "campaign": "beads-2wy8.1",
   "opportunity": "NES17",
-  "status": "independently-accepted-Zelda-retained-terrain-PR-handoff-pending",
+  "status": "independently-accepted-open-unmerged-PRs-final-combined-build-pending",
   "engine_runtime_commit": "4e8a5e08996571f7dc982a12dd912b12d7be9ced",
   "title_commit": "fb448b6",
   "engine_branch": "perf/nes17-retained-voxel",
@@ -3101,5 +3101,79 @@
     "INI concern raised during review was independently retracted: original source/config bytes have real linefeeds. v1 and repeated v2 feature checks are valid. feature-ini-audit.json retains direct counts; no fixed-defect claim."
   ],
   "evidence_root": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028",
-  "pull_requests": "pending"
+  "pull_requests": {
+    "engine": "https://github.com/mstan/nesrecomp/pull/85",
+    "zelda": "https://github.com/mstan/LegendOfZeldaNESRecomp/pull/12"
+  },
+  "diagnostic_archive": {
+    "file": "voxel-attribution-evidence.zip",
+    "sha256": "bb8e4fcff9dec529cd28106723afd74671b85da8919cc418c77eeffedba11c04",
+    "bytes": 71088,
+    "entries": 13
+  },
+  "cleanup_receipts": [
+    {
+      "removed": true,
+      "host": "DESKTOP-HN15M1H",
+      "files": 119,
+      "root": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028",
+      "reparse_or_nested_git": false,
+      "bytes": 127966009,
+      "archive_sha256": "1253e6203d967463a2a614e414d92b1ee1e25a92b31815acb14e3c9c3fda21bd"
+    },
+    {
+      "removed": true,
+      "host": "SERVER",
+      "files": 298,
+      "root": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028",
+      "reparse_or_nested_git": false,
+      "bytes": 203386920,
+      "archive_sha256": "32f4bae7b357dbbfef19c670aca6a678137a18b41638dca7f3ac7da5aa537814"
+    },
+    {
+      "removed": true,
+      "host": "DESKTOP-HN15M1H",
+      "files": 17,
+      "root": "G:\\Temp\\Codex\\nes110-voxel-profile-v1-20261028",
+      "reparse_or_nested_git": false,
+      "bytes": 23264584
+    },
+    [
+      {
+        "sha256": "f532bef15a7a56223e926ae18b5fed91bb20f5fb806d922f8bdd3aa27374b54f",
+        "removed": true,
+        "file": "retained-voxel-v1-zelda-voxel.zip",
+        "bytes": 16237543
+      },
+      {
+        "sha256": "adff67a377658ddfada3505c6489acdfbd8d6a3c4f54dd3943bc60d13c6f2cae",
+        "removed": true,
+        "file": "retained-voxel-v1-zelda-first-person.zip",
+        "bytes": 16237556
+      }
+    ]
+  ],
+  "ini_audit": {
+    "NES11-committed-probe": [
+      {
+        "linefeeds": 9,
+        "literal_backslash_n": 0
+      }
+    ],
+    "NES17-probe": [
+      {
+        "linefeeds": 9,
+        "literal_backslash_n": 0
+      }
+    ],
+    "v1-probe-config.ini": {
+      "linefeeds": 91,
+      "literal_backslash_n": 0
+    },
+    "v1-prepare.ini": {
+      "linefeeds": 9,
+      "literal_backslash_n": 0
+    }
+  },
+  "actual_title_engine_gitlink": "4e8a5e08996571f7dc982a12dd912b12d7be9ced"
 }

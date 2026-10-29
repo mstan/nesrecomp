@@ -3,7 +3,7 @@
 NES17, `beads-2dw.1.110`, campaign `beads-2wy8.1`. Runtime engine `4e8a5e0`,
 title `fb448b6`, with its actual engine gitlink pinned to that runtime commit.
 The independent validator accepts the scoped implementation and evidence;
-unmerged PR/record handoff is pending.
+[engine PR85](https://github.com/mstan/nesrecomp/pull/85) and dependent [Zelda PR12](https://github.com/mstan/LegendOfZeldaNESRecomp/pull/12) are open and unmerged. Final durable-record handoff is next.
 
 | Zelda voxel view | Host | Reference CPU s | Candidate CPU s | Median reduction | Faster pairs |
 |---|---|---:|---:|---:|---:|
@@ -59,3 +59,10 @@ source hashes/frozen paths and object/link manifests in the
 [machine-readable record](2026-10-28-retained-voxel-results.json) correct that
 metadata without changing any binary or sample. Verified raw archives,
 telemetry, settings and validation tools remain in the recorded evidence root.
+
+Verified raw archives and diagnostic attribution evidence are retained. Both
+hosts' disposable staging, the diagnostic stage, two input ZIPs and image
+inspection extracts have been removed after retention. Bounded source/product
+manifests, A/B executables, fixtures, supported configuration and raw evidence
+remain for the ongoing campaign; their cleanup is tracked in
+`retained-voxel-storage.json` in the private evidence root.

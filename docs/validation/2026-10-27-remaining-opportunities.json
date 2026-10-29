@@ -706,7 +706,11 @@
         }
       ],
       "execution_status": "selected-scoped-Zelda-retained-terrain",
-      "result_file": "2026-10-28-retained-voxel-results.json"
+      "result_file": "2026-10-28-retained-voxel-results.json",
+      "pull_requests": {
+        "engine": "https://github.com/mstan/nesrecomp/pull/85",
+        "zelda": "https://github.com/mstan/LegendOfZeldaNESRecomp/pull/12"
+      }
     },
     {
       "id": "NES18",
