@@ -1,9 +1,15 @@
 # Native pipeline implementation progress
 
-Current checkpoint: ten of 31 opportunities have qualified evaluation
+Current checkpoint: eleven of 31 opportunities have qualified evaluation
 decisions, including complete stable HLE raster jobs under NES01 and the
 qualified isolated native room service under NES18. NES20 snapshot replacement
-is deferred after measured attribution. See the
+is deferred after measured attribution. NES13 is deferred after two recorder
+experiments showed no demonstrated whole-game gain; the independent validator
+confirmed the evidence. See [HD recorder results](2026-10-28-hd-record-results.md).
+The remaining items use one serial implementation/measurement followed by a
+fresh validation-only subagent: PR for success, durable Beads decision for
+unsuccessful/deferred work, then validator-authorized movement to the next item.
+See the
 [current register](2026-10-27-remaining-opportunities.md) and
 [raster results](2026-10-28-raster-job-results.md) and
 [isolated service results](2026-10-28-isolated-native-results.md). The initial attribution

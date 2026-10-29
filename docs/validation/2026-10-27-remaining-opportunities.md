@@ -17,7 +17,7 @@ original HD runtime. See [HD results](2026-10-28-hd-plan-results.md), including
 the rejected universal packages and SMB's unchanged-runtime proof. Zelda's
 fixed SNROM SRAM code now joins the native deadline service; see
 [SRAM results](2026-10-28-sram-native-results.md). SERVER Fit improves5.128%
-and Remastered1.442%; stock is neutral/inconclusive. Ten items now have
+and Remastered1.442%; stock is neutral/inconclusive. Eleven items now have
 qualified evaluation decisions; NES01 is qualified for whole stable HLE raster
 jobs and NES29 remains parked.
 Guarded native ROM is now evaluated under NES09; see
@@ -312,13 +312,17 @@ close the per-pixel raster or APU-event algorithm work under NES01/NES06.
   Evidence: [runner/cyc/cyc_render.c:100](../../runner/cyc/cyc_render.c#L100), [runner/cyc/cyc_render.c:122](../../runner/cyc/cyc_render.c#L122).
 
 
-- [ ] **NES13 · P1 · HD recording as compact tile/run records**
+- [x] **NES13 · P1 · HD recording as compact tile/run records**
 
   Active HD copies fetched-tile structures into eight lanes, shifts sixteen entries per half-dot and copies tile keys/palettes into per-pixel records. Replace repeated metadata movement with immutable tile identities, indices and run/event references.
 
   Scope: Zelda Remastered active HD; other real enabled HD packs.
 
-  Next: One real Zelda Remastered gameplay interval: separate recording from sampling cost, then replace the complete recording-to-sampler representation.
+  Decision: Both pooled compact pixels and circular delay records are deferred
+  after two neutral/inconclusive actual Remastered A/B runs. No runtime change
+  is selected. See [HD recorder results](2026-10-28-hd-record-results.md).
+  The independent validator confirmed the deferral; continue to NES15 only
+  after its final Beads handoff. This is an evaluation decision, not exhaustion.
 
   Preserve: Bytes actually fetched across mid-tile bank/CHR changes, palette timing, sprite priority, masks/emphasis, exact native fallback and current-build saves.
 

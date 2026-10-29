@@ -17,7 +17,8 @@
     "2026-10-28-sram-native-results.json",
     "2026-10-28-guarded-rom-results.json",
     "2026-10-28-raster-job-results.json",
-    "2026-10-28-isolated-native-results.json"
+    "2026-10-28-isolated-native-results.json",
+    "2026-10-28-hd-record-results.json"
   ],
   "priorities": "Order expresses expected scope and evidence, not measured recoverable cost. Overlapping packages are not additive.",
   "acceptance": "Each game neutral or positive. Small mixed samples inconclusive. Shared original/candidate defects are separate. Native saves protected; old save-state compatibility never required.",
@@ -478,7 +479,7 @@
       "package": "visual-products",
       "priority": "P1",
       "title": "HD recording as compact tile/run records",
-      "status": "open-unmeasured",
+      "status": "evaluated-deferred-no-demonstrated-gain",
       "evidence": [
         {
           "file": "runner/cyc/cyc_hdpack.c",
@@ -502,15 +503,31 @@
           "link": "../../runner/cyc/cyc_hdpack.c#L98"
         }
       ],
-      "remaining": "Active HD copies fetched-tile structures into eight lanes, shifts sixteen entries per half-dot and copies tile keys/palettes into per-pixel records. Replace repeated metadata movement with immutable tile identities, indices and run/event references.",
+      "remaining": "Pooled compact pixel IDs and circular fetched/color records both preserve measured behavior but show neutral/inconclusive built-game CPU results. Neither is selected. The recording-to-sampler bridge remains; only a later measured end-to-end replacement justifies reopening this item.",
       "affected_profiles": [
         "Zelda Remastered active HD; other real enabled HD packs"
       ],
-      "next_decisive_check": "One real Zelda Remastered gameplay interval: separate recording from sampling cost, then replace the complete recording-to-sampler representation.",
+      "next_decisive_check": "Stop local tuning after two unsuccessful experiments. Continue serially to NES15 only after the independent validator verifies the durable Beads decision and hands off.",
       "required_behavior": "Bytes actually fetched across mid-tile bank/CHR changes, palette timing, sprite priority, masks/emphasis, exact native fallback and current-build saves.",
       "prior_issue": null,
-      "measured_additional_gain": null,
-      "execution_status": "remaining-evaluation"
+      "measured_additional_gain": [
+        {
+          "case": "zelda-hd",
+          "package": "v1",
+          "host": "DESKTOP-HN15M1H",
+          "reduction_percent": 0.7246376811594235,
+          "decision": "rejected: neutral/inconclusive"
+        },
+        {
+          "case": "zelda-hd",
+          "package": "v2",
+          "host": "SERVER",
+          "reduction_percent": -0.5305039787798504,
+          "decision": "rejected: neutral/inconclusive"
+        }
+      ],
+      "execution_status": "evaluated-two-rejected-prototypes",
+      "results": "2026-10-28-hd-record-results.json"
     },
     {
       "id": "NES14",
@@ -1126,7 +1143,7 @@
   ],
   "execution": {
     "issue": "beads-2dw.1.110",
-    "branch": "perf/pipeline-burndown-20261028",
+    "branch": "perf/nes13-hd-records",
     "base": "fc0bf3fa46a710464960c0a1f2d3b83b4d345600",
     "status": "in-progress",
     "evidence_root": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028",
@@ -1137,12 +1154,12 @@
     "owner_handoff_ready": false
   },
   "execution_summary": {
-    "evaluated_decisions": 10,
+    "evaluated_decisions": 11,
     "partial_ids": [],
     "parked_ids": [
       "NES29"
     ],
-    "other_unresolved": 20,
+    "other_unresolved": 19,
     "note": "Qualified scope decisions, not architectural exhaustion or a wall-clock completion estimate. Final combined builds and owner approval remain separate."
   }
 }
