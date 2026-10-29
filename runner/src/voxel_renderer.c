@@ -73,6 +73,72 @@ static uint32_t
     s_custom_tile_pixels[VOXEL_MAX_TILES *
                          VOXEL_CUSTOM_TILE_SIZE * VOXEL_CUSTOM_TILE_SIZE];
 
+#if defined(NESRECOMP_VOXEL_RETAINED_TERRAIN) && NESRECOMP_VOXEL_RETAINED_TERRAIN
+/* Own the resolved terrain command stream, including stack-backed side/card
+ * textures. Compare exact values rather than hashes or caller-owned pointers.
+ * Two bounded streams let an unchanged frame reuse its raster/depth layer. */
+#define VOXEL_PLAN_LIMIT (16u * 1024u * 1024u)
+typedef struct TerrainQuad {
+    Vec3 vertices[4];
+    float shade;
+    int width, height, alpha_test, overlay, bilinear, alpha_cutoff;
+    uint32_t color_overlay;
+} TerrainQuad;
+typedef struct TerrainPlan {
+    uint8_t *bytes;
+    size_t used, capacity;
+} TerrainPlan;
+typedef struct TerrainView {
+    Vec3 eye, right, up, forward;
+    float focal, center_x, center_y;
+    int width, height;
+    uint32_t sky_top, sky_bottom;
+} TerrainView;
+static TerrainPlan s_plan_build, s_plan_saved;
+static TerrainView s_plan_view;
+static uint32_t *s_terrain_color;
+static float *s_terrain_depth;
+static size_t s_terrain_capacity;
+static int s_retain_requested, s_plan_building, s_plan_failed, s_plan_valid;
+
+static void retain_quad(Vec3 a, Vec3 b, Vec3 c, Vec3 d, const Texture *texture) {
+    TerrainQuad q;
+    size_t pixels, needed, capacity;
+    uint8_t *bytes;
+    if (s_plan_failed) return;
+    if (texture->width <= 0 || texture->height <= 0 ||
+        texture->width > VOXEL_MAX_WIDTH || texture->height > VOXEL_MAX_HEIGHT ||
+        texture->stride < texture->width) {
+        s_plan_failed = 1;
+        return;
+    }
+    pixels = (size_t)texture->width * texture->height * sizeof(uint32_t);
+    needed = s_plan_build.used + sizeof(q) + pixels;
+    if (needed > VOXEL_PLAN_LIMIT) { s_plan_failed = 1; return; }
+    if (needed > s_plan_build.capacity) {
+        capacity = s_plan_build.capacity ? s_plan_build.capacity : 16384;
+        while (capacity < needed) capacity *= 2;
+        bytes = realloc(s_plan_build.bytes, capacity);
+        if (!bytes) { s_plan_failed = 1; return; }
+        s_plan_build.bytes = bytes;
+        s_plan_build.capacity = capacity;
+    }
+    memset(&q, 0, sizeof(q));
+    q.vertices[0]=a; q.vertices[1]=b; q.vertices[2]=c; q.vertices[3]=d;
+    q.shade=texture->shade; q.width=texture->width; q.height=texture->height;
+    q.alpha_test=texture->alpha_test; q.overlay=texture->overlay;
+    q.bilinear=texture->bilinear; q.alpha_cutoff=texture->alpha_cutoff;
+    q.color_overlay=texture->color_overlay;
+    bytes=s_plan_build.bytes+s_plan_build.used;
+    memcpy(bytes,&q,sizeof(q));bytes+=sizeof(q);
+    for(int y=0;y<q.height;y++)
+        memcpy(bytes+(size_t)y*q.width*sizeof(uint32_t),
+               texture->pixels+(size_t)y*texture->stride,
+               (size_t)q.width*sizeof(uint32_t));
+    s_plan_build.used=needed;
+}
+#endif
+
 #ifndef NESRECOMP_CYCLE_PRESENTATION
 extern const uint32_t g_nes_palette[64];
 #endif
@@ -306,6 +372,9 @@ static void draw_triangle(const RenderContext *ctx,
 
 static void draw_quad(const RenderContext *ctx, Vec3 a, Vec3 b, Vec3 c, Vec3 d,
                       const Texture *texture) {
+#if defined(NESRECOMP_VOXEL_RETAINED_TERRAIN) && NESRECOMP_VOXEL_RETAINED_TERRAIN
+    if (s_plan_building) { retain_quad(a,b,c,d,texture); return; }
+#endif
     ProjectedVertex pa, pb, pc, pd;
     float umax = (float)texture->width - 0.001f;
     float vmax = (float)texture->height - 0.001f;
@@ -1125,6 +1194,99 @@ static void render_sprites(const RenderContext *ctx) {
     }
 }
 
+#if defined(NESRECOMP_VOXEL_RETAINED_TERRAIN) && NESRECOMP_VOXEL_RETAINED_TERRAIN
+static uint64_t s_terrain_builds, s_terrain_hits;
+static void render_terrain_layer(const RenderContext *ctx) {
+    if (ctx->scene->terrain_layout == NES_VOXEL_LAYOUT_SIDE)
+        render_side_terrain(ctx);
+    else {
+        render_terrain(ctx);
+        render_tile_billboards(ctx);
+    }
+}
+
+static void replay_terrain_plan(const RenderContext *ctx) {
+    size_t at=0;
+    while(at<s_plan_build.used) {
+        TerrainQuad q;Texture t={0};
+        memcpy(&q,s_plan_build.bytes+at,sizeof(q));at+=sizeof(q);
+        t.pixels=(const uint32_t *)(s_plan_build.bytes+at);
+        t.width=q.width;t.height=q.height;t.stride=q.width;t.shade=q.shade;
+        t.alpha_test=q.alpha_test;t.overlay=q.overlay;t.bilinear=q.bilinear;
+        t.alpha_cutoff=q.alpha_cutoff;t.color_overlay=q.color_overlay;
+        draw_quad(ctx,q.vertices[0],q.vertices[1],q.vertices[2],q.vertices[3],&t);
+        at+=(size_t)q.width*q.height*sizeof(uint32_t);
+    }
+}
+
+static void render_retained_terrain(const RenderContext *ctx) {
+    const NesVoxelScene *s=ctx->scene;
+    TerrainView view;
+    size_t count=(size_t)s->output_width*s->output_height;
+    memset(&view,0,sizeof(view));
+    view.eye=ctx->eye;view.right=ctx->right;view.up=ctx->up;view.forward=ctx->forward;
+    view.focal=ctx->focal;view.center_x=ctx->center_x;view.center_y=ctx->center_y;
+    view.width=s->output_width;view.height=s->output_height;
+    view.sky_top=s->sky_top;view.sky_bottom=s->sky_bottom;
+    s_plan_build.used=0;s_plan_failed=0;s_plan_building=1;
+    render_terrain_layer(ctx);
+    s_plan_building=0;
+    if(s_plan_failed) {
+        s_plan_valid=0;
+        render_terrain_layer(ctx);
+        return;
+    }
+    if(s_plan_valid && !memcmp(&view,&s_plan_view,sizeof(view)) &&
+       s_plan_build.used==s_plan_saved.used &&
+       (!s_plan_build.used || !memcmp(s_plan_build.bytes,s_plan_saved.bytes,s_plan_build.used))) {
+        memcpy(s->framebuffer,s_terrain_color,count*sizeof(uint32_t));
+        memcpy(s_depth,s_terrain_depth,count*sizeof(float));
+        s_terrain_hits++;
+        return;
+    }
+    replay_terrain_plan(ctx);
+    s_terrain_builds++;
+    if(count>s_terrain_capacity) {
+        uint32_t *memory=realloc(s_terrain_color,count*(sizeof(uint32_t)+sizeof(float)));
+        if(!memory) {s_plan_valid=0;return;}
+        s_terrain_color=memory;s_terrain_capacity=count;
+        s_terrain_depth=(float *)(memory+count);
+    }
+    memcpy(s_terrain_color,s->framebuffer,count*sizeof(uint32_t));
+    memcpy(s_terrain_depth,s_depth,count*sizeof(float));
+    TerrainPlan swap=s_plan_saved;s_plan_saved=s_plan_build;s_plan_build=swap;
+    s_plan_view=view;s_plan_valid=1;
+}
+#endif
+
+void nes_voxel_retained_forget(void) {
+#if defined(NESRECOMP_VOXEL_RETAINED_TERRAIN) && NESRECOMP_VOXEL_RETAINED_TERRAIN
+    free(s_plan_build.bytes);free(s_plan_saved.bytes);free(s_terrain_color);
+    memset(&s_plan_build,0,sizeof(s_plan_build));memset(&s_plan_saved,0,sizeof(s_plan_saved));
+    s_terrain_color=NULL;s_terrain_depth=NULL;s_terrain_capacity=0;s_plan_valid=0;
+    s_terrain_builds=s_terrain_hits=0;
+#endif
+}
+
+void nes_voxel_retained_stats(uint64_t *builds,uint64_t *hits) {
+#if defined(NESRECOMP_VOXEL_RETAINED_TERRAIN) && NESRECOMP_VOXEL_RETAINED_TERRAIN
+    if(builds)*builds=s_terrain_builds;
+    if(hits)*hits=s_terrain_hits;
+#else
+    if(builds)*builds=0;
+    if(hits)*hits=0;
+#endif
+}
+
+uint64_t nes_voxel_retained_bytes(void) {
+#if defined(NESRECOMP_VOXEL_RETAINED_TERRAIN) && NESRECOMP_VOXEL_RETAINED_TERRAIN
+    return s_plan_build.capacity+s_plan_saved.capacity+
+           s_terrain_capacity*(sizeof(uint32_t)+sizeof(float));
+#else
+    return 0;
+#endif
+}
+
 static int validate_scene(const NesVoxelScene *s) {
     if (!s || !s->framebuffer || !s->tiles || !s->tile_height) return 0;
     if (s->output_width <= 0 || s->output_width > VOXEL_MAX_WIDTH ||
@@ -1196,6 +1358,10 @@ int nes_voxel_render(const NesVoxelScene *s) {
              ? s->camera_center_y : 0.59f);
     ctx.scene = s;
 
+#if defined(NESRECOMP_VOXEL_RETAINED_TERRAIN) && NESRECOMP_VOXEL_RETAINED_TERRAIN
+    if(s_retain_requested) render_retained_terrain(&ctx);
+    else
+#endif
     if (s->terrain_layout == NES_VOXEL_LAYOUT_SIDE)
         render_side_terrain(&ctx);
     else {
@@ -1219,6 +1385,17 @@ int nes_voxel_render(const NesVoxelScene *s) {
         }
     }
     return 1;
+}
+
+int nes_voxel_render_retained(const NesVoxelScene *s) {
+#if defined(NESRECOMP_VOXEL_RETAINED_TERRAIN) && NESRECOMP_VOXEL_RETAINED_TERRAIN
+    s_retain_requested=1;
+    int result=nes_voxel_render(s);
+    s_retain_requested=0;
+    return result;
+#else
+    return nes_voxel_render(s);
+#endif
 }
 
 /* ---------------------------------------------------------------------
