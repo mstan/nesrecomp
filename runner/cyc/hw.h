@@ -34,6 +34,9 @@
 #ifndef NESRECOMP_NATIVE_PRG_GUARDS
 #define NESRECOMP_NATIVE_PRG_GUARDS 0
 #endif
+#ifndef NESRECOMP_ISOLATED_NATIVE
+#define NESRECOMP_ISOLATED_NATIVE 0
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -63,6 +66,8 @@ extern int hw_dma_stalls;
 /* A derived cursor scoped to one compiled ROM dispatch or qualified SRAM
  * view. Ordinary RAM and folded code accesses consume credit only after a
  * stable, unobserved interval. All device/general accesses flush first.
+ * Qualified NESRECOMP_ISOLATED_NATIVE builds also use budget credit for
+ * memory-only guest calls, without advancing authoritative device time.
  * This cursor is never serialized; dispatch closes it before host callbacks. */
 typedef struct {
     uint8_t *ram;
@@ -78,6 +83,9 @@ typedef struct {
 extern HwNativeInterval hw_native_interval;
 extern uint8_t hw_code_watch[];
 extern uint64_t hw_native_interval_cycles, hw_native_interval_spans;
+#if NESRECOMP_ISOLATED_NATIVE
+extern uint64_t hw_native_isolated_cycles, hw_native_isolated_spans;
+#endif
 extern uint64_t ppu_native_sprite_spans, ppu_native_sprite_dots;
 extern uint64_t ppu_native_raster_tiles;
 extern uint64_t apu_native_event_spans, apu_native_event_cycles;

@@ -37,6 +37,9 @@ uint8_t    hw_code_watch[HW_CODE_BYTES];
 bool       hw_isolated;
 HwNativeInterval hw_native_interval;
 uint64_t hw_native_interval_cycles, hw_native_interval_spans;
+#if NESRECOMP_ISOLATED_NATIVE
+uint64_t hw_native_isolated_cycles, hw_native_isolated_spans;
+#endif
 uint64_t   hw_isolated_cycles, hw_isolated_budget, hw_isolated_io_writes;
 static void no_code_write(unsigned phys, uint8_t value) { (void)phys; (void)value; }
 void     (*hw_code_write)(unsigned phys, uint8_t value) = no_code_write;
@@ -179,6 +182,19 @@ static inline void run_tick_0(void)
 
 unsigned hw_native_interval_limit(void)
 {
+#if NESRECOMP_ISOLATED_NATIVE
+    if (hw_isolated) {
+        /* Memory-only guest service: no device clock, DMA or interrupt is
+         * sampled. Stop credit at the call budget; the next ordinary access
+         * must publish budget exhaustion at exactly the original cycle. */
+        if (cyc_trace_enabled || cpu.nmi_edge || hw.irq_line ||
+            (hw_cart.mapper != 0 && hw_cart.mapper != 1 &&
+             hw_cart.mapper != 4 && hw_cart.mapper != 66) ||
+            hw_isolated_cycles >= hw_isolated_budget) return 0;
+        uint64_t remaining = hw_isolated_budget - hw_isolated_cycles;
+        return remaining > 65535 ? 65535 : (unsigned)remaining;
+    }
+#endif
     if (hw.tick != 1 || hw_pal() || hw_isolated || cyc_trace_enabled ||
         hw_extra_timing.extra_scanlines || hw_cart.watch_cpu || hw_cart.clock_late ||
         (hw_cart.mapper != 0 && hw_cart.mapper != 1 &&
@@ -199,12 +215,23 @@ void hw_native_begin(void)
     hw_native_interval.checked_prg = false;
 #endif
     hw_native_interval.ram = hw.ram;
+#if NESRECOMP_ISOLATED_NATIVE
+    hw_native_interval.enabled = NESRECOMP_NATIVE_INTERVALS && !cyc_trace_enabled &&
+        ((!hw_isolated && !hw_pal() && !hw_extra_timing.extra_scanlines)
+         || hw_isolated
+        ) &&
+        (hw_cart.mapper == 0 || hw_cart.mapper == 1 ||
+         hw_cart.mapper == 4 || hw_cart.mapper == 66) &&
+        !hw_prg_data_modified && !cyc_mod_rom_read_overrides &&
+        (!cyc_cpu_rts_observer || cyc_cpu_rts_observer == cyc_mod_return_observer);
+#else
     hw_native_interval.enabled = NESRECOMP_NATIVE_INTERVALS && !hw_isolated && !cyc_trace_enabled &&
         !hw_pal() && !hw_extra_timing.extra_scanlines &&
         (hw_cart.mapper == 0 || hw_cart.mapper == 1 ||
          hw_cart.mapper == 4 || hw_cart.mapper == 66) &&
         !hw_prg_data_modified && !cyc_mod_rom_read_overrides &&
         (!cyc_cpu_rts_observer || cyc_cpu_rts_observer == cyc_mod_return_observer);
+#endif
     /* Armed instruction hooks are safe: compiled code yields to dispatch,
      * which closes this cursor before the scheduler invokes any callback.
      * Operand observers close at cpu_ram_read_value; registered RTS observers
@@ -217,11 +244,21 @@ void hw_native_begin_checked_rom(void)
     hw_native_begin();
     if (!hw_prg_modified && !hw_prg_data_modified) return;
     hw_native_interval.checked_prg = true;
+#if NESRECOMP_ISOLATED_NATIVE
+    hw_native_interval.enabled = NESRECOMP_NATIVE_INTERVALS && !cyc_trace_enabled &&
+        ((!hw_isolated && !hw_pal() && !hw_extra_timing.extra_scanlines)
+         || hw_isolated
+        ) &&
+        (hw_cart.mapper == 0 || hw_cart.mapper == 1 || hw_cart.mapper == 4 || hw_cart.mapper == 66) &&
+        !cyc_mod_rom_read_overrides &&
+        (!cyc_cpu_rts_observer || cyc_cpu_rts_observer == cyc_mod_return_observer);
+#else
     hw_native_interval.enabled = NESRECOMP_NATIVE_INTERVALS && !hw_isolated && !cyc_trace_enabled &&
         !hw_pal() && !hw_extra_timing.extra_scanlines &&
         (hw_cart.mapper == 0 || hw_cart.mapper == 1 || hw_cart.mapper == 4 || hw_cart.mapper == 66) &&
         !cyc_mod_rom_read_overrides &&
         (!cyc_cpu_rts_observer || cyc_cpu_rts_observer == cyc_mod_return_observer);
+#endif
     /* Unsupported mappers can encode RAM/open-bus flags in prg_off. Never
      * form a ROM pointer for those mappings, including on scalar fallback. */
     if (hw_native_interval.enabled)
@@ -240,8 +277,17 @@ void hw_native_flush(void)
         cpu_opcode_fetch = hw_native_interval.kind == HW_FETCH;
         hw.data_bus = hw.internal_bus = hw_native_interval.value;
         hw.data_driven = hw_native_interval.driven;
+#if NESRECOMP_ISOLATED_NATIVE
+        if (hw_isolated) {
+            hw_native_isolated_cycles += n;
+            ++hw_native_isolated_spans;
+        } else {
+#endif
         hw_native_interval_cycles += n;
         ++hw_native_interval_spans;
+#if NESRECOMP_ISOLATED_NATIVE
+        }
+#endif
     }
     hw_native_interval.pending = hw_native_interval.credit = 0;
 }
@@ -269,6 +315,13 @@ bool hw_native_prepare(void)
 
 void hw_native_interval_run(unsigned cycles)
 {
+#if NESRECOMP_ISOLATED_NATIVE
+    if (hw_isolated) {
+        hw_isolated_cycles += cycles;
+        if (hw_isolated_cycles > hw_isolated_budget) hw_frame_done = true;
+        return;
+    }
+#endif
     ppu_native_interval_run(cycles, hw.align);
     apu_native_interval_run(cycles);
     /* Both sampled inputs are proven constant throughout this interval. */
@@ -705,6 +758,9 @@ void cyc_set_controller(int port, uint8_t buttons) { hw_set_controller(port, but
 uint64_t cyc_cycle_count(void)
 {
 #if NESRECOMP_NATIVE_INTERVALS
+#if NESRECOMP_ISOLATED_NATIVE
+    if (hw_isolated) return hw.cycles; /* guest service time is not host/device time */
+#endif
     return hw.cycles + hw_native_interval.pending;
 #else
     return hw.cycles;
