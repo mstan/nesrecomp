@@ -15,7 +15,8 @@
     "2026-10-28-apu-event-results.json",
     "2026-10-28-hd-plan-results.json",
     "2026-10-28-sram-native-results.json",
-    "2026-10-28-guarded-rom-results.json"
+    "2026-10-28-guarded-rom-results.json",
+    "2026-10-28-raster-job-results.json"
   ],
   "priorities": "Order expresses expected scope and evidence, not measured recoverable cost. Overlapping packages are not additive.",
   "acceptance": "Each game neutral or positive. Small mixed samples inconclusive. Shared original/candidate defects are separate. Native saves protected; old save-state compatibility never required.",
@@ -25,7 +26,7 @@
       "package": "machine-intervals",
       "priority": "P1",
       "title": "Whole raster spans instead of one dot at a time",
-      "status": "open-unmeasured",
+      "status": "selected-qualified-stable-HLE-raster",
       "evidence": [
         {
           "file": "runner/cyc/hw_ppu.c",
@@ -42,15 +43,59 @@
           "link": "../../runner/cyc/hw_ppu.c#L1306"
         }
       ],
-      "remaining": "HLE packs pixel state and the prior package fuses a CPU-cycle tail, but stable rendering still runs sprite evaluation, fetch, pixel composition, shifts and output at each dot. Replace a stable tile/row interval with one renderer plan plus the observable event schedule.",
+      "remaining": "Complete aligned stable HLE tile jobs now own background fetch, pixel composition/output, OAM pairs and observable events on NROM/MMC1/MMC3/GxROM. Active HD recording, other/read-triggered boards and boundary adapters retain the old implementation; this qualified scope is evaluated without claiming architectural exhaustion.",
       "affected_profiles": [
         "SMB3 active MMC3 gameplay; SMB1 NROM control; subsequent affected cycle titles"
       ],
-      "next_decisive_check": "One post-delivery HLE SMB3 active-level inclusive profile; then prototype one complete stable interval and compare the built game against the already optimized HLE baseline.",
+      "next_decisive_check": "Final supported combined title regeneration and feature/owner handoff at the end of the campaign. Continue remaining independent opportunities, with NES18/20 next.",
       "required_behavior": "Correct pixels/opacity, sprite-zero and overflow publication, register effects, mapper address/IRQ events, Zapper light and current-build continuation. LLE remains a separate working reference.",
       "prior_issue": null,
-      "measured_additional_gain": null,
-      "execution_status": "selected-sprite-output-stock-qualified-full-raster-and-features-open"
+      "measured_additional_gain": [
+        {
+          "case": "smb-stock",
+          "host": "SERVER",
+          "reduction_percent": 19.554455445544548,
+          "decision": "positive in this matched run"
+        },
+        {
+          "case": "smb3-stock",
+          "host": "SERVER",
+          "reduction_percent": 17.11026615969582,
+          "decision": "positive in this matched run"
+        },
+        {
+          "case": "metroid-stock",
+          "host": "DESKTOP-HN15M1H",
+          "reduction_percent": 17.89137380191693,
+          "decision": "neutral/inconclusive; mixed samples"
+        },
+        {
+          "case": "zelda-stock",
+          "host": "SERVER",
+          "reduction_percent": 21.65605095541401,
+          "decision": "positive in this matched run"
+        },
+        {
+          "case": "gumshoe-stock",
+          "host": "SERVER",
+          "reduction_percent": 21.235521235521237,
+          "decision": "positive in this matched run"
+        },
+        {
+          "case": "zelda-world",
+          "host": "SERVER",
+          "reduction_percent": 13.253012048192769,
+          "decision": "positive in this matched run"
+        },
+        {
+          "case": "zelda-hd",
+          "host": "SERVER",
+          "reduction_percent": -0.8356545961002881,
+          "decision": "neutral/inconclusive; mixed samples"
+        }
+      ],
+      "execution_status": "selected-five-title-stock-and-Zelda-Fit-HD-qualified",
+      "results": "2026-10-28-raster-job-results.json"
     },
     {
       "id": "NES02",
@@ -1070,10 +1115,8 @@
     "owner_handoff_ready": false
   },
   "execution_summary": {
-    "evaluated_decisions": 7,
-    "partial_ids": [
-      "NES01"
-    ],
+    "evaluated_decisions": 8,
+    "partial_ids": [],
     "parked_ids": [
       "NES29"
     ],

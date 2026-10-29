@@ -17,10 +17,13 @@ original HD runtime. See [HD results](2026-10-28-hd-plan-results.md), including
 the rejected universal packages and SMB's unchanged-runtime proof. Zelda's
 fixed SNROM SRAM code now joins the native deadline service; see
 [SRAM results](2026-10-28-sram-native-results.md). SERVER Fit improves5.128%
-and Remastered1.442%; stock is neutral/inconclusive. Seven items now have
-qualified evaluation decisions; NES01 remains partial and NES29 parked.
+and Remastered1.442%; stock is neutral/inconclusive. Eight items now have
+qualified evaluation decisions; NES01 is qualified for whole stable HLE raster
+jobs and NES29 remains parked.
 Guarded native ROM is now evaluated under NES09; see
 [guarded ROM results](2026-10-28-guarded-rom-results.md).
+Whole stable HLE raster jobs are now qualified across the five stock titles
+and Zelda Fit/HD profiles; see [raster results](2026-10-28-raster-job-results.md).
 Remaining evaluations and the final combined feature handoff are still open. FDS remains
 parked. No main/master merge or new release is authorized before owner review.
 
@@ -127,13 +130,13 @@ close the per-pixel raster or APU-event algorithm work under NES01/NES06.
 ### Native execution and machine intervals
 
 
-- [ ] **NES01 · P1 · Whole raster spans instead of one dot at a time**
+- [x] **NES01 · P1 · Whole raster spans instead of one dot at a time**
 
-  HLE packs pixel state and the prior package fuses a CPU-cycle tail, but stable rendering still runs sprite evaluation, fetch, pixel composition, shifts and output at each dot. Replace a stable tile/row interval with one renderer plan plus the observable event schedule.
+  Stable HLE tile jobs now own background fetch, pixel composition/output, OAM pairs and observable events across complete eight-dot intervals. Boundary adapters and active HD/other-board paths remain; the qualified scope has a selection decision.
 
   Scope: SMB3 active MMC3 gameplay; SMB1 NROM control; subsequent affected cycle titles.
 
-  Next: One post-delivery HLE SMB3 active-level inclusive profile; then prototype one complete stable interval and compare the built game against the already optimized HLE baseline.
+  Decision: Selected whole stable HLE tile jobs after matched five-title stock and Zelda Fit/HD checks. See [raster results](2026-10-28-raster-job-results.md). Final combined regeneration and owner handoff remain; active HD/other boards retain their working paths.
 
   Preserve: Correct pixels/opacity, sprite-zero and overflow publication, register effects, mapper address/IRQ events, Zapper light and current-build continuation. LLE remains a separate working reference.
 

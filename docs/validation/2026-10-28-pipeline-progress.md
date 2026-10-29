@@ -1,5 +1,12 @@
 # Native pipeline implementation progress
 
+Current checkpoint: eight of 31 opportunities have qualified evaluation
+decisions, including complete stable HLE raster jobs under NES01. See the
+[current register](2026-10-27-remaining-opportunities.md) and
+[raster results](2026-10-28-raster-job-results.md). The initial attribution
+and plan below are historical; final combined builds and owner approval
+remain open. FDS stays parked.
+
 Owner goal: execute all NES01–NES31 in the
 [remaining-opportunity register](2026-10-27-remaining-opportunities.md), evaluate
 every item, implement and measure useful coherent packages, and leave affected
