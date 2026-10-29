@@ -17,7 +17,7 @@ original HD runtime. See [HD results](2026-10-28-hd-plan-results.md), including
 the rejected universal packages and SMB's unchanged-runtime proof. Zelda's
 fixed SNROM SRAM code now joins the native deadline service; see
 [SRAM results](2026-10-28-sram-native-results.md). SERVER Fit improves5.128%
-and Remastered1.442%; stock is neutral/inconclusive. Twelve items now have
+and Remastered1.442%; stock is neutral/inconclusive. Thirteen items now have
 qualified evaluation decisions; NES01 is qualified for whole stable HLE raster
 jobs and NES29 remains parked.
 Guarded native ROM is now evaluated under NES09; see
@@ -286,13 +286,20 @@ close the per-pixel raster or APU-event algorithm work under NES01/NES06.
 ### One visual product pipeline
 
 
-- [ ] **NES11 · P1 · One stock/custom rendering product pipeline**
+- [x] **NES11 · P1 · One stock/custom rendering product pipeline**
 
   A wide/custom view is composed after stock products exist. The old pixel-bypass rejection protected real observations, but did not evaluate a replacement that computes required status/mapper/light/pixel products once and feeds the final view directly.
 
   Scope: SMB1/SMB3/Metroid custom wide views; Zelda custom views; Zapper-aware consumers.
 
-  Next: Map every actual consumer of stock color, background opacity and line history in one widened profile; build one shared plan/output path with semantic fallback at unsupported raster effects.
+  Evaluation: One owned prepared Zelda picture is selected at `60a6821`,
+  [PR11](https://github.com/mstan/LegendOfZeldaNESRecomp/pull/11), unmerged.
+  SERVER stock4.18% and diorama38.77% CPU reductions each have five faster pairs.
+  Fit and HD remain mixed/inconclusive, including negative medians. See
+  [prepared picture results](2026-10-28-prepared-picture-results.md).
+  The broader stock/custom raster-product fusion remains unmeasured; this is a
+  scoped evaluated decision, not architectural exhaustion. Other titles are
+  unchanged. Reassess fusion after remaining decoder/span/material evaluations.
 
   Preserve: Required screenshots/raw pixels, collision/status consumers, mid-frame effects, Zapper and mapper events. Avoiding duplicate work does not mean dropping those products.
 

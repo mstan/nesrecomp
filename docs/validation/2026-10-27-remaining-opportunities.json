@@ -19,7 +19,8 @@
     "2026-10-28-raster-job-results.json",
     "2026-10-28-isolated-native-results.json",
     "2026-10-28-hd-record-results.json",
-    "2026-10-28-presentation-bridge-results.json"
+    "2026-10-28-presentation-bridge-results.json",
+    "2026-10-28-prepared-picture-results.json"
   ],
   "priorities": "Order expresses expected scope and evidence, not measured recoverable cost. Overlapping packages are not additive.",
   "acceptance": "Each game neutral or positive. Small mixed samples inconclusive. Shared original/candidate defects are separate. Native saves protected; old save-state compatibility never required.",
@@ -409,7 +410,7 @@
       "package": "visual-products",
       "priority": "P1",
       "title": "One stock/custom rendering product pipeline",
-      "status": "open-unmeasured",
+      "status": "evaluated-selected-Zelda-prepared-picture-fusion-remains-unmeasured",
       "evidence": [
         {
           "file": "runner/cyc/hw_ppu.c",
@@ -433,15 +434,48 @@
           "link": "../../runner/cyc/cyc_render.c#L163"
         }
       ],
-      "remaining": "A wide/custom view is composed after stock products exist. The old pixel-bypass rejection protected real observations, but did not evaluate a replacement that computes required status/mapper/light/pixel products once and feeds the final view directly.",
+      "remaining": "The original broader stock/custom raster-product fusion remains unmeasured. This selected revision-owned Zelda picture removes a demonstrated repeated consumer job; it does not replace the per-dot producer or fuse other title wide views. Reassess fusion after the remaining decoder/span/material evaluations; required raster/status/mapper/light outputs are a contract, not a constraint on implementation.",
       "affected_profiles": [
         "SMB1/SMB3/Metroid custom wide views; Zelda custom views; Zapper-aware consumers"
       ],
-      "next_decisive_check": "Map every actual consumer of stock color, background opacity and line history in one widened profile; build one shared plan/output path with semantic fallback at unsupported raster effects.",
+      "next_decisive_check": "Complete remaining decoder/span/material evaluations, then final supported combined regeneration and owner handoff. Reopen full stock/custom product fusion if attribution selects it.",
       "required_behavior": "Required screenshots/raw pixels, collision/status consumers, mid-frame effects, Zapper and mapper events. Avoiding duplicate work does not mean dropping those products.",
       "prior_issue": null,
-      "measured_additional_gain": null,
-      "execution_status": "remaining-evaluation"
+      "measured_additional_gain": [
+        {
+          "case": "zelda-hd",
+          "host": "DESKTOP-HN15M1H",
+          "median_cpu_reduction_percent": -5.263157894736836,
+          "decision": "mixed/inconclusive; no demonstrated win or reproducible regression"
+        },
+        {
+          "case": "zelda-hd",
+          "host": "SERVER",
+          "median_cpu_reduction_percent": -1.3440860215053752,
+          "decision": "mixed/inconclusive; no demonstrated win or reproducible regression"
+        },
+        {
+          "case": "zelda-stock",
+          "host": "SERVER",
+          "median_cpu_reduction_percent": 4.175365344467641,
+          "decision": "positive in this bounded workload"
+        },
+        {
+          "case": "zelda-voxel",
+          "host": "SERVER",
+          "median_cpu_reduction_percent": 38.76543209876543,
+          "decision": "positive in this bounded workload"
+        },
+        {
+          "case": "zelda-world",
+          "host": "SERVER",
+          "median_cpu_reduction_percent": -1.5789473684210575,
+          "decision": "mixed/inconclusive; no demonstrated win or reproducible regression"
+        }
+      ],
+      "execution_status": "selected-scoped-Zelda-prepared-picture",
+      "result_file": "2026-10-28-prepared-picture-results.json",
+      "pull_request": "https://github.com/mstan/LegendOfZeldaNESRecomp/pull/11"
     },
     {
       "id": "NES12",
