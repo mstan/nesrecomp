@@ -17,7 +17,7 @@ original HD runtime. See [HD results](2026-10-28-hd-plan-results.md), including
 the rejected universal packages and SMB's unchanged-runtime proof. Zelda's
 fixed SNROM SRAM code now joins the native deadline service; see
 [SRAM results](2026-10-28-sram-native-results.md). SERVER Fit improves5.128%
-and Remastered1.442%; stock is neutral/inconclusive. Thirteen items now have
+and Remastered1.442%; stock is neutral/inconclusive. Fourteen items now have
 qualified evaluation decisions; NES01 is qualified for whole stable HLE raster
 jobs and NES29 remains parked.
 Guarded native ROM is now evaluated under NES09; see
@@ -379,13 +379,19 @@ close the per-pixel raster or APU-event algorithm work under NES01/NES06.
   Evidence: [runner/cyc/cyc_render.c:163](../../runner/cyc/cyc_render.c#L163), [runner/cyc/cyc_render.c:122](../../runner/cyc/cyc_render.c#L122).
 
 
-- [ ] **NES17 · P2 · Retained voxel terrain and sprite assembly**
+- [x] **NES17 · P2 · Retained voxel terrain and sprite assembly**
 
   Terrain generation, tile materials, sprite grouping and contact shadows are a larger complete job than an isolated triangle helper. Retain static geometry/materials and update changed actors/camera-dependent products.
 
   Scope: Zelda/Metroid/other supported voxel diorama and first-person modes.
 
-  Next: One active voxel room with camera motion and animated terrain; distinguish geometry construction, rasterization and sprite assembly before choosing retained CPU meshes or an optional GPU backend.
+  Evaluation: Zelda exact resolved terrain commands and color/depth retention
+  selected at engine `4e8a5e0` / title `fb448b6` (pinned API). Diorama44.31% and
+  first-person46.08% CPU reductions each have five faster matched pairs. See
+  [retained terrain results](2026-10-28-retained-voxel-results.md). Dynamic actor
+  assembly and other title opt-ins remain deferred/unmeasured, explicitly
+  carried forward; shared Metroid restore defects are not a disqualifier.
+  Complete final combined builds and owner handoff before any merge.
 
   Preserve: Tile heights, clipping, transparent cards, actor grouping, proportional shadows, HUD and camera/input behavior. Shared Metroid restore defect remains separate.
 

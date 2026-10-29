@@ -1,0 +1,3105 @@
+{
+  "schema_version": 1,
+  "issue": "beads-2dw.1.110",
+  "campaign": "beads-2wy8.1",
+  "opportunity": "NES17",
+  "status": "independently-accepted-Zelda-retained-terrain-PR-handoff-pending",
+  "engine_runtime_commit": "4e8a5e08996571f7dc982a12dd912b12d7be9ced",
+  "title_commit": "fb448b6",
+  "engine_branch": "perf/nes17-retained-voxel",
+  "title_branch": "perf/retained-voxel-nes17",
+  "selected_scope": "Zelda-only build opt-in retains exact resolved terrain geometry/material commands and color/depth raster. Camera/sky, geometry and copied texture values compare byte-for-byte; actors and current HUD render every frame. Other callers use the ordinary API and portable flag-off fallback. No hash-collision invalidation assumption or saved-state cache payload.",
+  "canonical_products": {
+    "zelda": {
+      "reference": {
+        "title": "zelda",
+        "mode": "candidate",
+        "build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-raster-v1\\zelda\\candidate",
+        "target": "LegendOfZeldaNESRecomp",
+        "engine": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\engine",
+        "engine_head": "da7431242c1581e0ca1cb4691a9e8a3a0b07f9dd",
+        "title_head": "b602d2606e2949d42b4a450d9326d989f3a1ed3f",
+        "rom": "F:\\Projects\\nesrecomp\\LegendOfZeldaNESRecomp\\Legend of Zelda.NES",
+        "rom_sha256": "8f72dc2e98572eb4ba7c3a902bca5f69c448fc4391837e5f8f0d4556280440ac",
+        "configure": [
+          "-S",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\zelda",
+          "-B",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-zelda-guarded-rom-v2-candidate",
+          "-G",
+          "Ninja",
+          "-DCMAKE_BUILD_TYPE=Release",
+          "-DCMAKE_C_COMPILER=C:/msys64/mingw64/bin/gcc.exe",
+          "-DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe",
+          "-DCMAKE_MAKE_PROGRAM=C:/msys64/mingw64/bin/ninja.exe",
+          "-DCMAKE_RC_COMPILER=C:/msys64/mingw64/bin/windres.exe",
+          "-DCMAKE_C_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+          "-DCMAKE_CXX_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+          "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+          "-DPython3_EXECUTABLE=C:/Users/Matthew/AppData/Local/Programs/Python/Python312/python.exe",
+          "-DNESRECOMP_ROOT=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\engine",
+          "-DNESRECOMP_HOST_COMPILER=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-cli-guarded-rom-v2\\NESRecomp.exe",
+          "-DNESRECOMP_ROM=F:\\Projects\\nesrecomp\\LegendOfZeldaNESRecomp\\Legend of Zelda.NES",
+          "-DNESRECOMP_RECOMP_UI=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+          "-DRECOMP_UI_ROOT=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+          "-DSDL2_DIR=G:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/cmake",
+          "-DNESRECOMP_RECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+          "-DRECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+          "-DNESRECOMP_RBENGINE_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/retcomm-rbengine",
+          "-DNESRECOMP_BACKEND=cycle",
+          "-DNESRECOMP_PPU_IMPL=HLE"
+        ],
+        "reuse_reference": false,
+        "owner_authorized_shared_host": true,
+        "exe": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-retained-voxel-v1\\reference\\LegendOfZeldaNESRecomp.exe",
+        "sha256": "af04bd27c18df3d050552c63ef9d6296c4896a9b6f3f10879cae40f64947bed5",
+        "bytes": 11756970,
+        "package": "selected-through-isolated-native-plus-Zelda-prepared-picture-v1",
+        "compiler": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-cli-guarded-rom-v2\\NESRecomp.exe",
+        "compiler_sha256": "a8b6f3cd864709c467a3d51264bcfe80651e44f1ee2c6e538def09baff47e46f",
+        "sources": {
+          "recompiler/src/cyc_codegen.c": "4f497b2bed291fab39739d7cb4d416cc3fdeb646022bafa0f2a8c5e021eb0824",
+          "runner/cyc/CMakeLists.txt": "d20f365962ac3166ff1a73db5ed35983a76d859a536c41e6c22b32f5b6dc24c0",
+          "runner/cyc/cpu6502.h": "a6b258419c23d10d2c0896551432c76f3572e1076f96a820fcd259c14d26caab",
+          "runner/cyc/cyc_mod.c": "cd8f0219168dbe84cd56cc7fea8acedc8a52e0d4533a7ed06409f22d4a8c3d71",
+          "runner/cyc/cyc_mod.h": "ad4ce736c43cd585f569409e0d1ec5a2b51cdaf98908050dedaa9270e14ac6b0",
+          "runner/cyc/cyc_native_none.c": "107ac72fb8159aced7b57cfe39ca267d89e7294527ffe3e690287a36b9ff83b1",
+          "runner/cyc/cyc_recomp.h": "5afa08966c91afb3727939c33f57dd92dae1dd18240c038714cbad2a17f15209",
+          "runner/cyc/cyc_run.c": "549e4092716b117b9f14d6838ef7ed479db63bdc305746e42ef534b780d221aa",
+          "runner/cyc/hw.h": "2096c3ebd367ebd9b8731276a9471741194415f66a893935276ff253d95bdaa7",
+          "runner/cyc/hw_machine.c": "6973aa13e2cb2f3a172a6cded292482180bf096c12b4756b00d6b7fcc4bebe89",
+          "runner/cyc/hw_mapper.c": "5738306c9983f76b4a711fe56f02c5742848b2446950316e8fe255b131f5edd6",
+          "runner/cyc/tests/prg_guard_probe.c": "8d5a09076436a8111006b0ee1ae01757314b4d00b3fda136d0ac41ce6d05340f",
+          "tools/cyc/test_cyc_prg_guards.py": "c5f846d93ffe90cbb9aee53df310e0d4ceaf7da5404919325069f934bf50bf96"
+        },
+        "patch_sha256": "c5b80ffdd93236bb3f805ba7b60016720c944a3ce5ef2f82b188447fff9fa8b4",
+        "title_cmake_sha256": "aab551a8b2480504fc2972902411bb63dbb6996c3bde16cad7d6c08a8737a3db",
+        "source_snapshot": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\source-prepared-picture-v1",
+        "relink_manifest": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-prepared-picture-v1\\zelda\\candidate\\manifest.json",
+        "original_build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-zelda-guarded-rom-v2-candidate",
+        "source_sha256": {
+          "src/cyc_extras.c": "abb145b683b3136e523a7d30541372bd9dcedb0dc2da4e847b180ed0d8377e14",
+          "src/zelda_voxel.c": "975306edc188b8b5e3f18a2eca3542a9bea1175aa67d245532d1fe265d6580ab",
+          "src/zelda_world_rooms.c": "806058f0e54acbda44e93f55553f48ae9fd46bd0d62e1f2766a2c4db712ef3d3"
+        },
+        "engine_base": "9c8cbf2; source snapshot records uncommitted raster job",
+        "raster_service": "whole-stable-tile-job",
+        "source_base": "engineaac81a5/title040d295+source-prepared-picture-v1"
+      },
+      "candidate": {
+        "title": "zelda",
+        "mode": "candidate",
+        "build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-raster-v1\\zelda\\candidate",
+        "target": "LegendOfZeldaNESRecomp",
+        "engine": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\engine",
+        "rom": "F:\\Projects\\nesrecomp\\LegendOfZeldaNESRecomp\\Legend of Zelda.NES",
+        "rom_sha256": "8f72dc2e98572eb4ba7c3a902bca5f69c448fc4391837e5f8f0d4556280440ac",
+        "configure": [
+          "-S",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\zelda",
+          "-B",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-zelda-guarded-rom-v2-candidate",
+          "-G",
+          "Ninja",
+          "-DCMAKE_BUILD_TYPE=Release",
+          "-DCMAKE_C_COMPILER=C:/msys64/mingw64/bin/gcc.exe",
+          "-DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe",
+          "-DCMAKE_MAKE_PROGRAM=C:/msys64/mingw64/bin/ninja.exe",
+          "-DCMAKE_RC_COMPILER=C:/msys64/mingw64/bin/windres.exe",
+          "-DCMAKE_C_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+          "-DCMAKE_CXX_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+          "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+          "-DPython3_EXECUTABLE=C:/Users/Matthew/AppData/Local/Programs/Python/Python312/python.exe",
+          "-DNESRECOMP_ROOT=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\engine",
+          "-DNESRECOMP_HOST_COMPILER=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-cli-guarded-rom-v2\\NESRecomp.exe",
+          "-DNESRECOMP_ROM=F:\\Projects\\nesrecomp\\LegendOfZeldaNESRecomp\\Legend of Zelda.NES",
+          "-DNESRECOMP_RECOMP_UI=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+          "-DRECOMP_UI_ROOT=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+          "-DSDL2_DIR=G:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/cmake",
+          "-DNESRECOMP_RECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+          "-DRECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+          "-DNESRECOMP_RBENGINE_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/retcomm-rbengine",
+          "-DNESRECOMP_BACKEND=cycle",
+          "-DNESRECOMP_PPU_IMPL=HLE"
+        ],
+        "reuse_reference": false,
+        "owner_authorized_shared_host": true,
+        "exe": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-retained-voxel-v1\\candidate\\LegendOfZeldaNESRecomp.exe",
+        "sha256": "d94b9b7f37d337b7f2c904a9d6f94ed5ebf5b08dc297551b4b093ab1dfcd8d75",
+        "bytes": 11756970,
+        "package": "selected-through-prepared-picture-plus-retained-terrain-v1",
+        "compiler": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-cli-guarded-rom-v2\\NESRecomp.exe",
+        "compiler_sha256": "a8b6f3cd864709c467a3d51264bcfe80651e44f1ee2c6e538def09baff47e46f",
+        "sources": {
+          "recompiler/src/cyc_codegen.c": "4f497b2bed291fab39739d7cb4d416cc3fdeb646022bafa0f2a8c5e021eb0824",
+          "runner/cyc/CMakeLists.txt": "d20f365962ac3166ff1a73db5ed35983a76d859a536c41e6c22b32f5b6dc24c0",
+          "runner/cyc/cpu6502.h": "a6b258419c23d10d2c0896551432c76f3572e1076f96a820fcd259c14d26caab",
+          "runner/cyc/cyc_mod.c": "cd8f0219168dbe84cd56cc7fea8acedc8a52e0d4533a7ed06409f22d4a8c3d71",
+          "runner/cyc/cyc_mod.h": "ad4ce736c43cd585f569409e0d1ec5a2b51cdaf98908050dedaa9270e14ac6b0",
+          "runner/cyc/cyc_native_none.c": "107ac72fb8159aced7b57cfe39ca267d89e7294527ffe3e690287a36b9ff83b1",
+          "runner/cyc/cyc_recomp.h": "5afa08966c91afb3727939c33f57dd92dae1dd18240c038714cbad2a17f15209",
+          "runner/cyc/cyc_run.c": "549e4092716b117b9f14d6838ef7ed479db63bdc305746e42ef534b780d221aa",
+          "runner/cyc/hw.h": "2096c3ebd367ebd9b8731276a9471741194415f66a893935276ff253d95bdaa7",
+          "runner/cyc/hw_machine.c": "6973aa13e2cb2f3a172a6cded292482180bf096c12b4756b00d6b7fcc4bebe89",
+          "runner/cyc/hw_mapper.c": "5738306c9983f76b4a711fe56f02c5742848b2446950316e8fe255b131f5edd6",
+          "runner/cyc/tests/prg_guard_probe.c": "8d5a09076436a8111006b0ee1ae01757314b4d00b3fda136d0ac41ce6d05340f",
+          "tools/cyc/test_cyc_prg_guards.py": "c5f846d93ffe90cbb9aee53df310e0d4ceaf7da5404919325069f934bf50bf96"
+        },
+        "patch_sha256": "c5b80ffdd93236bb3f805ba7b60016720c944a3ce5ef2f82b188447fff9fa8b4",
+        "relink_manifest": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-prepared-picture-v1\\zelda\\candidate\\manifest.json",
+        "original_build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-zelda-guarded-rom-v2-candidate",
+        "engine_base": "9c8cbf2; source snapshot records uncommitted raster job",
+        "raster_service": "whole-stable-tile-job",
+        "source_base": "enginea2b2338/title60a6821 plus source-retained-voxel-v1",
+        "manifest": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-retained-voxel-v1\\candidate\\manifest.json",
+        "historical_baseline_provenance": {
+          "source_snapshot": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\source-prepared-picture-v1",
+          "source_sha256": {
+            "src/cyc_extras.c": "abb145b683b3136e523a7d30541372bd9dcedb0dc2da4e847b180ed0d8377e14",
+            "src/zelda_voxel.c": "975306edc188b8b5e3f18a2eca3542a9bea1175aa67d245532d1fe265d6580ab",
+            "src/zelda_world_rooms.c": "806058f0e54acbda44e93f55553f48ae9fd46bd0d62e1f2766a2c4db712ef3d3"
+          },
+          "title_cmake_sha256": "aab551a8b2480504fc2972902411bb63dbb6996c3bde16cad7d6c08a8737a3db",
+          "engine_head": "da7431242c1581e0ca1cb4691a9e8a3a0b07f9dd",
+          "title_head": "b602d2606e2949d42b4a450d9326d989f3a1ed3f"
+        },
+        "source_snapshot": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\source-retained-voxel-v1",
+        "source_sha256": {
+          "engine/runner/cyc/tests/voxel_retained_test.c": "b46d51070d5c129407ca9a2fbd7687e97fd7b154f11f2649c7b93da4b200ecc0",
+          "engine/runner/include/voxel_renderer.h": "57c3c0ed2a4415a75f9d8da07d707ad05acf1ce4f6f831c518b6d96e1a285668",
+          "engine/runner/src/voxel_renderer.c": "68e258bda97ae37641fe8d7f01e36e34753909180d007e411b4eed04cc76c5ae",
+          "zelda/CMakeLists.txt": "dff4681a5c6b0747027d4ca749adb1a52900c8f884c9f4ec6a5c9bd72cd33a8e",
+          "zelda/src/cyc_extras.c": "868d92316f0de56d75f33b724cc1f54cf9543dc7c07ed691486b51f5cac3670e",
+          "zelda/src/zelda_voxel.c": "c88d085d4a533edca9c02a8a20a4d8aa76eaee5d6e723efcd323be8235022b57"
+        },
+        "title_cmake_sha256": "dff4681a5c6b0747027d4ca749adb1a52900c8f884c9f4ec6a5c9bd72cd33a8e",
+        "engine_source_base": "a2b2338 plus frozen retained engine sources",
+        "title_source_base": "60a6821 plus frozen retained title sources",
+        "metadata_correction": "Original staged products inherited historical NES11 source_snapshot/source_sha256 fields. Those fields are baseline provenance, not the retained candidate source. Exact new snapshot hashes, object/link manifest and executable identity here are authoritative. No samples/binaries changed."
+      }
+    }
+  },
+  "provenance_correction": "Raw staged product records inherited historical NES11 source_snapshot/source_sha256 fields. Those are baseline metadata. Canonical product exact retained hashes/paths and object/link manifest here identify the actual candidate; no binary/sample changed. Correction is also inside each raw archive.",
+  "results": [
+    {
+      "case": "zelda-first-person",
+      "host": "DESKTOP-HN15M1H",
+      "profile": "first-person",
+      "first_frame": 1801,
+      "end_frame": 2101,
+      "median_cpu_seconds": {
+        "reference": 1.59375,
+        "candidate": 0.859375
+      },
+      "median_cpu_reduction_percent": 46.07843137254902,
+      "paired_samples": [
+        {
+          "index": 0,
+          "reference": {
+            "cpu_seconds": 1.625,
+            "wall_seconds": 1.7576544999610633,
+            "binary_sha256": "af04bd27c18df3d050552c63ef9d6296c4896a9b6f3f10879cae40f64947bed5"
+          },
+          "candidate": {
+            "cpu_seconds": 0.859375,
+            "wall_seconds": 1.047458800021559,
+            "binary_sha256": "d94b9b7f37d337b7f2c904a9d6f94ed5ebf5b08dc297551b4b093ab1dfcd8d75"
+          }
+        },
+        {
+          "index": 1,
+          "candidate": {
+            "cpu_seconds": 0.921875,
+            "wall_seconds": 1.0251689000288025,
+            "binary_sha256": "d94b9b7f37d337b7f2c904a9d6f94ed5ebf5b08dc297551b4b093ab1dfcd8d75"
+          },
+          "reference": {
+            "cpu_seconds": 1.546875,
+            "wall_seconds": 1.8032582000596449,
+            "binary_sha256": "af04bd27c18df3d050552c63ef9d6296c4896a9b6f3f10879cae40f64947bed5"
+          }
+        },
+        {
+          "index": 2,
+          "reference": {
+            "cpu_seconds": 1.59375,
+            "wall_seconds": 1.7066011999268085,
+            "binary_sha256": "af04bd27c18df3d050552c63ef9d6296c4896a9b6f3f10879cae40f64947bed5"
+          },
+          "candidate": {
+            "cpu_seconds": 0.96875,
+            "wall_seconds": 1.1008898000000045,
+            "binary_sha256": "d94b9b7f37d337b7f2c904a9d6f94ed5ebf5b08dc297551b4b093ab1dfcd8d75"
+          }
+        },
+        {
+          "index": 3,
+          "candidate": {
+            "cpu_seconds": 0.84375,
+            "wall_seconds": 1.0943051000358537,
+            "binary_sha256": "d94b9b7f37d337b7f2c904a9d6f94ed5ebf5b08dc297551b4b093ab1dfcd8d75"
+          },
+          "reference": {
+            "cpu_seconds": 1.5625,
+            "wall_seconds": 1.7158712999662384,
+            "binary_sha256": "af04bd27c18df3d050552c63ef9d6296c4896a9b6f3f10879cae40f64947bed5"
+          }
+        },
+        {
+          "index": 4,
+          "reference": {
+            "cpu_seconds": 1.65625,
+            "wall_seconds": 1.8397753000026569,
+            "binary_sha256": "af04bd27c18df3d050552c63ef9d6296c4896a9b6f3f10879cae40f64947bed5"
+          },
+          "candidate": {
+            "cpu_seconds": 0.859375,
+            "wall_seconds": 1.0503733000950888,
+            "binary_sha256": "d94b9b7f37d337b7f2c904a9d6f94ed5ebf5b08dc297551b4b093ab1dfcd8d75"
+          }
+        }
+      ],
+      "faster_pairs": 5,
+      "decision": "positive in this bounded workload",
+      "archive": "local-retained-voxel-evidence.zip",
+      "raw_performance_member": "zelda-first-person/evidence/performance.json",
+      "correctness": {
+        "reference": {
+          "command": [
+            "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-first-person\\reference\\LegendOfZeldaNESRecomp.exe",
+            "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-first-person\\baserom.nes",
+            "--headless",
+            "--no-save",
+            "--frames",
+            "2101",
+            "--input",
+            "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-first-person\\smb.input",
+            "--wav-out",
+            "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-first-person\\evidence\\reference\\audio.wav",
+            "--screenshot",
+            "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-first-person\\evidence\\reference\\final.png",
+            "--shot-every",
+            "300",
+            "--present-size",
+            "1280x720",
+            "--present-out",
+            "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-first-person\\evidence\\reference\\present.png",
+            "--present-every",
+            "300",
+            "--frame-log",
+            "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-first-person\\evidence\\reference\\frames.bin",
+            "--frame-log-frames",
+            "1800:2100",
+            "--state-out",
+            "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-first-person\\evidence\\reference\\hardware.txt",
+            "--state-frame",
+            "2100",
+            "--mem-out",
+            "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-first-person\\evidence\\reference\\memory.txt",
+            "--mem-frame",
+            "2100",
+            "--save-state",
+            "1800:G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-first-person\\evidence\\reference\\mid.state",
+            "--save-state",
+            "2100:G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-first-person\\evidence\\reference\\end.state",
+            "--mods-root",
+            "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-first-person\\reference\\mods",
+            "--voxel",
+            "first-person"
+          ],
+          "hashes": {
+            "audio.wav": "3f926d94cccb61dfd4eb09094e974ecf461464837eb7334c603dcc3bde313a46",
+            "final.png": "9e55d8e73ddd6455fdbafae3085070e58d271fd04e83ee131d5efe08e327f282",
+            "frames.bin": "a9dc4c35f7f3cf6d3517fc3d0586e4926b5856b792e5c25ff7b7231f53130275",
+            "hardware.txt": "93e7eec44cac69d267f1447aff5b146b557486ce46c8dc0f67e37a98f14f0629",
+            "memory.txt": "57e8c6d8431fdb24a944af31e6346aca490983bf7c63dc8d09993ca3b2b3bd08",
+            "present.png": "5c1cbc9b81dd1775c8d32fcce7747a83baccfd0339748b649fe3018f27331e92",
+            "present_00000.png": "98c946002b83f24c7a387a9c1cb2dfee7ec8269ed8b3d7dba98980d7de654f62",
+            "present_00300.png": "75a561ee2b318d9153bc5350b6846329024e8e5d77d75257168d75145bf470ba",
+            "present_00600.png": "2dca146c16b2c6ae12e4a8f0e08bdf769020bd48ef7fe021d5105060bf08ebbc",
+            "present_00900.png": "740b1e50843af9d9c3b51a2923ba05d4b21e3a6408751e092b213de0d79ea13f",
+            "present_01200.png": "409dcb0bfc46f210e3f6abd983d5a32222017ff5ea1323248034015a72eb9c36",
+            "present_01500.png": "9368324b1868c459d1706402799219c256615cdec9326a046118df90e65d0f48",
+            "present_01800.png": "0cff33ccf00e14dcf7d04f0c206737aba007fadf7d51e7e2900a0d09ea9da3e8",
+            "present_02100.png": "5c1cbc9b81dd1775c8d32fcce7747a83baccfd0339748b649fe3018f27331e92",
+            "mid_mod:cyc.hdpack.0": "7911f8f5921c37681c27636e5d0866e2f7e7debc87507b89de918c2008c94fb8",
+            "mid_mod:cyc.hdpack.1": "3390f6fc2ed15aa2560f073ccba24da27706a47c9d6450db9b68007cf77700f2",
+            "mid_mod:cyc.hdpack.2": "53d52c8586303738000e3349c54f35b32fc76e768e66f10e1e4700231b5011bf",
+            "mid_mod:cyc.hdpack.3": "8117f62f02a46ea0af6ca043e833e4514f38da13393d2516862b0089f137312d",
+            "mid_mod:cyc.hdpack.4": "4f4bc193b47257eabd7cc2193df9e0b006fb21cf5e5645bcc21c0f64e908fabc",
+            "mid_mod:zelda.world.rooms": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "mid_mod:zelda.world.portal-view": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "mid_mod:zelda.cycle.voxel": "067fa7214df51156246cd718e1629bad51ac7bdafbe0609dae21151564ff09fe",
+            "end_mod:cyc.hdpack.0": "7911f8f5921c37681c27636e5d0866e2f7e7debc87507b89de918c2008c94fb8",
+            "end_mod:cyc.hdpack.1": "3390f6fc2ed15aa2560f073ccba24da27706a47c9d6450db9b68007cf77700f2",
+            "end_mod:cyc.hdpack.2": "53d52c8586303738000e3349c54f35b32fc76e768e66f10e1e4700231b5011bf",
+            "end_mod:cyc.hdpack.3": "8117f62f02a46ea0af6ca043e833e4514f38da13393d2516862b0089f137312d",
+            "end_mod:cyc.hdpack.4": "4f4bc193b47257eabd7cc2193df9e0b006fb21cf5e5645bcc21c0f64e908fabc",
+            "end_mod:zelda.world.rooms": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "end_mod:zelda.world.portal-view": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "end_mod:zelda.cycle.voxel": "4ca3d21f289717007e633ff4917b6854a319f1bb6c31bbe0f435422cd972b7f6"
+          },
+          "product": {
+            "title": "zelda",
+            "mode": "reference",
+            "build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-raster-v1\\zelda\\candidate",
+            "target": "LegendOfZeldaNESRecomp",
+            "engine": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\engine",
+            "engine_head": "55644d2 selected runtime",
+            "title_head": "60a6821",
+            "rom": "F:\\Projects\\nesrecomp\\LegendOfZeldaNESRecomp\\Legend of Zelda.NES",
+            "rom_sha256": "8f72dc2e98572eb4ba7c3a902bca5f69c448fc4391837e5f8f0d4556280440ac",
+            "configure": [
+              "-S",
+              "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\zelda",
+              "-B",
+              "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-zelda-guarded-rom-v2-candidate",
+              "-G",
+              "Ninja",
+              "-DCMAKE_BUILD_TYPE=Release",
+              "-DCMAKE_C_COMPILER=C:/msys64/mingw64/bin/gcc.exe",
+              "-DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe",
+              "-DCMAKE_MAKE_PROGRAM=C:/msys64/mingw64/bin/ninja.exe",
+              "-DCMAKE_RC_COMPILER=C:/msys64/mingw64/bin/windres.exe",
+              "-DCMAKE_C_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+              "-DCMAKE_CXX_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+              "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+              "-DPython3_EXECUTABLE=C:/Users/Matthew/AppData/Local/Programs/Python/Python312/python.exe",
+              "-DNESRECOMP_ROOT=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\engine",
+              "-DNESRECOMP_HOST_COMPILER=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-cli-guarded-rom-v2\\NESRecomp.exe",
+              "-DNESRECOMP_ROM=F:\\Projects\\nesrecomp\\LegendOfZeldaNESRecomp\\Legend of Zelda.NES",
+              "-DNESRECOMP_RECOMP_UI=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+              "-DRECOMP_UI_ROOT=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+              "-DSDL2_DIR=G:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/cmake",
+              "-DNESRECOMP_RECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+              "-DRECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+              "-DNESRECOMP_RBENGINE_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/retcomm-rbengine",
+              "-DNESRECOMP_BACKEND=cycle",
+              "-DNESRECOMP_PPU_IMPL=HLE"
+            ],
+            "reuse_reference": false,
+            "owner_authorized_shared_host": true,
+            "exe": "reference/LegendOfZeldaNESRecomp.exe",
+            "sha256": "af04bd27c18df3d050552c63ef9d6296c4896a9b6f3f10879cae40f64947bed5",
+            "bytes": 11756970,
+            "package": "selected-through-isolated-native-plus-Zelda-prepared-picture-v1",
+            "compiler": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-cli-guarded-rom-v2\\NESRecomp.exe",
+            "compiler_sha256": "a8b6f3cd864709c467a3d51264bcfe80651e44f1ee2c6e538def09baff47e46f",
+            "sources": {
+              "recompiler/src/cyc_codegen.c": "4f497b2bed291fab39739d7cb4d416cc3fdeb646022bafa0f2a8c5e021eb0824",
+              "runner/cyc/CMakeLists.txt": "d20f365962ac3166ff1a73db5ed35983a76d859a536c41e6c22b32f5b6dc24c0",
+              "runner/cyc/cpu6502.h": "a6b258419c23d10d2c0896551432c76f3572e1076f96a820fcd259c14d26caab",
+              "runner/cyc/cyc_mod.c": "cd8f0219168dbe84cd56cc7fea8acedc8a52e0d4533a7ed06409f22d4a8c3d71",
+              "runner/cyc/cyc_mod.h": "ad4ce736c43cd585f569409e0d1ec5a2b51cdaf98908050dedaa9270e14ac6b0",
+              "runner/cyc/cyc_native_none.c": "107ac72fb8159aced7b57cfe39ca267d89e7294527ffe3e690287a36b9ff83b1",
+              "runner/cyc/cyc_recomp.h": "5afa08966c91afb3727939c33f57dd92dae1dd18240c038714cbad2a17f15209",
+              "runner/cyc/cyc_run.c": "549e4092716b117b9f14d6838ef7ed479db63bdc305746e42ef534b780d221aa",
+              "runner/cyc/hw.h": "2096c3ebd367ebd9b8731276a9471741194415f66a893935276ff253d95bdaa7",
+              "runner/cyc/hw_machine.c": "6973aa13e2cb2f3a172a6cded292482180bf096c12b4756b00d6b7fcc4bebe89",
+              "runner/cyc/hw_mapper.c": "5738306c9983f76b4a711fe56f02c5742848b2446950316e8fe255b131f5edd6",
+              "runner/cyc/tests/prg_guard_probe.c": "8d5a09076436a8111006b0ee1ae01757314b4d00b3fda136d0ac41ce6d05340f",
+              "tools/cyc/test_cyc_prg_guards.py": "c5f846d93ffe90cbb9aee53df310e0d4ceaf7da5404919325069f934bf50bf96"
+            },
+            "patch_sha256": "c5b80ffdd93236bb3f805ba7b60016720c944a3ce5ef2f82b188447fff9fa8b4",
+            "title_cmake_sha256": "aab551a8b2480504fc2972902411bb63dbb6996c3bde16cad7d6c08a8737a3db",
+            "source_snapshot": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\source-prepared-picture-v1",
+            "relink_manifest": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-prepared-picture-v1\\zelda\\candidate\\manifest.json",
+            "original_build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-zelda-guarded-rom-v2-candidate",
+            "source_sha256": {
+              "src/cyc_extras.c": "abb145b683b3136e523a7d30541372bd9dcedb0dc2da4e847b180ed0d8377e14",
+              "src/zelda_voxel.c": "975306edc188b8b5e3f18a2eca3542a9bea1175aa67d245532d1fe265d6580ab",
+              "src/zelda_world_rooms.c": "806058f0e54acbda44e93f55553f48ae9fd46bd0d62e1f2766a2c4db712ef3d3"
+            },
+            "engine_base": "9c8cbf2; source snapshot records uncommitted raster job",
+            "raster_service": "whole-stable-tile-job",
+            "source_base": "engineaac81a5/title040d295+source-prepared-picture-v1",
+            "mods": "reference/mods",
+            "profile": "first-person"
+          },
+          "log": "ppu: implementation=HLE (build-fixed)\n[Voxel] Zelda first-person enabled: pitch=0 yaw=0 roll=0 zoom=100% sprites=115% (numpad adjusts)\n[Voxel] Zelda first-person enabled: pitch=0 yaw=0 roll=0 zoom=100% sprites=115% (numpad adjusts)\naudio: 48000 Hz, nes output stage\ninput: 29 steps, 0 disk events from G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-first-person\\smb.input\n[Voxel] scene mode 5 invalidated stable diorama\n[Voxel] Zelda first-person move heading=-90 -> dir=8\nstate: saved G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-first-person\\evidence\\reference\\mid.state after frame 1800\n[Voxel] room scroll: holding stable diorama (cache=ready)\n[Voxel] room scroll: destination diorama ready\n[Voxel] Zelda first-person move heading=-90 -> dir=4\n[Voxel] room scroll: holding stable diorama (cache=ready)\nstate: saved G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-first-person\\evidence\\reference\\end.state after frame 2100\nmode=native frames=2101 cycles=62566459 native_cycles=62565408 (100.0%)\nnative_intervals: cycles=37614343 spans=981949\nisolated_native_intervals: cycles=0 spans=0\nsprite_output_spans: spans=601941 dots=108924855\nraster_output_tiles: tiles=12637838\napu_event_spans: spans=1574384 cycles=33401108\n  native: ROM 59767025 (95.5%)  RAM views 2798383 (4.5%)\n  interpreted: ROM 1044 (0.0%, add to cycle_seed_file)  RAM 0 (0.0%, CPU RAM code no view covers: --capture-log)\n  ram views: 55 compiled (55 usable here), 48959 entries, 32 validated, 0 rejected, 0 invalidated by stores, 0 block exits after code stores, 0 RAM instructions interpreted\nmod hooks: 5 sites, 0 callbacks run, 0 handled, 0 content mismatches; isolated calls: 0 in 0 scopes, 0 cycles, 0 failed\npresent: width 426 (stock), 0 composed, 2101 pillarboxed, 0 native\n"
+        },
+        "candidate": {
+          "command": [
+            "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-first-person\\candidate\\LegendOfZeldaNESRecomp.exe",
+            "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-first-person\\baserom.nes",
+            "--headless",
+            "--no-save",
+            "--frames",
+            "2101",
+            "--input",
+            "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-first-person\\smb.input",
+            "--wav-out",
+            "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-first-person\\evidence\\candidate\\audio.wav",
+            "--screenshot",
+            "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-first-person\\evidence\\candidate\\final.png",
+            "--shot-every",
+            "300",
+            "--present-size",
+            "1280x720",
+            "--present-out",
+            "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-first-person\\evidence\\candidate\\present.png",
+            "--present-every",
+            "300",
+            "--frame-log",
+            "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-first-person\\evidence\\candidate\\frames.bin",
+            "--frame-log-frames",
+            "1800:2100",
+            "--state-out",
+            "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-first-person\\evidence\\candidate\\hardware.txt",
+            "--state-frame",
+            "2100",
+            "--mem-out",
+            "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-first-person\\evidence\\candidate\\memory.txt",
+            "--mem-frame",
+            "2100",
+            "--save-state",
+            "1800:G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-first-person\\evidence\\candidate\\mid.state",
+            "--save-state",
+            "2100:G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-first-person\\evidence\\candidate\\end.state",
+            "--mods-root",
+            "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-first-person\\candidate\\mods",
+            "--voxel",
+            "first-person"
+          ],
+          "hashes": {
+            "audio.wav": "3f926d94cccb61dfd4eb09094e974ecf461464837eb7334c603dcc3bde313a46",
+            "final.png": "9e55d8e73ddd6455fdbafae3085070e58d271fd04e83ee131d5efe08e327f282",
+            "frames.bin": "a9dc4c35f7f3cf6d3517fc3d0586e4926b5856b792e5c25ff7b7231f53130275",
+            "hardware.txt": "93e7eec44cac69d267f1447aff5b146b557486ce46c8dc0f67e37a98f14f0629",
+            "memory.txt": "57e8c6d8431fdb24a944af31e6346aca490983bf7c63dc8d09993ca3b2b3bd08",
+            "present.png": "5c1cbc9b81dd1775c8d32fcce7747a83baccfd0339748b649fe3018f27331e92",
+            "present_00000.png": "98c946002b83f24c7a387a9c1cb2dfee7ec8269ed8b3d7dba98980d7de654f62",
+            "present_00300.png": "75a561ee2b318d9153bc5350b6846329024e8e5d77d75257168d75145bf470ba",
+            "present_00600.png": "2dca146c16b2c6ae12e4a8f0e08bdf769020bd48ef7fe021d5105060bf08ebbc",
+            "present_00900.png": "740b1e50843af9d9c3b51a2923ba05d4b21e3a6408751e092b213de0d79ea13f",
+            "present_01200.png": "409dcb0bfc46f210e3f6abd983d5a32222017ff5ea1323248034015a72eb9c36",
+            "present_01500.png": "9368324b1868c459d1706402799219c256615cdec9326a046118df90e65d0f48",
+            "present_01800.png": "0cff33ccf00e14dcf7d04f0c206737aba007fadf7d51e7e2900a0d09ea9da3e8",
+            "present_02100.png": "5c1cbc9b81dd1775c8d32fcce7747a83baccfd0339748b649fe3018f27331e92",
+            "mid_mod:cyc.hdpack.0": "7911f8f5921c37681c27636e5d0866e2f7e7debc87507b89de918c2008c94fb8",
+            "mid_mod:cyc.hdpack.1": "3390f6fc2ed15aa2560f073ccba24da27706a47c9d6450db9b68007cf77700f2",
+            "mid_mod:cyc.hdpack.2": "53d52c8586303738000e3349c54f35b32fc76e768e66f10e1e4700231b5011bf",
+            "mid_mod:cyc.hdpack.3": "8117f62f02a46ea0af6ca043e833e4514f38da13393d2516862b0089f137312d",
+            "mid_mod:cyc.hdpack.4": "4f4bc193b47257eabd7cc2193df9e0b006fb21cf5e5645bcc21c0f64e908fabc",
+            "mid_mod:zelda.world.rooms": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "mid_mod:zelda.world.portal-view": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "mid_mod:zelda.cycle.voxel": "067fa7214df51156246cd718e1629bad51ac7bdafbe0609dae21151564ff09fe",
+            "end_mod:cyc.hdpack.0": "7911f8f5921c37681c27636e5d0866e2f7e7debc87507b89de918c2008c94fb8",
+            "end_mod:cyc.hdpack.1": "3390f6fc2ed15aa2560f073ccba24da27706a47c9d6450db9b68007cf77700f2",
+            "end_mod:cyc.hdpack.2": "53d52c8586303738000e3349c54f35b32fc76e768e66f10e1e4700231b5011bf",
+            "end_mod:cyc.hdpack.3": "8117f62f02a46ea0af6ca043e833e4514f38da13393d2516862b0089f137312d",
+            "end_mod:cyc.hdpack.4": "4f4bc193b47257eabd7cc2193df9e0b006fb21cf5e5645bcc21c0f64e908fabc",
+            "end_mod:zelda.world.rooms": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "end_mod:zelda.world.portal-view": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "end_mod:zelda.cycle.voxel": "4ca3d21f289717007e633ff4917b6854a319f1bb6c31bbe0f435422cd972b7f6"
+          },
+          "product": {
+            "title": "zelda",
+            "mode": "candidate",
+            "build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-raster-v1\\zelda\\candidate",
+            "target": "LegendOfZeldaNESRecomp",
+            "engine": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\engine",
+            "engine_head": "a2b2338 + source-retained-voxel-v1/engine snapshot",
+            "title_head": "60a6821 + source-retained-voxel-v1/zelda snapshot",
+            "rom": "F:\\Projects\\nesrecomp\\LegendOfZeldaNESRecomp\\Legend of Zelda.NES",
+            "rom_sha256": "8f72dc2e98572eb4ba7c3a902bca5f69c448fc4391837e5f8f0d4556280440ac",
+            "configure": [
+              "-S",
+              "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\zelda",
+              "-B",
+              "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-zelda-guarded-rom-v2-candidate",
+              "-G",
+              "Ninja",
+              "-DCMAKE_BUILD_TYPE=Release",
+              "-DCMAKE_C_COMPILER=C:/msys64/mingw64/bin/gcc.exe",
+              "-DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe",
+              "-DCMAKE_MAKE_PROGRAM=C:/msys64/mingw64/bin/ninja.exe",
+              "-DCMAKE_RC_COMPILER=C:/msys64/mingw64/bin/windres.exe",
+              "-DCMAKE_C_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+              "-DCMAKE_CXX_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+              "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+              "-DPython3_EXECUTABLE=C:/Users/Matthew/AppData/Local/Programs/Python/Python312/python.exe",
+              "-DNESRECOMP_ROOT=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\engine",
+              "-DNESRECOMP_HOST_COMPILER=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-cli-guarded-rom-v2\\NESRecomp.exe",
+              "-DNESRECOMP_ROM=F:\\Projects\\nesrecomp\\LegendOfZeldaNESRecomp\\Legend of Zelda.NES",
+              "-DNESRECOMP_RECOMP_UI=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+              "-DRECOMP_UI_ROOT=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+              "-DSDL2_DIR=G:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/cmake",
+              "-DNESRECOMP_RECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+              "-DRECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+              "-DNESRECOMP_RBENGINE_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/retcomm-rbengine",
+              "-DNESRECOMP_BACKEND=cycle",
+              "-DNESRECOMP_PPU_IMPL=HLE"
+            ],
+            "reuse_reference": false,
+            "owner_authorized_shared_host": true,
+            "exe": "candidate/LegendOfZeldaNESRecomp.exe",
+            "sha256": "d94b9b7f37d337b7f2c904a9d6f94ed5ebf5b08dc297551b4b093ab1dfcd8d75",
+            "bytes": 11756970,
+            "package": "selected-through-prepared-picture-plus-retained-terrain-v1",
+            "compiler": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-cli-guarded-rom-v2\\NESRecomp.exe",
+            "compiler_sha256": "a8b6f3cd864709c467a3d51264bcfe80651e44f1ee2c6e538def09baff47e46f",
+            "sources": {
+              "recompiler/src/cyc_codegen.c": "4f497b2bed291fab39739d7cb4d416cc3fdeb646022bafa0f2a8c5e021eb0824",
+              "runner/cyc/CMakeLists.txt": "d20f365962ac3166ff1a73db5ed35983a76d859a536c41e6c22b32f5b6dc24c0",
+              "runner/cyc/cpu6502.h": "a6b258419c23d10d2c0896551432c76f3572e1076f96a820fcd259c14d26caab",
+              "runner/cyc/cyc_mod.c": "cd8f0219168dbe84cd56cc7fea8acedc8a52e0d4533a7ed06409f22d4a8c3d71",
+              "runner/cyc/cyc_mod.h": "ad4ce736c43cd585f569409e0d1ec5a2b51cdaf98908050dedaa9270e14ac6b0",
+              "runner/cyc/cyc_native_none.c": "107ac72fb8159aced7b57cfe39ca267d89e7294527ffe3e690287a36b9ff83b1",
+              "runner/cyc/cyc_recomp.h": "5afa08966c91afb3727939c33f57dd92dae1dd18240c038714cbad2a17f15209",
+              "runner/cyc/cyc_run.c": "549e4092716b117b9f14d6838ef7ed479db63bdc305746e42ef534b780d221aa",
+              "runner/cyc/hw.h": "2096c3ebd367ebd9b8731276a9471741194415f66a893935276ff253d95bdaa7",
+              "runner/cyc/hw_machine.c": "6973aa13e2cb2f3a172a6cded292482180bf096c12b4756b00d6b7fcc4bebe89",
+              "runner/cyc/hw_mapper.c": "5738306c9983f76b4a711fe56f02c5742848b2446950316e8fe255b131f5edd6",
+              "runner/cyc/tests/prg_guard_probe.c": "8d5a09076436a8111006b0ee1ae01757314b4d00b3fda136d0ac41ce6d05340f",
+              "tools/cyc/test_cyc_prg_guards.py": "c5f846d93ffe90cbb9aee53df310e0d4ceaf7da5404919325069f934bf50bf96"
+            },
+            "patch_sha256": "c5b80ffdd93236bb3f805ba7b60016720c944a3ce5ef2f82b188447fff9fa8b4",
+            "title_cmake_sha256": "aab551a8b2480504fc2972902411bb63dbb6996c3bde16cad7d6c08a8737a3db",
+            "source_snapshot": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\source-prepared-picture-v1",
+            "relink_manifest": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-prepared-picture-v1\\zelda\\candidate\\manifest.json",
+            "original_build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-zelda-guarded-rom-v2-candidate",
+            "source_sha256": {
+              "src/cyc_extras.c": "abb145b683b3136e523a7d30541372bd9dcedb0dc2da4e847b180ed0d8377e14",
+              "src/zelda_voxel.c": "975306edc188b8b5e3f18a2eca3542a9bea1175aa67d245532d1fe265d6580ab",
+              "src/zelda_world_rooms.c": "806058f0e54acbda44e93f55553f48ae9fd46bd0d62e1f2766a2c4db712ef3d3"
+            },
+            "engine_base": "9c8cbf2; source snapshot records uncommitted raster job",
+            "raster_service": "whole-stable-tile-job",
+            "source_base": "enginea2b2338/title60a6821 plus source-retained-voxel-v1",
+            "manifest": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-retained-voxel-v1\\candidate\\manifest.json",
+            "mods": "candidate/mods",
+            "profile": "first-person"
+          },
+          "log": "ppu: implementation=HLE (build-fixed)\n[Voxel] Zelda first-person enabled: pitch=0 yaw=0 roll=0 zoom=100% sprites=115% (numpad adjusts)\n[Voxel] Zelda first-person enabled: pitch=0 yaw=0 roll=0 zoom=100% sprites=115% (numpad adjusts)\naudio: 48000 Hz, nes output stage\ninput: 29 steps, 0 disk events from G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-first-person\\smb.input\n[Voxel] scene mode 5 invalidated stable diorama\n[Voxel] Zelda first-person move heading=-90 -> dir=8\nstate: saved G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-first-person\\evidence\\candidate\\mid.state after frame 1800\n[Voxel] room scroll: holding stable diorama (cache=ready)\n[Voxel] room scroll: destination diorama ready\n[Voxel] Zelda first-person move heading=-90 -> dir=4\n[Voxel] room scroll: holding stable diorama (cache=ready)\nstate: saved G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-first-person\\evidence\\candidate\\end.state after frame 2100\nmode=native frames=2101 cycles=62566459 native_cycles=62565408 (100.0%)\nnative_intervals: cycles=37614343 spans=981949\nisolated_native_intervals: cycles=0 spans=0\nsprite_output_spans: spans=601941 dots=108924855\nraster_output_tiles: tiles=12637838\napu_event_spans: spans=1574384 cycles=33401108\n  native: ROM 59767025 (95.5%)  RAM views 2798383 (4.5%)\n  interpreted: ROM 1044 (0.0%, add to cycle_seed_file)  RAM 0 (0.0%, CPU RAM code no view covers: --capture-log)\n  ram views: 55 compiled (55 usable here), 48959 entries, 32 validated, 0 rejected, 0 invalidated by stores, 0 block exits after code stores, 0 RAM instructions interpreted\nmod hooks: 5 sites, 0 callbacks run, 0 handled, 0 content mismatches; isolated calls: 0 in 0 scopes, 0 cycles, 0 failed\npresent: width 426 (stock), 0 composed, 2101 pillarboxed, 0 native\n"
+        }
+      },
+      "reservation": {
+        "before": {
+          "eligible": true,
+          "reasons": [],
+          "requested": {
+            "cpu": 1.0,
+            "gpu": 0.0,
+            "memory": 1.0,
+            "disk": 2.0
+          },
+          "remaining": {
+            "cpu_cores": 5.747572815533981,
+            "memory_gib": 18.90848159790039,
+            "gpu_percent": 79.0
+          },
+          "sample": {
+            "host": "DESKTOP-HN15M1H",
+            "os": "windows",
+            "timestamp": 1793247121.5450573,
+            "physical_cores": 8,
+            "logical_cpus": 16,
+            "cpu_busy_percent": 28.155339805825243,
+            "cpu_free_cores": 5.747572815533981,
+            "memory_available_gib": 18.90848159790039,
+            "memory_total_gib": 61.5560188293457,
+            "gpu_busy_percent": 21.0,
+            "gpu_source": "nvidia-smi utilization.gpu",
+            "storage": "G:\\",
+            "storage_free_gib": 7440.99450302124
+          },
+          "active_claims": 2,
+          "policy": "codex-benchmark-capacity-v1",
+          "token": "490bf949efdd4116a18397f2e75fe332",
+          "phase": "pending",
+          "target": "local",
+          "alias": null,
+          "other_targets": []
+        },
+        "command": [
+          "C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe",
+          "-NoProfile",
+          "-NonInteractive",
+          "-Command",
+          "$ErrorActionPreference='Stop';$py=if($env:COMPUTERNAME -eq 'SERVER'){'C:/Python311/python.exe'}else{'C:/Users/Matthew/AppData/Local/Programs/Python/Python312/python.exe'};& $py -X utf8 'G:/Temp/Codex/nes110-retained-voxel-v1-20261028/zelda-first-person/run.py';exit $LASTEXITCODE"
+        ],
+        "exit_code": 0,
+        "after": {
+          "host": "DESKTOP-HN15M1H",
+          "os": "windows",
+          "timestamp": 1793247168.529657,
+          "physical_cores": 8,
+          "logical_cpus": 16,
+          "cpu_busy_percent": 36.1328125,
+          "cpu_free_cores": 5.109375,
+          "memory_available_gib": 19.880226135253906,
+          "memory_total_gib": 61.5560188293457,
+          "gpu_busy_percent": 34.0,
+          "gpu_source": "nvidia-smi utilization.gpu",
+          "storage": "G:\\",
+          "storage_free_gib": 7440.928153991699
+        }
+      }
+    },
+    {
+      "case": "zelda-voxel",
+      "host": "SERVER",
+      "profile": "voxel",
+      "first_frame": 1801,
+      "end_frame": 2101,
+      "median_cpu_seconds": {
+        "reference": 3.84375,
+        "candidate": 2.140625
+      },
+      "median_cpu_reduction_percent": 44.3089430894309,
+      "paired_samples": [
+        {
+          "index": 0,
+          "reference": {
+            "cpu_seconds": 4.015625,
+            "wall_seconds": 4.357045699842274,
+            "binary_sha256": "af04bd27c18df3d050552c63ef9d6296c4896a9b6f3f10879cae40f64947bed5"
+          },
+          "candidate": {
+            "cpu_seconds": 2.15625,
+            "wall_seconds": 2.4759229000192136,
+            "binary_sha256": "d94b9b7f37d337b7f2c904a9d6f94ed5ebf5b08dc297551b4b093ab1dfcd8d75"
+          }
+        },
+        {
+          "index": 1,
+          "candidate": {
+            "cpu_seconds": 2.21875,
+            "wall_seconds": 2.5011990999337286,
+            "binary_sha256": "d94b9b7f37d337b7f2c904a9d6f94ed5ebf5b08dc297551b4b093ab1dfcd8d75"
+          },
+          "reference": {
+            "cpu_seconds": 3.796875,
+            "wall_seconds": 4.3061714000068605,
+            "binary_sha256": "af04bd27c18df3d050552c63ef9d6296c4896a9b6f3f10879cae40f64947bed5"
+          }
+        },
+        {
+          "index": 2,
+          "reference": {
+            "cpu_seconds": 3.828125,
+            "wall_seconds": 3.955795800080523,
+            "binary_sha256": "af04bd27c18df3d050552c63ef9d6296c4896a9b6f3f10879cae40f64947bed5"
+          },
+          "candidate": {
+            "cpu_seconds": 2.140625,
+            "wall_seconds": 2.3034609998576343,
+            "binary_sha256": "d94b9b7f37d337b7f2c904a9d6f94ed5ebf5b08dc297551b4b093ab1dfcd8d75"
+          }
+        },
+        {
+          "index": 3,
+          "candidate": {
+            "cpu_seconds": 2.125,
+            "wall_seconds": 2.271033399971202,
+            "binary_sha256": "d94b9b7f37d337b7f2c904a9d6f94ed5ebf5b08dc297551b4b093ab1dfcd8d75"
+          },
+          "reference": {
+            "cpu_seconds": 3.84375,
+            "wall_seconds": 3.966176199959591,
+            "binary_sha256": "af04bd27c18df3d050552c63ef9d6296c4896a9b6f3f10879cae40f64947bed5"
+          }
+        },
+        {
+          "index": 4,
+          "reference": {
+            "cpu_seconds": 3.859375,
+            "wall_seconds": 4.023105299798772,
+            "binary_sha256": "af04bd27c18df3d050552c63ef9d6296c4896a9b6f3f10879cae40f64947bed5"
+          },
+          "candidate": {
+            "cpu_seconds": 2.140625,
+            "wall_seconds": 2.2570034000091255,
+            "binary_sha256": "d94b9b7f37d337b7f2c904a9d6f94ed5ebf5b08dc297551b4b093ab1dfcd8d75"
+          }
+        }
+      ],
+      "faster_pairs": 5,
+      "decision": "positive in this bounded workload",
+      "archive": "server-retained-voxel-evidence.zip",
+      "raw_performance_member": "zelda-voxel/evidence/performance.json",
+      "correctness": {
+        "reference": {
+          "command": [
+            "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\reference\\LegendOfZeldaNESRecomp.exe",
+            "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\baserom.nes",
+            "--headless",
+            "--no-save",
+            "--frames",
+            "2101",
+            "--input",
+            "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\smb.input",
+            "--wav-out",
+            "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\evidence\\reference\\audio.wav",
+            "--screenshot",
+            "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\evidence\\reference\\final.png",
+            "--shot-every",
+            "300",
+            "--present-size",
+            "1280x720",
+            "--present-out",
+            "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\evidence\\reference\\present.png",
+            "--present-every",
+            "300",
+            "--frame-log",
+            "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\evidence\\reference\\frames.bin",
+            "--frame-log-frames",
+            "1800:2100",
+            "--state-out",
+            "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\evidence\\reference\\hardware.txt",
+            "--state-frame",
+            "2100",
+            "--mem-out",
+            "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\evidence\\reference\\memory.txt",
+            "--mem-frame",
+            "2100",
+            "--save-state",
+            "1800:G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\evidence\\reference\\mid.state",
+            "--save-state",
+            "2100:G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\evidence\\reference\\end.state",
+            "--mods-root",
+            "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\reference\\mods",
+            "--voxel",
+            "diorama"
+          ],
+          "hashes": {
+            "audio.wav": "4426d05036c5b7ba7c2598ee9268153a477560b8ab4695d474cbeae116c8d33a",
+            "final.png": "9e55d8e73ddd6455fdbafae3085070e58d271fd04e83ee131d5efe08e327f282",
+            "frames.bin": "584adfb0e65b39326f770220afc23bfe1bc922b58b2a6a7fa451395b9c948bb3",
+            "hardware.txt": "432213d210ae6c892e52aae59bce55b220f906acd99374680c590b8af0622275",
+            "memory.txt": "57e8c6d8431fdb24a944af31e6346aca490983bf7c63dc8d09993ca3b2b3bd08",
+            "present.png": "4725bae7f7fbd2f4dab3fcbdb369dc302822a24c7295aa22f3aa3607a81f8898",
+            "present_00000.png": "98c946002b83f24c7a387a9c1cb2dfee7ec8269ed8b3d7dba98980d7de654f62",
+            "present_00300.png": "75a561ee2b318d9153bc5350b6846329024e8e5d77d75257168d75145bf470ba",
+            "present_00600.png": "2dca146c16b2c6ae12e4a8f0e08bdf769020bd48ef7fe021d5105060bf08ebbc",
+            "present_00900.png": "740b1e50843af9d9c3b51a2923ba05d4b21e3a6408751e092b213de0d79ea13f",
+            "present_01200.png": "409dcb0bfc46f210e3f6abd983d5a32222017ff5ea1323248034015a72eb9c36",
+            "present_01500.png": "0352c67a08bb78e409670e75d335e2a70f529159644e550119e6615fb4128fcb",
+            "present_01800.png": "0352c67a08bb78e409670e75d335e2a70f529159644e550119e6615fb4128fcb",
+            "present_02100.png": "4725bae7f7fbd2f4dab3fcbdb369dc302822a24c7295aa22f3aa3607a81f8898",
+            "mid_mod:cyc.hdpack.0": "7911f8f5921c37681c27636e5d0866e2f7e7debc87507b89de918c2008c94fb8",
+            "mid_mod:cyc.hdpack.1": "3390f6fc2ed15aa2560f073ccba24da27706a47c9d6450db9b68007cf77700f2",
+            "mid_mod:cyc.hdpack.2": "53d52c8586303738000e3349c54f35b32fc76e768e66f10e1e4700231b5011bf",
+            "mid_mod:cyc.hdpack.3": "8117f62f02a46ea0af6ca043e833e4514f38da13393d2516862b0089f137312d",
+            "mid_mod:cyc.hdpack.4": "4f4bc193b47257eabd7cc2193df9e0b006fb21cf5e5645bcc21c0f64e908fabc",
+            "mid_mod:zelda.world.rooms": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "mid_mod:zelda.world.portal-view": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "mid_mod:zelda.cycle.voxel": "0c731be58138180396286e817f3af6d2025dd521a5e748f1f18c6c2994c4a5d1",
+            "end_mod:cyc.hdpack.0": "7911f8f5921c37681c27636e5d0866e2f7e7debc87507b89de918c2008c94fb8",
+            "end_mod:cyc.hdpack.1": "3390f6fc2ed15aa2560f073ccba24da27706a47c9d6450db9b68007cf77700f2",
+            "end_mod:cyc.hdpack.2": "53d52c8586303738000e3349c54f35b32fc76e768e66f10e1e4700231b5011bf",
+            "end_mod:cyc.hdpack.3": "8117f62f02a46ea0af6ca043e833e4514f38da13393d2516862b0089f137312d",
+            "end_mod:cyc.hdpack.4": "4f4bc193b47257eabd7cc2193df9e0b006fb21cf5e5645bcc21c0f64e908fabc",
+            "end_mod:zelda.world.rooms": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "end_mod:zelda.world.portal-view": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "end_mod:zelda.cycle.voxel": "a03c04b1c5658207a9cd9fde72dbf54a84bb8d5c73dc4afad9721e8b09af32dd"
+          },
+          "product": {
+            "title": "zelda",
+            "mode": "reference",
+            "build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-raster-v1\\zelda\\candidate",
+            "target": "LegendOfZeldaNESRecomp",
+            "engine": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\engine",
+            "engine_head": "55644d2 selected runtime",
+            "title_head": "60a6821",
+            "rom": "F:\\Projects\\nesrecomp\\LegendOfZeldaNESRecomp\\Legend of Zelda.NES",
+            "rom_sha256": "8f72dc2e98572eb4ba7c3a902bca5f69c448fc4391837e5f8f0d4556280440ac",
+            "configure": [
+              "-S",
+              "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\zelda",
+              "-B",
+              "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-zelda-guarded-rom-v2-candidate",
+              "-G",
+              "Ninja",
+              "-DCMAKE_BUILD_TYPE=Release",
+              "-DCMAKE_C_COMPILER=C:/msys64/mingw64/bin/gcc.exe",
+              "-DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe",
+              "-DCMAKE_MAKE_PROGRAM=C:/msys64/mingw64/bin/ninja.exe",
+              "-DCMAKE_RC_COMPILER=C:/msys64/mingw64/bin/windres.exe",
+              "-DCMAKE_C_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+              "-DCMAKE_CXX_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+              "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+              "-DPython3_EXECUTABLE=C:/Users/Matthew/AppData/Local/Programs/Python/Python312/python.exe",
+              "-DNESRECOMP_ROOT=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\engine",
+              "-DNESRECOMP_HOST_COMPILER=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-cli-guarded-rom-v2\\NESRecomp.exe",
+              "-DNESRECOMP_ROM=F:\\Projects\\nesrecomp\\LegendOfZeldaNESRecomp\\Legend of Zelda.NES",
+              "-DNESRECOMP_RECOMP_UI=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+              "-DRECOMP_UI_ROOT=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+              "-DSDL2_DIR=G:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/cmake",
+              "-DNESRECOMP_RECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+              "-DRECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+              "-DNESRECOMP_RBENGINE_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/retcomm-rbengine",
+              "-DNESRECOMP_BACKEND=cycle",
+              "-DNESRECOMP_PPU_IMPL=HLE"
+            ],
+            "reuse_reference": false,
+            "owner_authorized_shared_host": true,
+            "exe": "reference/LegendOfZeldaNESRecomp.exe",
+            "sha256": "af04bd27c18df3d050552c63ef9d6296c4896a9b6f3f10879cae40f64947bed5",
+            "bytes": 11756970,
+            "package": "selected-through-isolated-native-plus-Zelda-prepared-picture-v1",
+            "compiler": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-cli-guarded-rom-v2\\NESRecomp.exe",
+            "compiler_sha256": "a8b6f3cd864709c467a3d51264bcfe80651e44f1ee2c6e538def09baff47e46f",
+            "sources": {
+              "recompiler/src/cyc_codegen.c": "4f497b2bed291fab39739d7cb4d416cc3fdeb646022bafa0f2a8c5e021eb0824",
+              "runner/cyc/CMakeLists.txt": "d20f365962ac3166ff1a73db5ed35983a76d859a536c41e6c22b32f5b6dc24c0",
+              "runner/cyc/cpu6502.h": "a6b258419c23d10d2c0896551432c76f3572e1076f96a820fcd259c14d26caab",
+              "runner/cyc/cyc_mod.c": "cd8f0219168dbe84cd56cc7fea8acedc8a52e0d4533a7ed06409f22d4a8c3d71",
+              "runner/cyc/cyc_mod.h": "ad4ce736c43cd585f569409e0d1ec5a2b51cdaf98908050dedaa9270e14ac6b0",
+              "runner/cyc/cyc_native_none.c": "107ac72fb8159aced7b57cfe39ca267d89e7294527ffe3e690287a36b9ff83b1",
+              "runner/cyc/cyc_recomp.h": "5afa08966c91afb3727939c33f57dd92dae1dd18240c038714cbad2a17f15209",
+              "runner/cyc/cyc_run.c": "549e4092716b117b9f14d6838ef7ed479db63bdc305746e42ef534b780d221aa",
+              "runner/cyc/hw.h": "2096c3ebd367ebd9b8731276a9471741194415f66a893935276ff253d95bdaa7",
+              "runner/cyc/hw_machine.c": "6973aa13e2cb2f3a172a6cded292482180bf096c12b4756b00d6b7fcc4bebe89",
+              "runner/cyc/hw_mapper.c": "5738306c9983f76b4a711fe56f02c5742848b2446950316e8fe255b131f5edd6",
+              "runner/cyc/tests/prg_guard_probe.c": "8d5a09076436a8111006b0ee1ae01757314b4d00b3fda136d0ac41ce6d05340f",
+              "tools/cyc/test_cyc_prg_guards.py": "c5f846d93ffe90cbb9aee53df310e0d4ceaf7da5404919325069f934bf50bf96"
+            },
+            "patch_sha256": "c5b80ffdd93236bb3f805ba7b60016720c944a3ce5ef2f82b188447fff9fa8b4",
+            "title_cmake_sha256": "aab551a8b2480504fc2972902411bb63dbb6996c3bde16cad7d6c08a8737a3db",
+            "source_snapshot": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\source-prepared-picture-v1",
+            "relink_manifest": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-prepared-picture-v1\\zelda\\candidate\\manifest.json",
+            "original_build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-zelda-guarded-rom-v2-candidate",
+            "source_sha256": {
+              "src/cyc_extras.c": "abb145b683b3136e523a7d30541372bd9dcedb0dc2da4e847b180ed0d8377e14",
+              "src/zelda_voxel.c": "975306edc188b8b5e3f18a2eca3542a9bea1175aa67d245532d1fe265d6580ab",
+              "src/zelda_world_rooms.c": "806058f0e54acbda44e93f55553f48ae9fd46bd0d62e1f2766a2c4db712ef3d3"
+            },
+            "engine_base": "9c8cbf2; source snapshot records uncommitted raster job",
+            "raster_service": "whole-stable-tile-job",
+            "source_base": "engineaac81a5/title040d295+source-prepared-picture-v1",
+            "mods": "reference/mods",
+            "profile": "voxel"
+          },
+          "log": "ppu: implementation=HLE (build-fixed)\n[Voxel] Zelda overworld diorama enabled: pitch=35 yaw=-20 roll=0 zoom=100% sprites=135% (numpad adjusts)\n[Voxel] Zelda overworld diorama enabled: pitch=35 yaw=-20 roll=0 zoom=100% sprites=135% (numpad adjusts)\naudio: 48000 Hz, nes output stage\ninput: 29 steps, 0 disk events from G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\smb.input\n[Voxel] scene mode 5 invalidated stable diorama\nstate: saved G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\evidence\\reference\\mid.state after frame 1800\n[Voxel] room scroll: holding stable diorama (cache=ready)\n[Voxel] room scroll: destination diorama ready\n[Voxel] room scroll: holding stable diorama (cache=ready)\nstate: saved G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\evidence\\reference\\end.state after frame 2100\nmode=native frames=2101 cycles=62566459 native_cycles=62565408 (100.0%)\nnative_intervals: cycles=37614354 spans=981941\nisolated_native_intervals: cycles=0 spans=0\nsprite_output_spans: spans=601930 dots=108924792\nraster_output_tiles: tiles=12637846\napu_event_spans: spans=1574378 cycles=33401106\n  native: ROM 59767025 (95.5%)  RAM views 2798383 (4.5%)\n  interpreted: ROM 1044 (0.0%, add to cycle_seed_file)  RAM 0 (0.0%, CPU RAM code no view covers: --capture-log)\n  ram views: 55 compiled (55 usable here), 48959 entries, 32 validated, 0 rejected, 0 invalidated by stores, 0 block exits after code stores, 0 RAM instructions interpreted\nmod hooks: 5 sites, 0 callbacks run, 0 handled, 0 content mismatches; isolated calls: 0 in 0 scopes, 0 cycles, 0 failed\npresent: width 426 (stock), 0 composed, 2101 pillarboxed, 0 native\n"
+        },
+        "candidate": {
+          "command": [
+            "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\candidate\\LegendOfZeldaNESRecomp.exe",
+            "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\baserom.nes",
+            "--headless",
+            "--no-save",
+            "--frames",
+            "2101",
+            "--input",
+            "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\smb.input",
+            "--wav-out",
+            "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\evidence\\candidate\\audio.wav",
+            "--screenshot",
+            "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\evidence\\candidate\\final.png",
+            "--shot-every",
+            "300",
+            "--present-size",
+            "1280x720",
+            "--present-out",
+            "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\evidence\\candidate\\present.png",
+            "--present-every",
+            "300",
+            "--frame-log",
+            "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\evidence\\candidate\\frames.bin",
+            "--frame-log-frames",
+            "1800:2100",
+            "--state-out",
+            "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\evidence\\candidate\\hardware.txt",
+            "--state-frame",
+            "2100",
+            "--mem-out",
+            "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\evidence\\candidate\\memory.txt",
+            "--mem-frame",
+            "2100",
+            "--save-state",
+            "1800:G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\evidence\\candidate\\mid.state",
+            "--save-state",
+            "2100:G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\evidence\\candidate\\end.state",
+            "--mods-root",
+            "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\candidate\\mods",
+            "--voxel",
+            "diorama"
+          ],
+          "hashes": {
+            "audio.wav": "4426d05036c5b7ba7c2598ee9268153a477560b8ab4695d474cbeae116c8d33a",
+            "final.png": "9e55d8e73ddd6455fdbafae3085070e58d271fd04e83ee131d5efe08e327f282",
+            "frames.bin": "584adfb0e65b39326f770220afc23bfe1bc922b58b2a6a7fa451395b9c948bb3",
+            "hardware.txt": "432213d210ae6c892e52aae59bce55b220f906acd99374680c590b8af0622275",
+            "memory.txt": "57e8c6d8431fdb24a944af31e6346aca490983bf7c63dc8d09993ca3b2b3bd08",
+            "present.png": "4725bae7f7fbd2f4dab3fcbdb369dc302822a24c7295aa22f3aa3607a81f8898",
+            "present_00000.png": "98c946002b83f24c7a387a9c1cb2dfee7ec8269ed8b3d7dba98980d7de654f62",
+            "present_00300.png": "75a561ee2b318d9153bc5350b6846329024e8e5d77d75257168d75145bf470ba",
+            "present_00600.png": "2dca146c16b2c6ae12e4a8f0e08bdf769020bd48ef7fe021d5105060bf08ebbc",
+            "present_00900.png": "740b1e50843af9d9c3b51a2923ba05d4b21e3a6408751e092b213de0d79ea13f",
+            "present_01200.png": "409dcb0bfc46f210e3f6abd983d5a32222017ff5ea1323248034015a72eb9c36",
+            "present_01500.png": "0352c67a08bb78e409670e75d335e2a70f529159644e550119e6615fb4128fcb",
+            "present_01800.png": "0352c67a08bb78e409670e75d335e2a70f529159644e550119e6615fb4128fcb",
+            "present_02100.png": "4725bae7f7fbd2f4dab3fcbdb369dc302822a24c7295aa22f3aa3607a81f8898",
+            "mid_mod:cyc.hdpack.0": "7911f8f5921c37681c27636e5d0866e2f7e7debc87507b89de918c2008c94fb8",
+            "mid_mod:cyc.hdpack.1": "3390f6fc2ed15aa2560f073ccba24da27706a47c9d6450db9b68007cf77700f2",
+            "mid_mod:cyc.hdpack.2": "53d52c8586303738000e3349c54f35b32fc76e768e66f10e1e4700231b5011bf",
+            "mid_mod:cyc.hdpack.3": "8117f62f02a46ea0af6ca043e833e4514f38da13393d2516862b0089f137312d",
+            "mid_mod:cyc.hdpack.4": "4f4bc193b47257eabd7cc2193df9e0b006fb21cf5e5645bcc21c0f64e908fabc",
+            "mid_mod:zelda.world.rooms": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "mid_mod:zelda.world.portal-view": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "mid_mod:zelda.cycle.voxel": "0c731be58138180396286e817f3af6d2025dd521a5e748f1f18c6c2994c4a5d1",
+            "end_mod:cyc.hdpack.0": "7911f8f5921c37681c27636e5d0866e2f7e7debc87507b89de918c2008c94fb8",
+            "end_mod:cyc.hdpack.1": "3390f6fc2ed15aa2560f073ccba24da27706a47c9d6450db9b68007cf77700f2",
+            "end_mod:cyc.hdpack.2": "53d52c8586303738000e3349c54f35b32fc76e768e66f10e1e4700231b5011bf",
+            "end_mod:cyc.hdpack.3": "8117f62f02a46ea0af6ca043e833e4514f38da13393d2516862b0089f137312d",
+            "end_mod:cyc.hdpack.4": "4f4bc193b47257eabd7cc2193df9e0b006fb21cf5e5645bcc21c0f64e908fabc",
+            "end_mod:zelda.world.rooms": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "end_mod:zelda.world.portal-view": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "end_mod:zelda.cycle.voxel": "a03c04b1c5658207a9cd9fde72dbf54a84bb8d5c73dc4afad9721e8b09af32dd"
+          },
+          "product": {
+            "title": "zelda",
+            "mode": "candidate",
+            "build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-raster-v1\\zelda\\candidate",
+            "target": "LegendOfZeldaNESRecomp",
+            "engine": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\engine",
+            "engine_head": "a2b2338 + source-retained-voxel-v1/engine snapshot",
+            "title_head": "60a6821 + source-retained-voxel-v1/zelda snapshot",
+            "rom": "F:\\Projects\\nesrecomp\\LegendOfZeldaNESRecomp\\Legend of Zelda.NES",
+            "rom_sha256": "8f72dc2e98572eb4ba7c3a902bca5f69c448fc4391837e5f8f0d4556280440ac",
+            "configure": [
+              "-S",
+              "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\zelda",
+              "-B",
+              "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-zelda-guarded-rom-v2-candidate",
+              "-G",
+              "Ninja",
+              "-DCMAKE_BUILD_TYPE=Release",
+              "-DCMAKE_C_COMPILER=C:/msys64/mingw64/bin/gcc.exe",
+              "-DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe",
+              "-DCMAKE_MAKE_PROGRAM=C:/msys64/mingw64/bin/ninja.exe",
+              "-DCMAKE_RC_COMPILER=C:/msys64/mingw64/bin/windres.exe",
+              "-DCMAKE_C_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+              "-DCMAKE_CXX_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+              "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+              "-DPython3_EXECUTABLE=C:/Users/Matthew/AppData/Local/Programs/Python/Python312/python.exe",
+              "-DNESRECOMP_ROOT=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\engine",
+              "-DNESRECOMP_HOST_COMPILER=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-cli-guarded-rom-v2\\NESRecomp.exe",
+              "-DNESRECOMP_ROM=F:\\Projects\\nesrecomp\\LegendOfZeldaNESRecomp\\Legend of Zelda.NES",
+              "-DNESRECOMP_RECOMP_UI=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+              "-DRECOMP_UI_ROOT=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+              "-DSDL2_DIR=G:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/cmake",
+              "-DNESRECOMP_RECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+              "-DRECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+              "-DNESRECOMP_RBENGINE_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/retcomm-rbengine",
+              "-DNESRECOMP_BACKEND=cycle",
+              "-DNESRECOMP_PPU_IMPL=HLE"
+            ],
+            "reuse_reference": false,
+            "owner_authorized_shared_host": true,
+            "exe": "candidate/LegendOfZeldaNESRecomp.exe",
+            "sha256": "d94b9b7f37d337b7f2c904a9d6f94ed5ebf5b08dc297551b4b093ab1dfcd8d75",
+            "bytes": 11756970,
+            "package": "selected-through-prepared-picture-plus-retained-terrain-v1",
+            "compiler": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-cli-guarded-rom-v2\\NESRecomp.exe",
+            "compiler_sha256": "a8b6f3cd864709c467a3d51264bcfe80651e44f1ee2c6e538def09baff47e46f",
+            "sources": {
+              "recompiler/src/cyc_codegen.c": "4f497b2bed291fab39739d7cb4d416cc3fdeb646022bafa0f2a8c5e021eb0824",
+              "runner/cyc/CMakeLists.txt": "d20f365962ac3166ff1a73db5ed35983a76d859a536c41e6c22b32f5b6dc24c0",
+              "runner/cyc/cpu6502.h": "a6b258419c23d10d2c0896551432c76f3572e1076f96a820fcd259c14d26caab",
+              "runner/cyc/cyc_mod.c": "cd8f0219168dbe84cd56cc7fea8acedc8a52e0d4533a7ed06409f22d4a8c3d71",
+              "runner/cyc/cyc_mod.h": "ad4ce736c43cd585f569409e0d1ec5a2b51cdaf98908050dedaa9270e14ac6b0",
+              "runner/cyc/cyc_native_none.c": "107ac72fb8159aced7b57cfe39ca267d89e7294527ffe3e690287a36b9ff83b1",
+              "runner/cyc/cyc_recomp.h": "5afa08966c91afb3727939c33f57dd92dae1dd18240c038714cbad2a17f15209",
+              "runner/cyc/cyc_run.c": "549e4092716b117b9f14d6838ef7ed479db63bdc305746e42ef534b780d221aa",
+              "runner/cyc/hw.h": "2096c3ebd367ebd9b8731276a9471741194415f66a893935276ff253d95bdaa7",
+              "runner/cyc/hw_machine.c": "6973aa13e2cb2f3a172a6cded292482180bf096c12b4756b00d6b7fcc4bebe89",
+              "runner/cyc/hw_mapper.c": "5738306c9983f76b4a711fe56f02c5742848b2446950316e8fe255b131f5edd6",
+              "runner/cyc/tests/prg_guard_probe.c": "8d5a09076436a8111006b0ee1ae01757314b4d00b3fda136d0ac41ce6d05340f",
+              "tools/cyc/test_cyc_prg_guards.py": "c5f846d93ffe90cbb9aee53df310e0d4ceaf7da5404919325069f934bf50bf96"
+            },
+            "patch_sha256": "c5b80ffdd93236bb3f805ba7b60016720c944a3ce5ef2f82b188447fff9fa8b4",
+            "title_cmake_sha256": "aab551a8b2480504fc2972902411bb63dbb6996c3bde16cad7d6c08a8737a3db",
+            "source_snapshot": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\source-prepared-picture-v1",
+            "relink_manifest": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-prepared-picture-v1\\zelda\\candidate\\manifest.json",
+            "original_build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-zelda-guarded-rom-v2-candidate",
+            "source_sha256": {
+              "src/cyc_extras.c": "abb145b683b3136e523a7d30541372bd9dcedb0dc2da4e847b180ed0d8377e14",
+              "src/zelda_voxel.c": "975306edc188b8b5e3f18a2eca3542a9bea1175aa67d245532d1fe265d6580ab",
+              "src/zelda_world_rooms.c": "806058f0e54acbda44e93f55553f48ae9fd46bd0d62e1f2766a2c4db712ef3d3"
+            },
+            "engine_base": "9c8cbf2; source snapshot records uncommitted raster job",
+            "raster_service": "whole-stable-tile-job",
+            "source_base": "enginea2b2338/title60a6821 plus source-retained-voxel-v1",
+            "manifest": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-retained-voxel-v1\\candidate\\manifest.json",
+            "mods": "candidate/mods",
+            "profile": "voxel"
+          },
+          "log": "ppu: implementation=HLE (build-fixed)\n[Voxel] Zelda overworld diorama enabled: pitch=35 yaw=-20 roll=0 zoom=100% sprites=135% (numpad adjusts)\n[Voxel] Zelda overworld diorama enabled: pitch=35 yaw=-20 roll=0 zoom=100% sprites=135% (numpad adjusts)\naudio: 48000 Hz, nes output stage\ninput: 29 steps, 0 disk events from G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\smb.input\n[Voxel] scene mode 5 invalidated stable diorama\nstate: saved G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\evidence\\candidate\\mid.state after frame 1800\n[Voxel] room scroll: holding stable diorama (cache=ready)\n[Voxel] room scroll: destination diorama ready\n[Voxel] room scroll: holding stable diorama (cache=ready)\nstate: saved G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\evidence\\candidate\\end.state after frame 2100\nmode=native frames=2101 cycles=62566459 native_cycles=62565408 (100.0%)\nnative_intervals: cycles=37614354 spans=981941\nisolated_native_intervals: cycles=0 spans=0\nsprite_output_spans: spans=601930 dots=108924792\nraster_output_tiles: tiles=12637846\napu_event_spans: spans=1574378 cycles=33401106\n  native: ROM 59767025 (95.5%)  RAM views 2798383 (4.5%)\n  interpreted: ROM 1044 (0.0%, add to cycle_seed_file)  RAM 0 (0.0%, CPU RAM code no view covers: --capture-log)\n  ram views: 55 compiled (55 usable here), 48959 entries, 32 validated, 0 rejected, 0 invalidated by stores, 0 block exits after code stores, 0 RAM instructions interpreted\nmod hooks: 5 sites, 0 callbacks run, 0 handled, 0 content mismatches; isolated calls: 0 in 0 scopes, 0 cycles, 0 failed\npresent: width 426 (stock), 0 composed, 2101 pillarboxed, 0 native\n"
+        }
+      },
+      "reservation": {
+        "before": {
+          "eligible": true,
+          "reasons": [],
+          "requested": {
+            "cpu": 1.0,
+            "gpu": 0.0,
+            "memory": 1.0,
+            "disk": 2.0
+          },
+          "remaining": {
+            "cpu_cores": 2.96875,
+            "memory_gib": 7.4171142578125,
+            "gpu_percent": 99.0
+          },
+          "sample": {
+            "host": "SERVER",
+            "os": "windows",
+            "timestamp": 1793247027.1829352,
+            "physical_cores": 4,
+            "logical_cpus": 4,
+            "cpu_busy_percent": 25.78125,
+            "cpu_free_cores": 2.96875,
+            "memory_available_gib": 7.4171142578125,
+            "memory_total_gib": 15.939079284667969,
+            "gpu_busy_percent": 1.0,
+            "gpu_source": "WDDM per-engine aggregate maximum",
+            "storage": "G:\\",
+            "storage_free_gib": 3887.2985343933105
+          },
+          "active_claims": 1,
+          "policy": "codex-benchmark-capacity-v1",
+          "token": "ff4a9726fe1048b18ac33a30f4665720",
+          "phase": "pending",
+          "target": "server",
+          "alias": "server",
+          "other_targets": []
+        },
+        "command": [
+          "C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe",
+          "-NoProfile",
+          "-NonInteractive",
+          "-Command",
+          "$ErrorActionPreference='Stop';$py=if($env:COMPUTERNAME -eq 'SERVER'){'C:/Python311/python.exe'}else{'C:/Users/Matthew/AppData/Local/Programs/Python/Python312/python.exe'};& $py -X utf8 'G:/Temp/Codex/nes110-retained-voxel-v1-20261028/zelda-voxel/run.py';exit $LASTEXITCODE"
+        ],
+        "exit_code": 0,
+        "after": {
+          "host": "SERVER",
+          "os": "windows",
+          "timestamp": 1793247118.702692,
+          "physical_cores": 4,
+          "logical_cpus": 4,
+          "cpu_busy_percent": 34.375,
+          "cpu_free_cores": 2.625,
+          "memory_available_gib": 7.748115539550781,
+          "memory_total_gib": 15.939079284667969,
+          "gpu_busy_percent": 0.0,
+          "gpu_source": "WDDM per-engine aggregate maximum",
+          "storage": "G:\\",
+          "storage_free_gib": 3887.287326812744
+        }
+      }
+    }
+  ],
+  "archives": [
+    {
+      "file": "local-retained-voxel-evidence.zip",
+      "sha256": "1253e6203d967463a2a614e414d92b1ee1e25a92b31815acb14e3c9c3fda21bd",
+      "bytes": 11313555,
+      "entries": 79
+    },
+    {
+      "file": "server-retained-voxel-evidence.zip",
+      "sha256": "32f4bae7b357dbbfef19c670aca6a678137a18b41638dca7f3ac7da5aa537814",
+      "bytes": 12063632,
+      "entries": 166
+    }
+  ],
+  "features": {
+    "diorama/reference": {
+      "passed": true,
+      "returncode": 0,
+      "results": {
+        "command": [
+          "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\reference\\LegendOfZeldaNESRecomp.exe",
+          "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\baserom.nes",
+          "--hidden",
+          "--no-save",
+          "--tcp",
+          "64911",
+          "--config",
+          "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\diorama\\reference\\probe\\config.ini",
+          "--mods-root",
+          "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\reference\\mods",
+          "--voxel",
+          "diorama"
+        ],
+        "view": "diorama",
+        "initial_state": {
+          "id": 4,
+          "ok": true,
+          "frame": 1801,
+          "menu_open": true,
+          "fds": false,
+          "side": -1,
+          "sides": 0,
+          "motor": false,
+          "writing": false,
+          "toast": {
+            "visible": false,
+            "title": "",
+            "body": ""
+          },
+          "hle": "",
+          "disk_save": "",
+          "disk_binding": "D / LB",
+          "picture": [
+            426,
+            240
+          ],
+          "dev_ui": false,
+          "recomp_ui": true,
+          "native": true,
+          "vsync_requested": false,
+          "vsync_active": true,
+          "pads": [],
+          "state_panel": "closed",
+          "state_slot": 1,
+          "rewind_count": 0,
+          "rewind_frame": -1,
+          "rewind_enabled": true
+        },
+        "guest": {
+          "id": 5,
+          "ok": true,
+          "mode": 5,
+          "room": 119,
+          "link_x": 120,
+          "link_y": 139,
+          "direction": 8,
+          "link_state": 0,
+          "hearts": 34,
+          "sword": 0,
+          "paused": 0,
+          "submenu": 0,
+          "voxel": 1,
+          "width": 426,
+          "game_mode": 5,
+          "hp": 34,
+          "sub_mode": 0
+        },
+        "pictures": {
+          "initial": {
+            "response": {
+              "id": 6,
+              "ok": true,
+              "path": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\diorama\\reference\\probe\\initial.png",
+              "size": [
+                426,
+                240
+              ]
+            },
+            "sha256": "0352c67a08bb78e409670e75d335e2a70f529159644e550119e6615fb4128fcb"
+          },
+          "repeat-0": {
+            "response": {
+              "id": 8,
+              "ok": true,
+              "path": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\diorama\\reference\\probe\\repeat-0.png",
+              "size": [
+                426,
+                240
+              ]
+            },
+            "sha256": "0352c67a08bb78e409670e75d335e2a70f529159644e550119e6615fb4128fcb"
+          },
+          "repeat-1": {
+            "response": {
+              "id": 9,
+              "ok": true,
+              "path": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\diorama\\reference\\probe\\repeat-1.png",
+              "size": [
+                426,
+                240
+              ]
+            },
+            "sha256": "0352c67a08bb78e409670e75d335e2a70f529159644e550119e6615fb4128fcb"
+          },
+          "repeat-2": {
+            "response": {
+              "id": 10,
+              "ok": true,
+              "path": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\diorama\\reference\\probe\\repeat-2.png",
+              "size": [
+                426,
+                240
+              ]
+            },
+            "sha256": "0352c67a08bb78e409670e75d335e2a70f529159644e550119e6615fb4128fcb"
+          },
+          "repeat-3": {
+            "response": {
+              "id": 11,
+              "ok": true,
+              "path": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\diorama\\reference\\probe\\repeat-3.png",
+              "size": [
+                426,
+                240
+              ]
+            },
+            "sha256": "0352c67a08bb78e409670e75d335e2a70f529159644e550119e6615fb4128fcb"
+          },
+          "resize-1536x720": {
+            "response": {
+              "id": 14,
+              "ok": true,
+              "path": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\diorama\\reference\\probe\\resize-1536x720.png",
+              "size": [
+                426,
+                240
+              ]
+            },
+            "sha256": "0352c67a08bb78e409670e75d335e2a70f529159644e550119e6615fb4128fcb"
+          },
+          "resize-600x1200": {
+            "response": {
+              "id": 17,
+              "ok": true,
+              "path": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\diorama\\reference\\probe\\resize-600x1200.png",
+              "size": [
+                426,
+                240
+              ]
+            },
+            "sha256": "0352c67a08bb78e409670e75d335e2a70f529159644e550119e6615fb4128fcb"
+          },
+          "resize-1920x540": {
+            "response": {
+              "id": 20,
+              "ok": true,
+              "path": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\diorama\\reference\\probe\\resize-1920x540.png",
+              "size": [
+                426,
+                240
+              ]
+            },
+            "sha256": "0352c67a08bb78e409670e75d335e2a70f529159644e550119e6615fb4128fcb"
+          },
+          "restored": {
+            "response": {
+              "id": 24,
+              "ok": true,
+              "path": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\diorama\\reference\\probe\\restored.png",
+              "size": [
+                426,
+                240
+              ]
+            },
+            "sha256": "0352c67a08bb78e409670e75d335e2a70f529159644e550119e6615fb4128fcb"
+          },
+          "advanced": {
+            "response": {
+              "id": 26,
+              "ok": true,
+              "path": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\diorama\\reference\\probe\\advanced.png",
+              "size": [
+                426,
+                240
+              ]
+            },
+            "sha256": "08888c408f67c754016e7aa1ecda090c74ad966fbc35734f067b14c3202e864b"
+          },
+          "advanced-return": {
+            "response": {
+              "id": 29,
+              "ok": true,
+              "path": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\diorama\\reference\\probe\\advanced-return.png",
+              "size": [
+                426,
+                240
+              ]
+            },
+            "sha256": "0352c67a08bb78e409670e75d335e2a70f529159644e550119e6615fb4128fcb"
+          },
+          "advanced-reload": {
+            "response": {
+              "id": 31,
+              "ok": true,
+              "path": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\diorama\\reference\\probe\\advanced-reload.png",
+              "size": [
+                426,
+                240
+              ]
+            },
+            "sha256": "08888c408f67c754016e7aa1ecda090c74ad966fbc35734f067b14c3202e864b"
+          }
+        },
+        "reuse": {
+          "before": {
+            "id": 7,
+            "ok": true,
+            "valid": true,
+            "builds": 29,
+            "hits": 44,
+            "generation": 35,
+            "core_generation": 35,
+            "width": 426
+          },
+          "after": {
+            "id": 12,
+            "ok": true,
+            "valid": true,
+            "builds": 29,
+            "hits": 53,
+            "generation": 35,
+            "core_generation": 35,
+            "width": 426
+          }
+        },
+        "final_state": {
+          "id": 32,
+          "ok": true,
+          "frame": 1821,
+          "menu_open": true,
+          "fds": false,
+          "side": -1,
+          "sides": 0,
+          "motor": false,
+          "writing": false,
+          "toast": {
+            "visible": false,
+            "title": "",
+            "body": ""
+          },
+          "hle": "",
+          "disk_save": "",
+          "disk_binding": "D / LB",
+          "picture": [
+            426,
+            240
+          ],
+          "dev_ui": false,
+          "recomp_ui": true,
+          "native": true,
+          "vsync_requested": false,
+          "vsync_active": true,
+          "pads": [],
+          "state_panel": "closed",
+          "state_slot": 1,
+          "rewind_count": 0,
+          "rewind_frame": -1,
+          "rewind_enabled": true
+        },
+        "status": "pass"
+      },
+      "command": [
+        "C:/Python311/python.exe",
+        "-X",
+        "utf8",
+        "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\feature-probe-v2.py",
+        "--exe",
+        "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\reference\\LegendOfZeldaNESRecomp.exe",
+        "--rom",
+        "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\baserom.nes",
+        "--state",
+        "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\diorama\\reference\\start.state",
+        "--advanced-state",
+        "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\diorama\\reference\\advanced.state",
+        "--view",
+        "diorama",
+        "--out",
+        "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\diorama\\reference\\probe"
+      ],
+      "log": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\diorama\\reference\\probe.log"
+    },
+    "diorama/candidate": {
+      "passed": true,
+      "returncode": 0,
+      "results": {
+        "command": [
+          "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\candidate\\LegendOfZeldaNESRecomp.exe",
+          "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\baserom.nes",
+          "--hidden",
+          "--no-save",
+          "--tcp",
+          "64930",
+          "--config",
+          "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\diorama\\candidate\\probe\\config.ini",
+          "--mods-root",
+          "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\candidate\\mods",
+          "--voxel",
+          "diorama"
+        ],
+        "view": "diorama",
+        "initial_state": {
+          "id": 4,
+          "ok": true,
+          "frame": 1801,
+          "menu_open": true,
+          "fds": false,
+          "side": -1,
+          "sides": 0,
+          "motor": false,
+          "writing": false,
+          "toast": {
+            "visible": false,
+            "title": "",
+            "body": ""
+          },
+          "hle": "",
+          "disk_save": "",
+          "disk_binding": "D / LB",
+          "picture": [
+            426,
+            240
+          ],
+          "dev_ui": false,
+          "recomp_ui": true,
+          "native": true,
+          "vsync_requested": false,
+          "vsync_active": true,
+          "pads": [],
+          "state_panel": "closed",
+          "state_slot": 1,
+          "rewind_count": 0,
+          "rewind_frame": -1,
+          "rewind_enabled": true
+        },
+        "guest": {
+          "id": 5,
+          "ok": true,
+          "mode": 5,
+          "room": 119,
+          "link_x": 120,
+          "link_y": 139,
+          "direction": 8,
+          "link_state": 0,
+          "hearts": 34,
+          "sword": 0,
+          "paused": 0,
+          "submenu": 0,
+          "voxel": 1,
+          "width": 426,
+          "game_mode": 5,
+          "hp": 34,
+          "sub_mode": 0
+        },
+        "pictures": {
+          "initial": {
+            "response": {
+              "id": 6,
+              "ok": true,
+              "path": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\diorama\\candidate\\probe\\initial.png",
+              "size": [
+                426,
+                240
+              ]
+            },
+            "sha256": "0352c67a08bb78e409670e75d335e2a70f529159644e550119e6615fb4128fcb"
+          },
+          "repeat-0": {
+            "response": {
+              "id": 8,
+              "ok": true,
+              "path": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\diorama\\candidate\\probe\\repeat-0.png",
+              "size": [
+                426,
+                240
+              ]
+            },
+            "sha256": "0352c67a08bb78e409670e75d335e2a70f529159644e550119e6615fb4128fcb"
+          },
+          "repeat-1": {
+            "response": {
+              "id": 9,
+              "ok": true,
+              "path": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\diorama\\candidate\\probe\\repeat-1.png",
+              "size": [
+                426,
+                240
+              ]
+            },
+            "sha256": "0352c67a08bb78e409670e75d335e2a70f529159644e550119e6615fb4128fcb"
+          },
+          "repeat-2": {
+            "response": {
+              "id": 10,
+              "ok": true,
+              "path": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\diorama\\candidate\\probe\\repeat-2.png",
+              "size": [
+                426,
+                240
+              ]
+            },
+            "sha256": "0352c67a08bb78e409670e75d335e2a70f529159644e550119e6615fb4128fcb"
+          },
+          "repeat-3": {
+            "response": {
+              "id": 11,
+              "ok": true,
+              "path": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\diorama\\candidate\\probe\\repeat-3.png",
+              "size": [
+                426,
+                240
+              ]
+            },
+            "sha256": "0352c67a08bb78e409670e75d335e2a70f529159644e550119e6615fb4128fcb"
+          },
+          "resize-1536x720": {
+            "response": {
+              "id": 14,
+              "ok": true,
+              "path": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\diorama\\candidate\\probe\\resize-1536x720.png",
+              "size": [
+                426,
+                240
+              ]
+            },
+            "sha256": "0352c67a08bb78e409670e75d335e2a70f529159644e550119e6615fb4128fcb"
+          },
+          "resize-600x1200": {
+            "response": {
+              "id": 17,
+              "ok": true,
+              "path": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\diorama\\candidate\\probe\\resize-600x1200.png",
+              "size": [
+                426,
+                240
+              ]
+            },
+            "sha256": "0352c67a08bb78e409670e75d335e2a70f529159644e550119e6615fb4128fcb"
+          },
+          "resize-1920x540": {
+            "response": {
+              "id": 20,
+              "ok": true,
+              "path": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\diorama\\candidate\\probe\\resize-1920x540.png",
+              "size": [
+                426,
+                240
+              ]
+            },
+            "sha256": "0352c67a08bb78e409670e75d335e2a70f529159644e550119e6615fb4128fcb"
+          },
+          "restored": {
+            "response": {
+              "id": 24,
+              "ok": true,
+              "path": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\diorama\\candidate\\probe\\restored.png",
+              "size": [
+                426,
+                240
+              ]
+            },
+            "sha256": "0352c67a08bb78e409670e75d335e2a70f529159644e550119e6615fb4128fcb"
+          },
+          "advanced": {
+            "response": {
+              "id": 26,
+              "ok": true,
+              "path": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\diorama\\candidate\\probe\\advanced.png",
+              "size": [
+                426,
+                240
+              ]
+            },
+            "sha256": "08888c408f67c754016e7aa1ecda090c74ad966fbc35734f067b14c3202e864b"
+          },
+          "advanced-return": {
+            "response": {
+              "id": 29,
+              "ok": true,
+              "path": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\diorama\\candidate\\probe\\advanced-return.png",
+              "size": [
+                426,
+                240
+              ]
+            },
+            "sha256": "0352c67a08bb78e409670e75d335e2a70f529159644e550119e6615fb4128fcb"
+          },
+          "advanced-reload": {
+            "response": {
+              "id": 31,
+              "ok": true,
+              "path": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\diorama\\candidate\\probe\\advanced-reload.png",
+              "size": [
+                426,
+                240
+              ]
+            },
+            "sha256": "08888c408f67c754016e7aa1ecda090c74ad966fbc35734f067b14c3202e864b"
+          }
+        },
+        "reuse": {
+          "before": {
+            "id": 7,
+            "ok": true,
+            "valid": true,
+            "builds": 39,
+            "hits": 57,
+            "generation": 45,
+            "core_generation": 45,
+            "width": 426,
+            "terrain_builds": 1,
+            "terrain_hits": 0,
+            "terrain_bytes": 1080064
+          },
+          "after": {
+            "id": 12,
+            "ok": true,
+            "valid": true,
+            "builds": 39,
+            "hits": 66,
+            "generation": 45,
+            "core_generation": 45,
+            "width": 426,
+            "terrain_builds": 1,
+            "terrain_hits": 0,
+            "terrain_bytes": 1080064
+          }
+        },
+        "live_terrain_reuse": {
+          "before": {
+            "id": 32,
+            "ok": true,
+            "frame": 1821,
+            "menu_open": true,
+            "fds": false,
+            "side": -1,
+            "sides": 0,
+            "motor": false,
+            "writing": false,
+            "toast": {
+              "visible": false,
+              "title": "",
+              "body": ""
+            },
+            "hle": "",
+            "disk_save": "",
+            "disk_binding": "D / LB",
+            "picture": [
+              426,
+              240
+            ],
+            "dev_ui": false,
+            "recomp_ui": true,
+            "native": true,
+            "vsync_requested": false,
+            "vsync_active": true,
+            "pads": [],
+            "state_panel": "closed",
+            "state_slot": 1,
+            "rewind_count": 0,
+            "rewind_frame": -1,
+            "rewind_enabled": true
+          },
+          "after": {
+            "id": 43,
+            "ok": true,
+            "frame": 1842,
+            "menu_open": true,
+            "fds": false,
+            "side": -1,
+            "sides": 0,
+            "motor": false,
+            "writing": false,
+            "toast": {
+              "visible": false,
+              "title": "",
+              "body": ""
+            },
+            "hle": "",
+            "disk_save": "",
+            "disk_binding": "D / LB",
+            "picture": [
+              426,
+              240
+            ],
+            "dev_ui": false,
+            "recomp_ui": true,
+            "native": true,
+            "vsync_requested": false,
+            "vsync_active": true,
+            "pads": [],
+            "state_panel": "closed",
+            "state_slot": 1,
+            "rewind_count": 6,
+            "rewind_frame": -1,
+            "rewind_enabled": true
+          },
+          "cache": {
+            "id": 42,
+            "ok": true,
+            "valid": true,
+            "builds": 64,
+            "hits": 142,
+            "generation": 70,
+            "core_generation": 70,
+            "width": 426,
+            "terrain_builds": 1,
+            "terrain_hits": 21,
+            "terrain_bytes": 1342208
+          }
+        },
+        "final_state": {
+          "id": 44,
+          "ok": true,
+          "frame": 1842,
+          "menu_open": true,
+          "fds": false,
+          "side": -1,
+          "sides": 0,
+          "motor": false,
+          "writing": false,
+          "toast": {
+            "visible": false,
+            "title": "",
+            "body": ""
+          },
+          "hle": "",
+          "disk_save": "",
+          "disk_binding": "D / LB",
+          "picture": [
+            426,
+            240
+          ],
+          "dev_ui": false,
+          "recomp_ui": true,
+          "native": true,
+          "vsync_requested": false,
+          "vsync_active": true,
+          "pads": [],
+          "state_panel": "closed",
+          "state_slot": 1,
+          "rewind_count": 6,
+          "rewind_frame": -1,
+          "rewind_enabled": true
+        },
+        "status": "pass"
+      },
+      "command": [
+        "C:/Python311/python.exe",
+        "-X",
+        "utf8",
+        "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\feature-probe-v2.py",
+        "--exe",
+        "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\candidate\\LegendOfZeldaNESRecomp.exe",
+        "--rom",
+        "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\baserom.nes",
+        "--state",
+        "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\diorama\\candidate\\start.state",
+        "--advanced-state",
+        "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\diorama\\candidate\\advanced.state",
+        "--view",
+        "diorama",
+        "--out",
+        "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\diorama\\candidate\\probe",
+        "--require-reuse",
+        "--require-terrain"
+      ],
+      "log": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\diorama\\candidate\\probe.log"
+    },
+    "first-person/reference": {
+      "passed": true,
+      "returncode": 0,
+      "results": {
+        "command": [
+          "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\reference\\LegendOfZeldaNESRecomp.exe",
+          "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\baserom.nes",
+          "--hidden",
+          "--no-save",
+          "--tcp",
+          "64980",
+          "--config",
+          "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\first-person\\reference\\probe\\config.ini",
+          "--mods-root",
+          "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\reference\\mods",
+          "--voxel",
+          "first-person"
+        ],
+        "view": "first-person",
+        "initial_state": {
+          "id": 4,
+          "ok": true,
+          "frame": 1801,
+          "menu_open": true,
+          "fds": false,
+          "side": -1,
+          "sides": 0,
+          "motor": false,
+          "writing": false,
+          "toast": {
+            "visible": false,
+            "title": "",
+            "body": ""
+          },
+          "hle": "",
+          "disk_save": "",
+          "disk_binding": "D / LB",
+          "picture": [
+            426,
+            240
+          ],
+          "dev_ui": false,
+          "recomp_ui": true,
+          "native": true,
+          "vsync_requested": false,
+          "vsync_active": true,
+          "pads": [],
+          "state_panel": "closed",
+          "state_slot": 1,
+          "rewind_count": 0,
+          "rewind_frame": -1,
+          "rewind_enabled": true
+        },
+        "guest": {
+          "id": 5,
+          "ok": true,
+          "mode": 5,
+          "room": 119,
+          "link_x": 120,
+          "link_y": 139,
+          "direction": 8,
+          "link_state": 0,
+          "hearts": 34,
+          "sword": 0,
+          "paused": 0,
+          "submenu": 0,
+          "voxel": 2,
+          "width": 426,
+          "game_mode": 5,
+          "hp": 34,
+          "sub_mode": 0
+        },
+        "pictures": {
+          "initial": {
+            "response": {
+              "id": 6,
+              "ok": true,
+              "path": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\first-person\\reference\\probe\\initial.png",
+              "size": [
+                426,
+                240
+              ]
+            },
+            "sha256": "0cff33ccf00e14dcf7d04f0c206737aba007fadf7d51e7e2900a0d09ea9da3e8"
+          },
+          "repeat-0": {
+            "response": {
+              "id": 8,
+              "ok": true,
+              "path": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\first-person\\reference\\probe\\repeat-0.png",
+              "size": [
+                426,
+                240
+              ]
+            },
+            "sha256": "0cff33ccf00e14dcf7d04f0c206737aba007fadf7d51e7e2900a0d09ea9da3e8"
+          },
+          "repeat-1": {
+            "response": {
+              "id": 9,
+              "ok": true,
+              "path": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\first-person\\reference\\probe\\repeat-1.png",
+              "size": [
+                426,
+                240
+              ]
+            },
+            "sha256": "0cff33ccf00e14dcf7d04f0c206737aba007fadf7d51e7e2900a0d09ea9da3e8"
+          },
+          "repeat-2": {
+            "response": {
+              "id": 10,
+              "ok": true,
+              "path": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\first-person\\reference\\probe\\repeat-2.png",
+              "size": [
+                426,
+                240
+              ]
+            },
+            "sha256": "0cff33ccf00e14dcf7d04f0c206737aba007fadf7d51e7e2900a0d09ea9da3e8"
+          },
+          "repeat-3": {
+            "response": {
+              "id": 11,
+              "ok": true,
+              "path": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\first-person\\reference\\probe\\repeat-3.png",
+              "size": [
+                426,
+                240
+              ]
+            },
+            "sha256": "0cff33ccf00e14dcf7d04f0c206737aba007fadf7d51e7e2900a0d09ea9da3e8"
+          },
+          "resize-1536x720": {
+            "response": {
+              "id": 14,
+              "ok": true,
+              "path": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\first-person\\reference\\probe\\resize-1536x720.png",
+              "size": [
+                426,
+                240
+              ]
+            },
+            "sha256": "0cff33ccf00e14dcf7d04f0c206737aba007fadf7d51e7e2900a0d09ea9da3e8"
+          },
+          "resize-600x1200": {
+            "response": {
+              "id": 17,
+              "ok": true,
+              "path": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\first-person\\reference\\probe\\resize-600x1200.png",
+              "size": [
+                426,
+                240
+              ]
+            },
+            "sha256": "0cff33ccf00e14dcf7d04f0c206737aba007fadf7d51e7e2900a0d09ea9da3e8"
+          },
+          "resize-1920x540": {
+            "response": {
+              "id": 20,
+              "ok": true,
+              "path": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\first-person\\reference\\probe\\resize-1920x540.png",
+              "size": [
+                426,
+                240
+              ]
+            },
+            "sha256": "0cff33ccf00e14dcf7d04f0c206737aba007fadf7d51e7e2900a0d09ea9da3e8"
+          },
+          "restored": {
+            "response": {
+              "id": 24,
+              "ok": true,
+              "path": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\first-person\\reference\\probe\\restored.png",
+              "size": [
+                426,
+                240
+              ]
+            },
+            "sha256": "0cff33ccf00e14dcf7d04f0c206737aba007fadf7d51e7e2900a0d09ea9da3e8"
+          },
+          "advanced": {
+            "response": {
+              "id": 26,
+              "ok": true,
+              "path": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\first-person\\reference\\probe\\advanced.png",
+              "size": [
+                426,
+                240
+              ]
+            },
+            "sha256": "d7c42804a1b68f2a93f0f52da38850a9ecb0f7af4760aff0acd7bcdb8bfb37ec"
+          },
+          "advanced-return": {
+            "response": {
+              "id": 29,
+              "ok": true,
+              "path": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\first-person\\reference\\probe\\advanced-return.png",
+              "size": [
+                426,
+                240
+              ]
+            },
+            "sha256": "0cff33ccf00e14dcf7d04f0c206737aba007fadf7d51e7e2900a0d09ea9da3e8"
+          },
+          "advanced-reload": {
+            "response": {
+              "id": 31,
+              "ok": true,
+              "path": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\first-person\\reference\\probe\\advanced-reload.png",
+              "size": [
+                426,
+                240
+              ]
+            },
+            "sha256": "d7c42804a1b68f2a93f0f52da38850a9ecb0f7af4760aff0acd7bcdb8bfb37ec"
+          }
+        },
+        "reuse": {
+          "before": {
+            "id": 7,
+            "ok": true,
+            "valid": true,
+            "builds": 29,
+            "hits": 44,
+            "generation": 35,
+            "core_generation": 35,
+            "width": 426
+          },
+          "after": {
+            "id": 12,
+            "ok": true,
+            "valid": true,
+            "builds": 29,
+            "hits": 53,
+            "generation": 35,
+            "core_generation": 35,
+            "width": 426
+          }
+        },
+        "final_state": {
+          "id": 32,
+          "ok": true,
+          "frame": 1821,
+          "menu_open": true,
+          "fds": false,
+          "side": -1,
+          "sides": 0,
+          "motor": false,
+          "writing": false,
+          "toast": {
+            "visible": false,
+            "title": "",
+            "body": ""
+          },
+          "hle": "",
+          "disk_save": "",
+          "disk_binding": "D / LB",
+          "picture": [
+            426,
+            240
+          ],
+          "dev_ui": false,
+          "recomp_ui": true,
+          "native": true,
+          "vsync_requested": false,
+          "vsync_active": true,
+          "pads": [],
+          "state_panel": "closed",
+          "state_slot": 1,
+          "rewind_count": 0,
+          "rewind_frame": -1,
+          "rewind_enabled": true
+        },
+        "status": "pass"
+      },
+      "command": [
+        "C:/Python311/python.exe",
+        "-X",
+        "utf8",
+        "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\feature-probe-v2.py",
+        "--exe",
+        "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\reference\\LegendOfZeldaNESRecomp.exe",
+        "--rom",
+        "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\baserom.nes",
+        "--state",
+        "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\first-person\\reference\\start.state",
+        "--advanced-state",
+        "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\first-person\\reference\\advanced.state",
+        "--view",
+        "first-person",
+        "--out",
+        "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\first-person\\reference\\probe"
+      ],
+      "log": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\first-person\\reference\\probe.log"
+    },
+    "first-person/candidate": {
+      "passed": true,
+      "returncode": 0,
+      "results": {
+        "command": [
+          "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\candidate\\LegendOfZeldaNESRecomp.exe",
+          "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\baserom.nes",
+          "--hidden",
+          "--no-save",
+          "--tcp",
+          "65102",
+          "--config",
+          "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\first-person\\candidate\\probe\\config.ini",
+          "--mods-root",
+          "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\candidate\\mods",
+          "--voxel",
+          "first-person"
+        ],
+        "view": "first-person",
+        "initial_state": {
+          "id": 4,
+          "ok": true,
+          "frame": 1801,
+          "menu_open": true,
+          "fds": false,
+          "side": -1,
+          "sides": 0,
+          "motor": false,
+          "writing": false,
+          "toast": {
+            "visible": false,
+            "title": "",
+            "body": ""
+          },
+          "hle": "",
+          "disk_save": "",
+          "disk_binding": "D / LB",
+          "picture": [
+            426,
+            240
+          ],
+          "dev_ui": false,
+          "recomp_ui": true,
+          "native": true,
+          "vsync_requested": false,
+          "vsync_active": true,
+          "pads": [],
+          "state_panel": "closed",
+          "state_slot": 1,
+          "rewind_count": 0,
+          "rewind_frame": -1,
+          "rewind_enabled": true
+        },
+        "guest": {
+          "id": 5,
+          "ok": true,
+          "mode": 5,
+          "room": 119,
+          "link_x": 120,
+          "link_y": 139,
+          "direction": 8,
+          "link_state": 0,
+          "hearts": 34,
+          "sword": 0,
+          "paused": 0,
+          "submenu": 0,
+          "voxel": 2,
+          "width": 426,
+          "game_mode": 5,
+          "hp": 34,
+          "sub_mode": 0
+        },
+        "pictures": {
+          "initial": {
+            "response": {
+              "id": 6,
+              "ok": true,
+              "path": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\first-person\\candidate\\probe\\initial.png",
+              "size": [
+                426,
+                240
+              ]
+            },
+            "sha256": "0cff33ccf00e14dcf7d04f0c206737aba007fadf7d51e7e2900a0d09ea9da3e8"
+          },
+          "repeat-0": {
+            "response": {
+              "id": 8,
+              "ok": true,
+              "path": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\first-person\\candidate\\probe\\repeat-0.png",
+              "size": [
+                426,
+                240
+              ]
+            },
+            "sha256": "0cff33ccf00e14dcf7d04f0c206737aba007fadf7d51e7e2900a0d09ea9da3e8"
+          },
+          "repeat-1": {
+            "response": {
+              "id": 9,
+              "ok": true,
+              "path": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\first-person\\candidate\\probe\\repeat-1.png",
+              "size": [
+                426,
+                240
+              ]
+            },
+            "sha256": "0cff33ccf00e14dcf7d04f0c206737aba007fadf7d51e7e2900a0d09ea9da3e8"
+          },
+          "repeat-2": {
+            "response": {
+              "id": 10,
+              "ok": true,
+              "path": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\first-person\\candidate\\probe\\repeat-2.png",
+              "size": [
+                426,
+                240
+              ]
+            },
+            "sha256": "0cff33ccf00e14dcf7d04f0c206737aba007fadf7d51e7e2900a0d09ea9da3e8"
+          },
+          "repeat-3": {
+            "response": {
+              "id": 11,
+              "ok": true,
+              "path": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\first-person\\candidate\\probe\\repeat-3.png",
+              "size": [
+                426,
+                240
+              ]
+            },
+            "sha256": "0cff33ccf00e14dcf7d04f0c206737aba007fadf7d51e7e2900a0d09ea9da3e8"
+          },
+          "resize-1536x720": {
+            "response": {
+              "id": 14,
+              "ok": true,
+              "path": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\first-person\\candidate\\probe\\resize-1536x720.png",
+              "size": [
+                426,
+                240
+              ]
+            },
+            "sha256": "0cff33ccf00e14dcf7d04f0c206737aba007fadf7d51e7e2900a0d09ea9da3e8"
+          },
+          "resize-600x1200": {
+            "response": {
+              "id": 17,
+              "ok": true,
+              "path": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\first-person\\candidate\\probe\\resize-600x1200.png",
+              "size": [
+                426,
+                240
+              ]
+            },
+            "sha256": "0cff33ccf00e14dcf7d04f0c206737aba007fadf7d51e7e2900a0d09ea9da3e8"
+          },
+          "resize-1920x540": {
+            "response": {
+              "id": 20,
+              "ok": true,
+              "path": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\first-person\\candidate\\probe\\resize-1920x540.png",
+              "size": [
+                426,
+                240
+              ]
+            },
+            "sha256": "0cff33ccf00e14dcf7d04f0c206737aba007fadf7d51e7e2900a0d09ea9da3e8"
+          },
+          "restored": {
+            "response": {
+              "id": 24,
+              "ok": true,
+              "path": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\first-person\\candidate\\probe\\restored.png",
+              "size": [
+                426,
+                240
+              ]
+            },
+            "sha256": "0cff33ccf00e14dcf7d04f0c206737aba007fadf7d51e7e2900a0d09ea9da3e8"
+          },
+          "advanced": {
+            "response": {
+              "id": 26,
+              "ok": true,
+              "path": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\first-person\\candidate\\probe\\advanced.png",
+              "size": [
+                426,
+                240
+              ]
+            },
+            "sha256": "d7c42804a1b68f2a93f0f52da38850a9ecb0f7af4760aff0acd7bcdb8bfb37ec"
+          },
+          "advanced-return": {
+            "response": {
+              "id": 29,
+              "ok": true,
+              "path": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\first-person\\candidate\\probe\\advanced-return.png",
+              "size": [
+                426,
+                240
+              ]
+            },
+            "sha256": "0cff33ccf00e14dcf7d04f0c206737aba007fadf7d51e7e2900a0d09ea9da3e8"
+          },
+          "advanced-reload": {
+            "response": {
+              "id": 31,
+              "ok": true,
+              "path": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\first-person\\candidate\\probe\\advanced-reload.png",
+              "size": [
+                426,
+                240
+              ]
+            },
+            "sha256": "d7c42804a1b68f2a93f0f52da38850a9ecb0f7af4760aff0acd7bcdb8bfb37ec"
+          }
+        },
+        "reuse": {
+          "before": {
+            "id": 7,
+            "ok": true,
+            "valid": true,
+            "builds": 29,
+            "hits": 40,
+            "generation": 35,
+            "core_generation": 35,
+            "width": 426,
+            "terrain_builds": 1,
+            "terrain_hits": 0,
+            "terrain_bytes": 1080064
+          },
+          "after": {
+            "id": 12,
+            "ok": true,
+            "valid": true,
+            "builds": 29,
+            "hits": 49,
+            "generation": 35,
+            "core_generation": 35,
+            "width": 426,
+            "terrain_builds": 1,
+            "terrain_hits": 0,
+            "terrain_bytes": 1080064
+          }
+        },
+        "live_terrain_reuse": {
+          "before": {
+            "id": 32,
+            "ok": true,
+            "frame": 1821,
+            "menu_open": true,
+            "fds": false,
+            "side": -1,
+            "sides": 0,
+            "motor": false,
+            "writing": false,
+            "toast": {
+              "visible": false,
+              "title": "",
+              "body": ""
+            },
+            "hle": "",
+            "disk_save": "",
+            "disk_binding": "D / LB",
+            "picture": [
+              426,
+              240
+            ],
+            "dev_ui": false,
+            "recomp_ui": true,
+            "native": true,
+            "vsync_requested": false,
+            "vsync_active": true,
+            "pads": [],
+            "state_panel": "closed",
+            "state_slot": 1,
+            "rewind_count": 0,
+            "rewind_frame": -1,
+            "rewind_enabled": true
+          },
+          "after": {
+            "id": 45,
+            "ok": true,
+            "frame": 1843,
+            "menu_open": true,
+            "fds": false,
+            "side": -1,
+            "sides": 0,
+            "motor": false,
+            "writing": false,
+            "toast": {
+              "visible": false,
+              "title": "",
+              "body": ""
+            },
+            "hle": "",
+            "disk_save": "",
+            "disk_binding": "D / LB",
+            "picture": [
+              426,
+              240
+            ],
+            "dev_ui": false,
+            "recomp_ui": true,
+            "native": true,
+            "vsync_requested": false,
+            "vsync_active": true,
+            "pads": [],
+            "state_panel": "closed",
+            "state_slot": 1,
+            "rewind_count": 6,
+            "rewind_frame": -1,
+            "rewind_enabled": true
+          },
+          "cache": {
+            "id": 44,
+            "ok": true,
+            "valid": true,
+            "builds": 55,
+            "hits": 130,
+            "generation": 61,
+            "core_generation": 61,
+            "width": 426,
+            "terrain_builds": 1,
+            "terrain_hits": 22,
+            "terrain_bytes": 1342208
+          }
+        },
+        "final_state": {
+          "id": 46,
+          "ok": true,
+          "frame": 1843,
+          "menu_open": true,
+          "fds": false,
+          "side": -1,
+          "sides": 0,
+          "motor": false,
+          "writing": false,
+          "toast": {
+            "visible": false,
+            "title": "",
+            "body": ""
+          },
+          "hle": "",
+          "disk_save": "",
+          "disk_binding": "D / LB",
+          "picture": [
+            426,
+            240
+          ],
+          "dev_ui": false,
+          "recomp_ui": true,
+          "native": true,
+          "vsync_requested": false,
+          "vsync_active": true,
+          "pads": [],
+          "state_panel": "closed",
+          "state_slot": 1,
+          "rewind_count": 6,
+          "rewind_frame": -1,
+          "rewind_enabled": true
+        },
+        "status": "pass"
+      },
+      "command": [
+        "C:/Python311/python.exe",
+        "-X",
+        "utf8",
+        "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\feature-probe-v2.py",
+        "--exe",
+        "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\candidate\\LegendOfZeldaNESRecomp.exe",
+        "--rom",
+        "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\baserom.nes",
+        "--state",
+        "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\first-person\\candidate\\start.state",
+        "--advanced-state",
+        "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\first-person\\candidate\\advanced.state",
+        "--view",
+        "first-person",
+        "--out",
+        "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\first-person\\candidate\\probe",
+        "--require-reuse",
+        "--require-terrain"
+      ],
+      "log": "G:\\Temp\\Codex\\nes110-retained-voxel-v1-20261028\\zelda-voxel\\features-v2\\first-person\\candidate\\probe.log"
+    }
+  },
+  "supported_build": {
+    "configure_argv": [
+      "C:/msys64/mingw64/bin/cmake.exe",
+      "-S",
+      "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\zelda-nes17",
+      "-B",
+      "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-zelda-nes17",
+      "-G",
+      "Ninja",
+      "-DCMAKE_BUILD_TYPE=Release",
+      "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+      "-DCMAKE_C_COMPILER=C:/msys64/mingw64/bin/gcc.exe",
+      "-DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe",
+      "-DCMAKE_MAKE_PROGRAM=C:/msys64/mingw64/bin/ninja.exe",
+      "-DNESRECOMP_ROOT=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\engine-nes17",
+      "-DRECOMP_UI_ROOT=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+      "-DSDL2_DIR=G:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/cmake",
+      "-DNESRECOMP_ROM=F:/Projects/nesrecomp/LegendOfZeldaNESRecomp/Legend of Zelda.NES",
+      "-DNESRECOMP_HOST_COMPILER=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-cli-guarded-rom-v2\\NESRecomp.exe",
+      "-DNESRECOMP_PPU_IMPL=HLE",
+      "-DNESRECOMP_RECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+      "-DNESRECOMP_RBENGINE_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/retcomm-rbengine"
+    ],
+    "objects": [
+      {
+        "source": "G:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/zelda-nes17/src/cyc_extras.c",
+        "argv": [
+          "C:\\msys64\\mingw64\\bin\\gcc.exe",
+          "-DCYC_BUILD_REVISION=\"unknown\"",
+          "-DCYC_BUILD_VERSION=\"1.10.0\"",
+          "-DCYC_GAME_PLAYERS=1",
+          "-DCYC_GAME_REGION=0",
+          "-DCYC_MOD_GAME_ID=\"legend-of-zelda-us\"",
+          "-DCYC_MOD_ROM_CRC32=\"3fe272fb\"",
+          "-DCYC_WITH_SDL",
+          "-DNESRECOMP_CYCLE_HDPACK",
+          "-DNESRECOMP_CYCLE_HDPACK_MODS",
+          "-DNESRECOMP_CYCLE_PRESENTATION",
+          "-DNESRECOMP_ENABLE_MODS=1",
+          "-DNESRECOMP_GAME_PLAYERS=1",
+          "-DNESRECOMP_HDPACK_LAYER_PLANS=1",
+          "-DNESRECOMP_ISOLATED_NATIVE=1",
+          "-DNESRECOMP_NATIVE_INTERVALS=1",
+          "-DNESRECOMP_NATIVE_PRG_GUARDS=1",
+          "-DNESRECOMP_PPU_HLE=1",
+          "-DNESRECOMP_VOXEL_RETAINED_TERRAIN=1",
+          "-DZELDA_CYCLE",
+          "-D_CRT_SECURE_NO_WARNINGS",
+          "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine-nes17/runner/cyc",
+          "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine-nes17/runner/cyc/../include",
+          "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine-nes17/runner/include",
+          "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine-nes17/runner/cyc/../src",
+          "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/zelda-nes17/src",
+          "-isystem",
+          "G:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/cmake/../include",
+          "-O3",
+          "-DNDEBUG",
+          "-std=gnu11",
+          "-o",
+          "CMakeFiles\\LegendOfZeldaNESRecomp.dir\\src\\cyc_extras.c.obj",
+          "-c",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\zelda-nes17\\src\\cyc_extras.c"
+        ],
+        "object": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-zelda-nes17\\CMakeFiles\\LegendOfZeldaNESRecomp.dir\\src\\cyc_extras.c.obj",
+        "compiled": true
+      },
+      {
+        "source": "G:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/zelda-nes17/src/zelda_voxel.c",
+        "argv": [
+          "C:\\msys64\\mingw64\\bin\\gcc.exe",
+          "-DCYC_BUILD_REVISION=\"unknown\"",
+          "-DCYC_BUILD_VERSION=\"1.10.0\"",
+          "-DCYC_GAME_PLAYERS=1",
+          "-DCYC_GAME_REGION=0",
+          "-DCYC_MOD_GAME_ID=\"legend-of-zelda-us\"",
+          "-DCYC_MOD_ROM_CRC32=\"3fe272fb\"",
+          "-DCYC_WITH_SDL",
+          "-DNESRECOMP_CYCLE_HDPACK",
+          "-DNESRECOMP_CYCLE_HDPACK_MODS",
+          "-DNESRECOMP_CYCLE_PRESENTATION",
+          "-DNESRECOMP_ENABLE_MODS=1",
+          "-DNESRECOMP_GAME_PLAYERS=1",
+          "-DNESRECOMP_HDPACK_LAYER_PLANS=1",
+          "-DNESRECOMP_ISOLATED_NATIVE=1",
+          "-DNESRECOMP_NATIVE_INTERVALS=1",
+          "-DNESRECOMP_NATIVE_PRG_GUARDS=1",
+          "-DNESRECOMP_PPU_HLE=1",
+          "-DNESRECOMP_VOXEL_RETAINED_TERRAIN=1",
+          "-DZELDA_CYCLE",
+          "-D_CRT_SECURE_NO_WARNINGS",
+          "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine-nes17/runner/cyc",
+          "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine-nes17/runner/cyc/../include",
+          "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine-nes17/runner/include",
+          "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine-nes17/runner/cyc/../src",
+          "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/zelda-nes17/src",
+          "-isystem",
+          "G:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/cmake/../include",
+          "-O3",
+          "-DNDEBUG",
+          "-std=gnu11",
+          "-o",
+          "CMakeFiles\\LegendOfZeldaNESRecomp.dir\\src\\zelda_voxel.c.obj",
+          "-c",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\zelda-nes17\\src\\zelda_voxel.c"
+        ],
+        "object": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-zelda-nes17\\CMakeFiles\\LegendOfZeldaNESRecomp.dir\\src\\zelda_voxel.c.obj",
+        "compiled": true
+      },
+      {
+        "source": "G:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine-nes17/runner/src/voxel_renderer.c",
+        "argv": [
+          "C:\\msys64\\mingw64\\bin\\gcc.exe",
+          "-DCYC_BUILD_REVISION=\"unknown\"",
+          "-DCYC_BUILD_VERSION=\"1.10.0\"",
+          "-DCYC_GAME_PLAYERS=1",
+          "-DCYC_GAME_REGION=0",
+          "-DCYC_MOD_GAME_ID=\"legend-of-zelda-us\"",
+          "-DCYC_MOD_ROM_CRC32=\"3fe272fb\"",
+          "-DCYC_WITH_SDL",
+          "-DNESRECOMP_CYCLE_HDPACK",
+          "-DNESRECOMP_CYCLE_HDPACK_MODS",
+          "-DNESRECOMP_CYCLE_PRESENTATION",
+          "-DNESRECOMP_ENABLE_MODS=1",
+          "-DNESRECOMP_GAME_PLAYERS=1",
+          "-DNESRECOMP_HDPACK_LAYER_PLANS=1",
+          "-DNESRECOMP_ISOLATED_NATIVE=1",
+          "-DNESRECOMP_NATIVE_INTERVALS=1",
+          "-DNESRECOMP_NATIVE_PRG_GUARDS=1",
+          "-DNESRECOMP_PPU_HLE=1",
+          "-DNESRECOMP_VOXEL_RETAINED_TERRAIN=1",
+          "-DZELDA_CYCLE",
+          "-D_CRT_SECURE_NO_WARNINGS",
+          "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine-nes17/runner/cyc",
+          "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine-nes17/runner/cyc/../include",
+          "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine-nes17/runner/include",
+          "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine-nes17/runner/cyc/../src",
+          "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/zelda-nes17/src",
+          "-isystem",
+          "G:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/cmake/../include",
+          "-O3",
+          "-DNDEBUG",
+          "-std=gnu11",
+          "-o",
+          "CMakeFiles\\LegendOfZeldaNESRecomp.dir\\G_\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\engine-nes17\\runner\\src\\voxel_renderer.c.obj",
+          "-c",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\engine-nes17\\runner\\src\\voxel_renderer.c"
+        ],
+        "object": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-zelda-nes17\\CMakeFiles\\LegendOfZeldaNESRecomp.dir\\G_\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\engine-nes17\\runner\\src\\voxel_renderer.c.obj",
+        "compiled": true
+      }
+    ],
+    "scope": "Current supported CMake configuration and its exact changed-source compile commands. Full generated title link and final five-game owner build remain final combined gate."
+  },
+  "diagnostic_attribution": {
+    "profile": {
+      "calls": 299,
+      "total_ms": 1050.1898,
+      "prepare_ms": 26.1173,
+      "stages": [
+        {
+          "total_ms": 1008.9584,
+          "quad_ms": 985.6397,
+          "triangle_ms": 965.4321,
+          "quads": 270894,
+          "triangles": 541788
+        },
+        {
+          "total_ms": 2.5399,
+          "quad_ms": 0.0,
+          "triangle_ms": 0.0,
+          "quads": 0,
+          "triangles": 0
+        },
+        {
+          "total_ms": 6.3687,
+          "quad_ms": 5.2217,
+          "triangle_ms": 5.1342,
+          "quads": 1196,
+          "triangles": 2392
+        }
+      ]
+    },
+    "window": {
+      "cpu_seconds": 2.03125,
+      "wall_seconds": 2.196087999967858,
+      "command": [
+        "G:\\Temp\\Codex\\nes110-voxel-profile-v1-20261028\\LegendOfZeldaNESRecomp.exe",
+        "G:\\Temp\\Codex\\nes110-voxel-profile-v1-20261028\\baserom.nes",
+        "--hidden",
+        "--uncapped",
+        "--exit-after",
+        "2101",
+        "--no-save",
+        "--window-input",
+        "G:\\Temp\\Codex\\nes110-voxel-profile-v1-20261028\\zelda.input",
+        "--config",
+        "G:\\Temp\\Codex\\nes110-voxel-profile-v1-20261028\\config.ini",
+        "--mods-root",
+        "G:\\Temp\\Codex\\nes110-voxel-profile-v1-20261028\\mods",
+        "--voxel",
+        "diorama",
+        "--tcp",
+        "48678"
+      ],
+      "affinity_mask": null,
+      "priority": "Normal",
+      "first_frame": 1801,
+      "excluded_setup_cpu_seconds": 0.546875,
+      "excluded_setup_wall_seconds": 0.679207400069572,
+      "interval_core_before": [
+        [
+          3706856406250,
+          5804208593750,
+          1328149687500
+        ],
+        [
+          4400293750000,
+          5597592968750,
+          1534764687500
+        ],
+        [
+          2020735312500,
+          4008181250000,
+          3124176406250
+        ],
+        [
+          2917246406250,
+          4699422656250,
+          2432935000000
+        ],
+        [
+          3207739687500,
+          4813283750000,
+          2319073906250
+        ],
+        [
+          3398033281250,
+          4870663750000,
+          2261693906250
+        ],
+        [
+          3575503125000,
+          4964233437500,
+          2168124218750
+        ],
+        [
+          3737794531250,
+          5000896718750,
+          2131460937500
+        ],
+        [
+          2497480312500,
+          4306200468750,
+          2826157187500
+        ],
+        [
+          2802260312500,
+          4568465781250,
+          2563891875000
+        ],
+        [
+          3711276406250,
+          4962843593750,
+          2169514062500
+        ],
+        [
+          4141654687500,
+          5308277812500,
+          1824079843750
+        ],
+        [
+          4429774843750,
+          5645559218750,
+          1486798437500
+        ],
+        [
+          4531602187500,
+          5758804218750,
+          1373553437500
+        ],
+        [
+          4459286093750,
+          5533853906250,
+          1598503750000
+        ],
+        [
+          4378223750000,
+          5383993281250,
+          1748364375000
+        ]
+      ],
+      "interval_core_after": [
+        [
+          3706857500000,
+          5804220156250,
+          1328160000000
+        ],
+        [
+          4400298750000,
+          5597599218750,
+          1534780312500
+        ],
+        [
+          2020738281250,
+          4008186406250,
+          3124193125000
+        ],
+        [
+          2917247343750,
+          4699425468750,
+          2432954062500
+        ],
+        [
+          3207751875000,
+          4813300000000,
+          2319079531250
+        ],
+        [
+          3398045625000,
+          4870682656250,
+          2261696875000
+        ],
+        [
+          3575516093750,
+          4964250000000,
+          2168129531250
+        ],
+        [
+          3737809218750,
+          5000915312500,
+          2131464218750
+        ],
+        [
+          2497487656250,
+          4306211875000,
+          2826167656250
+        ],
+        [
+          2802271250000,
+          4568482031250,
+          2563897500000
+        ],
+        [
+          3711291406250,
+          4962861562500,
+          2169517968750
+        ],
+        [
+          4141668906250,
+          5308295312500,
+          1824084218750
+        ],
+        [
+          4429787968750,
+          5645578906250,
+          1486800625000
+        ],
+        [
+          4531615468750,
+          5758823906250,
+          1373555625000
+        ],
+        [
+          4459286093750,
+          5533855156250,
+          1598524375000
+        ],
+        [
+          4378223750000,
+          5384000312500,
+          1748379218750
+        ]
+      ],
+      "scope": "Resumed SDL frames plus normal shutdown; TCP menu/load/window setup excluded",
+      "fixed_zapper": null,
+      "setup_state": {
+        "id": 0,
+        "ok": true,
+        "frame": 1801,
+        "menu_open": true,
+        "fds": false,
+        "side": -1,
+        "sides": 0,
+        "motor": false,
+        "writing": false,
+        "toast": {
+          "visible": false,
+          "title": "",
+          "body": ""
+        },
+        "hle": "",
+        "disk_save": "",
+        "disk_binding": "D / LB",
+        "picture": [
+          426,
+          240
+        ],
+        "dev_ui": false,
+        "recomp_ui": true,
+        "native": true,
+        "vsync_requested": false,
+        "vsync_active": true,
+        "pads": [],
+        "state_panel": "closed",
+        "state_slot": 1,
+        "rewind_count": 0,
+        "rewind_frame": -1,
+        "rewind_enabled": true
+      },
+      "zapper_state": null,
+      "camera_events": [
+        {
+          "key": "Keypad 6",
+          "response": {
+            "id": 0,
+            "ok": true
+          },
+          "state": {
+            "id": 0,
+            "ok": true,
+            "frame": 1819,
+            "menu_open": false,
+            "fds": false,
+            "side": -1,
+            "sides": 0,
+            "motor": false,
+            "writing": false,
+            "toast": {
+              "visible": false,
+              "title": "",
+              "body": ""
+            },
+            "hle": "",
+            "disk_save": "",
+            "disk_binding": "D / LB",
+            "picture": [
+              426,
+              240
+            ],
+            "dev_ui": false,
+            "recomp_ui": true,
+            "native": true,
+            "vsync_requested": false,
+            "vsync_active": true,
+            "pads": [],
+            "state_panel": "closed",
+            "state_slot": 1,
+            "rewind_count": 5,
+            "rewind_frame": -1,
+            "rewind_enabled": true
+          }
+        },
+        {
+          "key": "Keypad 8",
+          "response": {
+            "id": 0,
+            "ok": true
+          },
+          "state": {
+            "id": 0,
+            "ok": true,
+            "frame": 1838,
+            "menu_open": false,
+            "fds": false,
+            "side": -1,
+            "sides": 0,
+            "motor": false,
+            "writing": false,
+            "toast": {
+              "visible": false,
+              "title": "",
+              "body": ""
+            },
+            "hle": "",
+            "disk_save": "",
+            "disk_binding": "D / LB",
+            "picture": [
+              426,
+              240
+            ],
+            "dev_ui": false,
+            "recomp_ui": true,
+            "native": true,
+            "vsync_requested": false,
+            "vsync_active": true,
+            "pads": [],
+            "state_panel": "closed",
+            "state_slot": 1,
+            "rewind_count": 10,
+            "rewind_frame": -1,
+            "rewind_enabled": true
+          }
+        },
+        {
+          "key": "Keypad 7",
+          "response": {
+            "id": 0,
+            "ok": true
+          },
+          "state": {
+            "id": 0,
+            "ok": true,
+            "frame": 1857,
+            "menu_open": false,
+            "fds": false,
+            "side": -1,
+            "sides": 0,
+            "motor": false,
+            "writing": false,
+            "toast": {
+              "visible": false,
+              "title": "",
+              "body": ""
+            },
+            "hle": "",
+            "disk_save": "",
+            "disk_binding": "D / LB",
+            "picture": [
+              426,
+              240
+            ],
+            "dev_ui": false,
+            "recomp_ui": true,
+            "native": true,
+            "vsync_requested": false,
+            "vsync_active": true,
+            "pads": [],
+            "state_panel": "closed",
+            "state_slot": 1,
+            "rewind_count": 14,
+            "rewind_frame": -1,
+            "rewind_enabled": true
+          }
+        }
+      ]
+    },
+    "binary_sha256": "b4a36b3d1de6f8095fb0242ec14cc6968b4d38037d1f2247dd06deff96615753",
+    "source_sha256": "b7b9c89865310f6e949a27deb595c69a3895b810766ea6313a0a828c28c48fc3",
+    "scope": "Diagnostic QPC wall scopes include clock overhead/scheduling, frames1802..2100 only, nested quad/triangle scopes; no A/B, exclusive CPU attribution or speedup claim. Stage0 terrain,1 tile-billboards,2 OAM sprites. Preparation includes clear/source/custom tile/camera setup. Starting overworld room; animated-terrain cache behavior not qualified by this diagnostic."
+  },
+  "memory": {
+    "actual_retained_capacity_bytes": 1342208,
+    "bounded_max_mib": 36,
+    "scope": "Owned plan capacities plus color/depth surface, not whole-process RSS; released on mod activation/init and state load."
+  },
+  "fixtures": {
+    "root": "Both retained and flag-off builds pass160 full-picture comparisons plus allocation failure. Includes animation/CHR/palette, geometry, camera/pose/resize, OAM/cards/shadows/HUD and reuse.",
+    "independent": {
+      "retained": {
+        "passed": true,
+        "stdout": "PASS:160 full pictures, animated materials/CHR/palette, geometry, camera/pose, resize, OAM cards/shadows, HUD, cache reuse and allocation-failure fallback\r\n",
+        "stderr": "",
+        "command": [
+          "C:/msys64/mingw64/bin/gcc.exe",
+          "-O2",
+          "-std=c11",
+          "-Wall",
+          "-Wextra",
+          "-DNESRECOMP_CYCLE_PRESENTATION",
+          "-DSDL_MAIN_HANDLED",
+          "-IG:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\engine-nes17\\runner\\cyc",
+          "-IG:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\engine-nes17\\runner\\include",
+          "-IG:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/include",
+          "-DNESRECOMP_VOXEL_RETAINED_TERRAIN=1",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\engine-nes17\\runner\\cyc\\tests\\voxel_retained_test.c",
+          "-o",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\validator-nes17\\retained.exe"
+        ]
+      },
+      "fallback": {
+        "passed": true,
+        "stdout": "PASS:160 full pictures, animated materials/CHR/palette, geometry, camera/pose, resize, OAM cards/shadows, HUD, cache reuse and allocation-failure fallback\r\n",
+        "stderr": "",
+        "command": [
+          "C:/msys64/mingw64/bin/gcc.exe",
+          "-O2",
+          "-std=c11",
+          "-Wall",
+          "-Wextra",
+          "-DNESRECOMP_CYCLE_PRESENTATION",
+          "-DSDL_MAIN_HANDLED",
+          "-IG:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\engine-nes17\\runner\\cyc",
+          "-IG:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\engine-nes17\\runner\\include",
+          "-IG:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/include",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\engine-nes17\\runner\\cyc\\tests\\voxel_retained_test.c",
+          "-o",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\validator-nes17\\fallback.exe"
+        ]
+      },
+      "extended": {
+        "passed": true,
+        "stdout": "PASS: independent 256 comparisons including side/sky/viewport/target/offset and allocation fallback; original160 full pictures, animated materials/CHR/palette, geometry, camera/pose, resize, OAM cards/shadows, HUD, cache reuse and allocation-failure fallback\r\n",
+        "stderr": "",
+        "command": [
+          "C:/msys64/mingw64/bin/gcc.exe",
+          "-O2",
+          "-std=c11",
+          "-Wall",
+          "-Wextra",
+          "-DNESRECOMP_CYCLE_PRESENTATION",
+          "-DSDL_MAIN_HANDLED",
+          "-IG:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\engine-nes17\\runner\\cyc",
+          "-IG:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\engine-nes17\\runner\\include",
+          "-IG:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/include",
+          "-DNESRECOMP_VOXEL_RETAINED_TERRAIN=1",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\validator-nes17\\extended_test.c",
+          "-o",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\validator-nes17\\extended.exe"
+        ]
+      }
+    }
+  },
+  "validator": {
+    "agent": "/root/validate_nes17",
+    "decision": "implementation/source/raw evidence accepted; actual PR/durable record handoff pending"
+  },
+  "settings": "Actual hidden SDL dummy video/software1280x720; audio emulated/mixed/queued to dummy output. Frames1801..2101, five alternating pairs after excluded warmup/setup. Pair stays on one host/configuration. Resumed gameplay plus normal shutdown CPU; not physical GPU/FPS or all-motion claims.",
+  "limitations": [
+    "The300-frame route contains player/camera motion followed by stationary periods. Terrain raster reuse benefits stable resolved products; animated terrain correctness is fixture-qualified, not measured as a gain. Do not add this reduction to NES11 or compare hosts as equivalent workloads.",
+    "Other titles, including Metroid voxel, do not receive the opt-in package. Shared baseline Metroid restore defects remain separate and were not used to reject this change.",
+    "Dynamic actor assembly remains ordinary and is a deferred residual, not architectural exhaustion. The measured pre-change OAM scope was6.37ms versus1050ms whole voxel work, instrumented wall time; reassess after terrain retention if actual workload costs select it.",
+    "Supported current CMake configure and exact changed-source compile commands pass; full generated/link production builds and final five-game human handoff remain the final combined gate.",
+    "INI concern raised during review was independently retracted: original source/config bytes have real linefeeds. v1 and repeated v2 feature checks are valid. feature-ini-audit.json retains direct counts; no fixed-defect claim."
+  ],
+  "evidence_root": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028",
+  "pull_requests": "pending"
+}

@@ -20,7 +20,8 @@
     "2026-10-28-isolated-native-results.json",
     "2026-10-28-hd-record-results.json",
     "2026-10-28-presentation-bridge-results.json",
-    "2026-10-28-prepared-picture-results.json"
+    "2026-10-28-prepared-picture-results.json",
+    "2026-10-28-retained-voxel-results.json"
   ],
   "priorities": "Order expresses expected scope and evidence, not measured recoverable cost. Overlapping packages are not additive.",
   "acceptance": "Each game neutral or positive. Small mixed samples inconclusive. Shared original/candidate defects are separate. Native saves protected; old save-state compatibility never required.",
@@ -666,7 +667,7 @@
       "package": "visual-products",
       "priority": "P2",
       "title": "Retained voxel terrain and sprite assembly",
-      "status": "open-unmeasured",
+      "status": "evaluated-selected-Zelda-retained-terrain",
       "evidence": [
         {
           "file": "runner/src/voxel_renderer.c",
@@ -683,15 +684,29 @@
           "link": "../../runner/src/voxel_renderer.c#L937"
         }
       ],
-      "remaining": "Terrain generation, tile materials, sprite grouping and contact shadows are a larger complete job than an isolated triangle helper. Retain static geometry/materials and update changed actors/camera-dependent products.",
+      "remaining": "Zelda retains exact resolved terrain commands and color/depth. Other title opt-ins and dynamic sprite assembly remain unmeasured/deferred; original Metroid shared restore defect is separate, not a rejection. Reassess actor assembly using remaining post-retention costs; no architectural exhaustion claim.",
       "affected_profiles": [
         "Zelda/Metroid/other supported voxel diorama and first-person modes"
       ],
-      "next_decisive_check": "One active voxel room with camera motion and animated terrain; distinguish geometry construction, rasterization and sprite assembly before choosing retained CPU meshes or an optional GPU backend.",
+      "next_decisive_check": "Final combined supported generation/link and owner handoff; separately reassess other title opt-ins and dynamic actor assembly when selected by actual remaining costs.",
       "required_behavior": "Tile heights, clipping, transparent cards, actor grouping, proportional shadows, HUD and camera/input behavior. Shared Metroid restore defect remains separate.",
       "prior_issue": null,
-      "measured_additional_gain": null,
-      "execution_status": "remaining-evaluation"
+      "measured_additional_gain": [
+        {
+          "case": "zelda-first-person",
+          "host": "DESKTOP-HN15M1H",
+          "median_cpu_reduction_percent": 46.07843137254902,
+          "decision": "positive in this bounded workload"
+        },
+        {
+          "case": "zelda-voxel",
+          "host": "SERVER",
+          "median_cpu_reduction_percent": 44.3089430894309,
+          "decision": "positive in this bounded workload"
+        }
+      ],
+      "execution_status": "selected-scoped-Zelda-retained-terrain",
+      "result_file": "2026-10-28-retained-voxel-results.json"
     },
     {
       "id": "NES18",
@@ -1190,12 +1205,12 @@
     "owner_handoff_ready": false
   },
   "execution_summary": {
-    "evaluated_decisions": 13,
+    "evaluated_decisions": 14,
     "partial_ids": [],
     "parked_ids": [
       "NES29"
     ],
-    "other_unresolved": 17,
+    "other_unresolved": 16,
     "note": "Qualified scope decisions, not architectural exhaustion or a wall-clock completion estimate. Final combined builds and owner approval remain separate."
   }
 }
