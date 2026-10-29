@@ -161,6 +161,16 @@ typedef struct NesVoxelScene {
 /* Returns 1 when a scene was rendered, 0 when the descriptor was invalid. */
 int nes_voxel_render(const NesVoxelScene *scene);
 
+/* Opt-in retained terrain presentation. Terrain callbacks still resolve each
+ * frame. Exact resolved geometry, texture pixels and camera values qualify
+ * reuse of the terrain color/depth layer; actors and the HUD remain current.
+ * Builds without NESRECOMP_VOXEL_RETAINED_TERRAIN use the ordinary renderer.
+ * Derived host storage is bounded, disposable and never part of save states. */
+int nes_voxel_render_retained(const NesVoxelScene *scene);
+void nes_voxel_retained_forget(void);
+void nes_voxel_retained_stats(uint64_t *builds, uint64_t *hits);
+uint64_t nes_voxel_retained_bytes(void);
+
 /*
  * ---------------------------------------------------------------------
  * Immediate-mode mesh API
