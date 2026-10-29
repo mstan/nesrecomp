@@ -40,9 +40,10 @@ Missing `selectscreen.png` and unsupported pack rules reproduce in both builds
 and remain shared limitations.
 
 No implementation PR is warranted for this unsuccessful item. The validator
-confirmed the evidence; its final handoff follows the durable Beads record.
-NES15 is the next separate candidate: the sampler still materializes full
-`HdPixel` records. A later measured end-to-end replacement could justify
+confirmed the evidence, durable Beads records and successful sync before
+handing off to NES15. Scope correction: NES15 evaluates the separate legacy
+OAM/nametable/palette/CHR bridge. Full `HdPixel` materialization remains a
+possible NES13 follow-up. A later measured end-to-end replacement could justify
 reopening NES13; these experiments do not establish architectural exhaustion.
 Final combined builds and owner approval remain open; FDS stays parked.
 

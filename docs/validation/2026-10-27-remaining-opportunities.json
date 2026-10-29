@@ -18,7 +18,8 @@
     "2026-10-28-guarded-rom-results.json",
     "2026-10-28-raster-job-results.json",
     "2026-10-28-isolated-native-results.json",
-    "2026-10-28-hd-record-results.json"
+    "2026-10-28-hd-record-results.json",
+    "2026-10-28-presentation-bridge-results.json"
   ],
   "priorities": "Order expresses expected scope and evidence, not measured recoverable cost. Overlapping packages are not additive.",
   "acceptance": "Each game neutral or positive. Small mixed samples inconclusive. Shared original/candidate defects are separate. Native saves protected; old save-state compatibility never required.",
@@ -507,7 +508,7 @@
       "affected_profiles": [
         "Zelda Remastered active HD; other real enabled HD packs"
       ],
-      "next_decisive_check": "Stop local tuning after two unsuccessful experiments. Continue serially to NES15 only after the independent validator verifies the durable Beads decision and hands off.",
+      "next_decisive_check": "Both recorder prototypes are deferred and independently validated. Full HdPixel materialization remains an NES13 follow-up; NES15 is the separate legacy graphics bridge and is now evaluated. Continue the serial register after validator handoff.",
       "required_behavior": "Bytes actually fetched across mid-tile bank/CHR changes, palette timing, sprite priority, masks/emphasis, exact native fallback and current-build saves.",
       "prior_issue": null,
       "measured_additional_gain": [
@@ -573,7 +574,7 @@
       "package": "visual-products",
       "priority": "P1",
       "title": "Replace the copy-based presentation compatibility bridge",
-      "status": "open-unmeasured",
+      "status": "evaluated-measured-deferral-consumer-job-first",
       "evidence": [
         {
           "file": "runner/cyc/cyc_presentation.c",
@@ -583,15 +584,16 @@
           "link": "../../runner/cyc/cyc_presentation.c#L16"
         }
       ],
-      "remaining": "The bridge copies OAM/nametable/palette and reads 8192 CHR bytes into legacy-shaped globals. Expose one immutable frame/mapping view or revision-aware update service to consumers instead of rebuilding all compatibility products at every sync.",
+      "remaining": "Legacy compatibility snapshots cost8.7925..13.0560ms in the admitted instrumented gameplay scopes, versus2387.3094ms voxel preparation and repeated frame-end/present calls. Defer a standalone view rewrite and prioritize one consumer render job. QPC is diagnostic wall attribution, not an A/B saving or recovery bound.",
       "affected_profiles": [
         "Cycle custom/HD/voxel callers of cyc_presentation_sync"
       ],
-      "next_decisive_check": "Audit sync callers in one wide/voxel/HD frame, count repeated products and measure inclusive bridge plus consumer preparation.",
+      "next_decisive_check": "Fresh validator confirms durable Beads/commit handoff, then NES11 one prepared consumer render job. Revisit this bridge only when a coherent consumer replacement changes its measured contribution.",
       "required_behavior": "Consumers see the correct completed-frame/mapping data, live bank/CHR changes and state restores; keep an adapter for unported consumers.",
       "prior_issue": null,
       "measured_additional_gain": null,
-      "execution_status": "remaining-evaluation"
+      "execution_status": "evaluated-diagnostic-attribution-no-implementation",
+      "results": "2026-10-28-presentation-bridge-results.json"
     },
     {
       "id": "NES16",
@@ -1143,7 +1145,7 @@
   ],
   "execution": {
     "issue": "beads-2dw.1.110",
-    "branch": "perf/nes13-hd-records",
+    "branch": "perf/nes15-presentation-bridge",
     "base": "fc0bf3fa46a710464960c0a1f2d3b83b4d345600",
     "status": "in-progress",
     "evidence_root": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028",
@@ -1154,12 +1156,12 @@
     "owner_handoff_ready": false
   },
   "execution_summary": {
-    "evaluated_decisions": 11,
+    "evaluated_decisions": 12,
     "partial_ids": [],
     "parked_ids": [
       "NES29"
     ],
-    "other_unresolved": 19,
+    "other_unresolved": 18,
     "note": "Qualified scope decisions, not architectural exhaustion or a wall-clock completion estimate. Final combined builds and owner approval remain separate."
   }
 }

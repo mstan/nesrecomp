@@ -17,7 +17,7 @@ original HD runtime. See [HD results](2026-10-28-hd-plan-results.md), including
 the rejected universal packages and SMB's unchanged-runtime proof. Zelda's
 fixed SNROM SRAM code now joins the native deadline service; see
 [SRAM results](2026-10-28-sram-native-results.md). SERVER Fit improves5.128%
-and Remastered1.442%; stock is neutral/inconclusive. Eleven items now have
+and Remastered1.442%; stock is neutral/inconclusive. Twelve items now have
 qualified evaluation decisions; NES01 is qualified for whole stable HLE raster
 jobs and NES29 remains parked.
 Guarded native ROM is now evaluated under NES09; see
@@ -321,8 +321,8 @@ close the per-pixel raster or APU-event algorithm work under NES01/NES06.
   Decision: Both pooled compact pixels and circular delay records are deferred
   after two neutral/inconclusive actual Remastered A/B runs. No runtime change
   is selected. See [HD recorder results](2026-10-28-hd-record-results.md).
-  The independent validator confirmed the deferral; continue to NES15 only
-  after its final Beads handoff. This is an evaluation decision, not exhaustion.
+  The independent validator confirmed the deferral and durable-record handoff.
+  NES15's separate bridge evaluation follows below. This is a decision, not exhaustion.
 
   Preserve: Bytes actually fetched across mid-tile bank/CHR changes, palette timing, sprite priority, masks/emphasis, exact native fallback and current-build saves.
 
@@ -342,13 +342,17 @@ close the per-pixel raster or APU-event algorithm work under NES01/NES06.
   Evidence: [runner/cyc/cyc_hdpack.c:133](../../runner/cyc/cyc_hdpack.c#L133), [runner/src/hdpack.c:237](../../runner/src/hdpack.c#L237), [runner/src/hdpack.c:1124](../../runner/src/hdpack.c#L1124).
 
 
-- [ ] **NES15 · P1 · Replace the copy-based presentation compatibility bridge**
+- [x] **NES15 · P1 · Replace the copy-based presentation compatibility bridge**
 
   The bridge copies OAM/nametable/palette and reads 8192 CHR bytes into legacy-shaped globals. Expose one immutable frame/mapping view or revision-aware update service to consumers instead of rebuilding all compatibility products at every sync.
 
   Scope: Cycle custom/HD/voxel callers of cyc_presentation_sync.
 
-  Next: Audit sync callers in one wide/voxel/HD frame, count repeated products and measure inclusive bridge plus consumer preparation.
+  Decision: Measured deferral after one active Fit/HD/diorama attribution.
+  The bridge is a small scoped cost beside repeated whole consumer preparation;
+  prioritize one prepared render job under NES11. No A/B speedup or runtime
+  change is claimed. See [bridge results](2026-10-28-presentation-bridge-results.md).
+  The fresh validator confirmed this evidence; its durable-record handoff is next.
 
   Preserve: Consumers see the correct completed-frame/mapping data, live bank/CHR changes and state restores; keep an adapter for unported consumers.
 

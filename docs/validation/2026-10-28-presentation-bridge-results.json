@@ -1,0 +1,1641 @@
+{
+  "schema_version": 1,
+  "issue": "beads-2dw.1.110",
+  "campaign": "beads-2wy8.1",
+  "opportunity": "NES15",
+  "source_base": "272b8b2",
+  "selected_runtime_change": false,
+  "status": "evaluated-measured-deferral-consumer-job-first",
+  "scope": "One diagnostic run each of Zelda Seamless Fit, real Remastered pack and active diorama. SDL dummy video/software1280x720 and dummy audio output with emulation enabled. QPC scopes admit cyc_ring_frame1802..2100; setup/load/pause at1801 excluded. Instrumentation wall scopes include scheduling/cache effects and clock overhead. No A/B or recoverable CPU bound.",
+  "diagnostic_product": {
+    "exe": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-bridge-profile-v1\\LegendOfZeldaNESRecomp.exe",
+    "sha256": "160392d24f7b9c5b92ada033e35791a7184a735681bd5c84c302d496e25206bf",
+    "build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-zelda-guarded-rom-v2-candidate",
+    "objects": [
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cpu6502.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cpu6502_interp.c.obj",
+      "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-isolated-native-v1\\zelda\\candidate\\hw_machine.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/hw_mapper.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/hw_fds.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/hw_fds_audio.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/hw_fds_hle.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/vendor/emu2413/emu2413.c.obj",
+      "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-raster-v1\\zelda\\candidate\\hw_ppu.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/hw_apu.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/hw_palette.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_trace.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_ring.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_run.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_ramview.c.obj",
+      "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-isolated-native-v1\\zelda\\candidate\\cyc_host.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_diagnostics.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_accuracycoin.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_png.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_disk_action.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_overlay.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_fds_bios.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_host_extras_none.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_session.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_hooks.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_mod.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_state.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_video.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_render.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/src/mod_function_hooks.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/src/mod_savestate.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/src/rollback/nes_session_config.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b01.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b04.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b06.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b08.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b09.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b0A.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b0B.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b0C.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b10.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b13.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b14.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b15.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b16.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b17.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b18.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b1A.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b1C.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b1E.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b1F.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_r00.c.obj",
+      "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-bridge-profile-v1\\cyc_extras.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/src/zelda_voxel.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/src/zelda_world.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/src/zelda_world_rooms.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/src/zelda_voxel_plugin.c.obj",
+      "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-bridge-profile-v1\\cyc_presentation.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/src/voxel_renderer.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/src/voxel_screen_profile.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/src/keybinds.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/src/mod_runtime.cpp.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/src/crc32.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_hdpack.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/src/hdpack.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/src/chr_codec.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_sdl.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_input.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_settings.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_tcp.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/launcher_model.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/launcher_platform_sdl2.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/launcher_gl.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/launcher_input.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/launcher_files.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/launcher_debug.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/launcher_binds.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/pad_binds.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/launcher_udp_port.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/recomp_runtime_ui.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/recomp_runtime_settings.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/recomp_frame_blend.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/recomp_moderation.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/recomp_flash_guard.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/launcher_boot_timing.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/launcher_ng_capi.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/launcher_i18n.cpp.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/launcher_mod_visibility.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/emoji/recomp_emoji.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/emoji/recomp_emoji_freetype.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/emoji/recomp_emoji_win32.cpp.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/emoji/recomp_emoji_flags.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/third_party/tinyfiledialogs.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/consoles/psx/memcard_format.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/consoles/psx/psx_binds.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/consoles/psx/psx_pad_binds.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/consoles/snes/snes_pad_binds.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/consoles/n64/n64_binds.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/consoles/n64/n64_pad_binds.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/consoles/nes/nes_binds.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/consoles/genesis/genesis_binds.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/consoles/gb/gb_binds.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/crc32.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/sha256.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/sha1.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/keybinds.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/ips_patch.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/backends/imgui/launcher_imgui.cpp.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/backends/imgui/runtime_ui_imgui.cpp.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/third_party/imgui/imgui.cpp.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/third_party/imgui/imgui_draw.cpp.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/third_party/imgui/imgui_tables.cpp.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/third_party/imgui/imgui_widgets.cpp.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/third_party/imgui/backends/imgui_impl_sdl2.cpp.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/third_party/imgui/backends/imgui_impl_opengl3.cpp.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/third_party/imgui/backends/imgui_impl_sdlrenderer2.cpp.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_ui_menu.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_ui_launcher.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_ui_imgui.cpp.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_state_ui.cpp.obj"
+    ],
+    "compile_commands": [
+      [
+        "C:\\msys64\\mingw64\\bin\\gcc.exe",
+        "-DCYC_BUILD_REVISION=\"unknown\"",
+        "-DCYC_BUILD_VERSION=\"1.10.0\"",
+        "-DCYC_GAME_PLAYERS=1",
+        "-DCYC_GAME_REGION=0",
+        "-DCYC_LAUNCHER_ROM_SHA256=\"085e5397a3487357c263dfa159fb0fe20a5f3ea8ef82d7af6a7e848d3b9364e8\"",
+        "-DCYC_MOD_GAME_ID=\"legend-of-zelda-us\"",
+        "-DCYC_MOD_ROM_CRC32=\"3fe272fb\"",
+        "-DCYC_WITH_RECOMP_UI",
+        "-DCYC_WITH_SDL",
+        "-DNESRECOMP_CYCLE_HDPACK",
+        "-DNESRECOMP_CYCLE_HDPACK_MODS",
+        "-DNESRECOMP_CYCLE_PRESENTATION",
+        "-DNESRECOMP_ENABLE_MODS=1",
+        "-DNESRECOMP_GAME_PLAYERS=1",
+        "-DNESRECOMP_HDPACK_LAYER_PLANS=1",
+        "-DNESRECOMP_NATIVE_INTERVALS=1",
+        "-DNESRECOMP_NATIVE_PRG_GUARDS=1",
+        "-DNESRECOMP_PPU_HLE=1",
+        "-DRECOMP_LAUNCHER",
+        "-DRECOMP_UI_ENABLE_MODS=1",
+        "-DSDL_MAIN_HANDLED",
+        "-DZELDA_CYCLE",
+        "-D_CRT_SECURE_NO_WARNINGS",
+        "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc",
+        "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/../include",
+        "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/include",
+        "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/../src",
+        "-IG:/Temp/Codex/nesrecomp/native-20261027/ui/src",
+        "-IG:/Temp/Codex/nesrecomp/native-20261027/ui/src/common",
+        "-IG:/Temp/Codex/nesrecomp/native-20261027/ui/src/third_party/imgui",
+        "-IG:/Temp/Codex/nesrecomp/native-20261027/ui/src/third_party/imgui/backends",
+        "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/zelda/src",
+        "-IG:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net/include",
+        "-IG:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/retcomm-rbengine/include",
+        "-isystem",
+        "G:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/cmake/../include",
+        "-O2",
+        "-g1",
+        "-DNDEBUG",
+        "-std=gnu11",
+        "-c",
+        "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\source-bridge-profile-v1\\cyc_presentation.c",
+        "-o",
+        "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-bridge-profile-v1\\cyc_presentation.c.obj"
+      ],
+      [
+        "C:\\msys64\\mingw64\\bin\\gcc.exe",
+        "-DCYC_BUILD_REVISION=\"unknown\"",
+        "-DCYC_BUILD_VERSION=\"1.10.0\"",
+        "-DCYC_GAME_PLAYERS=1",
+        "-DCYC_GAME_REGION=0",
+        "-DCYC_LAUNCHER_ROM_SHA256=\"085e5397a3487357c263dfa159fb0fe20a5f3ea8ef82d7af6a7e848d3b9364e8\"",
+        "-DCYC_MOD_GAME_ID=\"legend-of-zelda-us\"",
+        "-DCYC_MOD_ROM_CRC32=\"3fe272fb\"",
+        "-DCYC_WITH_RECOMP_UI",
+        "-DCYC_WITH_SDL",
+        "-DNESRECOMP_CYCLE_HDPACK",
+        "-DNESRECOMP_CYCLE_HDPACK_MODS",
+        "-DNESRECOMP_CYCLE_PRESENTATION",
+        "-DNESRECOMP_ENABLE_MODS=1",
+        "-DNESRECOMP_GAME_PLAYERS=1",
+        "-DNESRECOMP_HDPACK_LAYER_PLANS=1",
+        "-DNESRECOMP_NATIVE_INTERVALS=1",
+        "-DNESRECOMP_NATIVE_PRG_GUARDS=1",
+        "-DNESRECOMP_PPU_HLE=1",
+        "-DRECOMP_LAUNCHER",
+        "-DRECOMP_UI_ENABLE_MODS=1",
+        "-DSDL_MAIN_HANDLED",
+        "-DZELDA_CYCLE",
+        "-D_CRT_SECURE_NO_WARNINGS",
+        "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc",
+        "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/../include",
+        "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/include",
+        "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/../src",
+        "-IG:/Temp/Codex/nesrecomp/native-20261027/ui/src",
+        "-IG:/Temp/Codex/nesrecomp/native-20261027/ui/src/common",
+        "-IG:/Temp/Codex/nesrecomp/native-20261027/ui/src/third_party/imgui",
+        "-IG:/Temp/Codex/nesrecomp/native-20261027/ui/src/third_party/imgui/backends",
+        "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/zelda/src",
+        "-IG:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net/include",
+        "-IG:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/retcomm-rbengine/include",
+        "-isystem",
+        "G:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/cmake/../include",
+        "-O2",
+        "-g1",
+        "-DNDEBUG",
+        "-std=gnu11",
+        "-c",
+        "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\source-bridge-profile-v1\\cyc_extras.c",
+        "-o",
+        "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-bridge-profile-v1\\cyc_extras.c.obj"
+      ]
+    ],
+    "link_command": [
+      "C:\\msys64\\mingw64\\bin\\g++.exe",
+      "-O2",
+      "-g1",
+      "-DNDEBUG",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cpu6502.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cpu6502_interp.c.obj",
+      "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-isolated-native-v1\\zelda\\candidate\\hw_machine.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/hw_mapper.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/hw_fds.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/hw_fds_audio.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/hw_fds_hle.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/vendor/emu2413/emu2413.c.obj",
+      "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-raster-v1\\zelda\\candidate\\hw_ppu.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/hw_apu.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/hw_palette.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_trace.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_ring.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_run.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_ramview.c.obj",
+      "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-isolated-native-v1\\zelda\\candidate\\cyc_host.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_diagnostics.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_accuracycoin.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_png.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_disk_action.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_overlay.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_fds_bios.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_host_extras_none.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_session.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_hooks.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_mod.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_state.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_video.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_render.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/src/mod_function_hooks.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/src/mod_savestate.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/src/rollback/nes_session_config.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b01.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b04.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b06.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b08.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b09.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b0A.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b0B.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b0C.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b10.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b13.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b14.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b15.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b16.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b17.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b18.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b1A.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b1C.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b1E.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b1F.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_r00.c.obj",
+      "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-bridge-profile-v1\\cyc_extras.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/src/zelda_voxel.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/src/zelda_world.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/src/zelda_world_rooms.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/src/zelda_voxel_plugin.c.obj",
+      "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-bridge-profile-v1\\cyc_presentation.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/src/voxel_renderer.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/src/voxel_screen_profile.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/src/keybinds.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/src/mod_runtime.cpp.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/src/crc32.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_hdpack.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/src/hdpack.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/src/chr_codec.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_sdl.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_input.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_settings.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_tcp.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/launcher_model.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/launcher_platform_sdl2.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/launcher_gl.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/launcher_input.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/launcher_files.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/launcher_debug.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/launcher_binds.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/pad_binds.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/launcher_udp_port.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/recomp_runtime_ui.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/recomp_runtime_settings.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/recomp_frame_blend.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/recomp_moderation.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/recomp_flash_guard.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/launcher_boot_timing.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/launcher_ng_capi.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/launcher_i18n.cpp.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/launcher_mod_visibility.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/emoji/recomp_emoji.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/emoji/recomp_emoji_freetype.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/emoji/recomp_emoji_win32.cpp.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/emoji/recomp_emoji_flags.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/third_party/tinyfiledialogs.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/consoles/psx/memcard_format.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/consoles/psx/psx_binds.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/consoles/psx/psx_pad_binds.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/consoles/snes/snes_pad_binds.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/consoles/n64/n64_binds.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/consoles/n64/n64_pad_binds.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/consoles/nes/nes_binds.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/consoles/genesis/genesis_binds.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/consoles/gb/gb_binds.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/crc32.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/sha256.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/sha1.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/keybinds.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/ips_patch.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/backends/imgui/launcher_imgui.cpp.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/backends/imgui/runtime_ui_imgui.cpp.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/third_party/imgui/imgui.cpp.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/third_party/imgui/imgui_draw.cpp.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/third_party/imgui/imgui_tables.cpp.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/third_party/imgui/imgui_widgets.cpp.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/third_party/imgui/backends/imgui_impl_sdl2.cpp.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/third_party/imgui/backends/imgui_impl_opengl3.cpp.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/third_party/imgui/backends/imgui_impl_sdlrenderer2.cpp.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_ui_menu.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_ui_launcher.c.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_ui_imgui.cpp.obj",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_state_ui.cpp.obj",
+      "-o",
+      "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-bridge-profile-v1\\LegendOfZeldaNESRecomp.exe",
+      "-lws2_32",
+      "G:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/cmake/../lib/x64/SDL2.lib",
+      "-lopengl32",
+      "-lws2_32",
+      "-ld2d1",
+      "-ldwrite",
+      "-lwindowscodecs",
+      "-lole32",
+      "recomp-net-build/librecomp_net.a",
+      "retcomm-rbengine-build/libretcomm_rbengine.a",
+      "-lws2_32",
+      "-liphlpapi",
+      "-lbcrypt",
+      "-lshell32",
+      "-lkernel32",
+      "-luser32",
+      "-lgdi32",
+      "-lwinspool",
+      "-lshell32",
+      "-lole32",
+      "-loleaut32",
+      "-luuid",
+      "-lcomdlg32",
+      "-ladvapi32"
+    ],
+    "recovered_completed_output": false,
+    "source_sha256": {
+      "cyc_presentation.c": "3130e01681676ab2d8712207deaedab77d46824303ca9d1e9ff2ede22aacd05d",
+      "cyc_extras.c": "b94e69842b34384eaac6da9ade7bc378300c4042eb586b0020bae2694bc9a39e"
+    },
+    "object_sha256": {
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cpu6502.c.obj": "0805e84da3bbe3211948a80fcb144fdf20e8d333fe6116928499bffc4da2b40a",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cpu6502_interp.c.obj": "04c6a4f9c98fedb2aa2b37ab10663b23dfc423d9c3f69f87457de4d525cffc4e",
+      "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-isolated-native-v1\\zelda\\candidate\\hw_machine.c.obj": "32c6ec44e3aa71b93beee86e0706cefeececd646fb69b2ff6effcca4ab76427c",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/hw_mapper.c.obj": "7249e133aa073ccfec092eeddb113bb6ceea1348df2ef4fecc2a79bb8f5bb23f",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/hw_fds.c.obj": "59ce6b55ae133ded00084547f644f0c1977fe79643f97e35b7f64400f9d3c629",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/hw_fds_audio.c.obj": "bd218b80e49514bdfa710a3cec9e1c81c46a9018cb789713688e255faf5dfacb",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/hw_fds_hle.c.obj": "de8684fa76280ce9566cefc8af358de29043900a5314bf0c0a9ea964d2c13896",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/vendor/emu2413/emu2413.c.obj": "b2189a8b2bc716c836e091dbd57bda831935de93a61634e6ec3db48b4b1d12b1",
+      "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-raster-v1\\zelda\\candidate\\hw_ppu.c.obj": "33489a9081c02ee1ad55a0ecd2c18277b858b2d1048b802f03bb2901fe1bb63e",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/hw_apu.c.obj": "366812ebe5d6f3fd51714d924684ad65f23d5d442c092b0f069a3aeacc2dea1a",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/hw_palette.c.obj": "7dddca33d7d36c8d8c6c0f2607e23c563539ce6900f1b0baa6e843b1a6f9acce",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_trace.c.obj": "2b7e465e4bc585e8cd8c81761e16433119ebd4b751d6444986f0036049ea9d3d",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_ring.c.obj": "62816db2ceeae0e2640d8674821f2b16fbb494b4f464b45e71cddd7899882c7e",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_run.c.obj": "43a77f8cf77fa3d68739f2eebdb279c4147bd6080078ab5d90f691e2e65f1fa4",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_ramview.c.obj": "a11289fe1d32618da52439983edcd9ba0cecd244381ad0bde474b153e6fb86a1",
+      "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-isolated-native-v1\\zelda\\candidate\\cyc_host.c.obj": "70e007edc5f39f1de8784ffda76c7423cb72f25ee7a3946b8d848140fa5fcd67",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_diagnostics.c.obj": "fff53a4236338ddabf9c05dc7359b32d3367bdd65194913b18c5b421d6f5fb88",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_accuracycoin.c.obj": "b1a462917644f70207d4231b5f371b096ba3ffd5a70fb39499d69cd4fd09a50d",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_png.c.obj": "c527612a0925518c44171fbb0839a6fbcb090493e0261900dca3219a7a4022fc",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_disk_action.c.obj": "1dd5913677c55b99a1544494601027993223393c37402bf898c572ab582317c7",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_overlay.c.obj": "c5934b6861ee91bde197d5a99b0735d74dae331b74f3b56598618a4026db838d",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_fds_bios.c.obj": "c476bd2d72afd6402b49679eff62fe696bc02b5bcab51137dcd41dbdfad8b57c",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_host_extras_none.c.obj": "b40f190742d7aa75015f06dfbf59b4fb8af18389de50108bc4236413d044de0e",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_session.c.obj": "0b92497f9a512ca1fbaffa06db564ff864a786c24760c03d4bab4992391d9584",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_hooks.c.obj": "127e5276cd82b607e8bb3f1622a322f22fb465f4440e34fd36d4775bf7c75945",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_mod.c.obj": "c50fb89d3bb11016a7075bf7ee128c9ebbd6e6fa8e83c7480074212254a2f4e0",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_state.c.obj": "662c7f0890a53e19d70a65fd777856e947f7e83702345f9fe42e3c853060d51a",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_video.c.obj": "271c539f382a55ce9d4103cf8b9967bbcf5093e78691578d5921a703560a16f6",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_render.c.obj": "afa85155d781141704d6731797d42d04524f9a93c43ffa1b4b4edbaf25fb54e0",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/src/mod_function_hooks.c.obj": "64c20d40378dbe7e16767cae7ce1d2a23bb6dd4c73597795ce27b7f0135d1b90",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/src/mod_savestate.c.obj": "78ef53e4dfc123646a1b9601c150370a1303c0fe738290770f6b353aaffd531e",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/src/rollback/nes_session_config.c.obj": "c8fec6158f04c1550b30f41cf9923a3ffc8d9f84e762c5983c785fe3dae0d8e7",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc.c.obj": "14e91c1467f2fb47877fc54e4b80ea08908460bb6072211982026b3df2ec7927",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b01.c.obj": "e7570ed64f577d7ce205b323d90f0449ae1a4bdc4449dd58b419c52ba750d469",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b04.c.obj": "61ae390c6f6bae6dcd9bc3e133e74b6841cf6701b008d64e426d031d908b2fb3",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b06.c.obj": "5a152172a048ce66880b6cfbe61ac3c0c47dce4920657aa77dc3f3ab4bcd4598",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b08.c.obj": "cf541083b5faf36e0d95a637f3590c381bd57f172d0bab0748aeef9c3f461f3c",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b09.c.obj": "906b8f20ca979c4fe4ca339a9b338e132268a57ddda4aa6e638bbc36af7cd1b9",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b0A.c.obj": "1c9cbd8a3ced94e516e3831f8440a4d17d407a8263d53f97a276bce552948e3e",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b0B.c.obj": "9df8041627f497c485dbd4c0d65ca0083d5d9d788c1ba6c574bc29152e19f91e",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b0C.c.obj": "06d8129f24ec6588a9e9b37352adc75ce4c9bc0e3bdf2a0a0fcc2c42b24d708c",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b10.c.obj": "21b453da44cdeb6dcad42ccd4f1c84593527c03257e26a874b760163b36e1cf4",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b13.c.obj": "c3a711ba6d4b99cd6cda9c6387c65d95bf2f270d79dd889f0b568dfd753f11a7",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b14.c.obj": "bc7ead0d6780548dd6d79aaf328b3e55b9e278cc71a58cdebd2900871a998d9f",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b15.c.obj": "6844494cc23cd6e3a836976372b0258db1d23ee7dff426ff5e49b082c88c876f",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b16.c.obj": "9635a24065fa343a096e2fa8924215523332e54f110d4e1bdba5c91482aa60a4",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b17.c.obj": "fa07fa140a2013a9cda2c54428de36bb81c3e24cd56f87aaee2218110a83fa05",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b18.c.obj": "4d5fcdf737c4842e1e2c3e04eca96b36d11e6232daa4bac7ae2615ce20d5cf7a",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b1A.c.obj": "d9f824f1d6699532de02cc46e1402ba881254ae3c15f1680c7f0720130d77530",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b1C.c.obj": "bdaa79d329f2aab3b2ebb078d5991c3c66b292c9206f0f5dfaeb530e06667f4e",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b1E.c.obj": "a22d8f171a672b53b93d9eeb4a7af6e59a6b71cab713970d9f4122babc54726a",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_b1F.c.obj": "e357d6b6119b3387f269f7fb566a2676bb520718ca4651cda740d54e38ae82ba",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/cycle-LegendOfZeldaNESRecomp/4ad7d525d1707699d17b/generated/game_cyc_r00.c.obj": "8f96cb0c26f7635936d430358c907ceef95749e797244567c3bceba8d8b853a0",
+      "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-bridge-profile-v1\\cyc_extras.c.obj": "f9c55ff421585e39fbb5501f6618501993effc3aa16a7c495456dc98249807ed",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/src/zelda_voxel.c.obj": "06b1265ab1a1aab06c60588204f4a765e84a978f462f2589b24f0f12542c91e2",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/src/zelda_world.c.obj": "fd7a825f42b8a18be9b2b79813613af5f6b6f40c0d7891b1e6b510e04b1b2a3f",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/src/zelda_world_rooms.c.obj": "7554888b9b2cf5b28fa0d33312e5ba9cc33b3cc3b2814224b2e16f05b22dd0e9",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/src/zelda_voxel_plugin.c.obj": "fdf61f8958929d5e002cbcaf48333d05b28b84febe96500fac50f6c01093a785",
+      "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-bridge-profile-v1\\cyc_presentation.c.obj": "80edc45e481fe6dc8e040cf92f794562cf6f1cead58392d0f03dd6d6eacf7710",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/src/voxel_renderer.c.obj": "bca7dd25357ea9eff274683fb938e40795802eb7e70ecdd9dc5d0ae82235f715",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/src/voxel_screen_profile.c.obj": "d83875ee4ce3841c5203553902abc9b14ceaa19adf8b501678ce1ced065a3cfd",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/src/keybinds.c.obj": "7782e2daf5aa3d71b10646a41069f24a4e75b74c9132e75e12f24b182faa59c6",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/src/mod_runtime.cpp.obj": "3cfd2514eb0bc67ae14c5b0696bb43f32c2fb136b685c7fc3541beb6ef59324e",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/src/crc32.c.obj": "2678c35fe17fa2139d41f8e73f9d9feb8838deaa3e4c5b2206de0edc893021c0",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_hdpack.c.obj": "04e9cc43fb24ca657cc83bdd55d641b762ed79c53bca9d652def74a772579352",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/src/hdpack.c.obj": "52d2aaa6fa0a093d0c483e14aeb3fc174f7d0a34619e8c6ed445bd84bd684a70",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/src/chr_codec.c.obj": "69eb1a7e23741593022ad1fef24263d383a1fd8b8b5c6d3e4303542b510d4ccb",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_sdl.c.obj": "d8a326b8acb43878637429267116ac3e4d587994fbfe9a19ed30ad2400334fbb",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_input.c.obj": "67c76d35992c70b53fa09583235f1bc8a91d64be66235aafa5f4a381699c6f06",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_settings.c.obj": "7fe274d1a835981a5c01ecfa2d0304b4b5fff3f891918e08494e26fc6a4c25a7",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_tcp.c.obj": "688d935ab1ce63c250668d43554d94d457bcf47f98e0a8ed59bc7cca5f31252a",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/launcher_model.c.obj": "99a1896d58d60c14d69e59d47d448676b46d3403e3a10dd2f3e5d400eb2fbf18",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/launcher_platform_sdl2.c.obj": "11c15bd09001b77c3e84d00013c5b147736886781a22423e22d70d8230493260",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/launcher_gl.c.obj": "8d270c2d24a2f6fb7e0b34cdb03a4e6aefcd25b793b022aaa939fade4392c624",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/launcher_input.c.obj": "c06d1c9185a7645f31b35654dcc2fdf2ee817f2da3d84c24244c872054091646",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/launcher_files.c.obj": "7050502c95553df0eeddbeeaeead3ff83c698924316084ad438352da74f834f9",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/launcher_debug.c.obj": "77ef9c5b5da8f9fb76c5f4f51787f73a70236def141bdec76aca7d4530b3516b",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/launcher_binds.c.obj": "b02812adfe5eeb220cad848d98599c316a940cabcfa4ba8e7977e6a316d03a31",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/pad_binds.c.obj": "8c0eb5d2554b034285fe6a79b23b4f024072a438e463c96bd267d4364ee44eeb",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/launcher_udp_port.c.obj": "f77de804d800b843a4625994d1399592801973252d833dd2ffd6af1ea868d283",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/recomp_runtime_ui.c.obj": "fa26fcf1af98922b2ade28ba1ea2f888e11343a8e8f926ea69d72fa025719aa9",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/recomp_runtime_settings.c.obj": "757022fe7a33f8ddeb7a7d9d560066ea1ca561e4e78703965fdf363ed9551e75",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/recomp_frame_blend.c.obj": "d8f28518cb3fe44d1204824fd6264343e1d08487f75bb6f13fe18719814e679e",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/recomp_moderation.c.obj": "1ed8a18257162b8077255600067a1e0e7d32511fc2532fec25f4da3b0c131934",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/recomp_flash_guard.c.obj": "a884d5ac6b45f67756c6526543771b0a8738019a97a7284163aaaab7ac0f45d3",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/launcher_boot_timing.c.obj": "00e5aa45f9c1bbd9c6b69e7259fb7e05b804d6beee2b0ca27ee515e1c83c5a8b",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/launcher_ng_capi.c.obj": "e312a5801332bc952b34c0bc756969ce6fb4c0893f895265342b16f41d0ed4d7",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/launcher_i18n.cpp.obj": "495c9a485e6491778651a6ca432645f3f03a8b7f3fdae573bde6ca7f33beb3b6",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/launcher_mod_visibility.c.obj": "5300586836b27a1d0bb03fb6031167cc172954a02b5bf2a0f879a37090de496c",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/emoji/recomp_emoji.c.obj": "79c45c84e0f9f5ae882553d349fada68aac53284721a1f45799f561670ce3703",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/emoji/recomp_emoji_freetype.c.obj": "c97bf44372d0d4dd955abbab0a59fc10ea3cccf975ac1bc3ccee92379337edac",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/emoji/recomp_emoji_win32.cpp.obj": "fde6d6091deaf6fffd5e69e213f8bbba9f86f7d263fa7fe6bea11c6389f73641",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/emoji/recomp_emoji_flags.c.obj": "228bd293b88e2b6d743780bfce60dc390aa3bd3e98cc8e7f670b002a6b0bab5f",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/third_party/tinyfiledialogs.c.obj": "74e92a2310ecff5f50cc0221fb24deef906dcfea03cf4b244aa08efe77c85a1d",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/consoles/psx/memcard_format.c.obj": "a361033e1e8022a6e54337c0029a5a0a64964be4d9e10c3512d4f99395188640",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/consoles/psx/psx_binds.c.obj": "a07143d120633168f6ec2e261e45c1b1ab1c82029831cff247b121893516816c",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/consoles/psx/psx_pad_binds.c.obj": "a49e71bc4cc5d282ad5cb931efc498a3363eacbd4287715c0f9e860cac1bf804",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/consoles/snes/snes_pad_binds.c.obj": "9df75ff6bce4ab12a59a3e8bb04b10bde182a6f7ce93b6ae7e7a7933101db2fa",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/consoles/n64/n64_binds.c.obj": "2ef8df4fd328cb2a2fef742c2d2c2f369d8cf148683c3fc8bfb2aea974b78258",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/consoles/n64/n64_pad_binds.c.obj": "1063bd95909858ca1537a2d6ac2f2624e6a31ed99ee430f8d022ea1cecc9d740",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/consoles/nes/nes_binds.c.obj": "d499ccc6d4e5373fb2c57160b951503ff6f30c6cc77e7961f4613a9d7201e5e0",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/consoles/genesis/genesis_binds.c.obj": "3b77d353aba1ad6e2f20afb8aa6238e9e8368a3b77cea27998f509986f6d4eab",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/consoles/gb/gb_binds.c.obj": "408f67894ee0f7cd2359ecea112099f0e541aaea236e4d9e9e84f87a4635157a",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/crc32.c.obj": "36989402ec9684e7562f054dcff8950b5258ec2e96df2f9503ecb8aa24b4973b",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/sha256.c.obj": "61bc240e3d057985d2a30e860d013a258fc5e60b1bbe7ad826b3ada1962ba235",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/sha1.c.obj": "246d4984e832dcc1aead029fdb28c43b7733b08a1f7a3acb867981806df91a6f",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/keybinds.c.obj": "eef971e4179c0be89c6ed7e8b62583fea26fe7748c43b9f08a89e050eb7465a4",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/ips_patch.c.obj": "795f5fb3a8ed8a354c50dfa0089d8db3698b38e77d11cc3669e8961ecac463f7",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/backends/imgui/launcher_imgui.cpp.obj": "a056e1ddd29c2d7fe08fc339cbda71991d1da5344c18990d2c8a63177fe623b5",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/common/backends/imgui/runtime_ui_imgui.cpp.obj": "4cd04774f7b88def84c33082c5a467e28179c0fc349a4573405e4f36e51e25c1",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/third_party/imgui/imgui.cpp.obj": "92d8be2d775158e843da4337d433cb1e26aaec5a91c28828052ea71029904b39",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/third_party/imgui/imgui_draw.cpp.obj": "83cab728486b9b2f4edac042c8dc17034ac46ade5b3ac9dea79bdff4e485c999",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/third_party/imgui/imgui_tables.cpp.obj": "02c93aaab3053abf2765f8bf91cf9c92b5ec09d81ac2a1b75bc5ea1719145031",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/third_party/imgui/imgui_widgets.cpp.obj": "1cbc7db151b2173e0e2f58db454308dc0a09a3f8bb56ff51730c5280333eeed1",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/third_party/imgui/backends/imgui_impl_sdl2.cpp.obj": "957874854113212da94ffe5c45b0653c68dc9aabd931f4b7c799335a5a508bcb",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/third_party/imgui/backends/imgui_impl_opengl3.cpp.obj": "3ed3d7c35543705964301ccdcfbb3d54826fd2584186d2a7bafb055fb542afed",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/native-20261027/ui/src/third_party/imgui/backends/imgui_impl_sdlrenderer2.cpp.obj": "f79169f5fe8880fc11e5805e4baa43091fb24372bd6fe579246677f7b3378cad",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_ui_menu.c.obj": "82d81e070a69e1c3784ad505f72c77dd636b75395a269bd612192646875c9ef1",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_ui_launcher.c.obj": "8ab1ae89b57add15e18a85ad4da32a569b77604b43e0087ad68f9031c8a58509",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_ui_imgui.cpp.obj": "2f0138611199d636c3300963ee9207438092a0f8e644be38ccc45ac45ed39a23",
+      "CMakeFiles/LegendOfZeldaNESRecomp.dir/G_/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine/runner/cyc/cyc_state_ui.cpp.obj": "9eb2339890f65afb85fe8cb612647912e6b5498a2b18649c75bfa54fc45142f0"
+    },
+    "selected_base": {
+      "title": "zelda",
+      "mode": "candidate",
+      "build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-raster-v1\\zelda\\candidate",
+      "target": "LegendOfZeldaNESRecomp",
+      "engine": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\engine",
+      "engine_head": "da7431242c1581e0ca1cb4691a9e8a3a0b07f9dd",
+      "title_head": "b602d2606e2949d42b4a450d9326d989f3a1ed3f",
+      "rom": "F:\\Projects\\nesrecomp\\LegendOfZeldaNESRecomp\\Legend of Zelda.NES",
+      "rom_sha256": "8f72dc2e98572eb4ba7c3a902bca5f69c448fc4391837e5f8f0d4556280440ac",
+      "configure": [
+        "-S",
+        "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\zelda",
+        "-B",
+        "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-zelda-guarded-rom-v2-candidate",
+        "-G",
+        "Ninja",
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DCMAKE_C_COMPILER=C:/msys64/mingw64/bin/gcc.exe",
+        "-DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe",
+        "-DCMAKE_MAKE_PROGRAM=C:/msys64/mingw64/bin/ninja.exe",
+        "-DCMAKE_RC_COMPILER=C:/msys64/mingw64/bin/windres.exe",
+        "-DCMAKE_C_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+        "-DCMAKE_CXX_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+        "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+        "-DPython3_EXECUTABLE=C:/Users/Matthew/AppData/Local/Programs/Python/Python312/python.exe",
+        "-DNESRECOMP_ROOT=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\engine",
+        "-DNESRECOMP_HOST_COMPILER=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-cli-guarded-rom-v2\\NESRecomp.exe",
+        "-DNESRECOMP_ROM=F:\\Projects\\nesrecomp\\LegendOfZeldaNESRecomp\\Legend of Zelda.NES",
+        "-DNESRECOMP_RECOMP_UI=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+        "-DRECOMP_UI_ROOT=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+        "-DSDL2_DIR=G:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/cmake",
+        "-DNESRECOMP_RECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+        "-DRECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+        "-DNESRECOMP_RBENGINE_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/retcomm-rbengine",
+        "-DNESRECOMP_BACKEND=cycle",
+        "-DNESRECOMP_PPU_IMPL=HLE"
+      ],
+      "reuse_reference": false,
+      "owner_authorized_shared_host": true,
+      "exe": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-isolated-native-v1\\zelda\\candidate\\LegendOfZeldaNESRecomp.exe",
+      "sha256": "d33ca7729a8984b9da0b569063a087b43211511c7be16538a95cd40f06ad61e6",
+      "bytes": 11756970,
+      "package": "selected-raster-Zelda-HD-SRAM-guarded-ROM-plus-isolated-native",
+      "compiler": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-cli-guarded-rom-v2\\NESRecomp.exe",
+      "compiler_sha256": "a8b6f3cd864709c467a3d51264bcfe80651e44f1ee2c6e538def09baff47e46f",
+      "sources": {
+        "recompiler/src/cyc_codegen.c": "4f497b2bed291fab39739d7cb4d416cc3fdeb646022bafa0f2a8c5e021eb0824",
+        "runner/cyc/CMakeLists.txt": "d20f365962ac3166ff1a73db5ed35983a76d859a536c41e6c22b32f5b6dc24c0",
+        "runner/cyc/cpu6502.h": "a6b258419c23d10d2c0896551432c76f3572e1076f96a820fcd259c14d26caab",
+        "runner/cyc/cyc_mod.c": "cd8f0219168dbe84cd56cc7fea8acedc8a52e0d4533a7ed06409f22d4a8c3d71",
+        "runner/cyc/cyc_mod.h": "ad4ce736c43cd585f569409e0d1ec5a2b51cdaf98908050dedaa9270e14ac6b0",
+        "runner/cyc/cyc_native_none.c": "107ac72fb8159aced7b57cfe39ca267d89e7294527ffe3e690287a36b9ff83b1",
+        "runner/cyc/cyc_recomp.h": "5afa08966c91afb3727939c33f57dd92dae1dd18240c038714cbad2a17f15209",
+        "runner/cyc/cyc_run.c": "549e4092716b117b9f14d6838ef7ed479db63bdc305746e42ef534b780d221aa",
+        "runner/cyc/hw.h": "2096c3ebd367ebd9b8731276a9471741194415f66a893935276ff253d95bdaa7",
+        "runner/cyc/hw_machine.c": "6973aa13e2cb2f3a172a6cded292482180bf096c12b4756b00d6b7fcc4bebe89",
+        "runner/cyc/hw_mapper.c": "5738306c9983f76b4a711fe56f02c5742848b2446950316e8fe255b131f5edd6",
+        "runner/cyc/tests/prg_guard_probe.c": "8d5a09076436a8111006b0ee1ae01757314b4d00b3fda136d0ac41ce6d05340f",
+        "tools/cyc/test_cyc_prg_guards.py": "c5f846d93ffe90cbb9aee53df310e0d4ceaf7da5404919325069f934bf50bf96"
+      },
+      "patch_sha256": "c5b80ffdd93236bb3f805ba7b60016720c944a3ce5ef2f82b188447fff9fa8b4",
+      "title_cmake_sha256": "aab551a8b2480504fc2972902411bb63dbb6996c3bde16cad7d6c08a8737a3db",
+      "source_snapshot": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\source-isolated-native-v1",
+      "relink_manifest": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-isolated-native-v1\\zelda\\candidate\\manifest.json",
+      "original_build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-zelda-guarded-rom-v2-candidate",
+      "source_sha256": {
+        "runner/cyc/hw.h": "74b00882cb9d85b9ffaee2846bc6e358c8b321d7f27b2cfde66647bc66a47c6e",
+        "runner/cyc/hw_machine.c": "09c83ebfb44308a284d88e4b663e2ada71cbe7f68fa54c9010628b4ed0e54ed2",
+        "runner/cyc/cyc_host.c": "ebad85b8a8aefb5c976c8bef4794cdb9a2a0a44496e20d7b0c19431377e887df"
+      },
+      "engine_base": "9c8cbf2; source snapshot records uncommitted raster job",
+      "raster_service": "whole-stable-tile-job"
+    },
+    "source_base": "272b8b2",
+    "scope": "NES15 attribution only, not performance result"
+  },
+  "profiles": {
+    "world": {
+      "command": [
+        "G:\\Temp\\Codex\\nes110-bridge-profile-v2-20261028\\world\\LegendOfZeldaNESRecomp.exe",
+        "G:\\Temp\\Codex\\nes110-bridge-profile-v2-20261028\\world\\baserom.nes",
+        "--hidden",
+        "--uncapped",
+        "--exit-after",
+        "2101",
+        "--no-save",
+        "--window-input",
+        "G:\\Temp\\Codex\\nes110-bridge-profile-v2-20261028\\world\\zelda.input",
+        "--config",
+        "G:\\Temp\\Codex\\nes110-bridge-profile-v2-20261028\\world\\config.ini",
+        "--present-out",
+        "G:\\Temp\\Codex\\nes110-bridge-profile-v2-20261028\\world\\final.png",
+        "--mods-root",
+        "G:\\Temp\\Codex\\nes110-bridge-profile-v2-20261028\\world\\mods"
+      ],
+      "profile": {
+        "BRIDGE": {
+          "calls": 972,
+          "copy_ms": 0.0724,
+          "chr_ms": 11.3793,
+          "metadata_ms": 0.1005
+        },
+        "CONSUMERS": {
+          "input_calls": 299,
+          "frame_end_calls": 673,
+          "present_calls": 374,
+          "world_ms": 278.0401,
+          "sync_ms": 8.014,
+          "native_render_ms": 10.1521,
+          "picture_copy_ms": 3.0607,
+          "voxel_ms": 0.0415
+        }
+      },
+      "window_setup": {
+        "id": 0,
+        "ok": true,
+        "frame": 1801,
+        "menu_open": true,
+        "fds": false,
+        "side": -1,
+        "sides": 0,
+        "motor": false,
+        "writing": false,
+        "toast": {
+          "visible": false,
+          "title": "",
+          "body": ""
+        },
+        "hle": "",
+        "disk_save": "",
+        "disk_binding": "D / LB",
+        "picture": [
+          426,
+          240
+        ],
+        "dev_ui": false,
+        "recomp_ui": true,
+        "native": true,
+        "vsync_requested": false,
+        "vsync_active": true,
+        "pads": [],
+        "state_panel": "closed",
+        "state_slot": 1,
+        "rewind_count": 0,
+        "rewind_frame": -1,
+        "rewind_enabled": true
+      },
+      "scope": "Diagnostic QPC wall scopes at cyc_ring_frame1802..2100 only; setup frame1801 excluded. SDL dummy video/software1280x720/dummy output with audio emulated; not a performance win or recoverable CPU bound.",
+      "instrumented_runtime": {
+        "cpu_seconds": 1.265625,
+        "wall_seconds": 1.3820833000354469,
+        "command": [
+          "G:\\Temp\\Codex\\nes110-bridge-profile-v2-20261028\\world\\LegendOfZeldaNESRecomp.exe",
+          "G:\\Temp\\Codex\\nes110-bridge-profile-v2-20261028\\world\\baserom.nes",
+          "--hidden",
+          "--uncapped",
+          "--exit-after",
+          "2101",
+          "--no-save",
+          "--window-input",
+          "G:\\Temp\\Codex\\nes110-bridge-profile-v2-20261028\\world\\zelda.input",
+          "--config",
+          "G:\\Temp\\Codex\\nes110-bridge-profile-v2-20261028\\world\\config.ini",
+          "--present-out",
+          "G:\\Temp\\Codex\\nes110-bridge-profile-v2-20261028\\world\\final.png",
+          "--mods-root",
+          "G:\\Temp\\Codex\\nes110-bridge-profile-v2-20261028\\world\\mods",
+          "--tcp",
+          "4657"
+        ],
+        "affinity_mask": null,
+        "priority": "Normal",
+        "first_frame": 1801,
+        "excluded_setup_cpu_seconds": 0.5625,
+        "excluded_setup_wall_seconds": 0.6592818000353873,
+        "interval_core_before": [
+          [
+            3694015312500,
+            5778822343750,
+            1314207656250
+          ],
+          [
+            4381713125000,
+            5574945312500,
+            1518084062500
+          ],
+          [
+            2010542656250,
+            3989447968750,
+            3103581406250
+          ],
+          [
+            2903731093750,
+            4678050468750,
+            2414978906250
+          ],
+          [
+            3187334687500,
+            4784682656250,
+            2308346718750
+          ],
+          [
+            3374667343750,
+            4840072812500,
+            2252956562500
+          ],
+          [
+            3552086562500,
+            4933979062500,
+            2159050312500
+          ],
+          [
+            3712288437500,
+            4969218125000,
+            2123811250000
+          ],
+          [
+            2480968437500,
+            4279783281250,
+            2813246093750
+          ],
+          [
+            2782602187500,
+            4539390937500,
+            2553638437500
+          ],
+          [
+            3684704218750,
+            4930841562500,
+            2162187812500
+          ],
+          [
+            4113363281250,
+            5275035625000,
+            1817993750000
+          ],
+          [
+            4402917656250,
+            5610550468750,
+            1482478906250
+          ],
+          [
+            4504885625000,
+            5723367968750,
+            1369661406250
+          ],
+          [
+            4434722031250,
+            5504898125000,
+            1588131250000
+          ],
+          [
+            4354933125000,
+            5354900312500,
+            1738129062500
+          ]
+        ],
+        "interval_core_after": [
+          [
+            3694023281250,
+            5778833281250,
+            1314210625000
+          ],
+          [
+            4381723125000,
+            5574957656250,
+            1518085625000
+          ],
+          [
+            2010545937500,
+            3989454843750,
+            3103588437500
+          ],
+          [
+            2903736562500,
+            4678059062500,
+            2414984218750
+          ],
+          [
+            3187339531250,
+            4784690781250,
+            2308352500000
+          ],
+          [
+            3374673125000,
+            4840081093750,
+            2252962187500
+          ],
+          [
+            3552091093750,
+            4933986562500,
+            2159056718750
+          ],
+          [
+            3712295937500,
+            4969227812500,
+            2123815468750
+          ],
+          [
+            2480970937500,
+            4279790000000,
+            2813253281250
+          ],
+          [
+            2782609375000,
+            4539401406250,
+            2553641875000
+          ],
+          [
+            3684711562500,
+            4930851406250,
+            2162191875000
+          ],
+          [
+            4113372500000,
+            5275047343750,
+            1817995937500
+          ],
+          [
+            4402926250000,
+            5610562812500,
+            1482480468750
+          ],
+          [
+            4504893281250,
+            5723380156250,
+            1369663125000
+          ],
+          [
+            4434730781250,
+            5504909062500,
+            1588134218750
+          ],
+          [
+            4354933125000,
+            5354901406250,
+            1738141875000
+          ]
+        ],
+        "scope": "Resumed SDL frames plus normal shutdown; TCP menu/load/window setup excluded",
+        "fixed_zapper": null,
+        "setup_state": {
+          "id": 0,
+          "ok": true,
+          "frame": 1801,
+          "menu_open": true,
+          "fds": false,
+          "side": -1,
+          "sides": 0,
+          "motor": false,
+          "writing": false,
+          "toast": {
+            "visible": false,
+            "title": "",
+            "body": ""
+          },
+          "hle": "",
+          "disk_save": "",
+          "disk_binding": "D / LB",
+          "picture": [
+            426,
+            240
+          ],
+          "dev_ui": false,
+          "recomp_ui": true,
+          "native": true,
+          "vsync_requested": false,
+          "vsync_active": true,
+          "pads": [],
+          "state_panel": "closed",
+          "state_slot": 1,
+          "rewind_count": 0,
+          "rewind_frame": -1,
+          "rewind_enabled": true
+        },
+        "zapper_state": null
+      },
+      "binary_sha256": "160392d24f7b9c5b92ada033e35791a7184a735681bd5c84c302d496e25206bf",
+      "start_state_sha256": "1b48a526f7971802cf56d3ac14e032451891a5e385a0f6090728f1c6e93f8c90",
+      "route_sha256": "c118b8387a618f42b860a62c155388ea7aab3031df08bd26077829334e1ca6c3",
+      "mods_state": "format_version = 1\n\n[[package]]\nid = \"legend-of-zelda.enhancement.seamless-world\"\nversion = \"0.1.0\"\n\n[[package]]\nid = \"legend-of-zelda.enhancement.voxel-diorama\"\nversion = \"1.0.0\"\n\n[[package]]\nid = \"legend-of-zelda.enhancement.voxel-first-person\"\nversion = \"1.0.0\"\n\n[[package]]\nid = \"nesrecomp.developer.diagnostics\"\nversion = \"1.0.0\"\n\n[[feature]]\npackage_id = \"legend-of-zelda.enhancement.seamless-world\"\nid = \"seamless-world\"\nenabled = true\n\n[feature.values]\npixel-zoom = \"3\"\n\n[[feature]]\npackage_id = \"legend-of-zelda.enhancement.voxel-diorama\"\nid = \"voxel-diorama\"\nenabled = false\n\n[[feature]]\npackage_id = \"legend-of-zelda.enhancement.voxel-first-person\"\nid = \"voxel-first-person\"\nenabled = false\n\n[[feature]]\npackage_id = \"nesrecomp.developer.diagnostics\"\nid = \"diagnostics\"\nenabled = false\n",
+      "bridge_total_qpc_ms": 11.552200000000001,
+      "log_sha256": {
+        "prepare.log": "b1a07dd5dba508d191899e51af2f41f01e3b49f9d9e97c57edfdc350f1f50a3a",
+        "window.log": "95577dafdf206c35d987d7a61837cf2cb93e4e48193234ebb447a1aa8ef0c3ab"
+      },
+      "inference": "Repeated callback preparation is a larger demonstrated consumer job; bridge scopes alone do not establish a CPU saving or an A/B win."
+    },
+    "hd": {
+      "command": [
+        "G:\\Temp\\Codex\\nes110-bridge-profile-v2-20261028\\hd\\LegendOfZeldaNESRecomp.exe",
+        "G:\\Temp\\Codex\\nes110-bridge-profile-v2-20261028\\hd\\baserom.nes",
+        "--hidden",
+        "--uncapped",
+        "--exit-after",
+        "2101",
+        "--no-save",
+        "--window-input",
+        "G:\\Temp\\Codex\\nes110-bridge-profile-v2-20261028\\hd\\zelda.input",
+        "--config",
+        "G:\\Temp\\Codex\\nes110-bridge-profile-v2-20261028\\hd\\config.ini",
+        "--present-out",
+        "G:\\Temp\\Codex\\nes110-bridge-profile-v2-20261028\\hd\\final.png",
+        "--mods-root",
+        "G:\\Temp\\Codex\\nes110-bridge-profile-v2-20261028\\hd\\mods"
+      ],
+      "profile": {
+        "BRIDGE": {
+          "calls": 598,
+          "copy_ms": 0.1313,
+          "chr_ms": 8.4982,
+          "metadata_ms": 0.163
+        },
+        "CONSUMERS": {
+          "input_calls": 299,
+          "frame_end_calls": 299,
+          "present_calls": 0,
+          "world_ms": 0.4359,
+          "sync_ms": 4.2677,
+          "native_render_ms": 5.5223,
+          "picture_copy_ms": 2.6101,
+          "voxel_ms": 0.0967
+        }
+      },
+      "window_setup": {
+        "id": 0,
+        "ok": true,
+        "frame": 1801,
+        "menu_open": true,
+        "fds": false,
+        "side": -1,
+        "sides": 0,
+        "motor": false,
+        "writing": false,
+        "toast": {
+          "visible": false,
+          "title": "",
+          "body": ""
+        },
+        "hle": "",
+        "disk_save": "",
+        "disk_binding": "D / LB",
+        "picture": [
+          512,
+          480
+        ],
+        "dev_ui": false,
+        "recomp_ui": true,
+        "native": true,
+        "vsync_requested": false,
+        "vsync_active": true,
+        "pads": [],
+        "state_panel": "closed",
+        "state_slot": 1,
+        "rewind_count": 0,
+        "rewind_frame": -1,
+        "rewind_enabled": true
+      },
+      "scope": "Diagnostic QPC wall scopes at cyc_ring_frame1802..2100 only; setup frame1801 excluded. SDL dummy video/software1280x720/dummy output with audio emulated; not a performance win or recoverable CPU bound.",
+      "instrumented_runtime": {
+        "cpu_seconds": 3.4375,
+        "wall_seconds": 3.648863499984145,
+        "command": [
+          "G:\\Temp\\Codex\\nes110-bridge-profile-v2-20261028\\hd\\LegendOfZeldaNESRecomp.exe",
+          "G:\\Temp\\Codex\\nes110-bridge-profile-v2-20261028\\hd\\baserom.nes",
+          "--hidden",
+          "--uncapped",
+          "--exit-after",
+          "2101",
+          "--no-save",
+          "--window-input",
+          "G:\\Temp\\Codex\\nes110-bridge-profile-v2-20261028\\hd\\zelda.input",
+          "--config",
+          "G:\\Temp\\Codex\\nes110-bridge-profile-v2-20261028\\hd\\config.ini",
+          "--present-out",
+          "G:\\Temp\\Codex\\nes110-bridge-profile-v2-20261028\\hd\\final.png",
+          "--mods-root",
+          "G:\\Temp\\Codex\\nes110-bridge-profile-v2-20261028\\hd\\mods",
+          "--tcp",
+          "4729"
+        ],
+        "affinity_mask": null,
+        "priority": "Normal",
+        "first_frame": 1801,
+        "excluded_setup_cpu_seconds": 3.171875,
+        "excluded_setup_wall_seconds": 3.2403867999091744,
+        "interval_core_before": [
+          [
+            3694122812500,
+            5778977031250,
+            1314237343750
+          ],
+          [
+            4381843437500,
+            5575097812500,
+            1518115937500
+          ],
+          [
+            2010585156250,
+            3989528750000,
+            3103685000000
+          ],
+          [
+            2903809062500,
+            4678162343750,
+            2415051406250
+          ],
+          [
+            3187381093750,
+            4784766718750,
+            2308447031250
+          ],
+          [
+            3374759531250,
+            4840191250000,
+            2253022500000
+          ],
+          [
+            3552147656250,
+            4934075625000,
+            2159138125000
+          ],
+          [
+            3712381875000,
+            4969342187500,
+            2123871562500
+          ],
+          [
+            2481010156250,
+            4279872656250,
+            2813341093750
+          ],
+          [
+            2782693750000,
+            4539516093750,
+            2553697656250
+          ],
+          [
+            3684801250000,
+            4930975781250,
+            2162237968750
+          ],
+          [
+            4113477656250,
+            5275177968750,
+            1818035781250
+          ],
+          [
+            4403031718750,
+            5610716250000,
+            1482497500000
+          ],
+          [
+            4504999687500,
+            5723537968750,
+            1369675781250
+          ],
+          [
+            4434831875000,
+            5505039531250,
+            1588174218750
+          ],
+          [
+            4354933593750,
+            5354913125000,
+            1738300625000
+          ]
+        ],
+        "interval_core_after": [
+          [
+            3694142187500,
+            5779005937500,
+            1314245000000
+          ],
+          [
+            4381867812500,
+            5575126718750,
+            1518123593750
+          ],
+          [
+            2010593281250,
+            3989545312500,
+            3103705000000
+          ],
+          [
+            2903824218750,
+            4678185156250,
+            2415065156250
+          ],
+          [
+            3187392656250,
+            4784785000000,
+            2308465312500
+          ],
+          [
+            3374775156250,
+            4840213593750,
+            2253036718750
+          ],
+          [
+            3552160625000,
+            4934095156250,
+            2159155156250
+          ],
+          [
+            3712397656250,
+            4969362500000,
+            2123887812500
+          ],
+          [
+            2481019531250,
+            4279890781250,
+            2813359531250
+          ],
+          [
+            2782708750000,
+            4539537656250,
+            2553712656250
+          ],
+          [
+            3684821093750,
+            4931001093750,
+            2162249218750
+          ],
+          [
+            4113498906250,
+            5275205625000,
+            1818044687500
+          ],
+          [
+            4403053125000,
+            5610748437500,
+            1482501875000
+          ],
+          [
+            4505022500000,
+            5723570000000,
+            1369680156250
+          ],
+          [
+            4434851406250,
+            5505064531250,
+            1588185625000
+          ],
+          [
+            4354933906250,
+            5354916875000,
+            1738333437500
+          ]
+        ],
+        "scope": "Resumed SDL frames plus normal shutdown; TCP menu/load/window setup excluded",
+        "fixed_zapper": null,
+        "setup_state": {
+          "id": 0,
+          "ok": true,
+          "frame": 1801,
+          "menu_open": true,
+          "fds": false,
+          "side": -1,
+          "sides": 0,
+          "motor": false,
+          "writing": false,
+          "toast": {
+            "visible": false,
+            "title": "",
+            "body": ""
+          },
+          "hle": "",
+          "disk_save": "",
+          "disk_binding": "D / LB",
+          "picture": [
+            512,
+            480
+          ],
+          "dev_ui": false,
+          "recomp_ui": true,
+          "native": true,
+          "vsync_requested": false,
+          "vsync_active": true,
+          "pads": [],
+          "state_panel": "closed",
+          "state_slot": 1,
+          "rewind_count": 0,
+          "rewind_frame": -1,
+          "rewind_enabled": true
+        },
+        "zapper_state": null
+      },
+      "binary_sha256": "160392d24f7b9c5b92ada033e35791a7184a735681bd5c84c302d496e25206bf",
+      "start_state_sha256": "940aa0acea490900149a75b33a2f14db771561b3b9cf19d57536834568bdbbe7",
+      "route_sha256": "c118b8387a618f42b860a62c155388ea7aab3031df08bd26077829334e1ca6c3",
+      "mods_state": "format_version = 1\n\n[[package]]\nid = \"legend-of-zelda.remastered\"\nversion = \"1.0.0\"\n\n[[feature]]\npackage_id = \"legend-of-zelda.remastered\"\nid = \"hd-pack\"\nenabled = true\n",
+      "bridge_total_qpc_ms": 8.7925,
+      "log_sha256": {
+        "prepare.log": "59fcad0911a5363ec201f9fd5e0f3f5ee6f9f05b047a45862d2be021820e6b3c",
+        "window.log": "15a1dcb3bddd3d3ba608eddd098a6fd0f2d591d5fc71e34d77f5159f1e14ab78"
+      },
+      "inference": "Repeated callback preparation is a larger demonstrated consumer job; bridge scopes alone do not establish a CPU saving or an A/B win."
+    },
+    "voxel": {
+      "command": [
+        "G:\\Temp\\Codex\\nes110-bridge-profile-v2-20261028\\voxel\\LegendOfZeldaNESRecomp.exe",
+        "G:\\Temp\\Codex\\nes110-bridge-profile-v2-20261028\\voxel\\baserom.nes",
+        "--hidden",
+        "--uncapped",
+        "--exit-after",
+        "2101",
+        "--no-save",
+        "--window-input",
+        "G:\\Temp\\Codex\\nes110-bridge-profile-v2-20261028\\voxel\\zelda.input",
+        "--config",
+        "G:\\Temp\\Codex\\nes110-bridge-profile-v2-20261028\\voxel\\config.ini",
+        "--present-out",
+        "G:\\Temp\\Codex\\nes110-bridge-profile-v2-20261028\\voxel\\final.png",
+        "--mods-root",
+        "G:\\Temp\\Codex\\nes110-bridge-profile-v2-20261028\\voxel\\mods",
+        "--voxel",
+        "diorama"
+      ],
+      "profile": {
+        "BRIDGE": {
+          "calls": 972,
+          "copy_ms": 0.1651,
+          "chr_ms": 12.7072,
+          "metadata_ms": 0.1837
+        },
+        "CONSUMERS": {
+          "input_calls": 299,
+          "frame_end_calls": 673,
+          "present_calls": 374,
+          "world_ms": 0.3822,
+          "sync_ms": 8.985,
+          "native_render_ms": 11.1556,
+          "picture_copy_ms": 14.7689,
+          "voxel_ms": 2387.3094
+        }
+      },
+      "window_setup": {
+        "id": 0,
+        "ok": true,
+        "frame": 1801,
+        "menu_open": true,
+        "fds": false,
+        "side": -1,
+        "sides": 0,
+        "motor": false,
+        "writing": false,
+        "toast": {
+          "visible": false,
+          "title": "",
+          "body": ""
+        },
+        "hle": "",
+        "disk_save": "",
+        "disk_binding": "D / LB",
+        "picture": [
+          426,
+          240
+        ],
+        "dev_ui": false,
+        "recomp_ui": true,
+        "native": true,
+        "vsync_requested": false,
+        "vsync_active": true,
+        "pads": [],
+        "state_panel": "closed",
+        "state_slot": 1,
+        "rewind_count": 0,
+        "rewind_frame": -1,
+        "rewind_enabled": true
+      },
+      "scope": "Diagnostic QPC wall scopes at cyc_ring_frame1802..2100 only; setup frame1801 excluded. SDL dummy video/software1280x720/dummy output with audio emulated; not a performance win or recoverable CPU bound.",
+      "instrumented_runtime": {
+        "cpu_seconds": 3.453125,
+        "wall_seconds": 3.6093484999146312,
+        "command": [
+          "G:\\Temp\\Codex\\nes110-bridge-profile-v2-20261028\\voxel\\LegendOfZeldaNESRecomp.exe",
+          "G:\\Temp\\Codex\\nes110-bridge-profile-v2-20261028\\voxel\\baserom.nes",
+          "--hidden",
+          "--uncapped",
+          "--exit-after",
+          "2101",
+          "--no-save",
+          "--window-input",
+          "G:\\Temp\\Codex\\nes110-bridge-profile-v2-20261028\\voxel\\zelda.input",
+          "--config",
+          "G:\\Temp\\Codex\\nes110-bridge-profile-v2-20261028\\voxel\\config.ini",
+          "--present-out",
+          "G:\\Temp\\Codex\\nes110-bridge-profile-v2-20261028\\voxel\\final.png",
+          "--mods-root",
+          "G:\\Temp\\Codex\\nes110-bridge-profile-v2-20261028\\voxel\\mods",
+          "--voxel",
+          "diorama",
+          "--tcp",
+          "4810"
+        ],
+        "affinity_mask": null,
+        "priority": "Normal",
+        "first_frame": 1801,
+        "excluded_setup_cpu_seconds": 0.5625,
+        "excluded_setup_wall_seconds": 0.6538272000616416,
+        "interval_core_before": [
+          [
+            3694183437500,
+            5779061250000,
+            1314256093750
+          ],
+          [
+            4381916406250,
+            5575181718750,
+            1518135000000
+          ],
+          [
+            2010609843750,
+            3989572500000,
+            3103744218750
+          ],
+          [
+            2903852031250,
+            4678224531250,
+            2415092187500
+          ],
+          [
+            3187409843750,
+            4784813125000,
+            2308503593750
+          ],
+          [
+            3374810156250,
+            4840257968750,
+            2253058750000
+          ],
+          [
+            3552184531250,
+            4934128437500,
+            2159188281250
+          ],
+          [
+            3712439531250,
+            4969410625000,
+            2123906093750
+          ],
+          [
+            2481033437500,
+            4279920156250,
+            2813396562500
+          ],
+          [
+            2782743593750,
+            4539584062500,
+            2553732656250
+          ],
+          [
+            3684854218750,
+            4931044218750,
+            2162272500000
+          ],
+          [
+            4113545156250,
+            5275260937500,
+            1818055781250
+          ],
+          [
+            4403091250000,
+            5610806718750,
+            1482510000000
+          ],
+          [
+            4505065937500,
+            5723631093750,
+            1369685625000
+          ],
+          [
+            4434890000000,
+            5505111875000,
+            1588204843750
+          ],
+          [
+            4354933906250,
+            5354920000000,
+            1738396718750
+          ]
+        ],
+        "interval_core_after": [
+          [
+            3694204843750,
+            5779089375000,
+            1314264062500
+          ],
+          [
+            4381941718750,
+            5575211406250,
+            1518141406250
+          ],
+          [
+            2010618125000,
+            3989587031250,
+            3103765781250
+          ],
+          [
+            2903863125000,
+            4678242500000,
+            2415110312500
+          ],
+          [
+            3187418437500,
+            4784831250000,
+            2308521562500
+          ],
+          [
+            3374827187500,
+            4840282187500,
+            2253070625000
+          ],
+          [
+            3552196093750,
+            4934147031250,
+            2159205781250
+          ],
+          [
+            3712457031250,
+            4969434062500,
+            2123918750000
+          ],
+          [
+            2481040156250,
+            4279935781250,
+            2813417031250
+          ],
+          [
+            2782756093750,
+            4539605468750,
+            2553747343750
+          ],
+          [
+            3684870312500,
+            4931067812500,
+            2162285000000
+          ],
+          [
+            4113568906250,
+            5275289218750,
+            1818063593750
+          ],
+          [
+            4403110937500,
+            5610836406250,
+            1482516406250
+          ],
+          [
+            4505084843750,
+            5723663281250,
+            1369689531250
+          ],
+          [
+            4434910625000,
+            5505139531250,
+            1588213281250
+          ],
+          [
+            4354934843750,
+            5354921562500,
+            1738431250000
+          ]
+        ],
+        "scope": "Resumed SDL frames plus normal shutdown; TCP menu/load/window setup excluded",
+        "fixed_zapper": null,
+        "setup_state": {
+          "id": 0,
+          "ok": true,
+          "frame": 1801,
+          "menu_open": true,
+          "fds": false,
+          "side": -1,
+          "sides": 0,
+          "motor": false,
+          "writing": false,
+          "toast": {
+            "visible": false,
+            "title": "",
+            "body": ""
+          },
+          "hle": "",
+          "disk_save": "",
+          "disk_binding": "D / LB",
+          "picture": [
+            426,
+            240
+          ],
+          "dev_ui": false,
+          "recomp_ui": true,
+          "native": true,
+          "vsync_requested": false,
+          "vsync_active": true,
+          "pads": [],
+          "state_panel": "closed",
+          "state_slot": 1,
+          "rewind_count": 0,
+          "rewind_frame": -1,
+          "rewind_enabled": true
+        },
+        "zapper_state": null
+      },
+      "binary_sha256": "160392d24f7b9c5b92ada033e35791a7184a735681bd5c84c302d496e25206bf",
+      "start_state_sha256": "c2a2588dd54a62366276aba56f3cefbc9aef75663fb57e20278fa90a3ef54efa",
+      "route_sha256": "c118b8387a618f42b860a62c155388ea7aab3031df08bd26077829334e1ca6c3",
+      "mods_state": "format_version = 1\n\n[[package]]\nid = \"legend-of-zelda.enhancement.seamless-world\"\nversion = \"0.1.0\"\n\n[[package]]\nid = \"legend-of-zelda.enhancement.voxel-diorama\"\nversion = \"1.0.0\"\n\n[[package]]\nid = \"legend-of-zelda.enhancement.voxel-first-person\"\nversion = \"1.0.0\"\n\n[[package]]\nid = \"nesrecomp.developer.diagnostics\"\nversion = \"1.0.0\"\n\n[[feature]]\npackage_id = \"legend-of-zelda.enhancement.seamless-world\"\nid = \"seamless-world\"\nenabled = false\n\n[[feature]]\npackage_id = \"legend-of-zelda.enhancement.voxel-diorama\"\nid = \"voxel-diorama\"\nenabled = false\n\n[[feature]]\npackage_id = \"legend-of-zelda.enhancement.voxel-first-person\"\nid = \"voxel-first-person\"\nenabled = false\n\n[[feature]]\npackage_id = \"nesrecomp.developer.diagnostics\"\nid = \"diagnostics\"\nenabled = false\n",
+      "bridge_total_qpc_ms": 13.056000000000001,
+      "log_sha256": {
+        "prepare.log": "eb046599b6d3d1a0569cbe805453fb679f05aff66ba013ae3b7ccc78d4ee2e55",
+        "window.log": "7c60053e6a29bd4ebde95e8dc29914a6db4f9d1bd878d4755d6f56a4f6371a10"
+      },
+      "inference": "Repeated callback preparation is a larger demonstrated consumer job; bridge scopes alone do not establish a CPU saving or an A/B win."
+    }
+  },
+  "capacity_receipt": {
+    "before": {
+      "eligible": true,
+      "reasons": [],
+      "requested": {
+        "cpu": 1.0,
+        "gpu": 0.0,
+        "memory": 1.5,
+        "disk": 2.0
+      },
+      "remaining": {
+        "cpu_cores": 3.953125,
+        "memory_gib": 20.06570816040039,
+        "gpu_percent": 76.0
+      },
+      "sample": {
+        "host": "DESKTOP-HN15M1H",
+        "os": "windows",
+        "timestamp": 1793242326.785636,
+        "physical_cores": 8,
+        "logical_cpus": 16,
+        "cpu_busy_percent": 50.5859375,
+        "cpu_free_cores": 3.953125,
+        "memory_available_gib": 20.06570816040039,
+        "memory_total_gib": 61.5560188293457,
+        "gpu_busy_percent": 24.0,
+        "gpu_source": "nvidia-smi utilization.gpu",
+        "storage": "G:\\",
+        "storage_free_gib": 7452.538879394531
+      },
+      "active_claims": 2,
+      "policy": "codex-benchmark-capacity-v1",
+      "token": "13c4c5eaef9645478252cb6b23de24e1",
+      "phase": "pending",
+      "target": "local",
+      "alias": null,
+      "other_targets": []
+    },
+    "command": [
+      "C:/Users/Matthew/.pyenv/pyenv-win/versions/3.12.5/python.exe",
+      "-X",
+      "utf8",
+      "G:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/run_bridge_profile_v2.py"
+    ],
+    "exit_code": 0,
+    "after": {
+      "host": "DESKTOP-HN15M1H",
+      "os": "windows",
+      "timestamp": 1793242367.6619968,
+      "physical_cores": 8,
+      "logical_cpus": 16,
+      "cpu_busy_percent": 81.4453125,
+      "cpu_free_cores": 1.484375,
+      "memory_available_gib": 18.788375854492188,
+      "memory_total_gib": 61.5560188293457,
+      "gpu_busy_percent": 46.0,
+      "gpu_source": "nvidia-smi utilization.gpu",
+      "storage": "G:\\",
+      "storage_free_gib": 7452.404693603516
+    }
+  },
+  "decision": "Defer a standalone immutable-view/compatibility-copy rewrite. Prefer one prepared consumer render job (NES11), because full world/voxel preparation is repeated at frame-end and present while the bridge itself is a small measured scope. This is prioritization based on real gameplay attribution, not a gain floor, idle-host requirement or behavior constraint. No optimization has been implemented or speedup measured for NES15.",
+  "next": "After fresh independent validation and durable Beads record, NES11 is the next proposed serial candidate. A measured full render job may subsume compatibility work; revisit NES15 only when that changes the evidence.",
+  "scope_correction": "NES15 means cyc_presentation_sync legacy OAM/nametable/palette/CHR snapshots. Full HdPixel expansion is a separate NES13 follow-up; the preceding NES13 narrative incorrectly tied that expansion to NES15. The register itself retained the correct definition.",
+  "exclusions": "The initial diagnostic attempt omitted --mods-root for headless preparation. HD state then failed program identity against the correctly patched window build. Entire first attempt excluded; corrected run passes explicit mods root on both paths and prepares each profile independently. Optional --present-out did not produce a final window PNG; no final screenshot claim is made.",
+  "archive": {
+    "file": "local-bridge-attribution-evidence.zip",
+    "sha256": "aa66a071f8aa1926977d26430984d0a8cbea149a93fccbe0b8539c85a277d92b",
+    "bytes": 45442,
+    "entries": 27
+  },
+  "validator": {
+    "agent": "/root/validate_nes15",
+    "decision": "independently validated measured deferral; no runtime PR warranted",
+    "checks": [
+      "raw QPC sums and callback counts",
+      "original source versus diagnostic-only instrumentation",
+      "scoped frame gate and explicit profile preparation",
+      "actual diorama enablement and logged work",
+      "native gameplay images and movement route",
+      "all27 archive entries SHA/CRC",
+      "binary and both instrumentation-source identities",
+      "mods state and active picture dimensions",
+      "eligible capacity receipt"
+    ]
+  },
+  "evidence_root": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028",
+  "excluded_setup_archive": {
+    "file": "excluded-bridge-attribution-setup.zip",
+    "sha256": "78c4895cc7dad7742a85c67e7596e93abd4f2fd6ea56d98daa0da48718c71231",
+    "bytes": 15585,
+    "entries": 10
+  },
+  "cleanup_receipts": [
+    {
+      "removed": true,
+      "host": "DESKTOP-HN15M1H",
+      "files": 455,
+      "root": "G:\\Temp\\Codex\\nes110-bridge-profile-v1-20261028",
+      "reparse_or_nested_git": false,
+      "bytes": 106904288
+    },
+    {
+      "removed": true,
+      "host": "DESKTOP-HN15M1H",
+      "files": 472,
+      "root": "G:\\Temp\\Codex\\nes110-bridge-profile-v2-20261028",
+      "reparse_or_nested_git": false,
+      "bytes": 133974017
+    }
+  ]
+}

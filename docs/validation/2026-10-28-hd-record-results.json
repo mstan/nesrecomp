@@ -7107,7 +7107,7 @@
   ],
   "interpretation": "Both attempts preserve the measured behavior but have mixed per-pair CPU results. Neither is a proven speedup. Do not carry either implementation into owner builds or add these percentages to earlier packages.",
   "limits": "Actual Zelda Remastered SDL software1280x720 with SDL_VIDEODRIVER=dummy (no physical-window/GPU presentation timing), gameplay frames1801..2101, audio emulated/mixed/queued to dummy. Each A/B pair stays on one reserved host/configuration; the two different designs are not a cross-host A/B. No new stock/Fit measurements or HLE/LLE machine matrix was completed because neither prototype was selected. Missing PNG and unsupported pack rules are shared baseline limitations.",
-  "reassessment": "After two unsuccessful implementations, stop local tuning. The complete sampler still materializes HdPixel records; NES15 is the next separate candidate. A later measured end-to-end recorder/sampler replacement may justify reopening NES13, but has not been delivered.",
+  "reassessment": "After two unsuccessful implementations, stop local tuning. NES15 evaluates the separate cyc_presentation_sync legacy graphics bridge; full HdPixel materialization remains a possible NES13 follow-up. A later measured end-to-end recorder/sampler replacement may justify reopening NES13, but has not been delivered.",
   "evidence_root": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028",
   "validator": {
     "agent": "/root/validate_nes13",
