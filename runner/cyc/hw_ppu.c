@@ -43,6 +43,10 @@
 
 HwPpu    ppu;
 uint64_t ppu_native_sprite_spans, ppu_native_sprite_dots;
+uint64_t ppu_native_raster_tiles;
+#ifndef NESRECOMP_PPU_RASTER_REFERENCE
+#define NESRECOMP_PPU_RASTER_REFERENCE 0
+#endif
 const char *cyc_ppu_implementation(void) { return NESRECOMP_PPU_HLE ? "HLE" : "LLE"; }
 static CycModPpuWriteHook content_write_hook;
 void cyc_mod_set_ppu_write_hook(CycModPpuWriteHook hook) { content_write_hook = hook; }
@@ -1492,6 +1496,189 @@ static void render_prepared_sprite_dot(uint8_t sprite)
     hw_cart_ppu_addr(ppu.vbus);
 }
 
+#if NESRECOMP_PPU_HLE && !NESRECOMP_PPU_RASTER_REFERENCE
+/* An unobserved eight-dot job, rather than eight executions of the pixel,
+ * shifter, fetch and output machines. The native cursor has excluded CPU
+ * register/mapper/CHR writes, DMA and interrupt deadlines. These four board
+ * families have no read-triggered CHR or nametable mappings. Only A12 edges
+ * need publication inside the job; OAM evaluation is an independent pair
+ * service. Boundaries and recording consumers retain their adapters. */
+static void raster_decay(unsigned dots)
+{
+    while (ppu.io_bus && dots) {
+        uint64_t until = ppu.io_decay_next - ppu.io_decay_clock;
+        if (!until || until > dots) { ppu.io_decay_clock += dots; break; }
+        ppu.io_decay_clock += until;
+        dots -= (unsigned)until;
+        for (unsigned bit = 0; bit < 8; ++bit)
+            if (ppu.io_decay_deadline[bit] == ppu.io_decay_clock)
+                ppu.io_bus &= (uint8_t)~(1u << bit);
+        io_bus_next_deadline();
+    }
+}
+
+static void raster_oam(unsigned first, bool final_half)
+{
+    if (first <= 64) {
+        /* Four secondary-OAM clear writes; odd reads all supply FF. */
+        for (unsigned i = 0; i < 4; ++i) {
+            ppu.oam2[ppu.oam2_addr] = 0xff;
+            oam2_increment();
+        }
+        ppu.oam_latch = ppu.oam_buffer = ppu.oam_buffer_in = 0xff;
+        ppu.overflow_late = ppu.overflow;
+        if (first == 57) {
+            ppu.oam2_reset = final_half ? 0 : 1;
+            if (final_half) ppu.oam2_addr = ppu.oam2_full = 0;
+        }
+    } else {
+        if (first == 65) ppu.eval_nine = ppu.eval_odd_corrupt = ppu.eval_wrapped = 0;
+        for (unsigned i = 0; i < 4; ++i) {
+            /* Odd primary read and its latch, then the data-dependent even
+             * transition (including the original overflow/diagonal bug). */
+            ppu.oam_buffer = ppu.oam_buffer_in = ppu.oam[ppu.oam_addr];
+            ppu.oam_latch = ppu.oam_buffer;
+            ppu.dot = (int)(first + 2 * i + 1);
+            ppu.overflow_late = ppu.overflow;
+            eval_objects(false);
+            if (i != 3 || final_half) ppu.oam_buffer = ppu.oam_buffer_in;
+        }
+    }
+    ppu.dot = (int)(first + 7);
+}
+
+static void raster_tile(const uint8_t *sprite, unsigned align,
+                        uint64_t clock, unsigned offset)
+{
+    if (align < 2) render_span_half_dot(); /* entry's pending fetch/latches */
+    unsigned first = (unsigned)ppu.dot + 1;
+    uint32_t bg = ppu.bg_pixels, attr = ppu.attr_pixels;
+    unsigned latch = ppu.attr_latch;
+    uint32_t bg_pixels = bg << (2 * ppu.fine_x);
+    uint32_t attributes = ((attr << 16) | (latch * 0x5555u)) << (2 * ppu.fine_x);
+    uint8_t color[11], background[11];
+    color[0] = ppu.color[2]; color[1] = ppu.color[1]; color[2] = ppu.color[0];
+    if (cyc_background_enabled) {
+        background[0] = cyc_background_pipe[2];
+        background[1] = cyc_background_pipe[1];
+        background[2] = cyc_background_pipe[0];
+    }
+    unsigned collision = 8;
+    bool old_hit = ppu.s0hit || ppu.s0hit_pending1 || ppu.s0hit_pending2;
+    for (unsigned i = 0; i < 8; ++i) {
+        unsigned c = ppu.show_bg ? bg_pixels >> 30 : 0;
+        unsigned pal = c ? attributes >> 30 : 0;
+        bg_pixels <<= 2; attributes <<= 2;
+        hw_frame_bg[ppu.scanline * 256 + first + i - 1] = c != 0;
+        if (cyc_background_enabled) background[i + 3] = ppu.palette[pal * 4 + c] & 0x3f;
+        if (sprite[i]) {
+            unsigned slot = sprite[i] >> 2;
+            if (!slot && ppu.can_s0hit && ppu.cur_has_s0 && c) {
+                collision = i; ppu.can_s0hit = 0;
+            }
+            if (!c || !(ppu.spr_attr[slot] & 0x20)) {
+                c = sprite[i] & 3; pal = (ppu.spr_attr[slot] & 3) | 4;
+            }
+        }
+        color[i + 3] = ppu.palette[pal * 4 + c] & 0x3f;
+    }
+
+    /* Each nametable/attribute/pattern source is read once for the tile.
+     * Materialize connector/register state at the job boundary. */
+    uint16_t v = ppu.v;
+    uint16_t nt = (uint16_t)(0x2000 | (v & 0x0fff));
+    uint16_t at = (uint16_t)(0x23c0 | (v & 0x0c00) | ((v >> 4) & 0x38) | ((v >> 2) & 7));
+    uint8_t tile = ppu.ciram[(nt & 0x3ff) | hw_cart_ciram_a10(nt)];
+    uint8_t attribute = ppu.ciram[(at & 0x3ff) | hw_cart_ciram_a10(at)];
+    attribute >>= ((v & 2) ? 2 : 0) + ((v & 0x40) ? 4 : 0);
+    uint16_t pattern = (uint16_t)((ppu.bg_table ? 0x1000 : 0) | (tile << 4) | ((v >> 12) & 7));
+    if (hw_cart.watch_ppu_addr) {
+        if (hw_cart.mapper == 4) hw.cycles = clock + (offset + (align == 0)) / 3;
+        hw_cart_ppu_addr_watched(nt);
+        if (hw_cart.mapper == 4) hw.cycles = clock + (offset + 4 + (align == 0)) / 3;
+        hw_cart_ppu_addr_watched(pattern);
+    }
+    uint8_t lo = hw_cart.chr[hw_cart_chr_index(pattern)];
+    uint8_t hi = hw_cart.chr[hw_cart_chr_index(pattern | 8)];
+    ppu.par_chr = pattern | 8;
+    ppu.octal_latch = (uint8_t)ppu.par_chr;
+    ppu.fetch_data = hi;
+    ppu.attribute = attribute & 3;
+    ppu.lo_plane = lo;
+    ppu.vbus = (uint16_t)((ppu.par_chr & 0xff00) | hi);
+    bool final_half = align >= 2;
+    if (final_half) {
+        ppu.bg_pixels = (bg << 16) | ppu_hle_row(lo, hi);
+        ppu.attr_pixels = (attr << 16) | latch * 0x5555u;
+        ppu.hi_plane = hi;
+        ppu.attr_latch = ppu.attribute;
+        ppu.commit = 0;
+        increment_x();
+    } else {
+        ppu.bg_pixels = (bg << 14) | 0x2aaau;
+        ppu.attr_pixels = (attr << 14) | latch * 0x1555u;
+        ppu.commit = COMMIT_HI;
+    }
+    raster_oam(first, final_half);
+    unsigned halves = final_half ? 8 : 7;
+    unsigned hit_half = collision + 2;
+    ppu.s0hit = old_hit || hit_half <= halves;
+    ppu.s0hit_late = old_hit || hit_half < halves;
+    ppu.s0hit_pending1 = collision < 8 && hit_half == halves + 2;
+    ppu.s0hit_pending2 = collision < 8 && hit_half == halves + 1;
+    ppu.vset_latch2 = 0;
+    ppu.blnk_latch = ppu.pal_enable = ppu.copy_v = ppu.ale = ppu.wr = 0;
+    ppu.rd = 1;
+    unsigned out = (unsigned)ppu.scanline * 256 + first - 4;
+    unsigned emphasis = ppu.emphasis << 6;
+    unsigned mask = ppu.greyscale ? 0x30 : 0x3f;
+    for (unsigned i = 0; i < 8; ++i) {
+        uint16_t c = (uint16_t)((color[i] & mask) | emphasis);
+        hw_frame_index[out + i] = c;
+        if (cyc_background_enabled) {
+            cyc_background_pipe[3] = background[i];
+            cyc_render_background_output(out + i, ppu.emphasis, ppu.greyscale != 0);
+        }
+        if (hw_zapper.port) {
+            ++hw_zapper.dots;
+            hw_zapper_pixel((int)(first + i - 4), ppu.scanline, c);
+        }
+    }
+    for (unsigned i = 0; i < 4; ++i) {
+        ppu.color[i] = color[10 - i];
+        if (cyc_background_enabled) cyc_background_pipe[i] = background[10 - i];
+    }
+    raster_decay(8);
+    ++ppu_native_raster_tiles;
+}
+
+static void run_raster_output_span(unsigned cycles, unsigned align)
+{
+    SpriteOutputSpan span;
+    unsigned dots = cycles * 3u;
+    prepare_sprite_output(&span, dots);
+    uint64_t clock = hw.cycles;
+    for (unsigned i = 0; i < dots;) {
+        if (!(ppu.dot & 7) && dots - i >= 8 && !ppu.oam2_reset &&
+            ppu.commit == (align < 2 ? COMMIT_HI : 0)) {
+            raster_tile(span.pixel + i, align, clock, i);
+            i += 8;
+        } else {
+            if (hw_cart.mapper == 4) hw.cycles = clock + (i + (align == 0)) / 3;
+            if (align < 2) { render_span_half_dot(); render_prepared_sprite_dot(span.pixel[i]); }
+            else { render_prepared_sprite_dot(span.pixel[i]); render_span_half_dot(); }
+            ++i;
+        }
+    }
+    hw.cycles = clock;
+    memcpy(ppu.spr_x, span.x, 8);
+    memcpy(ppu.spr_lo, span.lo, 8);
+    memcpy(ppu.spr_hi, span.hi, 8);
+    ++ppu_native_sprite_spans;
+    ppu_native_sprite_dots += dots;
+}
+#endif
+
 static void run_sprite_output_span(unsigned cycles, unsigned align)
 {
     SpriteOutputSpan span;
@@ -1552,6 +1739,13 @@ void ppu_native_interval_run(unsigned cycles, unsigned align)
         && !hdpack_recording()
 #endif
     ) {
+#if NESRECOMP_PPU_HLE && !NESRECOMP_PPU_RASTER_REFERENCE
+        if ((hw_cart.mapper == 0 || hw_cart.mapper == 1 || hw_cart.mapper == 4 || hw_cart.mapper == 66) &&
+            !hw_cart.m.pattern_pending && !hw_cart.chr_ciram) {
+            run_raster_output_span(cycles, align);
+            return;
+        }
+#endif
         run_sprite_output_span(cycles, align);
         return;
     }

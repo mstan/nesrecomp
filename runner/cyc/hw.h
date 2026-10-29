@@ -79,6 +79,7 @@ extern HwNativeInterval hw_native_interval;
 extern uint8_t hw_code_watch[];
 extern uint64_t hw_native_interval_cycles, hw_native_interval_spans;
 extern uint64_t ppu_native_sprite_spans, ppu_native_sprite_dots;
+extern uint64_t ppu_native_raster_tiles;
 extern uint64_t apu_native_event_spans, apu_native_event_cycles;
 void hw_native_begin(void);
 #if NESRECOMP_NATIVE_PRG_GUARDS

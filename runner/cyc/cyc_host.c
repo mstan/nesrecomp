@@ -1741,6 +1741,7 @@ session_restart:
     printf("sprite_output_spans: spans=%llu dots=%llu\n",
            (unsigned long long)ppu_native_sprite_spans,
            (unsigned long long)ppu_native_sprite_dots);
+    printf("raster_output_tiles: tiles=%llu\n", (unsigned long long)ppu_native_raster_tiles);
     printf("apu_event_spans: spans=%llu cycles=%llu\n",
            (unsigned long long)apu_native_event_spans,
            (unsigned long long)apu_native_event_cycles);
