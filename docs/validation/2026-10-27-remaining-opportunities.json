@@ -16,7 +16,8 @@
     "2026-10-28-hd-plan-results.json",
     "2026-10-28-sram-native-results.json",
     "2026-10-28-guarded-rom-results.json",
-    "2026-10-28-raster-job-results.json"
+    "2026-10-28-raster-job-results.json",
+    "2026-10-28-isolated-native-results.json"
   ],
   "priorities": "Order expresses expected scope and evidence, not measured recoverable cost. Overlapping packages are not additive.",
   "acceptance": "Each game neutral or positive. Small mixed samples inconclusive. Shared original/candidate defects are separate. Native saves protected; old save-state compatibility never required.",
@@ -644,7 +645,7 @@
       "package": "seamless-world",
       "priority": "P1",
       "title": "Persistent neighboring-room simulation service",
-      "status": "open-unmeasured",
+      "status": "selected-qualified-isolated-native-service",
       "evidence": [
         {
           "file": "src/zelda_world_rooms.c",
@@ -661,15 +662,35 @@
           "link": "https://github.com/mstan/LegendOfZeldaNESRecomp/blob/5d90eb7a10e13f5dd5c693a0204b29f7917ec198/src/zelda_world_rooms.c#L251"
         }
       ],
-      "remaining": "Each eligible neighboring room installs local RAM into an isolated machine, calls translated entity logic, captures it and restores the host. Visible-plus-adjacent activation already exists; making it newly distance-limited is not a new optimization. Build persistent room contexts and a consolidated update job, optionally replacing qualified entity services natively.",
+      "remaining": "Selected qualified native memory execution for neighboring-room guest services; existing persistent actors/timers/RNG and activation cadence preserved. Further persistent scratch contexts deferred on attribution. Qualified Fit performance and dungeon/adaptive/all-map correctness; no exhaustive content audit.",
       "affected_profiles": [
         "Zelda Seamless Overworld ordinary Fit, dungeon and atlas modes"
       ],
-      "next_decisive_check": "Reuse zelda_world_timing for ordinary Fit and atlas views; split room updates, isolation copies and guest execution. Compare the complete neighbor-update service with identical actors/ticks.",
+      "next_decisive_check": "Final supported combined regeneration and owner handoff; further persistent contexts deferred on measured cost rather than preserving ownership by assumption.",
       "required_behavior": "Visible/adjacent actors still update before entry, RNG and timers remain consistent, room handoffs/doors/portals and shared progress remain correct. Slowing simulation is not equivalent performance.",
       "prior_issue": "beads-2dw.18.4",
-      "measured_additional_gain": null,
-      "execution_status": "remaining-evaluation"
+      "measured_additional_gain": [
+        {
+          "profile": "world",
+          "host": "DESKTOP-HN15M1H",
+          "reduction_percent": 10.22727272727273,
+          "decision": "positive in this matched run"
+        },
+        {
+          "profile": "stock",
+          "host": "SERVER",
+          "reduction_percent": 0.6276150627615107,
+          "decision": "neutral/inconclusive; mixed samples"
+        },
+        {
+          "profile": "hd",
+          "host": "DESKTOP-HN15M1H",
+          "reduction_percent": 0.7462686567164201,
+          "decision": "positive in this matched run"
+        }
+      ],
+      "execution_status": "selected-Fit-performance-and-dungeon-adaptive-full-map-correctness",
+      "results": "2026-10-28-isolated-native-results.json"
     },
     {
       "id": "NES19",
@@ -715,7 +736,7 @@
       "package": "seamless-world",
       "priority": "P1",
       "title": "Replace full-machine isolation copy/restore with explicit ownership",
-      "status": "open-unmeasured",
+      "status": "evaluated-deferred-measured-copy-cost",
       "evidence": [
         {
           "file": "runner/cyc/cyc_mod.c",
@@ -739,15 +760,16 @@
           "link": "../../runner/cyc/cyc_state.c#L530"
         }
       ],
-      "remaining": "Isolated helpers copy CPU/hardware/cart/PPU/APU/media state and restore it. A declared mutation domain, persistent scratch context or write journal can eliminate repeated full snapshots as part of the room/service architecture.",
+      "remaining": "Evaluated and deferred full snapshot replacement: capture/restore was 3.018% of measured scoped wall time versus 96.982% guest execution. This is a priority decision, not a claim that copies are free or impossible to optimize.",
       "affected_profiles": [
         "Zelda room updates and other supported isolated guest-service callers"
       ],
-      "next_decisive_check": "Measure scopes and copied regions in NES18; compare one persistent service context rather than another allocation-only experiment.",
+      "next_decisive_check": "Revisit only if later selected workloads make snapshot ownership the demonstrated larger obstacle; no new full snapshot rewrite selected in this package.",
       "required_behavior": "No leaked device clocks, native saves, inventory/shared progress or media/audio changes; refusal of forbidden effects and exact authoritative host continuation.",
       "prior_issue": null,
       "measured_additional_gain": null,
-      "execution_status": "remaining-evaluation"
+      "execution_status": "deferred-after-isolation-versus-guest-execution-attribution",
+      "results": "2026-10-28-isolated-native-results.json"
     },
     {
       "id": "NES21",
@@ -1115,12 +1137,12 @@
     "owner_handoff_ready": false
   },
   "execution_summary": {
-    "evaluated_decisions": 8,
+    "evaluated_decisions": 10,
     "partial_ids": [],
     "parked_ids": [
       "NES29"
     ],
-    "other_unresolved": 22,
+    "other_unresolved": 20,
     "note": "Qualified scope decisions, not architectural exhaustion or a wall-clock completion estimate. Final combined builds and owner approval remain separate."
   }
 }

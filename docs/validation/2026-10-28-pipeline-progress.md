@@ -1,9 +1,12 @@
 # Native pipeline implementation progress
 
-Current checkpoint: eight of 31 opportunities have qualified evaluation
-decisions, including complete stable HLE raster jobs under NES01. See the
+Current checkpoint: ten of 31 opportunities have qualified evaluation
+decisions, including complete stable HLE raster jobs under NES01 and the
+qualified isolated native room service under NES18. NES20 snapshot replacement
+is deferred after measured attribution. See the
 [current register](2026-10-27-remaining-opportunities.md) and
-[raster results](2026-10-28-raster-job-results.md). The initial attribution
+[raster results](2026-10-28-raster-job-results.md) and
+[isolated service results](2026-10-28-isolated-native-results.md). The initial attribution
 and plan below are historical; final combined builds and owner approval
 remain open. FDS stays parked.
 

@@ -17,13 +17,16 @@ original HD runtime. See [HD results](2026-10-28-hd-plan-results.md), including
 the rejected universal packages and SMB's unchanged-runtime proof. Zelda's
 fixed SNROM SRAM code now joins the native deadline service; see
 [SRAM results](2026-10-28-sram-native-results.md). SERVER Fit improves5.128%
-and Remastered1.442%; stock is neutral/inconclusive. Eight items now have
+and Remastered1.442%; stock is neutral/inconclusive. Ten items now have
 qualified evaluation decisions; NES01 is qualified for whole stable HLE raster
 jobs and NES29 remains parked.
 Guarded native ROM is now evaluated under NES09; see
 [guarded ROM results](2026-10-28-guarded-rom-results.md).
 Whole stable HLE raster jobs are now qualified across the five stock titles
 and Zelda Fit/HD profiles; see [raster results](2026-10-28-raster-job-results.md).
+Zelda isolated native execution is selected under NES18; NES20 snapshot
+replacement is deferred after measured attribution. See
+[isolated service results](2026-10-28-isolated-native-results.md).
 Remaining evaluations and the final combined feature handoff are still open. FDS remains
 parked. No main/master merge or new release is authorized before owner review.
 
@@ -377,13 +380,13 @@ close the per-pixel raster or APU-event algorithm work under NES01/NES06.
 ### Seamless world service ownership
 
 
-- [ ] **NES18 · P1 · Persistent neighboring-room simulation service**
+- [x] **NES18 · P1 · Persistent neighboring-room simulation service**
 
   Each eligible neighboring room installs local RAM into an isolated machine, calls translated entity logic, captures it and restores the host. Visible-plus-adjacent activation already exists; making it newly distance-limited is not a new optimization. Build persistent room contexts and a consolidated update job, optionally replacing qualified entity services natively.
 
   Scope: Zelda Seamless Overworld ordinary Fit, dungeon and atlas modes.
 
-  Next: Reuse zelda_world_timing for ordinary Fit and atlas views; split room updates, isolation copies and guest execution. Compare the complete neighbor-update service with identical actors/ticks.
+  Decision: Selected isolated native memory/budget service after Fit CPU and dungeon/adaptive/full-map correctness checks. Persistent actors already existed; further scratch contexts are deferred on attribution. See [results](2026-10-28-isolated-native-results.md).
 
   Preserve: Visible/adjacent actors still update before entry, RNG and timers remain consistent, room handoffs/doors/portals and shared progress remain correct. Slowing simulation is not equivalent performance.
 
@@ -403,13 +406,13 @@ close the per-pixel raster or APU-event algorithm work under NES01/NES06.
   Evidence: [src/zelda_world.c:219](https://github.com/mstan/LegendOfZeldaNESRecomp/blob/5d90eb7a10e13f5dd5c693a0204b29f7917ec198/src/zelda_world.c#L219), [src/zelda_world.c:254](https://github.com/mstan/LegendOfZeldaNESRecomp/blob/5d90eb7a10e13f5dd5c693a0204b29f7917ec198/src/zelda_world.c#L254), [src/zelda_world.c:424](https://github.com/mstan/LegendOfZeldaNESRecomp/blob/5d90eb7a10e13f5dd5c693a0204b29f7917ec198/src/zelda_world.c#L424).
 
 
-- [ ] **NES20 · P1 · Replace full-machine isolation copy/restore with explicit ownership**
+- [x] **NES20 · P1 · Replace full-machine isolation copy/restore with explicit ownership**
 
   Isolated helpers copy CPU/hardware/cart/PPU/APU/media state and restore it. A declared mutation domain, persistent scratch context or write journal can eliminate repeated full snapshots as part of the room/service architecture.
 
   Scope: Zelda room updates and other supported isolated guest-service callers.
 
-  Next: Measure scopes and copied regions in NES18; compare one persistent service context rather than another allocation-only experiment.
+  Decision: Deferred full snapshot replacement after measuring capture/restore at 3.018% of scoped diagnostic wall time, versus 96.982% guest execution. The larger execution service was selected; this is not architectural exhaustion. See [results](2026-10-28-isolated-native-results.md).
 
   Preserve: No leaked device clocks, native saves, inventory/shared progress or media/audio changes; refusal of forbidden effects and exact authoritative host continuation.
 
