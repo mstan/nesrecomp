@@ -43,7 +43,8 @@ def main():
         assert len(outputs[0]) == len(outputs[1]), 'different checkpoint counts'
     print('PASS: active NROM/MMC1/MMC3/GxROM intervals, four NTSC alignments, device/bus/memory/'
           'picture checkpoints and PCM match; DMA, IRQ, delayed-register edges, '
-          'trace and PAL refusal, CPU RAM/folded-ROM cursor and snapshot replay exercised')
+          'trace and PAL refusal, CPU RAM/folded-ROM cursor and snapshot replay, '
+          'settled VBlank, held-high NMI and idle bus-decay deadlines exercised')
 
 
 if __name__ == '__main__':

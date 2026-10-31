@@ -27,7 +27,8 @@
     "2026-10-31-rewind-history-results.json",
     "2026-10-31-present-upload-results.json",
     "2026-10-31-observer-results.json",
-    "2026-10-31-dma-service-results.json"
+    "2026-10-31-dma-service-results.json",
+    "2026-10-31-blank-interval-results.json"
   ],
   "priorities": "Order expresses expected scope and evidence, not measured recoverable cost. Overlapping packages are not additive.",
   "acceptance": "Each game neutral or positive. Small mixed samples inconclusive. Shared original/candidate defects are separate. Native saves protected; old save-state compatibility never required.",
@@ -320,7 +321,7 @@
       "package": "machine-intervals",
       "priority": "P2",
       "title": "Qualified polling-loop and blank-interval fast forwarding",
-      "status": "open-unmeasured",
+      "status": "evaluated-selected-settled-nonvisible-device-intervals",
       "evidence": [
         {
           "file": "runner/cyc/cpu6502.h",
@@ -337,15 +338,19 @@
           "link": "../../runner/cyc/hw_machine.c#L57"
         }
       ],
-      "remaining": "Native code can still execute an expensive guest wait. A verified loop can advance to its first observable event while accounting for repeated reads and elapsed device work; rendering-off intervals are another opportunity.",
+      "remaining": "Stable nonvisible NTSC device intervals selected after four-stock plus Zelda Fit output/performance qualification. Content-qualified CPU polling-loop elimination, visible rendering-off bulk output, PAL and additional boards remain residuals; no architectural exhaustion claim.",
       "affected_profiles": [
         "Content-qualified active-gameplay waits and rendering-off intervals"
       ],
-      "next_decisive_check": "Identify the exact active wait on gameplay traces. Reject menu/boot-only counts as gameplay attribution; prove a complete loop service on one content-qualified loop.",
+      "next_decisive_check": "Final supported regeneration and combined feature/performance/owner handoff; continue next burndown item only after independent PR and durable Beads validation.",
       "required_behavior": "Final registers/RAM, loop exit, side-effectful reads, interrupt sampling, device time and input latency. No arbitrary dropped cycles.",
       "prior_issue": null,
-      "measured_additional_gain": null,
-      "execution_status": "remaining-evaluation"
+      "measured_additional_gain": {
+        "metroid_observed_median_cpu_reduction_percent": 6.194690265486724,
+        "other_games": "neutral/inconclusive; raw medians and negative samples retained"
+      },
+      "execution_status": "selected-for-final-combined-integration",
+      "result_file": "2026-10-31-blank-interval-results.json"
     },
     {
       "id": "NES09",
@@ -1292,7 +1297,7 @@
   ],
   "execution": {
     "issue": "beads-2dw.1.110",
-    "branch": "perf/nes07-native-dma",
+    "branch": "perf/nes08-native-blank",
     "base": "fc0bf3fa46a710464960c0a1f2d3b83b4d345600",
     "status": "in-progress",
     "evidence_root": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028",
@@ -1303,12 +1308,12 @@
     "owner_handoff_ready": false
   },
   "execution_summary": {
-    "evaluated_decisions": 20,
+    "evaluated_decisions": 21,
     "partial_ids": [],
     "parked_ids": [
       "NES29"
     ],
-    "other_unresolved": 10,
+    "other_unresolved": 9,
     "note": "Qualified scope decisions, not architectural exhaustion or a wall-clock completion estimate. Final combined builds and owner approval remain separate."
   }
 }
