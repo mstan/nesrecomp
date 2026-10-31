@@ -33,7 +33,8 @@
     "2026-10-31-chr-plan-results.json",
     "2026-10-31-rollback-digest-results.json",
     "2026-10-31-audio-host-results.json",
-    "2026-10-31-pacing-reuse-results.json"
+    "2026-10-31-pacing-reuse-results.json",
+    "2026-10-31-compiler-policy-results.json"
   ],
   "priorities": "Order expresses expected scope and evidence, not measured recoverable cost. Overlapping packages are not additive.",
   "acceptance": "Each game neutral or positive. Small mixed samples inconclusive. Shared original/candidate defects are separate. Native saves protected; old save-state compatibility never required.",
@@ -1155,7 +1156,7 @@
       "package": "host-delivery",
       "priority": "P2",
       "title": "Compiler policy and generated-code layout",
-      "status": "open-existing-IPO-defect",
+      "status": "selected-qualified-SMB1-target-IPO",
       "evidence": [
         {
           "file": "recompiler/src/cyc_codegen.c",
@@ -1172,15 +1173,24 @@
           "link": "../../runner/cyc/project.cmake#L150"
         }
       ],
-      "remaining": "PGO, hot/cold layout, translation-unit/block layout and supported selective IPO can improve native locality and cross-unit optimization. Global IPO has a real SMB1 Fit divergence; native-C-only IPO had functional support but no admitted timing gain.",
+      "remaining": "Current SMB1-only Win64GNU15.2 O3 normalUI/NET target IPO qualified; old globalO2 IPO106 unresolved, other titles/compiler policies/PGO/layout unqualified.",
       "affected_profiles": [
         "SMB1 Fit defect; current gameplay-trained compiler policies across affected consumers"
       ],
-      "next_decisive_check": "Reuse beads-2dw.1.106 and existing binaries. Diagnose the actual aliasing/lifetime/optimizer defect before global IPO; use current gameplay-trained PGO or layout candidates only after the larger pipeline decision.",
+      "next_decisive_check": "Independent actual PR-head and durable Beads validation, then next serial item. Fresh combined final title/CLI builds and owner review remain.",
       "required_behavior": "Every affected game remains neutral or positive and correct; generated coverage/build size are not vetoes by themselves, but startup/memory costs must be recorded.",
       "prior_issue": "beads-2dw.1.106",
-      "measured_additional_gain": null,
-      "execution_status": "remaining-evaluation"
+      "measured_additional_gain": [
+        {
+          "game": "SMB1",
+          "profile": "Fit normalUI/NET compiled O3targetIPO",
+          "host": "DESKTOP-HN15M1H",
+          "reduction_percent": 14.615384615384619,
+          "decision": "positive in all3matchedpairs"
+        }
+      ],
+      "execution_status": "evaluated-selected-SMB1-current-O3",
+      "result_file": "2026-10-31-compiler-policy-results.json"
     },
     {
       "id": "NES28",
@@ -1313,7 +1323,7 @@
   ],
   "execution": {
     "issue": "beads-2dw.1.110",
-    "branch": "docs/nes26-pacing-disposition",
+    "branch": "perf/nes27-compiler-policy",
     "base": "fc0bf3fa46a710464960c0a1f2d3b83b4d345600",
     "status": "in-progress",
     "evidence_root": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028",
@@ -1324,12 +1334,12 @@
     "owner_handoff_ready": false
   },
   "execution_summary": {
-    "evaluated_decisions": 26,
+    "evaluated_decisions": 27,
     "partial_ids": [],
     "parked_ids": [
       "NES29"
     ],
-    "other_unresolved": 4,
+    "other_unresolved": 3,
     "note": "Qualified scope decisions, not architectural exhaustion or a wall-clock completion estimate. Final combined builds and owner approval remain separate."
   }
 }

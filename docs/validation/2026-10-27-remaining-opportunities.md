@@ -17,7 +17,7 @@ original HD runtime. See [HD results](2026-10-28-hd-plan-results.md), including
 the rejected universal packages and SMB's unchanged-runtime proof. Zelda's
 fixed SNROM SRAM code now joins the native deadline service; see
 [SRAM results](2026-10-28-sram-native-results.md). SERVER Fit improves5.128%
-and Remastered1.442%; stock is neutral/inconclusive. Twenty-six items now have
+and Remastered1.442%; stock is neutral/inconclusive. Twenty-seven items now have
 qualified evaluation decisions; NES01 is qualified for whole stable HLE raster
 jobs and NES29 remains parked.
 Guarded native ROM is now evaluated under NES09; see
@@ -599,13 +599,17 @@ close the per-pixel raster or APU-event algorithm work under NES01/NES06.
   Evidence: [runner/cyc/cyc_sdl.c:118](../../runner/cyc/cyc_sdl.c#L118), [runner/cyc/cyc_frame_pacing.h:9](../../runner/cyc/cyc_frame_pacing.h#L9).
 
 
-- [ ] **NES27 · P2 · Compiler policy and generated-code layout** (`open-existing-IPO-defect`)
+- [x] **NES27 · P2 · Compiler policy and generated-code layout** (`open-existing-IPO-defect`)
 
   PGO, hot/cold layout, translation-unit/block layout and supported selective IPO can improve native locality and cross-unit optimization. Global IPO has a real SMB1 Fit divergence; native-C-only IPO had functional support but no admitted timing gain.
 
   Scope: SMB1 Fit defect; current gameplay-trained compiler policies across affected consumers.
 
-  Next: Reuse beads-2dw.1.106 and existing binaries. Diagnose the actual aliasing/lifetime/optimizer defect before global IPO; use current gameplay-trained PGO or layout candidates only after the larger pipeline decision.
+  Evaluation: Select SMB1-only qualified Win64GNU15.2 O3 normalUI/NET target
+  IPO: matched Fit median whole-process CPU6.093750 to5.203125s (14.615%),
+  three pairs positive with exact outputs/work. Guarded fresh runtime code
+  matches the measured candidate. Other titles unchanged; historical globalO2
+  defect106 and baseline NET fork111 stay open. [Results](2026-10-31-compiler-policy-results.md).
 
   Preserve: Every affected game remains neutral or positive and correct; generated coverage/build size are not vetoes by themselves, but startup/memory costs must be recorded.
 
@@ -704,6 +708,6 @@ working portable implementation. Netplay settles a common validated profile
 before frame 0; platform compilation alone is not compatibility qualification.
 
 Audit completion closes only `beads-2dw.1.109`'s investigation/deliverable.
-Current execution has twenty-six scoped evaluation decisions, four unresolved
+Current execution has twenty-seven scoped evaluation decisions, three unresolved
 items and parked NES29. The implementation campaign and final combined owner
 handoff remain open; a scoped decision is not architectural exhaustion.

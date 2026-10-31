@@ -1,0 +1,1951 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-31",
+  "opportunity": "NES27",
+  "issue": "beads-2dw.1.110",
+  "consumer_issue": "beads-2dw.2.16",
+  "campaign": "beads-2wy8.1",
+  "decision": "Select qualified SMB1-only target IPO for combined final validation; not a global engine compiler policy",
+  "engine_base": "1ffc2f96ad24ba333ab3233726f8fbc3c5ac64fc",
+  "title_base": "45f95754f8ad6e04fc39966505c94af9783bd787",
+  "production": {
+    "exe": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-smb-nes27-policy\\SuperMarioBrosRecomp.exe",
+    "sha256": "3257333efab282fd777ef4e07695f8d9ad2cc8e22dceca44bb29d93c29179839",
+    "bytes": 8290655,
+    "build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-smb-nes27-policy",
+    "rom": "F:\\Projects\\nesrecomp\\SuperMarioBrosRecomp\\baserom.nes"
+  },
+  "evidence": {
+    "products-compiler-probe-v1.json": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-compiler-probe-v1.json",
+      "sha256": "85f975f31a3c595f84932006cda585d5ca2ec3e7255a0a794abb964fe690797a"
+    },
+    "compiler-probe-v1-result.json": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\compiler-probe-v1-result.json",
+      "sha256": "1a9a451c64f7dd4335744fecc3bd759aabd6f6feea3b5f2a33bfb8396de1e990"
+    },
+    "compiler-perf-v1-result.json": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\compiler-perf-v1-result.json",
+      "sha256": "36cd2e0e87d2ad4bc85cbf742ef021c6a6428ae87460637b1aec9ddbf9c2aeb0"
+    },
+    "products-compiler-full-v1.json": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-compiler-full-v1.json",
+      "sha256": "ca232281eb7c7d07dc549c298eb17f9c2cfb3b55eed48516a6f509441ef03a5b"
+    },
+    "compiler-full-probe-v1-result.json": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\compiler-full-probe-v1-result.json",
+      "sha256": "f16ba1c1a39f804ab903fb48dcb4140070f8f2356ee31f18ce1e4426306afe7d"
+    },
+    "compiler-full-perf-v1-result.json": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\compiler-full-perf-v1-result.json",
+      "sha256": "f1fe4bdbc4a5cc13e34df40a371f1eeb56557d171a9adec16702609ece649091"
+    },
+    "compiler-features-v1-result.json": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\compiler-features-v1-result.json",
+      "sha256": "b5362ab7683f3150992b5cad68a435582426008735d4e6cd14f2d5fdbcad6f57"
+    },
+    "compiler-sdl-v2-result.json": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\compiler-sdl-v2-result.json",
+      "sha256": "a0cc0276a0f06a9f0d71a939f7b6891b9f7092eb7967cc54ef3751475138dc49"
+    },
+    "compiler-net-v1-final-result.json": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\compiler-net-v1-final-result.json",
+      "sha256": "1b205438c1bbabc3f71f274f4897815ac1335e16ed1a78e986558f2a22ef45bc"
+    },
+    "compiler-policy-v1-product.json": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\compiler-policy-v1-product.json",
+      "sha256": "902cc53c79699f770c4ae2a207f3dbbb2d24e96654c75d7f13191a6883302047"
+    },
+    "compiler-policy-build-v1.json": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\compiler-policy-build-v1.json",
+      "sha256": "231e15a64cb2f6bb03b85c72cf1d1822a8fbadf4bd3e39f2b9b1ee9bc6ff6028"
+    },
+    "compiler-cost-v1-result.json": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\compiler-cost-v1-result.json",
+      "sha256": "1cf98fba6d7bce53b7c2b94fa318def6216c75298d83006aee2e197961b7807f"
+    }
+  },
+  "performance": {
+    "products": {
+      "reference": {
+        "exe": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-smb-nes27-full-reference\\SuperMarioBrosRecomp.exe",
+        "sha256": "66aacf15c2b8ae7b2252f12fa77c3dd33091e757eb34e2b15cb5e9f608f3e7de",
+        "bytes": 8645744,
+        "rom": "F:\\Projects\\nesrecomp\\SuperMarioBrosRecomp\\baserom.nes",
+        "rom_sha256": "f61548fdf1670cffefcc4f0b7bdcdd9eaba0c226e3b74f8666071496988248de",
+        "build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-smb-nes27-full-reference",
+        "engine_base": "1ffc2f96ad24ba333ab3233726f8fbc3c5ac64fc",
+        "title_base": "45f95754f8ad6e04fc39966505c94af9783bd787",
+        "IPO": "OFF",
+        "compiler": "GCC15.2.0 O3 Release, one LTRANS worker",
+        "scope": "Current matched full SMB1 title with normal UI/NET compiled in both; whole-target IPO experiment, not historical exact binary rerun or production selection"
+      },
+      "candidate": {
+        "exe": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-smb-nes27-full-candidate\\SuperMarioBrosRecomp.exe",
+        "sha256": "7164837324f0d3a5c87fad5c30aa14b8e475a60f5c4b1313701eec3b37d01e1e",
+        "bytes": 8290655,
+        "rom": "F:\\Projects\\nesrecomp\\SuperMarioBrosRecomp\\baserom.nes",
+        "rom_sha256": "f61548fdf1670cffefcc4f0b7bdcdd9eaba0c226e3b74f8666071496988248de",
+        "build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-smb-nes27-full-candidate",
+        "engine_base": "1ffc2f96ad24ba333ab3233726f8fbc3c5ac64fc",
+        "title_base": "45f95754f8ad6e04fc39966505c94af9783bd787",
+        "IPO": "ON",
+        "compiler": "GCC15.2.0 O3 Release, one LTRANS worker",
+        "scope": "Current matched full SMB1 title with normal UI/NET compiled in both; whole-target IPO experiment, not historical exact binary rerun or production selection"
+      }
+    },
+    "profile": "SMB1 Fit, full2401frameboot+gameplay SDL software/dummy mixed audio, UI/NET compiled O3 vswholeIPO, fixedroute/singleLP; startup+normalshutdownincluded",
+    "samples": [
+      {
+        "label": "warmup",
+        "mode": "reference",
+        "cpu_seconds": 6.09375,
+        "wall_seconds": 6.425896900007501,
+        "command": [
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-smb-nes27-full-reference\\SuperMarioBrosRecomp.exe",
+          "F:\\Projects\\nesrecomp\\SuperMarioBrosRecomp\\baserom.nes",
+          "--hidden",
+          "--uncapped",
+          "--exit-after",
+          "2401",
+          "--no-save",
+          "--config",
+          "G:\\Temp\\Codex\\nes110-compiler-full-perf-v1-20261031\\reference\\config.ini",
+          "--mods-root",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-smb-nes27-full-reference\\mods",
+          "--window-input",
+          "G:\\Temp\\Codex\\nes110-compiler-full-perf-v1-20261031\\route.input",
+          "--widescreen",
+          "fit"
+        ],
+        "binary_sha256": "66aacf15c2b8ae7b2252f12fa77c3dd33091e757eb34e2b15cb5e9f608f3e7de",
+        "affinity_mask": 16384,
+        "host_core_before": [
+          [
+            602657968750,
+            782542968750,
+            178086718750
+          ],
+          [
+            726977812500,
+            807668437500,
+            152960625000
+          ],
+          [
+            316993437500,
+            497360312500,
+            463268750000
+          ],
+          [
+            455759531250,
+            616750156250,
+            343878906250
+          ],
+          [
+            522700937500,
+            665410468750,
+            295218593750
+          ],
+          [
+            563828593750,
+            691737343750,
+            268891718750
+          ],
+          [
+            594002968750,
+            714135781250,
+            246493281250
+          ],
+          [
+            626832968750,
+            733816875000,
+            226812187500
+          ],
+          [
+            418015312500,
+            608000468750,
+            352628593750
+          ],
+          [
+            453741093750,
+            629360156250,
+            331268906250
+          ],
+          [
+            672718437500,
+            781033437500,
+            179595625000
+          ],
+          [
+            706191093750,
+            796864531250,
+            163764531250
+          ],
+          [
+            724615937500,
+            828533437500,
+            132095625000
+          ],
+          [
+            745035156250,
+            861342343750,
+            99286718750
+          ],
+          [
+            762880000000,
+            840009531250,
+            120619531250
+          ],
+          [
+            769067812500,
+            840562031250,
+            120067031250
+          ]
+        ],
+        "host_core_after": [
+          [
+            602715781250,
+            782605625000,
+            178088281250
+          ],
+          [
+            727038437500,
+            807730781250,
+            152962500000
+          ],
+          [
+            317044687500,
+            497418281250,
+            463275000000
+          ],
+          [
+            455809062500,
+            616808125000,
+            343885156250
+          ],
+          [
+            522757187500,
+            665469687500,
+            295223593750
+          ],
+          [
+            563887187500,
+            691797968750,
+            268895312500
+          ],
+          [
+            594061250000,
+            714196718750,
+            246496562500
+          ],
+          [
+            626891093750,
+            733877031250,
+            226816250000
+          ],
+          [
+            418066562500,
+            608059062500,
+            352634218750
+          ],
+          [
+            453793593750,
+            629416562500,
+            331276718750
+          ],
+          [
+            672777500000,
+            781094062500,
+            179599218750
+          ],
+          [
+            706250781250,
+            796926093750,
+            163767187500
+          ],
+          [
+            724676093750,
+            828595937500,
+            132097343750
+          ],
+          [
+            745093593750,
+            861404218750,
+            99289062500
+          ],
+          [
+            762882500000,
+            840013281250,
+            120680000000
+          ],
+          [
+            769124531250,
+            840622968750,
+            120070312500
+          ]
+        ],
+        "window_benchmark": "window benchmark: ppu=HLE frames=2401 seconds=6.112273 fps=392.816 cycles=71500612 native_cycles=71494771 audio_device=1 audio_enabled=1 produced_samples=1761775 queued_samples=270696"
+      },
+      {
+        "label": "warmup",
+        "mode": "candidate",
+        "cpu_seconds": 5.109375,
+        "wall_seconds": 5.38752150000073,
+        "command": [
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-smb-nes27-full-candidate\\SuperMarioBrosRecomp.exe",
+          "F:\\Projects\\nesrecomp\\SuperMarioBrosRecomp\\baserom.nes",
+          "--hidden",
+          "--uncapped",
+          "--exit-after",
+          "2401",
+          "--no-save",
+          "--config",
+          "G:\\Temp\\Codex\\nes110-compiler-full-perf-v1-20261031\\candidate\\config.ini",
+          "--mods-root",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-smb-nes27-full-candidate\\mods",
+          "--window-input",
+          "G:\\Temp\\Codex\\nes110-compiler-full-perf-v1-20261031\\route.input",
+          "--widescreen",
+          "fit"
+        ],
+        "binary_sha256": "7164837324f0d3a5c87fad5c30aa14b8e475a60f5c4b1313701eec3b37d01e1e",
+        "affinity_mask": 16384,
+        "host_core_before": [
+          [
+            602715781250,
+            782605625000,
+            178088281250
+          ],
+          [
+            727038437500,
+            807730781250,
+            152962500000
+          ],
+          [
+            317044687500,
+            497418281250,
+            463275000000
+          ],
+          [
+            455809062500,
+            616808125000,
+            343885156250
+          ],
+          [
+            522757187500,
+            665469687500,
+            295223593750
+          ],
+          [
+            563887187500,
+            691797968750,
+            268895312500
+          ],
+          [
+            594061250000,
+            714196718750,
+            246496562500
+          ],
+          [
+            626891093750,
+            733877031250,
+            226816250000
+          ],
+          [
+            418066562500,
+            608059062500,
+            352634218750
+          ],
+          [
+            453793593750,
+            629416562500,
+            331276718750
+          ],
+          [
+            672777500000,
+            781094062500,
+            179599218750
+          ],
+          [
+            706250781250,
+            796926093750,
+            163767187500
+          ],
+          [
+            724676093750,
+            828595937500,
+            132097343750
+          ],
+          [
+            745093593750,
+            861404218750,
+            99289062500
+          ],
+          [
+            762882500000,
+            840013281250,
+            120680000000
+          ],
+          [
+            769124531250,
+            840622968750,
+            120070312500
+          ]
+        ],
+        "host_core_after": [
+          [
+            602764218750,
+            782659375000,
+            178088437500
+          ],
+          [
+            727090937500,
+            807784531250,
+            152962656250
+          ],
+          [
+            317090156250,
+            497469375000,
+            463277812500
+          ],
+          [
+            455857031250,
+            616860000000,
+            343887187500
+          ],
+          [
+            522807343750,
+            665521718750,
+            295225468750
+          ],
+          [
+            563938750000,
+            691851562500,
+            268895625000
+          ],
+          [
+            594112187500,
+            714249218750,
+            246497968750
+          ],
+          [
+            626942812500,
+            733930468750,
+            226816718750
+          ],
+          [
+            418113281250,
+            608109531250,
+            352637656250
+          ],
+          [
+            453841718750,
+            629468125000,
+            331279062500
+          ],
+          [
+            672830156250,
+            781147968750,
+            179599218750
+          ],
+          [
+            706303593750,
+            796979375000,
+            163767812500
+          ],
+          [
+            724726562500,
+            828649375000,
+            132097812500
+          ],
+          [
+            745146406250,
+            861457656250,
+            99289531250
+          ],
+          [
+            762884843750,
+            840016875000,
+            120730312500
+          ],
+          [
+            769176718750,
+            840676562500,
+            120070625000
+          ]
+        ],
+        "window_benchmark": "window benchmark: ppu=HLE frames=2401 seconds=5.082984 fps=472.360 cycles=71500612 native_cycles=71494791 audio_device=1 audio_enabled=1 produced_samples=1761775 queued_samples=225950"
+      },
+      {
+        "label": "0",
+        "mode": "reference",
+        "cpu_seconds": 6.109375,
+        "wall_seconds": 6.356901699997252,
+        "command": [
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-smb-nes27-full-reference\\SuperMarioBrosRecomp.exe",
+          "F:\\Projects\\nesrecomp\\SuperMarioBrosRecomp\\baserom.nes",
+          "--hidden",
+          "--uncapped",
+          "--exit-after",
+          "2401",
+          "--no-save",
+          "--config",
+          "G:\\Temp\\Codex\\nes110-compiler-full-perf-v1-20261031\\reference\\config.ini",
+          "--mods-root",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-smb-nes27-full-reference\\mods",
+          "--window-input",
+          "G:\\Temp\\Codex\\nes110-compiler-full-perf-v1-20261031\\route.input",
+          "--widescreen",
+          "fit"
+        ],
+        "binary_sha256": "66aacf15c2b8ae7b2252f12fa77c3dd33091e757eb34e2b15cb5e9f608f3e7de",
+        "affinity_mask": 16384,
+        "host_core_before": [
+          [
+            602764218750,
+            782659375000,
+            178088437500
+          ],
+          [
+            727090937500,
+            807784531250,
+            152962656250
+          ],
+          [
+            317090156250,
+            497469375000,
+            463277812500
+          ],
+          [
+            455857031250,
+            616860000000,
+            343887187500
+          ],
+          [
+            522807343750,
+            665521718750,
+            295225468750
+          ],
+          [
+            563938750000,
+            691851562500,
+            268895625000
+          ],
+          [
+            594112187500,
+            714249218750,
+            246497968750
+          ],
+          [
+            626942812500,
+            733930468750,
+            226816718750
+          ],
+          [
+            418113281250,
+            608109531250,
+            352637656250
+          ],
+          [
+            453841718750,
+            629468125000,
+            331279062500
+          ],
+          [
+            672830156250,
+            781147968750,
+            179599218750
+          ],
+          [
+            706303593750,
+            796979375000,
+            163767812500
+          ],
+          [
+            724726562500,
+            828649375000,
+            132097812500
+          ],
+          [
+            745146406250,
+            861457656250,
+            99289531250
+          ],
+          [
+            762884843750,
+            840016875000,
+            120730312500
+          ],
+          [
+            769176718750,
+            840676562500,
+            120070625000
+          ]
+        ],
+        "host_core_after": [
+          [
+            602821718750,
+            782722812500,
+            178088593750
+          ],
+          [
+            727154062500,
+            807847812500,
+            152962968750
+          ],
+          [
+            317141875000,
+            497528281250,
+            463282500000
+          ],
+          [
+            455912031250,
+            616920781250,
+            343890000000
+          ],
+          [
+            522867500000,
+            665583906250,
+            295226875000
+          ],
+          [
+            563999062500,
+            691912968750,
+            268897812500
+          ],
+          [
+            594171875000,
+            714311093750,
+            246499687500
+          ],
+          [
+            627003593750,
+            733992656250,
+            226818125000
+          ],
+          [
+            418163750000,
+            608167031250,
+            352643750000
+          ],
+          [
+            453897500000,
+            629528906250,
+            331281875000
+          ],
+          [
+            672891875000,
+            781210312500,
+            179600468750
+          ],
+          [
+            706366093750,
+            797042500000,
+            163768281250
+          ],
+          [
+            724787187500,
+            828711875000,
+            132098906250
+          ],
+          [
+            745208750000,
+            861520937500,
+            99289843750
+          ],
+          [
+            762887343750,
+            840021250000,
+            120789531250
+          ],
+          [
+            769235312500,
+            840738437500,
+            120072343750
+          ]
+        ],
+        "window_benchmark": "window benchmark: ppu=HLE frames=2401 seconds=6.040411 fps=397.489 cycles=71500612 native_cycles=71494771 audio_device=1 audio_enabled=1 produced_samples=1761775 queued_samples=267777"
+      },
+      {
+        "label": "0",
+        "mode": "candidate",
+        "cpu_seconds": 5.21875,
+        "wall_seconds": 5.480479000005289,
+        "command": [
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-smb-nes27-full-candidate\\SuperMarioBrosRecomp.exe",
+          "F:\\Projects\\nesrecomp\\SuperMarioBrosRecomp\\baserom.nes",
+          "--hidden",
+          "--uncapped",
+          "--exit-after",
+          "2401",
+          "--no-save",
+          "--config",
+          "G:\\Temp\\Codex\\nes110-compiler-full-perf-v1-20261031\\candidate\\config.ini",
+          "--mods-root",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-smb-nes27-full-candidate\\mods",
+          "--window-input",
+          "G:\\Temp\\Codex\\nes110-compiler-full-perf-v1-20261031\\route.input",
+          "--widescreen",
+          "fit"
+        ],
+        "binary_sha256": "7164837324f0d3a5c87fad5c30aa14b8e475a60f5c4b1313701eec3b37d01e1e",
+        "affinity_mask": 16384,
+        "host_core_before": [
+          [
+            602821718750,
+            782722812500,
+            178088593750
+          ],
+          [
+            727154062500,
+            807847812500,
+            152962968750
+          ],
+          [
+            317141875000,
+            497528281250,
+            463282500000
+          ],
+          [
+            455912031250,
+            616920781250,
+            343890000000
+          ],
+          [
+            522867500000,
+            665583906250,
+            295226875000
+          ],
+          [
+            563999062500,
+            691912968750,
+            268897812500
+          ],
+          [
+            594171875000,
+            714311093750,
+            246499687500
+          ],
+          [
+            627003593750,
+            733992656250,
+            226818125000
+          ],
+          [
+            418163750000,
+            608167031250,
+            352643750000
+          ],
+          [
+            453897500000,
+            629528906250,
+            331281875000
+          ],
+          [
+            672891875000,
+            781210312500,
+            179600468750
+          ],
+          [
+            706366093750,
+            797042500000,
+            163768281250
+          ],
+          [
+            724787187500,
+            828711875000,
+            132098906250
+          ],
+          [
+            745208750000,
+            861520937500,
+            99289843750
+          ],
+          [
+            762887343750,
+            840021250000,
+            120789531250
+          ],
+          [
+            769235312500,
+            840738437500,
+            120072343750
+          ]
+        ],
+        "host_core_after": [
+          [
+            602873125000,
+            782777500000,
+            178088750000
+          ],
+          [
+            727207500000,
+            807902343750,
+            152963281250
+          ],
+          [
+            317185156250,
+            497576406250,
+            463289218750
+          ],
+          [
+            455957968750,
+            616972656250,
+            343892968750
+          ],
+          [
+            522917031250,
+            665636250000,
+            295229375000
+          ],
+          [
+            564051875000,
+            691966718750,
+            268898906250
+          ],
+          [
+            594223906250,
+            714364843750,
+            246500781250
+          ],
+          [
+            627056718750,
+            734047343750,
+            226818281250
+          ],
+          [
+            418209843750,
+            608218125000,
+            352647500000
+          ],
+          [
+            453944375000,
+            629580625000,
+            331285000000
+          ],
+          [
+            672944218750,
+            781264218750,
+            179601406250
+          ],
+          [
+            706419843750,
+            797097187500,
+            163768437500
+          ],
+          [
+            724839218750,
+            828766562500,
+            132099062500
+          ],
+          [
+            745263281250,
+            861575625000,
+            99290000000
+          ],
+          [
+            762889531250,
+            840025000000,
+            120840625000
+          ],
+          [
+            769286093750,
+            840791875000,
+            120073750000
+          ]
+        ],
+        "window_benchmark": "window benchmark: ppu=HLE frames=2401 seconds=5.184787 fps=463.086 cycles=71500612 native_cycles=71494791 audio_device=1 audio_enabled=1 produced_samples=1761775 queued_samples=231078"
+      },
+      {
+        "label": "1",
+        "mode": "candidate",
+        "cpu_seconds": 5.203125,
+        "wall_seconds": 5.437294399991515,
+        "command": [
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-smb-nes27-full-candidate\\SuperMarioBrosRecomp.exe",
+          "F:\\Projects\\nesrecomp\\SuperMarioBrosRecomp\\baserom.nes",
+          "--hidden",
+          "--uncapped",
+          "--exit-after",
+          "2401",
+          "--no-save",
+          "--config",
+          "G:\\Temp\\Codex\\nes110-compiler-full-perf-v1-20261031\\candidate\\config.ini",
+          "--mods-root",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-smb-nes27-full-candidate\\mods",
+          "--window-input",
+          "G:\\Temp\\Codex\\nes110-compiler-full-perf-v1-20261031\\route.input",
+          "--widescreen",
+          "fit"
+        ],
+        "binary_sha256": "7164837324f0d3a5c87fad5c30aa14b8e475a60f5c4b1313701eec3b37d01e1e",
+        "affinity_mask": 16384,
+        "host_core_before": [
+          [
+            602873281250,
+            782777656250,
+            178088750000
+          ],
+          [
+            727207656250,
+            807902500000,
+            152963281250
+          ],
+          [
+            317185312500,
+            497576562500,
+            463289218750
+          ],
+          [
+            455957968750,
+            616972656250,
+            343893125000
+          ],
+          [
+            522917187500,
+            665636406250,
+            295229375000
+          ],
+          [
+            564052031250,
+            691966875000,
+            268898906250
+          ],
+          [
+            594223906250,
+            714364843750,
+            246500781250
+          ],
+          [
+            627056875000,
+            734047500000,
+            226818281250
+          ],
+          [
+            418210000000,
+            608218281250,
+            352647500000
+          ],
+          [
+            453944531250,
+            629580781250,
+            331285000000
+          ],
+          [
+            672944375000,
+            781264375000,
+            179601406250
+          ],
+          [
+            706420000000,
+            797097343750,
+            163768437500
+          ],
+          [
+            724839218750,
+            828766562500,
+            132099062500
+          ],
+          [
+            745263281250,
+            861575625000,
+            99290000000
+          ],
+          [
+            762889687500,
+            840025156250,
+            120840625000
+          ],
+          [
+            769286093750,
+            840791875000,
+            120073750000
+          ]
+        ],
+        "host_core_after": [
+          [
+            602922656250,
+            782831718750,
+            178089062500
+          ],
+          [
+            727259687500,
+            807956562500,
+            152963437500
+          ],
+          [
+            317229843750,
+            497628593750,
+            463291562500
+          ],
+          [
+            456001718750,
+            617023750000,
+            343896406250
+          ],
+          [
+            522966718750,
+            665688906250,
+            295231250000
+          ],
+          [
+            564102656250,
+            692020156250,
+            268900000000
+          ],
+          [
+            594275000000,
+            714418593750,
+            246501562500
+          ],
+          [
+            627107812500,
+            734101093750,
+            226819062500
+          ],
+          [
+            418254218750,
+            608269531250,
+            352650625000
+          ],
+          [
+            453989375000,
+            629631562500,
+            331288593750
+          ],
+          [
+            672994531250,
+            781317187500,
+            179602812500
+          ],
+          [
+            706472187500,
+            797150937500,
+            163769062500
+          ],
+          [
+            724890781250,
+            828820625000,
+            132099375000
+          ],
+          [
+            745315156250,
+            861630000000,
+            99290000000
+          ],
+          [
+            762891718750,
+            840029062500,
+            120891093750
+          ],
+          [
+            769336406250,
+            840845000000,
+            120075000000
+          ]
+        ],
+        "window_benchmark": "window benchmark: ppu=HLE frames=2401 seconds=5.126020 fps=468.395 cycles=71500612 native_cycles=71494791 audio_device=1 audio_enabled=1 produced_samples=1761775 queued_samples=228151"
+      },
+      {
+        "label": "1",
+        "mode": "reference",
+        "cpu_seconds": 6.0,
+        "wall_seconds": 6.247906200005673,
+        "command": [
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-smb-nes27-full-reference\\SuperMarioBrosRecomp.exe",
+          "F:\\Projects\\nesrecomp\\SuperMarioBrosRecomp\\baserom.nes",
+          "--hidden",
+          "--uncapped",
+          "--exit-after",
+          "2401",
+          "--no-save",
+          "--config",
+          "G:\\Temp\\Codex\\nes110-compiler-full-perf-v1-20261031\\reference\\config.ini",
+          "--mods-root",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-smb-nes27-full-reference\\mods",
+          "--window-input",
+          "G:\\Temp\\Codex\\nes110-compiler-full-perf-v1-20261031\\route.input",
+          "--widescreen",
+          "fit"
+        ],
+        "binary_sha256": "66aacf15c2b8ae7b2252f12fa77c3dd33091e757eb34e2b15cb5e9f608f3e7de",
+        "affinity_mask": 16384,
+        "host_core_before": [
+          [
+            602922656250,
+            782831718750,
+            178089062500
+          ],
+          [
+            727259843750,
+            807956718750,
+            152963437500
+          ],
+          [
+            317229843750,
+            497628593750,
+            463291562500
+          ],
+          [
+            456001718750,
+            617023750000,
+            343896406250
+          ],
+          [
+            522966718750,
+            665688906250,
+            295231250000
+          ],
+          [
+            564102656250,
+            692020156250,
+            268900000000
+          ],
+          [
+            594275000000,
+            714418593750,
+            246501562500
+          ],
+          [
+            627107812500,
+            734101093750,
+            226819062500
+          ],
+          [
+            418254218750,
+            608269531250,
+            352650625000
+          ],
+          [
+            453989375000,
+            629631562500,
+            331288593750
+          ],
+          [
+            672994687500,
+            781317343750,
+            179602812500
+          ],
+          [
+            706472343750,
+            797151093750,
+            163769062500
+          ],
+          [
+            724890937500,
+            828820781250,
+            132099375000
+          ],
+          [
+            745315156250,
+            861630000000,
+            99290000000
+          ],
+          [
+            762891718750,
+            840029062500,
+            120891093750
+          ],
+          [
+            769336562500,
+            840845156250,
+            120075000000
+          ]
+        ],
+        "host_core_after": [
+          [
+            602980937500,
+            782893906250,
+            178089375000
+          ],
+          [
+            727320781250,
+            808018906250,
+            152963750000
+          ],
+          [
+            317284843750,
+            497688593750,
+            463294062500
+          ],
+          [
+            456055781250,
+            617082500000,
+            343900156250
+          ],
+          [
+            523026250000,
+            665750000000,
+            295232656250
+          ],
+          [
+            564161406250,
+            692081250000,
+            268901406250
+          ],
+          [
+            594336093750,
+            714480468750,
+            246502187500
+          ],
+          [
+            627167187500,
+            734162500000,
+            226820156250
+          ],
+          [
+            418308281250,
+            608328281250,
+            352654375000
+          ],
+          [
+            454040312500,
+            629689843750,
+            331292812500
+          ],
+          [
+            673055156250,
+            781378593750,
+            179604062500
+          ],
+          [
+            706532812500,
+            797212812500,
+            163769843750
+          ],
+          [
+            724952031250,
+            828882500000,
+            132100156250
+          ],
+          [
+            745375625000,
+            861692187500,
+            99290468750
+          ],
+          [
+            762893750000,
+            840032500000,
+            120950156250
+          ],
+          [
+            769395312500,
+            840905781250,
+            120076875000
+          ]
+        ],
+        "window_benchmark": "window benchmark: ppu=HLE frames=2401 seconds=5.957951 fps=402.991 cycles=71500612 native_cycles=71494771 audio_device=1 audio_enabled=1 produced_samples=1761775 queued_samples=264844"
+      },
+      {
+        "label": "2",
+        "mode": "reference",
+        "cpu_seconds": 6.09375,
+        "wall_seconds": 6.305582499990123,
+        "command": [
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-smb-nes27-full-reference\\SuperMarioBrosRecomp.exe",
+          "F:\\Projects\\nesrecomp\\SuperMarioBrosRecomp\\baserom.nes",
+          "--hidden",
+          "--uncapped",
+          "--exit-after",
+          "2401",
+          "--no-save",
+          "--config",
+          "G:\\Temp\\Codex\\nes110-compiler-full-perf-v1-20261031\\reference\\config.ini",
+          "--mods-root",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-smb-nes27-full-reference\\mods",
+          "--window-input",
+          "G:\\Temp\\Codex\\nes110-compiler-full-perf-v1-20261031\\route.input",
+          "--widescreen",
+          "fit"
+        ],
+        "binary_sha256": "66aacf15c2b8ae7b2252f12fa77c3dd33091e757eb34e2b15cb5e9f608f3e7de",
+        "affinity_mask": 16384,
+        "host_core_before": [
+          [
+            602980937500,
+            782893906250,
+            178089375000
+          ],
+          [
+            727320781250,
+            808018906250,
+            152963750000
+          ],
+          [
+            317284843750,
+            497688593750,
+            463294062500
+          ],
+          [
+            456055781250,
+            617082500000,
+            343900156250
+          ],
+          [
+            523026250000,
+            665750000000,
+            295232656250
+          ],
+          [
+            564161406250,
+            692081250000,
+            268901406250
+          ],
+          [
+            594336093750,
+            714480468750,
+            246502187500
+          ],
+          [
+            627167187500,
+            734162500000,
+            226820156250
+          ],
+          [
+            418308281250,
+            608328281250,
+            352654375000
+          ],
+          [
+            454040312500,
+            629689843750,
+            331292812500
+          ],
+          [
+            673055156250,
+            781378593750,
+            179604062500
+          ],
+          [
+            706532812500,
+            797212812500,
+            163769843750
+          ],
+          [
+            724952031250,
+            828882500000,
+            132100156250
+          ],
+          [
+            745375625000,
+            861692187500,
+            99290468750
+          ],
+          [
+            762893750000,
+            840032500000,
+            120950156250
+          ],
+          [
+            769395312500,
+            840905781250,
+            120076875000
+          ]
+        ],
+        "host_core_after": [
+          [
+            603038593750,
+            782956093750,
+            178090312500
+          ],
+          [
+            727382500000,
+            808081718750,
+            152964062500
+          ],
+          [
+            317339843750,
+            497748593750,
+            463297187500
+          ],
+          [
+            456109531250,
+            617141250000,
+            343904531250
+          ],
+          [
+            523084843750,
+            665810468750,
+            295235312500
+          ],
+          [
+            564219531250,
+            692142343750,
+            268903437500
+          ],
+          [
+            594397343750,
+            714542656250,
+            246503125000
+          ],
+          [
+            627226562500,
+            734223906250,
+            226821875000
+          ],
+          [
+            418360781250,
+            608387812500,
+            352657968750
+          ],
+          [
+            454094218750,
+            629748750000,
+            331297031250
+          ],
+          [
+            673115937500,
+            781440625000,
+            179605156250
+          ],
+          [
+            706594687500,
+            797275312500,
+            163770468750
+          ],
+          [
+            725012656250,
+            828945156250,
+            132100625000
+          ],
+          [
+            745437343750,
+            861755156250,
+            99290625000
+          ],
+          [
+            762895937500,
+            840035625000,
+            121010156250
+          ],
+          [
+            769452812500,
+            840967031250,
+            120078750000
+          ]
+        ],
+        "window_benchmark": "window benchmark: ppu=HLE frames=2401 seconds=6.012546 fps=399.332 cycles=71500612 native_cycles=71494771 audio_device=1 audio_enabled=1 produced_samples=1761775 queued_samples=267037"
+      },
+      {
+        "label": "2",
+        "mode": "candidate",
+        "cpu_seconds": 5.171875,
+        "wall_seconds": 5.396292099991115,
+        "command": [
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-smb-nes27-full-candidate\\SuperMarioBrosRecomp.exe",
+          "F:\\Projects\\nesrecomp\\SuperMarioBrosRecomp\\baserom.nes",
+          "--hidden",
+          "--uncapped",
+          "--exit-after",
+          "2401",
+          "--no-save",
+          "--config",
+          "G:\\Temp\\Codex\\nes110-compiler-full-perf-v1-20261031\\candidate\\config.ini",
+          "--mods-root",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-smb-nes27-full-candidate\\mods",
+          "--window-input",
+          "G:\\Temp\\Codex\\nes110-compiler-full-perf-v1-20261031\\route.input",
+          "--widescreen",
+          "fit"
+        ],
+        "binary_sha256": "7164837324f0d3a5c87fad5c30aa14b8e475a60f5c4b1313701eec3b37d01e1e",
+        "affinity_mask": 16384,
+        "host_core_before": [
+          [
+            603038593750,
+            782956093750,
+            178090312500
+          ],
+          [
+            727382500000,
+            808081718750,
+            152964062500
+          ],
+          [
+            317339843750,
+            497748593750,
+            463297187500
+          ],
+          [
+            456109531250,
+            617141250000,
+            343904531250
+          ],
+          [
+            523084843750,
+            665810468750,
+            295235312500
+          ],
+          [
+            564219531250,
+            692142343750,
+            268903437500
+          ],
+          [
+            594397343750,
+            714542656250,
+            246503125000
+          ],
+          [
+            627226562500,
+            734223906250,
+            226821875000
+          ],
+          [
+            418360781250,
+            608387812500,
+            352657968750
+          ],
+          [
+            454094218750,
+            629748750000,
+            331297031250
+          ],
+          [
+            673115937500,
+            781440625000,
+            179605156250
+          ],
+          [
+            706594687500,
+            797275312500,
+            163770468750
+          ],
+          [
+            725012656250,
+            828945156250,
+            132100625000
+          ],
+          [
+            745437343750,
+            861755156250,
+            99290625000
+          ],
+          [
+            762895937500,
+            840035625000,
+            121010156250
+          ],
+          [
+            769452812500,
+            840967031250,
+            120078750000
+          ]
+        ],
+        "host_core_after": [
+          [
+            603085000000,
+            783009531250,
+            178090781250
+          ],
+          [
+            727435312500,
+            808135156250,
+            152964531250
+          ],
+          [
+            317383437500,
+            497797500000,
+            463302187500
+          ],
+          [
+            456155468750,
+            617192500000,
+            343907187500
+          ],
+          [
+            523134218750,
+            665862343750,
+            295237343750
+          ],
+          [
+            564269531250,
+            692194218750,
+            268905468750
+          ],
+          [
+            594447968750,
+            714594843750,
+            246504843750
+          ],
+          [
+            627276875000,
+            734276093750,
+            226823593750
+          ],
+          [
+            418404218750,
+            608435625000,
+            352664062500
+          ],
+          [
+            454140312500,
+            629800156250,
+            331299531250
+          ],
+          [
+            673167812500,
+            781493281250,
+            179606406250
+          ],
+          [
+            706647656250,
+            797328750000,
+            163770937500
+          ],
+          [
+            725064062500,
+            828998750000,
+            132100937500
+          ],
+          [
+            745488906250,
+            861808750000,
+            99290937500
+          ],
+          [
+            762897656250,
+            840039531250,
+            121060156250
+          ],
+          [
+            769504062500,
+            841019531250,
+            120080156250
+          ]
+        ],
+        "window_benchmark": "window benchmark: ppu=HLE frames=2401 seconds=5.095925 fps=471.161 cycles=71500612 native_cycles=71494791 audio_device=1 audio_enabled=1 produced_samples=1761775 queued_samples=226688"
+      }
+    ],
+    "median_cpu_seconds": {
+      "reference": 6.09375,
+      "candidate": 5.203125
+    },
+    "raw_median_reduction_percent": 14.615384615384619,
+    "correctness": {
+      "reference": {
+        "command": [
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-smb-nes27-full-reference\\SuperMarioBrosRecomp.exe",
+          "F:\\Projects\\nesrecomp\\SuperMarioBrosRecomp\\baserom.nes",
+          "--headless",
+          "--frames",
+          "2401",
+          "--no-save",
+          "--input",
+          "G:\\Temp\\Codex\\nes110-compiler-full-perf-v1-20261031\\route.input",
+          "--mods-root",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-smb-nes27-full-reference\\mods",
+          "--config",
+          "G:\\Temp\\Codex\\nes110-compiler-full-perf-v1-20261031\\reference\\config.ini",
+          "--widescreen",
+          "fit",
+          "--present-size",
+          "1280x720",
+          "--wav-out",
+          "G:\\Temp\\Codex\\nes110-compiler-full-perf-v1-20261031\\reference\\audio.wav",
+          "--save-state",
+          "1800:G:\\Temp\\Codex\\nes110-compiler-full-perf-v1-20261031\\reference\\mid.state",
+          "--save-state",
+          "2400:G:\\Temp\\Codex\\nes110-compiler-full-perf-v1-20261031\\reference\\end.state",
+          "--screenshot",
+          "G:\\Temp\\Codex\\nes110-compiler-full-perf-v1-20261031\\reference\\native.png",
+          "--present-out",
+          "G:\\Temp\\Codex\\nes110-compiler-full-perf-v1-20261031\\reference\\present.png",
+          "--frame-log",
+          "G:\\Temp\\Codex\\nes110-compiler-full-perf-v1-20261031\\reference\\frames.bin",
+          "--frame-log-frames",
+          "1800:2400",
+          "--state-out",
+          "G:\\Temp\\Codex\\nes110-compiler-full-perf-v1-20261031\\reference\\hardware.txt",
+          "--state-frame",
+          "2400",
+          "--mem-out",
+          "G:\\Temp\\Codex\\nes110-compiler-full-perf-v1-20261031\\reference\\memory.txt",
+          "--mem-frame",
+          "2400"
+        ],
+        "hashes": {
+          "audio.wav": "c167f8c51eaacd56ca7bf8b3064b85e575641a52a119c51337716284dc5d31d9",
+          "end.state": "8c064e9212b6f2ef19f3973e666868c8dcd3dcdca70d8044cf2632cf39ec2eb3",
+          "frames.bin": "0a0b7b8378d0eb0574627822aac92a0bd76dece0b5a38ea3f9e1a86a4f5147ad",
+          "hardware.txt": "89bce6f0ecb7e65b4dcc0472d5a00ae04c55756032cc36ae0a53a66b9911c1e2",
+          "memory.txt": "80c5bdf24fcbfab8bd796e8d2eb1425d781a8ab4e49468fdb7c35e31b66772bf",
+          "mid.state": "159658ab8e457963f0acfd56ecf1c43fa09640456b6bcea523a4fcc60429e7d7",
+          "native.png": "1ce1b22609e7c3779ced1d6b55fe69e2c4bcdebf93297e15dc450e04c3d8af7c",
+          "present.png": "a67f9f7dd9172b9915e3d63da7271979f49f0c9aeefe9d46e567eb990f43dc27"
+        }
+      },
+      "candidate": {
+        "command": [
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-smb-nes27-full-candidate\\SuperMarioBrosRecomp.exe",
+          "F:\\Projects\\nesrecomp\\SuperMarioBrosRecomp\\baserom.nes",
+          "--headless",
+          "--frames",
+          "2401",
+          "--no-save",
+          "--input",
+          "G:\\Temp\\Codex\\nes110-compiler-full-perf-v1-20261031\\route.input",
+          "--mods-root",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-smb-nes27-full-candidate\\mods",
+          "--config",
+          "G:\\Temp\\Codex\\nes110-compiler-full-perf-v1-20261031\\candidate\\config.ini",
+          "--widescreen",
+          "fit",
+          "--present-size",
+          "1280x720",
+          "--wav-out",
+          "G:\\Temp\\Codex\\nes110-compiler-full-perf-v1-20261031\\candidate\\audio.wav",
+          "--save-state",
+          "1800:G:\\Temp\\Codex\\nes110-compiler-full-perf-v1-20261031\\candidate\\mid.state",
+          "--save-state",
+          "2400:G:\\Temp\\Codex\\nes110-compiler-full-perf-v1-20261031\\candidate\\end.state",
+          "--screenshot",
+          "G:\\Temp\\Codex\\nes110-compiler-full-perf-v1-20261031\\candidate\\native.png",
+          "--present-out",
+          "G:\\Temp\\Codex\\nes110-compiler-full-perf-v1-20261031\\candidate\\present.png",
+          "--frame-log",
+          "G:\\Temp\\Codex\\nes110-compiler-full-perf-v1-20261031\\candidate\\frames.bin",
+          "--frame-log-frames",
+          "1800:2400",
+          "--state-out",
+          "G:\\Temp\\Codex\\nes110-compiler-full-perf-v1-20261031\\candidate\\hardware.txt",
+          "--state-frame",
+          "2400",
+          "--mem-out",
+          "G:\\Temp\\Codex\\nes110-compiler-full-perf-v1-20261031\\candidate\\memory.txt",
+          "--mem-frame",
+          "2400"
+        ],
+        "hashes": {
+          "audio.wav": "c167f8c51eaacd56ca7bf8b3064b85e575641a52a119c51337716284dc5d31d9",
+          "end.state": "8c064e9212b6f2ef19f3973e666868c8dcd3dcdca70d8044cf2632cf39ec2eb3",
+          "frames.bin": "0a0b7b8378d0eb0574627822aac92a0bd76dece0b5a38ea3f9e1a86a4f5147ad",
+          "hardware.txt": "89bce6f0ecb7e65b4dcc0472d5a00ae04c55756032cc36ae0a53a66b9911c1e2",
+          "memory.txt": "80c5bdf24fcbfab8bd796e8d2eb1425d781a8ab4e49468fdb7c35e31b66772bf",
+          "mid.state": "159658ab8e457963f0acfd56ecf1c43fa09640456b6bcea523a4fcc60429e7d7",
+          "native.png": "1ce1b22609e7c3779ced1d6b55fe69e2c4bcdebf93297e15dc450e04c3d8af7c",
+          "present.png": "a67f9f7dd9172b9915e3d63da7271979f49f0c9aeefe9d46e567eb990f43dc27"
+        }
+      }
+    }
+  },
+  "guard": {
+    "default_qualified": true,
+    "off_and_o2_fallback_configure_pass": true,
+    "profile": "SMB1 cycle/HLE, normal UI and NET compiled, Win64 x86_64 GNU C+CXX15.2.0 exact default O3Release; CheckIPOSupported; one LTRANS worker",
+    "other_games": "No compiler-policy change; SMB3/Metroid/Gumshoe/Zelda gains are not inferred"
+  },
+  "production_runtime_sections_identical": true,
+  "cost_sample": {
+    "samples": {
+      "reference": {
+        "product": {
+          "exe": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-smb-nes27-full-reference\\SuperMarioBrosRecomp.exe",
+          "sha256": "66aacf15c2b8ae7b2252f12fa77c3dd33091e757eb34e2b15cb5e9f608f3e7de",
+          "bytes": 8645744,
+          "rom": "F:\\Projects\\nesrecomp\\SuperMarioBrosRecomp\\baserom.nes",
+          "rom_sha256": "f61548fdf1670cffefcc4f0b7bdcdd9eaba0c226e3b74f8666071496988248de",
+          "build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-smb-nes27-full-reference",
+          "engine_base": "1ffc2f96ad24ba333ab3233726f8fbc3c5ac64fc",
+          "title_base": "45f95754f8ad6e04fc39966505c94af9783bd787",
+          "IPO": "OFF",
+          "compiler": "GCC15.2.0 O3 Release, one LTRANS worker",
+          "scope": "Current matched full SMB1 title with normal UI/NET compiled in both; whole-target IPO experiment, not historical exact binary rerun or production selection"
+        },
+        "command": [
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-smb-nes27-full-reference\\SuperMarioBrosRecomp.exe",
+          "F:\\Projects\\nesrecomp\\SuperMarioBrosRecomp\\baserom.nes",
+          "--hidden",
+          "--exit-after",
+          "1000000",
+          "--tcp",
+          "58687",
+          "--no-save",
+          "--config",
+          "G:\\Temp\\Codex\\nes110-compiler-cost-v1-20261031\\reference\\config.ini",
+          "--mods-root",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-smb-nes27-full-reference\\mods",
+          "--widescreen",
+          "fit"
+        ],
+        "ready_seconds": 1.037294199995813,
+        "memory": {
+          "WorkingSetSize": 36130816,
+          "PeakWorkingSetSize": 37019648,
+          "PrivateUsage": 55443456,
+          "PeakPagefileUsage": 57884672
+        },
+        "state": {
+          "id": 0,
+          "ok": true,
+          "frame": 1801,
+          "menu_open": true,
+          "fds": false,
+          "side": -1,
+          "sides": 0,
+          "motor": false,
+          "writing": false,
+          "toast": {
+            "visible": false,
+            "title": "",
+            "body": ""
+          },
+          "hle": "",
+          "disk_save": "",
+          "disk_binding": "D / LB",
+          "picture": [
+            426,
+            240
+          ],
+          "dev_ui": false,
+          "recomp_ui": true,
+          "native": true,
+          "vsync_requested": false,
+          "vsync_active": true,
+          "pads": [],
+          "state_panel": "closed",
+          "state_slot": 1,
+          "rewind_count": 0,
+          "rewind_frame": -1,
+          "rewind_enabled": true
+        }
+      },
+      "candidate": {
+        "product": {
+          "exe": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-smb-nes27-policy\\SuperMarioBrosRecomp.exe",
+          "sha256": "3257333efab282fd777ef4e07695f8d9ad2cc8e22dceca44bb29d93c29179839",
+          "bytes": 8290655,
+          "build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-smb-nes27-policy",
+          "rom": "F:\\Projects\\nesrecomp\\SuperMarioBrosRecomp\\baserom.nes"
+        },
+        "command": [
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-smb-nes27-policy\\SuperMarioBrosRecomp.exe",
+          "F:\\Projects\\nesrecomp\\SuperMarioBrosRecomp\\baserom.nes",
+          "--hidden",
+          "--exit-after",
+          "1000000",
+          "--tcp",
+          "58696",
+          "--no-save",
+          "--config",
+          "G:\\Temp\\Codex\\nes110-compiler-cost-v1-20261031\\candidate\\config.ini",
+          "--mods-root",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-smb-nes27-policy\\mods",
+          "--widescreen",
+          "fit"
+        ],
+        "ready_seconds": 0.6071762999927159,
+        "memory": {
+          "WorkingSetSize": 53886976,
+          "PeakWorkingSetSize": 57602048,
+          "PrivateUsage": 55504896,
+          "PeakPagefileUsage": 61308928
+        },
+        "state": {
+          "id": 0,
+          "ok": true,
+          "frame": 1801,
+          "menu_open": true,
+          "fds": false,
+          "side": -1,
+          "sides": 0,
+          "motor": false,
+          "writing": false,
+          "toast": {
+            "visible": false,
+            "title": "",
+            "body": ""
+          },
+          "hle": "",
+          "disk_save": "",
+          "disk_binding": "D / LB",
+          "picture": [
+            426,
+            240
+          ],
+          "dev_ui": false,
+          "recomp_ui": true,
+          "native": true,
+          "vsync_requested": false,
+          "vsync_active": true,
+          "pads": [],
+          "state_panel": "closed",
+          "state_slot": 1,
+          "rewind_count": 0,
+          "rewind_frame": -1,
+          "rewind_enabled": true
+        }
+      }
+    },
+    "scope": "One untimed diagnostic sample each: launch to first successful TCP menu response, then paused Fit gameplay RSS/private commit. Includes poll/setup variability; no startup/memory performance win inferred."
+  },
+  "limitations": [
+    "Three paired whole-process SDL CPU observations include startup/shutdown. This is the current normalUI/NET-compiled Fit fixed-route package; trace off for timing. Software renderer, dummy output with actual mixed audio, single LP14, local9800X3D. No physical input/display latency or universal performance claim.",
+    "The separate UI/NET-OFF diagnostic pair improved14.634%; it is not pooled with the normalUI result14.615%. Output/native work exact, not less emulation.",
+    "Historical global O2 IPO first divergence frame933 remains unresolved in beads-2dw.1.106. Exact old candidate binary is absent. Current O3 target policy passing does not diagnose that older compiler defect. No PGO/layout/other compiler/platform qualification or architectural exhaustion claimed.",
+    "Stock/co-op2/Fit current-build continuation, invalid-state safe refusal, adaptive resizing, actual rewind and normal UI checks pass. Initial rewind one-frame QA pulse expired before sampling; corrected three-frame pulse passed without runtime source changes. Raw setup failure retained.",
+    "NET first reference forks; repeated reference and candidate pass20ms actual relay with real resimulation and share full-domain frame850 digests and last frame850 record. Defect111 stays open; no full850state byte comparison, final-drain-state comparison, NET speedup or retroactive NES22 waiver.",
+    "One startup/RSS sample each is diagnostic, not a startup/memory improvement claim. Reference/candidate first TCPready1.037/0.607s; working set36.13/53.89MB, private commit55.443/55.505MB. Sample/poll/OS residency variation is unqualified; executable shrinks8645744 to8290655bytes.",
+    "Production fresh build has identical short-named PE section bytes, sizes and RVAs to measured candidate, including zero-fill virtual layout. Whole-file identities differ outside compared runtime sections. Dependencies remain ordinary non-IPO libraries; actual normalUI ImGui objects attached to title target participate in IPO.",
+    "No merge/release yet. Fresh final supported CLI/five-title builds, combined checks and owner visual approval remain required. No old save-state migration required; native saves preserved. No new runtime ISA or simulation profile, strict existing build/content identity retained; capability issue100 unchanged."
+  ],
+  "title_head": "35df4bc760c8a27e0e55a6ae65fd1308ae335e87",
+  "pr": "https://github.com/mstan/SuperMarioBrosNESRecomp/pull/16",
+  "archives": [
+    {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\compiler-probe-v1-evidence.zip",
+      "bytes": 1043651,
+      "sha256": "cf5364b19e744409784a1b5c779cab2fd828974d617bc65a7c4378ffb8bf3c7e",
+      "source_stage": "G:\\Temp\\Codex\\nes110-compiler-probe-v1-20261031"
+    },
+    {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\compiler-perf-v1-evidence.zip",
+      "bytes": 6593800,
+      "sha256": "1505be2e28336f985d60d06c351588d264b0670b2a711edece55a62883dc9c4f",
+      "source_stage": "G:\\Temp\\Codex\\nes110-compiler-perf-v1-20261031"
+    },
+    {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\compiler-full-probe-v1-evidence.zip",
+      "bytes": 1043669,
+      "sha256": "bb900880e0bf797192e97a0db230b80727c97ae9a7af36d69462a5ed025869f3",
+      "source_stage": "G:\\Temp\\Codex\\nes110-compiler-full-probe-v1-20261031"
+    },
+    {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\compiler-full-perf-v1-evidence.zip",
+      "bytes": 6593552,
+      "sha256": "f666b0749a916b843da8fb0de6724cfdc1cb3be7e881c36fcd2a171739bd9fac",
+      "source_stage": "G:\\Temp\\Codex\\nes110-compiler-full-perf-v1-20261031"
+    },
+    {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\compiler-features-v1-evidence.zip",
+      "bytes": 22594838,
+      "sha256": "6bc6274cfd2ecf37539a2954de35bf993432f08aaae19afdfea3e2de5c08c02e",
+      "source_stage": "G:\\Temp\\Codex\\nes110-compiler-features-v1-20261031"
+    },
+    {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\compiler-sdl-v2-evidence.zip",
+      "bytes": 105956,
+      "sha256": "ba50373a8b40c08551f328f551c58a644785f00cafb4e21ab5429a696a2d5e70",
+      "source_stage": "G:\\Temp\\Codex\\nes110-compiler-sdl-v2-20261031"
+    },
+    {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\compiler-net-v1-evidence.zip",
+      "bytes": 476339,
+      "sha256": "2760471e7e3ffe329fc38ca66b71a2c95e4b271984640890bb4bb236369f2e00",
+      "source_stage": "G:\\Temp\\Codex\\nes110-compiler-net-v1-20261031"
+    },
+    {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\compiler-cost-v1-evidence.zip",
+      "bytes": 3636,
+      "sha256": "119630e364ba1ae9b707dfa46dad036d94d0645e75a3db68849bfa5f964c7711",
+      "source_stage": "G:\\Temp\\Codex\\nes110-compiler-cost-v1-20261031"
+    },
+    {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\compiler-policy-source-evidence.zip",
+      "bytes": 135092,
+      "sha256": "062d063478ca0356a53c7014ef56757175620f28f626ba11b7ede20b8a454515",
+      "source_stage": null
+    }
+  ],
+  "retention": "CRC/SHA-verified raw archives and selected production/source retained. Owned live diagnostic roots can be removed after validator completes reads; final supported build scratch retained until combined handoff."
+}
