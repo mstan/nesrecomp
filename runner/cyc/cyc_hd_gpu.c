@@ -45,7 +45,7 @@
  X(void,DeleteProgram,(GLuint)) X(GLint,GetUniformLocation,(GLuint,const GLchar *)) \
  X(void,Uniform1i,(GLint,GLint)) X(void,GenVertexArrays,(GLsizei,GLuint *)) \
  X(void,DeleteVertexArrays,(GLsizei,const GLuint *)) X(void,BindVertexArray,(GLuint)) \
- X(void,DrawArrays,(GLenum,GLint,GLsizei))
+ X(void,DrawArrays,(GLenum,GLint,GLsizei)) X(void,Finish,(void))
 typedef struct {
 #define HD_DECLARE(ret,name,args) ret (APIENTRY *name) args;
     HD_GL_FUNCTIONS(HD_DECLARE)
@@ -75,7 +75,7 @@ struct CycHdGpu {
     HdGl gl; SDL_Renderer *renderer; SDL_GLContext context; SDL_Texture *output;
     GLuint program,vao,textures[5],buffers[2];
     unsigned width,height,requested_scale,max_texture,max_buffer,plane_w,plane_h,bg_h;
-    uint64_t pack_generation,serial,asset_bytes,budget,frames;
+    uint64_t pack_generation,serial,asset_bytes,budget,frames,attempts;
     unsigned cache_slots;
     HdGpuPageCache cache;
     bool failed,profile; unsigned query_cursor,profile_lines; HdQuery query[4];
@@ -194,11 +194,11 @@ static void query_collect(CycHdGpu *s,HdQuery *q) {
     GLint ready=0;s->gl.GetQueryObjectiv(q->queries[1],GL_QUERY_RESULT_AVAILABLE,&ready);if(!ready)return;
     GLuint64 composite=0,present=0;s->gl.GetQueryObjectui64v(q->queries[0],GL_QUERY_RESULT,&composite);
     s->gl.GetQueryObjectui64v(q->queries[1],GL_QUERY_RESULT,&present);
-    if(s->profile_lines++<1200)fprintf(stderr,
+    if(s->profile_lines++<1200){fflush(stdout);fprintf(stderr,
         "hd_gpu_sample {\"serial\":%llu,\"scale\":%u,\"width\":%u,\"height\":%u,\"prepare_ns\":%llu,\"submit_ns\":%llu,\"composite_ns\":%llu,\"present_ns\":%llu,\"upload_bytes\":%llu,\"resident_bytes\":%llu}\n",
         (unsigned long long)q->serial,q->scale,q->width,q->height,(unsigned long long)q->prepare_ns,
         (unsigned long long)q->submit_ns,(unsigned long long)composite,(unsigned long long)present,
-        (unsigned long long)q->upload_bytes,(unsigned long long)q->resident_bytes);
+        (unsigned long long)q->upload_bytes,(unsigned long long)q->resident_bytes);}
     q->pending=false;
 }
 CycHdGpu *cyc_hd_gpu_create(SDL_Renderer *renderer,SDL_Texture *activation) {
@@ -254,7 +254,9 @@ CycHdGpu *cyc_hd_gpu_create(SDL_Renderer *renderer,SDL_Texture *activation) {
     return s;
 }
 SDL_Texture *cyc_hd_gpu_render(CycHdGpu *s,const HdJobFrame *f,unsigned requested,uint64_t prepare_ns) {
-    if(!s || s->failed)return NULL;
+    if(!s)return NULL;
+    ++s->attempts;
+    if(s->failed)return NULL;
     uint64_t begin=SDL_GetPerformanceCounter(),asset_bytes=0;if(!frame_valid(s,f,&asset_bytes))return NULL;
     if(!requested)requested=f->source_scale;
     if(requested>64)requested=64;
@@ -358,13 +360,23 @@ unsigned cyc_hd_gpu_height(const CycHdGpu *s){return s?s->height:0;}
 void cyc_hd_gpu_destroy(CycHdGpu *s,bool lost){
     if(!s)return;
     if(!lost && s->context && SDL_GL_GetCurrentContext()==s->context){
-        if(s->profile)for(unsigned i=0;i<4;++i){query_collect(s,&s->query[i]);s->gl.DeleteQueries(2,s->query[i].queries);}
+        if(s->profile){
+            bool pending=false;for(unsigned i=0;i<4;++i)pending|=s->query[i].pending;
+            /* Explicit profiling teardown only: complete the bounded query
+             * tail before collection. Ordinary rendering never waits here. */
+            if(pending)s->gl.Finish();
+            for(unsigned i=0;i<4;++i){query_collect(s,&s->query[i]);s->gl.DeleteQueries(2,s->query[i].queries);}
+        }
         s->gl.DeleteTextures(5,s->textures);s->gl.DeleteBuffers(2,s->buffers);
         if(s->vao)s->gl.DeleteVertexArrays(1,&s->vao);
         if(s->program)s->gl.DeleteProgram(s->program);
     }
     if(s->output)SDL_DestroyTexture(s->output);
     cyc_hd_gpu_cache_destroy(&s->cache);
+    fflush(stdout);
+    fprintf(stderr,"hd_gpu_summary {\"attempted\":%llu,\"rendered\":%llu,\"fallback\":%llu}\n",
+        (unsigned long long)s->attempts,(unsigned long long)s->frames,
+        (unsigned long long)(s->attempts-s->frames));
     free(s);
 }
 #else
