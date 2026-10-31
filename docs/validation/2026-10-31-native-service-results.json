@@ -7294,8 +7294,8 @@
     },
     {
       "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\service-v1-source-oracle-profile-evidence.zip",
-      "bytes": 6549224,
-      "sha256": "8ed92bdbfbbe7359375d738ddec05fdf400891e9011350c6af4a8726aad6bffe"
+      "bytes": 6550280,
+      "sha256": "e4db4df0ee55426dd8ee741ab8481c9f726717b5db339e0c9fd1c309968e55f1"
     }
   ],
   "storage": {
@@ -7344,5 +7344,6 @@
     "bytes": 16984199,
     "raw_legacy_bytes_field": 16972926,
     "note": "Raw oracle metadata inherited a stale baseline byte count; actual archived executable hash/length are authoritative. Current measured product byte count is corrected."
-  }
+  },
+  "evidence_retention_correction": "Final review found Fit report missing from the initial source archive. Added the exact independent report, verified all archive CRCs and updated source archive SHA/length; raw source/oracle/gameplay/performance values and cleanup unchanged."
 }
