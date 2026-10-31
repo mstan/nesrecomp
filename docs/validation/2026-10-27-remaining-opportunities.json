@@ -34,7 +34,8 @@
     "2026-10-31-rollback-digest-results.json",
     "2026-10-31-audio-host-results.json",
     "2026-10-31-pacing-reuse-results.json",
-    "2026-10-31-compiler-policy-results.json"
+    "2026-10-31-compiler-policy-results.json",
+    "2026-10-31-visual-jobs-results.json"
   ],
   "priorities": "Order expresses expected scope and evidence, not measured recoverable cost. Overlapping packages are not additive.",
   "acceptance": "Each game neutral or positive. Small mixed samples inconclusive. Shared original/candidate defects are separate. Native saves protected; old save-state compatibility never required.",
@@ -1197,7 +1198,7 @@
       "package": "host-delivery",
       "priority": "P3",
       "title": "Parallel immutable visual jobs",
-      "status": "open-unmeasured",
+      "status": "evaluated-rejected-row-worker",
       "evidence": [
         {
           "file": "runner/cyc/cyc_render.c",
@@ -1214,15 +1215,16 @@
           "link": "../../runner/src/voxel_renderer.c#L1147"
         }
       ],
-      "remaining": "After ownership consolidation, independent tile preparation, HD composition or voxel work can use immutable frame products on workers. Adding threads to shared mutable machine state is not the first step.",
+      "remaining": "Current immutable row-worker prototype rejected on3/3CPU+wall cost increases; other projected/binning designs, HD and moving/animated/firstperson work remain unqualified residuals.",
       "affected_profiles": [
         "A measured independent HD/wide/voxel visual job after immutable ownership exists"
       ],
-      "next_decisive_check": "Only after measuring a large parallelizable render job: compare complete frame latency, CPU and RSS against the simpler serial replacement.",
+      "next_decisive_check": "Independent durable Beads validation, thenNES30. Revisit only a different coherent design/current workload basis.",
       "required_behavior": "Deterministic authoritative simulation, no races/lifetime errors, bounded queues and acceptable latency; serial portable fallback remains usable.",
       "prior_issue": null,
       "measured_additional_gain": null,
-      "execution_status": "remaining-evaluation"
+      "execution_status": "evaluated-current-immutable-row-worker-negative",
+      "result_file": "2026-10-31-visual-jobs-results.json"
     },
     {
       "id": "NES29",
@@ -1323,7 +1325,7 @@
   ],
   "execution": {
     "issue": "beads-2dw.1.110",
-    "branch": "perf/nes27-compiler-policy",
+    "branch": "docs/nes28-visual-jobs",
     "base": "fc0bf3fa46a710464960c0a1f2d3b83b4d345600",
     "status": "in-progress",
     "evidence_root": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028",
@@ -1334,12 +1336,12 @@
     "owner_handoff_ready": false
   },
   "execution_summary": {
-    "evaluated_decisions": 27,
+    "evaluated_decisions": 28,
     "partial_ids": [],
     "parked_ids": [
       "NES29"
     ],
-    "other_unresolved": 3,
+    "other_unresolved": 2,
     "note": "Qualified scope decisions, not architectural exhaustion or a wall-clock completion estimate. Final combined builds and owner approval remain separate."
   }
 }

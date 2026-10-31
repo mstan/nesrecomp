@@ -17,7 +17,7 @@ original HD runtime. See [HD results](2026-10-28-hd-plan-results.md), including
 the rejected universal packages and SMB's unchanged-runtime proof. Zelda's
 fixed SNROM SRAM code now joins the native deadline service; see
 [SRAM results](2026-10-28-sram-native-results.md). SERVER Fit improves5.128%
-and Remastered1.442%; stock is neutral/inconclusive. Twenty-seven items now have
+and Remastered1.442%; stock is neutral/inconclusive. Twenty-eight items now have
 qualified evaluation decisions; NES01 is qualified for whole stable HLE raster
 jobs and NES29 remains parked.
 Guarded native ROM is now evaluated under NES09; see
@@ -616,13 +616,17 @@ close the per-pixel raster or APU-event algorithm work under NES01/NES06.
   Evidence: [recompiler/src/cyc_codegen.c:76](../../recompiler/src/cyc_codegen.c#L76), [runner/cyc/project.cmake:150](../../runner/cyc/project.cmake#L150). Reuse `beads-2dw.1.106`.
 
 
-- [ ] **NES28 · P3 · Parallel immutable visual jobs**
+- [x] **NES28 · P3 · Parallel immutable visual jobs**
 
   After ownership consolidation, independent tile preparation, HD composition or voxel work can use immutable frame products on workers. Adding threads to shared mutable machine state is not the first step.
 
   Scope: A measured independent HD/wide/voxel visual job after immutable ownership exists.
 
-  Next: Only after measuring a large parallelizable render job: compare complete frame latency, CPU and RSS against the simpler serial replacement.
+  Evaluation: Reject one-worker immutable terrain row prototype: matched
+  fixed-route diorama CPU0.859375 to0.984375s (14.545%higher), complete
+  interval wall7.506%longer,3/3worse each; all22outputs match. Current
+  diagnostic justifies testing; different projected/binning/animated/HD jobs
+  remain unqualified residuals. [Results](2026-10-31-visual-jobs-results.md).
 
   Preserve: Deterministic authoritative simulation, no races/lifetime errors, bounded queues and acceptable latency; serial portable fallback remains usable.
 
@@ -708,6 +712,6 @@ working portable implementation. Netplay settles a common validated profile
 before frame 0; platform compilation alone is not compatibility qualification.
 
 Audit completion closes only `beads-2dw.1.109`'s investigation/deliverable.
-Current execution has twenty-seven scoped evaluation decisions, three unresolved
+Current execution has twenty-eight scoped evaluation decisions, two unresolved
 items and parked NES29. The implementation campaign and final combined owner
 handoff remain open; a scoped decision is not architectural exhaustion.
