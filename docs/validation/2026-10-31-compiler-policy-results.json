@@ -1947,5 +1947,64 @@
       "source_stage": null
     }
   ],
-  "retention": "CRC/SHA-verified raw archives and selected production/source retained. Owned live diagnostic roots can be removed after validator completes reads; final supported build scratch retained until combined handoff."
+  "retention": "Eight owned diagnostic roots removed after CRC/SHA-verified archives and validator raw reads. Selected production/source and qualification builds retained for combined final integration/cleanup.",
+  "storage": [
+    {
+      "path": "G:\\Temp\\Codex\\nes110-compiler-probe-v1-20261031",
+      "archive": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\compiler-probe-v1-evidence.zip",
+      "removed": true,
+      "bytes": 10310529,
+      "sha256": "cf5364b19e744409784a1b5c779cab2fd828974d617bc65a7c4378ffb8bf3c7e"
+    },
+    {
+      "path": "G:\\Temp\\Codex\\nes110-compiler-perf-v1-20261031",
+      "archive": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\compiler-perf-v1-evidence.zip",
+      "removed": true,
+      "bytes": 15489636,
+      "sha256": "1505be2e28336f985d60d06c351588d264b0670b2a711edece55a62883dc9c4f"
+    },
+    {
+      "path": "G:\\Temp\\Codex\\nes110-compiler-full-probe-v1-20261031",
+      "archive": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\compiler-full-probe-v1-evidence.zip",
+      "removed": true,
+      "bytes": 10310934,
+      "sha256": "bb900880e0bf797192e97a0db230b80727c97ae9a7af36d69462a5ed025869f3"
+    },
+    {
+      "path": "G:\\Temp\\Codex\\nes110-compiler-full-perf-v1-20261031",
+      "archive": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\compiler-full-perf-v1-evidence.zip",
+      "removed": true,
+      "bytes": 15490311,
+      "sha256": "f666b0749a916b843da8fb0de6724cfdc1cb3be7e881c36fcd2a171739bd9fac"
+    },
+    {
+      "path": "G:\\Temp\\Codex\\nes110-compiler-features-v1-20261031",
+      "archive": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\compiler-features-v1-evidence.zip",
+      "removed": true,
+      "bytes": 685480875,
+      "sha256": "6bc6274cfd2ecf37539a2954de35bf993432f08aaae19afdfea3e2de5c08c02e"
+    },
+    {
+      "path": "G:\\Temp\\Codex\\nes110-compiler-sdl-v2-20261031",
+      "archive": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\compiler-sdl-v2-evidence.zip",
+      "removed": true,
+      "bytes": 5102643,
+      "sha256": "ba50373a8b40c08551f328f551c58a644785f00cafb4e21ab5429a696a2d5e70"
+    },
+    {
+      "path": "G:\\Temp\\Codex\\nes110-compiler-net-v1-20261031",
+      "archive": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\compiler-net-v1-evidence.zip",
+      "removed": true,
+      "bytes": 6045464,
+      "sha256": "2760471e7e3ffe329fc38ca66b71a2c95e4b271984640890bb4bb236369f2e00"
+    },
+    {
+      "path": "G:\\Temp\\Codex\\nes110-compiler-cost-v1-20261031",
+      "archive": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\compiler-cost-v1-evidence.zip",
+      "removed": true,
+      "bytes": 8576,
+      "sha256": "119630e364ba1ae9b707dfa46dad036d94d0645e75a3db68849bfa5f964c7711"
+    }
+  ],
+  "production_identity_detail": "Independent validator compared all resolved sections including debug: byte-identical. Only COFF timestamp1793461596->1793463662 and OptionalHeader checksum8341382->8343448 differ (four bytes in whole file)."
 }

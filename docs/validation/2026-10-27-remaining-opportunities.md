@@ -599,7 +599,7 @@ close the per-pixel raster or APU-event algorithm work under NES01/NES06.
   Evidence: [runner/cyc/cyc_sdl.c:118](../../runner/cyc/cyc_sdl.c#L118), [runner/cyc/cyc_frame_pacing.h:9](../../runner/cyc/cyc_frame_pacing.h#L9).
 
 
-- [x] **NES27 · P2 · Compiler policy and generated-code layout** (`open-existing-IPO-defect`)
+- [x] **NES27 · P2 · Compiler policy and generated-code layout** (`selected-qualified-SMB1-target-IPO`)
 
   PGO, hot/cold layout, translation-unit/block layout and supported selective IPO can improve native locality and cross-unit optimization. Global IPO has a real SMB1 Fit divergence; native-C-only IPO had functional support but no admitted timing gain.
 
