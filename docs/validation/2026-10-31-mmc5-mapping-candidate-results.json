@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "issue": "beads-2dw.1.110",
+  "campaign": "beads-2wy8.1",
+  "opportunity": "NES30",
+  "decision": "implemented-rejected-no-established-benefit",
+  "prototype_commit": "d68741e",
+  "source_base": "c253aca",
+  "runtime_adopted": false,
+  "game": "Castlevania III: Dracula's Curse (USA)",
+  "mapper": 5,
+  "rom_sha256": "1c7b2ed2c1fb5839a6764006aa476f5c9d48f99465b6141980f3a5af1dfec0d6",
+  "route_sha256": "b7f4ab77401aa543e7f3e9f8158c1532d5a468d5235c00448466364c43ee6a75",
+  "route_frames": 1500,
+  "native_coverage_percent": 98.5,
+  "products": {
+    "reference": {
+      "exe": "reference/game.exe",
+      "sha256": "74cc7f5f6cf839f673fc981b0d53a434ea5ba511affd124d4de614cb68a6dbd9"
+    },
+    "candidate": {
+      "exe": "candidate/game.exe",
+      "sha256": "33104e099a2d5d2c96e7c60e327875c545d7211b8e83228e0bc4ee0c2cbb84b1"
+    }
+  },
+  "raw_evidence": "G:\\Temp\\Codex\\nes110-complex-candidate-20261031\\castlevania3\\evidence",
+  "correctness": {
+    "equal_product_count": 16,
+    "exact_outputs": true,
+    "own_state_frames": 600,
+    "own_continuations_pass": true,
+    "mapper_test": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\test-complex-mapper.log"
+  },
+  "performance": {
+    "host": "DESKTOP-HN15M1H",
+    "scope": "Built native headless1500-frame retained stage-one route; process startup included",
+    "affinity_mask": 8192,
+    "initial_raw": "G:\\Temp\\Codex\\nes110-complex-candidate-20261031\\castlevania3\\evidence\\performance.json",
+    "confirmation_raw": "G:\\Temp\\Codex\\nes110-complex-candidate-20261031\\castlevania3\\evidence\\performance-confirmation.json",
+    "initial_medians": {
+      "reference": 5.171875,
+      "candidate": 5.109375
+    },
+    "confirmation_medians": {
+      "reference": 5.125,
+      "candidate": 5.15625
+    },
+    "confirmation_pairs": 5,
+    "confirmation_faster_pairs": 3,
+    "classification": "mixed-neutral-inconclusive-no-established-win",
+    "note": "Confirmation median process CPU5.125 to5.15625s; three faster/two slower; do not claim a precise regression or a win. Complete native1500-frame route includes process startup; observers absent from timed runs."
+  },
+  "limits": [
+    "One actual MMC5 action-game workload, not expansion-audio or complex-board architectural exhaustion.",
+    "Old smoke budget/evidence left untouched; fresh supported current compiler/game build used.",
+    "No shipping runtime change, no successful-candidate PR, no GPU claim."
+  ]
+}

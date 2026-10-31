@@ -37,7 +37,8 @@
     "2026-10-31-compiler-policy-results.json",
     "2026-10-31-visual-jobs-results.json",
     "2026-10-31-complex-board-scope-results.json",
-    "2026-10-31-startup-scope-results.json"
+    "2026-10-31-startup-scope-results.json",
+    "2026-10-31-mmc5-mapping-candidate-results.json"
   ],
   "priorities": "Order expresses expected scope and evidence, not measured recoverable cost. Overlapping packages are not additive.",
   "acceptance": "Each game neutral or positive. Small mixed samples inconclusive. Shared original/candidate defects are separate. Native saves protected; old save-state compatibility never required.",
@@ -1335,7 +1336,7 @@
       "package": "conditional-services",
       "priority": "P3",
       "title": "Expansion-audio and complex-board event services",
-      "status": "evaluated-deferred-no-current-workload",
+      "status": "implemented-rejected-no-established-benefit",
       "evidence": [
         {
           "file": "runner/cyc/hw_mapper.c",
@@ -1352,18 +1353,18 @@
           "link": "../../runner/cyc/hw_mapper.c#L1367"
         }
       ],
-      "remaining": "Complex-board/expansion services remain supported and potentially useful, but no eligible consumer among five campaign titles. FDS remains parked.",
+      "remaining": "Prepared CHR mapping service was implemented and rejected after actual MMC5 stage-one gameplay A/B. Other complex-board/expansion-audio services remain potential residuals, not a qualified win or an exhausted architecture.",
       "affected_profiles": [
-        "A supported title using MMC5 or VRC/Namco/FME-7 expansion services; FDS parked"
+        "Castlevania III USA MMC5 stage-one actual native gameplay; standard five boards unchanged"
       ],
-      "next_decisive_check": "Independent durable Beads review, thenNES31. Reopen on actual supported complex-board consuming title workload.",
+      "next_decisive_check": "Independent decision/Beads readback, then NES31 startup candidate.",
       "required_behavior": "Expansion PCM, board IRQ/read gating and register timing, device state and portable execution. FDS-specific work remains parked with NES29.",
       "prior_issue": null,
       "measured_additional_gain": null,
-      "execution_status": "evaluated-five-title-board-inventory",
-      "result_file": "2026-10-31-complex-board-scope-results.json",
-      "candidate_state": "prepared-or-deferred",
-      "candidate_decision_recorded": false
+      "execution_status": "actual-native-MMC5-gameplay-and-own-continuation-checked",
+      "result_file": "2026-10-31-mmc5-mapping-candidate-results.json",
+      "candidate_state": "implemented-rejected-scope",
+      "candidate_decision_recorded": true
     },
     {
       "id": "NES31",
@@ -1441,24 +1442,22 @@
     "scope_extension": "NES32 records the previously uncovered owner GPU rendering requirement; original NES01-NES31 objective is not claimed complete."
   },
   "execution_summary": {
-    "evaluated_decisions": 28,
+    "evaluated_decisions": 29,
     "partial_ids": [],
     "parked_ids": [
       "NES29"
     ],
-    "other_unresolved": 3,
-    "note": "28 scoped candidate decisions: 17 overlapping selections and 11 prototype dispositions; not additive or architectural exhaustion. NES30/31 remain prepared/deferred, NES32 is newly recorded open GPU work, NES29 owner-parked. Final combined owner handoff pending.",
-    "candidate_decision_areas": 28,
+    "other_unresolved": 2,
+    "note": "29 scoped candidate decisions:17 overlapping selections and12 actual prototype dispositions. NES31 startup and NES32 resident GPU work remain open; NES29 owner-parked. Final supported combined builds and owner handoff pending.",
+    "candidate_decision_areas": 29,
     "scoped_selection_areas": 17,
-    "prototype_disposition_areas": 11,
-    "prepared_or_deferred_areas": 2,
+    "prototype_disposition_areas": 12,
+    "prepared_or_deferred_areas": 1,
     "deferred_ids": [
-      "NES30",
       "NES31"
     ],
     "total_areas": 32,
     "open_ids": [
-      "NES30",
       "NES31",
       "NES32"
     ],

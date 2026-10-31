@@ -17,8 +17,8 @@ original HD runtime. See [HD results](2026-10-28-hd-plan-results.md), including
 the rejected universal packages and SMB's unchanged-runtime proof. Zelda's
 fixed SNROM SRAM code now joins the native deadline service; see
 [SRAM results](2026-10-28-sram-native-results.md). SERVER Fit improves5.128%
-and Remastered1.442%; stock is neutral/inconclusive. Seventeen areas have overlapping scoped selections and eleven have actual prototype
-dispositions. Three areas remain open: deferred NES30/31 and unimplemented
+and Remastered1.442%; stock is neutral/inconclusive. Seventeen areas have overlapping scoped selections and twelve have actual prototype
+dispositions. Two areas remain open: deferred NES31 and unimplemented
 GPU work in NES32. Preparation does not count as completed candidate burndown;
 NES01 is qualified for whole stable HLE raster jobs and NES29 remains parked.
 Guarded native ROM is now evaluated under NES09; see
@@ -27,7 +27,7 @@ Whole stable HLE raster jobs are now qualified across the five stock titles
 and Zelda Fit/HD profiles; see [raster results](2026-10-28-raster-job-results.md).
 Zelda isolated native execution is selected under NES18; NES20 now selects physical cartridge-storage ownership for isolated scopes. See
 [isolated service results](2026-10-28-isolated-native-results.md).
-Selected-package final game validation remains open alongside those three
+Selected-package final game validation remains open alongside those two
 areas. FDS remains parked. No main/master merge or new release is authorized
 before owner review.
 
@@ -652,20 +652,21 @@ close the per-pixel raster or APU-event algorithm work under NES01/NES06.
   Evidence: [runner/cyc/hw_fds_hle.c:2](../../runner/cyc/hw_fds_hle.c#L2), [runner/cyc/cyc_core.h:104](../../runner/cyc/cyc_core.h#L104). Reuse `beads-2dw.1.74`.
 
 
-- [ ] **NES30 · P3 · Expansion-audio and complex-board event services**
+- [x] **NES30 · P3 · Expansion-audio and complex-board event services**
 
-  FDS/VRC6/VRC7/Namco/FME-7 and MMC5-specific work has different timer, sampling and bus-observer costs. Build event-driven board/audio services where an actually supported title spends time, not a generic callback cleanup.
+  Decision: Implemented and rejected prepared MMC5 CHR mapping service after
+  actual Castlevania III USA stage-one native gameplay. All exact products,
+  mapper contracts and own-state continuations pass. Initial three pairs and
+  five same-core confirmation pairs are mixed; no established benefit and no
+  runtime adoption. [Results](2026-10-31-mmc5-mapping-candidate-results.md).
 
-  Scope: A supported title using MMC5 or VRC/Namco/FME-7 expansion services; FDS parked.
+  Scope: One supported MMC5 action-game workload. Other expansion-audio and
+  complex-board native services remain residual opportunities; this scoped
+  decision does not claim architectural exhaustion. Standard five games are
+  unchanged. FDS stays parked under NES29.
 
-  Evaluation: Defer: actual five-title ROM headers/hashes select only
-  boards0/1/4/66, with no eligible complex-board/expansion workload among
-  these titles. Engine support remains; no new runtime measure/speedup or
-  global catalog/exhaustion claim. FDS stays parked. [Results](2026-10-31-complex-board-scope-results.md).
-
-  Preserve: Expansion PCM, board IRQ/read gating and register timing, device state and portable execution. FDS-specific work remains parked with NES29.
-
-  Evidence: [runner/cyc/hw_mapper.c:1301](../../runner/cyc/hw_mapper.c#L1301), [runner/cyc/hw_mapper.c:1367](../../runner/cyc/hw_mapper.c#L1367).
+  Preserve: Expansion PCM, IRQ/read gating and register timing, device state,
+  native saves and portable execution.
 
 
 - [ ] **NES31 · P3 · Startup, native code footprint and first-use stalls**
@@ -760,10 +761,10 @@ working portable implementation. Netplay settles a common validated profile
 before frame 0; platform compilation alone is not compatibility qualification.
 
 Audit completion closes only `beads-2dw.1.109`'s investigation/deliverable.
-The execution campaign now tracks **32 areas: 28 scoped candidate decisions,
-three open areas (NES30, NES31, NES32), and owner-parked NES29**. The 28 decisions
-comprise 17 overlapping scoped selections and 11 prototype dispositions; they
-are neither 28 independent wins nor architectural exhaustion. NES32 explicitly
+The execution campaign now tracks **32 areas: 29 scoped candidate decisions,
+two open areas (NES31, NES32), and owner-parked NES29**. The 29 decisions
+comprise 17 overlapping scoped selections and 12 prototype dispositions; they
+are neither 29 independent wins nor architectural exhaustion. NES32 explicitly
 adds the previously uncovered GPU requirement. Final supported combined builds
 and owner visual acceptance remain pending.
 
@@ -775,3 +776,5 @@ Recent actual candidate decisions: [NES07 DMA rejection](2026-10-31-native-dma-c
 [NES26 presentation admission rejection](2026-10-31-presentation-admission-results.md).
 NES20's live Atlas confirmation measured 4.76% lower median process CPU in five
 of five pairs; the five standard game profiles were neutral/inconclusive.
+
+NES30 now has an actual implemented/rejected MMC5 mapping decision: [results](2026-10-31-mmc5-mapping-candidate-results.md). NES31 and NES32 remain open.
