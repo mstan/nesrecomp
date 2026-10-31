@@ -1,0 +1,1595 @@
+{
+  "schema_version": 1,
+  "opportunity": "NES19",
+  "issue": "beads-2dw.1.110",
+  "campaign": "beads-2wy8.1",
+  "report_date": "2026-10-31",
+  "status": "independently-accepted-scoped-runtime-doc-PR-handoff-pending",
+  "title_commit": "b2bd8fb3219d4bb01605541183f738280f3ad7b5",
+  "title_branch": "perf/world-materials-nes19",
+  "engine_docs_branch": "perf/nes19-world-materials",
+  "engine_runtime_gitlink": "4e8a5e08996571f7dc982a12dd912b12d7be9ced",
+  "scope": "Zelda Seamless mode3 retains terrain viewport and restores previous actor rectangles, then draws current HUD/actors. Camera, dimensions, background, raster identity/revision and owned-valid flags qualify reuse. Loads/portals/local/system/inventory/death transitions preserve original composition semantics. OOM uses full compositor. Engine runtime and other titles unchanged.",
+  "provenance": {
+    "title_commit": "b2bd8fb3219d4bb01605541183f738280f3ad7b5",
+    "title_base": "fb448b6",
+    "engine_runtime_gitlink": "4e8a5e08996571f7dc982a12dd912b12d7be9ced",
+    "runtime_source_sha256": {
+      "src/cyc_extras.c": "2da7a043fd20e9077e7886c812e4895a0a7b7d1ea39643b14a56fe80af1755c3",
+      "src/zelda_world.c": "14d81fd587e5962a23c86396163beaf7f792bc5e1b1296fd7233af583bb5d84b",
+      "src/zelda_world_canvas.c": "574e6f72b85ffa50ce0839d5efd63602f02019d75d4dc8f64253422e01de9085",
+      "src/zelda_world_canvas.h": "88629379749fb0f9040f5480e09a18ebcd3cdda02fc041b47cda29604ffc2574",
+      "CMakeLists.txt": "8c9f735a3895626d1434ad6fe3d8ad28c00153a9d7b36e5c4b645d9c9bf93b76"
+    },
+    "products": {
+      "zelda": {
+        "reference": {
+          "exe": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-world-canvas-v1\\reference\\LegendOfZeldaNESRecomp.exe",
+          "sha256": "c2ef6f621dc33f89857e6654dd6d72bb11634eb6c85f2d0edaeaf91ba53348f9",
+          "rom": "F:\\Projects\\nesrecomp\\LegendOfZeldaNESRecomp\\Legend of Zelda.NES",
+          "target": "LegendOfZeldaNESRecomp",
+          "source_base": "engine4e8a5e0/titlefb448b6 plus frozen reference world overlay",
+          "source_snapshot": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\source-world-canvas-v1\\reference",
+          "source_sha256": {
+            "src/cyc_extras.c": "2da7a043fd20e9077e7886c812e4895a0a7b7d1ea39643b14a56fe80af1755c3",
+            "src/zelda_world.c": "30e45d756cca8e5821dd1ffcc09a3beebc941b39143112ebbdfee24a91711f03"
+          },
+          "package": "selected-through-NES17-plus-common-QA-viewport",
+          "historical_baseline_provenance": {
+            "source_snapshot": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\source-retained-voxel-v1",
+            "source_sha256": {
+              "engine/runner/cyc/tests/voxel_retained_test.c": "b46d51070d5c129407ca9a2fbd7687e97fd7b154f11f2649c7b93da4b200ecc0",
+              "engine/runner/include/voxel_renderer.h": "57c3c0ed2a4415a75f9d8da07d707ad05acf1ce4f6f831c518b6d96e1a285668",
+              "engine/runner/src/voxel_renderer.c": "68e258bda97ae37641fe8d7f01e36e34753909180d007e411b4eed04cc76c5ae",
+              "zelda/CMakeLists.txt": "dff4681a5c6b0747027d4ca749adb1a52900c8f884c9f4ec6a5c9bd72cd33a8e",
+              "zelda/src/cyc_extras.c": "868d92316f0de56d75f33b724cc1f54cf9543dc7c07ed691486b51f5cac3670e",
+              "zelda/src/zelda_voxel.c": "c88d085d4a533edca9c02a8a20a4d8aa76eaee5d6e723efcd323be8235022b57"
+            },
+            "source_base": "enginea2b2338/title60a6821 plus source-retained-voxel-v1"
+          },
+          "manifest": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-world-canvas-v1\\reference\\manifest.json"
+        },
+        "candidate": {
+          "exe": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-world-canvas-v1\\candidate\\LegendOfZeldaNESRecomp.exe",
+          "sha256": "388d2b86d03f3c054c7cfa3745bc550fa92d44e50f012ed8fe339ce446030cb8",
+          "rom": "F:\\Projects\\nesrecomp\\LegendOfZeldaNESRecomp\\Legend of Zelda.NES",
+          "target": "LegendOfZeldaNESRecomp",
+          "source_base": "engine4e8a5e0/titlefb448b6 plus frozen candidate world overlay",
+          "source_snapshot": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\source-world-canvas-v1\\candidate",
+          "source_sha256": {
+            "CMakeLists.txt": "8c9f735a3895626d1434ad6fe3d8ad28c00153a9d7b36e5c4b645d9c9bf93b76",
+            "src/cyc_extras.c": "2da7a043fd20e9077e7886c812e4895a0a7b7d1ea39643b14a56fe80af1755c3",
+            "src/zelda_world.c": "14d81fd587e5962a23c86396163beaf7f792bc5e1b1296fd7233af583bb5d84b",
+            "src/zelda_world_canvas.c": "574e6f72b85ffa50ce0839d5efd63602f02019d75d4dc8f64253422e01de9085",
+            "src/zelda_world_canvas.h": "88629379749fb0f9040f5480e09a18ebcd3cdda02fc041b47cda29604ffc2574",
+            "tests/world_canvas_test.c": "3a30d22c39eb9d7c9cede5d32322b4d0e9a9d09082efa139efd45cff87d07ba0"
+          },
+          "package": "selected-through-NES17-plus-common-QA-viewport-and-NES19-retained-canvas",
+          "historical_baseline_provenance": {
+            "source_snapshot": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\source-retained-voxel-v1",
+            "source_sha256": {
+              "engine/runner/cyc/tests/voxel_retained_test.c": "b46d51070d5c129407ca9a2fbd7687e97fd7b154f11f2649c7b93da4b200ecc0",
+              "engine/runner/include/voxel_renderer.h": "57c3c0ed2a4415a75f9d8da07d707ad05acf1ce4f6f831c518b6d96e1a285668",
+              "engine/runner/src/voxel_renderer.c": "68e258bda97ae37641fe8d7f01e36e34753909180d007e411b4eed04cc76c5ae",
+              "zelda/CMakeLists.txt": "dff4681a5c6b0747027d4ca749adb1a52900c8f884c9f4ec6a5c9bd72cd33a8e",
+              "zelda/src/cyc_extras.c": "868d92316f0de56d75f33b724cc1f54cf9543dc7c07ed691486b51f5cac3670e",
+              "zelda/src/zelda_voxel.c": "c88d085d4a533edca9c02a8a20a4d8aa76eaee5d6e723efcd323be8235022b57"
+            },
+            "source_base": "enginea2b2338/title60a6821 plus source-retained-voxel-v1"
+          },
+          "manifest": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-world-canvas-v1\\candidate\\manifest.json"
+        }
+      }
+    },
+    "current_qa_source_sha256": {
+      "tests/world_canvas_test.c": "8aa7a7ca137d09973a1a45e5cb8ecb29a3e17aa9ae5559cb94121d799a94b095",
+      "tools/probe_world_canvas.py": "20a48a8a973c990bccd83d4019ca06c33d5f141c16ca792170e3cfcff0147254",
+      "tools/probe_world_portals.py": "a9724a6d38d444df3e651149472baa90dbac9c9dee1609caf6ef25b33d2c96db",
+      "tools/probe_world_effects.py": "b7709e7f27cdfb7298caf8153e0140e0efa83c135f4341db9391a1b094156bea"
+    },
+    "revised_unit": {
+      "passed": true,
+      "command": [
+        "C:/msys64/mingw64/bin/gcc.exe",
+        "-O2",
+        "-std=c11",
+        "-Wall",
+        "-Wextra",
+        "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\world-canvas-unit-v2\\tests\\world_canvas_test.c",
+        "-o",
+        "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\world-canvas-unit-v2\\world-canvas-test.exe"
+      ],
+      "source_sha256": {
+        "src/zelda_world_canvas.c": "574e6f72b85ffa50ce0839d5efd63602f02019d75d4dc8f64253422e01de9085",
+        "src/zelda_world_canvas.h": "88629379749fb0f9040f5480e09a18ebcd3cdda02fc041b47cda29604ffc2574",
+        "tests/world_canvas_test.c": "8aa7a7ca137d09973a1a45e5cb8ecb29a3e17aa9ae5559cb94121d799a94b095"
+      },
+      "exe_sha256": "c43372c47d750f0834d4c3080df1128b7ee8b2e7d768ed3103061a316a51fc91",
+      "scope": "Root revised100canvas oracle; visible enabled-room raster mutation after reuse must rebuild and change observable pixel. Runtime A/B sources/binaries unchanged."
+    },
+    "fixture_correction": "Frozen build snapshot retains original author fixture. Reviewer identified an off-screen/disabled-room mutation that did not prove visible raster revision. The committed fixture and separate unit-v2 validation now mutate an enabled visible pixel after reuse, assert a rebuild and exact observable pixel; runtime sources/binaries/samples did not change.",
+    "baseline": "Exact preceding title world logic plus common passive CLI/TCP viewport controls and help. Reference is not the unmodified prior d94 binary. Other selected objects identical, except the new separate candidate canvas object.",
+    "qa_python": "C:/Users/Matthew/AppData/Local/Programs/Python/Python312/python.exe; Pillow12.3.0",
+    "supported_check": {
+      "configure_argv": [
+        "C:/msys64/mingw64/bin/cmake.exe",
+        "-S",
+        "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\zelda-nes19",
+        "-B",
+        "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-zelda-nes19",
+        "-G",
+        "Ninja",
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+        "-DZELDA_BUILD_RENDER_TESTS=ON",
+        "-DCMAKE_C_COMPILER=C:/msys64/mingw64/bin/gcc.exe",
+        "-DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe",
+        "-DCMAKE_MAKE_PROGRAM=C:/msys64/mingw64/bin/ninja.exe",
+        "-DNESRECOMP_ROOT=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\engine-nes19",
+        "-DRECOMP_UI_ROOT=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+        "-DSDL2_DIR=G:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/cmake",
+        "-DNESRECOMP_ROM=F:/Projects/nesrecomp/LegendOfZeldaNESRecomp/Legend of Zelda.NES",
+        "-DNESRECOMP_HOST_COMPILER=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-cli-guarded-rom-v2\\NESRecomp.exe",
+        "-DNESRECOMP_PPU_IMPL=HLE",
+        "-DNESRECOMP_RECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+        "-DNESRECOMP_RBENGINE_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/retcomm-rbengine"
+      ],
+      "objects": [
+        {
+          "source": "G:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/zelda-nes19/src/cyc_extras.c",
+          "argv": [
+            "C:\\msys64\\mingw64\\bin\\gcc.exe",
+            "-DCYC_BUILD_REVISION=\"unknown\"",
+            "-DCYC_BUILD_VERSION=\"1.10.0\"",
+            "-DCYC_GAME_PLAYERS=1",
+            "-DCYC_GAME_REGION=0",
+            "-DCYC_MOD_GAME_ID=\"legend-of-zelda-us\"",
+            "-DCYC_MOD_ROM_CRC32=\"3fe272fb\"",
+            "-DCYC_WITH_SDL",
+            "-DNESRECOMP_CYCLE_HDPACK",
+            "-DNESRECOMP_CYCLE_HDPACK_MODS",
+            "-DNESRECOMP_CYCLE_PRESENTATION",
+            "-DNESRECOMP_ENABLE_MODS=1",
+            "-DNESRECOMP_GAME_PLAYERS=1",
+            "-DNESRECOMP_HDPACK_LAYER_PLANS=1",
+            "-DNESRECOMP_ISOLATED_NATIVE=1",
+            "-DNESRECOMP_NATIVE_INTERVALS=1",
+            "-DNESRECOMP_NATIVE_PRG_GUARDS=1",
+            "-DNESRECOMP_PPU_HLE=1",
+            "-DNESRECOMP_VOXEL_RETAINED_TERRAIN=1",
+            "-DZELDA_CYCLE",
+            "-D_CRT_SECURE_NO_WARNINGS",
+            "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine-nes19/runner/cyc",
+            "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine-nes19/runner/cyc/../include",
+            "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine-nes19/runner/include",
+            "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine-nes19/runner/cyc/../src",
+            "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/zelda-nes19/src",
+            "-isystem",
+            "G:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/cmake/../include",
+            "-O3",
+            "-DNDEBUG",
+            "-std=gnu11",
+            "-o",
+            "CMakeFiles\\LegendOfZeldaNESRecomp.dir\\src\\cyc_extras.c.obj",
+            "-c",
+            "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\zelda-nes19\\src\\cyc_extras.c"
+          ],
+          "object": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-zelda-nes19\\CMakeFiles\\LegendOfZeldaNESRecomp.dir\\src\\cyc_extras.c.obj",
+          "compiled": true
+        },
+        {
+          "source": "G:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/zelda-nes19/src/zelda_world.c",
+          "argv": [
+            "C:\\msys64\\mingw64\\bin\\gcc.exe",
+            "-DCYC_BUILD_REVISION=\"unknown\"",
+            "-DCYC_BUILD_VERSION=\"1.10.0\"",
+            "-DCYC_GAME_PLAYERS=1",
+            "-DCYC_GAME_REGION=0",
+            "-DCYC_MOD_GAME_ID=\"legend-of-zelda-us\"",
+            "-DCYC_MOD_ROM_CRC32=\"3fe272fb\"",
+            "-DCYC_WITH_SDL",
+            "-DNESRECOMP_CYCLE_HDPACK",
+            "-DNESRECOMP_CYCLE_HDPACK_MODS",
+            "-DNESRECOMP_CYCLE_PRESENTATION",
+            "-DNESRECOMP_ENABLE_MODS=1",
+            "-DNESRECOMP_GAME_PLAYERS=1",
+            "-DNESRECOMP_HDPACK_LAYER_PLANS=1",
+            "-DNESRECOMP_ISOLATED_NATIVE=1",
+            "-DNESRECOMP_NATIVE_INTERVALS=1",
+            "-DNESRECOMP_NATIVE_PRG_GUARDS=1",
+            "-DNESRECOMP_PPU_HLE=1",
+            "-DNESRECOMP_VOXEL_RETAINED_TERRAIN=1",
+            "-DZELDA_CYCLE",
+            "-D_CRT_SECURE_NO_WARNINGS",
+            "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine-nes19/runner/cyc",
+            "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine-nes19/runner/cyc/../include",
+            "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine-nes19/runner/include",
+            "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine-nes19/runner/cyc/../src",
+            "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/zelda-nes19/src",
+            "-isystem",
+            "G:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/cmake/../include",
+            "-O3",
+            "-DNDEBUG",
+            "-std=gnu11",
+            "-o",
+            "CMakeFiles\\LegendOfZeldaNESRecomp.dir\\src\\zelda_world.c.obj",
+            "-c",
+            "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\zelda-nes19\\src\\zelda_world.c"
+          ],
+          "object": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-zelda-nes19\\CMakeFiles\\LegendOfZeldaNESRecomp.dir\\src\\zelda_world.c.obj",
+          "compiled": true
+        },
+        {
+          "source": "G:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/zelda-nes19/src/zelda_world_canvas.c",
+          "argv": [
+            "C:\\msys64\\mingw64\\bin\\gcc.exe",
+            "-DCYC_BUILD_REVISION=\"unknown\"",
+            "-DCYC_BUILD_VERSION=\"1.10.0\"",
+            "-DCYC_GAME_PLAYERS=1",
+            "-DCYC_GAME_REGION=0",
+            "-DCYC_MOD_GAME_ID=\"legend-of-zelda-us\"",
+            "-DCYC_MOD_ROM_CRC32=\"3fe272fb\"",
+            "-DCYC_WITH_SDL",
+            "-DNESRECOMP_CYCLE_HDPACK",
+            "-DNESRECOMP_CYCLE_HDPACK_MODS",
+            "-DNESRECOMP_CYCLE_PRESENTATION",
+            "-DNESRECOMP_ENABLE_MODS=1",
+            "-DNESRECOMP_GAME_PLAYERS=1",
+            "-DNESRECOMP_HDPACK_LAYER_PLANS=1",
+            "-DNESRECOMP_ISOLATED_NATIVE=1",
+            "-DNESRECOMP_NATIVE_INTERVALS=1",
+            "-DNESRECOMP_NATIVE_PRG_GUARDS=1",
+            "-DNESRECOMP_PPU_HLE=1",
+            "-DNESRECOMP_VOXEL_RETAINED_TERRAIN=1",
+            "-DZELDA_CYCLE",
+            "-D_CRT_SECURE_NO_WARNINGS",
+            "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine-nes19/runner/cyc",
+            "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine-nes19/runner/cyc/../include",
+            "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine-nes19/runner/include",
+            "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine-nes19/runner/cyc/../src",
+            "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/zelda-nes19/src",
+            "-isystem",
+            "G:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/cmake/../include",
+            "-O3",
+            "-DNDEBUG",
+            "-std=gnu11",
+            "-o",
+            "CMakeFiles\\LegendOfZeldaNESRecomp.dir\\src\\zelda_world_canvas.c.obj",
+            "-c",
+            "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\zelda-nes19\\src\\zelda_world_canvas.c"
+          ],
+          "object": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-zelda-nes19\\CMakeFiles\\LegendOfZeldaNESRecomp.dir\\src\\zelda_world_canvas.c.obj",
+          "compiled": true
+        }
+      ],
+      "test_command": [
+        "C:/msys64/mingw64/bin/cmake.exe",
+        "--build",
+        "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-zelda-nes19",
+        "--target",
+        "zelda_world_canvas_test",
+        "--parallel",
+        "1"
+      ],
+      "test_passed": true,
+      "scope": "Current supported CMake configuration, three exact changed-source compile commands and real optional world-canvas test target. Full generated title link and final five-game owner build remain final combined gate."
+    }
+  },
+  "results": [
+    {
+      "case": "zelda-world",
+      "host": "DESKTOP-HN15M1H",
+      "profile": "world",
+      "first_frame": 1801,
+      "end_frame": 2101,
+      "median_cpu_seconds": {
+        "reference": 1.015625,
+        "candidate": 1.015625
+      },
+      "median_cpu_reduction_percent": 0.0,
+      "paired_samples": [
+        {
+          "index": 0,
+          "reference": {
+            "cpu_seconds": 1.03125,
+            "wall_seconds": 1.1380623000004562,
+            "binary_sha256": "c2ef6f621dc33f89857e6654dd6d72bb11634eb6c85f2d0edaeaf91ba53348f9"
+          },
+          "candidate": {
+            "cpu_seconds": 1.015625,
+            "wall_seconds": 1.1577361000017845,
+            "binary_sha256": "388d2b86d03f3c054c7cfa3745bc550fa92d44e50f012ed8fe339ce446030cb8"
+          }
+        },
+        {
+          "index": 1,
+          "candidate": {
+            "cpu_seconds": 1.015625,
+            "wall_seconds": 1.1316660000011325,
+            "binary_sha256": "388d2b86d03f3c054c7cfa3745bc550fa92d44e50f012ed8fe339ce446030cb8"
+          },
+          "reference": {
+            "cpu_seconds": 1.03125,
+            "wall_seconds": 1.293001700003515,
+            "binary_sha256": "c2ef6f621dc33f89857e6654dd6d72bb11634eb6c85f2d0edaeaf91ba53348f9"
+          }
+        },
+        {
+          "index": 2,
+          "reference": {
+            "cpu_seconds": 1.015625,
+            "wall_seconds": 1.1124064000032376,
+            "binary_sha256": "c2ef6f621dc33f89857e6654dd6d72bb11634eb6c85f2d0edaeaf91ba53348f9"
+          },
+          "candidate": {
+            "cpu_seconds": 1.015625,
+            "wall_seconds": 1.1388120999981766,
+            "binary_sha256": "388d2b86d03f3c054c7cfa3745bc550fa92d44e50f012ed8fe339ce446030cb8"
+          }
+        },
+        {
+          "index": 3,
+          "candidate": {
+            "cpu_seconds": 1.015625,
+            "wall_seconds": 1.1152070999960415,
+            "binary_sha256": "388d2b86d03f3c054c7cfa3745bc550fa92d44e50f012ed8fe339ce446030cb8"
+          },
+          "reference": {
+            "cpu_seconds": 1.015625,
+            "wall_seconds": 1.1153831999981776,
+            "binary_sha256": "c2ef6f621dc33f89857e6654dd6d72bb11634eb6c85f2d0edaeaf91ba53348f9"
+          }
+        },
+        {
+          "index": 4,
+          "reference": {
+            "cpu_seconds": 1.015625,
+            "wall_seconds": 1.1224644000030821,
+            "binary_sha256": "c2ef6f621dc33f89857e6654dd6d72bb11634eb6c85f2d0edaeaf91ba53348f9"
+          },
+          "candidate": {
+            "cpu_seconds": 1.0,
+            "wall_seconds": 1.1020401999994647,
+            "binary_sha256": "388d2b86d03f3c054c7cfa3745bc550fa92d44e50f012ed8fe339ce446030cb8"
+          }
+        }
+      ],
+      "faster_pairs": 3,
+      "slower_pairs": 0,
+      "tied_pairs": 2,
+      "decision": "neutral/inconclusive within quantization/variation; no demonstrated gain",
+      "correct_hashes": {
+        "audio.wav": "103440c6460794597906443e0f14877142cd94522e525147b10eaf36a45e53c2",
+        "final.png": "b3206e39aab84308e8880ec8ec2ad2d34a2a44fa99bc077cfc7a73915d70863e",
+        "frames.bin": "00a96417aac33933b09d340628d83a29315540353acb0b934f39d9b7d7f2c146",
+        "hardware.txt": "2d7a9869f04c737ac5b2cf93f2ffd21716debc0899a022bda762758945360911",
+        "memory.txt": "a058af56603eb653ed007b7d8b77041ea2d13934a900f305d869a7ba3124d0d3",
+        "present.png": "f9b6148ea62cdaf1456f321bd26c52495ff93cab88d66615335a85facb18c339",
+        "present_00000.png": "2706fa38e24aba8ec98ac71bfb6d887451d77fe5cb78ce3bf8c4151e87fe9f9e",
+        "present_00300.png": "9adfd8e72e95f170c444ee23facf318d817c59bec06d21348e66f5dec50d95cb",
+        "present_00600.png": "b023f92381877c40dec6549a75d42562a770c64b4460bd079f20dcad989364e8",
+        "present_00900.png": "12ee523323336ab9e88e41d427856d2e419f0ea96881b8b9a27949dbabf6a28a",
+        "present_01200.png": "90e401da76c01c3c67ce907c466f1dc0ca7f6558c85a8709f9c7b7739422a3cc",
+        "present_01500.png": "cfba77e51e0505458aa78220b501d0b673e49b41ba61e8913b260128a8df7837",
+        "present_01800.png": "4849a0621dffb37e61b8d1f8736bf6870f0fef432087500996a2bca11c39c547",
+        "present_02100.png": "f9b6148ea62cdaf1456f321bd26c52495ff93cab88d66615335a85facb18c339",
+        "final_00000.png": "2706fa38e24aba8ec98ac71bfb6d887451d77fe5cb78ce3bf8c4151e87fe9f9e",
+        "final_00300.png": "9adfd8e72e95f170c444ee23facf318d817c59bec06d21348e66f5dec50d95cb",
+        "final_00600.png": "b023f92381877c40dec6549a75d42562a770c64b4460bd079f20dcad989364e8",
+        "final_00900.png": "12ee523323336ab9e88e41d427856d2e419f0ea96881b8b9a27949dbabf6a28a",
+        "final_01200.png": "63f9f4400cdf4dd6cdbd6819351aeaa9cd73ec25b496b04b99a43859def4e8de",
+        "final_01500.png": "7a9d3933d6a221d09a7e0c1b197b24f2cbcbf09de6284fb5d42ff242cd7232d8",
+        "final_01800.png": "7a9d3933d6a221d09a7e0c1b197b24f2cbcbf09de6284fb5d42ff242cd7232d8",
+        "final_02100.png": "b3206e39aab84308e8880ec8ec2ad2d34a2a44fa99bc077cfc7a73915d70863e",
+        "mid_mod:cyc.hdpack.0": "7911f8f5921c37681c27636e5d0866e2f7e7debc87507b89de918c2008c94fb8",
+        "mid_mod:cyc.hdpack.1": "3390f6fc2ed15aa2560f073ccba24da27706a47c9d6450db9b68007cf77700f2",
+        "mid_mod:cyc.hdpack.2": "53d52c8586303738000e3349c54f35b32fc76e768e66f10e1e4700231b5011bf",
+        "mid_mod:cyc.hdpack.3": "8117f62f02a46ea0af6ca043e833e4514f38da13393d2516862b0089f137312d",
+        "mid_mod:cyc.hdpack.4": "4f4bc193b47257eabd7cc2193df9e0b006fb21cf5e5645bcc21c0f64e908fabc",
+        "mid_mod:zelda.world.rooms": "e9606f6018444e3b67d51da123fc6bf1cb99c1eb0536a0f257c14d44f0941e0b",
+        "mid_mod:zelda.world.portal-view": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "mid_mod:zelda.cycle.voxel": "ac053cd23cdfbff47dbbeec988a173df23a22555894038ff934b58ac5c978b1b",
+        "end_mod:cyc.hdpack.0": "7911f8f5921c37681c27636e5d0866e2f7e7debc87507b89de918c2008c94fb8",
+        "end_mod:cyc.hdpack.1": "3390f6fc2ed15aa2560f073ccba24da27706a47c9d6450db9b68007cf77700f2",
+        "end_mod:cyc.hdpack.2": "53d52c8586303738000e3349c54f35b32fc76e768e66f10e1e4700231b5011bf",
+        "end_mod:cyc.hdpack.3": "8117f62f02a46ea0af6ca043e833e4514f38da13393d2516862b0089f137312d",
+        "end_mod:cyc.hdpack.4": "4f4bc193b47257eabd7cc2193df9e0b006fb21cf5e5645bcc21c0f64e908fabc",
+        "end_mod:zelda.world.rooms": "04e39cc14e066a0abfcc356633aa5ccc5798707b80b81bd94377a0f5d20eb22d",
+        "end_mod:zelda.world.portal-view": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "end_mod:zelda.cycle.voxel": "ac053cd23cdfbff47dbbeec988a173df23a22555894038ff934b58ac5c978b1b"
+      },
+      "source_packages": {
+        "reference": "selected-through-NES17-plus-common-QA-viewport",
+        "candidate": "selected-through-NES17-plus-common-QA-viewport-and-NES19-retained-canvas"
+      },
+      "archive": "local-world-canvas-evidence.zip",
+      "raw_performance_member": "zelda-world/evidence/performance.json",
+      "raw_correctness_member": "zelda-world/evidence/correctness.json",
+      "setup_pictures": [
+        [
+          426,
+          240
+        ]
+      ],
+      "setup_simulated_rooms": [
+        15
+      ],
+      "affinity_mask": 32768,
+      "capacity_receipt": "pool-world-canvas-v1-zelda-world-receipt.json",
+      "capacity_receipt_sha256": "1f3f8f128e74573c8c189414bde1d92d6438710885580bad8f1ee0a635f4939d",
+      "host_telemetry": {
+        "before": {
+          "host": "DESKTOP-HN15M1H",
+          "os": "windows",
+          "timestamp": 1793427868.984389,
+          "physical_cores": 8,
+          "logical_cpus": 16,
+          "cpu_busy_percent": 27.24609375,
+          "cpu_free_cores": 5.8203125,
+          "memory_available_gib": 29.206390380859375,
+          "memory_total_gib": 61.5560188293457,
+          "gpu_busy_percent": 91.0,
+          "gpu_source": "nvidia-smi utilization.gpu",
+          "storage": "G:\\",
+          "storage_free_gib": 7227.494709014893
+        },
+        "after": {
+          "host": "DESKTOP-HN15M1H",
+          "os": "windows",
+          "timestamp": 1793427909.6463857,
+          "physical_cores": 8,
+          "logical_cpus": 16,
+          "cpu_busy_percent": 41.50390625,
+          "cpu_free_cores": 4.6796875,
+          "memory_available_gib": 30.069507598876953,
+          "memory_total_gib": 61.5560188293457,
+          "gpu_busy_percent": 38.0,
+          "gpu_source": "nvidia-smi utilization.gpu",
+          "storage": "G:\\",
+          "storage_free_gib": 7227.467475891113
+        },
+        "requested": {
+          "cpu": 1.0,
+          "gpu": 0.0,
+          "memory": 1.5,
+          "disk": 2.0,
+          "class": "timing",
+          "priority": "normal"
+        }
+      }
+    },
+    {
+      "case": "zelda-atlas",
+      "host": "SERVER",
+      "profile": "atlas",
+      "first_frame": 1801,
+      "end_frame": 2101,
+      "median_cpu_seconds": {
+        "reference": 13.3125,
+        "candidate": 10.40625
+      },
+      "median_cpu_reduction_percent": 21.830985915492963,
+      "paired_samples": [
+        {
+          "index": 0,
+          "reference": {
+            "cpu_seconds": 13.609375,
+            "wall_seconds": 17.365796899888664,
+            "binary_sha256": "c2ef6f621dc33f89857e6654dd6d72bb11634eb6c85f2d0edaeaf91ba53348f9"
+          },
+          "candidate": {
+            "cpu_seconds": 10.3125,
+            "wall_seconds": 12.044988200068474,
+            "binary_sha256": "388d2b86d03f3c054c7cfa3745bc550fa92d44e50f012ed8fe339ce446030cb8"
+          }
+        },
+        {
+          "index": 1,
+          "candidate": {
+            "cpu_seconds": 10.40625,
+            "wall_seconds": 12.278361999895424,
+            "binary_sha256": "388d2b86d03f3c054c7cfa3745bc550fa92d44e50f012ed8fe339ce446030cb8"
+          },
+          "reference": {
+            "cpu_seconds": 13.234375,
+            "wall_seconds": 15.90629839990288,
+            "binary_sha256": "c2ef6f621dc33f89857e6654dd6d72bb11634eb6c85f2d0edaeaf91ba53348f9"
+          }
+        },
+        {
+          "index": 2,
+          "reference": {
+            "cpu_seconds": 13.328125,
+            "wall_seconds": 15.340144000016153,
+            "binary_sha256": "c2ef6f621dc33f89857e6654dd6d72bb11634eb6c85f2d0edaeaf91ba53348f9"
+          },
+          "candidate": {
+            "cpu_seconds": 10.40625,
+            "wall_seconds": 12.158864399883896,
+            "binary_sha256": "388d2b86d03f3c054c7cfa3745bc550fa92d44e50f012ed8fe339ce446030cb8"
+          }
+        },
+        {
+          "index": 3,
+          "candidate": {
+            "cpu_seconds": 10.78125,
+            "wall_seconds": 13.412322300020605,
+            "binary_sha256": "388d2b86d03f3c054c7cfa3745bc550fa92d44e50f012ed8fe339ce446030cb8"
+          },
+          "reference": {
+            "cpu_seconds": 13.203125,
+            "wall_seconds": 15.876531900372356,
+            "binary_sha256": "c2ef6f621dc33f89857e6654dd6d72bb11634eb6c85f2d0edaeaf91ba53348f9"
+          }
+        },
+        {
+          "index": 4,
+          "reference": {
+            "cpu_seconds": 13.3125,
+            "wall_seconds": 15.586287199985236,
+            "binary_sha256": "c2ef6f621dc33f89857e6654dd6d72bb11634eb6c85f2d0edaeaf91ba53348f9"
+          },
+          "candidate": {
+            "cpu_seconds": 10.359375,
+            "wall_seconds": 12.155696799978614,
+            "binary_sha256": "388d2b86d03f3c054c7cfa3745bc550fa92d44e50f012ed8fe339ce446030cb8"
+          }
+        }
+      ],
+      "faster_pairs": 5,
+      "slower_pairs": 0,
+      "tied_pairs": 0,
+      "decision": "positive in this bounded workload",
+      "correct_hashes": {
+        "audio.wav": "103440c6460794597906443e0f14877142cd94522e525147b10eaf36a45e53c2",
+        "final.png": "b3206e39aab84308e8880ec8ec2ad2d34a2a44fa99bc077cfc7a73915d70863e",
+        "frames.bin": "00a96417aac33933b09d340628d83a29315540353acb0b934f39d9b7d7f2c146",
+        "hardware.txt": "2d7a9869f04c737ac5b2cf93f2ffd21716debc0899a022bda762758945360911",
+        "memory.txt": "a058af56603eb653ed007b7d8b77041ea2d13934a900f305d869a7ba3124d0d3",
+        "present.png": "143b140274397e691497f9706df8661aa4a73a406bf986362f739314819a9551",
+        "present_00000.png": "2706fa38e24aba8ec98ac71bfb6d887451d77fe5cb78ce3bf8c4151e87fe9f9e",
+        "present_00300.png": "9adfd8e72e95f170c444ee23facf318d817c59bec06d21348e66f5dec50d95cb",
+        "present_00600.png": "b023f92381877c40dec6549a75d42562a770c64b4460bd079f20dcad989364e8",
+        "present_00900.png": "12ee523323336ab9e88e41d427856d2e419f0ea96881b8b9a27949dbabf6a28a",
+        "present_01200.png": "2b2a4a9fbadd53016fe42d0e6fb3360e8b7a809789f543767c06425682dbe764",
+        "present_01500.png": "ad7ff9ccae647ad22e0d86b3825063bc36e3abdc5a80a095737ca0d4a77b5c0c",
+        "present_01800.png": "542a4eff158bd9bad56be5536fe1444c6085fdcb918df81056b6e66e153ba678",
+        "present_02100.png": "143b140274397e691497f9706df8661aa4a73a406bf986362f739314819a9551",
+        "final_00000.png": "2706fa38e24aba8ec98ac71bfb6d887451d77fe5cb78ce3bf8c4151e87fe9f9e",
+        "final_00300.png": "9adfd8e72e95f170c444ee23facf318d817c59bec06d21348e66f5dec50d95cb",
+        "final_00600.png": "b023f92381877c40dec6549a75d42562a770c64b4460bd079f20dcad989364e8",
+        "final_00900.png": "12ee523323336ab9e88e41d427856d2e419f0ea96881b8b9a27949dbabf6a28a",
+        "final_01200.png": "63f9f4400cdf4dd6cdbd6819351aeaa9cd73ec25b496b04b99a43859def4e8de",
+        "final_01500.png": "7a9d3933d6a221d09a7e0c1b197b24f2cbcbf09de6284fb5d42ff242cd7232d8",
+        "final_01800.png": "7a9d3933d6a221d09a7e0c1b197b24f2cbcbf09de6284fb5d42ff242cd7232d8",
+        "final_02100.png": "b3206e39aab84308e8880ec8ec2ad2d34a2a44fa99bc077cfc7a73915d70863e",
+        "mid_mod:cyc.hdpack.0": "7911f8f5921c37681c27636e5d0866e2f7e7debc87507b89de918c2008c94fb8",
+        "mid_mod:cyc.hdpack.1": "3390f6fc2ed15aa2560f073ccba24da27706a47c9d6450db9b68007cf77700f2",
+        "mid_mod:cyc.hdpack.2": "53d52c8586303738000e3349c54f35b32fc76e768e66f10e1e4700231b5011bf",
+        "mid_mod:cyc.hdpack.3": "8117f62f02a46ea0af6ca043e833e4514f38da13393d2516862b0089f137312d",
+        "mid_mod:cyc.hdpack.4": "4f4bc193b47257eabd7cc2193df9e0b006fb21cf5e5645bcc21c0f64e908fabc",
+        "mid_mod:zelda.world.rooms": "1f8c5e2338bc0e12c169f857036b334c64f68c000465216a77a2ffbaebbeccac",
+        "mid_mod:zelda.world.portal-view": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "mid_mod:zelda.cycle.voxel": "ac053cd23cdfbff47dbbeec988a173df23a22555894038ff934b58ac5c978b1b",
+        "end_mod:cyc.hdpack.0": "7911f8f5921c37681c27636e5d0866e2f7e7debc87507b89de918c2008c94fb8",
+        "end_mod:cyc.hdpack.1": "3390f6fc2ed15aa2560f073ccba24da27706a47c9d6450db9b68007cf77700f2",
+        "end_mod:cyc.hdpack.2": "53d52c8586303738000e3349c54f35b32fc76e768e66f10e1e4700231b5011bf",
+        "end_mod:cyc.hdpack.3": "8117f62f02a46ea0af6ca043e833e4514f38da13393d2516862b0089f137312d",
+        "end_mod:cyc.hdpack.4": "4f4bc193b47257eabd7cc2193df9e0b006fb21cf5e5645bcc21c0f64e908fabc",
+        "end_mod:zelda.world.rooms": "2a71ed48cfdc7063a403008991931bd2e756d132cc4f07a7351e8e9ae506005d",
+        "end_mod:zelda.world.portal-view": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "end_mod:zelda.cycle.voxel": "ac053cd23cdfbff47dbbeec988a173df23a22555894038ff934b58ac5c978b1b"
+      },
+      "source_packages": {
+        "reference": "selected-through-NES17-plus-common-QA-viewport",
+        "candidate": "selected-through-NES17-plus-common-QA-viewport-and-NES19-retained-canvas"
+      },
+      "archive": "server-world-canvas-evidence.zip",
+      "raw_performance_member": "zelda-atlas/evidence/performance.json",
+      "raw_correctness_member": "zelda-atlas/evidence/correctness.json",
+      "setup_pictures": [
+        [
+          4096,
+          1472
+        ]
+      ],
+      "setup_simulated_rooms": [
+        128
+      ],
+      "affinity_mask": 4,
+      "capacity_receipt": "pool-world-canvas-v1-zelda-atlas-receipt.json",
+      "capacity_receipt_sha256": "58a288f0bf73e73f78dd78a4fbc3db9cbdb0c940fd5d3bde9f4937d42fcbee54",
+      "host_telemetry": {
+        "before": {
+          "host": "SERVER",
+          "os": "windows",
+          "timestamp": 1793427912.7618577,
+          "physical_cores": 4,
+          "logical_cpus": 4,
+          "cpu_busy_percent": 28.515625,
+          "cpu_free_cores": 2.859375,
+          "memory_available_gib": 7.425281524658203,
+          "memory_total_gib": 15.939079284667969,
+          "gpu_busy_percent": 0.0,
+          "gpu_source": "WDDM per-engine aggregate maximum",
+          "storage": "G:\\",
+          "storage_free_gib": 3875.5482635498047
+        },
+        "after": {
+          "host": "SERVER",
+          "os": "windows",
+          "timestamp": 1793428161.1291456,
+          "physical_cores": 4,
+          "logical_cpus": 4,
+          "cpu_busy_percent": 17.1875,
+          "cpu_free_cores": 3.3125,
+          "memory_available_gib": 7.42755126953125,
+          "memory_total_gib": 15.939079284667969,
+          "gpu_busy_percent": 0.0,
+          "gpu_source": "WDDM per-engine aggregate maximum",
+          "storage": "G:\\",
+          "storage_free_gib": 3875.3507347106934
+        },
+        "requested": {
+          "cpu": 1.0,
+          "gpu": 0.0,
+          "memory": 1.5,
+          "disk": 2.0,
+          "class": "timing",
+          "priority": "normal"
+        }
+      }
+    }
+  ],
+  "archives": [
+    {
+      "file": "local-world-canvas-evidence.zip",
+      "sha256": "0fa9ea4140fdca4eba8646a10ba890dd9c6102c7c7d08020e407e5af770a9aa8",
+      "bytes": 16187732,
+      "entries": 328
+    },
+    {
+      "file": "server-world-canvas-evidence.zip",
+      "sha256": "fd575cb8041b462c0aa478ebaaded88049f9f6c7b9fb9b9d099d5d87bc55af69",
+      "bytes": 14279417,
+      "entries": 81
+    }
+  ],
+  "diagnostic_attribution": {
+    "fit": {
+      "scopes": {
+        "present_calls": 374,
+        "same_frame_calls": 75,
+        "step_calls": 299,
+        "present_ms": 91.8058,
+        "atlas": false,
+        "simulated_rooms": 15,
+        "stages_ms": [
+          789.9991,
+          27.4273,
+          1.0753,
+          38.2358,
+          8.566,
+          4.572,
+          0.0401,
+          0.0
+        ]
+      },
+      "window": {
+        "cpu_seconds": 2.859375,
+        "wall_seconds": 2.9742584999185055,
+        "command": [
+          "G:\\Temp\\Codex\\nes110-world-profile-v1-20261028\\bin\\LegendOfZeldaNESRecomp.exe",
+          "G:\\Temp\\Codex\\nes110-world-profile-v1-20261028\\baserom.nes",
+          "--hidden",
+          "--uncapped",
+          "--exit-after",
+          "2101",
+          "--no-save",
+          "--window-input",
+          "G:\\Temp\\Codex\\nes110-world-profile-v1-20261028\\zelda.input",
+          "--config",
+          "G:\\Temp\\Codex\\nes110-world-profile-v1-20261028\\fit\\config.ini",
+          "--mods-root",
+          "G:\\Temp\\Codex\\nes110-world-profile-v1-20261028\\bin\\mods",
+          "--tcp",
+          "55781"
+        ],
+        "affinity_mask": null,
+        "priority": "Normal",
+        "first_frame": 1801,
+        "excluded_setup_cpu_seconds": 0.984375,
+        "excluded_setup_wall_seconds": 0.9544842999894172,
+        "interval_core_before": [
+          [
+            14818632812500,
+            17444645312500,
+            2632271562500
+          ],
+          [
+            15557967187500,
+            17104562500000,
+            2972352968750
+          ],
+          [
+            15650342031250,
+            17078300781250,
+            2998614687500
+          ],
+          [
+            14952844062500,
+            16598553281250,
+            3478362187500
+          ]
+        ],
+        "interval_core_after": [
+          [
+            14818651718750,
+            17444668125000,
+            2632278437500
+          ],
+          [
+            15557988437500,
+            17104586562500,
+            2972358593750
+          ],
+          [
+            15650361718750,
+            17078321875000,
+            2998623281250
+          ],
+          [
+            14952861406250,
+            16598570781250,
+            3478374375000
+          ]
+        ],
+        "scope": "Resumed SDL frames plus normal shutdown; TCP menu/load/window setup excluded",
+        "fixed_zapper": null,
+        "setup_state": {
+          "id": 0,
+          "ok": true,
+          "frame": 1801,
+          "menu_open": true,
+          "fds": false,
+          "side": -1,
+          "sides": 0,
+          "motor": false,
+          "writing": false,
+          "toast": {
+            "visible": false,
+            "title": "",
+            "body": ""
+          },
+          "hle": "",
+          "disk_save": "",
+          "disk_binding": "D / LB",
+          "picture": [
+            426,
+            240
+          ],
+          "dev_ui": false,
+          "recomp_ui": true,
+          "native": true,
+          "vsync_requested": false,
+          "vsync_active": true,
+          "pads": [],
+          "state_panel": "closed",
+          "state_slot": 1,
+          "rewind_count": 0,
+          "rewind_frame": -1,
+          "rewind_enabled": true
+        },
+        "zapper_state": null
+      },
+      "binary_sha256": "df3cf309666f97d8722e7da76b55375b1ec784a2969c8239bb424fe174676d51",
+      "source_sha256": "df1622404ee3cc9c41f71700b1a7346d42b8f9a738031b806cb5e0055b5440e3",
+      "scope": "Diagnostic SDL performance-counter wall scopes, frames1802..2100 excluding setup/load1801. Stages step,refresh/capture,rasters,fill/runs,HUD,actors,inventory,subroom. No A/B or exclusive CPU/recoverable bound. Atlas uses existing F4 semantics and all-room seamless simulation, not mode2 terrain-only shortcut."
+    },
+    "atlas": {
+      "scopes": {
+        "present_calls": 374,
+        "same_frame_calls": 75,
+        "step_calls": 299,
+        "present_ms": 3140.5641,
+        "atlas": true,
+        "simulated_rooms": 128,
+        "stages_ms": [
+          6339.1692,
+          28.0083,
+          8.7349,
+          2835.4018,
+          45.1993,
+          210.6317,
+          0.151,
+          0.0
+        ]
+      },
+      "window": {
+        "cpu_seconds": 12.640625,
+        "wall_seconds": 12.929277800023556,
+        "command": [
+          "G:\\Temp\\Codex\\nes110-world-profile-v1-20261028\\bin\\LegendOfZeldaNESRecomp.exe",
+          "G:\\Temp\\Codex\\nes110-world-profile-v1-20261028\\baserom.nes",
+          "--hidden",
+          "--uncapped",
+          "--exit-after",
+          "2101",
+          "--no-save",
+          "--window-input",
+          "G:\\Temp\\Codex\\nes110-world-profile-v1-20261028\\zelda.input",
+          "--config",
+          "G:\\Temp\\Codex\\nes110-world-profile-v1-20261028\\atlas\\config.ini",
+          "--mods-root",
+          "G:\\Temp\\Codex\\nes110-world-profile-v1-20261028\\bin\\mods",
+          "--tcp",
+          "55812"
+        ],
+        "affinity_mask": null,
+        "priority": "Normal",
+        "first_frame": 1801,
+        "excluded_setup_cpu_seconds": 0.953125,
+        "excluded_setup_wall_seconds": 0.9900468001142144,
+        "interval_core_before": [
+          [
+            14818704218750,
+            17444732812500,
+            2632311093750
+          ],
+          [
+            15558039375000,
+            17104651562500,
+            2972390937500
+          ],
+          [
+            15650405625000,
+            17078379218750,
+            2998663281250
+          ],
+          [
+            14952900156250,
+            16598620312500,
+            3478422187500
+          ]
+        ],
+        "interval_core_after": [
+          [
+            14818784218750,
+            17444831250000,
+            2632341875000
+          ],
+          [
+            15558108906250,
+            17104739218750,
+            2972432500000
+          ],
+          [
+            15650474687500,
+            17078460000000,
+            2998711718750
+          ],
+          [
+            14952962343750,
+            16598693750000,
+            3478477968750
+          ]
+        ],
+        "scope": "Resumed SDL frames plus normal shutdown; TCP menu/load/window setup excluded",
+        "fixed_zapper": null,
+        "setup_state": {
+          "id": 0,
+          "ok": true,
+          "frame": 1801,
+          "menu_open": true,
+          "fds": false,
+          "side": -1,
+          "sides": 0,
+          "motor": false,
+          "writing": false,
+          "toast": {
+            "visible": false,
+            "title": "",
+            "body": ""
+          },
+          "hle": "",
+          "disk_save": "",
+          "disk_binding": "D / LB",
+          "picture": [
+            4096,
+            1472
+          ],
+          "dev_ui": false,
+          "recomp_ui": true,
+          "native": true,
+          "vsync_requested": false,
+          "vsync_active": true,
+          "pads": [],
+          "state_panel": "closed",
+          "state_slot": 1,
+          "rewind_count": 0,
+          "rewind_frame": -1,
+          "rewind_enabled": true
+        },
+        "zapper_state": null
+      },
+      "binary_sha256": "df3cf309666f97d8722e7da76b55375b1ec784a2969c8239bb424fe174676d51",
+      "source_sha256": "df1622404ee3cc9c41f71700b1a7346d42b8f9a738031b806cb5e0055b5440e3",
+      "scope": "Diagnostic SDL performance-counter wall scopes, frames1802..2100 excluding setup/load1801. Stages step,refresh/capture,rasters,fill/runs,HUD,actors,inventory,subroom. No A/B or exclusive CPU/recoverable bound. Atlas uses existing F4 semantics and all-room seamless simulation, not mode2 terrain-only shortcut."
+    }
+  },
+  "diagnostic_archive": {
+    "file": "world-material-attribution-evidence.zip",
+    "sha256": "2f70978fce63c8cd676bc3abe211aeb88770bd42a901d31fb24fbb193e3914e1",
+    "bytes": 76056,
+    "entries": 16
+  },
+  "boundaries": {
+    "reference/canvas": {
+      "passed": true,
+      "returncode": 0,
+      "command": [
+        "C:/Users/Matthew/AppData/Local/Programs/Python/Python312/python.exe",
+        "-X",
+        "utf8",
+        "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\zelda-nes19\\tools\\probe_world_canvas.py",
+        "--exe",
+        "G:\\Temp\\Codex\\nes110-world-canvas-v1-20261030\\zelda-world\\reference\\LegendOfZeldaNESRecomp.exe",
+        "--rom",
+        "G:\\Temp\\Codex\\nes110-world-canvas-v1-20261030\\zelda-world\\baserom.nes",
+        "--state",
+        "G:\\Temp\\Codex\\nes110-world-canvas-v1-20261030\\zelda-world\\evidence\\reference\\mid.state",
+        "--out",
+        "G:\\Temp\\Codex\\nes110-world-canvas-v1-20261030\\zelda-world\\features\\reference\\canvas"
+      ],
+      "paused_reuse": {
+        "before": {
+          "id": 10,
+          "ok": false,
+          "err": "unknown command (try help)"
+        },
+        "after": {
+          "id": 15,
+          "ok": false,
+          "err": "unknown command (try help)"
+        }
+      },
+      "atlas_live": {
+        "id": 47,
+        "ok": true,
+        "enabled": true,
+        "stage": "room-simulation",
+        "level": 0,
+        "decoded": 226,
+        "failures": 0,
+        "camera": [
+          0,
+          0
+        ],
+        "size": [
+          4096,
+          1472
+        ],
+        "adjacent_actors": true,
+        "seamless_traversal": true,
+        "simulated_rooms": 128,
+        "actors": 553,
+        "neighbor_ticks": 7764,
+        "handoffs": 1,
+        "menu": 0,
+        "game_mode": 5,
+        "submode": 0,
+        "updating": 1,
+        "scroll_y64": 64,
+        "mask64": 30,
+        "presentation": "world",
+        "scene_room": 119,
+        "scene_level": 0,
+        "ui_bounds": [
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "atlas_cache": {
+        "id": 49,
+        "ok": false,
+        "err": "unknown command (try help)"
+      },
+      "deterministic_picture_sha256": {
+        "initial": "a9865e141e2053978b0697956e3a064452bef41e999aaf0d43b1014bb2f77b0c",
+        "repeat-0": "a9865e141e2053978b0697956e3a064452bef41e999aaf0d43b1014bb2f77b0c",
+        "repeat-1": "a9865e141e2053978b0697956e3a064452bef41e999aaf0d43b1014bb2f77b0c",
+        "repeat-2": "a9865e141e2053978b0697956e3a064452bef41e999aaf0d43b1014bb2f77b0c",
+        "repeat-3": "a9865e141e2053978b0697956e3a064452bef41e999aaf0d43b1014bb2f77b0c",
+        "resize-3840x720": "3eca0fc1e7b5d59b8f7ff4e03717d09f84732cb8ec586752f607522fcba2de3e",
+        "resize-600x1200": "23d07a4becd11d368f75ee55f1747c71b786a11bf52a4666ce0a755bc7d3fd0d",
+        "resize-2304x1440": "a9865e141e2053978b0697956e3a064452bef41e999aaf0d43b1014bb2f77b0c",
+        "resize-return": "a9865e141e2053978b0697956e3a064452bef41e999aaf0d43b1014bb2f77b0c",
+        "loaded-fit": "a9865e141e2053978b0697956e3a064452bef41e999aaf0d43b1014bb2f77b0c",
+        "atlas-paused": "991d655c4ad5ea5d8f8afd35f06f4a7a54c9deffaf9a5b65c1212ea1224861ba"
+      },
+      "current_atlas_load_exact": true
+    },
+    "reference/portals": {
+      "passed": true,
+      "returncode": 0,
+      "command": [
+        "C:/Users/Matthew/AppData/Local/Programs/Python/Python312/python.exe",
+        "-X",
+        "utf8",
+        "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\zelda-nes19\\tools\\probe_world_portals.py",
+        "--exe",
+        "G:\\Temp\\Codex\\nes110-world-canvas-v1-20261030\\zelda-world\\reference\\LegendOfZeldaNESRecomp.exe",
+        "--rom",
+        "G:\\Temp\\Codex\\nes110-world-canvas-v1-20261030\\zelda-world\\baserom.nes",
+        "--state",
+        "G:\\Temp\\Codex\\nes110-world-canvas-v1-20261030\\zelda-world\\features\\reference\\canvas\\ready.state",
+        "--out",
+        "G:\\Temp\\Codex\\nes110-world-canvas-v1-20261030\\zelda-world\\features\\reference\\portals",
+        "--port",
+        "32397",
+        "--dungeon-state-out",
+        "G:\\Temp\\Codex\\nes110-world-canvas-v1-20261030\\zelda-world\\features\\reference\\dungeon.state"
+      ],
+      "phase_counts": {
+        "cave-entry": 6,
+        "cave_resizes": 3,
+        "cave-exit": 6,
+        "dungeon-entry": 10,
+        "dungeon-exit": 8
+      },
+      "portal_current_state_checks": [
+        "cave-entry-state",
+        "cave-exit-state",
+        "dungeon-entry-state",
+        "dungeon-exit-state"
+      ],
+      "dungeon_state_exported": true,
+      "cave_restored": "subroom",
+      "dungeon_level": 1
+    },
+    "reference/overworld-effects": {
+      "passed": true,
+      "returncode": 0,
+      "command": [
+        "C:/Users/Matthew/AppData/Local/Programs/Python/Python312/python.exe",
+        "-X",
+        "utf8",
+        "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\zelda-nes19\\tools\\probe_world_effects.py",
+        "--exe",
+        "G:\\Temp\\Codex\\nes110-world-canvas-v1-20261030\\zelda-world\\reference\\LegendOfZeldaNESRecomp.exe",
+        "--rom",
+        "G:\\Temp\\Codex\\nes110-world-canvas-v1-20261030\\zelda-world\\baserom.nes",
+        "--state",
+        "G:\\Temp\\Codex\\nes110-world-canvas-v1-20261030\\zelda-world\\features\\reference\\canvas\\ready.state",
+        "--out",
+        "G:\\Temp\\Codex\\nes110-world-canvas-v1-20261030\\zelda-world\\features\\reference\\overworld-effects",
+        "--port",
+        "32542",
+        "--adaptive"
+      ],
+      "menu_samples": 20,
+      "bomb_flash_chroma": 0,
+      "death_samples": 57,
+      "actual_game_over_text": "game-over",
+      "continue_page": "continue",
+      "continue_resizes": 3,
+      "returned_to_game": true,
+      "retry_presentation": "system-ui"
+    },
+    "reference/dungeon-effects": {
+      "passed": true,
+      "returncode": 0,
+      "command": [
+        "C:/Users/Matthew/AppData/Local/Programs/Python/Python312/python.exe",
+        "-X",
+        "utf8",
+        "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\zelda-nes19\\tools\\probe_world_effects.py",
+        "--exe",
+        "G:\\Temp\\Codex\\nes110-world-canvas-v1-20261030\\zelda-world\\reference\\LegendOfZeldaNESRecomp.exe",
+        "--rom",
+        "G:\\Temp\\Codex\\nes110-world-canvas-v1-20261030\\zelda-world\\baserom.nes",
+        "--state",
+        "G:\\Temp\\Codex\\nes110-world-canvas-v1-20261030\\zelda-world\\features\\reference\\dungeon.state",
+        "--out",
+        "G:\\Temp\\Codex\\nes110-world-canvas-v1-20261030\\zelda-world\\features\\reference\\dungeon-effects",
+        "--port",
+        "32664",
+        "--adaptive",
+        "--dungeon"
+      ],
+      "menu_samples": 20,
+      "bomb_flash_chroma": 0,
+      "death_samples": 57,
+      "actual_game_over_text": "game-over",
+      "continue_page": "continue",
+      "continue_resizes": 3,
+      "returned_to_game": true,
+      "retry_presentation": "system-ui"
+    },
+    "candidate/canvas": {
+      "passed": true,
+      "returncode": 0,
+      "command": [
+        "C:/Users/Matthew/AppData/Local/Programs/Python/Python312/python.exe",
+        "-X",
+        "utf8",
+        "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\zelda-nes19\\tools\\probe_world_canvas.py",
+        "--exe",
+        "G:\\Temp\\Codex\\nes110-world-canvas-v1-20261030\\zelda-world\\candidate\\LegendOfZeldaNESRecomp.exe",
+        "--rom",
+        "G:\\Temp\\Codex\\nes110-world-canvas-v1-20261030\\zelda-world\\baserom.nes",
+        "--state",
+        "G:\\Temp\\Codex\\nes110-world-canvas-v1-20261030\\zelda-world\\evidence\\candidate\\mid.state",
+        "--out",
+        "G:\\Temp\\Codex\\nes110-world-canvas-v1-20261030\\zelda-world\\features\\candidate\\canvas",
+        "--require-reuse"
+      ],
+      "paused_reuse": {
+        "before": {
+          "id": 10,
+          "ok": true,
+          "builds": 2,
+          "reuses": 8,
+          "bytes": 1474560
+        },
+        "after": {
+          "id": 15,
+          "ok": true,
+          "builds": 2,
+          "reuses": 17,
+          "bytes": 1474560
+        }
+      },
+      "atlas_live": {
+        "id": 45,
+        "ok": true,
+        "enabled": true,
+        "stage": "room-simulation",
+        "level": 0,
+        "decoded": 226,
+        "failures": 0,
+        "camera": [
+          0,
+          0
+        ],
+        "size": [
+          4096,
+          1472
+        ],
+        "adjacent_actors": true,
+        "seamless_traversal": true,
+        "simulated_rooms": 128,
+        "actors": 553,
+        "neighbor_ticks": 7891,
+        "handoffs": 1,
+        "menu": 0,
+        "game_mode": 5,
+        "submode": 0,
+        "updating": 1,
+        "scroll_y64": 64,
+        "mask64": 30,
+        "presentation": "world",
+        "scene_room": 119,
+        "scene_level": 0,
+        "ui_bounds": [
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "atlas_cache": {
+        "id": 47,
+        "ok": true,
+        "builds": 7,
+        "reuses": 83,
+        "bytes": 24117248
+      },
+      "deterministic_picture_sha256": {
+        "initial": "a9865e141e2053978b0697956e3a064452bef41e999aaf0d43b1014bb2f77b0c",
+        "repeat-0": "a9865e141e2053978b0697956e3a064452bef41e999aaf0d43b1014bb2f77b0c",
+        "repeat-1": "a9865e141e2053978b0697956e3a064452bef41e999aaf0d43b1014bb2f77b0c",
+        "repeat-2": "a9865e141e2053978b0697956e3a064452bef41e999aaf0d43b1014bb2f77b0c",
+        "repeat-3": "a9865e141e2053978b0697956e3a064452bef41e999aaf0d43b1014bb2f77b0c",
+        "resize-3840x720": "3eca0fc1e7b5d59b8f7ff4e03717d09f84732cb8ec586752f607522fcba2de3e",
+        "resize-600x1200": "23d07a4becd11d368f75ee55f1747c71b786a11bf52a4666ce0a755bc7d3fd0d",
+        "resize-2304x1440": "a9865e141e2053978b0697956e3a064452bef41e999aaf0d43b1014bb2f77b0c",
+        "resize-return": "a9865e141e2053978b0697956e3a064452bef41e999aaf0d43b1014bb2f77b0c",
+        "loaded-fit": "a9865e141e2053978b0697956e3a064452bef41e999aaf0d43b1014bb2f77b0c",
+        "atlas-paused": "991d655c4ad5ea5d8f8afd35f06f4a7a54c9deffaf9a5b65c1212ea1224861ba"
+      },
+      "current_atlas_load_exact": true
+    },
+    "candidate/portals": {
+      "passed": true,
+      "returncode": 0,
+      "command": [
+        "C:/Users/Matthew/AppData/Local/Programs/Python/Python312/python.exe",
+        "-X",
+        "utf8",
+        "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\zelda-nes19\\tools\\probe_world_portals.py",
+        "--exe",
+        "G:\\Temp\\Codex\\nes110-world-canvas-v1-20261030\\zelda-world\\candidate\\LegendOfZeldaNESRecomp.exe",
+        "--rom",
+        "G:\\Temp\\Codex\\nes110-world-canvas-v1-20261030\\zelda-world\\baserom.nes",
+        "--state",
+        "G:\\Temp\\Codex\\nes110-world-canvas-v1-20261030\\zelda-world\\features\\candidate\\canvas\\ready.state",
+        "--out",
+        "G:\\Temp\\Codex\\nes110-world-canvas-v1-20261030\\zelda-world\\features\\candidate\\portals",
+        "--port",
+        "32806",
+        "--dungeon-state-out",
+        "G:\\Temp\\Codex\\nes110-world-canvas-v1-20261030\\zelda-world\\features\\candidate\\dungeon.state"
+      ],
+      "phase_counts": {
+        "cave-entry": 8,
+        "cave_resizes": 3,
+        "cave-exit": 6,
+        "dungeon-entry": 10,
+        "dungeon-exit": 7
+      },
+      "portal_current_state_checks": [
+        "cave-entry-state",
+        "cave-exit-state",
+        "dungeon-entry-state",
+        "dungeon-exit-state"
+      ],
+      "dungeon_state_exported": true,
+      "cave_restored": "subroom",
+      "dungeon_level": 1
+    },
+    "candidate/overworld-effects": {
+      "passed": true,
+      "returncode": 0,
+      "command": [
+        "C:/Users/Matthew/AppData/Local/Programs/Python/Python312/python.exe",
+        "-X",
+        "utf8",
+        "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\zelda-nes19\\tools\\probe_world_effects.py",
+        "--exe",
+        "G:\\Temp\\Codex\\nes110-world-canvas-v1-20261030\\zelda-world\\candidate\\LegendOfZeldaNESRecomp.exe",
+        "--rom",
+        "G:\\Temp\\Codex\\nes110-world-canvas-v1-20261030\\zelda-world\\baserom.nes",
+        "--state",
+        "G:\\Temp\\Codex\\nes110-world-canvas-v1-20261030\\zelda-world\\features\\candidate\\canvas\\ready.state",
+        "--out",
+        "G:\\Temp\\Codex\\nes110-world-canvas-v1-20261030\\zelda-world\\features\\candidate\\overworld-effects",
+        "--port",
+        "32925",
+        "--adaptive"
+      ],
+      "menu_samples": 20,
+      "bomb_flash_chroma": 0,
+      "death_samples": 57,
+      "actual_game_over_text": "game-over",
+      "continue_page": "continue",
+      "continue_resizes": 3,
+      "returned_to_game": true,
+      "retry_presentation": "system-ui"
+    },
+    "candidate/dungeon-effects": {
+      "passed": true,
+      "returncode": 0,
+      "command": [
+        "C:/Users/Matthew/AppData/Local/Programs/Python/Python312/python.exe",
+        "-X",
+        "utf8",
+        "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\zelda-nes19\\tools\\probe_world_effects.py",
+        "--exe",
+        "G:\\Temp\\Codex\\nes110-world-canvas-v1-20261030\\zelda-world\\candidate\\LegendOfZeldaNESRecomp.exe",
+        "--rom",
+        "G:\\Temp\\Codex\\nes110-world-canvas-v1-20261030\\zelda-world\\baserom.nes",
+        "--state",
+        "G:\\Temp\\Codex\\nes110-world-canvas-v1-20261030\\zelda-world\\features\\candidate\\dungeon.state",
+        "--out",
+        "G:\\Temp\\Codex\\nes110-world-canvas-v1-20261030\\zelda-world\\features\\candidate\\dungeon-effects",
+        "--port",
+        "33519",
+        "--adaptive",
+        "--dungeon"
+      ],
+      "menu_samples": 20,
+      "bomb_flash_chroma": 0,
+      "death_samples": 57,
+      "actual_game_over_text": "game-over",
+      "continue_page": "continue",
+      "continue_resizes": 3,
+      "returned_to_game": true,
+      "retry_presentation": "system-ui"
+    }
+  },
+  "boundary_raw": "local-world-canvas-evidence.zip:zelda-world/features/{reference,candidate}/{canvas,portals,overworld-effects,dungeon-effects}/results.json and tcp.json",
+  "revised_root_fixture": {
+    "passed": true,
+    "command": [
+      "C:/msys64/mingw64/bin/gcc.exe",
+      "-O2",
+      "-std=c11",
+      "-Wall",
+      "-Wextra",
+      "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\world-canvas-unit-v2\\tests\\world_canvas_test.c",
+      "-o",
+      "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\world-canvas-unit-v2\\world-canvas-test.exe"
+    ],
+    "source_sha256": {
+      "src/zelda_world_canvas.c": "574e6f72b85ffa50ce0839d5efd63602f02019d75d4dc8f64253422e01de9085",
+      "src/zelda_world_canvas.h": "88629379749fb0f9040f5480e09a18ebcd3cdda02fc041b47cda29604ffc2574",
+      "tests/world_canvas_test.c": "8aa7a7ca137d09973a1a45e5cb8ecb29a3e17aa9ae5559cb94121d799a94b095"
+    },
+    "exe_sha256": "c43372c47d750f0834d4c3080df1128b7ee8b2e7d768ed3103061a316a51fc91",
+    "scope": "Root revised100canvas oracle; visible enabled-room raster mutation after reuse must rebuild and change observable pixel. Runtime A/B sources/binaries unchanged."
+  },
+  "independent_validation": {
+    "product_sha256": {
+      "candidate": "388d2b86d03f3c054c7cfa3745bc550fa92d44e50f012ed8fe339ce446030cb8",
+      "reference": "c2ef6f621dc33f89857e6654dd6d72bb11634eb6c85f2d0edaeaf91ba53348f9"
+    },
+    "issue": "beads-2dw.1.110",
+    "source_review": [
+      "Terrain reuse key includes dimensions/camera/background/raster pointer/revision/owned-valid flags/output pointer",
+      "Actor painted rectangles are restored; current HUD fully overwrites top64 rows",
+      "Inventory/local/system/continue/gameover and state-load/reset invalidate or release",
+      "OOM keeps completed full compositor output and disables reuse; dirty overflow invalidates next reuse",
+      "Reference adapter diff shows only common QA viewport controls against titlefb448b6; candidate links separate helper object",
+      "Other engine/voxel/native objects preserved; authoritative title gitlink4e8a5e08996571f7dc982a12dd912b12d7be9ced"
+    ],
+    "next_authorization": "No next candidate before final actual-game/doc acceptance, scoped open PR verification and durable Beads handoff",
+    "campaign": "beads-2wy8.1",
+    "role": "independent validation only",
+    "fixtures": {
+      "compiler": "C:/msys64/mingw64/bin/gcc.exe -O2 -std=c11 -Wall -Wextra",
+      "budget": {
+        "gpu": 0,
+        "cpu": 0.5,
+        "ram_gib": 1,
+        "disk_gib": 1
+      },
+      "independent_source": "canvas_independent_test.c",
+      "affinity_logical_cpu": 12,
+      "receipt": "receipt-final.json",
+      "author_full_canvases": 100,
+      "log": "run-final.log",
+      "result": "pass, no compiler diagnostics",
+      "independent_full_canvases": 240
+    },
+    "finding": {
+      "status": "resolved; independently recompiled and rerun",
+      "description": "Original raster-revision mutation was invalidated and outside the visible viewport",
+      "test_sha256": "8aa7a7ca137d09973a1a45e5cb8ecb29a3e17aa9ae5559cb94121d799a94b095",
+      "resolution": "Revised author fixture mutates room19 local(180,100) after reuse; asserts exact visible pixel and increased build count"
+    },
+    "status": "source-fixtures-boundaries-build-and-retained-A/B-evidence-pass; final docs/register/PR gate pending",
+    "item": "NES19",
+    "validation_game_launches": 0,
+    "runtime_source_sha256": {
+      "world": "14d81fd587e5962a23c86396163beaf7f792bc5e1b1296fd7233af583bb5d84b",
+      "header": "88629379749fb0f9040f5480e09a18ebcd3cdda02fc041b47cda29604ffc2574",
+      "canvas": "574e6f72b85ffa50ce0839d5efd63602f02019d75d4dc8f64253422e01de9085"
+    },
+    "boundary_review": {
+      "source": "../world-canvas-boundaries-v1.json",
+      "individual_legs": 8,
+      "all_individual_legs_pass": true,
+      "deterministic_picture_pairs": 11,
+      "all_picture_hashes_equal": true,
+      "paused_builds_before": 2,
+      "paused_builds_after": 2,
+      "paused_reuses_before": 8,
+      "paused_reuses_after": 17,
+      "atlas_simulated_rooms": 128,
+      "atlas_capacity_bytes": 24117248,
+      "both_world_and_dungeon_effects": "inventory20samples; bombchroma0; death57samples; 3Continue resizes; nativeContinue and Retrysystem-ui",
+      "visually_inspected_existing_pngs": [
+        "candidate/canvas/initial.png",
+        "candidate/canvas/atlas-paused.png"
+      ],
+      "no_game_launch_by_validator": true
+    },
+    "performance_review": {
+      "raw_archive_audit": "actual-evidence-audit.json",
+      "fit": "neutral; CPU medians1.015625s/1.015625s on DESKTOP-HN15M1H",
+      "atlas": "positive in this matched SERVER run;13.3125s/10.40625s=21.8309859155%; all5pair reductions18.34\u201324.23%",
+      "different_profiles_hosts": "Compared each A/B pair only within its own host/profile; no cross-host claim",
+      "warmups_excluded": true,
+      "all_setup_pictures_and_room_counts_match": true,
+      "all_correctness_fields_match": true
+    },
+    "supported_build_review": {
+      "json": "../supported-zelda-nes19-check.json",
+      "configure": "pass",
+      "changed_objects": [
+        "cyc_extras.c",
+        "zelda_world.c",
+        "zelda_world_canvas.c"
+      ],
+      "all_compiled": true,
+      "actual_optional_test_target": "pass100canvases",
+      "full_production_regeneration": "deferred to authorized final combined five-title gate"
+    }
+  },
+  "supported_build": {
+    "configure_argv": [
+      "C:/msys64/mingw64/bin/cmake.exe",
+      "-S",
+      "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\zelda-nes19",
+      "-B",
+      "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-zelda-nes19",
+      "-G",
+      "Ninja",
+      "-DCMAKE_BUILD_TYPE=Release",
+      "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+      "-DZELDA_BUILD_RENDER_TESTS=ON",
+      "-DCMAKE_C_COMPILER=C:/msys64/mingw64/bin/gcc.exe",
+      "-DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe",
+      "-DCMAKE_MAKE_PROGRAM=C:/msys64/mingw64/bin/ninja.exe",
+      "-DNESRECOMP_ROOT=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\engine-nes19",
+      "-DRECOMP_UI_ROOT=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+      "-DSDL2_DIR=G:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/cmake",
+      "-DNESRECOMP_ROM=F:/Projects/nesrecomp/LegendOfZeldaNESRecomp/Legend of Zelda.NES",
+      "-DNESRECOMP_HOST_COMPILER=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-cli-guarded-rom-v2\\NESRecomp.exe",
+      "-DNESRECOMP_PPU_IMPL=HLE",
+      "-DNESRECOMP_RECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+      "-DNESRECOMP_RBENGINE_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/retcomm-rbengine"
+    ],
+    "objects": [
+      {
+        "source": "G:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/zelda-nes19/src/cyc_extras.c",
+        "argv": [
+          "C:\\msys64\\mingw64\\bin\\gcc.exe",
+          "-DCYC_BUILD_REVISION=\"unknown\"",
+          "-DCYC_BUILD_VERSION=\"1.10.0\"",
+          "-DCYC_GAME_PLAYERS=1",
+          "-DCYC_GAME_REGION=0",
+          "-DCYC_MOD_GAME_ID=\"legend-of-zelda-us\"",
+          "-DCYC_MOD_ROM_CRC32=\"3fe272fb\"",
+          "-DCYC_WITH_SDL",
+          "-DNESRECOMP_CYCLE_HDPACK",
+          "-DNESRECOMP_CYCLE_HDPACK_MODS",
+          "-DNESRECOMP_CYCLE_PRESENTATION",
+          "-DNESRECOMP_ENABLE_MODS=1",
+          "-DNESRECOMP_GAME_PLAYERS=1",
+          "-DNESRECOMP_HDPACK_LAYER_PLANS=1",
+          "-DNESRECOMP_ISOLATED_NATIVE=1",
+          "-DNESRECOMP_NATIVE_INTERVALS=1",
+          "-DNESRECOMP_NATIVE_PRG_GUARDS=1",
+          "-DNESRECOMP_PPU_HLE=1",
+          "-DNESRECOMP_VOXEL_RETAINED_TERRAIN=1",
+          "-DZELDA_CYCLE",
+          "-D_CRT_SECURE_NO_WARNINGS",
+          "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine-nes19/runner/cyc",
+          "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine-nes19/runner/cyc/../include",
+          "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine-nes19/runner/include",
+          "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine-nes19/runner/cyc/../src",
+          "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/zelda-nes19/src",
+          "-isystem",
+          "G:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/cmake/../include",
+          "-O3",
+          "-DNDEBUG",
+          "-std=gnu11",
+          "-o",
+          "CMakeFiles\\LegendOfZeldaNESRecomp.dir\\src\\cyc_extras.c.obj",
+          "-c",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\zelda-nes19\\src\\cyc_extras.c"
+        ],
+        "object": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-zelda-nes19\\CMakeFiles\\LegendOfZeldaNESRecomp.dir\\src\\cyc_extras.c.obj",
+        "compiled": true
+      },
+      {
+        "source": "G:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/zelda-nes19/src/zelda_world.c",
+        "argv": [
+          "C:\\msys64\\mingw64\\bin\\gcc.exe",
+          "-DCYC_BUILD_REVISION=\"unknown\"",
+          "-DCYC_BUILD_VERSION=\"1.10.0\"",
+          "-DCYC_GAME_PLAYERS=1",
+          "-DCYC_GAME_REGION=0",
+          "-DCYC_MOD_GAME_ID=\"legend-of-zelda-us\"",
+          "-DCYC_MOD_ROM_CRC32=\"3fe272fb\"",
+          "-DCYC_WITH_SDL",
+          "-DNESRECOMP_CYCLE_HDPACK",
+          "-DNESRECOMP_CYCLE_HDPACK_MODS",
+          "-DNESRECOMP_CYCLE_PRESENTATION",
+          "-DNESRECOMP_ENABLE_MODS=1",
+          "-DNESRECOMP_GAME_PLAYERS=1",
+          "-DNESRECOMP_HDPACK_LAYER_PLANS=1",
+          "-DNESRECOMP_ISOLATED_NATIVE=1",
+          "-DNESRECOMP_NATIVE_INTERVALS=1",
+          "-DNESRECOMP_NATIVE_PRG_GUARDS=1",
+          "-DNESRECOMP_PPU_HLE=1",
+          "-DNESRECOMP_VOXEL_RETAINED_TERRAIN=1",
+          "-DZELDA_CYCLE",
+          "-D_CRT_SECURE_NO_WARNINGS",
+          "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine-nes19/runner/cyc",
+          "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine-nes19/runner/cyc/../include",
+          "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine-nes19/runner/include",
+          "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine-nes19/runner/cyc/../src",
+          "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/zelda-nes19/src",
+          "-isystem",
+          "G:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/cmake/../include",
+          "-O3",
+          "-DNDEBUG",
+          "-std=gnu11",
+          "-o",
+          "CMakeFiles\\LegendOfZeldaNESRecomp.dir\\src\\zelda_world.c.obj",
+          "-c",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\zelda-nes19\\src\\zelda_world.c"
+        ],
+        "object": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-zelda-nes19\\CMakeFiles\\LegendOfZeldaNESRecomp.dir\\src\\zelda_world.c.obj",
+        "compiled": true
+      },
+      {
+        "source": "G:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/zelda-nes19/src/zelda_world_canvas.c",
+        "argv": [
+          "C:\\msys64\\mingw64\\bin\\gcc.exe",
+          "-DCYC_BUILD_REVISION=\"unknown\"",
+          "-DCYC_BUILD_VERSION=\"1.10.0\"",
+          "-DCYC_GAME_PLAYERS=1",
+          "-DCYC_GAME_REGION=0",
+          "-DCYC_MOD_GAME_ID=\"legend-of-zelda-us\"",
+          "-DCYC_MOD_ROM_CRC32=\"3fe272fb\"",
+          "-DCYC_WITH_SDL",
+          "-DNESRECOMP_CYCLE_HDPACK",
+          "-DNESRECOMP_CYCLE_HDPACK_MODS",
+          "-DNESRECOMP_CYCLE_PRESENTATION",
+          "-DNESRECOMP_ENABLE_MODS=1",
+          "-DNESRECOMP_GAME_PLAYERS=1",
+          "-DNESRECOMP_HDPACK_LAYER_PLANS=1",
+          "-DNESRECOMP_ISOLATED_NATIVE=1",
+          "-DNESRECOMP_NATIVE_INTERVALS=1",
+          "-DNESRECOMP_NATIVE_PRG_GUARDS=1",
+          "-DNESRECOMP_PPU_HLE=1",
+          "-DNESRECOMP_VOXEL_RETAINED_TERRAIN=1",
+          "-DZELDA_CYCLE",
+          "-D_CRT_SECURE_NO_WARNINGS",
+          "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine-nes19/runner/cyc",
+          "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine-nes19/runner/cyc/../include",
+          "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine-nes19/runner/include",
+          "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/engine-nes19/runner/cyc/../src",
+          "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/zelda-nes19/src",
+          "-isystem",
+          "G:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/cmake/../include",
+          "-O3",
+          "-DNDEBUG",
+          "-std=gnu11",
+          "-o",
+          "CMakeFiles\\LegendOfZeldaNESRecomp.dir\\src\\zelda_world_canvas.c.obj",
+          "-c",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\zelda-nes19\\src\\zelda_world_canvas.c"
+        ],
+        "object": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-zelda-nes19\\CMakeFiles\\LegendOfZeldaNESRecomp.dir\\src\\zelda_world_canvas.c.obj",
+        "compiled": true
+      }
+    ],
+    "test_command": [
+      "C:/msys64/mingw64/bin/cmake.exe",
+      "--build",
+      "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-zelda-nes19",
+      "--target",
+      "zelda_world_canvas_test",
+      "--parallel",
+      "1"
+    ],
+    "test_passed": true,
+    "scope": "Current supported CMake configuration, three exact changed-source compile commands and real optional world-canvas test target. Full generated title link and final five-game owner build remain final combined gate."
+  },
+  "memory": {
+    "observed_atlas_capacity_bytes": 24117248,
+    "max_capacity_bytes": 33554432,
+    "scope": "Owned terrain allocation only, not process RSS; capacity persists after smaller resize until reset/release."
+  },
+  "settings": "Actual hidden SDL software1280x720/dummy video; audio emulated/mixed/queued to dummy output. Five alternating matched pairs after excluded warmup/setup. Frames1801..2101 include motion then stationary periods; pair stays on one host/configuration. CPU interval includes resumed gameplay and normal shutdown. Not physical GPU/FPS or all-motion promises.",
+  "limitations": [
+    "Fit has equal CPU medians and small quantized samples, not a proven win or proof of exact zero overhead. Atlas five-pair improvement is bounded to this actual route/host. Percentages incremental, not additive or pooled across hosts.",
+    "Moving viewports still rebuild. Incremental camera-shift reuse remains deferred; the measured large obstacle was repeated full-atlas repaint, not room material regeneration. Upload remains a separate NES24 opportunity.",
+    "Reference is prior world logic plus common passive QA CLI/TCP viewport controls/help, not the unmodified d94 predecessor. Reference/candidate packages and exact frozen identities are explicit.",
+    "The initial author fixture mutation was not observable. Corrected current100-canvas and independent240-canvas tests cover visible revision after reuse. Runtime and timed binary identities did not change.",
+    "Full supported generation/link, final combined five-title performance/feature gate and owner visual approval remain pending. No merge/release/visible owner game launch. FDS parked."
+  ],
+  "validator": {
+    "agent": "/root/validate_nes19",
+    "decision": "source/fixtures/raw performance/eight gameplay bundles/current CMake accepted; finalized docs/PR/durable-record handoff next"
+  },
+  "evidence_root": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028",
+  "pull_request": "pending"
+}

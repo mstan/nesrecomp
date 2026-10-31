@@ -21,7 +21,8 @@
     "2026-10-28-hd-record-results.json",
     "2026-10-28-presentation-bridge-results.json",
     "2026-10-28-prepared-picture-results.json",
-    "2026-10-28-retained-voxel-results.json"
+    "2026-10-28-retained-voxel-results.json",
+    "2026-10-30-world-canvas-results.json"
   ],
   "priorities": "Order expresses expected scope and evidence, not measured recoverable cost. Overlapping packages are not additive.",
   "acceptance": "Each game neutral or positive. Small mixed samples inconclusive. Shared original/candidate defects are separate. Native saves protected; old save-state compatibility never required.",
@@ -769,7 +770,7 @@
       "package": "seamless-world",
       "priority": "P2",
       "title": "Persistent world raster/material products",
-      "status": "open-unmeasured",
+      "status": "evaluated-selected-Zelda-retained-viewport",
       "evidence": [
         {
           "file": "src/zelda_world.c",
@@ -793,15 +794,29 @@
           "link": "https://github.com/mstan/LegendOfZeldaNESRecomp/blob/5d90eb7a10e13f5dd5c693a0204b29f7917ec198/src/zelda_world.c#L424"
         }
       ],
-      "remaining": "Room rasters are already cached. Remaining candidates are sharing unchanged world/material products across camera moves, preparing visible runs once and updating actor overlays without repainting every large atlas pixel.",
+      "remaining": "Persistent terrain viewport plus old-actor rectangle restoration selected for mode3; camera moves still rebuild. Incremental camera-shift reuse deferred, not architectural exhaustion; upload remains NES24. Native presentation boundaries/current-build loads qualified in both builds.",
       "affected_profiles": [
         "Zelda Seamless Fit/dungeon/atlas; bomb/menu/death presentation"
       ],
-      "next_decisive_check": "Use the same Fit/atlas interval as NES18 and separate already-cached terrain from final draw/upload cost.",
+      "next_decisive_check": "Final supported combined generation/link, five-title feature/performance and owner handoff. Reassess incremental camera shifts only when remaining measured costs select them.",
       "required_behavior": "Bomb-wide flash, inventory/death/Continue framing, arbitrary aspect, palettes, changing tiles and dungeon doors remain correct. Do not reintroduce 4:3 transitions.",
       "prior_issue": null,
-      "measured_additional_gain": null,
-      "execution_status": "remaining-evaluation"
+      "measured_additional_gain": [
+        {
+          "case": "zelda-world",
+          "host": "DESKTOP-HN15M1H",
+          "median_cpu_reduction_percent": 0.0,
+          "decision": "neutral/inconclusive within quantization/variation; no demonstrated gain"
+        },
+        {
+          "case": "zelda-atlas",
+          "host": "SERVER",
+          "median_cpu_reduction_percent": 21.830985915492963,
+          "decision": "positive in this bounded workload"
+        }
+      ],
+      "execution_status": "selected-scoped-seamless-world-viewport",
+      "result_file": "2026-10-30-world-canvas-results.json"
     },
     {
       "id": "NES20",
@@ -1209,12 +1224,12 @@
     "owner_handoff_ready": false
   },
   "execution_summary": {
-    "evaluated_decisions": 14,
+    "evaluated_decisions": 15,
     "partial_ids": [],
     "parked_ids": [
       "NES29"
     ],
-    "other_unresolved": 16,
+    "other_unresolved": 15,
     "note": "Qualified scope decisions, not architectural exhaustion or a wall-clock completion estimate. Final combined builds and owner approval remain separate."
   }
 }

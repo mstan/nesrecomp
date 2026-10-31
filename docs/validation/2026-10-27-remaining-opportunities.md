@@ -17,7 +17,7 @@ original HD runtime. See [HD results](2026-10-28-hd-plan-results.md), including
 the rejected universal packages and SMB's unchanged-runtime proof. Zelda's
 fixed SNROM SRAM code now joins the native deadline service; see
 [SRAM results](2026-10-28-sram-native-results.md). SERVER Fit improves5.128%
-and Remastered1.442%; stock is neutral/inconclusive. Fourteen items now have
+and Remastered1.442%; stock is neutral/inconclusive. Fifteen items now have
 qualified evaluation decisions; NES01 is qualified for whole stable HLE raster
 jobs and NES29 remains parked.
 Guarded native ROM is now evaluated under NES09; see
@@ -414,13 +414,20 @@ close the per-pixel raster or APU-event algorithm work under NES01/NES06.
   Evidence: [src/zelda_world_rooms.c:161](https://github.com/mstan/LegendOfZeldaNESRecomp/blob/5d90eb7a10e13f5dd5c693a0204b29f7917ec198/src/zelda_world_rooms.c#L161), [src/zelda_world_rooms.c:251](https://github.com/mstan/LegendOfZeldaNESRecomp/blob/5d90eb7a10e13f5dd5c693a0204b29f7917ec198/src/zelda_world_rooms.c#L251). Reuse `beads-2dw.18.4`.
 
 
-- [ ] **NES19 · P2 · Persistent world raster/material products**
+- [x] **NES19 · P2 · Persistent world raster/material products**
 
   Room rasters are already cached. Remaining candidates are sharing unchanged world/material products across camera moves, preparing visible runs once and updating actor overlays without repainting every large atlas pixel.
 
   Scope: Zelda Seamless Fit/dungeon/atlas; bomb/menu/death presentation.
 
-  Next: Use the same Fit/atlas interval as NES18 and separate already-cached terrain from final draw/upload cost.
+  Evaluation: Complete terrain viewport and old actor rectangle restoration
+  selected at Zelda `b2bd8fb`; engine runtime unchanged. Full seamless atlas
+  CPU median improves21.83% in five faster pairs; Fit is neutral/inconclusive.
+  Eight original/candidate boundary bundles pass, including bomb/menu/death,
+  real portals, resizing and current-build loads. See
+  [world viewport results](2026-10-30-world-canvas-results.md).
+  Camera changes still rebuild; incremental camera-shift reuse is explicitly
+  deferred, and upload remains NES24. Complete final combined owner builds.
 
   Preserve: Bomb-wide flash, inventory/death/Continue framing, arbitrary aspect, palettes, changing tiles and dungeon doors remain correct. Do not reintroduce 4:3 transitions.
 
@@ -449,7 +456,14 @@ close the per-pixel raster or APU-event algorithm work under NES01/NES06.
 
   Scope: Current-build save/rewind-heavy games; active HD/world records when enabled.
 
-  Next: Measure a current-build rewind/snapshot-heavy workload, including active HD/world mods, copied bytes, resident memory and tail latency. Reuse rejected scratch/allocation evidence.
+  Evaluation: Complete terrain viewport and old actor rectangle restoration
+  selected at Zelda `b2bd8fb`; engine runtime unchanged. Full seamless atlas
+  CPU median improves21.83% in five faster pairs; Fit is neutral/inconclusive.
+  Eight original/candidate boundary bundles pass, including bomb/menu/death,
+  real portals, resizing and current-build loads. See
+  [world viewport results](2026-10-30-world-canvas-results.md).
+  Camera changes still rebuild; incremental camera-shift reuse is explicitly
+  deferred, and upload remains NES24. Complete final combined owner builds.
 
   Preserve: Current-build save/load/rewind correctness and malformed-input rejection; persistent native saves protected. Old-state compatibility, old layout and private cache byte identity are not requirements.
 
