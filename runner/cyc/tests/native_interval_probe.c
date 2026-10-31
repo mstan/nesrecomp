@@ -124,7 +124,7 @@ static void sprite_output_cases(bool reference)
         unsigned limit = 0, wait;
         for (wait = 0; wait < 100000; ++wait) {
             limit = hw_native_interval_limit();
-            if (limit >= 12) break;
+            if (limit >= 12 && ppu.scanline < 240) break;
             access_bus(0, 0, false);
         }
         check(wait < 100000, "reach stable sprite fixture");
@@ -162,6 +162,63 @@ static void sprite_output_cases(bool reference)
     }
 }
 
+/* Rendering-on VBlank: acknowledge real NMI edges, then retain the asserted
+ * input while the device cursor owns settled nonvisible intervals. Register
+ * accesses, status reads and frame/pre-render boundaries use the bus clock. */
+static void idle_output_cases(bool reference)
+{
+    unsigned idle_spans = 0, high_spans = 0, edges = 0;
+    bool decay = false;
+    /* Let the real power-on register-write inhibit expire. */
+    for (unsigned i = 0; i < 30000; ++i) access_bus(0, 0, false);
+    access_bus(0x4017, 0x40, true);
+    access_bus(0x4015, 0, true);
+    access_bus(0x2000, 0x80, true);
+    access_bus(0x2001, 0x1e, true);
+    for (unsigned q = 0; q < 64; ++q) {
+        if (q >= 24 && q % 11 == 0) access_bus(0x2001, (q & 1) ? 0 : 0x1e, true);
+        if (q >= 24 && q % 7 == 0) access_bus(0x2002, 0, false);
+        if (q >= 24 && q % 13 == 0) access_bus(0x2000, (q & 1) ? 0 : 0x80, true);
+        for (unsigned i = 0; i < 2048;) {
+            if (cpu.nmi_edge) { ++edges; cpu.nmi_edge = 0; }
+            unsigned n = hw_native_interval_limit();
+            if (n > 2048 - i) n = 2048 - i;
+            if (n && ppu.scanline >= 240) {
+                if (!decay && n >= 3) {
+                    /* Cross two actual decay deadlines within this span. */
+                    ppu.io_bus = 0x81;
+                    ppu.io_decay_clock = 900;
+                    ppu.io_decay_next = ppu.io_decay_deadline[0] = 902;
+                    ppu.io_decay_deadline[7] = 907;
+                    decay = true;
+                }
+                ++idle_spans;
+                high_spans += cpu.nmi_input != 0;
+                cpu.nmi_edge = 1;
+                check(!hw_native_interval_limit(), "pending NMI edge refusal");
+                cpu.nmi_edge = 0;
+            }
+            if (!n || reference) { access_bus(0, 0, false); ++i; }
+            else {
+                hw.cpu_addr = 0; hw.cpu_reading = 1;
+                hw.data_driven = 1; hw.data_bus = hw.internal_bus = hw.ram[0];
+                hw_native_interval_run(n); i += n;
+            }
+        }
+        printf("idle %u %016llx %016llx %u%u %u\n", q,
+               (unsigned long long)cyc_hw_state_hash(),
+               (unsigned long long)cyc_mem_state_hash(),
+               cpu.nmi_input, cpu.nmi_edge, edges);
+    }
+    if (idle_spans <= 10 || high_spans <= 10)
+        fprintf(stderr, "idle coverage mapper=%u align=%u spans=%u high=%u edges=%u\n",
+                hw_cart.mapper, hw.align, idle_spans, high_spans, edges);
+    check(idle_spans > 10 && high_spans > 10, "settled VBlank and high NMI exercised");
+    check(decay, "idle decay deadlines exercised");
+    access_bus(0x2000, 0, true);
+    cpu.nmi_edge = 0;
+}
+
 int main(int argc, char **argv)
 {
     bool reference = argc > 1 && strstr(argv[1], "reference") != NULL;
@@ -179,6 +236,11 @@ int main(int argc, char **argv)
         for (unsigned align = 0; align < 4; ++align) {
             check(cyc_load_ines(image, 16u + image[4] * 16384u + image[5] * 8192u), "load fixture");
             check(cyc_set_region(CYC_REGION_NTSC), "region");
+            cyc_power_on((uint8_t)align);
+            check(cyc_audio_enable(align & 1 ? 48000 : 44100), "idle audio");
+            check(cyc_zapper_attach(2), "idle Zapper");
+            cyc_set_zapper(120, 100, true);
+            idle_output_cases(reference);
             cyc_power_on((uint8_t)align);
             check(cyc_audio_enable(align & 1 ? 48000 : 44100), "audio");
             check(cyc_zapper_attach(2), "Zapper");
@@ -215,7 +277,7 @@ int main(int argc, char **argv)
                 stimulus(i);
                 unsigned n = hw_native_interval_limit();
                 if (n) {
-                    check(n <= 80, "bounded visible span");
+                    check(n <= (ppu.scanline < 240 ? 80u : 109u), "bounded native span");
                     uint8_t saved_tick = hw.tick;
                     hw.tick = 0;
                     check(!hw_native_interval_limit(), "partial cycle refusal");
@@ -223,9 +285,10 @@ int main(int argc, char **argv)
                     cyc_trace_enabled = true;
                     check(!hw_native_interval_limit(), "trace refusal");
                     cyc_trace_enabled = false;
-                    cpu.nmi_input = 1;
+                    uint8_t saved_nmi = cpu.nmi_input;
+                    cpu.nmi_input = !ppu_nmi_output();
                     check(!hw_native_interval_limit(), "NMI refusal");
-                    cpu.nmi_input = 0;
+                    cpu.nmi_input = saved_nmi;
                     hw.irq_line = 1;
                     check(!hw_native_interval_limit(), "IRQ refusal");
                     hw.irq_line = 0;
@@ -239,7 +302,8 @@ int main(int argc, char **argv)
                         hw_cart.m.irq_out = saved_out;
                         uint8_t saved_table = ppu.bg_table, saved_a12 = hw_cart.m.a12;
                         ppu.bg_table = 1; hw_cart.m.a12 = 0;
-                        check(!hw_native_interval_limit(), "possible first A12 rise refusal");
+                        if (ppu.scanline < 240)
+                            check(!hw_native_interval_limit(), "possible first A12 rise refusal");
                         ppu.bg_table = saved_table; hw_cart.m.a12 = saved_a12;
                     }
                     hw_extra_timing.extra_scanlines = 1;

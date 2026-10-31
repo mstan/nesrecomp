@@ -200,7 +200,7 @@ unsigned hw_native_interval_limit(void)
         (hw_cart.mapper != 0 && hw_cart.mapper != 1 &&
          hw_cart.mapper != 4 && hw_cart.mapper != 66) ||
         hw.irq_line || (hw_cart.mapper == 4 && hw_cart.m.irq_out) ||
-        cpu.nmi_input || cpu.nmi_edge || ppu_nmi_output() ||
+        cpu.nmi_edge || cpu.nmi_input != ppu_nmi_output() ||
         !apu_native_interval_ready()) return 0;
     /* On extended SxROM, PPU A12 can also select CPU PRG/RAM signals. Such
      * boards need a bank-selection deadline before admitting CPU ROM reads. */
@@ -325,7 +325,7 @@ void hw_native_interval_run(unsigned cycles)
     ppu_native_interval_run(cycles, hw.align);
     apu_native_interval_run(cycles);
     /* Both sampled inputs are proven constant throughout this interval. */
-    cpu_nmi_input(false);
+    cpu_nmi_input(ppu_nmi_output());
     apu_sample_irq();
     hw.cycles += cycles;
     hw_dma_stalls = 0;

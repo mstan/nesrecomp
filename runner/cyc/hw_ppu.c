@@ -108,6 +108,21 @@ HW_ALWAYS_INLINE void io_bus_decay(void)
 
 /* ---- VRAM bus ---- */
 
+/* Same hold-time deadlines as io_bus_decay, advanced once per stable span. */
+static void io_bus_decay_span(unsigned dots)
+{
+    while (ppu.io_bus && dots) {
+        uint64_t until = ppu.io_decay_next - ppu.io_decay_clock;
+        if (!until || until > dots) { ppu.io_decay_clock += dots; break; }
+        ppu.io_decay_clock += until;
+        dots -= (unsigned)until;
+        for (unsigned bit = 0; bit < 8; ++bit)
+            if (ppu.io_decay_deadline[bit] == ppu.io_decay_clock)
+                ppu.io_bus &= (uint8_t)~(1u << bit);
+        io_bus_next_deadline();
+    }
+}
+
 static inline uint16_t ciram_index(void)
 {
     /* CIRAM A10 comes from the cartridge (pin 22), not from the PPU. */
@@ -1016,8 +1031,33 @@ HW_ALWAYS_INLINE void half_dot_status(void)
  * state machine) clears it. The general path runs otherwise, and
  * native/--interp-only comparisons cover both. */
 
-enum { DOT_UNKNOWN, DOT_BLANK, DOT_GENERAL, DOT_RENDER };
+enum { DOT_UNKNOWN, DOT_BLANK, DOT_GENERAL, DOT_RENDER, DOT_IDLE };
 static uint8_t dot_kind;
+
+/* Nonvisible, settled dots have neither pixels nor VRAM/OAM fetches. Keep
+ * scanline/frame/status edges and register latch settling on the coupled
+ * clock. Register accesses and restore invalidate this cached proof. */
+static bool idle_span_ready(void)
+{
+    return !hw_pal() && ppu.scanline >= 240 && ppu.scanline <= 260 &&
+           ppu.dot >= 8 && ppu.dot < 337 && sm_rest &&
+           (!rendering() || ppu.render_count == 5) &&
+           ppu.eval_bg == ppu.show_bg && ppu.eval_spr == ppu.show_spr &&
+           ppu.instant_bg == ppu.show_bg && ppu.instant_spr == ppu.show_spr &&
+           ppu.oam_buffer == ppu.oam_buffer_in &&
+           !(ppu.skipped_dot | ppu.w2001_delay | ppu.w2001_oam_delay |
+             ppu.w2001_emph_delay | ppu.w2005_delay | ppu.w2006_delay |
+             ppu.oamc_disabled | ppu.oamc_disabled_now | ppu.oamc_pending |
+             ppu.palc_disabled | ppu.palc_v_left | ppu.read2002 |
+             ppu.vset | ppu.vblank_pending | ppu.oam2_reset | ppu.commit |
+             ppu.s0hit_pending1 | ppu.s0hit_pending2) &&
+           ppu.vset_latch1 && !ppu.vset_latch2 &&
+           !hw_cart.m.pattern_pending
+#ifdef NESRECOMP_CYCLE_HDPACK
+           && !hdpack_recording()
+#endif
+           ;
+}
 
 static bool is_blank(void)
 {
@@ -1374,7 +1414,8 @@ void ppu_dot(void)
 #endif
     } else {
         general_dot();
-        if (!rendering()) dot_kind = DOT_UNKNOWN;
+        if (idle_span_ready()) dot_kind = DOT_IDLE;
+        else if (!rendering()) dot_kind = DOT_UNKNOWN;
 #if NESRECOMP_PPU_HLE || !NESRECOMP_PPU_LLE_REFERENCE
         else dot_kind = render_span_ready() ? DOT_RENDER : DOT_GENERAL;
 #endif
@@ -1393,7 +1434,8 @@ void ppu_half_dot(void)
 #endif
     } else {
         general_half_dot();
-        if (!rendering()) dot_kind = DOT_UNKNOWN;
+        if (idle_span_ready()) dot_kind = DOT_IDLE;
+        else if (!rendering()) dot_kind = DOT_UNKNOWN;
 #if NESRECOMP_PPU_HLE || !NESRECOMP_PPU_LLE_REFERENCE
         else if (render_span_ready()) dot_kind = DOT_RENDER;
 #endif
@@ -1418,6 +1460,8 @@ static void render_clock_dot(void)
 unsigned ppu_native_interval_limit(void)
 {
 #if NESRECOMP_PPU_HLE || !NESRECOMP_PPU_LLE_REFERENCE
+    if (dot_kind == DOT_IDLE && ppu.dot < 334)
+        return (337u - ppu.dot) / 3u;
     /* MMC3 can clock an IRQ at the first pattern fetch after a long A12-low
      * interval. Leave that edge to the coupled clock. Once A12 is high, the
      * background's four-dot low gaps stay below its three-CPU-cycle filter.
@@ -1503,20 +1547,6 @@ static void render_prepared_sprite_dot(uint8_t sprite)
  * families have no read-triggered CHR or nametable mappings. Only A12 edges
  * need publication inside the job; OAM evaluation is an independent pair
  * service. Boundaries and recording consumers retain their adapters. */
-static void raster_decay(unsigned dots)
-{
-    while (ppu.io_bus && dots) {
-        uint64_t until = ppu.io_decay_next - ppu.io_decay_clock;
-        if (!until || until > dots) { ppu.io_decay_clock += dots; break; }
-        ppu.io_decay_clock += until;
-        dots -= (unsigned)until;
-        for (unsigned bit = 0; bit < 8; ++bit)
-            if (ppu.io_decay_deadline[bit] == ppu.io_decay_clock)
-                ppu.io_bus &= (uint8_t)~(1u << bit);
-        io_bus_next_deadline();
-    }
-}
-
 static void raster_oam(unsigned first, bool final_half)
 {
     if (first <= 64) {
@@ -1648,7 +1678,7 @@ static void raster_tile(const uint8_t *sprite, unsigned align,
         ppu.color[i] = color[10 - i];
         if (cyc_background_enabled) cyc_background_pipe[i] = background[10 - i];
     }
-    raster_decay(8);
+    io_bus_decay_span(8);
     ++ppu_native_raster_tiles;
 }
 
@@ -1734,6 +1764,27 @@ static void run_sprite_output_span(unsigned cycles, unsigned align)
 void ppu_native_interval_run(unsigned cycles, unsigned align)
 {
 #if NESRECOMP_PPU_HLE || !NESRECOMP_PPU_LLE_REFERENCE
+    if (dot_kind == DOT_IDLE) {
+        unsigned dots = cycles * 3u;
+        ppu.dot += dots;
+        if (hw_zapper.port) hw_zapper.dots += dots;
+        ppu.overflow_late = ppu.overflow;
+        ppu.s0hit_late = ppu.s0hit;
+        ppu.blnk_latch = 1;
+        ppu.pal_enable = (ppu.vbus & 0x3f00) == 0x3f00;
+        ppu.rd = ppu.ale = ppu.wr = ppu.copy_v = 0;
+        ppu.oam_latch = ppu.oam_buffer;
+        if (!rendering()) { ppu.render_count = 0; ppu.vbus = ppu.v; }
+        else ppu.render_count = 5;
+        /* At least three dots: both output pipelines settle to element 0. */
+        for (unsigned i = 1; i < 4; ++i) {
+            ppu.color[i] = ppu.color[0];
+            if (cyc_background_enabled) cyc_background_pipe[i] = cyc_background_pipe[0];
+        }
+        /* Decay is elapsed-dot based even when no pixels are produced. */
+        io_bus_decay_span(dots);
+        return;
+    }
     if (cycles >= 8
 #ifdef NESRECOMP_CYCLE_HDPACK
         && !hdpack_recording()
