@@ -116,7 +116,9 @@
         }
       ],
       "execution_status": "selected-five-title-stock-and-Zelda-Fit-HD-qualified",
-      "results": "2026-10-28-raster-job-results.json"
+      "results": "2026-10-28-raster-job-results.json",
+      "candidate_state": "selected-qualified-scope",
+      "candidate_decision_recorded": true
     },
     {
       "id": "NES02",
@@ -155,7 +157,9 @@
       "required_behavior": "NMI edge and IRQ poll ordering, DMA readiness, open bus, mapper clocks, observable accesses and hook/stop deadlines. An unchanged number of helper calls is not a contract.",
       "prior_issue": null,
       "measured_additional_gain": null,
-      "execution_status": "selected-stock-qualified-five-title-native-interval-package-v2"
+      "execution_status": "selected-stock-qualified-five-title-native-interval-package-v2",
+      "candidate_state": "selected-qualified-scope",
+      "candidate_decision_recorded": true
     },
     {
       "id": "NES03",
@@ -194,7 +198,9 @@
       "required_behavior": "Interrupt boundaries, mapper writes and slot changes, hooks/read substitutions, self-modifying code, DMA and portable fallback. Fix the generator, never emitted C.",
       "prior_issue": null,
       "measured_additional_gain": null,
-      "execution_status": "selected-stock-qualified-five-title-native-interval-package-v2"
+      "execution_status": "selected-stock-qualified-five-title-native-interval-package-v2",
+      "candidate_state": "selected-qualified-scope",
+      "candidate_decision_recorded": true
     },
     {
       "id": "NES04",
@@ -226,7 +232,9 @@
       "required_behavior": "Every folded byte remains the visible byte, mapping/write changes exit or invalidate, restore revalidates and unsupported mappings interpret. Earlier 10.1% is emulated-cycle share, not possible CPU savings.",
       "prior_issue": "beads-2dw.1.105",
       "measured_additional_gain": null,
-      "execution_status": "evaluated-selected-fixed-SNROM-SRAM-with-device-deadlines"
+      "execution_status": "evaluated-selected-fixed-SNROM-SRAM-with-device-deadlines",
+      "candidate_state": "selected-qualified-scope",
+      "candidate_decision_recorded": true
     },
     {
       "id": "NES05",
@@ -258,7 +266,9 @@
       "required_behavior": "Bank-qualified cheats, data overlays, MMC5 read snoops, actual active board devices and configuration changes. Do not silently specialize away supported mods.",
       "prior_issue": null,
       "measured_additional_gain": null,
-      "execution_status": "selected-stock-qualified-five-title-native-interval-package-v2"
+      "execution_status": "selected-stock-qualified-five-title-native-interval-package-v2",
+      "candidate_state": "selected-qualified-scope",
+      "candidate_decision_recorded": true
     },
     {
       "id": "NES06",
@@ -290,7 +300,9 @@
       "required_behavior": "PCM, phase, output filters, envelopes, frame IRQ, DMC bus steals and controller delays. Exact old floating-point accumulation may require a matching arithmetic formulation or conservative fallback.",
       "prior_issue": null,
       "measured_additional_gain": null,
-      "execution_status": "selected-base-APU-event-spans-stock-qualified-enhancement-and-expansion-evaluation-open"
+      "execution_status": "selected-base-APU-event-spans-stock-qualified-enhancement-and-expansion-evaluation-open",
+      "candidate_state": "selected-qualified-scope",
+      "candidate_decision_recorded": true
     },
     {
       "id": "NES07",
@@ -323,7 +335,9 @@
       "prior_issue": null,
       "measured_additional_gain": null,
       "execution_status": "deferred-after-scoped-DMA-heavy-gameplay-attribution",
-      "result_file": "2026-10-31-dma-service-results.json"
+      "result_file": "2026-10-31-dma-service-results.json",
+      "candidate_state": "prepared-or-deferred",
+      "candidate_decision_recorded": false
     },
     {
       "id": "NES08",
@@ -359,7 +373,9 @@
         "other_games": "neutral/inconclusive; raw medians and negative samples retained"
       },
       "execution_status": "selected-for-final-combined-integration",
-      "result_file": "2026-10-31-blank-interval-results.json"
+      "result_file": "2026-10-31-blank-interval-results.json",
+      "candidate_state": "selected-qualified-scope",
+      "candidate_decision_recorded": true
     },
     {
       "id": "NES09",
@@ -393,7 +409,9 @@
       "measured_additional_gain": null,
       "execution_status": "evaluated-selected-qualified-Zelda-atomic-PRG-guarded-native-ROM-two-dispatch-families",
       "execution_result": "2026-10-28-guarded-rom-results.json",
-      "execution_next": "Further native coverage only when built gameplay shows meaningful remaining interpreted cost; final combined regeneration and owner handoff remain."
+      "execution_next": "Further native coverage only when built gameplay shows meaningful remaining interpreted cost; final combined regeneration and owner handoff remain.",
+      "candidate_state": "selected-qualified-scope",
+      "candidate_decision_recorded": true
     },
     {
       "id": "NES10",
@@ -429,7 +447,9 @@
         "zelda_fit": "neutral/inconclusive; mixed samples retained"
       },
       "execution_status": "selected-for-final-combined-integration",
-      "result_file": "2026-10-31-native-service-results.json"
+      "result_file": "2026-10-31-native-service-results.json",
+      "candidate_state": "selected-qualified-scope",
+      "candidate_decision_recorded": true
     },
     {
       "id": "NES11",
@@ -501,7 +521,9 @@
       ],
       "execution_status": "selected-scoped-Zelda-prepared-picture",
       "result_file": "2026-10-28-prepared-picture-results.json",
-      "pull_request": "https://github.com/mstan/LegendOfZeldaNESRecomp/pull/11"
+      "pull_request": "https://github.com/mstan/LegendOfZeldaNESRecomp/pull/11",
+      "candidate_state": "selected-qualified-scope",
+      "candidate_decision_recorded": true
     },
     {
       "id": "NES12",
@@ -537,7 +559,9 @@
         "zelda_atlas": "neutral/inconclusive; raw median -.2604%, mixed pairs"
       },
       "execution_status": "evaluated-unselected-prototype",
-      "result_file": "2026-10-31-chr-plan-results.json"
+      "result_file": "2026-10-31-chr-plan-results.json",
+      "candidate_state": "prototype-evaluated-not-selected",
+      "candidate_decision_recorded": true
     },
     {
       "id": "NES13",
@@ -592,7 +616,9 @@
         }
       ],
       "execution_status": "evaluated-two-rejected-prototypes",
-      "results": "2026-10-28-hd-record-results.json"
+      "results": "2026-10-28-hd-record-results.json",
+      "candidate_state": "prototype-evaluated-not-selected",
+      "candidate_decision_recorded": true
     },
     {
       "id": "NES14",
@@ -631,7 +657,9 @@
       "required_behavior": "All supported condition semantics, sprite/background blending and fallback pixels; do not claim unsupported pack audio or conditions become implemented.",
       "prior_issue": null,
       "measured_additional_gain": null,
-      "execution_status": "evaluated-selected-qualified-Zelda-layered-module-others-original-runtime"
+      "execution_status": "evaluated-selected-qualified-Zelda-layered-module-others-original-runtime",
+      "candidate_state": "selected-qualified-scope",
+      "candidate_decision_recorded": true
     },
     {
       "id": "NES15",
@@ -657,7 +685,9 @@
       "prior_issue": null,
       "measured_additional_gain": null,
       "execution_status": "evaluated-diagnostic-attribution-no-implementation",
-      "results": "2026-10-28-presentation-bridge-results.json"
+      "results": "2026-10-28-presentation-bridge-results.json",
+      "candidate_state": "prepared-or-deferred",
+      "candidate_decision_recorded": false
     },
     {
       "id": "NES16",
@@ -719,7 +749,9 @@
         }
       ],
       "execution_status": "deferred-after-two-built-game-experiments",
-      "result_file": "2026-10-31-wide-view-results.json"
+      "result_file": "2026-10-31-wide-view-results.json",
+      "candidate_state": "prototype-evaluated-not-selected",
+      "candidate_decision_recorded": true
     },
     {
       "id": "NES17",
@@ -769,7 +801,9 @@
       "pull_requests": {
         "engine": "https://github.com/mstan/nesrecomp/pull/85",
         "zelda": "https://github.com/mstan/LegendOfZeldaNESRecomp/pull/12"
-      }
+      },
+      "candidate_state": "selected-qualified-scope",
+      "candidate_decision_recorded": true
     },
     {
       "id": "NES18",
@@ -821,7 +855,9 @@
         }
       ],
       "execution_status": "selected-Fit-performance-and-dungeon-adaptive-full-map-correctness",
-      "results": "2026-10-28-isolated-native-results.json"
+      "results": "2026-10-28-isolated-native-results.json",
+      "candidate_state": "selected-qualified-scope",
+      "candidate_decision_recorded": true
     },
     {
       "id": "NES19",
@@ -875,7 +911,9 @@
       ],
       "execution_status": "selected-scoped-seamless-world-viewport",
       "result_file": "2026-10-30-world-canvas-results.json",
-      "pull_request": "https://github.com/mstan/LegendOfZeldaNESRecomp/pull/13"
+      "pull_request": "https://github.com/mstan/LegendOfZeldaNESRecomp/pull/13",
+      "candidate_state": "selected-qualified-scope",
+      "candidate_decision_recorded": true
     },
     {
       "id": "NES20",
@@ -915,7 +953,9 @@
       "prior_issue": null,
       "measured_additional_gain": null,
       "execution_status": "deferred-after-isolation-versus-guest-execution-attribution",
-      "results": "2026-10-28-isolated-native-results.json"
+      "results": "2026-10-28-isolated-native-results.json",
+      "candidate_state": "prepared-or-deferred",
+      "candidate_decision_recorded": false
     },
     {
       "id": "NES21",
@@ -987,7 +1027,9 @@
       "execution_status": "selected-scoped-stable-history-retention",
       "result_file": "2026-10-31-rewind-history-results.json",
       "runtime_commit": "8df7b500e88466fe5dfd7fd78a555b114ba85071",
-      "pull_request": "https://github.com/mstan/nesrecomp/pull/86"
+      "pull_request": "https://github.com/mstan/nesrecomp/pull/86",
+      "candidate_state": "selected-qualified-scope",
+      "candidate_decision_recorded": true
     },
     {
       "id": "NES22",
@@ -1020,7 +1062,9 @@
       "prior_issue": "beads-2dw.1.100",
       "measured_additional_gain": null,
       "execution_status": "evaluated-unselected-prototype",
-      "result_file": "2026-10-31-rollback-digest-results.json"
+      "result_file": "2026-10-31-rollback-digest-results.json",
+      "candidate_state": "prototype-evaluated-not-selected",
+      "candidate_decision_recorded": true
     },
     {
       "id": "NES23",
@@ -1053,7 +1097,9 @@
       "prior_issue": null,
       "measured_additional_gain": null,
       "execution_status": "deferred-after-scoped-production-attribution",
-      "result_file": "2026-10-31-observer-results.json"
+      "result_file": "2026-10-31-observer-results.json",
+      "candidate_state": "prepared-or-deferred",
+      "candidate_decision_recorded": false
     },
     {
       "id": "NES24",
@@ -1086,7 +1132,9 @@
       "prior_issue": null,
       "measured_additional_gain": null,
       "execution_status": "deferred-after-two-built-game-screening-experiments",
-      "result_file": "2026-10-31-present-upload-results.json"
+      "result_file": "2026-10-31-present-upload-results.json",
+      "candidate_state": "prototype-evaluated-not-selected",
+      "candidate_decision_recorded": true
     },
     {
       "id": "NES25",
@@ -1119,7 +1167,9 @@
       "prior_issue": null,
       "measured_additional_gain": null,
       "execution_status": "evaluated-attribution-only",
-      "result_file": "2026-10-31-audio-host-results.json"
+      "result_file": "2026-10-31-audio-host-results.json",
+      "candidate_state": "prepared-or-deferred",
+      "candidate_decision_recorded": false
     },
     {
       "id": "NES26",
@@ -1152,7 +1202,9 @@
       "prior_issue": null,
       "measured_additional_gain": null,
       "execution_status": "evaluated-historical-negative-reused",
-      "result_file": "2026-10-31-pacing-reuse-results.json"
+      "result_file": "2026-10-31-pacing-reuse-results.json",
+      "candidate_state": "prepared-or-deferred",
+      "candidate_decision_recorded": false
     },
     {
       "id": "NES27",
@@ -1193,7 +1245,9 @@
         }
       ],
       "execution_status": "evaluated-selected-SMB1-current-O3",
-      "result_file": "2026-10-31-compiler-policy-results.json"
+      "result_file": "2026-10-31-compiler-policy-results.json",
+      "candidate_state": "selected-qualified-scope",
+      "candidate_decision_recorded": true
     },
     {
       "id": "NES28",
@@ -1226,7 +1280,9 @@
       "prior_issue": null,
       "measured_additional_gain": null,
       "execution_status": "evaluated-current-immutable-row-worker-negative",
-      "result_file": "2026-10-31-visual-jobs-results.json"
+      "result_file": "2026-10-31-visual-jobs-results.json",
+      "candidate_state": "prototype-evaluated-not-selected",
+      "candidate_decision_recorded": true
     },
     {
       "id": "NES29",
@@ -1258,7 +1314,9 @@
       "required_behavior": "Disk files/status/errors, writes/native progress, side routing, RAM publication and game-visible completion/interrupt timing; distinguish CPU savings from an elective faster-loading behavior change.",
       "prior_issue": "beads-2dw.1.74",
       "measured_additional_gain": null,
-      "execution_status": "parked-owner-exclusion"
+      "execution_status": "parked-owner-exclusion",
+      "candidate_state": "owner-parked",
+      "candidate_decision_recorded": false
     },
     {
       "id": "NES30",
@@ -1291,7 +1349,9 @@
       "prior_issue": null,
       "measured_additional_gain": null,
       "execution_status": "evaluated-five-title-board-inventory",
-      "result_file": "2026-10-31-complex-board-scope-results.json"
+      "result_file": "2026-10-31-complex-board-scope-results.json",
+      "candidate_state": "prepared-or-deferred",
+      "candidate_decision_recorded": false
     },
     {
       "id": "NES31",
@@ -1324,7 +1384,9 @@
       "prior_issue": null,
       "measured_additional_gain": null,
       "execution_status": "evaluated-existing-cost-and-conditional-scope",
-      "result_file": "2026-10-31-startup-scope-results.json"
+      "result_file": "2026-10-31-startup-scope-results.json",
+      "candidate_state": "prepared-or-deferred",
+      "candidate_decision_recorded": false
     }
   ],
   "execution": {
@@ -1338,15 +1400,29 @@
     "retained_implementations": [],
     "new_performance_results": [],
     "owner_handoff_ready": false,
-    "phase": "opportunities-evaluated-final-combined-gate-pending"
+    "phase": "selected-package-final-game-validation-with-eight-deferred-areas"
   },
   "execution_summary": {
-    "evaluated_decisions": 30,
+    "evaluated_decisions": 22,
     "partial_ids": [],
     "parked_ids": [
       "NES29"
     ],
-    "other_unresolved": 0,
-    "note": "Qualified scope decisions, not architectural exhaustion or a wall-clock completion estimate. Final combined builds and owner approval remain separate."
+    "other_unresolved": 8,
+    "note": "Sixteen overlapping scoped selections and six actual prototype-disposition areas; not22independent wins or whole-area exhaustion. Eight attribution/historical/inventory/conditional deferrals remain preparation, not completed candidate burndown. FDS29 owner-parked; finalfivegame validation/ownerapproval pending.",
+    "candidate_decision_areas": 22,
+    "scoped_selection_areas": 16,
+    "prototype_disposition_areas": 6,
+    "prepared_or_deferred_areas": 8,
+    "deferred_ids": [
+      "NES07",
+      "NES15",
+      "NES20",
+      "NES23",
+      "NES25",
+      "NES26",
+      "NES30",
+      "NES31"
+    ]
   }
 }

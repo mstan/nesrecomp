@@ -1,0 +1,616 @@
+{
+  "scope": "Fresh supported CLI/five-game checkpoint for selected package; eight deferred areas remain to evaluate; no owner approval/merge/release",
+  "engine_source": "3c9a2ba392b82eec0b1df36bdb96c01a9af7c80c",
+  "engine_remote_base": "fc0bf3fa46a710464960c0a1f2d3b83b4d345600",
+  "source_freeze": {
+    "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-source-freeze-v1.json",
+    "sha256": "80dca3d830934f2cf92a2e2ad59145722528c88b4335221bdc8f777b46f64341"
+  },
+  "games": {
+    "smb": {
+      "product": {
+        "title": "smb",
+        "exe": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-build-smb\\SuperMarioBrosRecomp.exe",
+        "sha256": "165410ddea6a388ce28efdaade2ad4511d62d078105cfdba16740002d4668a7a",
+        "bytes": 8290655,
+        "engine_head": "3c9a2ba392b82eec0b1df36bdb96c01a9af7c80c",
+        "title_head": "39dc829369664ded471d8a88279e2b80a4394596",
+        "rom": "F:\\Projects\\nesrecomp\\SuperMarioBrosRecomp\\baserom.nes",
+        "rom_sha256": "f61548fdf1670cffefcc4f0b7bdcdd9eaba0c226e3b74f8666071496988248de",
+        "build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-build-smb",
+        "commands": [
+          {
+            "argv": [
+              "C:/msys64/mingw64/bin/cmake.exe",
+              "-S",
+              "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-smb",
+              "-B",
+              "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-build-smb",
+              "-G",
+              "Ninja",
+              "-DCMAKE_BUILD_TYPE=Release",
+              "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+              "-DCMAKE_C_COMPILER=C:/msys64/mingw64/bin/gcc.exe",
+              "-DCMAKE_MAKE_PROGRAM=C:/msys64/mingw64/bin/ninja.exe",
+              "-DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe",
+              "-DCMAKE_RC_COMPILER=C:/msys64/mingw64/bin/windres.exe",
+              "-DPython3_EXECUTABLE=C:/Users/Matthew/AppData/Local/Programs/Python/Python312/python.exe",
+              "-DNESRECOMP_ROOT=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-engine",
+              "-DNESRECOMP_HOST_COMPILER=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-build-cli\\NESRecomp.exe",
+              "-DNESRECOMP_ROM=F:\\Projects\\nesrecomp\\SuperMarioBrosRecomp\\baserom.nes",
+              "-DNESRECOMP_BACKEND=cycle",
+              "-DNESRECOMP_PPU_IMPL=HLE",
+              "-DNESRECOMP_RECOMP_UI=G:\\Temp\\Codex\\nesrecomp\\native-20261027\\ui",
+              "-DSDL2_DIR=G:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/cmake",
+              "-DNESRECOMP_RECOMP_NET_ROOT=G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\framework\\lib\\recomp-net",
+              "-DRECOMP_NET_ROOT=G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\framework\\lib\\recomp-net",
+              "-DNESRECOMP_RBENGINE_ROOT=G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\framework\\lib\\retcomm-rbengine",
+              "-DNESRECOMP_ENABLE_NET=ON",
+              "-DSMB_ENABLE_NETPLAY=ON"
+            ],
+            "exit": 0,
+            "log": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-build-smb\\step-0.log"
+          },
+          {
+            "argv": [
+              "C:/msys64/mingw64/bin/cmake.exe",
+              "--build",
+              "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-build-smb",
+              "--target",
+              "SuperMarioBrosRecomp",
+              "--parallel",
+              "1"
+            ],
+            "exit": 0,
+            "log": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-build-smb\\step-1.log"
+          }
+        ],
+        "source_freeze": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-source-freeze-v1.json",
+        "status": "built-not-yet-tested",
+        "compiler_package": "SMB1 qualified Win64GNU15.2 O3 targetIPO"
+      },
+      "evidence": [
+        {
+          "path": "G:\\Temp\\Codex\\nes110-final-check-v1-20261031\\smb\\evidence\\correctness.json",
+          "sha256": "20d41b0b662d2f69e8002f49e9ba1bb902a761b24c23806c2ddc0e230a6bfe86"
+        },
+        {
+          "path": "G:\\Temp\\Codex\\nes110-final-check-v1-20261031\\smb\\evidence\\continuation.json",
+          "sha256": "274d82139b28906e16727bcda6e9177f65a0d24859181730260d3857e56ccf0a"
+        },
+        {
+          "path": "G:\\Temp\\Codex\\nes110-final-check-v1-20261031\\smb\\evidence\\performance.json",
+          "sha256": "b88a774385d7699f3c0e32627044d953939ef80bb73b9152d1e660e80d0cdad3"
+        },
+        {
+          "path": "G:\\Temp\\Codex\\nes110-final-check-v1-20261031\\smb\\sdl-candidate\\result.json",
+          "sha256": "bb2b9c81e7fe40422482b55d9367dfd8449a9ff15caff3054dbf4e7cb6dbcaab"
+        }
+      ],
+      "disposition": "neutral/inconclusive",
+      "loader_files": {
+        "falcon_owner_assets.exe": {
+          "bytes": 15515355,
+          "sha256": "419edd3b1b4dadbbfc93cf78750172f057c4a77ed68ca353bb90b64de0b2899f"
+        },
+        "libgcc_s_seh-1.dll": {
+          "bytes": 150196,
+          "sha256": "54549c2946c3ccee5d8bd3680fd351539c30018acedea64568e474c40d0900db"
+        },
+        "libstdc++-6.dll": {
+          "bytes": 2460660,
+          "sha256": "dc352127b8f399f95536d75745fcbc76c5b498d44d8fc55469fba1d8abac1823"
+        },
+        "libwinpthread-1.dll": {
+          "bytes": 65018,
+          "sha256": "b0d84f7b6346cf835ef19ecc95991cdaa6272bb8ad6fee43f446c07aa97fcbd9"
+        },
+        "SDL2.dll": {
+          "bytes": 2529792,
+          "sha256": "df6be1cd49d741d1a3963eca3f32dea9aa78c39de6e876aabfe74bd2ae528872"
+        },
+        "smb_hdpack_importer.exe": {
+          "bytes": 8317905,
+          "sha256": "a84aac2bd5a0485df4ffb5df576f85cf4c5db0ef939e8ad9db468ec56a380428"
+        },
+        "SuperMarioBrosRecomp.exe": {
+          "bytes": 8290655,
+          "sha256": "165410ddea6a388ce28efdaade2ad4511d62d078105cfdba16740002d4668a7a"
+        }
+      }
+    },
+    "smb3": {
+      "product": {
+        "title": "smb3",
+        "exe": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-build-smb3\\SuperMarioBros3Recomp.exe",
+        "sha256": "d454f56eb99d5e548619ab202321ce3a0a21d9ec3ad52e582d1b6bfb058112f8",
+        "bytes": 26071984,
+        "engine_head": "3c9a2ba392b82eec0b1df36bdb96c01a9af7c80c",
+        "title_head": "1325afd4ebf01510ccd74ba5928fb722a74500a6",
+        "rom": "F:\\Projects\\nesrecomp\\SuperMarioBros3Recomp\\Super Mario Bros. 3 (USA).nes",
+        "rom_sha256": "6ea0777ca520ba7ad7b0ea0f6452140d59aa0b1dffe5045cb1e8020dde10c267",
+        "build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-build-smb3",
+        "commands": [
+          {
+            "argv": [
+              "C:/msys64/mingw64/bin/cmake.exe",
+              "-S",
+              "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-smb3",
+              "-B",
+              "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-build-smb3",
+              "-G",
+              "Ninja",
+              "-DCMAKE_BUILD_TYPE=Release",
+              "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+              "-DCMAKE_C_COMPILER=C:/msys64/mingw64/bin/gcc.exe",
+              "-DCMAKE_MAKE_PROGRAM=C:/msys64/mingw64/bin/ninja.exe",
+              "-DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe",
+              "-DCMAKE_RC_COMPILER=C:/msys64/mingw64/bin/windres.exe",
+              "-DPython3_EXECUTABLE=C:/Users/Matthew/AppData/Local/Programs/Python/Python312/python.exe",
+              "-DNESRECOMP_ROOT=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-engine",
+              "-DNESRECOMP_HOST_COMPILER=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-build-cli\\NESRecomp.exe",
+              "-DNESRECOMP_ROM=F:\\Projects\\nesrecomp\\SuperMarioBros3Recomp\\Super Mario Bros. 3 (USA).nes",
+              "-DNESRECOMP_BACKEND=cycle",
+              "-DNESRECOMP_PPU_IMPL=HLE",
+              "-DNESRECOMP_RECOMP_UI=G:\\Temp\\Codex\\nesrecomp\\native-20261027\\ui",
+              "-DSDL2_DIR=G:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/cmake",
+              "-DNESRECOMP_RECOMP_NET_ROOT=G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\framework\\lib\\recomp-net",
+              "-DRECOMP_NET_ROOT=G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\framework\\lib\\recomp-net",
+              "-DNESRECOMP_RBENGINE_ROOT=G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\framework\\lib\\retcomm-rbengine",
+              "-DNESRECOMP_ENABLE_NET=ON",
+              "-DCMAKE_C_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+              "-DCMAKE_CXX_FLAGS_RELEASE=-O2 -g1 -DNDEBUG"
+            ],
+            "exit": 0,
+            "log": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-build-smb3\\step-0.log"
+          },
+          {
+            "argv": [
+              "C:/msys64/mingw64/bin/cmake.exe",
+              "--build",
+              "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-build-smb3",
+              "--target",
+              "SuperMarioBros3Recomp",
+              "--parallel",
+              "4"
+            ],
+            "exit": 0,
+            "log": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-build-smb3\\step-1.log"
+          }
+        ],
+        "source_freeze": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-source-freeze-v1.json",
+        "status": "built-not-yet-tested",
+        "compiler_package": "Explicit O2g1 qualified campaign package"
+      },
+      "evidence": [
+        {
+          "path": "G:\\Temp\\Codex\\nes110-final-check-v1-20261031\\smb3\\evidence\\correctness.json",
+          "sha256": "7caa82333947b297be332083809f9e60601ba16a9881eb05a41358047df5e3cf"
+        },
+        {
+          "path": "G:\\Temp\\Codex\\nes110-final-check-v1-20261031\\smb3\\evidence\\continuation.json",
+          "sha256": "d1e3fcff51b9bc2ebb5adcaab7d5ac5784d30e2c069a0df550de2ae2990ae87e"
+        },
+        {
+          "path": "G:\\Temp\\Codex\\nes110-final-check-v1-20261031\\smb3\\evidence\\performance.json",
+          "sha256": "0a728e705820ed25d1a65d29209780b6b995f78aa0bf1370d00983c0cebdb73f"
+        },
+        {
+          "path": "G:\\Temp\\Codex\\nes110-final-check-v1-20261031\\smb3\\sdl-candidate\\result.json",
+          "sha256": "3989ed792fc622047fd68bb97e261650dd0c5ba4742d193c919e0982de9a88d5"
+        }
+      ],
+      "disposition": "neutral/inconclusive",
+      "loader_files": {
+        "libgcc_s_seh-1.dll": {
+          "bytes": 150196,
+          "sha256": "54549c2946c3ccee5d8bd3680fd351539c30018acedea64568e474c40d0900db"
+        },
+        "libstdc++-6.dll": {
+          "bytes": 2460660,
+          "sha256": "dc352127b8f399f95536d75745fcbc76c5b498d44d8fc55469fba1d8abac1823"
+        },
+        "libwinpthread-1.dll": {
+          "bytes": 65018,
+          "sha256": "b0d84f7b6346cf835ef19ecc95991cdaa6272bb8ad6fee43f446c07aa97fcbd9"
+        },
+        "SDL2.dll": {
+          "bytes": 2529792,
+          "sha256": "df6be1cd49d741d1a3963eca3f32dea9aa78c39de6e876aabfe74bd2ae528872"
+        },
+        "SuperMarioBros3Recomp.exe": {
+          "bytes": 26071984,
+          "sha256": "d454f56eb99d5e548619ab202321ce3a0a21d9ec3ad52e582d1b6bfb058112f8"
+        }
+      }
+    },
+    "metroid": {
+      "product": {
+        "title": "metroid",
+        "exe": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-build-metroid\\MetroidNESRecomp.exe",
+        "sha256": "7b0898421729650716bb1f3abe9418242a8b4cb2b70b5720f30739e3e5f076b3",
+        "bytes": 16476483,
+        "engine_head": "3c9a2ba392b82eec0b1df36bdb96c01a9af7c80c",
+        "title_head": "3e19fdcaebb61cf97704a129586504620722eb51",
+        "rom": "F:\\Projects\\nesrecomp\\MetroidNESRecomp\\metroid.nes",
+        "rom_sha256": "e6e6b7014685adae447ebb3833242815747bc1e5df83ade79f693fb67cf565b6",
+        "build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-build-metroid",
+        "commands": [
+          {
+            "argv": [
+              "C:/msys64/mingw64/bin/cmake.exe",
+              "-S",
+              "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-metroid",
+              "-B",
+              "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-build-metroid",
+              "-G",
+              "Ninja",
+              "-DCMAKE_BUILD_TYPE=Release",
+              "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+              "-DCMAKE_C_COMPILER=C:/msys64/mingw64/bin/gcc.exe",
+              "-DCMAKE_MAKE_PROGRAM=C:/msys64/mingw64/bin/ninja.exe",
+              "-DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe",
+              "-DCMAKE_RC_COMPILER=C:/msys64/mingw64/bin/windres.exe",
+              "-DPython3_EXECUTABLE=C:/Users/Matthew/AppData/Local/Programs/Python/Python312/python.exe",
+              "-DNESRECOMP_ROOT=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-engine",
+              "-DNESRECOMP_HOST_COMPILER=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-build-cli\\NESRecomp.exe",
+              "-DNESRECOMP_ROM=F:\\Projects\\nesrecomp\\MetroidNESRecomp\\metroid.nes",
+              "-DNESRECOMP_BACKEND=cycle",
+              "-DNESRECOMP_PPU_IMPL=HLE",
+              "-DNESRECOMP_RECOMP_UI=G:\\Temp\\Codex\\nesrecomp\\native-20261027\\ui",
+              "-DSDL2_DIR=G:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/cmake",
+              "-DNESRECOMP_RECOMP_NET_ROOT=G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\framework\\lib\\recomp-net",
+              "-DRECOMP_NET_ROOT=G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\framework\\lib\\recomp-net",
+              "-DNESRECOMP_RBENGINE_ROOT=G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\framework\\lib\\retcomm-rbengine",
+              "-DNESRECOMP_ENABLE_NET=ON",
+              "-DCMAKE_C_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+              "-DCMAKE_CXX_FLAGS_RELEASE=-O2 -g1 -DNDEBUG"
+            ],
+            "exit": 0,
+            "log": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-build-metroid\\step-0.log"
+          },
+          {
+            "argv": [
+              "C:/msys64/mingw64/bin/cmake.exe",
+              "--build",
+              "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-build-metroid",
+              "--target",
+              "MetroidNESRecomp",
+              "--parallel",
+              "4"
+            ],
+            "exit": 0,
+            "log": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-build-metroid\\step-1.log"
+          }
+        ],
+        "source_freeze": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-source-freeze-v1.json",
+        "status": "built-not-yet-tested",
+        "compiler_package": "Explicit O2g1 qualified campaign package"
+      },
+      "evidence": [
+        {
+          "path": "G:\\Temp\\Codex\\nes110-final-check-v1-20261031\\metroid\\evidence\\correctness.json",
+          "sha256": "80236b33f379230ad2259c23308f00e418470ca8b9720bdadb32680054a2e2ef"
+        },
+        {
+          "path": "G:\\Temp\\Codex\\nes110-final-check-v1-20261031\\metroid\\evidence\\continuation.json",
+          "sha256": "da932abf68d35cb8ddc9113afca79a479e7c762938cad6ad22e1a85ea07a6b26"
+        },
+        {
+          "path": "G:\\Temp\\Codex\\nes110-final-check-v1-20261031\\metroid\\evidence\\performance.json",
+          "sha256": "2fca13920989ed738edfd29781f2cd4c59c73042f87ba5d622fe5d7eedd2241f"
+        },
+        {
+          "path": "G:\\Temp\\Codex\\nes110-final-check-v1-20261031\\metroid\\sdl-candidate\\result.json",
+          "sha256": "df15b0f459b6f16a35599134bed6d515fdaeca5f69892db83ecc6964bf9c917c"
+        }
+      ],
+      "disposition": "neutral/inconclusive",
+      "loader_files": {
+        "libgcc_s_seh-1.dll": {
+          "bytes": 150196,
+          "sha256": "54549c2946c3ccee5d8bd3680fd351539c30018acedea64568e474c40d0900db"
+        },
+        "libstdc++-6.dll": {
+          "bytes": 2460660,
+          "sha256": "dc352127b8f399f95536d75745fcbc76c5b498d44d8fc55469fba1d8abac1823"
+        },
+        "libwinpthread-1.dll": {
+          "bytes": 65018,
+          "sha256": "b0d84f7b6346cf835ef19ecc95991cdaa6272bb8ad6fee43f446c07aa97fcbd9"
+        },
+        "MetroidNESRecomp.exe": {
+          "bytes": 16476483,
+          "sha256": "7b0898421729650716bb1f3abe9418242a8b4cb2b70b5720f30739e3e5f076b3"
+        },
+        "SDL2.dll": {
+          "bytes": 2529792,
+          "sha256": "df6be1cd49d741d1a3963eca3f32dea9aa78c39de6e876aabfe74bd2ae528872"
+        }
+      },
+      "confirmation": {
+        "path": "G:\\Temp\\Codex\\nes110-final-check-v1-20261031\\metroid\\confirmation-v1\\performance.json",
+        "sha256": "95e253df401941893d1da70a08cd76d40ee394807a68221a847ac048de9cd72a"
+      },
+      "note": "Initial3/3negative4.348% retained. Sameconfig5pairconfirmation0,0,0,+15.625ms,+15.625ms; pairedmedian0. Initialmagnitude not reproduced; one accounting-step residual, not gain/zerocostproof."
+    },
+    "gumshoe": {
+      "product": {
+        "title": "gumshoe",
+        "exe": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-build-gumshoe\\GumshoeRecomp.exe",
+        "sha256": "b3cf3481242701380a9f3ca005a29fa4a902307ea5ada928424a519b51a8c1ec",
+        "bytes": 12692790,
+        "engine_head": "3c9a2ba392b82eec0b1df36bdb96c01a9af7c80c",
+        "title_head": "afab082a99cea85909cef912144dee6c90d6cae7",
+        "rom": "F:\\Projects\\nesrecomp\\GumshoeNESRecomp\\Gumshoe (USA, Europe).nes",
+        "rom_sha256": "f62529ff98015d8feb6b7288200a4d8a3acfd2fbcbb90ce0b4a6379be342f38a",
+        "build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-build-gumshoe",
+        "commands": [
+          {
+            "argv": [
+              "C:/msys64/mingw64/bin/cmake.exe",
+              "-S",
+              "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-gumshoe",
+              "-B",
+              "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-build-gumshoe",
+              "-G",
+              "Ninja",
+              "-DCMAKE_BUILD_TYPE=Release",
+              "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+              "-DCMAKE_C_COMPILER=C:/msys64/mingw64/bin/gcc.exe",
+              "-DCMAKE_MAKE_PROGRAM=C:/msys64/mingw64/bin/ninja.exe",
+              "-DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe",
+              "-DCMAKE_RC_COMPILER=C:/msys64/mingw64/bin/windres.exe",
+              "-DPython3_EXECUTABLE=C:/Users/Matthew/AppData/Local/Programs/Python/Python312/python.exe",
+              "-DNESRECOMP_ROOT=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-engine",
+              "-DNESRECOMP_HOST_COMPILER=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-build-cli\\NESRecomp.exe",
+              "-DNESRECOMP_ROM=F:\\Projects\\nesrecomp\\GumshoeNESRecomp\\Gumshoe (USA, Europe).nes",
+              "-DNESRECOMP_BACKEND=cycle",
+              "-DNESRECOMP_PPU_IMPL=HLE",
+              "-DNESRECOMP_RECOMP_UI=G:\\Temp\\Codex\\nesrecomp\\native-20261027\\ui",
+              "-DSDL2_DIR=G:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/cmake",
+              "-DNESRECOMP_RECOMP_NET_ROOT=G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\framework\\lib\\recomp-net",
+              "-DRECOMP_NET_ROOT=G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\framework\\lib\\recomp-net",
+              "-DNESRECOMP_RBENGINE_ROOT=G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\framework\\lib\\retcomm-rbengine",
+              "-DNESRECOMP_ENABLE_NET=ON",
+              "-DCMAKE_C_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+              "-DCMAKE_CXX_FLAGS_RELEASE=-O2 -g1 -DNDEBUG"
+            ],
+            "exit": 0,
+            "log": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-build-gumshoe\\step-0.log"
+          },
+          {
+            "argv": [
+              "C:/msys64/mingw64/bin/cmake.exe",
+              "--build",
+              "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-build-gumshoe",
+              "--target",
+              "GumshoeRecomp",
+              "--parallel",
+              "4"
+            ],
+            "exit": 0,
+            "log": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-build-gumshoe\\step-1.log"
+          }
+        ],
+        "source_freeze": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-source-freeze-v1.json",
+        "status": "built-not-yet-tested",
+        "compiler_package": "Explicit O2g1 qualified campaign package"
+      },
+      "evidence": [
+        {
+          "path": "G:\\Temp\\Codex\\nes110-final-check-v1-20261031\\gumshoe\\evidence\\correctness.json",
+          "sha256": "e73b671c7112ccff219217b5795811d1f28d2355199c9c8b527d6dadf5d720fa"
+        },
+        {
+          "path": "G:\\Temp\\Codex\\nes110-final-check-v1-20261031\\gumshoe\\evidence\\continuation.json",
+          "sha256": "2faa4eba1ffe23d9b04fa8490c62f4fa35987b5fb6838ddee0d771967b9b9392"
+        },
+        {
+          "path": "G:\\Temp\\Codex\\nes110-final-check-v1-20261031\\gumshoe\\evidence\\performance.json",
+          "sha256": "8319f93eca1a859195499b337491c259cd55840e6bb37f8f31c7941b7f29abf7"
+        },
+        {
+          "path": "G:\\Temp\\Codex\\nes110-final-check-v1-20261031\\gumshoe\\sdl-candidate\\result.json",
+          "sha256": "94adbea1b6a97c12c16b8bcb536d4d33df309e8d5c6df9b8355ff8b3f475f025"
+        }
+      ],
+      "disposition": "neutral/inconclusive",
+      "loader_files": {
+        "GumshoeRecomp.exe": {
+          "bytes": 12692790,
+          "sha256": "b3cf3481242701380a9f3ca005a29fa4a902307ea5ada928424a519b51a8c1ec"
+        },
+        "libgcc_s_seh-1.dll": {
+          "bytes": 150196,
+          "sha256": "54549c2946c3ccee5d8bd3680fd351539c30018acedea64568e474c40d0900db"
+        },
+        "libstdc++-6.dll": {
+          "bytes": 2460660,
+          "sha256": "dc352127b8f399f95536d75745fcbc76c5b498d44d8fc55469fba1d8abac1823"
+        },
+        "libwinpthread-1.dll": {
+          "bytes": 65018,
+          "sha256": "b0d84f7b6346cf835ef19ecc95991cdaa6272bb8ad6fee43f446c07aa97fcbd9"
+        },
+        "SDL2.dll": {
+          "bytes": 2529792,
+          "sha256": "df6be1cd49d741d1a3963eca3f32dea9aa78c39de6e876aabfe74bd2ae528872"
+        }
+      }
+    },
+    "zelda": {
+      "product": {
+        "title": "zelda",
+        "exe": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-build-zelda\\LegendOfZeldaNESRecomp.exe",
+        "sha256": "e80edde05db7d66f1e35dc8e9445d275a11a883e76fa42d0e57b8c041b7670a7",
+        "bytes": 16971147,
+        "engine_head": "3c9a2ba392b82eec0b1df36bdb96c01a9af7c80c",
+        "title_head": "11f285768dac983d9c46531b0adff195dc715e34",
+        "rom": "F:\\Projects\\nesrecomp\\LegendOfZeldaNESRecomp\\Legend of Zelda.NES",
+        "rom_sha256": "8f72dc2e98572eb4ba7c3a902bca5f69c448fc4391837e5f8f0d4556280440ac",
+        "build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-build-zelda",
+        "commands": [
+          {
+            "argv": [
+              "C:/msys64/mingw64/bin/cmake.exe",
+              "-S",
+              "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-zelda",
+              "-B",
+              "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-build-zelda",
+              "-G",
+              "Ninja",
+              "-DCMAKE_BUILD_TYPE=Release",
+              "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+              "-DCMAKE_C_COMPILER=C:/msys64/mingw64/bin/gcc.exe",
+              "-DCMAKE_MAKE_PROGRAM=C:/msys64/mingw64/bin/ninja.exe",
+              "-DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe",
+              "-DCMAKE_RC_COMPILER=C:/msys64/mingw64/bin/windres.exe",
+              "-DPython3_EXECUTABLE=C:/Users/Matthew/AppData/Local/Programs/Python/Python312/python.exe",
+              "-DNESRECOMP_ROOT=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-engine",
+              "-DNESRECOMP_HOST_COMPILER=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-build-cli\\NESRecomp.exe",
+              "-DNESRECOMP_ROM=F:\\Projects\\nesrecomp\\LegendOfZeldaNESRecomp\\Legend of Zelda.NES",
+              "-DNESRECOMP_BACKEND=cycle",
+              "-DNESRECOMP_PPU_IMPL=HLE",
+              "-DNESRECOMP_RECOMP_UI=G:\\Temp\\Codex\\nesrecomp\\native-20261027\\ui",
+              "-DSDL2_DIR=G:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/cmake",
+              "-DNESRECOMP_RECOMP_NET_ROOT=G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\framework\\lib\\recomp-net",
+              "-DRECOMP_NET_ROOT=G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\framework\\lib\\recomp-net",
+              "-DNESRECOMP_RBENGINE_ROOT=G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\framework\\lib\\retcomm-rbengine",
+              "-DNESRECOMP_ENABLE_NET=ON",
+              "-DCMAKE_C_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+              "-DCMAKE_CXX_FLAGS_RELEASE=-O2 -g1 -DNDEBUG"
+            ],
+            "exit": 0,
+            "log": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-build-zelda\\step-0.log"
+          },
+          {
+            "argv": [
+              "C:/msys64/mingw64/bin/cmake.exe",
+              "--build",
+              "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-build-zelda",
+              "--target",
+              "LegendOfZeldaNESRecomp",
+              "--parallel",
+              "4"
+            ],
+            "exit": 0,
+            "log": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-build-zelda\\step-1.log"
+          }
+        ],
+        "source_freeze": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-source-freeze-v1.json",
+        "status": "built-not-yet-tested",
+        "compiler_package": "Explicit O2g1 qualified campaign package"
+      },
+      "evidence": [
+        {
+          "path": "G:\\Temp\\Codex\\nes110-final-check-v1-20261031\\zelda\\evidence\\correctness.json",
+          "sha256": "dbf4bd34ef461ffc10a0d10eacda78d689ae587b0db1dd2e7028ead3d949ddb3"
+        },
+        {
+          "path": "G:\\Temp\\Codex\\nes110-final-check-v1-20261031\\zelda\\evidence\\continuation.json",
+          "sha256": "3ba40de9e22bf948f5426b7909cd0eeb9827b71c2d8e9b7590fd0223cb527c93"
+        },
+        {
+          "path": "G:\\Temp\\Codex\\nes110-final-check-v1-20261031\\zelda\\evidence\\performance.json",
+          "sha256": "d2064cb8539d7abbac6a4a22e7f72ec1a1cdd86318a9d94644312e7c1656629a"
+        },
+        {
+          "path": "G:\\Temp\\Codex\\nes110-final-check-v1-20261031\\zelda\\sdl-candidate\\result.json",
+          "sha256": "09e013a9bf5c0b09bbc8e5c3d537181720f01b277ee97e13461eac7c818d9370"
+        }
+      ],
+      "disposition": "neutral/inconclusive",
+      "loader_files": {
+        "LegendOfZeldaNESRecomp.exe": {
+          "bytes": 16971147,
+          "sha256": "e80edde05db7d66f1e35dc8e9445d275a11a883e76fa42d0e57b8c041b7670a7"
+        },
+        "libgcc_s_seh-1.dll": {
+          "bytes": 150196,
+          "sha256": "54549c2946c3ccee5d8bd3680fd351539c30018acedea64568e474c40d0900db"
+        },
+        "libstdc++-6.dll": {
+          "bytes": 2460660,
+          "sha256": "dc352127b8f399f95536d75745fcbc76c5b498d44d8fc55469fba1d8abac1823"
+        },
+        "libwinpthread-1.dll": {
+          "bytes": 65018,
+          "sha256": "b0d84f7b6346cf835ef19ecc95991cdaa6272bb8ad6fee43f446c07aa97fcbd9"
+        },
+        "SDL2.dll": {
+          "bytes": 2529792,
+          "sha256": "df6be1cd49d741d1a3963eca3f32dea9aa78c39de6e876aabfe74bd2ae528872"
+        }
+      },
+      "author_save_history": {
+        "path": "G:\\Temp\\Codex\\nes110-final-check-v1-20261031\\zelda\\author-save-history\\results.json",
+        "sha256": "fd9e824e3037fc3b9ea41b9099290e9e8791cbe599feafafe78104ca398c0d9a"
+      },
+      "note": "Both inactive first-person history cases pass architectural/MOD records and pictures in fresh-process load, preserving current master60708c9 fix and retained cache invalidation."
+    }
+  },
+  "candidate_decision_areas": 22,
+  "scoped_selections": 16,
+  "prototype_dispositions": 6,
+  "deferred_areas": [
+    "NES07",
+    "NES15",
+    "NES20",
+    "NES23",
+    "NES25",
+    "NES26",
+    "NES30",
+    "NES31"
+  ],
+  "parked": [
+    "NES29"
+  ],
+  "cli": {
+    "title": "cli",
+    "exe": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-build-cli\\NESRecomp.exe",
+    "sha256": "864305722c1c631693742c51eea8c1c527f3a585f50843e4933d801a7393ea69",
+    "bytes": 904048,
+    "engine_head": "3c9a2ba392b82eec0b1df36bdb96c01a9af7c80c",
+    "title_head": null,
+    "rom": null,
+    "rom_sha256": null,
+    "build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-build-cli",
+    "commands": [
+      {
+        "argv": [
+          "C:/msys64/mingw64/bin/cmake.exe",
+          "-S",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-engine\\recompiler",
+          "-B",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-build-cli",
+          "-G",
+          "Ninja",
+          "-DCMAKE_BUILD_TYPE=Release",
+          "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+          "-DCMAKE_C_COMPILER=C:/msys64/mingw64/bin/gcc.exe",
+          "-DCMAKE_MAKE_PROGRAM=C:/msys64/mingw64/bin/ninja.exe"
+        ],
+        "exit": 0,
+        "log": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-build-cli\\step-0.log"
+      },
+      {
+        "argv": [
+          "C:/msys64/mingw64/bin/cmake.exe",
+          "--build",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-build-cli",
+          "--target",
+          "NESRecomp",
+          "--parallel",
+          "1"
+        ],
+        "exit": 0,
+        "log": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-build-cli\\step-1.log"
+      }
+    ],
+    "source_freeze": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-source-freeze-v1.json",
+    "status": "built-not-yet-tested",
+    "compiler_package": "Current supported CLI Release"
+  },
+  "resource_policy": "Original build/maincase reservations retained. Owner2026-10-31 nowexplicitlyauthorizes headroom-onlyoperation; finaltwoZeldahistorychecks direct at17%CPU/24.52GiBfree, no held-leaseclaim."
+}

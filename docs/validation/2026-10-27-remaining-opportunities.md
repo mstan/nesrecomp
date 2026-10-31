@@ -17,8 +17,9 @@ original HD runtime. See [HD results](2026-10-28-hd-plan-results.md), including
 the rejected universal packages and SMB's unchanged-runtime proof. Zelda's
 fixed SNROM SRAM code now joins the native deadline service; see
 [SRAM results](2026-10-28-sram-native-results.md). SERVER Fit improves5.128%
-and Remastered1.442%; stock is neutral/inconclusive. Thirty items now have
-qualified evaluation decisions; NES01 is qualified for whole stable HLE raster
+and Remastered1.442%; stock is neutral/inconclusive. Sixteen areas have overlapping scoped selections and six have actual prototype
+dispositions; eight attribution/historical/inventory/conditional deferrals remain
+preparation rather than completed candidate burndown; NES01 is qualified for whole stable HLE raster
 jobs and NES29 remains parked.
 Guarded native ROM is now evaluated under NES09; see
 [guarded ROM results](2026-10-28-guarded-rom-results.md).
@@ -27,7 +28,8 @@ and Zelda Fit/HD profiles; see [raster results](2026-10-28-raster-job-results.md
 Zelda isolated native execution is selected under NES18; NES20 snapshot
 replacement is deferred after measured attribution. See
 [isolated service results](2026-10-28-isolated-native-results.md).
-All in-scope opportunities have evaluation decisions; the final combined feature handoff remains open. FDS remains
+Selected-package final game validation remains open alongside eight deferred
+areas. FDS remains
 parked. No main/master merge or new release is authorized before owner review.
 
 Source checkpoint: engine `957e9902de9b91107e61bc981f2ca871c8740446`;
@@ -219,7 +221,7 @@ close the per-pixel raster or APU-event algorithm work under NES01/NES06.
   Evidence: [runner/cyc/hw_apu.c:350](../../runner/cyc/hw_apu.c#L350), [runner/cyc/hw_apu.c:601](../../runner/cyc/hw_apu.c#L601).
 
 
-- [x] **NES07 · P2 · Native DMA transfer service with exact device deadlines**
+- [ ] **NES07 · P2 · Native DMA transfer service with exact device deadlines**
 
   OAM and DMC DMA still traverse the ordinary cycle machinery. Consolidate safe transfer runs and device advancement rather than substituting an unqualified memcpy.
 
@@ -377,7 +379,7 @@ close the per-pixel raster or APU-event algorithm work under NES01/NES06.
   Evidence: [runner/cyc/cyc_hdpack.c:133](../../runner/cyc/cyc_hdpack.c#L133), [runner/src/hdpack.c:237](../../runner/src/hdpack.c#L237), [runner/src/hdpack.c:1124](../../runner/src/hdpack.c#L1124).
 
 
-- [x] **NES15 · P1 · Replace the copy-based presentation compatibility bridge**
+- [ ] **NES15 · P1 · Replace the copy-based presentation compatibility bridge**
 
   The bridge copies OAM/nametable/palette and reads 8192 CHR bytes into legacy-shaped globals. Expose one immutable frame/mapping view or revision-aware update service to consumers instead of rebuilding all compatibility products at every sync.
 
@@ -468,7 +470,7 @@ close the per-pixel raster or APU-event algorithm work under NES01/NES06.
   Evidence: [src/zelda_world.c:219](https://github.com/mstan/LegendOfZeldaNESRecomp/blob/5d90eb7a10e13f5dd5c693a0204b29f7917ec198/src/zelda_world.c#L219), [src/zelda_world.c:254](https://github.com/mstan/LegendOfZeldaNESRecomp/blob/5d90eb7a10e13f5dd5c693a0204b29f7917ec198/src/zelda_world.c#L254), [src/zelda_world.c:424](https://github.com/mstan/LegendOfZeldaNESRecomp/blob/5d90eb7a10e13f5dd5c693a0204b29f7917ec198/src/zelda_world.c#L424).
 
 
-- [x] **NES20 · P1 · Replace full-machine isolation copy/restore with explicit ownership**
+- [ ] **NES20 · P1 · Replace full-machine isolation copy/restore with explicit ownership**
 
   Isolated helpers copy CPU/hardware/cart/PPU/APU/media state and restore it. A declared mutation domain, persistent scratch context or write journal can eliminate repeated full snapshots as part of the room/service architecture.
 
@@ -522,7 +524,7 @@ close the per-pixel raster or APU-event algorithm work under NES01/NES06.
   Evidence: [runner/cyc/cyc_net.c:84](../../runner/cyc/cyc_net.c#L84), [runner/cyc/cyc_session.c:197](../../runner/cyc/cyc_session.c#L197). Reuse `beads-2dw.1.100`.
 
 
-- [x] **NES23 · P2 · Observer/history work integrated with semantic events**
+- [ ] **NES23 · P2 · Observer/history work integrated with semantic events**
 
   Offline timed builds disable optional cycle tracing, but ordinary device history remains active. Netplay explicitly enables cycle tracing as a simulation setting. Derive required history/digests at semantic service boundaries and separate them from trace-detail production; preserve useful diagnostics rather than pretending legacy CMake keys disable the cycle ring.
 
@@ -562,7 +564,7 @@ close the per-pixel raster or APU-event algorithm work under NES01/NES06.
   Evidence: [runner/cyc/cyc_render.c:163](../../runner/cyc/cyc_render.c#L163), [runner/cyc/cyc_sdl.c:1203](../../runner/cyc/cyc_sdl.c#L1203).
 
 
-- [x] **NES25 · P3 · Audio host buffering and queue ownership**
+- [ ] **NES25 · P3 · Audio host buffering and queue ownership**
 
   Separate generated PCM cost from draining/copying/queueing output. Consolidate buffers or callback ownership only when they cause meaningful CPU or underruns; the earlier desktop queue share was small.
 
@@ -581,7 +583,7 @@ close the per-pixel raster or APU-event algorithm work under NES01/NES06.
   Evidence: [runner/cyc/cyc_sdl.c:269](../../runner/cyc/cyc_sdl.c#L269), [runner/cyc/hw_apu.c:192](../../runner/cyc/hw_apu.c#L192).
 
 
-- [x] **NES26 · P3 · Pacing and presentation deadlines**
+- [ ] **NES26 · P3 · Pacing and presentation deadlines**
 
   A previous waitable-pacing candidate reduced CPU but worsened deadline lateness. A revised service can coordinate audio/video/input deadlines without busy wait or repeated synchronous presentation.
 
@@ -649,7 +651,7 @@ close the per-pixel raster or APU-event algorithm work under NES01/NES06.
   Evidence: [runner/cyc/hw_fds_hle.c:2](../../runner/cyc/hw_fds_hle.c#L2), [runner/cyc/cyc_core.h:104](../../runner/cyc/cyc_core.h#L104). Reuse `beads-2dw.1.74`.
 
 
-- [x] **NES30 · P3 · Expansion-audio and complex-board event services**
+- [ ] **NES30 · P3 · Expansion-audio and complex-board event services**
 
   FDS/VRC6/VRC7/Namco/FME-7 and MMC5-specific work has different timer, sampling and bus-observer costs. Build event-driven board/audio services where an actually supported title spends time, not a generic callback cleanup.
 
@@ -665,7 +667,7 @@ close the per-pixel raster or APU-event algorithm work under NES01/NES06.
   Evidence: [runner/cyc/hw_mapper.c:1301](../../runner/cyc/hw_mapper.c#L1301), [runner/cyc/hw_mapper.c:1367](../../runner/cyc/hw_mapper.c#L1367).
 
 
-- [x] **NES31 · P3 · Startup, native code footprint and first-use stalls**
+- [ ] **NES31 · P3 · Startup, native code footprint and first-use stalls**
 
   Larger generated programs and boot-time RAM-view indexes can affect startup, RSS and first-use page faults even when steady gameplay is fast. Deduplicate cold metadata and lay out hot native blocks as one startup/execution design.
 
@@ -718,6 +720,6 @@ working portable implementation. Netplay settles a common validated profile
 before frame 0; platform compilation alone is not compatibility qualification.
 
 Audit completion closes only `beads-2dw.1.109`'s investigation/deliverable.
-Current execution has thirty scoped evaluation decisions, zero unresolved
-items and parked NES29. The implementation campaign and final combined owner
+Current execution has22scoped candidate-decision areas (16overlapping selections
+and6prototype dispositions),8prepared/deferred areas and parkedNES29. The implementation campaign and final combined owner
 handoff remain open; a scoped decision is not architectural exhaustion.
