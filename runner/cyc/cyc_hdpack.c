@@ -17,6 +17,13 @@
 static uint32_t *upscaled;
 static size_t upscaled_capacity;
 static uint64_t presented_generation;
+static const HdJobFrame *prepared_jobs;
+static uint64_t jobs_generation,jobs_epoch,thumbnail_serial;
+static uint32_t thumbnail[256*240];
+static void release_jobs(void) {
+    hdpack_jobs_release(prepared_jobs);prepared_jobs=NULL;
+    thumbnail_serial=UINT64_MAX;
+}
 #ifndef NESRECOMP_CYCLE_HDPACK_MODS
 static bool configured;
 
@@ -25,7 +32,7 @@ void cyc_hdpack_config(int enabled,const char *directory) {
     snprintf(g_nes_config.hdpack_dir,sizeof g_nes_config.hdpack_dir,"%s",directory?directory:"");
 }
 void cyc_hdpack_power_on(void) {
-    presentation_valid=false;
+    presentation_valid=false;++presentation_epoch;release_jobs();
     memset(&pipeline,0,sizeof pipeline);memset(recorded,0,sizeof recorded);
     if(!configured)cyc_hdpack_config(1,"");
     hdpack_load_from_config(hw_cart.chr_ram!=0,256);
@@ -36,7 +43,7 @@ NES_MOD_CONSTRUCTOR(register_hd_pack_plugin) {
     nes_mod_register_activation_plugin("nesrecomp.hd-pack",activate_hd_pack);
 }
 bool cyc_hdpack_mod_prepare(void) {
-    presentation_valid=false;
+    presentation_valid=false;++presentation_epoch;release_jobs();
     const NESModHdPack *pack=nes_mod_hd_pack();
     memset(&pipeline,0,sizeof pipeline);memset(recorded,0,sizeof recorded);
     memset(fingerprint,0,sizeof fingerprint);hdpack_unload();
@@ -130,14 +137,7 @@ void cyc_hdpack_output(int x,int y) {
 static uint32_t color(uint8_t value,uint8_t mask) {
     return hw_palette_argb[((mask>>5)*64)+((mask&1)?(value&0x30):(value&0x3f))];
 }
-const uint32_t *cyc_hdpack_present(const uint32_t *native,int *width,int *height) {
-    *width=256;*height=240;if(!hdpack_active())return native;
-    uint64_t generation=cyc_render_generation();
-    if(presentation_valid && generation==presented_generation) {
-        *width=256*hdpack_scale();*height=240*hdpack_scale();return upscaled;
-    }
-    /* A restored state can reuse a frame number with different RAM/tiles.
-     * Revision identity also keeps repeated paused presents inexpensive. */
+static void prepare_pixels(const uint32_t *native) {
     hdpack_invalidate_conditions();
     HdPixel *pixels=hdpack_pixels();
     for(unsigned i=0;i<256*240;i++) {
@@ -153,12 +153,40 @@ const uint32_t *cyc_hdpack_present(const uint32_t *native,int *width,int *height
         p->bg_argb=color(r->bg_pal[r->bg_color],r->mask);
         p->sp_argb=r->sp_color?color(r->sp_pal[r->sp_color-1],r->mask):native[i];
     }
+}
+const HdJobFrame *cyc_hdpack_jobs(const uint32_t *native) {
+    if(!hdpack_active()){release_jobs();return NULL;}
+    uint64_t generation=cyc_render_generation();
+    if(prepared_jobs && generation==jobs_generation && jobs_epoch==presentation_epoch)return prepared_jobs;
+    prepare_pixels(native);
+    const HdJobFrame *next=hdpack_prepare_jobs(native,256);
+    release_jobs();prepared_jobs=next;jobs_generation=generation;jobs_epoch=presentation_epoch;
+    return prepared_jobs;
+}
+const uint32_t *cyc_hdpack_thumbnail(const uint32_t *native) {
+    const HdJobFrame *frame=cyc_hdpack_jobs(native);
+    if(!frame)return native;
+    if(thumbnail_serial!=frame->serial){
+        if(hdpack_render_jobs(frame,1,thumbnail,256))return native;
+        thumbnail_serial=frame->serial;
+    }
+    return thumbnail;
+}
+const uint32_t *cyc_hdpack_present(const uint32_t *native,int *width,int *height) {
+    *width=256;*height=240;if(!hdpack_active())return native;
+    uint64_t generation=cyc_render_generation();
+    if(presentation_valid && generation==presented_generation) {
+        *width=256*hdpack_scale();*height=240*hdpack_scale();return upscaled;
+    }
+    const HdJobFrame *frame=cyc_hdpack_jobs(native);
     size_t count=(size_t)256*240*hdpack_scale()*hdpack_scale();
     if(count>upscaled_capacity) {
         uint32_t *next=realloc(upscaled,count*sizeof(*next));if(!next)return native;
         upscaled=next;upscaled_capacity=count;
     }
-    hdpack_upscale(native,256,upscaled);presented_generation=generation;presentation_valid=true;
+    if(!frame || hdpack_render_jobs(frame,(unsigned)hdpack_scale(),upscaled,256*hdpack_scale()))
+        hdpack_upscale(native,256,upscaled);
+    presented_generation=generation;presentation_valid=true;
     *width=256*hdpack_scale();*height=240*hdpack_scale();return upscaled;
 }
 

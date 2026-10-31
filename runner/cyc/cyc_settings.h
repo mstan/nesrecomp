@@ -8,6 +8,7 @@
  * PlayerNDeadzone; [Launcher] SkipLauncher). The cycle host adds:
  *
  *   [Audio]    Enabled
+ *   [Display]  HDResolution: 0 uses the pack resolution; otherwise 1/2/4/8/16/32/64
  *   [FDS]      one key per HLE axis (common/nes_fds_hle.h nes_fds_hle_axes():
  *              AutoSwap, FastLoad, ...): on, off or default (game.toml decides);
  *              Bios = the FDS BIOS file the player chose (the launcher's
@@ -49,6 +50,7 @@ typedef struct CycSettings {
     NesFdsHleAsk fds_hle;   /* the player's saved HLE choices (the plan's "settings" source) */
     char fds_bios[512];     /* [FDS] Bios: the player's FDS BIOS file; "" looks for one */
     CycBindings  bind;
+    int hd_resolution;     /* local HD output scale; 0 = pack's original scale */
 } CycSettings;
 
 /* A game's own [Game] keys (cyc_host_extras.h load_setting / save_settings). */

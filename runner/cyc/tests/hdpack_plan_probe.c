@@ -8,6 +8,11 @@
 #define NESRECOMP_HDPACK_LAYER_PLANS 1
 #include "../../src/hdpack.c"
 
+#ifdef NESRECOMP_HDPACK_GPU_PROBE
+extern void hdpack_gpu_probe_check(const HdJobFrame *, unsigned,
+                                   const uint32_t *, size_t);
+#endif
+
 uint8_t g_ram[0x800], g_ppuscroll_x, g_ppuscroll_y, g_ppuctrl;
 uint64_t g_frame_count;
 unsigned char *stbi_load(const char *p,int *w,int *h,int *c,int n) {
@@ -70,10 +75,10 @@ static void setup(int ram,int version,int scale) {
     tile(0,0x12345678,10,1,mem,NULL,1);
     s_bg_count=6;s_bgs=calloc(6,sizeof(*s_bgs));
     s_bg_sorted=calloc(6,sizeof(*s_bg_sorted));s_actbg=calloc(6,sizeof(*s_actbg));
-    s_bgimg_count=3;s_bgimgs=calloc(3,sizeof(*s_bgimgs));
+    s_bgimg_count=4;s_bgimgs=calloc(4,sizeof(*s_bgimgs));
     assert(s_bgs&&s_bg_sorted&&s_actbg&&s_bgimgs);
     for(int i=0;i<3;i++) {
-        HdBgImg *im=calloc(1,sizeof(*im));assert(im);s_bgimgs[i]=im;
+        HdBgImg *im=calloc(1,sizeof(*im));assert(im);s_bgimgs[i?i+1:0]=im;
         im->w=(17+9)*scale;im->h=(32+i*109)*scale;
         im->px=malloc((size_t)im->w*im->h*4);assert(im->px);
         for(int y=0;y<im->h;y++)for(int x=0;x<im->w;x++) {
@@ -82,9 +87,12 @@ static void setup(int ram,int version,int scale) {
                 ((unsigned)(y*7+i*31)&255)<<8|((unsigned)(x+y*3)&255));
         }
     }
+    /* Failed source loads remain cached, but referencing backgrounds are
+     * absent. This shared asset failure must not disable the valid jobs. */
+    s_bgimgs[1]=calloc(1,sizeof(*s_bgimgs[1]));assert(s_bgimgs[1]);
     static const int priorities[]={0,19,20,29,30,39};
     for(int i=0;i<6;i++) {
-        HdBg *b=&s_bgs[i];s_bg_sorted[i]=b;b->img=s_bgimgs[i%3];
+        HdBg *b=&s_bgs[i];s_bg_sorted[i]=b;b->img=s_bgimgs[i%3?(i%3)+1:0];
         b->priority=priorities[i];b->brightness=i%3==0?350:i%3==1?100:255;
         b->blend=i%3;b->left=i-3;b->top=i==5?0:i*7-15;
         b->hscroll=(i-2)*0.5f;b->vscroll=(i-3)*0.25f;
@@ -97,9 +105,41 @@ static void setup(int ram,int version,int scale) {
     s_use_render_plan=1;build_key_groups();
 }
 
+static void check_retained_jobs(const HdJobFrame *frame, const uint32_t *expected)
+{
+    size_t count=(size_t)frame->width*frame->height*frame->source_scale*frame->source_scale;
+    uint32_t *out=malloc(count*4);assert(out);
+    assert(!hdpack_render_jobs(frame,frame->source_scale,out,
+                               (size_t)frame->width*frame->source_scale));
+    assert(!memcmp(out,expected,count*4));free(out);
+}
+
+static void check_job_scales(const HdJobFrame *frame,const uint32_t *expected)
+{
+    static const unsigned scales[]={1,2,4,16,64};
+    size_t source_pitch=(size_t)frame->width*frame->source_scale;
+    for(unsigned i=0;i<sizeof(scales)/sizeof(scales[0]);++i) {
+        unsigned scale=scales[i];size_t pitch=(size_t)frame->width*scale;
+        size_t height=(size_t)frame->height*scale;
+        uint32_t *out=malloc(pitch*height*4);assert(out);
+        assert(!hdpack_render_jobs(frame,scale,out,pitch));
+        for(size_t y=0;y<height;++y)for(size_t x=0;x<pitch;++x) {
+            size_t sx=(x/scale)*frame->source_scale+(x%scale)*frame->source_scale/scale;
+            size_t sy=(y/scale)*frame->source_scale+(y%scale)*frame->source_scale/scale;
+            assert(out[y*pitch+x]==expected[sy*source_pitch+sx]);
+        }
+        free(out);
+    }
+    uint32_t untouched=0x12345678;
+    assert(hdpack_render_jobs(frame,0,&untouched,1)<0 && untouched==0x12345678);
+    assert(hdpack_render_jobs(frame,65,&untouched,1)<0 && untouched==0x12345678);
+    assert(hdpack_render_jobs(frame,1,&untouched,0)<0 && untouched==0x12345678);
+}
+
 int main(void) {
     for(int k=0;k<3;k++)for(int i=0;i<16;i++)patterns[k][i]=(uint8_t)(k*71+i*29);
     const int scales[]={1,2,3,10};unsigned count=0;
+    const HdJobFrame *retained=NULL;uint32_t *retained_pixels=NULL;
     for(int ram=0;ram<2;ram++)for(int ver=0;ver<2;ver++)for(unsigned si=0;si<4;si++) {
         setup(ram,ver?106:99,scales[si]);
         uint32_t native[17*240];size_t n=(size_t)17*240*s_scale*s_scale;
@@ -124,11 +164,41 @@ int main(void) {
             s_use_render_plan=q%4!=0; /* simple-pack compositor selection */
             if(q==10)s_plan_epoch=UINT64_MAX;
             hdpack_upscale(native,17,out);
+#if !(defined(NESRECOMP_HDPACK_PLAN_REFERENCE) && NESRECOMP_HDPACK_PLAN_REFERENCE)
+            if(q==0 || (ram==0 && ver==1 && si==2 && q==2)) {
+                const HdJobFrame *jobs=hdpack_prepare_jobs(native,17);assert(jobs);
+                assert(sizeof(HdJobPixel)==8*sizeof(uint32_t));
+                assert(s_bgimgs[1]->job_image==HD_JOB_NO_IMAGE);
+                assert(jobs->image_count==(uint32_t)s_all_count+3);
+                assert(s_bgimgs[3]->job_image==(uint32_t)s_all_count+2);
+                if(q==0 && retained && count!=0) {
+                    assert(jobs->pack_generation!=retained->pack_generation);
+                    check_retained_jobs(retained,retained_pixels);
+                    hdpack_jobs_release(retained);retained=NULL;
+                    free(retained_pixels);retained_pixels=NULL;
+                }
+                if(count==0) {
+                    retained_pixels=malloc(n*4);assert(retained_pixels);
+                    memcpy(retained_pixels,out,n*4);retained=jobs;
+                    hdpack_jobs_retain(retained);
+                }
+                if(ram==0 && ver==1 && si==2 && q==2) check_job_scales(jobs,out);
+                hdpack_jobs_release(jobs);
+            }
+            if(q==1 && retained) check_retained_jobs(retained,retained_pixels);
+#endif
+#ifdef NESRECOMP_HDPACK_GPU_PROBE
+            const HdJobFrame *gpu_jobs=hdpack_prepare_jobs(native,17);assert(gpu_jobs);
+            hdpack_gpu_probe_check(gpu_jobs,(unsigned)s_scale,out,(size_t)17*s_scale);
+            hdpack_jobs_release(gpu_jobs);
+#endif
             uint64_t hash=UINT64_C(1469598103934665603);
             for(size_t i=0;i<n;i++)for(int j=0;j<4;j++)hash=(hash^(uint8_t)(out[i]>>(j*8)))*UINT64_C(1099511628211);
             printf("case %u %016llx\n",count++,(unsigned long long)hash);
         }
         free(out);hdpack_unload();
+        if(retained) check_retained_jobs(retained,retained_pixels);
     }
+    assert(!retained && !retained_pixels);
     assert(count==192);return 0;
 }

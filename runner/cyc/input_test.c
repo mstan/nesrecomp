@@ -308,11 +308,13 @@ static void persistence(const char *dir)
     CycSettings s, back;
     cyc_settings_default(&s);
     CHECK(!cyc_settings_load(&s, path, NULL, NULL));               /* no file: defaults stay */
+    CHECK(s.hd_resolution == 0);
     /* change every field */
     s.window_scale = 5; s.fullscreen = 2; s.integer_scale = 0; s.linear_filter = 1;
     s.audio_enabled = 0; s.volume = 35; s.skip_launcher = 1;
     s.rewind_enabled = 0; s.rewind_depth = 150; s.rewind_interval = 15;
     s.hdpack_enabled = 0;
+    s.hd_resolution = 16;
     snprintf(s.hdpack_dir,sizeof s.hdpack_dir,"F:/HD Packs/Zelda");
     s.zapper_mouse = 0; s.zapper_crosshair = 0;
     s.fds_hle.auto_swap = 1; s.fds_hle.fast_load = 0;
@@ -338,6 +340,7 @@ static void persistence(const char *dir)
     CHECK(back.audio_enabled == 0 && back.volume == 35 && back.skip_launcher == 1);
     CHECK(back.rewind_enabled == 0 && back.rewind_depth == 150 && back.rewind_interval == 15);
     CHECK(!back.hdpack_enabled && !strcmp(back.hdpack_dir,s.hdpack_dir));
+    CHECK(back.hd_resolution == 16);
     CHECK(!back.zapper_mouse && !back.zapper_crosshair && back.zapper_keys == 3);
     CHECK(back.fds_hle.auto_swap == 1 && back.fds_hle.fast_load == 0);
     CHECK(!memcmp(&back.bind, &s.bind, sizeof(s.bind)));
@@ -374,7 +377,7 @@ static void persistence(const char *dir)
     /* damaged values keep their defaults and are reported; unknown sections
      * and keys are ignored; the runner's keybinds.ini names parse */
     f = fopen(path, "w");
-    fputs("[Display]\nWindowScale = lots\nFullscreen = 9\n[Unknown]\nx = y\n"
+    fputs("[Display]\nWindowScale = lots\nFullscreen = 9\nHDResolution = 3\n[Unknown]\nx = y\n"
           "[Keyboard.Player1]\na = NoSuchKey\nb = rshift\n[Gamepad.Player1]\nstart = a, b\nup = paddle9\n"
           "[Keyboard.Player7]\na = Q\n[FDS]\nAutoSwap = maybe\nFastLoad = on\n"
           "[Zapper]\nMouse = false\nCrosshair = true\n"
@@ -390,6 +393,7 @@ static void persistence(const char *dir)
     CycSettings d;
     cyc_settings_default(&d);
     CHECK(back.window_scale == d.window_scale && back.fullscreen == 2);         /* clamped */
+    CHECK(back.hd_resolution == 0);
     CHECK(back.bind.button[0][0].key == d.bind.button[0][0].key);             /* kept */
     CHECK(back.bind.button[0][1].key == SDL_SCANCODE_RSHIFT);
     CHECK(back.bind.button[0][3].pad == CYC_PAD_BUTTON(SDL_CONTROLLER_BUTTON_A));
@@ -404,7 +408,25 @@ static void persistence(const char *dir)
     fclose(log);
     all[n] = 0;
     CHECK(strstr(all, "WindowScale = lots") && strstr(all, "a = NoSuchKey") && strstr(all, "up = paddle9") &&
-          strstr(all, "AutoSwap = maybe"));
+          strstr(all, "AutoSwap = maybe") && strstr(all, "HDResolution = 3"));
+    /* Every advertised HD scale persists; invalid values keep an existing choice. */
+    const int hd_scales[] = {0, 1, 2, 4, 8, 16, 32, 64};
+    for (size_t i = 0; i < sizeof(hd_scales) / sizeof(hd_scales[0]); ++i) {
+        s.hd_resolution = hd_scales[i];
+        CHECK(cyc_settings_save(&s, path, NULL));
+        cyc_settings_default(&back);
+        CHECK(cyc_settings_load(&back, path, NULL, NULL));
+        CHECK(back.hd_resolution == hd_scales[i]);
+    }
+    const char *const invalid_hd_scales[] = {"-1", "3", "65", "16x", "4294967360"};
+    for (size_t i = 0; i < sizeof(invalid_hd_scales) / sizeof(invalid_hd_scales[0]); ++i) {
+        f = fopen(path, "w");
+        fprintf(f, "[Display]\nHDResolution = %s\n", invalid_hd_scales[i]);
+        fclose(f);
+        back.hd_resolution = 16;
+        CHECK(cyc_settings_load(&back, path, NULL, NULL));
+        CHECK(back.hd_resolution == 16);
+    }
     remove(path);
     remove(logpath);
 }

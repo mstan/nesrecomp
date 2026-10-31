@@ -9,15 +9,17 @@
  *   - ppu_renderer.c records the visible tile per pixel into the side channel
  *     (hdpack_pixels()) while doing the normal native render, gated by
  *     hdpack_recording().
- *   - main_runner.c calls hdpack_upscale() to turn the native framebuffer +
- *     side channel into a width*scale x 240*scale HD framebuffer, presented
- *     through an HD-sized SDL texture.
+ *   - hosts publish immutable presentation jobs with hdpack_prepare_jobs().
+ *     GPU consumers keep their authored source pixels resident and render at
+ *     output density. The shared portable consumer is hdpack_render_jobs();
+ *     hdpack_upscale() remains the pack-scale CPU compatibility entry point.
  *
  * All matching/parsing/rendering lives in hdpack.c; the renderer change is a
  * thin record-on-write. Byte-compatible with Mesen2 Core/NES/HdPacks.
  */
 #pragma once
 #include <stdint.h>
+#include "hdpack_jobs.h"
 
 /* Per-pixel record of the visible BG + topmost sprite tile, filled by the native
  * render pass. Two layers so the upscaler can composite HD sprites over the HD
