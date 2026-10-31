@@ -17,7 +17,7 @@ original HD runtime. See [HD results](2026-10-28-hd-plan-results.md), including
 the rejected universal packages and SMB's unchanged-runtime proof. Zelda's
 fixed SNROM SRAM code now joins the native deadline service; see
 [SRAM results](2026-10-28-sram-native-results.md). SERVER Fit improves5.128%
-and Remastered1.442%; stock is neutral/inconclusive. Twenty-eight items now have
+and Remastered1.442%; stock is neutral/inconclusive. Twenty-nine items now have
 qualified evaluation decisions; NES01 is qualified for whole stable HLE raster
 jobs and NES29 remains parked.
 Guarded native ROM is now evaluated under NES09; see
@@ -649,13 +649,16 @@ close the per-pixel raster or APU-event algorithm work under NES01/NES06.
   Evidence: [runner/cyc/hw_fds_hle.c:2](../../runner/cyc/hw_fds_hle.c#L2), [runner/cyc/cyc_core.h:104](../../runner/cyc/cyc_core.h#L104). Reuse `beads-2dw.1.74`.
 
 
-- [ ] **NES30 · P3 · Expansion-audio and complex-board event services**
+- [x] **NES30 · P3 · Expansion-audio and complex-board event services**
 
   FDS/VRC6/VRC7/Namco/FME-7 and MMC5-specific work has different timer, sampling and bus-observer costs. Build event-driven board/audio services where an actually supported title spends time, not a generic callback cleanup.
 
   Scope: A supported title using MMC5 or VRC/Namco/FME-7 expansion services; FDS parked.
 
-  Next: A matching supported board workload and one inclusive service attribution. Reuse existing board fixtures; no all-mapper matrix merely to rank a candidate.
+  Evaluation: Defer: actual five-title ROM headers/hashes select only
+  boards0/1/4/66, with no eligible complex-board/expansion workload among
+  these titles. Engine support remains; no new runtime measure/speedup or
+  global catalog/exhaustion claim. FDS stays parked. [Results](2026-10-31-complex-board-scope-results.md).
 
   Preserve: Expansion PCM, board IRQ/read gating and register timing, device state and portable execution. FDS-specific work remains parked with NES29.
 
@@ -712,6 +715,6 @@ working portable implementation. Netplay settles a common validated profile
 before frame 0; platform compilation alone is not compatibility qualification.
 
 Audit completion closes only `beads-2dw.1.109`'s investigation/deliverable.
-Current execution has twenty-eight scoped evaluation decisions, two unresolved
+Current execution has twenty-nine scoped evaluation decisions, one unresolved
 items and parked NES29. The implementation campaign and final combined owner
 handoff remain open; a scoped decision is not architectural exhaustion.

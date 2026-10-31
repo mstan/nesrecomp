@@ -1,0 +1,107 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-31",
+  "opportunity": "NES30",
+  "issue": "beads-2dw.1.110",
+  "campaign": "beads-2wy8.1",
+  "engine_base": "f3dffcdb5f9bb066aa65bb1652e25c7e4c540e36",
+  "decision": "Defer complex-board/expansion service implementation: no eligible workload among five campaign titles",
+  "inventory": {
+    "games": [
+      {
+        "title": "smb",
+        "rom": "F:\\Projects\\nesrecomp\\SuperMarioBrosRecomp\\baserom.nes",
+        "rom_sha256": "f61548fdf1670cffefcc4f0b7bdcdd9eaba0c226e3b74f8666071496988248de",
+        "header_hex": "4e45531a020101000000000000000000",
+        "mapper": 0,
+        "current_selected_title_head": "35df4bc760c8a27e0e55a6ae65fd1308ae335e87",
+        "prepared_title_head": "45f95754f8ad6e04fc39966505c94af9783bd787",
+        "eligible_complex_expansion_workload": false,
+        "new_runtime_measurement": false
+      },
+      {
+        "title": "smb3",
+        "rom": "F:\\Projects\\nesrecomp\\SuperMarioBros3Recomp\\Super Mario Bros. 3 (USA).nes",
+        "rom_sha256": "6ea0777ca520ba7ad7b0ea0f6452140d59aa0b1dffe5045cb1e8020dde10c267",
+        "header_hex": "4e45531a101040000000000000000000",
+        "mapper": 4,
+        "current_selected_title_head": "99e5d3b852eb8ace6a9344583cb53990ac8e29cb",
+        "prepared_title_head": "99e5d3b852eb8ace6a9344583cb53990ac8e29cb",
+        "eligible_complex_expansion_workload": false,
+        "new_runtime_measurement": false
+      },
+      {
+        "title": "metroid",
+        "rom": "F:\\Projects\\nesrecomp\\MetroidNESRecomp\\metroid.nes",
+        "rom_sha256": "e6e6b7014685adae447ebb3833242815747bc1e5df83ade79f693fb67cf565b6",
+        "header_hex": "4e45531a080010000000000000000000",
+        "mapper": 1,
+        "current_selected_title_head": "caccee62a67daea083fac8af36b1d0065b902071",
+        "prepared_title_head": "caccee62a67daea083fac8af36b1d0065b902071",
+        "eligible_complex_expansion_workload": false,
+        "new_runtime_measurement": false
+      },
+      {
+        "title": "gumshoe",
+        "rom": "F:\\Projects\\nesrecomp\\GumshoeNESRecomp\\Gumshoe (USA, Europe).nes",
+        "rom_sha256": "f62529ff98015d8feb6b7288200a4d8a3acfd2fbcbb90ce0b4a6379be342f38a",
+        "header_hex": "4e45531a080421400000000000000000",
+        "mapper": 66,
+        "current_selected_title_head": "867a0091f3e2381d5507df3a95f24acb1b133465",
+        "prepared_title_head": "867a0091f3e2381d5507df3a95f24acb1b133465",
+        "eligible_complex_expansion_workload": false,
+        "new_runtime_measurement": false
+      },
+      {
+        "title": "zelda",
+        "rom": "F:\\Projects\\nesrecomp\\LegendOfZeldaNESRecomp\\Legend of Zelda.NES",
+        "rom_sha256": "8f72dc2e98572eb4ba7c3a902bca5f69c448fc4391837e5f8f0d4556280440ac",
+        "header_hex": "4e45531a080012000000000000000000",
+        "mapper": 1,
+        "current_selected_title_head": "13f475bd769a063f63ac0166048df2b6578c35f1",
+        "prepared_title_head": "b2bd8fb3219d4bb01605541183f738280f3ad7b5",
+        "eligible_complex_expansion_workload": false,
+        "new_runtime_measurement": false
+      }
+    ],
+    "eligible_count": 0,
+    "scope": "Actual five campaign title ROM inventory, not global engine supported-title inventory or runtime qualification",
+    "FDS": "NES29 remains owner-parked"
+  },
+  "source_identities": {
+    "hw_mapper.c": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\engine-nes30\\runner\\cyc\\hw_mapper.c",
+      "sha256": "5738306c9983f76b4a711fe56f02c5742848b2446950316e8fe255b131f5edd6"
+    },
+    "hw_mmc5.inc": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\engine-nes30\\runner\\cyc\\hw_mmc5.inc",
+      "sha256": "50e95f74640bb5879d586c1b5dea3b6b9dfd46ec337f0cde23a54fa15e74419a"
+    },
+    "hw_vrc6.inc": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\engine-nes30\\runner\\cyc\\hw_vrc6.inc",
+      "sha256": "1681a93e55b01d74cd51bfbe8d6e7db93ce5e866cccd62a4432888c8568d9776"
+    },
+    "hw_vrc7.inc": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\engine-nes30\\runner\\cyc\\hw_vrc7.inc",
+      "sha256": "696da15f4fb75035ef54cf0eb52f9ec0b23bb89e5ee12f2f91b4050c4e9b2566"
+    },
+    "hw_namco.inc": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\engine-nes30\\runner\\cyc\\hw_namco.inc",
+      "sha256": "75fa4afb6b523c736be5ced11fa4c93bab6127bf49be3d3285a62cfa356ab66e"
+    }
+  },
+  "archive": {
+    "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\complex-board-scope-v1-evidence.zip",
+    "bytes": 35307,
+    "sha256": "267fa352e3e22211209bda966a1610335e32aac66b0a0d57d8d7bcc680e9a344"
+  },
+  "new_runtime_launches": 0,
+  "new_builds": 0,
+  "measured_gain": null,
+  "limitations": [
+    "Mapper0 SMB1, mapper4 SMB3, mapper1 Metroid/Zelda and mapper66 Gumshoe are verified from actual16byte headers and full ROM hashes. Current selected titleheads distinguished from prepared snapshots; ROM identity unchanged.",
+    "Engine supports MMC5, VRC6/VRC7, Namco and FME7 services; no eligible workload among these5titles does not mean no supported games globally. Current audio dispatch gates5/85/69/19/20/VRC6; specific CPU/PPU/IRQ/read service gates remain real behavioral contracts. Board4/MMC3 is not board5/MMC5.",
+    "No generic callback cleanup, allmapper benchmark matrix, fabricated attribution or speedup. Existing normal cartridge board intervals remain selected through earlierNES01..06 scope. Complex-board service ownership/event replacement remains potentially useful when a supported consuming title is actually in scope; retain expansion PCM/register/IRQ/read timing and state/portable contracts.",
+    "FDS20 is owner-parked withNES29 and is not reopened as this item. Inventory/sourceaudit is a scoped evaluation decision, not runtime qualification or architectural exhaustion. Final supportedCLI/five-title builds and owner acceptance remain separate."
+  ]
+}

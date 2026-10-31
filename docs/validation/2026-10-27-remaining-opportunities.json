@@ -35,7 +35,8 @@
     "2026-10-31-audio-host-results.json",
     "2026-10-31-pacing-reuse-results.json",
     "2026-10-31-compiler-policy-results.json",
-    "2026-10-31-visual-jobs-results.json"
+    "2026-10-31-visual-jobs-results.json",
+    "2026-10-31-complex-board-scope-results.json"
   ],
   "priorities": "Order expresses expected scope and evidence, not measured recoverable cost. Overlapping packages are not additive.",
   "acceptance": "Each game neutral or positive. Small mixed samples inconclusive. Shared original/candidate defects are separate. Native saves protected; old save-state compatibility never required.",
@@ -1263,7 +1264,7 @@
       "package": "conditional-services",
       "priority": "P3",
       "title": "Expansion-audio and complex-board event services",
-      "status": "open-unmeasured",
+      "status": "evaluated-deferred-no-current-workload",
       "evidence": [
         {
           "file": "runner/cyc/hw_mapper.c",
@@ -1280,15 +1281,16 @@
           "link": "../../runner/cyc/hw_mapper.c#L1367"
         }
       ],
-      "remaining": "FDS/VRC6/VRC7/Namco/FME-7 and MMC5-specific work has different timer, sampling and bus-observer costs. Build event-driven board/audio services where an actually supported title spends time, not a generic callback cleanup.",
+      "remaining": "Complex-board/expansion services remain supported and potentially useful, but no eligible consumer among five campaign titles. FDS remains parked.",
       "affected_profiles": [
         "A supported title using MMC5 or VRC/Namco/FME-7 expansion services; FDS parked"
       ],
-      "next_decisive_check": "A matching supported board workload and one inclusive service attribution. Reuse existing board fixtures; no all-mapper matrix merely to rank a candidate.",
+      "next_decisive_check": "Independent durable Beads review, thenNES31. Reopen on actual supported complex-board consuming title workload.",
       "required_behavior": "Expansion PCM, board IRQ/read gating and register timing, device state and portable execution. FDS-specific work remains parked with NES29.",
       "prior_issue": null,
       "measured_additional_gain": null,
-      "execution_status": "remaining-evaluation"
+      "execution_status": "evaluated-five-title-board-inventory",
+      "result_file": "2026-10-31-complex-board-scope-results.json"
     },
     {
       "id": "NES31",
@@ -1325,7 +1327,7 @@
   ],
   "execution": {
     "issue": "beads-2dw.1.110",
-    "branch": "docs/nes28-visual-jobs",
+    "branch": "docs/nes30-board-scope",
     "base": "fc0bf3fa46a710464960c0a1f2d3b83b4d345600",
     "status": "in-progress",
     "evidence_root": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028",
@@ -1336,12 +1338,12 @@
     "owner_handoff_ready": false
   },
   "execution_summary": {
-    "evaluated_decisions": 28,
+    "evaluated_decisions": 29,
     "partial_ids": [],
     "parked_ids": [
       "NES29"
     ],
-    "other_unresolved": 2,
+    "other_unresolved": 1,
     "note": "Qualified scope decisions, not architectural exhaustion or a wall-clock completion estimate. Final combined builds and owner approval remain separate."
   }
 }
