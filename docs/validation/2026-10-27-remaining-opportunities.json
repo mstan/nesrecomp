@@ -26,7 +26,8 @@
     "2026-10-31-wide-view-results.json",
     "2026-10-31-rewind-history-results.json",
     "2026-10-31-present-upload-results.json",
-    "2026-10-31-observer-results.json"
+    "2026-10-31-observer-results.json",
+    "2026-10-31-dma-service-results.json"
   ],
   "priorities": "Order expresses expected scope and evidence, not measured recoverable cost. Overlapping packages are not additive.",
   "acceptance": "Each game neutral or positive. Small mixed samples inconclusive. Shared original/candidate defects are separate. Native saves protected; old save-state compatibility never required.",
@@ -286,7 +287,7 @@
       "package": "machine-intervals",
       "priority": "P2",
       "title": "Native DMA transfer service with exact device deadlines",
-      "status": "open-unmeasured",
+      "status": "evaluated-deferred-standalone-DMA-after-attribution",
       "evidence": [
         {
           "file": "runner/cyc/hw_machine.c",
@@ -303,15 +304,16 @@
           "link": "../../runner/cyc/hw_apu.c#L601"
         }
       ],
-      "remaining": "OAM and DMC DMA still traverse the ordinary cycle machinery. Consolidate safe transfer runs and device advancement rather than substituting an unqualified memcpy.",
+      "remaining": "Standalone DMA deferred after complete burst-body attribution in SMB3/SMB1. Native polling/blank-clock execution and possible future DMA reuse remain unmeasured residuals; no memcpy substitution or architecture-exhaustion claim.",
       "affected_profiles": [
         "Actual OAM/DMC-heavy gameplay; controller/Zapper interactions when affected"
       ],
-      "next_decisive_check": "Attribute a real DMA-heavy interval; reuse collision fixtures and test a transfer service only if the post-HLE share warrants it.",
+      "next_decisive_check": "Continue NES08 polling/blank CPU service attribution after independent durable handoff. Revisit DMA only when a larger measured coherent replacement or matching supported heavy workload selects it.",
       "required_behavior": "Stolen cycles, CPU-held address, controller/register/open-bus reads, DMC/OAM collisions, interrupts and mapper observations.",
       "prior_issue": null,
       "measured_additional_gain": null,
-      "execution_status": "remaining-evaluation"
+      "execution_status": "deferred-after-scoped-DMA-heavy-gameplay-attribution",
+      "result_file": "2026-10-31-dma-service-results.json"
     },
     {
       "id": "NES08",
@@ -1290,7 +1292,7 @@
   ],
   "execution": {
     "issue": "beads-2dw.1.110",
-    "branch": "perf/nes23-observer-products",
+    "branch": "perf/nes07-native-dma",
     "base": "fc0bf3fa46a710464960c0a1f2d3b83b4d345600",
     "status": "in-progress",
     "evidence_root": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028",
@@ -1301,12 +1303,12 @@
     "owner_handoff_ready": false
   },
   "execution_summary": {
-    "evaluated_decisions": 19,
+    "evaluated_decisions": 20,
     "partial_ids": [],
     "parked_ids": [
       "NES29"
     ],
-    "other_unresolved": 11,
+    "other_unresolved": 10,
     "note": "Qualified scope decisions, not architectural exhaustion or a wall-clock completion estimate. Final combined builds and owner approval remain separate."
   }
 }

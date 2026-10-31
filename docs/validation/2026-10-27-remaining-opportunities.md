@@ -17,7 +17,7 @@ original HD runtime. See [HD results](2026-10-28-hd-plan-results.md), including
 the rejected universal packages and SMB's unchanged-runtime proof. Zelda's
 fixed SNROM SRAM code now joins the native deadline service; see
 [SRAM results](2026-10-28-sram-native-results.md). SERVER Fit improves5.128%
-and Remastered1.442%; stock is neutral/inconclusive. Nineteen items now have
+and Remastered1.442%; stock is neutral/inconclusive. Twenty items now have
 qualified evaluation decisions; NES01 is qualified for whole stable HLE raster
 jobs and NES29 remains parked.
 Guarded native ROM is now evaluated under NES09; see
@@ -219,13 +219,19 @@ close the per-pixel raster or APU-event algorithm work under NES01/NES06.
   Evidence: [runner/cyc/hw_apu.c:350](../../runner/cyc/hw_apu.c#L350), [runner/cyc/hw_apu.c:601](../../runner/cyc/hw_apu.c#L601).
 
 
-- [ ] **NES07 · P2 · Native DMA transfer service with exact device deadlines**
+- [x] **NES07 · P2 · Native DMA transfer service with exact device deadlines**
 
   OAM and DMC DMA still traverse the ordinary cycle machinery. Consolidate safe transfer runs and device advancement rather than substituting an unqualified memcpy.
 
   Scope: Actual OAM/DMC-heavy gameplay; controller/Zapper interactions when affected.
 
-  Next: Attribute a real DMA-heavy interval; reuse collision fixtures and test a transfer service only if the post-HLE share warrants it.
+  Evaluation: Standalone DMA rewrite deferred after actual native-HLE SMB3
+  DMA-heavy and SMB1 control attribution. Full stolen-burst bodies include
+  necessary device advancement and occupy about1% observed interval wall;
+  this is not a recoverable bound or an A/B gain. No candidate or unqualified
+  memcpy. See [DMA service results](2026-10-31-dma-service-results.md). Reusable
+  polling/blank-clock work underNES08 and later DMA reuse remain explicit
+  unmeasured residuals, not architectural exhaustion.
 
   Preserve: Stolen cycles, CPU-held address, controller/register/open-bus reads, DMC/OAM collisions, interrupts and mapper observations.
 
@@ -238,7 +244,13 @@ close the per-pixel raster or APU-event algorithm work under NES01/NES06.
 
   Scope: Content-qualified active-gameplay waits and rendering-off intervals.
 
-  Next: Identify the exact active wait on gameplay traces. Reject menu/boot-only counts as gameplay attribution; prove a complete loop service on one content-qualified loop.
+  Evaluation: Standalone DMA rewrite deferred after actual native-HLE SMB3
+  DMA-heavy and SMB1 control attribution. Full stolen-burst bodies include
+  necessary device advancement and occupy about1% observed interval wall;
+  this is not a recoverable bound or an A/B gain. No candidate or unqualified
+  memcpy. See [DMA service results](2026-10-31-dma-service-results.md). Reusable
+  polling/blank-clock work underNES08 and later DMA reuse remain explicit
+  unmeasured residuals, not architectural exhaustion.
 
   Preserve: Final registers/RAM, loop exit, side-effectful reads, interrupt sampling, device time and input latency. No arbitrary dropped cycles.
 

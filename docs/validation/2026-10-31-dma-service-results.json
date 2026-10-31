@@ -1,0 +1,1124 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-31",
+  "opportunity": "NES07",
+  "issue": "beads-2dw.1.110",
+  "campaign": "beads-2wy8.1",
+  "branch": "perf/nes07-native-dma",
+  "campaign_source_base": "2cdbbd0171f1cdaef6278eda28632984b9c16dfc",
+  "decision": "DEFERRED standalone DMA service after bounded actual post-HLE attribution; no runtime candidate/adoption/PR",
+  "runtime_commit": null,
+  "pull_request": null,
+  "results": [
+    {
+      "title": "smb3",
+      "host": "DESKTOP-HN15M1H",
+      "profile": "retained stock gameplay route, native HLE, audio mixed/queued to dummy, rewind100/4",
+      "scope": {
+        "first": 2402,
+        "last": 3600,
+        "bursts": 14451,
+        "stolen_cycles": 663143,
+        "oam_start_bursts": 1188,
+        "dmc_start_bursts": 13265,
+        "combined_start_bursts": 2,
+        "blank_ram_no_dmc_start_bursts": 1018,
+        "inclusive_wall_ms": 43.146,
+        "events": [
+          41427,
+          304128,
+          304128,
+          13460,
+          783
+        ]
+      },
+      "window": {
+        "cpu_seconds": 3.21875,
+        "wall_seconds": 3.992267100009485,
+        "command": [
+          "G:\\Temp\\Codex\\nes110-dma-profile-v2-20261031\\smb3\\SuperMarioBros3Recomp.exe",
+          "G:\\Temp\\Codex\\nes110-dma-profile-v2-20261031\\smb3\\baserom.nes",
+          "--hidden",
+          "--uncapped",
+          "--exit-after",
+          "3601",
+          "--no-save",
+          "--config",
+          "G:\\Temp\\Codex\\nes110-dma-profile-v2-20261031\\smb3\\config.ini",
+          "--mods-root",
+          "G:\\Temp\\Codex\\nes110-dma-profile-v2-20261031\\smb3\\mods",
+          "--window-input",
+          "G:\\Temp\\Codex\\nes110-dma-profile-v2-20261031\\smb3\\moving.input",
+          "--tcp",
+          "51995"
+        ],
+        "affinity_mask": 16384,
+        "priority": "Normal",
+        "first_frame": 2401,
+        "excluded_setup_cpu_seconds": 0.375,
+        "excluded_setup_wall_seconds": 0.8895603999990271,
+        "interval_core_before": [
+          [
+            479880625000,
+            632085937500,
+            150736250000
+          ],
+          [
+            591383750000,
+            660940625000,
+            121880937500
+          ],
+          [
+            235570156250,
+            385674218750,
+            397147343750
+          ],
+          [
+            354337343750,
+            489705781250,
+            293115781250
+          ],
+          [
+            407087031250,
+            529537812500,
+            253283750000
+          ],
+          [
+            441185000000,
+            551002031250,
+            231819531250
+          ],
+          [
+            467430000000,
+            570694218750,
+            212127343750
+          ],
+          [
+            496040468750,
+            587948750000,
+            194872812500
+          ],
+          [
+            323347500000,
+            483388437500,
+            299433125000
+          ],
+          [
+            350847812500,
+            498005625000,
+            284815937500
+          ],
+          [
+            537463437500,
+            630869687500,
+            151951875000
+          ],
+          [
+            566287656250,
+            644022031250,
+            138799531250
+          ],
+          [
+            591136406250,
+            681623437500,
+            101198125000
+          ],
+          [
+            600601406250,
+            702837187500,
+            79984375000
+          ],
+          [
+            622566875000,
+            689038593750,
+            93782968750
+          ],
+          [
+            623256093750,
+            684905468750,
+            97916093750
+          ]
+        ],
+        "interval_core_after": [
+          [
+            479898437500,
+            632112343750,
+            150749843750
+          ],
+          [
+            591408750000,
+            660968281250,
+            121893281250
+          ],
+          [
+            235577343750,
+            385687187500,
+            397174375000
+          ],
+          [
+            354352968750,
+            489723906250,
+            293137656250
+          ],
+          [
+            407101406250,
+            529556562500,
+            253305000000
+          ],
+          [
+            441204062500,
+            551025156250,
+            231836406250
+          ],
+          [
+            467447031250,
+            570716406250,
+            212145156250
+          ],
+          [
+            496058906250,
+            587971093750,
+            194890468750
+          ],
+          [
+            323358281250,
+            483404687500,
+            299456875000
+          ],
+          [
+            350861875000,
+            498026562500,
+            284835000000
+          ],
+          [
+            537482343750,
+            630894531250,
+            151967031250
+          ],
+          [
+            566308750000,
+            644047343750,
+            138814218750
+          ],
+          [
+            591160156250,
+            681652343750,
+            101209218750
+          ],
+          [
+            600624531250,
+            702866718750,
+            79994843750
+          ],
+          [
+            622567656250,
+            689040156250,
+            93821406250
+          ],
+          [
+            623281250000,
+            684934375000,
+            97927187500
+          ]
+        ],
+        "scope": "Resumed SDL frames plus normal shutdown; TCP menu/load/window setup excluded",
+        "fixed_zapper": null,
+        "setup_state": {
+          "id": 0,
+          "ok": true,
+          "frame": 2401,
+          "menu_open": true,
+          "fds": false,
+          "side": -1,
+          "sides": 0,
+          "motor": false,
+          "writing": false,
+          "toast": {
+            "visible": false,
+            "title": "",
+            "body": ""
+          },
+          "hle": "",
+          "disk_save": "",
+          "disk_binding": "D / LB",
+          "picture": [
+            256,
+            240
+          ],
+          "dev_ui": false,
+          "recomp_ui": true,
+          "native": true,
+          "vsync_requested": false,
+          "vsync_active": true,
+          "pads": [],
+          "state_panel": "closed",
+          "state_slot": 1,
+          "rewind_count": 0,
+          "rewind_frame": -1,
+          "rewind_enabled": true,
+          "workload_scene": {
+            "id": 0,
+            "ok": true,
+            "hex": "00000000000009000000012B35000400"
+          },
+          "workload_ram": {
+            "id": 0,
+            "ok": true,
+            "hex": "000000D50000000D003801020100400000000000003D1841000000000100000000000A1101808080808080808080808080808080808080808080808040404040"
+          }
+        },
+        "zapper_state": null,
+        "world_state": null
+      },
+      "inclusive_wall_percent": 1.0807393122543703,
+      "settings": "# NESRecomp cycle-backend settings: the launcher, the in-game menu and the\n# window write this file. Keys are SDL key and controller names.\n[Display]\nWindowScale = 3\nFullscreen = 0\nIntegerScale = 1\nLinearFilter = 0\nVSync = 0\nHdPackEnabled = 1\nHdPackDir = \n[Audio]\nEnabled = 1\nVolume = 0\n[Input]\nPlayer1Source = 1\nPlayer1Device = \nPlayer1Deadzone = 30\nPlayer2Source = 2\nPlayer2Device = \nPlayer2Deadzone = 30\n[Launcher]\nSkipLauncher = 0\n[Rewind]\nEnabled = 1\nDepth = 100\nInterval = 4\n[Netplay]\nPlayerName = \n[Zapper]\nMouse = 1\nCrosshair = 1\n[FDS]\n# on, off, or default (the game's own setting)\nAutoSwap = default\nFastLoad = default\n# the FDS BIOS file, any name (checked by size and CRC); empty: the launcher asks for it\nBios = \n[Keyboard.Player1]\na = Z\nb = X\nselect = \\\nstart = Return\nup = Up\ndown = Down\nleft = Left\nright = Right\n[Gamepad.Player1]\na = a\nb = x\nselect = back\nstart = start\nup = dpup\ndown = dpdown\nleft = dpleft\nright = dpright\n[Keyboard.Player2]\na = None\nb = None\nselect = None\nstart = None\nup = None\ndown = None\nleft = None\nright = None\n[Gamepad.Player2]\na = a\nb = x\nselect = back\nstart = start\nup = dpup\ndown = dpdown\nleft = dpleft\nright = dpright\n[Keyboard.Shortcuts]\ndisk = D\nmenu = Escape\nfast_forward = Tab\nscreenshot = F12\nfullscreen = F11\nstate_menu = F7\nrewind = F8\n[Gamepad.Shortcuts]\ndisk = leftshoulder\nmenu = rightshoulder\nfast_forward = righttrigger+\nscreenshot = none\nfullscreen = none\nstate_menu = back+leftstick\nrewind = back+rightstick\n[Game]\nViewMode = 0\n",
+      "rom_sha256": "6ea0777ca520ba7ad7b0ea0f6452140d59aa0b1dffe5045cb1e8020dde10c267",
+      "binary_sha256": "3e8b6066fb315f5a39b8473abaf3ebcd12084bc22096bc19bfbd2e25820a8c7e",
+      "source_compile": [
+        {
+          "file": "hw_machine.c",
+          "original_source": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\deadline-candidate-v2\\runner\\cyc\\hw_machine.c",
+          "original_sha256": "10b35a8d536e7662c6e3d7f801574468479d4219f48d341afbeaaf1d9d661a7c",
+          "instrumented_source": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\source-dma-profile-v1\\smb3\\hw_machine.c",
+          "instrumented_sha256": "ebe75c020836975c23249416dc0929eb672eec62025c3c5c479ece9fa291a6a9",
+          "original_object": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-smb3-candidate-v2\\CMakeFiles\\SuperMarioBros3Recomp.dir\\G_\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\deadline-candidate-v2\\runner\\cyc\\hw_machine.c.obj",
+          "compile_argv": [
+            "C:/msys64/mingw64/bin/gcc.exe",
+            "-DCYC_BUILD_REVISION=\"unknown\"",
+            "-DCYC_BUILD_VERSION=\"0.2.4\"",
+            "-DCYC_GAME_PLAYERS=2",
+            "-DCYC_LAUNCHER_ROM_SHA256=\"d77d17d34af24871d7ce1160ccd3330555835c8e940b7100e095ac38973d927a\"",
+            "-DCYC_MOD_GAME_ID=\"super-mario-bros-3-usa\"",
+            "-DCYC_MOD_ROM_CRC32=\"a0b0b742\"",
+            "-DCYC_WITH_RECOMP_UI",
+            "-DCYC_WITH_SDL",
+            "-DNESRECOMP_ENABLE_MODS=1",
+            "-DNESRECOMP_GAME_PLAYERS=2",
+            "-DNESRECOMP_NATIVE_INTERVALS=1",
+            "-DNESRECOMP_PPU_HLE=1",
+            "-DRECOMP_LAUNCHER",
+            "-DRECOMP_UI_ENABLE_MODS=1",
+            "-DSDL_MAIN_HANDLED",
+            "-D_CRT_SECURE_NO_WARNINGS",
+            "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/deadline-candidate-v2/runner/cyc",
+            "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/deadline-candidate-v2/runner/cyc/../include",
+            "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/deadline-candidate-v2/runner/include",
+            "-IG:/Temp/Codex/nesrecomp/native-20261027/ui/src",
+            "-IG:/Temp/Codex/nesrecomp/native-20261027/ui/src/common",
+            "-IG:/Temp/Codex/nesrecomp/native-20261027/ui/src/third_party/imgui",
+            "-IG:/Temp/Codex/nesrecomp/native-20261027/ui/src/third_party/imgui/backends",
+            "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/smb3",
+            "-IG:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net/include",
+            "-IG:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/retcomm-rbengine/include",
+            "-isystem",
+            "G:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/cmake/../include",
+            "-O2",
+            "-g1",
+            "-DNDEBUG",
+            "-std=gnu11",
+            "-c",
+            "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\source-dma-profile-v1\\smb3\\hw_machine.c",
+            "-o",
+            "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-dma-profile-v1\\smb3\\hw_machine.c.obj"
+          ],
+          "cwd": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-smb3-candidate-v2",
+          "origin": {
+            "kind": "original-ninja-object",
+            "ninja": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-smb3-candidate-v2\\build.ninja",
+            "object": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-smb3-candidate-v2\\CMakeFiles\\SuperMarioBros3Recomp.dir\\G_\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\deadline-candidate-v2\\runner\\cyc\\hw_machine.c.obj"
+          }
+        },
+        {
+          "file": "hw_apu.c",
+          "original_source": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\engine\\runner\\cyc\\hw_apu.c",
+          "original_sha256": "17a21f75c8a88f2bba9637cdff19e929e6417419edac0566580558d342f62d62",
+          "instrumented_source": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\source-dma-profile-v1\\smb3\\hw_apu.c",
+          "instrumented_sha256": "18ea05f6e9f8a63f418674ca8b8f715674ad60a0e56e72af77c4520508db3093",
+          "original_object": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-apu-event-v1\\smb3\\candidate\\hw_apu.c.obj",
+          "compile_argv": [
+            "C:\\msys64\\mingw64\\bin\\gcc.exe",
+            "-DCYC_BUILD_REVISION=\"unknown\"",
+            "-DCYC_BUILD_VERSION=\"0.2.4\"",
+            "-DCYC_GAME_PLAYERS=2",
+            "-DCYC_LAUNCHER_ROM_SHA256=\"d77d17d34af24871d7ce1160ccd3330555835c8e940b7100e095ac38973d927a\"",
+            "-DCYC_MOD_GAME_ID=\"super-mario-bros-3-usa\"",
+            "-DCYC_MOD_ROM_CRC32=\"a0b0b742\"",
+            "-DCYC_WITH_RECOMP_UI",
+            "-DCYC_WITH_SDL",
+            "-DNESRECOMP_ENABLE_MODS=1",
+            "-DNESRECOMP_GAME_PLAYERS=2",
+            "-DNESRECOMP_NATIVE_INTERVALS=1",
+            "-DNESRECOMP_PPU_HLE=1",
+            "-DRECOMP_LAUNCHER",
+            "-DRECOMP_UI_ENABLE_MODS=1",
+            "-DSDL_MAIN_HANDLED",
+            "-D_CRT_SECURE_NO_WARNINGS",
+            "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/deadline-candidate-v2/runner/cyc",
+            "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/deadline-candidate-v2/runner/cyc/../include",
+            "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/deadline-candidate-v2/runner/include",
+            "-IG:/Temp/Codex/nesrecomp/native-20261027/ui/src",
+            "-IG:/Temp/Codex/nesrecomp/native-20261027/ui/src/common",
+            "-IG:/Temp/Codex/nesrecomp/native-20261027/ui/src/third_party/imgui",
+            "-IG:/Temp/Codex/nesrecomp/native-20261027/ui/src/third_party/imgui/backends",
+            "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/smb3",
+            "-IG:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net/include",
+            "-IG:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/retcomm-rbengine/include",
+            "-isystem",
+            "G:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/cmake/../include",
+            "-O2",
+            "-g1",
+            "-DNDEBUG",
+            "-std=gnu11",
+            "-c",
+            "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\source-dma-profile-v1\\smb3\\hw_apu.c",
+            "-o",
+            "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-dma-profile-v1\\smb3\\hw_apu.c.obj"
+          ],
+          "cwd": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-smb3-candidate-v2",
+          "origin": {
+            "kind": "selected-relink-command",
+            "manifest": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-apu-event-v1\\smb3\\candidate\\manifest.json",
+            "object": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-apu-event-v1\\smb3\\candidate\\hw_apu.c.obj"
+          }
+        }
+      ],
+      "capacity": {
+        "before": {
+          "eligible": true,
+          "reasons": [],
+          "requested": {
+            "cpu": 1.0,
+            "gpu": 0.0,
+            "memory": 2.0,
+            "disk": 1.0,
+            "class": "timing",
+            "priority": "normal"
+          },
+          "remaining": {
+            "cpu_cores": 3.8984375,
+            "memory_gib": 25.933704376220703,
+            "gpu_percent": 36.0
+          },
+          "sample": {
+            "host": "DESKTOP-HN15M1H",
+            "os": "windows",
+            "timestamp": 1793444103.2346482,
+            "physical_cores": 8,
+            "logical_cpus": 16,
+            "cpu_busy_percent": 51.26953125,
+            "cpu_free_cores": 3.8984375,
+            "memory_available_gib": 25.933704376220703,
+            "memory_total_gib": 61.5560188293457,
+            "gpu_busy_percent": 64.0,
+            "gpu_source": "nvidia-smi utilization.gpu",
+            "storage": "G:\\",
+            "storage_free_gib": 7199.618797302246
+          },
+          "active_claims": 1,
+          "policy": "codex-benchmark-capacity-v1",
+          "token": "00da013e7700446a879559af35626ecd",
+          "phase": "pending",
+          "target": "local",
+          "alias": null,
+          "other_targets": []
+        },
+        "command": [
+          "C:\\Users\\Matthew\\.pyenv\\pyenv-win\\versions\\3.12.5\\python.exe",
+          "-X",
+          "utf8",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\run_dma_profile_v2.py",
+          "--title",
+          "smb3"
+        ],
+        "exit_code": 0,
+        "after": {
+          "host": "DESKTOP-HN15M1H",
+          "os": "windows",
+          "timestamp": 1793444111.2550707,
+          "physical_cores": 8,
+          "logical_cpus": 16,
+          "cpu_busy_percent": 48.73046875,
+          "cpu_free_cores": 4.1015625,
+          "memory_available_gib": 25.8597412109375,
+          "memory_total_gib": 61.5560188293457,
+          "gpu_busy_percent": 82.0,
+          "gpu_source": "nvidia-smi utilization.gpu",
+          "storage": "G:\\",
+          "storage_free_gib": 7199.583667755127
+        }
+      },
+      "raw_archive": "dma-profile-v2-evidence.zip",
+      "raw_path": "smb3/results.json"
+    },
+    {
+      "title": "smb",
+      "host": "DESKTOP-HN15M1H",
+      "profile": "retained stock gameplay route, native HLE, audio mixed/queued to dummy, rewind100/4",
+      "scope": {
+        "first": 1802,
+        "last": 3000,
+        "bursts": 1197,
+        "stolen_cycles": 614671,
+        "oam_start_bursts": 1197,
+        "dmc_start_bursts": 0,
+        "combined_start_bursts": 0,
+        "blank_ram_no_dmc_start_bursts": 1197,
+        "inclusive_wall_ms": 37.9573,
+        "events": [
+          1807,
+          306432,
+          306432,
+          0,
+          0
+        ]
+      },
+      "window": {
+        "cpu_seconds": 3.1875,
+        "wall_seconds": 4.096388599995407,
+        "command": [
+          "G:\\Temp\\Codex\\nes110-dma-profile-v2-20261031\\smb\\SuperMarioBrosRecomp.exe",
+          "G:\\Temp\\Codex\\nes110-dma-profile-v2-20261031\\smb\\baserom.nes",
+          "--hidden",
+          "--uncapped",
+          "--exit-after",
+          "3001",
+          "--no-save",
+          "--config",
+          "G:\\Temp\\Codex\\nes110-dma-profile-v2-20261031\\smb\\config.ini",
+          "--mods-root",
+          "G:\\Temp\\Codex\\nes110-dma-profile-v2-20261031\\smb\\mods",
+          "--window-input",
+          "G:\\Temp\\Codex\\nes110-dma-profile-v2-20261031\\smb\\moving.input",
+          "--tcp",
+          "52082"
+        ],
+        "affinity_mask": 16384,
+        "priority": "Normal",
+        "first_frame": 1801,
+        "excluded_setup_cpu_seconds": 0.359375,
+        "excluded_setup_wall_seconds": 0.9746445000055246,
+        "interval_core_before": [
+          [
+            479933593750,
+            632160781250,
+            150779843750
+          ],
+          [
+            591453750000,
+            661019218750,
+            121920781250
+          ],
+          [
+            235592031250,
+            385711406250,
+            397228593750
+          ],
+          [
+            354384843750,
+            489763437500,
+            293176562500
+          ],
+          [
+            407130312500,
+            529595781250,
+            253344218750
+          ],
+          [
+            441238906250,
+            551069218750,
+            231870781250
+          ],
+          [
+            467477812500,
+            570756406250,
+            212183593750
+          ],
+          [
+            496094687500,
+            588015468750,
+            194924531250
+          ],
+          [
+            323382187500,
+            483438281250,
+            299501718750
+          ],
+          [
+            350888906250,
+            498065937500,
+            284874062500
+          ],
+          [
+            537517343750,
+            630937812500,
+            152002187500
+          ],
+          [
+            566349062500,
+            644095468750,
+            138844531250
+          ],
+          [
+            591208906250,
+            681710312500,
+            101229687500
+          ],
+          [
+            600671406250,
+            702921562500,
+            80018437500
+          ],
+          [
+            622610937500,
+            689091250000,
+            93848750000
+          ],
+          [
+            623327500000,
+            684987812500,
+            97952187500
+          ]
+        ],
+        "interval_core_after": [
+          [
+            479953437500,
+            632188593750,
+            150792968750
+          ],
+          [
+            591476250000,
+            661045781250,
+            121935156250
+          ],
+          [
+            235600156250,
+            385725468750,
+            397255468750
+          ],
+          [
+            354401250000,
+            489785000000,
+            293195937500
+          ],
+          [
+            407145937500,
+            529619062500,
+            253361875000
+          ],
+          [
+            441253125000,
+            551088750000,
+            231892187500
+          ],
+          [
+            467496718750,
+            570779062500,
+            212201875000
+          ],
+          [
+            496109687500,
+            588035312500,
+            194945625000
+          ],
+          [
+            323395937500,
+            483456875000,
+            299524062500
+          ],
+          [
+            350901093750,
+            498083125000,
+            284897812500
+          ],
+          [
+            537538593750,
+            630963593750,
+            152017343750
+          ],
+          [
+            566366093750,
+            644118593750,
+            138862343750
+          ],
+          [
+            591232812500,
+            681739531250,
+            101241406250
+          ],
+          [
+            600692812500,
+            702947187500,
+            80033750000
+          ],
+          [
+            622611718750,
+            689095312500,
+            93885625000
+          ],
+          [
+            623354218750,
+            685018125000,
+            97962812500
+          ]
+        ],
+        "scope": "Resumed SDL frames plus normal shutdown; TCP menu/load/window setup excluded",
+        "fixed_zapper": null,
+        "setup_state": {
+          "id": 0,
+          "ok": true,
+          "frame": 1801,
+          "menu_open": true,
+          "fds": false,
+          "side": -1,
+          "sides": 0,
+          "motor": false,
+          "writing": false,
+          "toast": {
+            "visible": false,
+            "title": "",
+            "body": ""
+          },
+          "hle": "",
+          "disk_save": "",
+          "disk_binding": "D / LB",
+          "picture": [
+            256,
+            240
+          ],
+          "dev_ui": false,
+          "recomp_ui": true,
+          "native": true,
+          "vsync_requested": false,
+          "vsync_active": true,
+          "pads": [],
+          "state_panel": "closed",
+          "state_slot": 1,
+          "rewind_count": 0,
+          "rewind_frame": -1,
+          "rewind_enabled": true,
+          "workload_scene": {
+            "id": 0,
+            "ok": true,
+            "hex": "00000000000000000000000000000000"
+          },
+          "workload_ram": {
+            "id": 0,
+            "ok": true,
+            "hex": "020378016C859D88002A000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        "zapper_state": null,
+        "world_state": null
+      },
+      "inclusive_wall_percent": 0.9266039847890054,
+      "settings": "# NESRecomp cycle-backend settings: the launcher, the in-game menu and the\n# window write this file. Keys are SDL key and controller names.\n[Display]\nWindowScale = 3\nFullscreen = 0\nIntegerScale = 1\nLinearFilter = 0\nVSync = 0\nHdPackEnabled = 1\nHdPackDir = \n[Audio]\nEnabled = 1\nVolume = 0\n[Input]\nPlayer1Source = 1\nPlayer1Device = \nPlayer1Deadzone = 30\nPlayer2Source = 2\nPlayer2Device = \nPlayer2Deadzone = 30\nPlayer3Source = 2\nPlayer3Device = \nPlayer3Deadzone = 30\nPlayer4Source = 2\nPlayer4Device = \nPlayer4Deadzone = 30\n[Launcher]\nSkipLauncher = 0\n[Rewind]\nEnabled = 1\nDepth = 100\nInterval = 4\n[Netplay]\nPlayerName = \n[Zapper]\nMouse = 1\nCrosshair = 1\n[FDS]\n# on, off, or default (the game's own setting)\nAutoSwap = default\nFastLoad = default\n# the FDS BIOS file, any name (checked by size and CRC); empty: the launcher asks for it\nBios = \n[Keyboard.Player1]\na = Z\nb = X\nselect = \\\nstart = Return\nup = Up\ndown = Down\nleft = Left\nright = Right\n[Gamepad.Player1]\na = a\nb = x\nselect = back\nstart = start\nup = dpup\ndown = dpdown\nleft = dpleft\nright = dpright\n[Keyboard.Player2]\na = None\nb = None\nselect = None\nstart = None\nup = None\ndown = None\nleft = None\nright = None\n[Gamepad.Player2]\na = a\nb = x\nselect = back\nstart = start\nup = dpup\ndown = dpdown\nleft = dpleft\nright = dpright\n[Keyboard.Player3]\na = None\nb = None\nselect = None\nstart = None\nup = None\ndown = None\nleft = None\nright = None\n[Gamepad.Player3]\na = a\nb = x\nselect = back\nstart = start\nup = dpup\ndown = dpdown\nleft = dpleft\nright = dpright\n[Keyboard.Player4]\na = None\nb = None\nselect = None\nstart = None\nup = None\ndown = None\nleft = None\nright = None\n[Gamepad.Player4]\na = a\nb = x\nselect = back\nstart = start\nup = dpup\ndown = dpdown\nleft = dpleft\nright = dpright\n[Keyboard.Shortcuts]\ndisk = D\nmenu = Escape\nfast_forward = Tab\nscreenshot = F12\nfullscreen = F11\nstate_menu = F7\nrewind = F8\n[Gamepad.Shortcuts]\ndisk = leftshoulder\nmenu = rightshoulder\nfast_forward = righttrigger+\nscreenshot = none\nfullscreen = none\nstate_menu = back+leftstick\nrewind = back+rightstick\n[Game]\nViewMode = 0\n",
+      "rom_sha256": "f61548fdf1670cffefcc4f0b7bdcdd9eaba0c226e3b74f8666071496988248de",
+      "binary_sha256": "aac80f36fa0061e75db1a78efd0fb2cf58957cf9bc24bfdefcb1c568f12d7685",
+      "source_compile": [
+        {
+          "file": "hw_machine.c",
+          "original_source": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\deadline-candidate-v2\\runner\\cyc\\hw_machine.c",
+          "original_sha256": "10b35a8d536e7662c6e3d7f801574468479d4219f48d341afbeaaf1d9d661a7c",
+          "instrumented_source": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\source-dma-profile-v1\\smb\\hw_machine.c",
+          "instrumented_sha256": "ebe75c020836975c23249416dc0929eb672eec62025c3c5c479ece9fa291a6a9",
+          "original_object": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-smb-candidate-v2\\CMakeFiles\\SuperMarioBrosRecomp.dir\\G_\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\deadline-candidate-v2\\runner\\cyc\\hw_machine.c.obj",
+          "compile_argv": [
+            "C:/msys64/mingw64/bin/gcc.exe",
+            "-DCYC_BUILD_REVISION=\"unknown\"",
+            "-DCYC_BUILD_VERSION=\"1.12.4\"",
+            "-DCYC_GAME_PLAYERS=4",
+            "-DCYC_GAME_REGION=0",
+            "-DCYC_INPUT_PLAYERS=4",
+            "-DCYC_LAUNCHER_ROM_SHA256=\"fcb6a0ef3a20c19b356005fbb21dc8009563b1cb5a9aaebc8e9386b4a8c5912e\"",
+            "-DCYC_MOD_GAME_ID=\"super-mario-bros-world\"",
+            "-DCYC_MOD_ROM_CRC32=\"d445f698\"",
+            "-DCYC_STARTUP_DIAGNOSTICS=1",
+            "-DCYC_WITH_RECOMP_UI",
+            "-DCYC_WITH_SDL",
+            "-DNESRECOMP_CYCLE_HDPACK",
+            "-DNESRECOMP_CYCLE_HDPACK_MODS",
+            "-DNESRECOMP_CYCLE_NET=1",
+            "-DNESRECOMP_CYCLE_PRESENTATION",
+            "-DNESRECOMP_ENABLE_MODS=1",
+            "-DNESRECOMP_GAME_PLAYERS=4",
+            "-DNESRECOMP_GAME_VERSION=\"1.12.4\"",
+            "-DNESRECOMP_INPUT_SEATS=4",
+            "-DNESRECOMP_NATIVE_INTERVALS=1",
+            "-DNESRECOMP_NET=1",
+            "-DNESRECOMP_PPU_HLE=1",
+            "-DNESRECOMP_TRACE=0",
+            "-DNES_HOST_HAS_RECOMP_UI=1",
+            "-DRECOMP_LAUNCHER",
+            "-DRECOMP_UI_ENABLE_MODS=1",
+            "-DRECOMP_UI_HAS_NETPLAY_HOST=1",
+            "-DSDL_MAIN_HANDLED",
+            "-DSMB1_CYCLE",
+            "-D_CRT_SECURE_NO_WARNINGS",
+            "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/deadline-candidate-v2/runner/cyc",
+            "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/deadline-candidate-v2/runner/cyc/../include",
+            "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/deadline-candidate-v2/runner/include",
+            "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/deadline-candidate-v2/runner/cyc/../src",
+            "-IG:/Temp/Codex/nesrecomp/native-20261027/ui/src",
+            "-IG:/Temp/Codex/nesrecomp/native-20261027/ui/src/common",
+            "-IG:/Temp/Codex/nesrecomp/native-20261027/ui/src/third_party/imgui",
+            "-IG:/Temp/Codex/nesrecomp/native-20261027/ui/src/third_party/imgui/backends",
+            "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/smb",
+            "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/smb/src",
+            "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/deadline-candidate-v2/runner/src/netplay",
+            "-IG:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/retcomm-rbengine/include",
+            "-IG:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net/include",
+            "-isystem",
+            "G:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/cmake/../include",
+            "-O2",
+            "-g1",
+            "-DNDEBUG",
+            "-std=gnu11",
+            "-c",
+            "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\source-dma-profile-v1\\smb\\hw_machine.c",
+            "-o",
+            "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-dma-profile-v1\\smb\\hw_machine.c.obj"
+          ],
+          "cwd": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-smb-candidate-v2",
+          "origin": {
+            "kind": "original-ninja-object",
+            "ninja": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-smb-candidate-v2\\build.ninja",
+            "object": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-smb-candidate-v2\\CMakeFiles\\SuperMarioBrosRecomp.dir\\G_\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\deadline-candidate-v2\\runner\\cyc\\hw_machine.c.obj"
+          }
+        },
+        {
+          "file": "hw_apu.c",
+          "original_source": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\engine\\runner\\cyc\\hw_apu.c",
+          "original_sha256": "17a21f75c8a88f2bba9637cdff19e929e6417419edac0566580558d342f62d62",
+          "instrumented_source": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\source-dma-profile-v1\\smb\\hw_apu.c",
+          "instrumented_sha256": "18ea05f6e9f8a63f418674ca8b8f715674ad60a0e56e72af77c4520508db3093",
+          "original_object": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-apu-event-v1\\smb\\candidate\\hw_apu.c.obj",
+          "compile_argv": [
+            "C:\\msys64\\mingw64\\bin\\gcc.exe",
+            "-DCYC_BUILD_REVISION=\"unknown\"",
+            "-DCYC_BUILD_VERSION=\"1.12.4\"",
+            "-DCYC_GAME_PLAYERS=4",
+            "-DCYC_GAME_REGION=0",
+            "-DCYC_INPUT_PLAYERS=4",
+            "-DCYC_LAUNCHER_ROM_SHA256=\"fcb6a0ef3a20c19b356005fbb21dc8009563b1cb5a9aaebc8e9386b4a8c5912e\"",
+            "-DCYC_MOD_GAME_ID=\"super-mario-bros-world\"",
+            "-DCYC_MOD_ROM_CRC32=\"d445f698\"",
+            "-DCYC_STARTUP_DIAGNOSTICS=1",
+            "-DCYC_WITH_RECOMP_UI",
+            "-DCYC_WITH_SDL",
+            "-DNESRECOMP_CYCLE_HDPACK",
+            "-DNESRECOMP_CYCLE_HDPACK_MODS",
+            "-DNESRECOMP_CYCLE_NET=1",
+            "-DNESRECOMP_CYCLE_PRESENTATION",
+            "-DNESRECOMP_ENABLE_MODS=1",
+            "-DNESRECOMP_GAME_PLAYERS=4",
+            "-DNESRECOMP_GAME_VERSION=\"1.12.4\"",
+            "-DNESRECOMP_INPUT_SEATS=4",
+            "-DNESRECOMP_NATIVE_INTERVALS=1",
+            "-DNESRECOMP_NET=1",
+            "-DNESRECOMP_PPU_HLE=1",
+            "-DNESRECOMP_TRACE=0",
+            "-DNES_HOST_HAS_RECOMP_UI=1",
+            "-DRECOMP_LAUNCHER",
+            "-DRECOMP_UI_ENABLE_MODS=1",
+            "-DRECOMP_UI_HAS_NETPLAY_HOST=1",
+            "-DSDL_MAIN_HANDLED",
+            "-DSMB1_CYCLE",
+            "-D_CRT_SECURE_NO_WARNINGS",
+            "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/deadline-candidate-v2/runner/cyc",
+            "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/deadline-candidate-v2/runner/cyc/../include",
+            "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/deadline-candidate-v2/runner/include",
+            "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/deadline-candidate-v2/runner/cyc/../src",
+            "-IG:/Temp/Codex/nesrecomp/native-20261027/ui/src",
+            "-IG:/Temp/Codex/nesrecomp/native-20261027/ui/src/common",
+            "-IG:/Temp/Codex/nesrecomp/native-20261027/ui/src/third_party/imgui",
+            "-IG:/Temp/Codex/nesrecomp/native-20261027/ui/src/third_party/imgui/backends",
+            "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/smb",
+            "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/smb/src",
+            "-IG:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/deadline-candidate-v2/runner/src/netplay",
+            "-IG:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/retcomm-rbengine/include",
+            "-IG:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net/include",
+            "-isystem",
+            "G:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/cmake/../include",
+            "-O2",
+            "-g1",
+            "-DNDEBUG",
+            "-std=gnu11",
+            "-c",
+            "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\source-dma-profile-v1\\smb\\hw_apu.c",
+            "-o",
+            "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-dma-profile-v1\\smb\\hw_apu.c.obj"
+          ],
+          "cwd": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-smb-candidate-v2",
+          "origin": {
+            "kind": "selected-relink-command",
+            "manifest": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-apu-event-v1\\smb\\candidate\\manifest.json",
+            "object": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-apu-event-v1\\smb\\candidate\\hw_apu.c.obj"
+          }
+        }
+      ],
+      "capacity": {
+        "before": {
+          "eligible": true,
+          "reasons": [],
+          "requested": {
+            "cpu": 1.0,
+            "gpu": 0.0,
+            "memory": 2.0,
+            "disk": 1.0,
+            "class": "timing",
+            "priority": "normal"
+          },
+          "remaining": {
+            "cpu_cores": 4.078125,
+            "memory_gib": 26.396446228027344,
+            "gpu_percent": 28.0
+          },
+          "sample": {
+            "host": "DESKTOP-HN15M1H",
+            "os": "windows",
+            "timestamp": 1793444114.5616953,
+            "physical_cores": 8,
+            "logical_cpus": 16,
+            "cpu_busy_percent": 49.0234375,
+            "cpu_free_cores": 4.078125,
+            "memory_available_gib": 26.396446228027344,
+            "memory_total_gib": 61.5560188293457,
+            "gpu_busy_percent": 72.0,
+            "gpu_source": "nvidia-smi utilization.gpu",
+            "storage": "G:\\",
+            "storage_free_gib": 7199.594772338867
+          },
+          "active_claims": 1,
+          "policy": "codex-benchmark-capacity-v1",
+          "token": "3a2dbf04cfa44923bfe5b4d3f26c93a9",
+          "phase": "pending",
+          "target": "local",
+          "alias": null,
+          "other_targets": []
+        },
+        "command": [
+          "C:\\Users\\Matthew\\.pyenv\\pyenv-win\\versions\\3.12.5\\python.exe",
+          "-X",
+          "utf8",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\run_dma_profile_v2.py",
+          "--title",
+          "smb"
+        ],
+        "exit_code": 0,
+        "after": {
+          "host": "DESKTOP-HN15M1H",
+          "os": "windows",
+          "timestamp": 1793444123.2430372,
+          "physical_cores": 8,
+          "logical_cpus": 16,
+          "cpu_busy_percent": 53.80859375,
+          "cpu_free_cores": 3.6953125,
+          "memory_available_gib": 26.12582015991211,
+          "memory_total_gib": 61.5560188293457,
+          "gpu_busy_percent": 88.0,
+          "gpu_source": "nvidia-smi utilization.gpu",
+          "storage": "G:\\",
+          "storage_free_gib": 7199.569980621338
+        }
+      },
+      "raw_archive": "dma-profile-v2-evidence.zip",
+      "raw_path": "smb/results.json"
+    }
+  ],
+  "archives": [
+    {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\dma-profile-v1-evidence.zip",
+      "bytes": 10796066,
+      "sha256": "39026e4bcd9807aeafd1e47f88f6ed2460ab26c0bc3a4bd69f303c3490e02130",
+      "staging": "G:\\Temp\\Codex\\nes110-dma-profile-v1-20261031"
+    },
+    {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\dma-profile-v2-evidence.zip",
+      "bytes": 18240937,
+      "sha256": "8c50bc68614850defc683b58cc323344375afcd405c38b2c8c9f3e69fa1ded6f",
+      "staging": "G:\\Temp\\Codex\\nes110-dma-profile-v2-20261031"
+    },
+    {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\dma-source-validation-evidence.zip",
+      "bytes": 127820,
+      "sha256": "d9da253a518819b20cdf1a3cc2e3db0ebf5038975ec92937c2edc41d48b89dd6"
+    }
+  ],
+  "storage": {
+    "archives": {
+      "value": [
+        {
+          "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\dma-profile-v1-evidence.zip",
+          "bytes": 10796066,
+          "sha256": "39026e4bcd9807aeafd1e47f88f6ed2460ab26c0bc3a4bd69f303c3490e02130",
+          "staging": "G:\\Temp\\Codex\\nes110-dma-profile-v1-20261031"
+        },
+        {
+          "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\dma-profile-v2-evidence.zip",
+          "bytes": 18240937,
+          "sha256": "8c50bc68614850defc683b58cc323344375afcd405c38b2c8c9f3e69fa1ded6f",
+          "staging": "G:\\Temp\\Codex\\nes110-dma-profile-v2-20261031"
+        },
+        {
+          "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\dma-source-validation-evidence.zip",
+          "bytes": 127820,
+          "sha256": "d9da253a518819b20cdf1a3cc2e3db0ebf5038975ec92937c2edc41d48b89dd6"
+        }
+      ],
+      "Count": 3
+    },
+    "purpose": "Exact rejected/deferred investigation evidence and reproducible future selection",
+    "cleanup": [
+      {
+        "removed": true,
+        "host": "DESKTOP-HN15M1H",
+        "files": 14,
+        "root": "G:\\Temp\\Codex\\nes110-dma-profile-v1-20261031",
+        "reparse_or_git": false,
+        "bytes": 32048414
+      },
+      {
+        "removed": true,
+        "host": "DESKTOP-HN15M1H",
+        "files": 39,
+        "root": "G:\\Temp\\Codex\\nes110-dma-profile-v2-20261031",
+        "reparse_or_git": false,
+        "bytes": 53872895
+      }
+    ],
+    "cleanup_when": "After final combined campaign integration, remove obsolete products/prototypes and worktrees; retain useful raw/source evidence and owner data",
+    "retained": [
+      "products-dma-profile-v1",
+      "source-dma-profile-v1",
+      "validator-nes07",
+      "frozen_compile.py"
+    ],
+    "item": "NES07"
+  },
+  "independent_static": {
+    "kind": "read-only independent static source/recipe review; no build or runtime test",
+    "checks": {
+      "smb3": {
+        "binary_sha256": "3e8b6066fb315f5a39b8473abaf3ebcd12084bc22096bc19bfbd2e25820a8c7e",
+        "only_machine_and_apu_objects_replaced": true,
+        "unchanged_object_recorded_hashes_match": true,
+        "compile_recipes": [
+          {
+            "file": "hw_machine.c",
+            "matched_frozen_recipe": true,
+            "source_hashes_match": true,
+            "original_sha256": "10b35a8d536e7662c6e3d7f801574468479d4219f48d341afbeaaf1d9d661a7c",
+            "instrumented_sha256": "ebe75c020836975c23249416dc0929eb672eec62025c3c5c479ece9fa291a6a9"
+          },
+          {
+            "file": "hw_apu.c",
+            "matched_frozen_recipe": true,
+            "source_hashes_match": true,
+            "original_sha256": "17a21f75c8a88f2bba9637cdff19e929e6417419edac0566580558d342f62d62",
+            "instrumented_sha256": "18ea05f6e9f8a63f418674ca8b8f715674ad60a0e56e72af77c4520508db3093"
+          }
+        ]
+      },
+      "smb": {
+        "binary_sha256": "aac80f36fa0061e75db1a78efd0fb2cf58957cf9bc24bfdefcb1c568f12d7685",
+        "only_machine_and_apu_objects_replaced": true,
+        "unchanged_object_recorded_hashes_match": true,
+        "compile_recipes": [
+          {
+            "file": "hw_machine.c",
+            "matched_frozen_recipe": true,
+            "source_hashes_match": true,
+            "original_sha256": "10b35a8d536e7662c6e3d7f801574468479d4219f48d341afbeaaf1d9d661a7c",
+            "instrumented_sha256": "ebe75c020836975c23249416dc0929eb672eec62025c3c5c479ece9fa291a6a9"
+          },
+          {
+            "file": "hw_apu.c",
+            "matched_frozen_recipe": true,
+            "source_hashes_match": true,
+            "original_sha256": "17a21f75c8a88f2bba9637cdff19e929e6417419edac0566580558d342f62d62",
+            "instrumented_sha256": "18ea05f6e9f8a63f418674ca8b8f715674ad60a0e56e72af77c4520508db3093"
+          }
+        ]
+      }
+    }
+  },
+  "independent_raw": {
+    "kind": "Independent read-only source/raw-data/provenance review; no runtime candidate or test",
+    "reviewed": {
+      "smb3": {
+        "scope": {
+          "first": 2402,
+          "last": 3600,
+          "bursts": 14451,
+          "stolen_cycles": 663143,
+          "oam_start_bursts": 1188,
+          "dmc_start_bursts": 13265,
+          "combined_start_bursts": 2,
+          "blank_ram_no_dmc_start_bursts": 1018,
+          "inclusive_wall_ms": 43.146,
+          "events": [
+            41427,
+            304128,
+            304128,
+            13460,
+            783
+          ]
+        },
+        "wall_seconds": 3.992267100009485,
+        "cpu_seconds": 3.21875,
+        "inclusive_wall_percent": 1.0807393122543703,
+        "raw_marker_window_results_match": true,
+        "binary_sha256": "3e8b6066fb315f5a39b8473abaf3ebcd12084bc22096bc19bfbd2e25820a8c7e",
+        "known_route_and_start_state_match": true,
+        "eligible_receipt_exit_zero": true
+      },
+      "smb": {
+        "scope": {
+          "first": 1802,
+          "last": 3000,
+          "bursts": 1197,
+          "stolen_cycles": 614671,
+          "oam_start_bursts": 1197,
+          "dmc_start_bursts": 0,
+          "combined_start_bursts": 0,
+          "blank_ram_no_dmc_start_bursts": 1197,
+          "inclusive_wall_ms": 37.9573,
+          "events": [
+            1807,
+            306432,
+            306432,
+            0,
+            0
+          ]
+        },
+        "wall_seconds": 4.096388599995407,
+        "cpu_seconds": 3.1875,
+        "inclusive_wall_percent": 0.9266039847890054,
+        "raw_marker_window_results_match": true,
+        "binary_sha256": "aac80f36fa0061e75db1a78efd0fb2cf58957cf9bc24bfdefcb1c568f12d7685",
+        "known_route_and_start_state_match": true,
+        "eligible_receipt_exit_zero": true
+      }
+    },
+    "disposition": "Scoped standalone DMA service deferral supported. This is attribution only; no speedup/neutrality or global architectural exhaustion established. Broader blank/polling service and DMA reuse remain explicit residual scope under NES08."
+  },
+  "excluded_attempt": {
+    "corrected": "v2 persists window.json before parsing and matches actual marker; same v1 binaries reused",
+    "binary": "3e8b6066fb315f5a39b8473abaf3ebcd12084bc22096bc19bfbd2e25820a8c7e",
+    "raw": "G:/Temp/Codex/nes110-dma-profile-v1-20261031/smb3/window.log",
+    "reason": "Actual SDL run completed, but QA postprocessor searched NES07_RING instead of emitted NES07_DMA and did not persist returned interval CPU/wall metadata before failing",
+    "status": "Excluded from timing acceptance",
+    "not_an_optimization_experiment": true
+  },
+  "limitations": [
+    "Two single diagnostic baselines, not an A/B experiment or performance win. Exact selected source/object compile origins preserved separately per title. Current engine working tree is documentation-only, not a claim every selected legacy object was rebuilt from its latest header set.",
+    "Timer starts after the first wants-cycle succeeds at tick0 and ends after the final stolen-cycle tail; initial normal CPU tail excluded. It includes necessary PPU/APU/device clocks, private counters, QPC and scheduling. It is not exclusive CPU, recoverable upper bound or proof DMA can be replaced by memcpy.",
+    "1199 instrumented frame labels within nominal1200resumedframes plus shutdown wall. Coexistence/headroom telemetry retained; no quiet-host or universal percent inference.",
+    "events0..3 are actual halt/OAMget/OAMput/DMCget counts and sum to stolen cycles; event4 counts cycles with both requests pending, not unique collision episodes. Coarse blank-RAM/noDMC fields describe starting conditions, not safe complete-transfer admission or exclusion of future IRQ/PPU/bus events.",
+    "V1 actual game exited0 but QA postprocessor looked for the wrong marker and lost returned interval metadata. It is retained/excluded; V2 runner only fixes parsing and persists window.json before analysis, using identical v1 binaries. SMB3 event counts match between attempts. No game/optimization defect is inferred.",
+    "No numerical retention floor and no measured optimization win was rejected. Small observed whole-service scope includes required work; prioritize a reusable CPU polling/blank-device service before standalone DMA complexity. Current PPU native intervals cover stable render interior only; a new blank executor remains an explicit opportunity, not a prohibition on replacing legacy loops.",
+    "No candidate exists, so no collision/AccuracyCoin/Zapper/trace fixture matrix was rerun. Any future changed admission must exercise actual new executor, current restores and fallback, preserving stolen cycles/CPU-held reads/controller/register/openbus/OAMADDR/rendering/DMC abort/collision/IRQ/NMI/mapper/Zapper/PCM behavior.",
+    "Other three titles, feature profiles and supported target variants remain unchanged/unmeasured in this item. No broader exhaustion claim. FDS remains parked.",
+    "Final combined supported five-title regeneration/build/features/performance and owner visual approval remain pending. No main/master merge or release."
+  ]
+}
