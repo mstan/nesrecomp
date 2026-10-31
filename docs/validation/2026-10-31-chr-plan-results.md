@@ -34,7 +34,7 @@ PPU state, supplies retained scenes. A fixture passes five boards, 512 tiles,
 owned-image restore. The first fixture target omitted render/video sources;
 correcting its link setup produced a passing run.
 
-Unchanged controls reproduce all six runtime COFF sections of the selected
+Unchanged controls reproduce all present runtime COFF sections of the selected
 objects. The final 123-object manifests differ only in cyc_render and
 zelda_world; accepted native job/oracle and retained canvas stay unchanged.
 This is a frozen relink experiment, not a fresh supported build.
