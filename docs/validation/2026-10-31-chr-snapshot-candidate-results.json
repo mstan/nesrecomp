@@ -1,0 +1,250 @@
+{
+  "candidate": "NES15 block mapped-CHR compatibility snapshot",
+  "base": "0bbe0a2",
+  "branch": "perf/nes15-native-chr-snapshot",
+  "decision": "prototype evaluated/rejected; selected runtime unchanged",
+  "scope": "One actual portable native snapshot candidate, not exhaustion of presentation ownership designs",
+  "source_sha256": {
+    "runner/cyc/cyc_render.c": "d90bb1cd17d88c7f940d9e7a4e388e271bb63c1789bdf00a4284be4ee6205226",
+    "runner/cyc/cyc_render.h": "5b2627f72dff0811b95f3deee9e6c183333dc18643750c218a0b66e5e9691cf8",
+    "runner/cyc/cyc_presentation.c": "19f90cf8058136ade8d1b38154c17efe91b1c92da3a505bab6e5c0fd214829b4",
+    "runner/cyc/video_test.c": "dc206a1b4056e709f41f09e9f31e8ddef113ec2d7e99359f28e66084bc571dc0"
+  },
+  "fixture_test": {
+    "result": "PASS",
+    "log": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\ctest-presentation-tests-HLE.log",
+    "coverage": "scalar equality across six boards, ROM/RAM, full/partial/wrapped/unaligned mappings and NULL; separate writable host product"
+  },
+  "games": {
+    "smb": {
+      "cpu_pairs_seconds": [
+        [
+          1.859375,
+          1.78125
+        ],
+        [
+          1.765625,
+          1.71875
+        ],
+        [
+          1.8125,
+          1.703125
+        ]
+      ],
+      "initial_median_cpu_seconds": {
+        "reference": 1.8125,
+        "candidate": 1.71875
+      },
+      "binary_sha256": {
+        "reference": "165410ddea6a388ce28efdaade2ad4511d62d078105cfdba16740002d4668a7a",
+        "candidate": "43ae3d4d1079b11264dc7fe1d9f5669a54cee313aa53fa7ed0ae521d61478b4b"
+      },
+      "raw_case": "G:\\Temp\\Codex\\nes110-presentation-candidate-20261031\\smb",
+      "decision": "initial apparent gain not reproduced; not qualified net-neutral",
+      "exact_output_pass": true,
+      "current_build_continuation_frames": 600,
+      "confirmation_cpu_pairs_seconds": [
+        [
+          1.71875,
+          1.734375
+        ],
+        [
+          1.703125,
+          1.734375
+        ],
+        [
+          1.671875,
+          1.6875
+        ],
+        [
+          1.671875,
+          1.75
+        ],
+        [
+          1.703125,
+          1.671875
+        ]
+      ]
+    },
+    "smb3": {
+      "cpu_pairs_seconds": [
+        [
+          1.4375,
+          1.40625
+        ],
+        [
+          1.359375,
+          1.34375
+        ],
+        [
+          1.390625,
+          1.484375
+        ]
+      ],
+      "initial_median_cpu_seconds": {
+        "reference": 1.390625,
+        "candidate": 1.40625
+      },
+      "binary_sha256": {
+        "reference": "d454f56eb99d5e548619ab202321ce3a0a21d9ec3ad52e582d1b6bfb058112f8",
+        "candidate": "7e8e7c05446341bdd68f6d60c1e6e1416c1ec9b2eb0a71081a549adeb5b39249"
+      },
+      "raw_case": "G:\\Temp\\Codex\\nes110-presentation-candidate-20261031\\smb3",
+      "decision": "neutral/inconclusive",
+      "exact_output_pass": true,
+      "current_build_continuation_frames": 600
+    },
+    "metroid": {
+      "cpu_pairs_seconds": [
+        [
+          1.390625,
+          1.375
+        ],
+        [
+          1.390625,
+          1.375
+        ],
+        [
+          1.34375,
+          1.375
+        ]
+      ],
+      "initial_median_cpu_seconds": {
+        "reference": 1.390625,
+        "candidate": 1.375
+      },
+      "binary_sha256": {
+        "reference": "7b0898421729650716bb1f3abe9418242a8b4cb2b70b5720f30739e3e5f076b3",
+        "candidate": "e81f9ab1261f697fc0d768f2a91c47a789bc8c45fbe1fb59d363c9692d021d20"
+      },
+      "raw_case": "G:\\Temp\\Codex\\nes110-presentation-candidate-20261031\\metroid",
+      "decision": "neutral/inconclusive",
+      "exact_output_pass": true,
+      "current_build_continuation_frames": 600
+    },
+    "gumshoe": {
+      "cpu_pairs_seconds": [
+        [
+          1.25,
+          1.25
+        ],
+        [
+          1.21875,
+          1.203125
+        ],
+        [
+          1.234375,
+          1.203125
+        ]
+      ],
+      "initial_median_cpu_seconds": {
+        "reference": 1.234375,
+        "candidate": 1.203125
+      },
+      "binary_sha256": {
+        "reference": "b3cf3481242701380a9f3ca005a29fa4a902307ea5ada928424a519b51a8c1ec",
+        "candidate": "07a01000a6185cfec11cf4125ff0ccbc10e2b6bf5509fb914ffbaed2fa428694"
+      },
+      "raw_case": "G:\\Temp\\Codex\\nes110-presentation-candidate-20261031\\gumshoe",
+      "decision": "neutral/inconclusive",
+      "exact_output_pass": true,
+      "current_build_continuation_frames": 600
+    },
+    "zelda": {
+      "cpu_pairs_seconds": [
+        [
+          1.8125,
+          1.796875
+        ],
+        [
+          1.828125,
+          1.859375
+        ],
+        [
+          2.15625,
+          1.8125
+        ]
+      ],
+      "initial_median_cpu_seconds": {
+        "reference": 1.828125,
+        "candidate": 1.8125
+      },
+      "binary_sha256": {
+        "reference": "e80edde05db7d66f1e35dc8e9445d275a11a883e76fa42d0e57b8c041b7670a7",
+        "candidate": "3578038fbe50ec41f49454ab415d16f9b19aadbf54603c7d10b88e8d0b9c6cac"
+      },
+      "raw_case": "G:\\Temp\\Codex\\nes110-presentation-candidate-20261031\\zelda",
+      "decision": "neutral/inconclusive",
+      "exact_output_pass": true,
+      "current_build_continuation_frames": 600
+    }
+  },
+  "baseline_repeatability": {
+    "command": [
+      "G:\\Temp\\Codex\\nes110-presentation-candidate-20261031\\smb\\reference\\SuperMarioBrosRecomp.exe",
+      "G:\\Temp\\Codex\\nes110-presentation-candidate-20261031\\smb\\baserom.nes",
+      "--no-save",
+      "--config",
+      "G:\\Temp\\Codex\\nes110-presentation-candidate-20261031\\smb\\baseline-repeat\\config.ini",
+      "--widescreen",
+      "fit",
+      "--mods-root",
+      "G:\\Temp\\Codex\\nes110-presentation-candidate-20261031\\smb\\reference\\mods",
+      "--headless",
+      "--frames",
+      "2401",
+      "--input",
+      "G:\\Temp\\Codex\\nes110-presentation-candidate-20261031\\smb\\route.input",
+      "--wav-out",
+      "G:\\Temp\\Codex\\nes110-presentation-candidate-20261031\\smb\\baseline-repeat\\audio.wav",
+      "--screenshot",
+      "G:\\Temp\\Codex\\nes110-presentation-candidate-20261031\\smb\\baseline-repeat\\final.png",
+      "--shot-every",
+      "300",
+      "--frame-log",
+      "G:\\Temp\\Codex\\nes110-presentation-candidate-20261031\\smb\\baseline-repeat\\frames.bin",
+      "--frame-log-frames",
+      "1800:2400",
+      "--state-out",
+      "G:\\Temp\\Codex\\nes110-presentation-candidate-20261031\\smb\\baseline-repeat\\hardware.txt",
+      "--state-frame",
+      "2400",
+      "--mem-out",
+      "G:\\Temp\\Codex\\nes110-presentation-candidate-20261031\\smb\\baseline-repeat\\memory.txt",
+      "--mem-frame",
+      "2400",
+      "--save-state",
+      "1800:G:\\Temp\\Codex\\nes110-presentation-candidate-20261031\\smb\\baseline-repeat\\mid.state",
+      "--save-state",
+      "2400:G:\\Temp\\Codex\\nes110-presentation-candidate-20261031\\smb\\baseline-repeat\\end.state",
+      "--present-size",
+      "1280x720",
+      "--present-out",
+      "G:\\Temp\\Codex\\nes110-presentation-candidate-20261031\\smb\\baseline-repeat\\present.png",
+      "--present-every",
+      "300"
+    ],
+    "differing_products": [
+      "audio.wav",
+      "frames.bin",
+      "hardware.txt",
+      "memory.txt",
+      "final.png",
+      "final_01500.png",
+      "final_01800.png",
+      "final_02100.png",
+      "final_02400.png",
+      "present.png",
+      "present_01500.png",
+      "present_01800.png",
+      "present_02100.png",
+      "present_02400.png"
+    ],
+    "candidate_products_equal": true,
+    "initial_evidence_retained": "G:\\Temp\\Codex\\nes110-presentation-candidate-20261031\\smb\\initial-evidence",
+    "cause": "unproven baseline repeatability issue; unchanged original executable reproduces candidate products exactly"
+  },
+  "measured_gain": null,
+  "selected": false,
+  "resource_policy": "owner waived reservations; direct serial timing with existing per-core telemetry/headroom, no lease claimed"
+}

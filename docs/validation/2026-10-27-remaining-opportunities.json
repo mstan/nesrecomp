@@ -666,7 +666,7 @@
       "package": "visual-products",
       "priority": "P1",
       "title": "Replace the copy-based presentation compatibility bridge",
-      "status": "evaluated-measured-deferral-consumer-job-first",
+      "status": "evaluated-prototype-rejected",
       "evidence": [
         {
           "file": "runner/cyc/cyc_presentation.c",
@@ -676,18 +676,19 @@
           "link": "../../runner/cyc/cyc_presentation.c#L16"
         }
       ],
-      "remaining": "Legacy compatibility snapshots cost8.7925..13.0560ms in the admitted instrumented gameplay scopes, versus2387.3094ms voxel preparation and repeated frame-end/present calls. Defer a standalone view rewrite and prioritize one consumer render job. QPC is diagnostic wall attribution, not an A/B saving or recovery bound.",
+      "remaining": "This native CHR snapshot candidate is rejected after exact correctness/per-game qualification; other presentation ownership architectures remain possible.",
       "affected_profiles": [
         "Cycle custom/HD/voxel callers of cyc_presentation_sync"
       ],
-      "next_decisive_check": "Fresh validator confirms durable Beads/commit handoff, then NES11 one prepared consumer render job. Revisit this bridge only when a coherent consumer replacement changes its measured contribution.",
+      "next_decisive_check": "Independent durable handoff, then NES20 actual isolation ownership candidate.",
       "required_behavior": "Consumers see the correct completed-frame/mapping data, live bank/CHR changes and state restores; keep an adapter for unported consumers.",
       "prior_issue": null,
       "measured_additional_gain": null,
-      "execution_status": "evaluated-diagnostic-attribution-no-implementation",
+      "execution_status": "implemented-and-five-game-qualified-negative",
       "results": "2026-10-28-presentation-bridge-results.json",
-      "candidate_state": "prepared-or-deferred",
-      "candidate_decision_recorded": false
+      "candidate_state": "prototype-evaluated-not-selected",
+      "candidate_decision_recorded": true,
+      "result_file": "2026-10-31-chr-snapshot-candidate-results.json"
     },
     {
       "id": "NES16",
@@ -1403,19 +1404,18 @@
     "phase": "serial-remaining-candidates"
   },
   "execution_summary": {
-    "evaluated_decisions": 23,
+    "evaluated_decisions": 24,
     "partial_ids": [],
     "parked_ids": [
       "NES29"
     ],
-    "other_unresolved": 7,
-    "note": "Sixteen overlapping scoped selections and seven actual prototype-disposition areas; not23independent wins or architectural exhaustion. Seven prepared/deferred areas remain; FDS29 owner-parked. Current combined game checkpoint passes technical checks, final owner handoff pending remaining candidates.",
-    "candidate_decision_areas": 23,
+    "other_unresolved": 6,
+    "note": "Sixteen overlapping scoped selections and eight actual prototype-disposition areas; not24independent wins or architectural exhaustion. Six prepared/deferred areas remain; FDS29 owner-parked. Final owner handoff remains pending remaining candidates.",
+    "candidate_decision_areas": 24,
     "scoped_selection_areas": 16,
-    "prototype_disposition_areas": 7,
-    "prepared_or_deferred_areas": 7,
+    "prototype_disposition_areas": 8,
+    "prepared_or_deferred_areas": 6,
     "deferred_ids": [
-      "NES15",
       "NES20",
       "NES23",
       "NES25",
