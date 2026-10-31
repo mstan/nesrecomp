@@ -15,6 +15,7 @@
 #include "../../common/nes_fds.h"
 
 #include <stdio.h>
+#include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -275,6 +276,46 @@ void cyc_mod_set_regs(const CycModRegs *in)
 }
 
 bool cyc_mod_isolated(void) { return s_open; }
+
+bool cyc_mod_isolated_job_ready(const CycModCodeRegion *regions, size_t count,
+                                uint64_t cycles)
+{
+    if (!s_open || !hw_isolated || !s_isolated_hooks || !regions || !count ||
+        !cycles || cyc_trace_enabled || cyc_cpu_ram_read_policy ||
+        cyc_cpu_rts_observer || cyc_mod_rom_read_overrides ||
+        cpu.jammed || cpu.do_nmi || cpu.do_irq || cpu.do_reset || cpu.nmi_edge ||
+        hw.irq_line)
+        return false;
+    hw_native_end();
+    if (hw_isolated_cycles > hw_isolated_budget ||
+        cycles > hw_isolated_budget - hw_isolated_cycles) return false;
+    for (size_t i = 0; i < count; ++i) {
+        const CycModCodeRegion *r = &regions[i];
+        if (!r->bytes || !r->size || r->size > 65536u - r->addr) return false;
+        for (size_t j = 0; j < r->size; ++j) {
+            uint16_t a = (uint16_t)(r->addr + j);
+            uint8_t value;
+            if (a < 0x800) value = hw.ram[a];
+            else if (a >= 0x6000 && a < 0x8000 && hw_cart_code_ram_ready())
+                value = hw_cart.wram[a - 0x6000u];
+            else return false;
+            if (value != r->bytes[j] || (a != cpu.pc && cyc_hooks_due(a)))
+                return false;
+        }
+    }
+    return true;
+}
+
+void cyc_mod_isolated_job_resume(uint64_t cycles, uint16_t last_read,
+                                 uint16_t resume_pc)
+{
+    assert(s_open && hw_isolated && cycles &&
+           hw_isolated_cycles <= hw_isolated_budget &&
+           cycles <= hw_isolated_budget - hw_isolated_cycles);
+    hw_isolated_cycles += cycles - 1;
+    (void)cpu_read(last_read, CYC_POLL | CYC_DONE);
+    cpu.pc = resume_pc;
+}
 
 void cyc_mod_set_call_budget(uint64_t cycles) { s_budget = cycles ? cycles : 1; }
 

@@ -135,6 +135,24 @@ void cyc_mod_set_regs(const CycModRegs *in);
 
 bool cyc_mod_isolate_begin(void);
 bool cyc_mod_isolated(void);
+
+/* A trusted memory-only replacement inside an isolated call. Readiness closes
+ * pending native work, verifies every code byte in driven CPU RAM or qualified
+ * fixed SRAM, and refuses read/return observers, intervening hooks or an
+ * insufficient call budget. The caller must make only write-watched RAM
+ * changes until resume, on this thread, without another CPU/device operation.
+ * cycles includes the final original driven read; resume publishes that read
+ * through the ordinary bus and continues at an original instruction boundary.
+ * A false readiness result leaves the original routine available. */
+typedef struct {
+    uint16_t addr;
+    const uint8_t *bytes;
+    size_t size;
+} CycModCodeRegion;
+bool cyc_mod_isolated_job_ready(const CycModCodeRegion *regions, size_t count,
+                                uint64_t cycles);
+void cyc_mod_isolated_job_resume(uint64_t cycles, uint16_t last_read,
+                                 uint16_t resume_pc);
 /* JSR `routine` with A, X, Y, S and P from *regs (S is where the return
  * address is pushed), run it until it returns, and give back the registers it
  * returned with. False when it did not return within the budget
