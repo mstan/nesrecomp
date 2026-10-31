@@ -46,11 +46,27 @@ int main(int argc,char **argv)
         cyc_power_on((uint8_t)align);cpu.do_reset=cpu.power_on=0;
         check(cyc_region()==(pal?CYC_REGION_PAL:CYC_REGION_NTSC),"effective region");
         check(cyc_audio_enable(44100),"audio enable");
+        /* Normal snapshots retain their universal full-storage contract. */
+        CycSnapshot *full = cyc_snapshot_new();
+        check(full != NULL, "normal snapshot allocation");
+        uint8_t unused = hw_cart.wram[sizeof hw_cart.wram - 1];
+        cyc_snapshot_take(full);
+        hw_cart.wram[sizeof hw_cart.wram - 1] ^= 0xa5;
+        cyc_snapshot_restore(full);
+        check(hw_cart.wram[sizeof hw_cart.wram - 1] == unused, "normal snapshot restores all RAM");
+        cyc_snapshot_free(full);
         host_clock=cyc_cycle_count();
         for(unsigned q=0;q<128;q++) {
+            static const uint32_t ram_sizes[] = { 0x2000, 0x8000, 0x20000 };
+            hw_cart.wram_len = ram_sizes[(q / 16) % 3];
+            hw_cart.wram_bank = hw_cart.wram_len - 0x2000;
+            hw_cart.has_wram = (q & 32) == 0;
+            hw_cart.wram_readable = hw_cart.wram_writable = (q & 64) == 0;
             uint64_t before=state_hash();
             uint64_t trace_hash=cyc_trace_hash;uint32_t trace_cycle=cyc_trace_cycle;
             check(cyc_mod_isolate_begin(),"scope begin");
+            if (hw_cart.has_wram)
+                check(cyc_mod_poke(0x7fff, (uint8_t)(q + 0x58)), "last physical RAM bank mutation");
             hw_isolated_cycles=0;hw_isolated_budget=budgets[q/16];
             cyc_trace_enabled=(q&1)!=0;
             if(q&2)hw.irq_line=1;

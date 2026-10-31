@@ -1,0 +1,235 @@
+{
+  "candidate": "NES20 accessible cartridge-storage isolation snapshot",
+  "base": "cd37f85",
+  "branch": "perf/nes20-isolation-storage",
+  "decision": "scoped candidate selected; pending final combined owner review",
+  "scope": "Qualified physical WRAM extents in isolated mod calls; normal full snapshots and all device/register state preserved; not complete context/snapshot architectural exhaustion",
+  "source_sha256": {
+    "runner/cyc/cyc_state.c": "f160cf1d4bcbe51cb9f1c246812c550320a8e2100567d1cccbd1a200078568c6",
+    "runner/cyc/cyc_state.h": "d72d0675c13a315b15798932f3de43705cf23f174f77d27fad45d6249f759986",
+    "runner/cyc/cyc_mod.c": "1f797198efd59a3a7ccb613047639dfb98c7140755be9af48e1b425e7737a793",
+    "runner/cyc/tests/isolated_native_probe.c": "4c82b0088ec33d878ae27391f2572466c434d858e9039f42d49b91c52d0836dc",
+    "runner/cyc/CMakeLists.txt": "eefb41718a064cffcd7c9b3547ea12773ba27704de774707c63133ddf97daa59",
+    "tools/cyc/test_isolated_native.py": "c1d71e6ae6e5256f353bcbeca26a3d79245e45cea38cce3b69cd4532c4623665"
+  },
+  "tests": {
+    "HLE": {
+      "result": "PASS",
+      "log": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\ctest-isolation-storage-HLE.log",
+      "checkpoints": 5120
+    },
+    "LLE": {
+      "result": "PASS",
+      "log": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\ctest-isolation-storage-LLE.log",
+      "checkpoints": 5120
+    }
+  },
+  "games": {
+    "smb": {
+      "cpu_pairs_seconds": [
+        [
+          1.59375,
+          1.59375
+        ],
+        [
+          1.671875,
+          1.640625
+        ],
+        [
+          1.625,
+          1.609375
+        ]
+      ],
+      "initial_median_cpu_seconds": {
+        "reference": 1.625,
+        "candidate": 1.609375
+      },
+      "binary_sha256": {
+        "reference": "165410ddea6a388ce28efdaade2ad4511d62d078105cfdba16740002d4668a7a",
+        "candidate": "a25b8df96ebed24ef70db3943f03d6882a60d300f1394973d6641ec23a0150ac"
+      },
+      "raw_case": "G:\\Temp\\Codex\\nes110-isolation-candidate-20261031\\smb",
+      "decision": "neutral/inconclusive",
+      "exact_output_pass": true,
+      "current_build_continuation_frames": 600
+    },
+    "smb3": {
+      "cpu_pairs_seconds": [
+        [
+          1.34375,
+          1.5
+        ],
+        [
+          1.34375,
+          1.34375
+        ],
+        [
+          1.328125,
+          1.328125
+        ]
+      ],
+      "initial_median_cpu_seconds": {
+        "reference": 1.34375,
+        "candidate": 1.34375
+      },
+      "binary_sha256": {
+        "reference": "d454f56eb99d5e548619ab202321ce3a0a21d9ec3ad52e582d1b6bfb058112f8",
+        "candidate": "0a7d68c7d542418f423fc9856a64db461ecffaa3bc6c8e730adc69834d962a00"
+      },
+      "raw_case": "G:\\Temp\\Codex\\nes110-isolation-candidate-20261031\\smb3",
+      "decision": "neutral/inconclusive",
+      "exact_output_pass": true,
+      "current_build_continuation_frames": 600
+    },
+    "metroid": {
+      "cpu_pairs_seconds": [
+        [
+          1.359375,
+          1.359375
+        ],
+        [
+          1.421875,
+          1.359375
+        ],
+        [
+          1.359375,
+          1.328125
+        ]
+      ],
+      "initial_median_cpu_seconds": {
+        "reference": 1.359375,
+        "candidate": 1.359375
+      },
+      "binary_sha256": {
+        "reference": "7b0898421729650716bb1f3abe9418242a8b4cb2b70b5720f30739e3e5f076b3",
+        "candidate": "b6b87add144484329f59fe5f731e11ebf9d8d8d873e0154c72aeae4b5e30a458"
+      },
+      "raw_case": "G:\\Temp\\Codex\\nes110-isolation-candidate-20261031\\metroid",
+      "decision": "neutral/inconclusive",
+      "exact_output_pass": true,
+      "current_build_continuation_frames": 600
+    },
+    "gumshoe": {
+      "cpu_pairs_seconds": [
+        [
+          1.21875,
+          1.21875
+        ],
+        [
+          1.203125,
+          1.1875
+        ],
+        [
+          1.203125,
+          1.203125
+        ]
+      ],
+      "initial_median_cpu_seconds": {
+        "reference": 1.203125,
+        "candidate": 1.203125
+      },
+      "binary_sha256": {
+        "reference": "b3cf3481242701380a9f3ca005a29fa4a902307ea5ada928424a519b51a8c1ec",
+        "candidate": "cc7f23f0e00e7f8c1666d151a5ba1904a62f7bd211bb72743942c7c5258ca58d"
+      },
+      "raw_case": "G:\\Temp\\Codex\\nes110-isolation-candidate-20261031\\gumshoe",
+      "decision": "neutral/inconclusive",
+      "exact_output_pass": true,
+      "current_build_continuation_frames": 600
+    },
+    "zelda": {
+      "cpu_pairs_seconds": [
+        [
+          1.859375,
+          1.859375
+        ],
+        [
+          1.8125,
+          1.796875
+        ],
+        [
+          1.828125,
+          1.828125
+        ]
+      ],
+      "initial_median_cpu_seconds": {
+        "reference": 1.828125,
+        "candidate": 1.828125
+      },
+      "binary_sha256": {
+        "reference": "e80edde05db7d66f1e35dc8e9445d275a11a883e76fa42d0e57b8c041b7670a7",
+        "candidate": "52264a9a830f6cd2bb9a4c223995731b3bfcf5a52d28e79e74efc17bbb62ced9"
+      },
+      "raw_case": "G:\\Temp\\Codex\\nes110-isolation-candidate-20261031\\zelda",
+      "decision": "neutral/inconclusive",
+      "exact_output_pass": true,
+      "current_build_continuation_frames": 600
+    },
+    "zelda-atlas": {
+      "cpu_pairs_seconds": [
+        [
+          2.640625,
+          2.53125
+        ],
+        [
+          2.625,
+          2.484375
+        ],
+        [
+          2.640625,
+          2.546875
+        ]
+      ],
+      "initial_median_cpu_seconds": {
+        "reference": 2.640625,
+        "candidate": 2.53125
+      },
+      "binary_sha256": {
+        "reference": "e80edde05db7d66f1e35dc8e9445d275a11a883e76fa42d0e57b8c041b7670a7",
+        "candidate": "52264a9a830f6cd2bb9a4c223995731b3bfcf5a52d28e79e74efc17bbb62ced9"
+      },
+      "raw_case": "G:\\Temp\\Codex\\nes110-isolation-candidate-20261031\\zelda-atlas",
+      "decision": "selected;5/5confirmationpairsfaster",
+      "exact_output_pass": true,
+      "current_build_continuation_frames": 300,
+      "confirmation_cpu_pairs_seconds": [
+        [
+          2.84375,
+          2.796875
+        ],
+        [
+          2.625,
+          2.5
+        ],
+        [
+          2.625,
+          2.484375
+        ],
+        [
+          2.625,
+          2.46875
+        ],
+        [
+          2.671875,
+          2.5625
+        ]
+      ],
+      "confirmed_median_cpu_seconds": {
+        "reference": 2.625,
+        "candidate": 2.5
+      },
+      "confirmed_reduction_percent": 4.761904761904767,
+      "actual_picture": [
+        4096,
+        1472
+      ]
+    }
+  },
+  "sdl_current_build": {
+    "result": "PASS",
+    "raw": "G:\\Temp\\Codex\\nes110-isolation-candidate-20261031\\zelda\\sdl-candidate",
+    "checks": "normalSDL/UI ownload/refusal, actualrewind, Fitresize"
+  },
+  "resource_policy": "Owner waived reservations; direct serial timing, existing per-core headroom telemetry, no leases claimed",
+  "selected": true
+}

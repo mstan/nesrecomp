@@ -59,6 +59,9 @@ typedef struct CycSnapshot CycSnapshot;
 CycSnapshot *cyc_snapshot_new(void);
 void cyc_snapshot_free(CycSnapshot *s);
 void cyc_snapshot_take(CycSnapshot *s);
+/* Unclocked mod scopes cannot change physical cartridge RAM size. Qualified
+ * boards capture all accessible RAM banks; other machines use the full copy. */
+void cyc_snapshot_take_isolated(CycSnapshot *s);
 void cyc_snapshot_restore(const CycSnapshot *s);
 /* The CPU RAM (2 KiB) and the cartridge's RAM (the FDS's PRG RAM, or work
  * RAM; *len bytes from $6000's first byte) as the snapshot holds them. */

@@ -9,6 +9,7 @@ import subprocess
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--probe', required=True, type=Path)
+    parser.add_argument('--storage-reference', type=Path)
     parser.add_argument('--out', required=True, type=Path)
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
@@ -16,6 +17,8 @@ def main():
     for mode in ('reference', 'candidate'):
         command = [str(args.probe.resolve())]
         if mode == 'reference':
+            if args.storage_reference:
+                command = [str(args.storage_reference.resolve())]
             command.append('--reference')
         result = subprocess.run(command, capture_output=True, timeout=180,
                                 creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))

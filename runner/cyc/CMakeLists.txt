@@ -519,6 +519,19 @@ add_test(NAME cyc_isolated_native COMMAND ${Python3_EXECUTABLE}
     --out ${CMAKE_CURRENT_BINARY_DIR}/isolated_native_results)
 set_tests_properties(cyc_isolated_native PROPERTIES TIMEOUT 600)
 
+get_target_property(ISOLATION_PROBE_SOURCES cyc_isolated_native_probe SOURCES)
+add_executable(cyc_isolation_storage_reference_probe ${ISOLATION_PROBE_SOURCES})
+target_include_directories(cyc_isolation_storage_reference_probe PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})
+target_link_libraries(cyc_isolation_storage_reference_probe PRIVATE ${NESRECOMP_CYC_LIBRARIES})
+target_compile_definitions(cyc_isolation_storage_reference_probe PRIVATE NESRECOMP_ISOLATED_NATIVE=1
+    NESRECOMP_NATIVE_PRG_GUARDS=1 NESRECOMP_ISOLATION_STORAGE_REFERENCE=1)
+add_test(NAME cyc_isolation_storage COMMAND ${Python3_EXECUTABLE}
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_isolated_native.py
+    --probe $<TARGET_FILE:cyc_isolated_native_probe>
+    --storage-reference $<TARGET_FILE:cyc_isolation_storage_reference_probe>
+    --out ${CMAKE_CURRENT_BINARY_DIR}/isolation_storage_results)
+set_tests_properties(cyc_isolation_storage PROPERTIES TIMEOUT 600)
+
 add_executable(cyc_content_test content_test.c cpu6502.c cpu6502_interp.c hw_machine.c ${CYC_TEST_BOARD_SOURCES}
     hw_ppu.c hw_apu.c hw_palette.c cyc_trace.c cyc_ring.c ${NESRECOMP_CYC_SCHEDULER_SOURCES} cyc_native_none.c)
 target_include_directories(cyc_content_test PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})
