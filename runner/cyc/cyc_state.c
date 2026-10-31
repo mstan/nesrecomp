@@ -455,6 +455,7 @@ struct CycSnapshot {
     HwCart   *cart;
     uint8_t  *chr, *apu, *media, *hle, *sound, *views;
     size_t    chr_len, apu_len, media_len, hle_len, sound_len, views_len;
+    size_t    wram_copy_len;
     HwPpu     ppu;
     CycRamViewStats view_stats;
     uint8_t   code_dirty;
@@ -496,7 +497,17 @@ void cyc_snapshot_free(CycSnapshot *s)
     free(s);
 }
 
-void cyc_snapshot_take(CycSnapshot *s)
+static void snapshot_cart_copy(HwCart *out, const HwCart *in, size_t ram_len)
+{
+    if (ram_len == sizeof in->wram) { memcpy(out, in, sizeof *out); return; }
+    size_t prefix = offsetof(HwCart, wram);
+    size_t suffix = prefix + sizeof in->wram;
+    memcpy(out, in, prefix);
+    if (ram_len) memcpy(out->wram, in->wram, ram_len);
+    memcpy((uint8_t *)out + suffix, (const uint8_t *)in + suffix, sizeof *out - suffix);
+}
+
+static void snapshot_take(CycSnapshot *s, bool isolated)
 {
     hw_native_flush();
     size_t n;
@@ -505,7 +516,17 @@ void cyc_snapshot_take(CycSnapshot *s)
     s->timing = hw_extra_timing;
     s->zapper = hw_zapper;
     s->region = hw_region_timing;
-    memcpy(s->cart, &hw_cart, sizeof(HwCart));
+    s->wram_copy_len = sizeof hw_cart.wram;
+#if !NESRECOMP_ISOLATION_STORAGE_REFERENCE
+    if (isolated && (hw_cart.mapper == 0 || hw_cart.mapper == 1 ||
+                     hw_cart.mapper == 4 || hw_cart.mapper == 66) &&
+        hw_cart.wram_len <= sizeof hw_cart.wram &&
+        (!hw_cart.has_wram || hw_cart.wram_len))
+        s->wram_copy_len = hw_cart.has_wram ? hw_cart.wram_len : 0;
+#else
+    (void)isolated;
+#endif
+    snapshot_cart_copy(s->cart, &hw_cart, s->wram_copy_len);
     if (s->chr_len) memcpy(s->chr, hw_cart.chr + hw_cart.chr_ram_base, s->chr_len);
     s->ppu = ppu;
     memcpy(s->apu, apu_state_ptr(&n), s->apu_len);
@@ -521,12 +542,16 @@ void cyc_snapshot_take(CycSnapshot *s)
     s->dma_stalls = hw_dma_stalls;
 }
 
+void cyc_snapshot_take(CycSnapshot *s) { snapshot_take(s, false); }
+void cyc_snapshot_take_isolated(CycSnapshot *s) { snapshot_take(s, true); }
+
 const uint8_t *cyc_snapshot_cpu_ram(const CycSnapshot *s) { return s->hw.ram; }
 
 const uint8_t *cyc_snapshot_cart_ram(const CycSnapshot *s, size_t *len)
 {
-    size_t n = hw_cart.mapper == NES_FDS_MAPPER ? 0x8000u : hw_cart.has_wram ? hw_cart.wram_len : 0u;
-    if (n > sizeof(s->cart->wram)) n = sizeof(s->cart->wram);
+    size_t n = s->cart->mapper == NES_FDS_MAPPER ? 0x8000u :
+               s->cart->has_wram ? s->cart->wram_len : 0u;
+    if (n > s->wram_copy_len) n = s->wram_copy_len;
     *len = n;
     return s->cart->wram;
 }
@@ -543,7 +568,7 @@ void cyc_snapshot_restore(const CycSnapshot *s)
     hw_extra_timing = s->timing;
     hw_zapper = s->zapper;
     hw_region_timing = s->region;
-    memcpy(&hw_cart, s->cart, sizeof(HwCart));
+    snapshot_cart_copy(&hw_cart, s->cart, s->wram_copy_len);
     if (s->chr_len) memcpy(hw_cart.chr + hw_cart.chr_ram_base, s->chr, s->chr_len);
     ppu = s->ppu;
     memcpy(apu_state_ptr(&n), s->apu, s->apu_len);

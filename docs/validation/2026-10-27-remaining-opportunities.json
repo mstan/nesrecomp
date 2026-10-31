@@ -921,7 +921,7 @@
       "package": "seamless-world",
       "priority": "P1",
       "title": "Replace full-machine isolation copy/restore with explicit ownership",
-      "status": "evaluated-deferred-measured-copy-cost",
+      "status": "evaluated-selected-accessible-storage-isolation",
       "evidence": [
         {
           "file": "runner/cyc/cyc_mod.c",
@@ -945,18 +945,28 @@
           "link": "../../runner/cyc/cyc_state.c#L530"
         }
       ],
-      "remaining": "Evaluated and deferred full snapshot replacement: capture/restore was 3.018% of measured scoped wall time versus 96.982% guest execution. This is a priority decision, not a claim that copies are free or impossible to optimize.",
+      "remaining": "Physical WRAM storage ownership selected for qualified isolated scopes; broader context/snapshot architectures remain possible.",
       "affected_profiles": [
         "Zelda room updates and other supported isolated guest-service callers"
       ],
-      "next_decisive_check": "Revisit only if later selected workloads make snapshot ownership the demonstrated larger obstacle; no new full snapshot rewrite selected in this package.",
+      "next_decisive_check": "Independent durable PR handoff, then NES23 candidate.",
       "required_behavior": "No leaked device clocks, native saves, inventory/shared progress or media/audio changes; refusal of forbidden effects and exact authoritative host continuation.",
       "prior_issue": null,
-      "measured_additional_gain": null,
-      "execution_status": "deferred-after-isolation-versus-guest-execution-attribution",
+      "measured_additional_gain": [
+        {
+          "case": "zelda-live-atlas",
+          "host": "DESKTOP-HN15M1H",
+          "reduction_percent": 4.761904761904767,
+          "reference_cpu_seconds": 2.625,
+          "candidate_cpu_seconds": 2.5,
+          "decision": "positive5/5confirmationpairs; standardfivegamesneutral/inconclusive"
+        }
+      ],
+      "execution_status": "implemented-and-qualified-five-games-plus-live-Atlas",
       "results": "2026-10-28-isolated-native-results.json",
-      "candidate_state": "prepared-or-deferred",
-      "candidate_decision_recorded": false
+      "candidate_state": "scoped-runtime-selected",
+      "candidate_decision_recorded": true,
+      "result_file": "2026-10-31-isolation-storage-results.json"
     },
     {
       "id": "NES21",
@@ -1404,19 +1414,18 @@
     "phase": "serial-remaining-candidates"
   },
   "execution_summary": {
-    "evaluated_decisions": 24,
+    "evaluated_decisions": 25,
     "partial_ids": [],
     "parked_ids": [
       "NES29"
     ],
-    "other_unresolved": 6,
-    "note": "Sixteen overlapping scoped selections and eight actual prototype-disposition areas; not24independent wins or architectural exhaustion. Six prepared/deferred areas remain; FDS29 owner-parked. Final owner handoff remains pending remaining candidates.",
-    "candidate_decision_areas": 24,
-    "scoped_selection_areas": 16,
+    "other_unresolved": 5,
+    "note": "Seventeen overlapping scoped selections and eight actual prototype-disposition areas; not25independent wins or architectural exhaustion. Five prepared/deferred areas remain; FDS29 owner-parked. Final combined owner handoff pending.",
+    "candidate_decision_areas": 25,
+    "scoped_selection_areas": 17,
     "prototype_disposition_areas": 8,
-    "prepared_or_deferred_areas": 6,
+    "prepared_or_deferred_areas": 5,
     "deferred_ids": [
-      "NES20",
       "NES23",
       "NES25",
       "NES26",

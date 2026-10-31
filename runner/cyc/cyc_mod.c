@@ -334,7 +334,7 @@ bool cyc_mod_isolate_begin(void)
             return false;
         }
     }
-    cyc_snapshot_take(s_snap);
+    cyc_snapshot_take_isolated(s_snap);
     s_open = true;
     s_isolated_hooks = false;
     s_stats.scopes++;
