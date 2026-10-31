@@ -1,0 +1,636 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-31",
+  "opportunity": "NES26",
+  "issue": "beads-2dw.1.110",
+  "campaign": "beads-2wy8.1",
+  "decision": "Defer a new pacing service; retain historical waitable design rejection and do not repeat a timer/guard variant",
+  "engine_base": "eae01bb5a01d5f4dfbaf86391599407fe7a37ff8",
+  "new_builds": 0,
+  "new_launches": 0,
+  "new_performance_results": false,
+  "archive": {
+    "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\pacing-reuse-v1-evidence.zip",
+    "bytes": 101903,
+    "sha256": "7ac1cddbcdeeef40a23d4cffa4116d4afcfc158b5ca8c2eaf93c39dee0200dc0"
+  },
+  "source_identities": {
+    "historical/broad/sdl/reference.c": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad\\sdl\\reference.c",
+      "sha256": "9931eff4387ccfc057e163ad453627d030ca88d9c4538743505554b96f62edac"
+    },
+    "historical/broad/sdl/waitable500.c": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad\\sdl\\waitable500.c",
+      "sha256": "5e5809411b1b32b656af62fe1a04d884d4488b4d3f3ca192d5730061625addd6"
+    },
+    "historical/broad_sdl_prepare.py": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad_sdl_prepare.py",
+      "sha256": "6a720b6d77cb86519b366e001a0044be1c1b0028f56b14100c5ff303ffef79cb"
+    },
+    "historical/broad_pacing_stage.py": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad_pacing_stage.py",
+      "sha256": "6937ccb5f58199083147e13a967ccedd1d48b4aee3e0906c1f23632c998a9b54"
+    },
+    "historical/broad_pacing_smoke.py": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad_pacing_smoke.py",
+      "sha256": "20d6bc1ed989ecf7b400e6a2190fe87981ddc40104979ea7dc17afea2f790f77"
+    },
+    "current/selected-cyc_sdl.c": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\source-audio-profile-v2\\control.c",
+      "sha256": "3299e93888a4c5eed1f43280970f1052e432f778b2932f0f128082c09b9c14d5"
+    },
+    "current/engine-cyc_sdl.c": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\engine-nes26\\runner\\cyc\\cyc_sdl.c",
+      "sha256": "3299e93888a4c5eed1f43280970f1052e432f778b2932f0f128082c09b9c14d5"
+    },
+    "current/cyc_frame_pacing.h": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\engine-nes26\\runner\\cyc\\cyc_frame_pacing.h",
+      "sha256": "fe6b9cd7022ff4d0238acf3228e287a49129d847c4d7551c14a4f061447408bf"
+    }
+  },
+  "historical": {
+    "source_snapshot": "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\nas-results\\broad-results-snapshot.json",
+    "queue": "broad-pacing",
+    "samples": [
+      {
+        "cpu_seconds": 8.6875,
+        "wall_seconds": 15.216048100031912,
+        "command": [
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1_reference.exe",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1.nes",
+          "--window-input",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1.input",
+          "--hidden",
+          "--exit-after",
+          "900",
+          "--config",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1\\00-A\\config.ini",
+          "--no-save"
+        ],
+        "window_frames": 900,
+        "presents": 900,
+        "pixels": "97a0750d",
+        "jitter_us": {
+          "p50": 0.0,
+          "p99": 264.9,
+          "max": 7048.9
+        },
+        "kind": "warmup",
+        "label": "A",
+        "exe_sha256": "87de16a8bfda910801e024c050539a642cc942b375d1187a47907f2c8962dbf1",
+        "audio_sha256": "7d2c17016e7760a6e39331cf79441b0abf89f87e64df9fb74699539d50a3e5a9",
+        "state_sha256": "2050e8feca9075962bd53288b37ffea2f4f25635b1baa8c4fb21a9320d26f53b",
+        "external_overlap": [],
+        "trial": "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1\\00-A"
+      },
+      {
+        "cpu_seconds": 8.3125,
+        "wall_seconds": 15.201384600019082,
+        "command": [
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1_waitable500.exe",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1.nes",
+          "--window-input",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1.input",
+          "--hidden",
+          "--exit-after",
+          "900",
+          "--config",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1\\01-B\\config.ini",
+          "--no-save"
+        ],
+        "window_frames": 900,
+        "presents": 900,
+        "pixels": "97a0750d",
+        "jitter_us": {
+          "p50": 0.0,
+          "p99": 19200.2,
+          "max": 38860.9
+        },
+        "kind": "warmup",
+        "label": "B",
+        "exe_sha256": "09b21e0568be7df03dcd40cc8c2dd66491233ed1fb6ba5bdb5205311e9e84b0e",
+        "audio_sha256": "7d2c17016e7760a6e39331cf79441b0abf89f87e64df9fb74699539d50a3e5a9",
+        "state_sha256": "2050e8feca9075962bd53288b37ffea2f4f25635b1baa8c4fb21a9320d26f53b",
+        "external_overlap": [],
+        "trial": "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1\\01-B"
+      },
+      {
+        "cpu_seconds": 8.765625,
+        "wall_seconds": 15.142570900032297,
+        "command": [
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1_reference.exe",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1.nes",
+          "--window-input",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1.input",
+          "--hidden",
+          "--exit-after",
+          "900",
+          "--config",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1\\02-A\\config.ini",
+          "--no-save"
+        ],
+        "window_frames": 900,
+        "presents": 900,
+        "pixels": "97a0750d",
+        "jitter_us": {
+          "p50": 0.0,
+          "p99": 8.8,
+          "max": 239.0
+        },
+        "kind": "AA",
+        "label": "A",
+        "exe_sha256": "87de16a8bfda910801e024c050539a642cc942b375d1187a47907f2c8962dbf1",
+        "audio_sha256": "7d2c17016e7760a6e39331cf79441b0abf89f87e64df9fb74699539d50a3e5a9",
+        "state_sha256": "2050e8feca9075962bd53288b37ffea2f4f25635b1baa8c4fb21a9320d26f53b",
+        "external_overlap": [],
+        "trial": "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1\\02-A"
+      },
+      {
+        "cpu_seconds": 8.71875,
+        "wall_seconds": 15.084372199838981,
+        "command": [
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1_reference.exe",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1.nes",
+          "--window-input",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1.input",
+          "--hidden",
+          "--exit-after",
+          "900",
+          "--config",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1\\03-A\\config.ini",
+          "--no-save"
+        ],
+        "window_frames": 900,
+        "presents": 900,
+        "pixels": "97a0750d",
+        "jitter_us": {
+          "p50": 0.0,
+          "p99": 5.2,
+          "max": 45.0
+        },
+        "kind": "AA",
+        "label": "A",
+        "exe_sha256": "87de16a8bfda910801e024c050539a642cc942b375d1187a47907f2c8962dbf1",
+        "audio_sha256": "7d2c17016e7760a6e39331cf79441b0abf89f87e64df9fb74699539d50a3e5a9",
+        "state_sha256": "2050e8feca9075962bd53288b37ffea2f4f25635b1baa8c4fb21a9320d26f53b",
+        "external_overlap": [],
+        "trial": "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1\\03-A"
+      },
+      {
+        "cpu_seconds": 8.75,
+        "wall_seconds": 15.126578300027177,
+        "command": [
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1_reference.exe",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1.nes",
+          "--window-input",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1.input",
+          "--hidden",
+          "--exit-after",
+          "900",
+          "--config",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1\\04-A\\config.ini",
+          "--no-save"
+        ],
+        "window_frames": 900,
+        "presents": 900,
+        "pixels": "97a0750d",
+        "jitter_us": {
+          "p50": 0.0,
+          "p99": 8.3,
+          "max": 4749.4
+        },
+        "kind": "AA",
+        "label": "A",
+        "exe_sha256": "87de16a8bfda910801e024c050539a642cc942b375d1187a47907f2c8962dbf1",
+        "audio_sha256": "7d2c17016e7760a6e39331cf79441b0abf89f87e64df9fb74699539d50a3e5a9",
+        "state_sha256": "2050e8feca9075962bd53288b37ffea2f4f25635b1baa8c4fb21a9320d26f53b",
+        "external_overlap": [],
+        "trial": "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1\\04-A"
+      },
+      {
+        "cpu_seconds": 8.953125,
+        "wall_seconds": 15.116525799967349,
+        "command": [
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1_reference.exe",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1.nes",
+          "--window-input",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1.input",
+          "--hidden",
+          "--exit-after",
+          "900",
+          "--config",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1\\05-A\\config.ini",
+          "--no-save"
+        ],
+        "window_frames": 900,
+        "presents": 900,
+        "pixels": "97a0750d",
+        "jitter_us": {
+          "p50": 0.0,
+          "p99": 9.2,
+          "max": 2510.5
+        },
+        "kind": "AA",
+        "label": "A",
+        "exe_sha256": "87de16a8bfda910801e024c050539a642cc942b375d1187a47907f2c8962dbf1",
+        "audio_sha256": "7d2c17016e7760a6e39331cf79441b0abf89f87e64df9fb74699539d50a3e5a9",
+        "state_sha256": "2050e8feca9075962bd53288b37ffea2f4f25635b1baa8c4fb21a9320d26f53b",
+        "external_overlap": [],
+        "trial": "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1\\05-A"
+      },
+      {
+        "cpu_seconds": 8.859375,
+        "wall_seconds": 15.098291500005871,
+        "command": [
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1_reference.exe",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1.nes",
+          "--window-input",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1.input",
+          "--hidden",
+          "--exit-after",
+          "900",
+          "--config",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1\\06-A\\config.ini",
+          "--no-save"
+        ],
+        "window_frames": 900,
+        "presents": 900,
+        "pixels": "97a0750d",
+        "jitter_us": {
+          "p50": 0.0,
+          "p99": 12.3,
+          "max": 975.3
+        },
+        "kind": "ABBA",
+        "label": "A",
+        "exe_sha256": "87de16a8bfda910801e024c050539a642cc942b375d1187a47907f2c8962dbf1",
+        "audio_sha256": "7d2c17016e7760a6e39331cf79441b0abf89f87e64df9fb74699539d50a3e5a9",
+        "state_sha256": "2050e8feca9075962bd53288b37ffea2f4f25635b1baa8c4fb21a9320d26f53b",
+        "external_overlap": [],
+        "trial": "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1\\06-A"
+      },
+      {
+        "cpu_seconds": 8.171875,
+        "wall_seconds": 15.109580900054425,
+        "command": [
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1_waitable500.exe",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1.nes",
+          "--window-input",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1.input",
+          "--hidden",
+          "--exit-after",
+          "900",
+          "--config",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1\\07-B\\config.ini",
+          "--no-save"
+        ],
+        "window_frames": 900,
+        "presents": 900,
+        "pixels": "97a0750d",
+        "jitter_us": {
+          "p50": 0.0,
+          "p99": 539.2,
+          "max": 1562.6
+        },
+        "kind": "ABBA",
+        "label": "B",
+        "exe_sha256": "09b21e0568be7df03dcd40cc8c2dd66491233ed1fb6ba5bdb5205311e9e84b0e",
+        "audio_sha256": "7d2c17016e7760a6e39331cf79441b0abf89f87e64df9fb74699539d50a3e5a9",
+        "state_sha256": "2050e8feca9075962bd53288b37ffea2f4f25635b1baa8c4fb21a9320d26f53b",
+        "external_overlap": [],
+        "trial": "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1\\07-B"
+      },
+      {
+        "cpu_seconds": 8.25,
+        "wall_seconds": 15.112521399976686,
+        "command": [
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1_waitable500.exe",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1.nes",
+          "--window-input",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1.input",
+          "--hidden",
+          "--exit-after",
+          "900",
+          "--config",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1\\08-B\\config.ini",
+          "--no-save"
+        ],
+        "window_frames": 900,
+        "presents": 900,
+        "pixels": "97a0750d",
+        "jitter_us": {
+          "p50": 0.0,
+          "p99": 570.4,
+          "max": 8271.9
+        },
+        "kind": "ABBA",
+        "label": "B",
+        "exe_sha256": "09b21e0568be7df03dcd40cc8c2dd66491233ed1fb6ba5bdb5205311e9e84b0e",
+        "audio_sha256": "7d2c17016e7760a6e39331cf79441b0abf89f87e64df9fb74699539d50a3e5a9",
+        "state_sha256": "2050e8feca9075962bd53288b37ffea2f4f25635b1baa8c4fb21a9320d26f53b",
+        "external_overlap": [],
+        "trial": "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1\\08-B"
+      },
+      {
+        "cpu_seconds": 8.75,
+        "wall_seconds": 15.137696700170636,
+        "command": [
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1_reference.exe",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1.nes",
+          "--window-input",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1.input",
+          "--hidden",
+          "--exit-after",
+          "900",
+          "--config",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1\\09-A\\config.ini",
+          "--no-save"
+        ],
+        "window_frames": 900,
+        "presents": 900,
+        "pixels": "97a0750d",
+        "jitter_us": {
+          "p50": 0.0,
+          "p99": 16.4,
+          "max": 8751.7
+        },
+        "kind": "ABBA",
+        "label": "A",
+        "exe_sha256": "87de16a8bfda910801e024c050539a642cc942b375d1187a47907f2c8962dbf1",
+        "audio_sha256": "7d2c17016e7760a6e39331cf79441b0abf89f87e64df9fb74699539d50a3e5a9",
+        "state_sha256": "2050e8feca9075962bd53288b37ffea2f4f25635b1baa8c4fb21a9320d26f53b",
+        "external_overlap": [],
+        "trial": "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1\\09-A"
+      },
+      {
+        "cpu_seconds": 7.9375,
+        "wall_seconds": 15.11716779996641,
+        "command": [
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1_waitable500.exe",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1.nes",
+          "--window-input",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1.input",
+          "--hidden",
+          "--exit-after",
+          "900",
+          "--config",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1\\10-B\\config.ini",
+          "--no-save"
+        ],
+        "window_frames": 900,
+        "presents": 900,
+        "pixels": "97a0750d",
+        "jitter_us": {
+          "p50": 0.0,
+          "p99": 512.8,
+          "max": 4250.6
+        },
+        "kind": "ABBA",
+        "label": "B",
+        "exe_sha256": "09b21e0568be7df03dcd40cc8c2dd66491233ed1fb6ba5bdb5205311e9e84b0e",
+        "audio_sha256": "7d2c17016e7760a6e39331cf79441b0abf89f87e64df9fb74699539d50a3e5a9",
+        "state_sha256": "2050e8feca9075962bd53288b37ffea2f4f25635b1baa8c4fb21a9320d26f53b",
+        "external_overlap": [],
+        "trial": "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1\\10-B"
+      },
+      {
+        "cpu_seconds": 8.671875,
+        "wall_seconds": 15.100089800078422,
+        "command": [
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1_reference.exe",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1.nes",
+          "--window-input",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1.input",
+          "--hidden",
+          "--exit-after",
+          "900",
+          "--config",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1\\11-A\\config.ini",
+          "--no-save"
+        ],
+        "window_frames": 900,
+        "presents": 900,
+        "pixels": "97a0750d",
+        "jitter_us": {
+          "p50": 0.0,
+          "p99": 12485.3,
+          "max": 29693.7
+        },
+        "kind": "ABBA",
+        "label": "A",
+        "exe_sha256": "87de16a8bfda910801e024c050539a642cc942b375d1187a47907f2c8962dbf1",
+        "audio_sha256": "7d2c17016e7760a6e39331cf79441b0abf89f87e64df9fb74699539d50a3e5a9",
+        "state_sha256": "2050e8feca9075962bd53288b37ffea2f4f25635b1baa8c4fb21a9320d26f53b",
+        "external_overlap": [],
+        "trial": "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1\\11-A"
+      },
+      {
+        "cpu_seconds": 8.671875,
+        "wall_seconds": 15.113509600050747,
+        "command": [
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1_reference.exe",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1.nes",
+          "--window-input",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1.input",
+          "--hidden",
+          "--exit-after",
+          "900",
+          "--config",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1\\12-A\\config.ini",
+          "--no-save"
+        ],
+        "window_frames": 900,
+        "presents": 900,
+        "pixels": "97a0750d",
+        "jitter_us": {
+          "p50": 0.0,
+          "p99": 7.1,
+          "max": 175.8
+        },
+        "kind": "ABBA",
+        "label": "A",
+        "exe_sha256": "87de16a8bfda910801e024c050539a642cc942b375d1187a47907f2c8962dbf1",
+        "audio_sha256": "7d2c17016e7760a6e39331cf79441b0abf89f87e64df9fb74699539d50a3e5a9",
+        "state_sha256": "2050e8feca9075962bd53288b37ffea2f4f25635b1baa8c4fb21a9320d26f53b",
+        "external_overlap": [],
+        "trial": "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1\\12-A"
+      },
+      {
+        "cpu_seconds": 8.265625,
+        "wall_seconds": 15.114282499998808,
+        "command": [
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1_waitable500.exe",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1.nes",
+          "--window-input",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1.input",
+          "--hidden",
+          "--exit-after",
+          "900",
+          "--config",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1\\13-B\\config.ini",
+          "--no-save"
+        ],
+        "window_frames": 900,
+        "presents": 900,
+        "pixels": "97a0750d",
+        "jitter_us": {
+          "p50": 0.0,
+          "p99": 3221.4,
+          "max": 9931.0
+        },
+        "kind": "ABBA",
+        "label": "B",
+        "exe_sha256": "09b21e0568be7df03dcd40cc8c2dd66491233ed1fb6ba5bdb5205311e9e84b0e",
+        "audio_sha256": "7d2c17016e7760a6e39331cf79441b0abf89f87e64df9fb74699539d50a3e5a9",
+        "state_sha256": "2050e8feca9075962bd53288b37ffea2f4f25635b1baa8c4fb21a9320d26f53b",
+        "external_overlap": [],
+        "trial": "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1\\13-B"
+      },
+      {
+        "cpu_seconds": 8.8125,
+        "wall_seconds": 15.117324399994686,
+        "command": [
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1_reference.exe",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1.nes",
+          "--window-input",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1.input",
+          "--hidden",
+          "--exit-after",
+          "900",
+          "--config",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1\\14-A\\config.ini",
+          "--no-save"
+        ],
+        "window_frames": 900,
+        "presents": 900,
+        "pixels": "97a0750d",
+        "jitter_us": {
+          "p50": 0.0,
+          "p99": 7.1,
+          "max": 59.0
+        },
+        "kind": "ABBA",
+        "label": "A",
+        "exe_sha256": "87de16a8bfda910801e024c050539a642cc942b375d1187a47907f2c8962dbf1",
+        "audio_sha256": "7d2c17016e7760a6e39331cf79441b0abf89f87e64df9fb74699539d50a3e5a9",
+        "state_sha256": "2050e8feca9075962bd53288b37ffea2f4f25635b1baa8c4fb21a9320d26f53b",
+        "external_overlap": [],
+        "trial": "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1\\14-A"
+      },
+      {
+        "cpu_seconds": 8.359375,
+        "wall_seconds": 15.106535400031134,
+        "command": [
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1_waitable500.exe",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1.nes",
+          "--window-input",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1.input",
+          "--hidden",
+          "--exit-after",
+          "900",
+          "--config",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1\\15-B\\config.ini",
+          "--no-save"
+        ],
+        "window_frames": 900,
+        "presents": 900,
+        "pixels": "97a0750d",
+        "jitter_us": {
+          "p50": 0.0,
+          "p99": 535.6,
+          "max": 5265.1
+        },
+        "kind": "ABBA",
+        "label": "B",
+        "exe_sha256": "09b21e0568be7df03dcd40cc8c2dd66491233ed1fb6ba5bdb5205311e9e84b0e",
+        "audio_sha256": "7d2c17016e7760a6e39331cf79441b0abf89f87e64df9fb74699539d50a3e5a9",
+        "state_sha256": "2050e8feca9075962bd53288b37ffea2f4f25635b1baa8c4fb21a9320d26f53b",
+        "external_overlap": [],
+        "trial": "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1\\15-B"
+      },
+      {
+        "cpu_seconds": 8.28125,
+        "wall_seconds": 15.0964299000334,
+        "command": [
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1_waitable500.exe",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1.nes",
+          "--window-input",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1.input",
+          "--hidden",
+          "--exit-after",
+          "900",
+          "--config",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1\\16-B\\config.ini",
+          "--no-save"
+        ],
+        "window_frames": 900,
+        "presents": 900,
+        "pixels": "97a0750d",
+        "jitter_us": {
+          "p50": 0.0,
+          "p99": 526.8,
+          "max": 5406.3
+        },
+        "kind": "ABBA",
+        "label": "B",
+        "exe_sha256": "09b21e0568be7df03dcd40cc8c2dd66491233ed1fb6ba5bdb5205311e9e84b0e",
+        "audio_sha256": "7d2c17016e7760a6e39331cf79441b0abf89f87e64df9fb74699539d50a3e5a9",
+        "state_sha256": "2050e8feca9075962bd53288b37ffea2f4f25635b1baa8c4fb21a9320d26f53b",
+        "external_overlap": [],
+        "trial": "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1\\16-B"
+      },
+      {
+        "cpu_seconds": 8.765625,
+        "wall_seconds": 15.119901000056416,
+        "command": [
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1_reference.exe",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1.nes",
+          "--window-input",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1.input",
+          "--hidden",
+          "--exit-after",
+          "900",
+          "--config",
+          "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1\\17-A\\config.ini",
+          "--no-save"
+        ],
+        "window_frames": 900,
+        "presents": 900,
+        "pixels": "97a0750d",
+        "jitter_us": {
+          "p50": 0.0,
+          "p99": 1777.0,
+          "max": 14170.8
+        },
+        "kind": "ABBA",
+        "label": "A",
+        "exe_sha256": "87de16a8bfda910801e024c050539a642cc942b375d1187a47907f2c8962dbf1",
+        "audio_sha256": "7d2c17016e7760a6e39331cf79441b0abf89f87e64df9fb74699539d50a3e5a9",
+        "state_sha256": "2050e8feca9075962bd53288b37ffea2f4f25635b1baa8c4fb21a9320d26f53b",
+        "external_overlap": [],
+        "trial": "G:\\Temp\\Codex\\nesrecomp\\accuracy-perf-20261022\\broad-pacing\\smb1\\17-A"
+      }
+    ],
+    "blocks_cpu_reduction_percent": [
+      6.743566992014194,
+      6.576576576576576,
+      5.333333333333334
+    ],
+    "median_cpu_reduction_percent": 6.576576576576576,
+    "median_per_run_p99_end_wait_lateness_us": {
+      "A": 14.35,
+      "B": 537.4000000000001
+    },
+    "measured_boundary": "After wait returns relative to next loop deadline; not physical input/display latency",
+    "outputs": "All18rows retain900frames/900presents/identical state, PCM and pixel hashes"
+  },
+  "limitations": [
+    "This is a scoped reuse/audit decision under NES26 conditional next step, not a fresh current-package pacing qualification. Historical source/package/host/settings are retained as historical. Old quiet-host/lease/matrix policies are not reused or reimposed.",
+    "The old candidate already creates a Windows high-resolution waitable timer with dynamic API lookup, portable SDL fallback and500usfinalspin. Changing timer API or300/500us guard alone repeats its design. Existing6.58%CPU reduction does not qualify a new default when its measured end-wait p99 worsened14.35\u2192537.4us.",
+    "Old end-of-wait lateness is not a measurement of display cadence or physical input-to-photon latency. No new blanket requirement for identical private counters is imposed. A different service must measure actual user-relevant boundaries and preserve required observable behavior, not merely improve CPU.",
+    "Current selected source still uses SDL_Delay(ms-1)+counterspin; guest deadlines remain independent of VSync, catch-up picture suppression stays bounded and fast/uncapped/replay bypass waits. Source audit does not quantify current wait cost. NES25 total process CPU cannot be credited as current pacing cost or recoverable work.",
+    "A coherent frame-admission/presentation service remains unimplemented and potentially useful. Before another trial, freeze actual event/pad sample, admission, target/wake and present timestamps; measure cadence/p95/p99, actual event\u2192admitted-frame latency, CPU, audio queue and fast-forward/slow-display behavior. Fixed frame-index input equality alone does not establish wall-clock input latency.",
+    "A future Windows timer must retain a portable non-Windows/unsupported-API fallback and clear handle lifetime. Avoid preserving legacy internal ownership solely as a constraint, or claiming that the whole pipeline has been exhausted.",
+    "No new runtime source, performance gain, runtime PR, merge or release. Final supported CLI/five-title builds and combined owner handoff remain pending."
+  ]
+}

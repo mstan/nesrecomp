@@ -32,7 +32,8 @@
     "2026-10-31-native-service-results.json",
     "2026-10-31-chr-plan-results.json",
     "2026-10-31-rollback-digest-results.json",
-    "2026-10-31-audio-host-results.json"
+    "2026-10-31-audio-host-results.json",
+    "2026-10-31-pacing-reuse-results.json"
   ],
   "priorities": "Order expresses expected scope and evidence, not measured recoverable cost. Overlapping packages are not additive.",
   "acceptance": "Each game neutral or positive. Small mixed samples inconclusive. Shared original/candidate defects are separate. Native saves protected; old save-state compatibility never required.",
@@ -1121,7 +1122,7 @@
       "package": "host-delivery",
       "priority": "P3",
       "title": "Pacing and presentation deadlines",
-      "status": "open-unmeasured",
+      "status": "evaluated-deferred-pacing-reuse",
       "evidence": [
         {
           "file": "runner/cyc/cyc_sdl.c",
@@ -1138,15 +1139,16 @@
           "link": "../../runner/cyc/cyc_frame_pacing.h#L9"
         }
       ],
-      "remaining": "A previous waitable-pacing candidate reduced CPU but worsened deadline lateness. A revised service can coordinate audio/video/input deadlines without busy wait or repeated synchronous presentation.",
+      "remaining": "Historical high-resolution waitable design retained as rejected on end-wait lateness; no materially different new admission/presentation service implemented/qualified. Current-package cost and actual input/display latency remain unmeasured residuals.",
       "affected_profiles": [
         "Normal paced play, fast-forward and slow-display presentation"
       ],
-      "next_decisive_check": "Reuse the negative receipt first; only test a materially different deadline design. Compare p95/p99 lateness, cadence and input latency as well as CPU.",
+      "next_decisive_check": "Independent durable Beads handoff, then next serial item. Revisit a coherent admission/presentation service with actual event/admit/present cadence and latency metrics, not another fixed timer guard.",
       "required_behavior": "No worse user-visible pacing/latency or broken fast-forward. Retain the earlier failed candidate as rejected, not an open ready-to-ship win.",
       "prior_issue": null,
       "measured_additional_gain": null,
-      "execution_status": "remaining-evaluation"
+      "execution_status": "evaluated-historical-negative-reused",
+      "result_file": "2026-10-31-pacing-reuse-results.json"
     },
     {
       "id": "NES27",
@@ -1311,7 +1313,7 @@
   ],
   "execution": {
     "issue": "beads-2dw.1.110",
-    "branch": "perf/nes25-audio-ownership",
+    "branch": "docs/nes26-pacing-disposition",
     "base": "fc0bf3fa46a710464960c0a1f2d3b83b4d345600",
     "status": "in-progress",
     "evidence_root": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028",
@@ -1322,12 +1324,12 @@
     "owner_handoff_ready": false
   },
   "execution_summary": {
-    "evaluated_decisions": 25,
+    "evaluated_decisions": 26,
     "partial_ids": [],
     "parked_ids": [
       "NES29"
     ],
-    "other_unresolved": 5,
+    "other_unresolved": 4,
     "note": "Qualified scope decisions, not architectural exhaustion or a wall-clock completion estimate. Final combined builds and owner approval remain separate."
   }
 }

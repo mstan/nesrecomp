@@ -17,7 +17,7 @@ original HD runtime. See [HD results](2026-10-28-hd-plan-results.md), including
 the rejected universal packages and SMB's unchanged-runtime proof. Zelda's
 fixed SNROM SRAM code now joins the native deadline service; see
 [SRAM results](2026-10-28-sram-native-results.md). SERVER Fit improves5.128%
-and Remastered1.442%; stock is neutral/inconclusive. Twenty-five items now have
+and Remastered1.442%; stock is neutral/inconclusive. Twenty-six items now have
 qualified evaluation decisions; NES01 is qualified for whole stable HLE raster
 jobs and NES29 remains parked.
 Guarded native ROM is now evaluated under NES09; see
@@ -581,13 +581,18 @@ close the per-pixel raster or APU-event algorithm work under NES01/NES06.
   Evidence: [runner/cyc/cyc_sdl.c:269](../../runner/cyc/cyc_sdl.c#L269), [runner/cyc/hw_apu.c:192](../../runner/cyc/hw_apu.c#L192).
 
 
-- [ ] **NES26 · P3 · Pacing and presentation deadlines**
+- [x] **NES26 · P3 · Pacing and presentation deadlines**
 
   A previous waitable-pacing candidate reduced CPU but worsened deadline lateness. A revised service can coordinate audio/video/input deadlines without busy wait or repeated synchronous presentation.
 
   Scope: Normal paced play, fast-forward and slow-display presentation.
 
-  Next: Reuse the negative receipt first; only test a materially different deadline design. Compare p95/p99 lateness, cadence and input latency as well as CPU.
+  Evaluation: Deferred by reuse of the historical 18-leg high-resolution
+  waitable-timer trial: CPU median improves 6.577%, but end-of-wait p99
+  lateness worsens 14.35 to 537.4 microseconds. Another guard variant repeats
+  that design. No fresh current-package result or physical input/display
+  latency qualification is claimed. A coherent admission/presentation service
+  remains unimplemented and potentially useful. [Results](2026-10-31-pacing-reuse-results.md).
 
   Preserve: No worse user-visible pacing/latency or broken fast-forward. Retain the earlier failed candidate as rejected, not an open ready-to-ship win.
 
@@ -699,6 +704,6 @@ working portable implementation. Netplay settles a common validated profile
 before frame 0; platform compilation alone is not compatibility qualification.
 
 Audit completion closes only `beads-2dw.1.109`'s investigation/deliverable.
-Current execution has twenty-five scoped evaluation decisions, five unresolved
+Current execution has twenty-six scoped evaluation decisions, four unresolved
 items and parked NES29. The implementation campaign and final combined owner
 handoff remain open; a scoped decision is not architectural exhaustion.
