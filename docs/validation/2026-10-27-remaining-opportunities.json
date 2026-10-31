@@ -23,7 +23,8 @@
     "2026-10-28-prepared-picture-results.json",
     "2026-10-28-retained-voxel-results.json",
     "2026-10-30-world-canvas-results.json",
-    "2026-10-31-wide-view-results.json"
+    "2026-10-31-wide-view-results.json",
+    "2026-10-31-rewind-history-results.json"
   ],
   "priorities": "Order expresses expected scope and evidence, not measured recoverable cost. Overlapping packages are not additive.",
   "acceptance": "Each game neutral or positive. Small mixed samples inconclusive. Shared original/candidate defects are separate. Native saves protected; old save-state compatibility never required.",
@@ -895,7 +896,7 @@
       "package": "state-ownership",
       "priority": "P2",
       "title": "One authoritative state image for save, rewind and mod records",
-      "status": "open-unmeasured",
+      "status": "evaluated-selected-stable-rewind-preview-ownership",
       "evidence": [
         {
           "file": "runner/cyc/cyc_state.c",
@@ -912,15 +913,55 @@
           "link": "../../runner/cyc/cyc_state.c#L82"
         }
       ],
-      "remaining": "State serialization still copies machine/cart/frame products plus host/mod payloads. Prior fused digest and inactive-HD work are already baseline. Evaluate immutable frame images, mutation generations and derived-product reconstruction across the complete capture/restore lifetime.",
+      "remaining": "Existing canonical image/ring ownership was baseline. Stable retained previews selected; vector-front shifts removed. Serializer scratch/directwriter and eager-thumbnail residuals deferred on currentattribution, not exhausted.",
       "affected_profiles": [
         "Current-build save/rewind-heavy games; active HD/world records when enabled"
       ],
-      "next_decisive_check": "Measure a current-build rewind/snapshot-heavy workload, including active HD/world mods, copied bytes, resident memory and tail latency. Reuse rejected scratch/allocation evidence.",
+      "next_decisive_check": "File reviewed PR and final combined supported generation/link, five-title feature/performance and owner handoff. No more per-item game matrix; choose another independent opportunity after durable validator handoff.",
       "required_behavior": "Current-build save/load/rewind correctness and malformed-input rejection; persistent native saves protected. Old-state compatibility, old layout and private cache byte identity are not requirements.",
       "prior_issue": null,
-      "measured_additional_gain": null,
-      "execution_status": "remaining-evaluation"
+      "measured_additional_gain": [
+        {
+          "title": "smb3",
+          "trial": "first-trial",
+          "median_cpu_reduction_percent": 2.1739130434782594,
+          "assessment": "small positive median with mixed/tied pairs; neutral/suggestive within variation"
+        },
+        {
+          "title": "smb",
+          "trial": "first-trial",
+          "median_cpu_reduction_percent": 2.0942408376963373,
+          "assessment": "small positive median with mixed/tied pairs; neutral/suggestive within variation"
+        },
+        {
+          "title": "metroid",
+          "trial": "first-trial",
+          "median_cpu_reduction_percent": 4.591836734693877,
+          "assessment": "positive in this bounded run; effect size varies"
+        },
+        {
+          "title": "gumshoe",
+          "trial": "first-trial",
+          "median_cpu_reduction_percent": 4.545454545454541,
+          "assessment": "small positive median with mixed/tied pairs; neutral/suggestive within variation"
+        },
+        {
+          "title": "zelda",
+          "trial": "first-trial",
+          "median_cpu_reduction_percent": -2.9629629629629672,
+          "assessment": "neutral/inconclusive across two opposing trials; no pooled win and no reproduced regression"
+        },
+        {
+          "title": "zelda",
+          "trial": "targeted-replication",
+          "median_cpu_reduction_percent": 2.3809523809523836,
+          "assessment": "neutral/inconclusive across two opposing trials; no pooled win and no reproduced regression"
+        }
+      ],
+      "execution_status": "selected-scoped-stable-history-retention",
+      "result_file": "2026-10-31-rewind-history-results.json",
+      "runtime_commit": "8df7b500e88466fe5dfd7fd78a555b114ba85071",
+      "pull_request": "https://github.com/mstan/nesrecomp/pull/86"
     },
     {
       "id": "NES22",
@@ -1245,7 +1286,7 @@
   ],
   "execution": {
     "issue": "beads-2dw.1.110",
-    "branch": "perf/nes16-wide-view",
+    "branch": "perf/nes21-state-ownership",
     "base": "fc0bf3fa46a710464960c0a1f2d3b83b4d345600",
     "status": "in-progress",
     "evidence_root": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028",
@@ -1256,12 +1297,12 @@
     "owner_handoff_ready": false
   },
   "execution_summary": {
-    "evaluated_decisions": 16,
+    "evaluated_decisions": 17,
     "partial_ids": [],
     "parked_ids": [
       "NES29"
     ],
-    "other_unresolved": 14,
+    "other_unresolved": 13,
     "note": "Qualified scope decisions, not architectural exhaustion or a wall-clock completion estimate. Final combined builds and owner approval remain separate."
   }
 }
