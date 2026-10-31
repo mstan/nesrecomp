@@ -4,11 +4,19 @@
   "issue": "beads-2dw.1.110",
   "campaign": "beads-2wy8.1",
   "date": "2026-10-31",
-  "status": "selected-scoped-stable-preview-history-PR-handoff-pending",
+  "status": "selected-scoped-stable-history-open-PR; final-independent-durable-readback-pending",
   "runtime_commit": "8df7b500e88466fe5dfd7fd78a555b114ba85071",
   "branch": "perf/nes21-state-ownership",
   "base": "868614c70f6dacf8517520b6647c9387f7fd358c",
-  "pull_request": "pending",
+  "pull_request": {
+    "number": 86,
+    "url": "https://github.com/mstan/nesrecomp/pull/86",
+    "state": "open",
+    "head_branch": "perf/nes21-state-ownership",
+    "base_branch": "perf/nes16-wide-view",
+    "base_sha": "868614c70f6dacf8517520b6647c9387f7fd358c",
+    "filed_head": "805aca70ecc6b27afc6f9e0246c8bd592e242e70"
+  },
   "scope": "Existing canonical serialized blob and snapshot-ring ownership are baseline. Replace vector<Entry> with deque<Entry> so evicting oldest history releases only that preview, without shifting all other inline192x108 previews. No format/API/cadence/depth/budget/native-save/guest-state change.",
   "results": [
     {
@@ -3460,5 +3468,26 @@
     "Allfive current nativeUI objects built/relinked with recorded supportedflags, everyuntouchedobjecthash matched. Full supported regeneration/link and final combined five-title/owner gates remain pending. No merge/release/owner-facinglaunch. FDS parked."
   ],
   "evidence_root": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028",
-  "independent_validator": "/root/validate_nes21"
+  "independent_validator": "/root/validate_nes21",
+  "independent_native_replay_ram": {
+    "scope": "Read-only comparison of already retained actual rewind RAM with native headless oracle RAM; no relaunch",
+    "archive_sha256": "545e5b870d05859d8d3945376af56316b403473898f13797721397b26dbb8047",
+    "cases": {
+      "reference": {
+        "compared_bytes": 2048,
+        "equal": true,
+        "actual_sha256": "b0e09b10a1b0f9ce9165ef648211b511cc889b4416a833a34897038e3dcc8b11",
+        "oracle_sha256": "b0e09b10a1b0f9ce9165ef648211b511cc889b4416a833a34897038e3dcc8b11",
+        "differing_offsets": []
+      },
+      "candidate": {
+        "compared_bytes": 2048,
+        "equal": true,
+        "actual_sha256": "b0e09b10a1b0f9ce9165ef648211b511cc889b4416a833a34897038e3dcc8b11",
+        "oracle_sha256": "b0e09b10a1b0f9ce9165ef648211b511cc889b4416a833a34897038e3dcc8b11",
+        "differing_offsets": []
+      }
+    }
+  },
+  "handoff": "Validator accepted actual source/lifetime/per-game/native-feature evidence, independently recomputed native replay RAM from archives, and explicitly instructed PR86. Actual remote final head/base and durable owner/campaign readback remain the serial handoff; no merge."
 }

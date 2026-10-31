@@ -2,7 +2,9 @@
 
 NES21, `beads-2dw.1.110`, optimization campaign `beads-2wy8.1`.
 Selected runtime `8df7b500e88466fe5dfd7fd78a555b114ba85071` on `perf/nes21-state-ownership`.
-Actual PR/central durable-record handoff remains next; keep it unmerged.
+[Engine PR86](https://github.com/mstan/nesrecomp/pull/86) is open, based on
+`perf/nes16-wide-view`. Actual final-head/central durable-record verification
+is the remaining serial handoff; keep it unmerged.
 
 | Title | Trial | Reference CPU s | Candidate CPU s | Median reduction | Faster/slower/tied pairs |
 |---|---|---:|---:|---:|---:|

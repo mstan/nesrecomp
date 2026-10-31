@@ -960,7 +960,8 @@
       ],
       "execution_status": "selected-scoped-stable-history-retention",
       "result_file": "2026-10-31-rewind-history-results.json",
-      "runtime_commit": "8df7b500e88466fe5dfd7fd78a555b114ba85071"
+      "runtime_commit": "8df7b500e88466fe5dfd7fd78a555b114ba85071",
+      "pull_request": "https://github.com/mstan/nesrecomp/pull/86"
     },
     {
       "id": "NES22",
