@@ -10,9 +10,9 @@
   "game": "Castlevania III: Dracula's Curse (USA)",
   "mapper": 5,
   "rom_sha256": "1c7b2ed2c1fb5839a6764006aa476f5c9d48f99465b6141980f3a5af1dfec0d6",
-  "route_sha256": "b7f4ab77401aa543e7f3e9f8158c1532d5a468d5235c00448466364c43ee6a75",
-  "route_frames": 1500,
-  "native_coverage_percent": 98.5,
+  "route_sha256": "cbe188b915dd3939e59bef58b457992e848685d8ace53cc062933261708dc8d8",
+  "route_frames": 2100,
+  "native_coverage_percent": null,
   "products": {
     "reference": {
       "exe": "reference/game.exe",
@@ -23,9 +23,9 @@
       "sha256": "33104e099a2d5d2c96e7c60e327875c545d7211b8e83228e0bc4ee0c2cbb84b1"
     }
   },
-  "raw_evidence": "G:\\Temp\\Codex\\nes110-complex-candidate-20261031\\castlevania3\\evidence",
+  "raw_evidence": "G:\\Temp\\Codex\\nes110-complex-candidate-20261031\\castlevania3-gameplay\\evidence",
   "correctness": {
-    "equal_product_count": 16,
+    "equal_product_count": 20,
     "exact_outputs": true,
     "own_state_frames": 600,
     "own_continuations_pass": true,
@@ -33,26 +33,61 @@
   },
   "performance": {
     "host": "DESKTOP-HN15M1H",
-    "scope": "Built native headless1500-frame retained stage-one route; process startup included",
+    "scope": "Built native active stage-one frames1500..2099 resumed from own state; process startup/load included",
     "affinity_mask": 8192,
-    "initial_raw": "G:\\Temp\\Codex\\nes110-complex-candidate-20261031\\castlevania3\\evidence\\performance.json",
-    "confirmation_raw": "G:\\Temp\\Codex\\nes110-complex-candidate-20261031\\castlevania3\\evidence\\performance-confirmation.json",
+    "initial_raw": "G:\\Temp\\Codex\\nes110-complex-candidate-20261031\\castlevania3-gameplay\\evidence\\performance.json",
+    "confirmation_raw": "G:\\Temp\\Codex\\nes110-complex-candidate-20261031\\castlevania3-gameplay\\evidence\\performance-confirmation.json",
     "initial_medians": {
-      "reference": 5.171875,
-      "candidate": 5.109375
+      "reference": 2.265625,
+      "candidate": 2.28125
     },
     "confirmation_medians": {
-      "reference": 5.125,
-      "candidate": 5.15625
+      "reference": 2.171875,
+      "candidate": 2.1875
     },
     "confirmation_pairs": 5,
-    "confirmation_faster_pairs": 3,
+    "confirmation_faster_pairs": 2,
     "classification": "mixed-neutral-inconclusive-no-established-win",
-    "note": "Confirmation median process CPU5.125 to5.15625s; three faster/two slower; do not claim a precise regression or a win. Complete native1500-frame route includes process startup; observers absent from timed runs."
+    "note": "Active confirmation median process CPU2.171875 to2.1875s; two faster/three slower, strong drift. No precise regression/win claim; startup and own-state load included."
   },
   "limits": [
     "One actual MMC5 action-game workload, not expansion-audio or complex-board architectural exhaustion.",
     "Old smoke budget/evidence left untouched; fresh supported current compiler/game build used.",
     "No shipping runtime change, no successful-candidate PR, no GPU claim."
-  ]
+  ],
+  "active_timed_frames": [
+    1500,
+    2100
+  ],
+  "native_execution": {
+    "scope": "Timed resumed600-frame interval",
+    "native_cycles": 15307477,
+    "interpreted_cycles": 2560824,
+    "native_share_percent": 85.66834082322656,
+    "note": "Printed native percentage divides new native counter by historical loaded total cycles; use interval counters for actual coverage."
+  },
+  "superseded_workload": {
+    "kind": "boot-and-stage-intro",
+    "performance": {
+      "host": "DESKTOP-HN15M1H",
+      "scope": "Built native headless1500-frame retained stage-one route; process startup included",
+      "affinity_mask": 8192,
+      "initial_raw": "G:\\Temp\\Codex\\nes110-complex-candidate-20261031\\castlevania3\\evidence\\performance.json",
+      "confirmation_raw": "G:\\Temp\\Codex\\nes110-complex-candidate-20261031\\castlevania3\\evidence\\performance-confirmation.json",
+      "initial_medians": {
+        "reference": 5.171875,
+        "candidate": 5.109375
+      },
+      "confirmation_medians": {
+        "reference": 5.125,
+        "candidate": 5.15625
+      },
+      "confirmation_pairs": 5,
+      "confirmation_faster_pairs": 3,
+      "classification": "mixed-neutral-inconclusive-no-established-win",
+      "note": "Confirmation median process CPU5.125 to5.15625s; three faster/two slower; do not claim a precise regression or a win. Complete native1500-frame route includes process startup; observers absent from timed runs."
+    },
+    "raw_evidence": "G:\\Temp\\Codex\\nes110-complex-candidate-20261031\\castlevania3\\evidence",
+    "note": "Initial route includes long opening animation. Retained for transparency, excluded from active-gameplay decision."
+  }
 }

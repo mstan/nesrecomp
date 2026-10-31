@@ -1,39 +1,42 @@
 # NES30: prepared MMC5 pattern-window candidate
 
-Reject this implemented package: correctness passes, but matched gameplay timing
-does not establish a benefit. It remains local prototype `d68741e`; its runtime
-code is absent from the selected integration branch. This is an actual candidate
-decision, not complex-board or expansion-audio architectural exhaustion.
+Reject this implemented package: correctness passes, but matched active gameplay
+does not establish a benefit. Local prototype `d68741e` is absent from the selected
+runtime. This decision does not exhaust complex-board or expansion-audio work.
 
-The candidate prepares both sprite/background CHR windows at register writes,
-reset and both state restore paths. Fetch-time /RD, split, extended-attribute,
-IRQ and audio timing stay unchanged. The 64-byte derived table is excluded from
-canonical state. Existing mapper contracts, including restored mapping after a
-discarded future, pass.
+Both sprite/background CHR windows are prepared at register writes, reset and
+both state restore paths. Fetch-time /RD, split, extended-attribute, IRQ and audio
+timing stay unchanged. The derived 64-byte table is outside canonical state.
+Existing mapper contracts, including discarded-future mapping restore, pass.
 
-The current supported compiler generated a fresh native Castlevania III USA
-build from the retained seeds. The retained 1,500-frame stage-one gameplay route
-executes 98.5% native cycles. Both binaries match all 16 output products
-(PCM, frame records, hardware, RAM and pictures) and pass their own 600-frame
-save/load continuations. The old private smoke's budget and evidence were not
-rerun or reset.
+The original 1,500-frame route spent much of its time in the opening animation.
+The independent validator caught that limitation. Those samples remain retained
+as boot/intro evidence and are excluded from gameplay conclusions. The corrected
+workload uses normal stage-one movement/combat during frames 1,500–2,099. Images at
+1,500/1,800/2,099 show the HUD, changing player position, rightward scrolling,
+enemies and countdown 498→489. No success flags or game state were forced.
 
-Matched single-core process CPU includes startup and the entire native route;
-no observers run in the timed legs. The initial three pairs were mixed. Five
-confirmation pairs on the same core produced:
+The fresh supported native build executes 15,307,477 native cycles and 2,560,824
+interpreted cycles in that active interval (85.67% native). Both binaries match
+all 20 output products (PCM, frame records, hardware, RAM and pictures), and each
+passes its own 600-frame save/load continuation. The old private smoke's budget
+and evidence were neither rerun nor reset.
+
+Matched same-core process CPU includes process startup/load and 600 resumed
+active frames; timed legs have no observers. Initial 3pairs were mixed. The five
+active confirmation pairs were:
 
 | Pair | Reference CPU seconds | Candidate CPU seconds |
 |---|---:|---:|
-| 1 | 5.125000 | 4.906250 |
-| 2 | 5.203125 | 5.156250 |
-| 3 | 4.796875 | 5.156250 |
-| 4 | 5.203125 | 5.140625 |
-| 5 | 5.062500 | 5.234375 |
+| 1 | 2.609375 | 2.187500 |
+| 2 | 2.156250 | 2.203125 |
+| 3 | 2.125000 | 2.171875 |
+| 4 | 2.218750 | 2.656250 |
+| 5 | 2.171875 | 2.109375 |
 
-The confirmation median is 5.125 to 5.15625 seconds, with three faster and two
-slower pairs. Variation prevents claiming a win or a precise regression.
-No further matrix or profiler is needed to reject this package. The five
-standard games have other boards and receive no runtime change.
-
-Raw products, commands, hashes, affinity and per-core telemetry remain at
-`G:\Temp\Codex\nes110-complex-candidate-20261031\castlevania3\evidence`. [Machine-readable result](2026-10-31-mmc5-mapping-candidate-results.json).
+Median 2.171875→2.1875s, two faster/three slower, with strong variation: no
+established gain or precise regression. No runtime adoption or successful-change
+PR. The five standard games receive no change. Raw products, exact commands,
+identities and per-core telemetry remain at
+`G:/Temp/Codex/nes110-complex-candidate-20261031/castlevania3-gameplay/evidence`.
+[Machine-readable result](2026-10-31-mmc5-mapping-candidate-results.json).
