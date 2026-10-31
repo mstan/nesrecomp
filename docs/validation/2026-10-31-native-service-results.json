@@ -7338,5 +7338,11 @@
     "First oracle launcher omitted required exit-after with uncapped and exited2 before any TCP/gameplay; corrected launcher reused the same binary and passed. This is a retained QA setup exclusion, not an optimization failure.",
     "NES08 earlier all-stock wording is corrected on PR87 at5898f5e: four stock256x240 titles plus Zelda Seamless Fit426x240. Original raw labels remain historical; matching samples/runtime/disposition are unchanged and were not rerun.",
     "Other complete entity/collision/decompression/streaming services remain explicit residual opportunities. Scoped selection is not architectural exhaustion. FDS remains parked. Final supported CLI/five-title regeneration, combined feature/performance and owner visual approval remain pending; no merge or release."
-  ]
+  ],
+  "oracle_binary_identity": {
+    "sha256": "53a2fec91acbcda1a0937fbb673e10020c3f1ac3eb2cd436f1bfebe3828c117d",
+    "bytes": 16984199,
+    "raw_legacy_bytes_field": 16972926,
+    "note": "Raw oracle metadata inherited a stale baseline byte count; actual archived executable hash/length are authoritative. Current measured product byte count is corrected."
+  }
 }
