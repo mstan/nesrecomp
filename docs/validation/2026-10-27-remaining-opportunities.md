@@ -17,7 +17,7 @@ original HD runtime. See [HD results](2026-10-28-hd-plan-results.md), including
 the rejected universal packages and SMB's unchanged-runtime proof. Zelda's
 fixed SNROM SRAM code now joins the native deadline service; see
 [SRAM results](2026-10-28-sram-native-results.md). SERVER Fit improves5.128%
-and Remastered1.442%; stock is neutral/inconclusive. Twenty-nine items now have
+and Remastered1.442%; stock is neutral/inconclusive. Thirty items now have
 qualified evaluation decisions; NES01 is qualified for whole stable HLE raster
 jobs and NES29 remains parked.
 Guarded native ROM is now evaluated under NES09; see
@@ -27,7 +27,7 @@ and Zelda Fit/HD profiles; see [raster results](2026-10-28-raster-job-results.md
 Zelda isolated native execution is selected under NES18; NES20 snapshot
 replacement is deferred after measured attribution. See
 [isolated service results](2026-10-28-isolated-native-results.md).
-Remaining evaluations and the final combined feature handoff are still open. FDS remains
+All in-scope opportunities have evaluation decisions; the final combined feature handoff remains open. FDS remains
 parked. No main/master merge or new release is authorized before owner review.
 
 Source checkpoint: engine `957e9902de9b91107e61bc981f2ca871c8740446`;
@@ -665,13 +665,16 @@ close the per-pixel raster or APU-event algorithm work under NES01/NES06.
   Evidence: [runner/cyc/hw_mapper.c:1301](../../runner/cyc/hw_mapper.c#L1301), [runner/cyc/hw_mapper.c:1367](../../runner/cyc/hw_mapper.c#L1367).
 
 
-- [ ] **NES31 · P3 · Startup, native code footprint and first-use stalls**
+- [x] **NES31 · P3 · Startup, native code footprint and first-use stalls**
 
   Larger generated programs and boot-time RAM-view indexes can affect startup, RSS and first-use page faults even when steady gameplay is fast. Deduplicate cold metadata and lay out hot native blocks as one startup/execution design.
 
   Scope: A supported title with reported/measured startup or first-use stalls.
 
-  Next: Only if startup or first-use delay is reported or visible in the selected interval; distinguish generation/build time, launcher time and game runtime. No menu-only throughput campaign.
+  Evaluation: Defer without a current reported/identified startupstall
+  trigger. Reuse SMB1 diagnostic launch-to-TCP/paused-memory sample with its
+  limits; this does not qualify firstvisibleframe/coldstart/firstuse or other
+  titles. Reopen if final combined fresh boots reveal an issue. [Results](2026-10-31-startup-scope-results.md).
 
   Preserve: Same ROM/content validation, working fallback, actual game start and persistent settings/saves. Longer generation and a larger binary alone do not disqualify useful built-runtime gains.
 
@@ -715,6 +718,6 @@ working portable implementation. Netplay settles a common validated profile
 before frame 0; platform compilation alone is not compatibility qualification.
 
 Audit completion closes only `beads-2dw.1.109`'s investigation/deliverable.
-Current execution has twenty-nine scoped evaluation decisions, one unresolved
+Current execution has thirty scoped evaluation decisions, zero unresolved
 items and parked NES29. The implementation campaign and final combined owner
 handoff remain open; a scoped decision is not architectural exhaustion.

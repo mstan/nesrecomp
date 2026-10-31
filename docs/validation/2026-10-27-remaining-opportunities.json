@@ -36,7 +36,8 @@
     "2026-10-31-pacing-reuse-results.json",
     "2026-10-31-compiler-policy-results.json",
     "2026-10-31-visual-jobs-results.json",
-    "2026-10-31-complex-board-scope-results.json"
+    "2026-10-31-complex-board-scope-results.json",
+    "2026-10-31-startup-scope-results.json"
   ],
   "priorities": "Order expresses expected scope and evidence, not measured recoverable cost. Overlapping packages are not additive.",
   "acceptance": "Each game neutral or positive. Small mixed samples inconclusive. Shared original/candidate defects are separate. Native saves protected; old save-state compatibility never required.",
@@ -1297,7 +1298,7 @@
       "package": "conditional-services",
       "priority": "P3",
       "title": "Startup, native code footprint and first-use stalls",
-      "status": "open-unmeasured",
+      "status": "evaluated-deferred-no-current-stall-trigger",
       "evidence": [
         {
           "file": "recompiler/src/cyc_codegen.c",
@@ -1314,20 +1315,21 @@
           "link": "../../runner/cyc/cyc_ramview.c#L134"
         }
       ],
-      "remaining": "Larger generated programs and boot-time RAM-view indexes can affect startup, RSS and first-use page faults even when steady gameplay is fast. Deduplicate cold metadata and lay out hot native blocks as one startup/execution design.",
+      "remaining": "Startup/first-use/cold-pagefault and other-title costs remain unmeasured residuals. No currently identified owner/selected-interval trigger; reopen if final combined fresh boots reveal one.",
       "affected_profiles": [
         "A supported title with reported/measured startup or first-use stalls"
       ],
-      "next_decisive_check": "Only if startup or first-use delay is reported or visible in the selected interval; distinguish generation/build time, launcher time and game runtime. No menu-only throughput campaign.",
+      "next_decisive_check": "Independent durable validator handoff, then final supported CLI/five-title source freeze/build/combined correctness/performance and owner review.",
       "required_behavior": "Same ROM/content validation, working fallback, actual game start and persistent settings/saves. Longer generation and a larger binary alone do not disqualify useful built-runtime gains.",
       "prior_issue": null,
       "measured_additional_gain": null,
-      "execution_status": "remaining-evaluation"
+      "execution_status": "evaluated-existing-cost-and-conditional-scope",
+      "result_file": "2026-10-31-startup-scope-results.json"
     }
   ],
   "execution": {
     "issue": "beads-2dw.1.110",
-    "branch": "docs/nes30-board-scope",
+    "branch": "docs/nes31-startup-scope",
     "base": "fc0bf3fa46a710464960c0a1f2d3b83b4d345600",
     "status": "in-progress",
     "evidence_root": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028",
@@ -1335,15 +1337,16 @@
     "first_selection": "Native stable-interval CPU/memory/PPU/APU service; whole-goal scope remains NES01-NES31",
     "retained_implementations": [],
     "new_performance_results": [],
-    "owner_handoff_ready": false
+    "owner_handoff_ready": false,
+    "phase": "opportunities-evaluated-final-combined-gate-pending"
   },
   "execution_summary": {
-    "evaluated_decisions": 29,
+    "evaluated_decisions": 30,
     "partial_ids": [],
     "parked_ids": [
       "NES29"
     ],
-    "other_unresolved": 1,
+    "other_unresolved": 0,
     "note": "Qualified scope decisions, not architectural exhaustion or a wall-clock completion estimate. Final combined builds and owner approval remain separate."
   }
 }

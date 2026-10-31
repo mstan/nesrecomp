@@ -1,0 +1,181 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-31",
+  "opportunity": "NES31",
+  "issue": "beads-2dw.1.110",
+  "campaign": "beads-2wy8.1",
+  "engine_base": "be75659893be5b1829f6581e6de8cbb7193b4e44",
+  "decision": "Defer a startup/first-use replacement: no currently identified conditional trigger, reopen on final combined boot issue",
+  "existing_cost_sample": {
+    "samples": {
+      "reference": {
+        "product": {
+          "exe": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-smb-nes27-full-reference\\SuperMarioBrosRecomp.exe",
+          "sha256": "66aacf15c2b8ae7b2252f12fa77c3dd33091e757eb34e2b15cb5e9f608f3e7de",
+          "bytes": 8645744,
+          "rom": "F:\\Projects\\nesrecomp\\SuperMarioBrosRecomp\\baserom.nes",
+          "rom_sha256": "f61548fdf1670cffefcc4f0b7bdcdd9eaba0c226e3b74f8666071496988248de",
+          "build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-smb-nes27-full-reference",
+          "engine_base": "1ffc2f96ad24ba333ab3233726f8fbc3c5ac64fc",
+          "title_base": "45f95754f8ad6e04fc39966505c94af9783bd787",
+          "IPO": "OFF",
+          "compiler": "GCC15.2.0 O3 Release, one LTRANS worker",
+          "scope": "Current matched full SMB1 title with normal UI/NET compiled in both; whole-target IPO experiment, not historical exact binary rerun or production selection"
+        },
+        "command": [
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-smb-nes27-full-reference\\SuperMarioBrosRecomp.exe",
+          "F:\\Projects\\nesrecomp\\SuperMarioBrosRecomp\\baserom.nes",
+          "--hidden",
+          "--exit-after",
+          "1000000",
+          "--tcp",
+          "58687",
+          "--no-save",
+          "--config",
+          "G:\\Temp\\Codex\\nes110-compiler-cost-v1-20261031\\reference\\config.ini",
+          "--mods-root",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-smb-nes27-full-reference\\mods",
+          "--widescreen",
+          "fit"
+        ],
+        "ready_seconds": 1.037294199995813,
+        "memory": {
+          "WorkingSetSize": 36130816,
+          "PeakWorkingSetSize": 37019648,
+          "PrivateUsage": 55443456,
+          "PeakPagefileUsage": 57884672
+        },
+        "state": {
+          "id": 0,
+          "ok": true,
+          "frame": 1801,
+          "menu_open": true,
+          "fds": false,
+          "side": -1,
+          "sides": 0,
+          "motor": false,
+          "writing": false,
+          "toast": {
+            "visible": false,
+            "title": "",
+            "body": ""
+          },
+          "hle": "",
+          "disk_save": "",
+          "disk_binding": "D / LB",
+          "picture": [
+            426,
+            240
+          ],
+          "dev_ui": false,
+          "recomp_ui": true,
+          "native": true,
+          "vsync_requested": false,
+          "vsync_active": true,
+          "pads": [],
+          "state_panel": "closed",
+          "state_slot": 1,
+          "rewind_count": 0,
+          "rewind_frame": -1,
+          "rewind_enabled": true
+        }
+      },
+      "candidate": {
+        "product": {
+          "exe": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-smb-nes27-policy\\SuperMarioBrosRecomp.exe",
+          "sha256": "3257333efab282fd777ef4e07695f8d9ad2cc8e22dceca44bb29d93c29179839",
+          "bytes": 8290655,
+          "build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-smb-nes27-policy",
+          "rom": "F:\\Projects\\nesrecomp\\SuperMarioBrosRecomp\\baserom.nes"
+        },
+        "command": [
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-smb-nes27-policy\\SuperMarioBrosRecomp.exe",
+          "F:\\Projects\\nesrecomp\\SuperMarioBrosRecomp\\baserom.nes",
+          "--hidden",
+          "--exit-after",
+          "1000000",
+          "--tcp",
+          "58696",
+          "--no-save",
+          "--config",
+          "G:\\Temp\\Codex\\nes110-compiler-cost-v1-20261031\\candidate\\config.ini",
+          "--mods-root",
+          "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\supported-smb-nes27-policy\\mods",
+          "--widescreen",
+          "fit"
+        ],
+        "ready_seconds": 0.6071762999927159,
+        "memory": {
+          "WorkingSetSize": 53886976,
+          "PeakWorkingSetSize": 57602048,
+          "PrivateUsage": 55504896,
+          "PeakPagefileUsage": 61308928
+        },
+        "state": {
+          "id": 0,
+          "ok": true,
+          "frame": 1801,
+          "menu_open": true,
+          "fds": false,
+          "side": -1,
+          "sides": 0,
+          "motor": false,
+          "writing": false,
+          "toast": {
+            "visible": false,
+            "title": "",
+            "body": ""
+          },
+          "hle": "",
+          "disk_save": "",
+          "disk_binding": "D / LB",
+          "picture": [
+            426,
+            240
+          ],
+          "dev_ui": false,
+          "recomp_ui": true,
+          "native": true,
+          "vsync_requested": false,
+          "vsync_active": true,
+          "pads": [],
+          "state_panel": "closed",
+          "state_slot": 1,
+          "rewind_count": 0,
+          "rewind_frame": -1,
+          "rewind_enabled": true
+        }
+      }
+    },
+    "scope": "One untimed diagnostic sample each: launch to first successful TCP menu response, then paused Fit gameplay RSS/private commit. Includes poll/setup variability; no startup/memory performance win inferred."
+  },
+  "source_identities": {
+    "cyc_ramview.c": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\engine-nes31\\runner\\cyc\\cyc_ramview.c",
+      "sha256": "f55cbdcaf7531bc2cc3d8a6ba55e091a5a358bf5228ea7adfa8f2b00c7b78f0d"
+    },
+    "hw_internal.h": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\engine-nes31\\runner\\cyc\\hw_internal.h",
+      "sha256": "1e6402c65233d03491877b70adc7d3da34505d1710e53f1fd1f9d8016b8f0a47"
+    },
+    "cyc_codegen.c": {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\engine-nes31\\recompiler\\src\\cyc_codegen.c",
+      "sha256": "4f497b2bed291fab39739d7cb4d416cc3fdeb646022bafa0f2a8c5e021eb0824"
+    }
+  },
+  "archive": {
+    "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\startup-scope-v1-evidence.zip",
+    "bytes": 66944,
+    "sha256": "a6a5713c593bb4b9a684324661d1c9c6bbc96cfd4427fd35568de241d05f1c64"
+  },
+  "new_runtime_launches": 0,
+  "new_builds": 0,
+  "new_performance_result": false,
+  "limitations": [
+    "Reuse actual normalUI/NET-compiled SMB1 Win64GNU15.2 O3 reference/candidate diagnostic. Startup launch->first successful TCP menu response1.0372942/.6071763s includes poll and startup emulation; launcher bypassed. Then each build own frame1801state loads and paused Fit memory is sampled. Not game-first-visible-frame/cold-start/first-use/pagefault or a startup/memory speedup measurement.",
+    "Observed WS36130816/53886976B, private55443456/55504896B, peakWS37019648/57602048B, peakprivate57884672/61308928B. One sample each reflects setup/OS-residency variation, not a representative paired cost distribution or proof no stalls across five titles. Executable size shrinks8645744->8290655B under independently qualifiedNES27; size itself is neither a win nor veto.",
+    "Source audit: native ROM blocks remain split by1KiB function/chunk and perbank translation units; this is generation/layout design, not measured runtimecost. RAM-view power_on rebuilds state/CSR watchers from actual table; no-view case allocates2zeroed(HW_CODE_BYTES+1)offsetarrays. HW_CODE_BYTES34816 implies278536B total for those arrays; source size/count alone is not demonstrated startupstall or recoverable bound. Other views/first-touch/allocator costs unmeasured.",
+    "No currently identified owner-reported startupstall/current selected-interval trigger in this campaign. That absence is a scope decision, not evidence every title starts quickly. Other title boots, cold-start/pagefaults, actual firstvisiblegameframe and firstuse latency are not qualified here. Do not run a menu-only throughput campaign or change ROM/content validation/native saves/fallback solely to reduce developerbuild time.",
+    "Defer coherent cold-metadata/index/layout replacement until actual supportedgame startup/first-use issue selects it. Final fresh CLI/five-title combined boots may supply a trigger; reopen then if needed. No runtimePR/adoption/merge/release. Thirty scoped decisions +ownerparkedNES29 is not architectural exhaustion; finalcombinedcorrectness/performance and ownerapproval remain pending."
+  ]
+}
