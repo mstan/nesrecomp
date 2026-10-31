@@ -17,7 +17,7 @@ original HD runtime. See [HD results](2026-10-28-hd-plan-results.md), including
 the rejected universal packages and SMB's unchanged-runtime proof. Zelda's
 fixed SNROM SRAM code now joins the native deadline service; see
 [SRAM results](2026-10-28-sram-native-results.md). SERVER Fit improves5.128%
-and Remastered1.442%; stock is neutral/inconclusive. Twenty-four items now have
+and Remastered1.442%; stock is neutral/inconclusive. Twenty-five items now have
 qualified evaluation decisions; NES01 is qualified for whole stable HLE raster
 jobs and NES29 remains parked.
 Guarded native ROM is now evaluated under NES09; see
@@ -562,13 +562,19 @@ close the per-pixel raster or APU-event algorithm work under NES01/NES06.
   Evidence: [runner/cyc/cyc_render.c:163](../../runner/cyc/cyc_render.c#L163), [runner/cyc/cyc_sdl.c:1203](../../runner/cyc/cyc_sdl.c#L1203).
 
 
-- [ ] **NES25 · P3 · Audio host buffering and queue ownership**
+- [x] **NES25 · P3 · Audio host buffering and queue ownership**
 
   Separate generated PCM cost from draining/copying/queueing output. Consolidate buffers or callback ownership only when they cause meaningful CPU or underruns; the earlier desktop queue share was small.
 
   Scope: Real audio-device gameplay; queues/underruns distinct from dummy output timing.
 
-  Next: Observe queue depth, underruns and output-thread CPU on actual audio-on gameplay, separately from dummy-device simulation timing.
+  Evaluation: Deferred host queue consolidation after actual muted-output
+  WASAPI SMB3 gameplay. The drain/mix/volume/queue scope totals 2.0911 ms across
+  1,139 frames; all produced samples are submitted to SDL_QueueAudio. Other enumerated worker CPU
+  totals one accounting tick, with backend names unavailable. Three empty
+  software queues do not establish audible underruns. External audio service,
+  other devices/titles and physical latency remain residuals; no gain selected.
+  [Results](2026-10-31-audio-host-results.md).
 
   Preserve: PCM, latency, pause/resume, volume and fast-forward behavior; muting or disabling emulation is not an optimization win.
 
@@ -693,6 +699,6 @@ working portable implementation. Netplay settles a common validated profile
 before frame 0; platform compilation alone is not compatibility qualification.
 
 Audit completion closes only `beads-2dw.1.109`'s investigation/deliverable.
-Current execution has twenty-four scoped evaluation decisions, six unresolved
+Current execution has twenty-five scoped evaluation decisions, five unresolved
 items and parked NES29. The implementation campaign and final combined owner
 handoff remain open; a scoped decision is not architectural exhaustion.

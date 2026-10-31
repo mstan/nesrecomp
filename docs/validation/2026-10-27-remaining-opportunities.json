@@ -31,7 +31,8 @@
     "2026-10-31-blank-interval-results.json",
     "2026-10-31-native-service-results.json",
     "2026-10-31-chr-plan-results.json",
-    "2026-10-31-rollback-digest-results.json"
+    "2026-10-31-rollback-digest-results.json",
+    "2026-10-31-audio-host-results.json"
   ],
   "priorities": "Order expresses expected scope and evidence, not measured recoverable cost. Overlapping packages are not additive.",
   "acceptance": "Each game neutral or positive. Small mixed samples inconclusive. Shared original/candidate defects are separate. Native saves protected; old save-state compatibility never required.",
@@ -1087,7 +1088,7 @@
       "package": "host-delivery",
       "priority": "P3",
       "title": "Audio host buffering and queue ownership",
-      "status": "open-unmeasured",
+      "status": "evaluated-deferred-real-device-host-audio",
       "evidence": [
         {
           "file": "runner/cyc/cyc_sdl.c",
@@ -1104,15 +1105,16 @@
           "link": "../../runner/cyc/hw_apu.c#L192"
         }
       ],
-      "remaining": "Separate generated PCM cost from draining/copying/queueing output. Consolidate buffers or callback ownership only when they cause meaningful CPU or underruns; the earlier desktop queue share was small.",
+      "remaining": "SMB3 real WASAPI host loop2.0911ms across1139frames, observed other enumerated workerCPU one15.625ms tick. No queue ownership change selected. External audio-service/hardware, other titles/devices and physical latency remain unmeasured residuals.",
       "affected_profiles": [
         "Real audio-device gameplay; queues/underruns distinct from dummy output timing"
       ],
-      "next_decisive_check": "Observe queue depth, underruns and output-thread CPU on actual audio-on gameplay, separately from dummy-device simulation timing.",
+      "next_decisive_check": "Independent durable Beads handoff, then next serial item. Revisit with reported audible glitches or a different measured device/host bottleneck; do not infer underruns from an empty software queue.",
       "required_behavior": "PCM, latency, pause/resume, volume and fast-forward behavior; muting or disabling emulation is not an optimization win.",
       "prior_issue": null,
       "measured_additional_gain": null,
-      "execution_status": "remaining-evaluation"
+      "execution_status": "evaluated-attribution-only",
+      "result_file": "2026-10-31-audio-host-results.json"
     },
     {
       "id": "NES26",
@@ -1309,7 +1311,7 @@
   ],
   "execution": {
     "issue": "beads-2dw.1.110",
-    "branch": "perf/nes22-rollback-ownership",
+    "branch": "perf/nes25-audio-ownership",
     "base": "fc0bf3fa46a710464960c0a1f2d3b83b4d345600",
     "status": "in-progress",
     "evidence_root": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028",
@@ -1320,12 +1322,12 @@
     "owner_handoff_ready": false
   },
   "execution_summary": {
-    "evaluated_decisions": 24,
+    "evaluated_decisions": 25,
     "partial_ids": [],
     "parked_ids": [
       "NES29"
     ],
-    "other_unresolved": 6,
+    "other_unresolved": 5,
     "note": "Qualified scope decisions, not architectural exhaustion or a wall-clock completion estimate. Final combined builds and owner approval remain separate."
   }
 }
