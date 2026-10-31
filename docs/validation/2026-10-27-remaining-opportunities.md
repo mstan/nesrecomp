@@ -244,13 +244,7 @@ close the per-pixel raster or APU-event algorithm work under NES01/NES06.
 
   Scope: Content-qualified active-gameplay waits and rendering-off intervals.
 
-  Evaluation: Standalone DMA rewrite deferred after actual native-HLE SMB3
-  DMA-heavy and SMB1 control attribution. Full stolen-burst bodies include
-  necessary device advancement and occupy about1% observed interval wall;
-  this is not a recoverable bound or an A/B gain. No candidate or unqualified
-  memcpy. See [DMA service results](2026-10-31-dma-service-results.md). Reusable
-  polling/blank-clock work underNES08 and later DMA reuse remain explicit
-  unmeasured residuals, not architectural exhaustion.
+  Next: Identify the exact active wait on gameplay traces. Reject menu/boot-only counts as gameplay attribution; prove a complete loop service on one content-qualified loop.
 
   Preserve: Final registers/RAM, loop exit, side-effectful reads, interrupt sampling, device time and input latency. No arbitrary dropped cycles.
 
