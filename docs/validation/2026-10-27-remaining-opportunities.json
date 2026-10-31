@@ -38,7 +38,8 @@
     "2026-10-31-visual-jobs-results.json",
     "2026-10-31-complex-board-scope-results.json",
     "2026-10-31-startup-scope-results.json",
-    "2026-10-31-mmc5-mapping-candidate-results.json"
+    "2026-10-31-mmc5-mapping-candidate-results.json",
+    "2026-10-31-empty-view-candidate-results.json"
   ],
   "priorities": "Order expresses expected scope and evidence, not measured recoverable cost. Overlapping packages are not additive.",
   "acceptance": "Each game neutral or positive. Small mixed samples inconclusive. Shared original/candidate defects are separate. Native saves protected; old save-state compatibility never required.",
@@ -1371,7 +1372,7 @@
       "package": "conditional-services",
       "priority": "P3",
       "title": "Startup, native code footprint and first-use stalls",
-      "status": "evaluated-deferred-no-current-stall-trigger",
+      "status": "implemented-not-selected-no-established-startup-or-runtime-benefit",
       "evidence": [
         {
           "file": "recompiler/src/cyc_codegen.c",
@@ -1388,18 +1389,18 @@
           "link": "../../runner/cyc/cyc_ramview.c#L134"
         }
       ],
-      "remaining": "Startup/first-use/cold-pagefault and other-title costs remain unmeasured residuals. No currently identified owner/selected-interval trigger; reopen if final combined fresh boots reveal one.",
+      "remaining": "Empty-service elimination was implemented and not selected after Metroid gameplay, own-continuation, nonempty cartridge contracts and startup/RSS checks. Other cold/first-use/layout costs remain residuals; no architectural exhaustion claim.",
       "affected_profiles": [
         "A supported title with reported/measured startup or first-use stalls"
       ],
-      "next_decisive_check": "Independent durable validator handoff, then final supported CLI/five-title source freeze/build/combined correctness/performance and owner review.",
+      "next_decisive_check": "Independent durable decision review, then NES32 resident GPU implementation and qualification.",
       "required_behavior": "Same ROM/content validation, working fallback, actual game start and persistent settings/saves. Longer generation and a larger binary alone do not disqualify useful built-runtime gains.",
       "prior_issue": null,
       "measured_additional_gain": null,
-      "execution_status": "evaluated-existing-cost-and-conditional-scope",
-      "result_file": "2026-10-31-startup-scope-results.json",
-      "candidate_state": "prepared-or-deferred",
-      "candidate_decision_recorded": false
+      "execution_status": "actual-candidate-built-and-checked",
+      "result_file": "2026-10-31-empty-view-candidate-results.json",
+      "candidate_state": "implemented-not-selected-scope",
+      "candidate_decision_recorded": true
     },
     {
       "id": "NES32",
@@ -1442,23 +1443,20 @@
     "scope_extension": "NES32 records the previously uncovered owner GPU rendering requirement; original NES01-NES31 objective is not claimed complete."
   },
   "execution_summary": {
-    "evaluated_decisions": 29,
+    "evaluated_decisions": 30,
     "partial_ids": [],
     "parked_ids": [
       "NES29"
     ],
-    "other_unresolved": 2,
-    "note": "29 scoped candidate decisions:17 overlapping selections and12 actual prototype dispositions. NES31 startup and NES32 resident GPU work remain open; NES29 owner-parked. Final supported combined builds and owner handoff pending.",
-    "candidate_decision_areas": 29,
+    "other_unresolved": 1,
+    "note": "30 scoped candidate decisions:17 overlapping selections and13 actual prototype dispositions. NES32 resident GPU work remains open; NES29 owner-parked. Final supported combined builds and owner handoff pending.",
+    "candidate_decision_areas": 30,
     "scoped_selection_areas": 17,
-    "prototype_disposition_areas": 12,
-    "prepared_or_deferred_areas": 1,
-    "deferred_ids": [
-      "NES31"
-    ],
+    "prototype_disposition_areas": 13,
+    "prepared_or_deferred_areas": 0,
+    "deferred_ids": [],
     "total_areas": 32,
     "open_ids": [
-      "NES31",
       "NES32"
     ],
     "new_unimplemented_ids": [

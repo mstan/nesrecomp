@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "issue": "beads-2dw.1.110",
+  "campaign": "beads-2wy8.1",
+  "opportunity": "NES31",
+  "decision": "implemented-not-selected-no-established-startup-or-runtime-benefit",
+  "prototype_commit": "b09415a",
+  "source_base": "3e65437",
+  "runtime_adopted": false,
+  "affected_profile": "Metroid stock compiled RAM-view count0",
+  "products": {
+    "reference": {
+      "exe": "reference/MetroidNESRecomp.exe",
+      "sha256": "b6b87add144484329f59fe5f731e11ebf9d8d8d873e0154c72aeae4b5e30a458",
+      "binary_files": {
+        "MetroidNESRecomp.exe": {
+          "sha256": "b6b87add144484329f59fe5f731e11ebf9d8d8d873e0154c72aeae4b5e30a458",
+          "bytes": 16478187
+        },
+        "SDL2.dll": {
+          "sha256": "df6be1cd49d741d1a3963eca3f32dea9aa78c39de6e876aabfe74bd2ae528872",
+          "bytes": 2529792
+        },
+        "libgcc_s_seh-1.dll": {
+          "sha256": "54549c2946c3ccee5d8bd3680fd351539c30018acedea64568e474c40d0900db",
+          "bytes": 150196
+        },
+        "libstdc++-6.dll": {
+          "sha256": "dc352127b8f399f95536d75745fcbc76c5b498d44d8fc55469fba1d8abac1823",
+          "bytes": 2460660
+        },
+        "libwinpthread-1.dll": {
+          "sha256": "b0d84f7b6346cf835ef19ecc95991cdaa6272bb8ad6fee43f446c07aa97fcbd9",
+          "bytes": 65018
+        }
+      }
+    },
+    "candidate": {
+      "exe": "candidate/MetroidNESRecomp.exe",
+      "sha256": "5e29c1da0b217e6bbecd02a040a22e18ab9abfb071caaba651420ffb05de3fbe",
+      "binary_files": {
+        "MetroidNESRecomp.exe": {
+          "sha256": "5e29c1da0b217e6bbecd02a040a22e18ab9abfb071caaba651420ffb05de3fbe",
+          "bytes": 16478237
+        },
+        "SDL2.dll": {
+          "sha256": "df6be1cd49d741d1a3963eca3f32dea9aa78c39de6e876aabfe74bd2ae528872",
+          "bytes": 2529792
+        },
+        "libgcc_s_seh-1.dll": {
+          "sha256": "54549c2946c3ccee5d8bd3680fd351539c30018acedea64568e474c40d0900db",
+          "bytes": 150196
+        },
+        "libstdc++-6.dll": {
+          "sha256": "dc352127b8f399f95536d75745fcbc76c5b498d44d8fc55469fba1d8abac1823",
+          "bytes": 2460660
+        },
+        "libwinpthread-1.dll": {
+          "sha256": "b0d84f7b6346cf835ef19ecc95991cdaa6272bb8ad6fee43f446c07aa97fcbd9",
+          "bytes": 65018
+        }
+      }
+    }
+  },
+  "raw_evidence": "G:\\Temp\\Codex\\nes110-startup-candidate-20261031\\metroid",
+  "correctness": {
+    "equal_product_count": 24,
+    "own_continuation_frames": 600,
+    "pass_all": true,
+    "nonempty_contract_log": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\test-startup-cart-ramviews.log",
+    "contract": "Five synthetic cartridge kinds/four alignments, selfmod/capture/gates/snapshot/isolated and committed changes plus untraced deadline replay"
+  },
+  "initial_cpu_medians": {
+    "reference": 1.671875,
+    "candidate": 1.5625
+  },
+  "confirmation_cpu_medians": {
+    "reference": 2.3125,
+    "candidate": 2.328125
+  },
+  "confirmation_raw": "G:\\Temp\\Codex\\nes110-startup-candidate-20261031\\metroid\\confirmation-v1\\performance.json",
+  "classification": "neutral-inconclusive-no-established-benefit",
+  "startup_memory_sample": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\startup-cost-metroid-result.json",
+  "requested_allocation_bytes_removed": 278536,
+  "limits": [
+    "First3pairs positive did not confirm:1faster/4slower in five same-affinity pairs with substantial cohort drift; no precise regression claim.",
+    "One diagnostic startup/RSS sample does not qualify a latency or physical memory win; source allocation reduction is not a demonstrated stall remedy.",
+    "No current reported cold/first-use trigger is resolved; architectural exhaustion is not claimed.",
+    "No additional four-title matrix for an unselected package; selected runtime unchanged."
+  ]
+}

@@ -17,9 +17,8 @@ original HD runtime. See [HD results](2026-10-28-hd-plan-results.md), including
 the rejected universal packages and SMB's unchanged-runtime proof. Zelda's
 fixed SNROM SRAM code now joins the native deadline service; see
 [SRAM results](2026-10-28-sram-native-results.md). SERVER Fit improves5.128%
-and Remastered1.442%; stock is neutral/inconclusive. Seventeen areas have overlapping scoped selections and twelve have actual prototype
-dispositions. Two areas remain open: deferred NES31 and unimplemented
-GPU work in NES32. Preparation does not count as completed candidate burndown;
+and Remastered1.442%; stock is neutral/inconclusive. Seventeen areas have overlapping scoped selections and thirteen have actual prototype
+dispositions. One area remains open: unimplemented GPU work in NES32. Preparation does not count as completed candidate burndown;
 NES01 is qualified for whole stable HLE raster jobs and NES29 remains parked.
 Guarded native ROM is now evaluated under NES09; see
 [guarded ROM results](2026-10-28-guarded-rom-results.md).
@@ -27,8 +26,8 @@ Whole stable HLE raster jobs are now qualified across the five stock titles
 and Zelda Fit/HD profiles; see [raster results](2026-10-28-raster-job-results.md).
 Zelda isolated native execution is selected under NES18; NES20 now selects physical cartridge-storage ownership for isolated scopes. See
 [isolated service results](2026-10-28-isolated-native-results.md).
-Selected-package final game validation remains open alongside those two
-areas. FDS remains parked. No main/master merge or new release is authorized
+Selected-package final game validation remains open alongside that GPU
+area. FDS remains parked. No main/master merge or new release is authorized
 before owner review.
 
 Source checkpoint: engine `957e9902de9b91107e61bc981f2ca871c8740446`;
@@ -669,20 +668,20 @@ close the per-pixel raster or APU-event algorithm work under NES01/NES06.
   native saves and portable execution.
 
 
-- [ ] **NES31 · P3 · Startup, native code footprint and first-use stalls**
+- [x] **NES31 · P3 · Startup, native code footprint and first-use stalls**
 
-  Larger generated programs and boot-time RAM-view indexes can affect startup, RSS and first-use page faults even when steady gameplay is fast. Deduplicate cold metadata and lay out hot native blocks as one startup/execution design.
+  Decision: Built and did not select empty RAM-view service elimination.
+  Metroid exact outputs/current-build continuation and nonempty cartridge
+  contracts pass. Initial runtime improvement did not confirm; startup/RSS
+  diagnostics establish no latency or physical-memory win. No further matrix.
+  [Results](2026-10-31-empty-view-candidate-results.md).
 
-  Scope: A supported title with reported/measured startup or first-use stalls.
+  Scope: Actual Metroid stock empty-view service candidate. Other cold/first-use
+  and generated layout opportunities remain residuals; no currently reported
+  startup stall was resolved and architectural exhaustion is not claimed.
 
-  Evaluation: Defer without a current reported/identified startupstall
-  trigger. Reuse SMB1 diagnostic launch-to-TCP/paused-memory sample with its
-  limits; this does not qualify firstvisibleframe/coldstart/firstuse or other
-  titles. Reopen if final combined fresh boots reveal an issue. [Results](2026-10-31-startup-scope-results.md).
-
-  Preserve: Same ROM/content validation, working fallback, actual game start and persistent settings/saves. Longer generation and a larger binary alone do not disqualify useful built-runtime gains.
-
-  Evidence: [recompiler/src/cyc_codegen.c:15](../../recompiler/src/cyc_codegen.c#L15), [runner/cyc/cyc_ramview.c:134](../../runner/cyc/cyc_ramview.c#L134).
+  Preserve: ROM/content validation, nonempty views/capture, native saves,
+  settings and portable execution.
 
 
 ### Owner GPU rendering requirement added October 31
@@ -761,10 +760,10 @@ working portable implementation. Netplay settles a common validated profile
 before frame 0; platform compilation alone is not compatibility qualification.
 
 Audit completion closes only `beads-2dw.1.109`'s investigation/deliverable.
-The execution campaign now tracks **32 areas: 29 scoped candidate decisions,
-two open areas (NES31, NES32), and owner-parked NES29**. The 29 decisions
-comprise 17 overlapping scoped selections and 12 prototype dispositions; they
-are neither 29 independent wins nor architectural exhaustion. NES32 explicitly
+The execution campaign now tracks **32 areas: 30 scoped candidate decisions,
+one open area (NES32), and owner-parked NES29**. The 30 decisions
+comprise 17 overlapping scoped selections and 13 prototype dispositions; they
+are neither 30 independent wins nor architectural exhaustion. NES32 explicitly
 adds the previously uncovered GPU requirement. Final supported combined builds
 and owner visual acceptance remain pending.
 
@@ -777,4 +776,6 @@ Recent actual candidate decisions: [NES07 DMA rejection](2026-10-31-native-dma-c
 NES20's live Atlas confirmation measured 4.76% lower median process CPU in five
 of five pairs; the five standard game profiles were neutral/inconclusive.
 
-NES30 now has an actual implemented/rejected MMC5 mapping decision: [results](2026-10-31-mmc5-mapping-candidate-results.md). NES31 and NES32 remain open.
+NES30 now has an actual implemented/rejected MMC5 mapping decision: [results](2026-10-31-mmc5-mapping-candidate-results.md). NES32 remains open.
+
+NES31 now has an actual implemented/not-selected empty-view service decision: [results](2026-10-31-empty-view-candidate-results.md). NES32 remains open.
