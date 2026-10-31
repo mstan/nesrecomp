@@ -1,0 +1,1786 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-31",
+  "opportunity": "NES22",
+  "issue": "beads-2dw.1.110",
+  "campaign": "beads-2wy8.1",
+  "decision": "Reject/unselect streamed xxHash32 prototype: genuine candidate delayed-peer replay fork; no equivalent baseline failure observed",
+  "engine_base": "ec4d9fb5d40b5bffb382feda2ac9fbef408af142",
+  "title_base": "45f95754f8ad6e04fc39966505c94af9783bd787",
+  "dependency_heads": {
+    "recomp_net": "b0751b7b8f8d19a8b3629f46c6d9eb3672dc113b",
+    "rbengine": "2a03e73693acee0fb78076ea058642c931bef12e"
+  },
+  "products": {
+    "reference": {
+      "exe": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-net-digest-v1\\reference\\SuperMarioBrosRecomp.exe",
+      "sha256": "3b11feb27194fa2bf589d778583df9d949989a1809b93565e57fab0a8ed214d9",
+      "bytes": 5674627,
+      "relink_manifest": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-net-digest-v1\\reference\\manifest.json",
+      "package": "Current NET/HLE stock SMB1 full-domain FNV baseline plus common private850state/PCM capture and timing counters"
+    },
+    "candidate": {
+      "exe": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-net-digest-v1\\candidate\\SuperMarioBrosRecomp.exe",
+      "sha256": "cda571c9c1062a78d8664292e98666d30b49347e3f5e8b65bedc570fcef08d2e",
+      "bytes": 5680771,
+      "relink_manifest": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-net-digest-v1\\candidate\\manifest.json",
+      "package": "Current NET/HLE stock SMB1 full-domain portable streamed xxHash32 candidate plus common private850state/PCM capture and timing counters"
+    }
+  },
+  "fixture": [
+    {
+      "argv": [
+        "C:/msys64/mingw64/bin/cmake.exe",
+        "-S",
+        "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\engine-nes22\\runner\\cyc",
+        "-B",
+        "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-net-digest-tests-LLE",
+        "-G",
+        "Ninja",
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+        "-DCMAKE_C_COMPILER=C:/msys64/mingw64/bin/gcc.exe",
+        "-DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe",
+        "-DCMAKE_MAKE_PROGRAM=C:/msys64/mingw64/bin/ninja.exe",
+        "-DNESRECOMP_PPU_IMPL=LLE"
+      ],
+      "exit": 0,
+      "log": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-net-digest-tests-LLE\\step-0.log"
+    },
+    {
+      "argv": [
+        "C:/msys64/mingw64/bin/cmake.exe",
+        "--build",
+        "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-net-digest-tests-LLE",
+        "--target",
+        "cyc_rb_digest_test",
+        "--parallel",
+        "1"
+      ],
+      "exit": 0,
+      "log": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-net-digest-tests-LLE\\step-1.log"
+    },
+    {
+      "argv": [
+        "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-net-digest-tests-LLE\\cyc_rb_digest_test.exe"
+      ],
+      "exit": 0,
+      "log": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-net-digest-tests-LLE\\step-2.log"
+    }
+  ],
+  "win32_fixture": [
+    {
+      "argv": [
+        "C:/msys64/mingw64/bin/cmake.exe",
+        "-S",
+        "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\prepared-nes22\\win32-consumer",
+        "-B",
+        "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-net-digest-win32-v1",
+        "-G",
+        "Visual Studio 17 2022",
+        "-A",
+        "Win32",
+        "-DSDL2_DIR=G:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/cmake"
+      ],
+      "exit": 0,
+      "log": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-net-digest-win32-v1\\step-0.log"
+    },
+    {
+      "argv": [
+        "C:/msys64/mingw64/bin/cmake.exe",
+        "--build",
+        "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-net-digest-win32-v1",
+        "--config",
+        "Release",
+        "--target",
+        "probe",
+        "--parallel",
+        "1"
+      ],
+      "exit": 0,
+      "log": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-net-digest-win32-v1\\step-1.log"
+    },
+    {
+      "argv": [
+        "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-net-digest-win32-v1\\Release\\probe.exe"
+      ],
+      "exit": 0,
+      "log": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-net-digest-win32-v1\\step-2.log"
+    }
+  ],
+  "samples": [
+    {
+      "label": "warmup",
+      "mode": "reference",
+      "exit": 0,
+      "accepted": false,
+      "peers": [
+        {
+          "slot": 0,
+          "exit": 0,
+          "cpu_seconds": 12.1875,
+          "wall_seconds": 36.5527746998705,
+          "command": [
+            "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\reference\\SuperMarioBrosRecomp.exe",
+            "G:/Temp/Codex/nes110-net-digest-server-v1-20261031/baserom.nes",
+            "--headless",
+            "--frames",
+            "1100",
+            "--realtime",
+            "--no-save",
+            "--config",
+            "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\runs\\warmup-reference\\0\\config.ini",
+            "--mods-root",
+            "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\reference\\mods"
+          ],
+          "env": {
+            "NESRECOMP_BENCHMARK_POOL_RESERVED": "1",
+            "NESRECOMP_NO_LAUNCHER": "1",
+            "NES_NETPLAY": "1",
+            "NES_NET_SLOT": "0",
+            "NES_NET_SLOTS": "2",
+            "NES_NET_BIND": "127.0.0.1:54073",
+            "NES_NET_PEER": "127.0.0.1:54075",
+            "NES_NET_SESSION_CONFIG": "nes-session/1;vw=256;ws=0:1:0:1;coop=0:player;",
+            "NES_NET_SESSION_ID": "54075",
+            "NES_NET_TEST_PAD": "0:90",
+            "NES_NET_MATCH_TICKS": "900",
+            "NES_NET_SHOT_TICK": "850",
+            "NES_NET_DELAY": "0",
+            "RBE_RB_ADAPT_DELAY": "0",
+            "RBE_RB_AUTO_DELAY": "0",
+            "NES_NET_SRAM_SYNC": "1",
+            "NES_NET_CONNECT_TIMEOUT_MS": "15000",
+            "NES_NET_FINAL_STATE": "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\runs\\warmup-reference\\0\\final.rbstate",
+            "SDL_AUDIODRIVER": "dummy",
+            "SDL_VIDEODRIVER": "dummy",
+            "SDL_RENDER_DRIVER": "software",
+            "NES_RB_FORCE_MISPREDICT": "0"
+          },
+          "driver": {
+            "sim": 909,
+            "episodes": 50,
+            "invents": 476,
+            "promotes": 472,
+            "resim_ticks": 226,
+            "desyncs": 0,
+            "replays_changed": 45,
+            "replays_same": 181,
+            "confirmed": 905,
+            "rtt_ms": 30
+          },
+          "totals": {
+            "save_us": 945983.0,
+            "load_us": 31799.5,
+            "digest_us": 939626.1,
+            "saves": 1198.0,
+            "loads": 54.0,
+            "digests": 1198.0
+          },
+          "admitted": 1143,
+          "cpu_ms_per_admitted_tick": 10.662729658792651,
+          "digest_elapsed_us_per_image": 784.3289649415692,
+          "shot_digests": [
+            "NET_TICK_DIGEST tick=850 live master=f4ba2196 cpu_wram=2bff4419 ppu=c7d80330 apu_io_mods=9fb364bf\r"
+          ]
+        },
+        {
+          "slot": 1,
+          "exit": 0,
+          "cpu_seconds": 11.484375,
+          "wall_seconds": 36.384540299884975,
+          "command": [
+            "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\reference\\SuperMarioBrosRecomp.exe",
+            "G:/Temp/Codex/nes110-net-digest-server-v1-20261031/baserom.nes",
+            "--headless",
+            "--frames",
+            "1100",
+            "--realtime",
+            "--no-save",
+            "--config",
+            "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\runs\\warmup-reference\\1\\config.ini",
+            "--mods-root",
+            "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\reference\\mods"
+          ],
+          "env": {
+            "NESRECOMP_BENCHMARK_POOL_RESERVED": "1",
+            "NESRECOMP_NO_LAUNCHER": "1",
+            "NES_NETPLAY": "1",
+            "NES_NET_SLOT": "1",
+            "NES_NET_SLOTS": "2",
+            "NES_NET_BIND": "127.0.0.1:54074",
+            "NES_NET_PEER": "127.0.0.1:54076",
+            "NES_NET_SESSION_CONFIG": "nes-session/1;vw=256;ws=0:1:0:1;coop=0:player;",
+            "NES_NET_SESSION_ID": "54075",
+            "NES_NET_TEST_PAD": "1:90",
+            "NES_NET_MATCH_TICKS": "900",
+            "NES_NET_SHOT_TICK": "850",
+            "NES_NET_DELAY": "0",
+            "RBE_RB_ADAPT_DELAY": "0",
+            "RBE_RB_AUTO_DELAY": "0",
+            "NES_NET_SRAM_SYNC": "1",
+            "NES_NET_CONNECT_TIMEOUT_MS": "15000",
+            "NES_NET_FINAL_STATE": "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\runs\\warmup-reference\\1\\final.rbstate",
+            "SDL_AUDIODRIVER": "dummy",
+            "SDL_VIDEODRIVER": "dummy",
+            "SDL_RENDER_DRIVER": "software",
+            "NES_RB_FORCE_MISPREDICT": "0"
+          },
+          "driver": {
+            "sim": 909,
+            "episodes": 57,
+            "invents": 663,
+            "promotes": 654,
+            "resim_ticks": 208,
+            "desyncs": 0,
+            "replays_changed": 178,
+            "replays_same": 30,
+            "confirmed": 905,
+            "rtt_ms": 18
+          },
+          "totals": {
+            "save_us": 911267.0,
+            "load_us": 32216.0,
+            "digest_us": 860589.9,
+            "saves": 1192.0,
+            "loads": 57.0,
+            "digests": 1192.0
+          },
+          "admitted": 1134,
+          "cpu_ms_per_admitted_tick": 10.127314814814815,
+          "digest_elapsed_us_per_image": 721.9713926174497,
+          "shot_digests": [
+            "NET_TICK_DIGEST tick=850 live master=f4ba2196 cpu_wram=2bff4419 ppu=c7d80330 apu_io_mods=9fb364bf\r"
+          ]
+        }
+      ],
+      "whole_match_cpu_seconds": 23.671875,
+      "admitted": 2277,
+      "whole_cpu_ms_per_admitted_tick": 10.396080368906455,
+      "endpoint_sha256": "1c0de62f30a649e1b2250d0fcd9bb97fe7e7a7d6b86752b6491820fa8e661480",
+      "pcm": {
+        "peer_equal": false,
+        "bytes": [
+          1468,
+          1468
+        ],
+        "sha256": [
+          "6a97dc5d386fbc0f4d262fc72313e07dcfd80bc11ade0677479cc13ca5df9ba3",
+          "52f18dbdbe9a0825656641a5c5611b6c74805a1c0d346263622935b6c78c3003"
+        ]
+      },
+      "host_core_before": [
+        [
+          16225277500000,
+          19147556875000,
+          3018426718750
+        ],
+        [
+          16962331406250,
+          18711866718750,
+          3454115468750
+        ],
+        [
+          17169925156250,
+          18774012968750,
+          3391969218750
+        ],
+        [
+          16454157031250,
+          18280605937500,
+          3885376250000
+        ]
+      ],
+      "host_core_after": [
+        [
+          16225443906250,
+          19147770000000,
+          3018583437500
+        ],
+        [
+          16962486562500,
+          18712073281250,
+          3454278750000
+        ],
+        [
+          17170117812500,
+          18774236250000,
+          3392115781250
+        ],
+        [
+          16454431406250,
+          18280912812500,
+          3885439218750
+        ]
+      ]
+    },
+    {
+      "label": "warmup",
+      "mode": "candidate",
+      "exit": 0,
+      "accepted": false,
+      "peers": [
+        {
+          "slot": 0,
+          "exit": 0,
+          "cpu_seconds": 12.3125,
+          "wall_seconds": 37.43610280007124,
+          "command": [
+            "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\candidate\\SuperMarioBrosRecomp.exe",
+            "G:/Temp/Codex/nes110-net-digest-server-v1-20261031/baserom.nes",
+            "--headless",
+            "--frames",
+            "1100",
+            "--realtime",
+            "--no-save",
+            "--config",
+            "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\runs\\warmup-candidate\\0\\config.ini",
+            "--mods-root",
+            "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\candidate\\mods"
+          ],
+          "env": {
+            "NESRECOMP_BENCHMARK_POOL_RESERVED": "1",
+            "NESRECOMP_NO_LAUNCHER": "1",
+            "NES_NETPLAY": "1",
+            "NES_NET_SLOT": "0",
+            "NES_NET_SLOTS": "2",
+            "NES_NET_BIND": "127.0.0.1:64414",
+            "NES_NET_PEER": "127.0.0.1:64416",
+            "NES_NET_SESSION_CONFIG": "nes-session/1;vw=256;ws=0:1:0:1;coop=0:player;",
+            "NES_NET_SESSION_ID": "64416",
+            "NES_NET_TEST_PAD": "0:90",
+            "NES_NET_MATCH_TICKS": "900",
+            "NES_NET_SHOT_TICK": "850",
+            "NES_NET_DELAY": "0",
+            "RBE_RB_ADAPT_DELAY": "0",
+            "RBE_RB_AUTO_DELAY": "0",
+            "NES_NET_SRAM_SYNC": "1",
+            "NES_NET_CONNECT_TIMEOUT_MS": "15000",
+            "NES_NET_FINAL_STATE": "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\runs\\warmup-candidate\\0\\final.rbstate",
+            "SDL_AUDIODRIVER": "dummy",
+            "SDL_VIDEODRIVER": "dummy",
+            "SDL_RENDER_DRIVER": "software",
+            "NES_RB_FORCE_MISPREDICT": "0"
+          },
+          "driver": {
+            "sim": 912,
+            "episodes": 48,
+            "invents": 554,
+            "promotes": 550,
+            "resim_ticks": 292,
+            "desyncs": 0,
+            "replays_changed": 96,
+            "replays_same": 196,
+            "confirmed": 905,
+            "rtt_ms": 46
+          },
+          "totals": {
+            "save_us": 988700.4,
+            "load_us": 31523.6,
+            "digest_us": 570400.0,
+            "saves": 1266.0,
+            "loads": 52.0,
+            "digests": 1266.0
+          },
+          "admitted": 1213,
+          "cpu_ms_per_admitted_tick": 10.15045342126958,
+          "digest_elapsed_us_per_image": 450.5529225908373,
+          "shot_digests": [
+            "NET_TICK_DIGEST tick=850 live master=01b836b2 cpu_wram=179d16f9 ppu=9f6f2b91 apu_io_mods=ff9eb07c\r"
+          ]
+        },
+        {
+          "slot": 1,
+          "exit": 0,
+          "cpu_seconds": 12.125,
+          "wall_seconds": 37.27792729996145,
+          "command": [
+            "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\candidate\\SuperMarioBrosRecomp.exe",
+            "G:/Temp/Codex/nes110-net-digest-server-v1-20261031/baserom.nes",
+            "--headless",
+            "--frames",
+            "1100",
+            "--realtime",
+            "--no-save",
+            "--config",
+            "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\runs\\warmup-candidate\\1\\config.ini",
+            "--mods-root",
+            "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\candidate\\mods"
+          ],
+          "env": {
+            "NESRECOMP_BENCHMARK_POOL_RESERVED": "1",
+            "NESRECOMP_NO_LAUNCHER": "1",
+            "NES_NETPLAY": "1",
+            "NES_NET_SLOT": "1",
+            "NES_NET_SLOTS": "2",
+            "NES_NET_BIND": "127.0.0.1:64415",
+            "NES_NET_PEER": "127.0.0.1:64417",
+            "NES_NET_SESSION_CONFIG": "nes-session/1;vw=256;ws=0:1:0:1;coop=0:player;",
+            "NES_NET_SESSION_ID": "64416",
+            "NES_NET_TEST_PAD": "1:90",
+            "NES_NET_MATCH_TICKS": "900",
+            "NES_NET_SHOT_TICK": "850",
+            "NES_NET_DELAY": "0",
+            "RBE_RB_ADAPT_DELAY": "0",
+            "RBE_RB_AUTO_DELAY": "0",
+            "NES_NET_SRAM_SYNC": "1",
+            "NES_NET_CONNECT_TIMEOUT_MS": "15000",
+            "NES_NET_FINAL_STATE": "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\runs\\warmup-candidate\\1\\final.rbstate",
+            "SDL_AUDIODRIVER": "dummy",
+            "SDL_VIDEODRIVER": "dummy",
+            "SDL_RENDER_DRIVER": "software",
+            "NES_RB_FORCE_MISPREDICT": "0"
+          },
+          "driver": {
+            "sim": 912,
+            "episodes": 54,
+            "invents": 608,
+            "promotes": 601,
+            "resim_ticks": 284,
+            "desyncs": 0,
+            "replays_changed": 179,
+            "replays_same": 104,
+            "confirmed": 905,
+            "rtt_ms": 18
+          },
+          "totals": {
+            "save_us": 915328.1,
+            "load_us": 32974.1,
+            "digest_us": 548629.3,
+            "saves": 1265.0,
+            "loads": 57.0,
+            "digests": 1265.0
+          },
+          "admitted": 1207,
+          "cpu_ms_per_admitted_tick": 10.045567522783761,
+          "digest_elapsed_us_per_image": 433.69905138339925,
+          "shot_digests": [
+            "NET_TICK_DIGEST tick=850 live master=01b836b2 cpu_wram=179d16f9 ppu=9f6f2b91 apu_io_mods=ff9eb07c\r"
+          ]
+        }
+      ],
+      "whole_match_cpu_seconds": 24.4375,
+      "admitted": 2420,
+      "whole_cpu_ms_per_admitted_tick": 10.098140495867769,
+      "endpoint_sha256": "1c0de62f30a649e1b2250d0fcd9bb97fe7e7a7d6b86752b6491820fa8e661480",
+      "pcm": {
+        "peer_equal": false,
+        "bytes": [
+          1468,
+          1468
+        ],
+        "sha256": [
+          "c60da9b936a935da5861ab5c30e88fbbd7674c1db05a812510623bdaa1cf7757",
+          "651f9e68d58f7fea4783a39cbd7b09b8b57ccbc28a885397e1b484c68f1abcec"
+        ]
+      },
+      "host_core_before": [
+        [
+          16225444062500,
+          19147770156250,
+          3018583437500
+        ],
+        [
+          16962486718750,
+          18712073437500,
+          3454278750000
+        ],
+        [
+          17170117968750,
+          18774236406250,
+          3392115781250
+        ],
+        [
+          16454431406250,
+          18280912812500,
+          3885439375000
+        ]
+      ],
+      "host_core_after": [
+        [
+          16225621718750,
+          19147991875000,
+          3018739843750
+        ],
+        [
+          16962747968750,
+          18712381406250,
+          3454348906250
+        ],
+        [
+          17170308125000,
+          18774456093750,
+          3392274218750
+        ],
+        [
+          16454697812500,
+          18281221406250,
+          3885508906250
+        ]
+      ]
+    },
+    {
+      "label": "0",
+      "mode": "reference",
+      "exit": 0,
+      "accepted": false,
+      "peers": [
+        {
+          "slot": 0,
+          "exit": 0,
+          "cpu_seconds": 12.828125,
+          "wall_seconds": 36.2366110002622,
+          "command": [
+            "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\reference\\SuperMarioBrosRecomp.exe",
+            "G:/Temp/Codex/nes110-net-digest-server-v1-20261031/baserom.nes",
+            "--headless",
+            "--frames",
+            "1100",
+            "--realtime",
+            "--no-save",
+            "--config",
+            "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\runs\\0-reference\\0\\config.ini",
+            "--mods-root",
+            "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\reference\\mods"
+          ],
+          "env": {
+            "NESRECOMP_BENCHMARK_POOL_RESERVED": "1",
+            "NESRECOMP_NO_LAUNCHER": "1",
+            "NES_NETPLAY": "1",
+            "NES_NET_SLOT": "0",
+            "NES_NET_SLOTS": "2",
+            "NES_NET_BIND": "127.0.0.1:65151",
+            "NES_NET_PEER": "127.0.0.1:65153",
+            "NES_NET_SESSION_CONFIG": "nes-session/1;vw=256;ws=0:1:0:1;coop=0:player;",
+            "NES_NET_SESSION_ID": "65153",
+            "NES_NET_TEST_PAD": "0:90",
+            "NES_NET_MATCH_TICKS": "900",
+            "NES_NET_SHOT_TICK": "850",
+            "NES_NET_DELAY": "0",
+            "RBE_RB_ADAPT_DELAY": "0",
+            "RBE_RB_AUTO_DELAY": "0",
+            "NES_NET_SRAM_SYNC": "1",
+            "NES_NET_CONNECT_TIMEOUT_MS": "15000",
+            "NES_NET_FINAL_STATE": "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\runs\\0-reference\\0\\final.rbstate",
+            "SDL_AUDIODRIVER": "dummy",
+            "SDL_VIDEODRIVER": "dummy",
+            "SDL_RENDER_DRIVER": "software",
+            "NES_RB_FORCE_MISPREDICT": "0"
+          },
+          "driver": {
+            "sim": 903,
+            "episodes": 45,
+            "invents": 453,
+            "promotes": 449,
+            "resim_ticks": 289,
+            "desyncs": 0,
+            "replays_changed": 60,
+            "replays_same": 229,
+            "confirmed": 900,
+            "rtt_ms": 39
+          },
+          "totals": {
+            "save_us": 926881.7,
+            "load_us": 29739.6,
+            "digest_us": 916021.7,
+            "saves": 1245.0,
+            "loads": 48.0,
+            "digests": 1245.0
+          },
+          "admitted": 1196,
+          "cpu_ms_per_admitted_tick": 10.725857023411372,
+          "digest_elapsed_us_per_image": 735.7604016064257,
+          "shot_digests": [
+            "NET_TICK_DIGEST tick=850 live master=f4ba2196 cpu_wram=2bff4419 ppu=c7d80330 apu_io_mods=9fb364bf\r"
+          ]
+        },
+        {
+          "slot": 1,
+          "exit": 0,
+          "cpu_seconds": 12.53125,
+          "wall_seconds": 36.22996799973771,
+          "command": [
+            "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\reference\\SuperMarioBrosRecomp.exe",
+            "G:/Temp/Codex/nes110-net-digest-server-v1-20261031/baserom.nes",
+            "--headless",
+            "--frames",
+            "1100",
+            "--realtime",
+            "--no-save",
+            "--config",
+            "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\runs\\0-reference\\1\\config.ini",
+            "--mods-root",
+            "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\reference\\mods"
+          ],
+          "env": {
+            "NESRECOMP_BENCHMARK_POOL_RESERVED": "1",
+            "NESRECOMP_NO_LAUNCHER": "1",
+            "NES_NETPLAY": "1",
+            "NES_NET_SLOT": "1",
+            "NES_NET_SLOTS": "2",
+            "NES_NET_BIND": "127.0.0.1:65152",
+            "NES_NET_PEER": "127.0.0.1:65154",
+            "NES_NET_SESSION_CONFIG": "nes-session/1;vw=256;ws=0:1:0:1;coop=0:player;",
+            "NES_NET_SESSION_ID": "65153",
+            "NES_NET_TEST_PAD": "1:90",
+            "NES_NET_MATCH_TICKS": "900",
+            "NES_NET_SHOT_TICK": "850",
+            "NES_NET_DELAY": "0",
+            "RBE_RB_ADAPT_DELAY": "0",
+            "RBE_RB_AUTO_DELAY": "0",
+            "NES_NET_SRAM_SYNC": "1",
+            "NES_NET_CONNECT_TIMEOUT_MS": "15000",
+            "NES_NET_FINAL_STATE": "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\runs\\0-reference\\1\\final.rbstate",
+            "SDL_AUDIODRIVER": "dummy",
+            "SDL_VIDEODRIVER": "dummy",
+            "SDL_RENDER_DRIVER": "software",
+            "NES_RB_FORCE_MISPREDICT": "0"
+          },
+          "driver": {
+            "sim": 902,
+            "episodes": 54,
+            "invents": 655,
+            "promotes": 645,
+            "resim_ticks": 287,
+            "desyncs": 0,
+            "replays_changed": 228,
+            "replays_same": 59,
+            "confirmed": 900,
+            "rtt_ms": 15
+          },
+          "totals": {
+            "save_us": 922746.3,
+            "load_us": 31727.7,
+            "digest_us": 891989.9,
+            "saves": 1264.0,
+            "loads": 56.0,
+            "digests": 1264.0
+          },
+          "admitted": 1207,
+          "cpu_ms_per_admitted_tick": 10.382145816072908,
+          "digest_elapsed_us_per_image": 705.6882120253165,
+          "shot_digests": [
+            "NET_TICK_DIGEST tick=850 live master=f4ba2196 cpu_wram=2bff4419 ppu=c7d80330 apu_io_mods=9fb364bf\r"
+          ]
+        }
+      ],
+      "whole_match_cpu_seconds": 25.359375,
+      "admitted": 2403,
+      "whole_cpu_ms_per_admitted_tick": 10.553214731585518,
+      "endpoint_sha256": "1c0de62f30a649e1b2250d0fcd9bb97fe7e7a7d6b86752b6491820fa8e661480",
+      "pcm": {
+        "peer_equal": false,
+        "bytes": [
+          1468,
+          1468
+        ],
+        "sha256": [
+          "48c4346cc332e4495ef3c78df4808398bd36d7c7bd1655da13ad2465d1fc3417",
+          "60c0c78b8bbf1e441510237cef85e3a645f3804ffb980c1ffaea509701e33aa8"
+        ]
+      },
+      "host_core_before": [
+        [
+          16225621875000,
+          19147992031250,
+          3018739843750
+        ],
+        [
+          16962747968750,
+          18712381562500,
+          3454348906250
+        ],
+        [
+          17170308125000,
+          18774456250000,
+          3392274218750
+        ],
+        [
+          16454697812500,
+          18281221406250,
+          3885509062500
+        ]
+      ],
+      "host_core_after": [
+        [
+          16225787968750,
+          19148201875000,
+          3018894531250
+        ],
+        [
+          16963015312500,
+          18712689531250,
+          3454405468750
+        ],
+        [
+          17170497500000,
+          18774665937500,
+          3392429062500
+        ],
+        [
+          16454975781250,
+          18281533281250,
+          3885561718750
+        ]
+      ]
+    },
+    {
+      "label": "0",
+      "mode": "candidate",
+      "exit": 1,
+      "accepted": false,
+      "peers": [
+        {
+          "slot": 0,
+          "exit": 0,
+          "cpu_seconds": 9.828125,
+          "wall_seconds": 37.26677630003542,
+          "command": [
+            "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\candidate\\SuperMarioBrosRecomp.exe",
+            "G:/Temp/Codex/nes110-net-digest-server-v1-20261031/baserom.nes",
+            "--headless",
+            "--frames",
+            "1100",
+            "--realtime",
+            "--no-save",
+            "--config",
+            "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\runs\\0-candidate\\0\\config.ini",
+            "--mods-root",
+            "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\candidate\\mods"
+          ],
+          "env": {
+            "NESRECOMP_BENCHMARK_POOL_RESERVED": "1",
+            "NESRECOMP_NO_LAUNCHER": "1",
+            "NES_NETPLAY": "1",
+            "NES_NET_SLOT": "0",
+            "NES_NET_SLOTS": "2",
+            "NES_NET_BIND": "127.0.0.1:50041",
+            "NES_NET_PEER": "127.0.0.1:50043",
+            "NES_NET_SESSION_CONFIG": "nes-session/1;vw=256;ws=0:1:0:1;coop=0:player;",
+            "NES_NET_SESSION_ID": "50043",
+            "NES_NET_TEST_PAD": "0:90",
+            "NES_NET_MATCH_TICKS": "900",
+            "NES_NET_SHOT_TICK": "850",
+            "NES_NET_DELAY": "0",
+            "RBE_RB_ADAPT_DELAY": "0",
+            "RBE_RB_AUTO_DELAY": "0",
+            "NES_NET_SRAM_SYNC": "1",
+            "NES_NET_CONNECT_TIMEOUT_MS": "15000",
+            "NES_NET_FINAL_STATE": "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\runs\\0-candidate\\0\\final.rbstate",
+            "SDL_AUDIODRIVER": "dummy",
+            "SDL_VIDEODRIVER": "dummy",
+            "SDL_RENDER_DRIVER": "software",
+            "NES_RB_FORCE_MISPREDICT": "0"
+          },
+          "driver": {
+            "sim": 902,
+            "episodes": 25,
+            "invents": 349,
+            "promotes": 348,
+            "resim_ticks": 109,
+            "desyncs": 8,
+            "replays_changed": 47,
+            "replays_same": 62,
+            "confirmed": 306,
+            "rtt_ms": 36
+          },
+          "totals": {
+            "save_us": 772599.5,
+            "load_us": 17209.6,
+            "digest_us": 469572.3,
+            "saves": 1043.0,
+            "loads": 30.0,
+            "digests": 1043.0
+          },
+          "admitted": 1012,
+          "cpu_ms_per_admitted_tick": 9.711585968379447,
+          "digest_elapsed_us_per_image": 450.2131351869607,
+          "shot_digests": [
+            "NET_TICK_DIGEST tick=850 live master=cc034432 cpu_wram=179d16f9 ppu=9f6f2b91 apu_io_mods=842bf01a\r"
+          ]
+        },
+        {
+          "slot": 1,
+          "exit": 0,
+          "cpu_seconds": 10.5625,
+          "wall_seconds": 37.259824899956584,
+          "command": [
+            "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\candidate\\SuperMarioBrosRecomp.exe",
+            "G:/Temp/Codex/nes110-net-digest-server-v1-20261031/baserom.nes",
+            "--headless",
+            "--frames",
+            "1100",
+            "--realtime",
+            "--no-save",
+            "--config",
+            "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\runs\\0-candidate\\1\\config.ini",
+            "--mods-root",
+            "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\candidate\\mods"
+          ],
+          "env": {
+            "NESRECOMP_BENCHMARK_POOL_RESERVED": "1",
+            "NESRECOMP_NO_LAUNCHER": "1",
+            "NES_NETPLAY": "1",
+            "NES_NET_SLOT": "1",
+            "NES_NET_SLOTS": "2",
+            "NES_NET_BIND": "127.0.0.1:50042",
+            "NES_NET_PEER": "127.0.0.1:50044",
+            "NES_NET_SESSION_CONFIG": "nes-session/1;vw=256;ws=0:1:0:1;coop=0:player;",
+            "NES_NET_SESSION_ID": "50043",
+            "NES_NET_TEST_PAD": "1:90",
+            "NES_NET_MATCH_TICKS": "900",
+            "NES_NET_SHOT_TICK": "850",
+            "NES_NET_DELAY": "0",
+            "RBE_RB_ADAPT_DELAY": "0",
+            "RBE_RB_AUTO_DELAY": "0",
+            "NES_NET_SRAM_SYNC": "1",
+            "NES_NET_CONNECT_TIMEOUT_MS": "15000",
+            "NES_NET_FINAL_STATE": "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\runs\\0-candidate\\1\\final.rbstate",
+            "SDL_AUDIODRIVER": "dummy",
+            "SDL_VIDEODRIVER": "dummy",
+            "SDL_RENDER_DRIVER": "software",
+            "NES_RB_FORCE_MISPREDICT": "0"
+          },
+          "driver": {
+            "sim": 901,
+            "episodes": 26,
+            "invents": 406,
+            "promotes": 405,
+            "resim_ticks": 138,
+            "desyncs": 6,
+            "replays_changed": 88,
+            "replays_same": 50,
+            "confirmed": 306,
+            "rtt_ms": 18
+          },
+          "totals": {
+            "save_us": 836501.8,
+            "load_us": 13695.8,
+            "digest_us": 473779.8,
+            "saves": 1068.0,
+            "loads": 25.0,
+            "digests": 1068.0
+          },
+          "admitted": 1042,
+          "cpu_ms_per_admitted_tick": 10.136756238003839,
+          "digest_elapsed_us_per_image": 443.6140449438202,
+          "shot_digests": [
+            "NET_TICK_DIGEST tick=850 live master=d5cf93c4 cpu_wram=16f2efb6 ppu=85440af8 apu_io_mods=d8889dc0\r"
+          ]
+        }
+      ],
+      "whole_match_cpu_seconds": 20.390625,
+      "admitted": 2054,
+      "whole_cpu_ms_per_admitted_tick": 9.927276046738072,
+      "endpoint_sha256": null,
+      "pcm": null,
+      "host_core_before": [
+        [
+          16225788125000,
+          19148202031250,
+          3018894531250
+        ],
+        [
+          16963015468750,
+          18712689687500,
+          3454405468750
+        ],
+        [
+          17170497500000,
+          18774665937500,
+          3392429218750
+        ],
+        [
+          16454975937500,
+          18281533437500,
+          3885561718750
+        ]
+      ],
+      "host_core_after": [
+        [
+          16225978593750,
+          19148441562500,
+          3019029687500
+        ],
+        [
+          16963277031250,
+          18712995156250,
+          3454474687500
+        ],
+        [
+          17170697656250,
+          18774896562500,
+          3392573281250
+        ],
+        [
+          16455237031250,
+          18281842500000,
+          3885627343750
+        ]
+      ]
+    },
+    {
+      "label": "1",
+      "mode": "candidate",
+      "exit": 0,
+      "accepted": false,
+      "peers": [
+        {
+          "slot": 0,
+          "exit": 0,
+          "cpu_seconds": 12.53125,
+          "wall_seconds": 36.167494299821556,
+          "command": [
+            "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\candidate\\SuperMarioBrosRecomp.exe",
+            "G:/Temp/Codex/nes110-net-digest-server-v1-20261031/baserom.nes",
+            "--headless",
+            "--frames",
+            "1100",
+            "--realtime",
+            "--no-save",
+            "--config",
+            "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\runs\\1-candidate\\0\\config.ini",
+            "--mods-root",
+            "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\candidate\\mods"
+          ],
+          "env": {
+            "NESRECOMP_BENCHMARK_POOL_RESERVED": "1",
+            "NESRECOMP_NO_LAUNCHER": "1",
+            "NES_NETPLAY": "1",
+            "NES_NET_SLOT": "0",
+            "NES_NET_SLOTS": "2",
+            "NES_NET_BIND": "127.0.0.1:62168",
+            "NES_NET_PEER": "127.0.0.1:62170",
+            "NES_NET_SESSION_CONFIG": "nes-session/1;vw=256;ws=0:1:0:1;coop=0:player;",
+            "NES_NET_SESSION_ID": "62170",
+            "NES_NET_TEST_PAD": "0:90",
+            "NES_NET_MATCH_TICKS": "900",
+            "NES_NET_SHOT_TICK": "850",
+            "NES_NET_DELAY": "0",
+            "RBE_RB_ADAPT_DELAY": "0",
+            "RBE_RB_AUTO_DELAY": "0",
+            "NES_NET_SRAM_SYNC": "1",
+            "NES_NET_CONNECT_TIMEOUT_MS": "15000",
+            "NES_NET_FINAL_STATE": "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\runs\\1-candidate\\0\\final.rbstate",
+            "SDL_AUDIODRIVER": "dummy",
+            "SDL_VIDEODRIVER": "dummy",
+            "SDL_RENDER_DRIVER": "software",
+            "NES_RB_FORCE_MISPREDICT": "0"
+          },
+          "driver": {
+            "sim": 911,
+            "episodes": 44,
+            "invents": 438,
+            "promotes": 437,
+            "resim_ticks": 288,
+            "desyncs": 0,
+            "replays_changed": 49,
+            "replays_same": 239,
+            "confirmed": 905,
+            "rtt_ms": 31
+          },
+          "totals": {
+            "save_us": 994236.3,
+            "load_us": 29490.8,
+            "digest_us": 568649.8,
+            "saves": 1256.0,
+            "loads": 49.0,
+            "digests": 1256.0
+          },
+          "admitted": 1206,
+          "cpu_ms_per_admitted_tick": 10.39075456053068,
+          "digest_elapsed_us_per_image": 452.74665605095544,
+          "shot_digests": [
+            "NET_TICK_DIGEST tick=850 live master=01b836b2 cpu_wram=179d16f9 ppu=9f6f2b91 apu_io_mods=ff9eb07c\r"
+          ]
+        },
+        {
+          "slot": 1,
+          "exit": 0,
+          "cpu_seconds": 11.78125,
+          "wall_seconds": 36.15914819994941,
+          "command": [
+            "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\candidate\\SuperMarioBrosRecomp.exe",
+            "G:/Temp/Codex/nes110-net-digest-server-v1-20261031/baserom.nes",
+            "--headless",
+            "--frames",
+            "1100",
+            "--realtime",
+            "--no-save",
+            "--config",
+            "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\runs\\1-candidate\\1\\config.ini",
+            "--mods-root",
+            "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\candidate\\mods"
+          ],
+          "env": {
+            "NESRECOMP_BENCHMARK_POOL_RESERVED": "1",
+            "NESRECOMP_NO_LAUNCHER": "1",
+            "NES_NETPLAY": "1",
+            "NES_NET_SLOT": "1",
+            "NES_NET_SLOTS": "2",
+            "NES_NET_BIND": "127.0.0.1:62169",
+            "NES_NET_PEER": "127.0.0.1:62171",
+            "NES_NET_SESSION_CONFIG": "nes-session/1;vw=256;ws=0:1:0:1;coop=0:player;",
+            "NES_NET_SESSION_ID": "62170",
+            "NES_NET_TEST_PAD": "1:90",
+            "NES_NET_MATCH_TICKS": "900",
+            "NES_NET_SHOT_TICK": "850",
+            "NES_NET_DELAY": "0",
+            "RBE_RB_ADAPT_DELAY": "0",
+            "RBE_RB_AUTO_DELAY": "0",
+            "NES_NET_SRAM_SYNC": "1",
+            "NES_NET_CONNECT_TIMEOUT_MS": "15000",
+            "NES_NET_FINAL_STATE": "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\runs\\1-candidate\\1\\final.rbstate",
+            "SDL_AUDIODRIVER": "dummy",
+            "SDL_VIDEODRIVER": "dummy",
+            "SDL_RENDER_DRIVER": "software",
+            "NES_RB_FORCE_MISPREDICT": "0"
+          },
+          "driver": {
+            "sim": 912,
+            "episodes": 55,
+            "invents": 685,
+            "promotes": 678,
+            "resim_ticks": 265,
+            "desyncs": 0,
+            "replays_changed": 187,
+            "replays_same": 78,
+            "confirmed": 905,
+            "rtt_ms": 32
+          },
+          "totals": {
+            "save_us": 967139.7,
+            "load_us": 33423.1,
+            "digest_us": 544725.0,
+            "saves": 1250.0,
+            "loads": 58.0,
+            "digests": 1250.0
+          },
+          "admitted": 1191,
+          "cpu_ms_per_admitted_tick": 9.89189756507137,
+          "digest_elapsed_us_per_image": 435.78,
+          "shot_digests": [
+            "NET_TICK_DIGEST tick=850 live master=01b836b2 cpu_wram=179d16f9 ppu=9f6f2b91 apu_io_mods=ff9eb07c\r"
+          ]
+        }
+      ],
+      "whole_match_cpu_seconds": 24.3125,
+      "admitted": 2397,
+      "whole_cpu_ms_per_admitted_tick": 10.142886942010847,
+      "endpoint_sha256": "1c0de62f30a649e1b2250d0fcd9bb97fe7e7a7d6b86752b6491820fa8e661480",
+      "pcm": {
+        "peer_equal": false,
+        "bytes": [
+          1468,
+          1468
+        ],
+        "sha256": [
+          "6617afa14654afc76cc527f280c27122fc54c622de9bb6c412825388a774c34f",
+          "d53ed15b5431ad863b223a21bc9521a07f75a533087df993f868244967184c59"
+        ]
+      },
+      "host_core_before": [
+        [
+          16227346406250,
+          19150106406250,
+          3019292968750
+        ],
+        [
+          16964611875000,
+          18714559062500,
+          3454838906250
+        ],
+        [
+          17172181718750,
+          18776566875000,
+          3392831093750
+        ],
+        [
+          16456675000000,
+          18283466093750,
+          3885931875000
+        ]
+      ],
+      "host_core_after": [
+        [
+          16227516718750,
+          19150320781250,
+          3019442500000
+        ],
+        [
+          16964728906250,
+          18714729062500,
+          3455032812500
+        ],
+        [
+          17172372968750,
+          18776784218750,
+          3392977656250
+        ],
+        [
+          16456969687500,
+          18283787187500,
+          3885974687500
+        ]
+      ]
+    },
+    {
+      "label": "1",
+      "mode": "reference",
+      "exit": 0,
+      "accepted": false,
+      "peers": [
+        {
+          "slot": 0,
+          "exit": 0,
+          "cpu_seconds": 12.671875,
+          "wall_seconds": 37.65490310033783,
+          "command": [
+            "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\reference\\SuperMarioBrosRecomp.exe",
+            "G:/Temp/Codex/nes110-net-digest-server-v1-20261031/baserom.nes",
+            "--headless",
+            "--frames",
+            "1100",
+            "--realtime",
+            "--no-save",
+            "--config",
+            "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\runs\\1-reference\\0\\config.ini",
+            "--mods-root",
+            "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\reference\\mods"
+          ],
+          "env": {
+            "NESRECOMP_BENCHMARK_POOL_RESERVED": "1",
+            "NESRECOMP_NO_LAUNCHER": "1",
+            "NES_NETPLAY": "1",
+            "NES_NET_SLOT": "0",
+            "NES_NET_SLOTS": "2",
+            "NES_NET_BIND": "127.0.0.1:57543",
+            "NES_NET_PEER": "127.0.0.1:57545",
+            "NES_NET_SESSION_CONFIG": "nes-session/1;vw=256;ws=0:1:0:1;coop=0:player;",
+            "NES_NET_SESSION_ID": "57545",
+            "NES_NET_TEST_PAD": "0:90",
+            "NES_NET_MATCH_TICKS": "900",
+            "NES_NET_SHOT_TICK": "850",
+            "NES_NET_DELAY": "0",
+            "RBE_RB_ADAPT_DELAY": "0",
+            "RBE_RB_AUTO_DELAY": "0",
+            "NES_NET_SRAM_SYNC": "1",
+            "NES_NET_CONNECT_TIMEOUT_MS": "15000",
+            "NES_NET_FINAL_STATE": "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\runs\\1-reference\\0\\final.rbstate",
+            "SDL_AUDIODRIVER": "dummy",
+            "SDL_VIDEODRIVER": "dummy",
+            "SDL_RENDER_DRIVER": "software",
+            "NES_RB_FORCE_MISPREDICT": "0"
+          },
+          "driver": {
+            "sim": 902,
+            "episodes": 44,
+            "invents": 436,
+            "promotes": 436,
+            "resim_ticks": 300,
+            "desyncs": 0,
+            "replays_changed": 65,
+            "replays_same": 235,
+            "confirmed": 899,
+            "rtt_ms": 23
+          },
+          "totals": {
+            "save_us": 1141393.5,
+            "load_us": 30143.9,
+            "digest_us": 986035.0,
+            "saves": 1257.0,
+            "loads": 49.0,
+            "digests": 1257.0
+          },
+          "admitted": 1207,
+          "cpu_ms_per_admitted_tick": 10.498653686826843,
+          "digest_elapsed_us_per_image": 784.4351630867144,
+          "shot_digests": [
+            "NET_TICK_DIGEST tick=850 live master=f4ba2196 cpu_wram=2bff4419 ppu=c7d80330 apu_io_mods=9fb364bf\r"
+          ]
+        },
+        {
+          "slot": 1,
+          "exit": 0,
+          "cpu_seconds": 12.3125,
+          "wall_seconds": 37.648847999982536,
+          "command": [
+            "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\reference\\SuperMarioBrosRecomp.exe",
+            "G:/Temp/Codex/nes110-net-digest-server-v1-20261031/baserom.nes",
+            "--headless",
+            "--frames",
+            "1100",
+            "--realtime",
+            "--no-save",
+            "--config",
+            "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\runs\\1-reference\\1\\config.ini",
+            "--mods-root",
+            "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\reference\\mods"
+          ],
+          "env": {
+            "NESRECOMP_BENCHMARK_POOL_RESERVED": "1",
+            "NESRECOMP_NO_LAUNCHER": "1",
+            "NES_NETPLAY": "1",
+            "NES_NET_SLOT": "1",
+            "NES_NET_SLOTS": "2",
+            "NES_NET_BIND": "127.0.0.1:57544",
+            "NES_NET_PEER": "127.0.0.1:57546",
+            "NES_NET_SESSION_CONFIG": "nes-session/1;vw=256;ws=0:1:0:1;coop=0:player;",
+            "NES_NET_SESSION_ID": "57545",
+            "NES_NET_TEST_PAD": "1:90",
+            "NES_NET_MATCH_TICKS": "900",
+            "NES_NET_SHOT_TICK": "850",
+            "NES_NET_DELAY": "0",
+            "RBE_RB_ADAPT_DELAY": "0",
+            "RBE_RB_AUTO_DELAY": "0",
+            "NES_NET_SRAM_SYNC": "1",
+            "NES_NET_CONNECT_TIMEOUT_MS": "15000",
+            "NES_NET_FINAL_STATE": "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\runs\\1-reference\\1\\final.rbstate",
+            "SDL_AUDIODRIVER": "dummy",
+            "SDL_VIDEODRIVER": "dummy",
+            "SDL_RENDER_DRIVER": "software",
+            "NES_RB_FORCE_MISPREDICT": "0"
+          },
+          "driver": {
+            "sim": 902,
+            "episodes": 53,
+            "invents": 694,
+            "promotes": 685,
+            "resim_ticks": 295,
+            "desyncs": 0,
+            "replays_changed": 192,
+            "replays_same": 103,
+            "confirmed": 900,
+            "rtt_ms": 29
+          },
+          "totals": {
+            "save_us": 994817.3,
+            "load_us": 32064.8,
+            "digest_us": 936004.8,
+            "saves": 1268.0,
+            "loads": 55.0,
+            "digests": 1268.0
+          },
+          "admitted": 1212,
+          "cpu_ms_per_admitted_tick": 10.158828382838283,
+          "digest_elapsed_us_per_image": 738.1741324921136,
+          "shot_digests": [
+            "NET_TICK_DIGEST tick=850 live master=f4ba2196 cpu_wram=2bff4419 ppu=c7d80330 apu_io_mods=9fb364bf\r"
+          ]
+        }
+      ],
+      "whole_match_cpu_seconds": 24.984375,
+      "admitted": 2419,
+      "whole_cpu_ms_per_admitted_tick": 10.328389830508474,
+      "endpoint_sha256": "1c0de62f30a649e1b2250d0fcd9bb97fe7e7a7d6b86752b6491820fa8e661480",
+      "pcm": {
+        "peer_equal": false,
+        "bytes": [
+          1468,
+          1468
+        ],
+        "sha256": [
+          "d907321c8ecc3797713ea1d15747c0136ac2a8d8c6950ea7ec6116d68e41e10d",
+          "74e5a4bc69dce359dfcff4b75477648e566e75def5c433024e11dce114a91a48"
+        ]
+      },
+      "host_core_before": [
+        [
+          16227516718750,
+          19150320781250,
+          3019442500000
+        ],
+        [
+          16964728906250,
+          18714729062500,
+          3455032812500
+        ],
+        [
+          17172372968750,
+          18776784218750,
+          3392977656250
+        ],
+        [
+          16456969687500,
+          18283787187500,
+          3885974687500
+        ]
+      ],
+      "host_core_after": [
+        [
+          16227668125000,
+          19150527968750,
+          3019614062500
+        ],
+        [
+          16964860468750,
+          18714938906250,
+          3455201718750
+        ],
+        [
+          17172548125000,
+          18777001250000,
+          3393139375000
+        ],
+        [
+          16457198750000,
+          18284073750000,
+          3886066875000
+        ]
+      ]
+    },
+    {
+      "label": "2",
+      "mode": "reference",
+      "exit": 0,
+      "accepted": false,
+      "peers": [
+        {
+          "slot": 0,
+          "exit": 0,
+          "cpu_seconds": 13.078125,
+          "wall_seconds": 36.39218359999359,
+          "command": [
+            "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\reference\\SuperMarioBrosRecomp.exe",
+            "G:/Temp/Codex/nes110-net-digest-server-v1-20261031/baserom.nes",
+            "--headless",
+            "--frames",
+            "1100",
+            "--realtime",
+            "--no-save",
+            "--config",
+            "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\runs\\2-reference\\0\\config.ini",
+            "--mods-root",
+            "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\reference\\mods"
+          ],
+          "env": {
+            "NESRECOMP_BENCHMARK_POOL_RESERVED": "1",
+            "NESRECOMP_NO_LAUNCHER": "1",
+            "NES_NETPLAY": "1",
+            "NES_NET_SLOT": "0",
+            "NES_NET_SLOTS": "2",
+            "NES_NET_BIND": "127.0.0.1:55415",
+            "NES_NET_PEER": "127.0.0.1:55417",
+            "NES_NET_SESSION_CONFIG": "nes-session/1;vw=256;ws=0:1:0:1;coop=0:player;",
+            "NES_NET_SESSION_ID": "55417",
+            "NES_NET_TEST_PAD": "0:90",
+            "NES_NET_MATCH_TICKS": "900",
+            "NES_NET_SHOT_TICK": "850",
+            "NES_NET_DELAY": "0",
+            "RBE_RB_ADAPT_DELAY": "0",
+            "RBE_RB_AUTO_DELAY": "0",
+            "NES_NET_SRAM_SYNC": "1",
+            "NES_NET_CONNECT_TIMEOUT_MS": "15000",
+            "NES_NET_FINAL_STATE": "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\runs\\2-reference\\0\\final.rbstate",
+            "SDL_AUDIODRIVER": "dummy",
+            "SDL_VIDEODRIVER": "dummy",
+            "SDL_RENDER_DRIVER": "software",
+            "NES_RB_FORCE_MISPREDICT": "0"
+          },
+          "driver": {
+            "sim": 909,
+            "episodes": 50,
+            "invents": 574,
+            "promotes": 569,
+            "resim_ticks": 316,
+            "desyncs": 0,
+            "replays_changed": 131,
+            "replays_same": 185,
+            "confirmed": 905,
+            "rtt_ms": 33
+          },
+          "totals": {
+            "save_us": 970505.2,
+            "load_us": 35375.9,
+            "digest_us": 925384.7,
+            "saves": 1292.0,
+            "loads": 57.0,
+            "digests": 1292.0
+          },
+          "admitted": 1234,
+          "cpu_ms_per_admitted_tick": 10.598156401944895,
+          "digest_elapsed_us_per_image": 716.242027863777,
+          "shot_digests": [
+            "NET_TICK_DIGEST tick=850 live master=f4ba2196 cpu_wram=2bff4419 ppu=c7d80330 apu_io_mods=9fb364bf\r"
+          ]
+        },
+        {
+          "slot": 1,
+          "exit": 0,
+          "cpu_seconds": 12.1875,
+          "wall_seconds": 36.3855506000109,
+          "command": [
+            "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\reference\\SuperMarioBrosRecomp.exe",
+            "G:/Temp/Codex/nes110-net-digest-server-v1-20261031/baserom.nes",
+            "--headless",
+            "--frames",
+            "1100",
+            "--realtime",
+            "--no-save",
+            "--config",
+            "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\runs\\2-reference\\1\\config.ini",
+            "--mods-root",
+            "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\reference\\mods"
+          ],
+          "env": {
+            "NESRECOMP_BENCHMARK_POOL_RESERVED": "1",
+            "NESRECOMP_NO_LAUNCHER": "1",
+            "NES_NETPLAY": "1",
+            "NES_NET_SLOT": "1",
+            "NES_NET_SLOTS": "2",
+            "NES_NET_BIND": "127.0.0.1:55416",
+            "NES_NET_PEER": "127.0.0.1:55418",
+            "NES_NET_SESSION_CONFIG": "nes-session/1;vw=256;ws=0:1:0:1;coop=0:player;",
+            "NES_NET_SESSION_ID": "55417",
+            "NES_NET_TEST_PAD": "1:90",
+            "NES_NET_MATCH_TICKS": "900",
+            "NES_NET_SHOT_TICK": "850",
+            "NES_NET_DELAY": "0",
+            "RBE_RB_ADAPT_DELAY": "0",
+            "RBE_RB_AUTO_DELAY": "0",
+            "NES_NET_SRAM_SYNC": "1",
+            "NES_NET_CONNECT_TIMEOUT_MS": "15000",
+            "NES_NET_FINAL_STATE": "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\runs\\2-reference\\1\\final.rbstate",
+            "SDL_AUDIODRIVER": "dummy",
+            "SDL_VIDEODRIVER": "dummy",
+            "SDL_RENDER_DRIVER": "software",
+            "NES_RB_FORCE_MISPREDICT": "0"
+          },
+          "driver": {
+            "sim": 908,
+            "episodes": 56,
+            "invents": 604,
+            "promotes": 598,
+            "resim_ticks": 271,
+            "desyncs": 0,
+            "replays_changed": 147,
+            "replays_same": 124,
+            "confirmed": 905,
+            "rtt_ms": 15
+          },
+          "totals": {
+            "save_us": 894734.1,
+            "load_us": 33111.4,
+            "digest_us": 870244.9,
+            "saves": 1249.0,
+            "loads": 57.0,
+            "digests": 1249.0
+          },
+          "admitted": 1191,
+          "cpu_ms_per_admitted_tick": 10.232997481108312,
+          "digest_elapsed_us_per_image": 696.7533226581265,
+          "shot_digests": [
+            "NET_TICK_DIGEST tick=850 live master=f4ba2196 cpu_wram=2bff4419 ppu=c7d80330 apu_io_mods=9fb364bf\r"
+          ]
+        }
+      ],
+      "whole_match_cpu_seconds": 25.265625,
+      "admitted": 2425,
+      "whole_cpu_ms_per_admitted_tick": 10.418814432989691,
+      "endpoint_sha256": "1c0de62f30a649e1b2250d0fcd9bb97fe7e7a7d6b86752b6491820fa8e661480",
+      "pcm": {
+        "peer_equal": false,
+        "bytes": [
+          1468,
+          1468
+        ],
+        "sha256": [
+          "8bbc651fb862a5a11e3315fb229ffe291e1341a6d2ff903e0d0e517925602016",
+          "3eb39dd9a4fc52bd24ba1c601e567dc123d3c147cd35a82b17c3ffa7934b392c"
+        ]
+      },
+      "host_core_before": [
+        [
+          16227668125000,
+          19150528125000,
+          3019614062500
+        ],
+        [
+          16964860468750,
+          18714938906250,
+          3455201875000
+        ],
+        [
+          17172548125000,
+          18777001250000,
+          3393139531250
+        ],
+        [
+          16457198750000,
+          18284073750000,
+          3886067031250
+        ]
+      ],
+      "host_core_after": [
+        [
+          16227832812500,
+          19150742500000,
+          3019765937500
+        ],
+        [
+          16964935625000,
+          18715076250000,
+          3455430781250
+        ],
+        [
+          17172731562500,
+          18777220781250,
+          3393286250000
+        ],
+        [
+          16457473593750,
+          18284393281250,
+          3886113750000
+        ]
+      ]
+    },
+    {
+      "label": "2",
+      "mode": "candidate",
+      "exit": 0,
+      "accepted": false,
+      "peers": [
+        {
+          "slot": 0,
+          "exit": 0,
+          "cpu_seconds": 12.09375,
+          "wall_seconds": 36.03625700017437,
+          "command": [
+            "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\candidate\\SuperMarioBrosRecomp.exe",
+            "G:/Temp/Codex/nes110-net-digest-server-v1-20261031/baserom.nes",
+            "--headless",
+            "--frames",
+            "1100",
+            "--realtime",
+            "--no-save",
+            "--config",
+            "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\runs\\2-candidate\\0\\config.ini",
+            "--mods-root",
+            "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\candidate\\mods"
+          ],
+          "env": {
+            "NESRECOMP_BENCHMARK_POOL_RESERVED": "1",
+            "NESRECOMP_NO_LAUNCHER": "1",
+            "NES_NETPLAY": "1",
+            "NES_NET_SLOT": "0",
+            "NES_NET_SLOTS": "2",
+            "NES_NET_BIND": "127.0.0.1:61307",
+            "NES_NET_PEER": "127.0.0.1:61309",
+            "NES_NET_SESSION_CONFIG": "nes-session/1;vw=256;ws=0:1:0:1;coop=0:player;",
+            "NES_NET_SESSION_ID": "61309",
+            "NES_NET_TEST_PAD": "0:90",
+            "NES_NET_MATCH_TICKS": "900",
+            "NES_NET_SHOT_TICK": "850",
+            "NES_NET_DELAY": "0",
+            "RBE_RB_ADAPT_DELAY": "0",
+            "RBE_RB_AUTO_DELAY": "0",
+            "NES_NET_SRAM_SYNC": "1",
+            "NES_NET_CONNECT_TIMEOUT_MS": "15000",
+            "NES_NET_FINAL_STATE": "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\runs\\2-candidate\\0\\final.rbstate",
+            "SDL_AUDIODRIVER": "dummy",
+            "SDL_VIDEODRIVER": "dummy",
+            "SDL_RENDER_DRIVER": "software",
+            "NES_RB_FORCE_MISPREDICT": "0"
+          },
+          "driver": {
+            "sim": 902,
+            "episodes": 45,
+            "invents": 401,
+            "promotes": 398,
+            "resim_ticks": 266,
+            "desyncs": 0,
+            "replays_changed": 47,
+            "replays_same": 219,
+            "confirmed": 889,
+            "rtt_ms": 32
+          },
+          "totals": {
+            "save_us": 952884.7,
+            "load_us": 28800.1,
+            "digest_us": 551805.0,
+            "saves": 1221.0,
+            "loads": 47.0,
+            "digests": 1221.0
+          },
+          "admitted": 1173,
+          "cpu_ms_per_admitted_tick": 10.310102301790282,
+          "digest_elapsed_us_per_image": 451.92874692874693,
+          "shot_digests": [
+            "NET_TICK_DIGEST tick=850 live master=01b836b2 cpu_wram=179d16f9 ppu=9f6f2b91 apu_io_mods=ff9eb07c\r"
+          ]
+        },
+        {
+          "slot": 1,
+          "exit": 0,
+          "cpu_seconds": 12.4375,
+          "wall_seconds": 36.029737000353634,
+          "command": [
+            "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\candidate\\SuperMarioBrosRecomp.exe",
+            "G:/Temp/Codex/nes110-net-digest-server-v1-20261031/baserom.nes",
+            "--headless",
+            "--frames",
+            "1100",
+            "--realtime",
+            "--no-save",
+            "--config",
+            "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\runs\\2-candidate\\1\\config.ini",
+            "--mods-root",
+            "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\candidate\\mods"
+          ],
+          "env": {
+            "NESRECOMP_BENCHMARK_POOL_RESERVED": "1",
+            "NESRECOMP_NO_LAUNCHER": "1",
+            "NES_NETPLAY": "1",
+            "NES_NET_SLOT": "1",
+            "NES_NET_SLOTS": "2",
+            "NES_NET_BIND": "127.0.0.1:61308",
+            "NES_NET_PEER": "127.0.0.1:61310",
+            "NES_NET_SESSION_CONFIG": "nes-session/1;vw=256;ws=0:1:0:1;coop=0:player;",
+            "NES_NET_SESSION_ID": "61309",
+            "NES_NET_TEST_PAD": "1:90",
+            "NES_NET_MATCH_TICKS": "900",
+            "NES_NET_SHOT_TICK": "850",
+            "NES_NET_DELAY": "0",
+            "RBE_RB_ADAPT_DELAY": "0",
+            "RBE_RB_AUTO_DELAY": "0",
+            "NES_NET_SRAM_SYNC": "1",
+            "NES_NET_CONNECT_TIMEOUT_MS": "15000",
+            "NES_NET_FINAL_STATE": "G:\\Temp\\Codex\\nes110-net-digest-server-v1-20261031\\runs\\2-candidate\\1\\final.rbstate",
+            "SDL_AUDIODRIVER": "dummy",
+            "SDL_VIDEODRIVER": "dummy",
+            "SDL_RENDER_DRIVER": "software",
+            "NES_RB_FORCE_MISPREDICT": "0"
+          },
+          "driver": {
+            "sim": 902,
+            "episodes": 53,
+            "invents": 704,
+            "promotes": 698,
+            "resim_ticks": 301,
+            "desyncs": 0,
+            "replays_changed": 228,
+            "replays_same": 73,
+            "confirmed": 889,
+            "rtt_ms": 34
+          },
+          "totals": {
+            "save_us": 941731.7,
+            "load_us": 32536.3,
+            "digest_us": 540634.0,
+            "saves": 1276.0,
+            "loads": 57.0,
+            "digests": 1276.0
+          },
+          "admitted": 1218,
+          "cpu_ms_per_admitted_tick": 10.211412151067323,
+          "digest_elapsed_us_per_image": 423.69435736677116,
+          "shot_digests": [
+            "NET_TICK_DIGEST tick=850 live master=01b836b2 cpu_wram=179d16f9 ppu=9f6f2b91 apu_io_mods=ff9eb07c\r"
+          ]
+        }
+      ],
+      "whole_match_cpu_seconds": 24.53125,
+      "admitted": 2391,
+      "whole_cpu_ms_per_admitted_tick": 10.259828523630281,
+      "endpoint_sha256": "1c0de62f30a649e1b2250d0fcd9bb97fe7e7a7d6b86752b6491820fa8e661480",
+      "pcm": {
+        "peer_equal": false,
+        "bytes": [
+          1468,
+          1466
+        ],
+        "sha256": [
+          "72912c1e54ebdf7e272cb97446d4d97d596eec93f5db58d9b6afb404e713e33b",
+          "d4b8edb2bb8ff9fbd1a36911e72e67fa789b195e0b4536913e1712051e425245"
+        ]
+      },
+      "host_core_before": [
+        [
+          16227832812500,
+          19150742656250,
+          3019765937500
+        ],
+        [
+          16964935625000,
+          18715076406250,
+          3455430781250
+        ],
+        [
+          17172731718750,
+          18777220937500,
+          3393286250000
+        ],
+        [
+          16457473593750,
+          18284393437500,
+          3886113750000
+        ]
+      ],
+      "host_core_after": [
+        [
+          16228002187500,
+          19150957656250,
+          3019913281250
+        ],
+        [
+          16965003125000,
+          18715199531250,
+          3455670000000
+        ],
+        [
+          17172914062500,
+          18777437031250,
+          3393432500000
+        ],
+        [
+          16457747656250,
+          18284707812500,
+          3886161718750
+        ]
+      ]
+    }
+  ],
+  "collection": {
+    "completed_planned_legs": 8,
+    "all_qualified": false,
+    "failures": [
+      {
+        "label": "0",
+        "mode": "candidate",
+        "exit": 1
+      }
+    ],
+    "note": "All planned legs retained. Completing collection does not waive any failure, qualify a candidate, or establish a gain."
+  },
+  "archives": [
+    {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\net-digest-server-partial-evidence-v1.zip",
+      "bytes": 779399,
+      "sha256": "2eeddff5b1d5307a5459210d4788171dc2bda2e5c9bef55ea2524866b8123a3b"
+    },
+    {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\net-digest-server-final-evidence-v1.zip",
+      "bytes": 1556702,
+      "sha256": "e9bca4674d78b0b54d139d0545dcefc97dfbfb6a4b58a4992b85bd20f5caf842"
+    },
+    {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\net-digest-v1-source-diagnostic-evidence.zip",
+      "bytes": 552042,
+      "sha256": "d9c50461e35df5743d64c0f13cebc7955a96ff3e03c7ee4057da1fc49ff4a389"
+    }
+  ],
+  "limitations": [
+    "Four FNV baseline runs pass; three xxHash candidate runs pass and one genuinely diverges. Its two peers stop confirming at306, log8/6desyncs and have differing CPU/RAM/PPU/picture/APU/trace/background at the same850tick. Earlier successful candidate and all other passing runs have identical full850state bytes. A source/fixture pass does not waive the actual failure.",
+    "Cause remains unresolved. xxHash arithmetic and byte domains review correctly; protocol uses opaque32bit digests. A timing-sensitive replay fork is plausible but not established shared because no baseline reproduced it. No accepted CPU improvement, regression-cause claim or new runtime PR.",
+    "Portable scalar XXH32 v0.8.3 unmodified headerSHA17973c0dc49d9854ca26caa191f0e12f7a424b68858d9a78de3860d959d85e4b with BSD2notice; only32bit interface/memcpy access, no optional instructions. MinGWx64 and actual MSVCWin32 fixture runs pass knownvectors and independent materialized byte-domain, unaligned, valid/malformed/truncated checks.",
+    "The prior fused FNV digest/cached image/replay presentation suppression are baseline, not newly credited. Prototype replaces the private digest algorithm while retaining exact authoritative bytes, master/partition domains, simulation/trace behavior, exact executable/content checks and existing protocol. Historical private FNV values were not imposed as a constraint.",
+    "NET boot still forces trace and disables native intervals. Capability/common-profile exchange issuebeads-2dw.1.100 remains open/unfixed; this prototype adds no simulation profile or feature negotiation claim. Full capture ownership/changed-region hashing and qualified trace-off remain residuals.",
+    "Current supported full SMB1 NETON/UIOFF/HLE build uses frozen accepted engine/title plus common private850state/host850PCM probes and inclusive timing counters.107objects differ only at digest objectindex103;106othersidentical. Private UI-OFF SDL_MAIN_HANDLED entryproperty addresses a known setup gap; initialfailedlink retained.",
+    "SERVER runs realUDP with20msminimum hold each direction, fixed0inputdelay,900tickslimit, neutralboot then actualgamepadroute. Forcedmisprediction explicitly0. Fullstate capture is NETtick850/headerframe851; PCM capture is hostframe850, a distinct output-domain label. Realresimulation and gameplaymode1/task3 are observed in passinglegs.",
+    "Both warmups excluded and threealternatingpairs collected; initialcontroller stopped on genuinefailure, explicitresume collected only the remainingfouralreadyplannedlegs, keeping failure active. Failedleg is not an admitted performance result; full pairs do not qualify a package. PerprocessCPU and live/replay workcounts retained. Normalized CPU includes setup/session overhead and is diagnostic, not a proven whole-game gain.",
+    "Inclusive capture/load/digest totals are elapsedwall scopes including required work/preemption/measurement, neither exclusiveCPU nor removablebounds. Offline snapshot throughput does not qualify NET.",
+    "Nonempty hostframe850PCM differs between peers in all four baseline runs and the successful candidate runs. This is an observed shared baseline audio-output difference; its cause/currentbuild postcatchupPCM qualification is unresolved and it is not treated as a candidate-only failure.",
+    "Earlier localdiagnosticv1 aborted on WindowsUDP closedendpointICMP; v2 bothprocessesexit0 but unaligneddrainframes903/904 made finalfilecomparison inappropriate. Corrected sameNET850image probe avoids relabeling differentendpoints as a defect; candidate0 failure remains genuine same850 divergence.",
+    "Local2CPU reservation was denied, so compatibleSERVER with measuredheadroom ran exactbinarypair. Both portions use samehost/configuration/CPUs and retain all receipts/rawnegative results. No alreadyaccepted gameplay checks or large new matrix repeated. No merge/release; finalCLI/fivetitle builds/combinedownerhandoff remain pending."
+  ]
+}

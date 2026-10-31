@@ -17,7 +17,7 @@ original HD runtime. See [HD results](2026-10-28-hd-plan-results.md), including
 the rejected universal packages and SMB's unchanged-runtime proof. Zelda's
 fixed SNROM SRAM code now joins the native deadline service; see
 [SRAM results](2026-10-28-sram-native-results.md). SERVER Fit improves5.128%
-and Remastered1.442%; stock is neutral/inconclusive. Twenty-three items now have
+and Remastered1.442%; stock is neutral/inconclusive. Twenty-four items now have
 qualified evaluation decisions; NES01 is qualified for whole stable HLE raster
 jobs and NES29 remains parked.
 Guarded native ROM is now evaluated under NES09; see
@@ -503,13 +503,19 @@ close the per-pixel raster or APU-event algorithm work under NES01/NES06.
   Evidence: [runner/cyc/cyc_state.c:104](../../runner/cyc/cyc_state.c#L104), [runner/cyc/cyc_state.c:82](../../runner/cyc/cyc_state.c#L82).
 
 
-- [ ] **NES22 · P2 · Rollback capture/digest/replay ownership**
+- [x] **NES22 · P2 · Rollback capture/digest/replay ownership**
 
   The prior fused digest and presentation-skipping replay must not be credited again. Remaining candidates are common authoritative capture ownership, changed-region hashing and avoiding duplicate host/mod reconstruction during actual delayed-peer replay.
 
   Scope: Actual delayed-peer cycle netplay and current-build replay.
 
-  Next: Only if netplay is selected: one real delayed-peer workload with actual replay ticks and full endpoint-state/digest checks. Do not infer rollback cost from offline snapshots.
+  Evaluation: Portable full-domain xxHash32 digest prototype is rejected and
+  unselected after a genuine delayed-peer candidate fork. Four baseline runs
+  pass; three candidate runs pass and one fails. Cause remains unresolved;
+  this is not labeled shared or waived. Fixtures pass on x64/Win32, but actual
+  gameplay failure prevents acceptance. No performance gain is selected.
+  Capture ownership, changed-region hashing and negotiated trace-off remain
+  residuals. [Results](2026-10-31-rollback-digest-results.md).
 
   Preserve: Deterministic peer input, current-build restore, all authoritative state and before-frame-0 capability/profile agreement; same-host checks do not establish cross-build compatibility.
 
@@ -687,6 +693,6 @@ working portable implementation. Netplay settles a common validated profile
 before frame 0; platform compilation alone is not compatibility qualification.
 
 Audit completion closes only `beads-2dw.1.109`'s investigation/deliverable.
-Current execution has twenty-three scoped evaluation decisions, seven unresolved
+Current execution has twenty-four scoped evaluation decisions, six unresolved
 items and parked NES29. The implementation campaign and final combined owner
 handoff remain open; a scoped decision is not architectural exhaustion.

@@ -30,7 +30,8 @@
     "2026-10-31-dma-service-results.json",
     "2026-10-31-blank-interval-results.json",
     "2026-10-31-native-service-results.json",
-    "2026-10-31-chr-plan-results.json"
+    "2026-10-31-chr-plan-results.json",
+    "2026-10-31-rollback-digest-results.json"
   ],
   "priorities": "Order expresses expected scope and evidence, not measured recoverable cost. Overlapping packages are not additive.",
   "acceptance": "Each game neutral or positive. Small mixed samples inconclusive. Shared original/candidate defects are separate. Native saves protected; old save-state compatibility never required.",
@@ -987,7 +988,7 @@
       "package": "state-ownership",
       "priority": "P2",
       "title": "Rollback capture/digest/replay ownership",
-      "status": "open-unmeasured",
+      "status": "evaluated-rejected-digest-replay-fork",
       "evidence": [
         {
           "file": "runner/cyc/cyc_net.c",
@@ -1004,15 +1005,16 @@
           "link": "../../runner/cyc/cyc_session.c#L197"
         }
       ],
-      "remaining": "The prior fused digest and presentation-skipping replay must not be credited again. Remaining candidates are common authoritative capture ownership, changed-region hashing and avoiding duplicate host/mod reconstruction during actual delayed-peer replay.",
+      "remaining": "Portable full-domain xxHash32 prototype rejected after one actual candidate replay fork;4/4baselinepasses,3/4candidatepasses. Cause unresolved, no shared failure claim. Capture ownership/changed-region hashing and negotiated trace-off remain residuals; capability issue100 stays open.",
       "affected_profiles": [
         "Actual delayed-peer cycle netplay and current-build replay"
       ],
-      "next_decisive_check": "Only if netplay is selected: one real delayed-peer workload with actual replay ticks and full endpoint-state/digest checks. Do not infer rollback cost from offline snapshots.",
+      "next_decisive_check": "Independent durable Beads handoff, then next serial item. Any revisit must resolve the actual replay fork; do not preserve private FNV values as a new constraint.",
       "required_behavior": "Deterministic peer input, current-build restore, all authoritative state and before-frame-0 capability/profile agreement; same-host checks do not establish cross-build compatibility.",
       "prior_issue": "beads-2dw.1.100",
       "measured_additional_gain": null,
-      "execution_status": "remaining-evaluation"
+      "execution_status": "evaluated-unselected-prototype",
+      "result_file": "2026-10-31-rollback-digest-results.json"
     },
     {
       "id": "NES23",
@@ -1307,7 +1309,7 @@
   ],
   "execution": {
     "issue": "beads-2dw.1.110",
-    "branch": "perf/nes12-world-ownership",
+    "branch": "perf/nes22-rollback-ownership",
     "base": "fc0bf3fa46a710464960c0a1f2d3b83b4d345600",
     "status": "in-progress",
     "evidence_root": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028",
@@ -1318,12 +1320,12 @@
     "owner_handoff_ready": false
   },
   "execution_summary": {
-    "evaluated_decisions": 23,
+    "evaluated_decisions": 24,
     "partial_ids": [],
     "parked_ids": [
       "NES29"
     ],
-    "other_unresolved": 7,
+    "other_unresolved": 6,
     "note": "Qualified scope decisions, not architectural exhaustion or a wall-clock completion estimate. Final combined builds and owner approval remain separate."
   }
 }
