@@ -4,7 +4,7 @@
   "issue": "beads-2dw.1.110",
   "campaign": "beads-2wy8.1",
   "report_date": "2026-10-31",
-  "status": "independently-accepted-scoped-runtime-doc-PR-handoff-pending",
+  "status": "scoped-runtime-selected-open-PR; final-independent-durable-handoff-pending",
   "title_commit": "b2bd8fb3219d4bb01605541183f738280f3ad7b5",
   "title_branch": "perf/world-materials-nes19",
   "engine_docs_branch": "perf/nes19-world-materials",
@@ -1588,8 +1588,145 @@
   ],
   "validator": {
     "agent": "/root/validate_nes19",
-    "decision": "source/fixtures/raw performance/eight gameplay bundles/current CMake accepted; finalized docs/PR/durable-record handoff next"
+    "decision": "Source/fixtures/raw measurements/eight boundaries/current CMake/final docs accepted; explicitly instructed scoped PR13. Actual remote PR and durable Beads readback are the remaining serial handoff."
   },
   "evidence_root": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028",
-  "pull_request": "pending"
+  "pull_request": {
+    "number": 13,
+    "html_url": "https://github.com/mstan/LegendOfZeldaNESRecomp/pull/13",
+    "state": "open",
+    "head": "b2bd8fb3219d4bb01605541183f738280f3ad7b5",
+    "base": "fb448b62cef2a2571f34d003b437230144f6ffc1",
+    "head_ref": "perf/world-materials-nes19",
+    "base_ref": "perf/retained-voxel-nes17"
+  },
+  "source_validation_archive": {
+    "file": "world-canvas-source-validation-evidence.zip",
+    "sha256": "fa06b9144c03acea82e8a5a25ff8125c25110f6947df0a815f36d3c69fa3726c",
+    "bytes": 141869,
+    "entries": 62
+  },
+  "storage": {
+    "retained_archives": [
+      {
+        "sha256": "0fa9ea4140fdca4eba8646a10ba890dd9c6102c7c7d08020e407e5af770a9aa8",
+        "file": "local-world-canvas-evidence.zip",
+        "bytes": 16187732
+      },
+      {
+        "sha256": "fd575cb8041b462c0aa478ebaaded88049f9f6c7b9fb9b9d099d5d87bc55af69",
+        "file": "server-world-canvas-evidence.zip",
+        "bytes": 14279417
+      },
+      {
+        "sha256": "2f70978fce63c8cd676bc3abe211aeb88770bd42a901d31fb24fbb193e3914e1",
+        "file": "world-material-attribution-evidence.zip",
+        "bytes": 76056
+      },
+      {
+        "sha256": "fa06b9144c03acea82e8a5a25ff8125c25110f6947df0a815f36d3c69fa3726c",
+        "file": "world-canvas-source-validation-evidence.zip",
+        "bytes": 141869
+      }
+    ],
+    "purpose": "Reproducibility and final supported campaign integration/owner gate",
+    "cleanup": [
+      {
+        "value": [
+          {
+            "archive_sha256": "0fa9ea4140fdca4eba8646a10ba890dd9c6102c7c7d08020e407e5af770a9aa8",
+            "host": "DESKTOP-HN15M1H",
+            "files": 366,
+            "removed": true,
+            "root": "G:\\Temp\\Codex\\nes110-world-canvas-v1-20261030",
+            "reparse_or_nested_git": false,
+            "bytes": 462776807
+          },
+          {
+            "archive_sha256": null,
+            "host": "DESKTOP-HN15M1H",
+            "files": 15,
+            "removed": true,
+            "root": "G:\\Temp\\Codex\\nes110-world-profile-v1-20261028",
+            "reparse_or_nested_git": false,
+            "bytes": 22381547
+          }
+        ],
+        "Count": 2
+      },
+      {
+        "value": [
+          {
+            "archive_sha256": "fd575cb8041b462c0aa478ebaaded88049f9f6c7b9fb9b9d099d5d87bc55af69",
+            "host": "SERVER",
+            "files": 124,
+            "removed": true,
+            "root": "G:\\Temp\\Codex\\nes110-world-canvas-v1-20261030",
+            "reparse_or_nested_git": false,
+            "bytes": 341802033
+          },
+          {
+            "archive_sha256": "2f70978fce63c8cd676bc3abe211aeb88770bd42a901d31fb24fbb193e3914e1",
+            "host": "SERVER",
+            "files": 29,
+            "removed": true,
+            "root": "G:\\Temp\\Codex\\nes110-world-profile-v1-20261028",
+            "reparse_or_nested_git": false,
+            "bytes": 25125079
+          },
+          {
+            "host": "SERVER",
+            "sha256": "b70a55e8d1633786021ab5ca5790d3a597992503b9945457674568fd35aaffa5",
+            "removed": true,
+            "file": "G:\\Temp\\Codex\\nes110-world-profile-v1-input.zip",
+            "bytes": 8165297
+          },
+          {
+            "host": "SERVER",
+            "sha256": "073374312995daa21824fdc0cefd2ee507b6164bb7fcf4ca35ccc7f72cb9f94c",
+            "removed": true,
+            "file": "G:\\Temp\\Codex\\unpack-nes110-world-profile-v1.py",
+            "bytes": 217
+          }
+        ],
+        "Count": 4
+      },
+      {
+        "value": [
+          {
+            "sha256": "5114230374653c04d5f279d8a3b1addc378633029ac74e759ae02e006a464c88",
+            "removed": true,
+            "file": "world-canvas-v1-zelda-world.zip",
+            "bytes": 16241298
+          },
+          {
+            "sha256": "67e621551e6862238f104db03e961ce0194896a47f66902c207c0460c24e6053",
+            "removed": true,
+            "file": "world-canvas-v1-zelda-atlas.zip",
+            "bytes": 16241319
+          },
+          {
+            "sha256": "b70a55e8d1633786021ab5ca5790d3a597992503b9945457674568fd35aaffa5",
+            "removed": true,
+            "file": "world-profile-v1-input.zip",
+            "bytes": 8165297
+          }
+        ],
+        "Count": 3
+      }
+    ],
+    "cleanup_when": "After final combined validation and durable evidence retention, remove obsolete products, configurations and worktrees; preserve sources, useful evidence and owner data.",
+    "retained_directories": [
+      "products-world-canvas-v1",
+      "source-world-canvas-v1",
+      "products-world-profile-v1",
+      "source-world-profile-v1",
+      "supported-zelda-nes19",
+      "world-canvas-unit-v2",
+      "validator-nes19",
+      "engine-nes19",
+      "zelda-nes19"
+    ],
+    "item": "NES19"
+  }
 }

@@ -816,7 +816,8 @@
         }
       ],
       "execution_status": "selected-scoped-seamless-world-viewport",
-      "result_file": "2026-10-30-world-canvas-results.json"
+      "result_file": "2026-10-30-world-canvas-results.json",
+      "pull_request": "https://github.com/mstan/LegendOfZeldaNESRecomp/pull/13"
     },
     {
       "id": "NES20",

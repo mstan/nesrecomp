@@ -3,7 +3,10 @@
 NES19, `beads-2dw.1.110`, optimization campaign `beads-2wy8.1`.
 Zelda `b2bd8fb` on `perf/world-materials-nes19`; engine gitlink remains `4e8a5e0`.
 The independent reviewer accepts the source, tests, measurements and current
-supported CMake checks. PR/durable-record handoff is pending.
+supported CMake checks and final docs/register. Following its explicit instruction,
+[Zelda PR13](https://github.com/mstan/LegendOfZeldaNESRecomp/pull/13) is open,
+based on `perf/retained-voxel-nes17`; its head is `b2bd8fb`. Actual PR/durable-record
+readback is the remaining serial handoff. The PR remains unmerged.
 
 | Zelda workload | Host | Reference CPU s | Candidate CPU s | Median reduction | Faster/slower/tied pairs |
 |---|---|---:|---:|---:|---:|
@@ -62,3 +65,9 @@ frozen sources, compile/link identities, raw pairs/settings/telemetry and verifi
 archives are in the [machine-readable record](2026-10-30-world-canvas-results.json).
 Incremental camera-shift reuse remains a deferred residual; upload is NES24.
 This scoped selection does not claim architectural exhaustion. FDS stays parked.
+
+Four SHA-256/CRC-verified evidence/source archives are retained (about29MiB).
+Audited temporary staging on both physical hosts and the three disposable input
+ZIPs were removed. Bounded frozen sources, products, recipes and supported-build
+configuration remain for final integration; `world-canvas-storage.json` records
+exact retained paths, archive identities and cleanup receipts.
