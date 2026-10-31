@@ -13,6 +13,7 @@
 #define CYC_HD_GL 1
 #include <SDL_opengl.h>
 #include "cyc_hd_gpu_shader.h"
+#include "cyc_hd_gpu_cache.h"
 #endif
 #endif
 
@@ -29,6 +30,8 @@
  X(void,TexParameteri,(GLenum,GLenum,GLint)) \
  X(void,TexImage2D,(GLenum,GLint,GLint,GLsizei,GLsizei,GLint,GLenum,GLenum,const void *)) \
  X(void,TexSubImage2D,(GLenum,GLint,GLint,GLint,GLsizei,GLsizei,GLenum,GLenum,const void *)) \
+ X(void,TexImage3D,(GLenum,GLint,GLint,GLsizei,GLsizei,GLsizei,GLint,GLenum,GLenum,const void *)) \
+ X(void,TexSubImage3D,(GLenum,GLint,GLint,GLint,GLint,GLsizei,GLsizei,GLsizei,GLenum,GLenum,const void *)) \
  X(void,TexBuffer,(GLenum,GLenum,GLuint)) X(void,GenBuffers,(GLsizei,GLuint *)) \
  X(void,DeleteBuffers,(GLsizei,const GLuint *)) X(void,BindBuffer,(GLenum,GLuint)) \
  X(void,BufferData,(GLenum,GLsizeiptr,const void *,GLenum)) \
@@ -56,13 +59,13 @@ typedef struct {
 } HdGl;
 typedef struct {
     GLint program,active,vao,array_buffer,unpack_buffer,viewport[4],scissor[4];
-    GLint textures[4],buffer_textures[4],stores[6];
+    GLint textures[5],buffer_textures[5],array_textures[5],stores[8];
     GLboolean mask[4],enabled[8];
 } HdGlState;
 static const GLenum switches[]={GL_BLEND,GL_SCISSOR_TEST,GL_DEPTH_TEST,GL_STENCIL_TEST,
     GL_CULL_FACE,GL_DITHER,GL_FRAMEBUFFER_SRGB,GL_RASTERIZER_DISCARD};
 static const GLenum stores[]={GL_UNPACK_ALIGNMENT,GL_UNPACK_ROW_LENGTH,GL_UNPACK_SKIP_PIXELS,
-    GL_UNPACK_SKIP_ROWS,GL_UNPACK_SWAP_BYTES,GL_UNPACK_LSB_FIRST};
+    GL_UNPACK_SKIP_ROWS,GL_UNPACK_SWAP_BYTES,GL_UNPACK_LSB_FIRST,GL_UNPACK_IMAGE_HEIGHT,GL_UNPACK_SKIP_IMAGES};
 typedef struct {
     GLuint queries[2]; bool pending,composite,present;
     uint64_t serial,prepare_ns,submit_ns,upload_bytes,resident_bytes;
@@ -70,9 +73,11 @@ typedef struct {
 } HdQuery;
 struct CycHdGpu {
     HdGl gl; SDL_Renderer *renderer; SDL_GLContext context; SDL_Texture *output;
-    GLuint program,vao,textures[4],buffers[2];
+    GLuint program,vao,textures[5],buffers[2];
     unsigned width,height,requested_scale,max_texture,max_buffer,plane_w,plane_h,bg_h;
     uint64_t pack_generation,serial,asset_bytes,budget,frames;
+    unsigned cache_slots;
+    HdGpuPageCache cache;
     bool failed,profile; unsigned query_cursor,profile_lines; HdQuery query[4];
 };
 static uint64_t nanoseconds(uint64_t begin) {
@@ -95,19 +100,21 @@ static void state_take(HdGl *g,HdGlState *s) {
     g->GetIntegerv(GL_VIEWPORT,s->viewport);g->GetIntegerv(GL_SCISSOR_BOX,s->scissor);
     g->GetBooleanv(GL_COLOR_WRITEMASK,s->mask);
     for(unsigned i=0;i<8;++i){s->enabled[i]=g->IsEnabled(switches[i]);g->Disable(switches[i]);}
-    for(unsigned i=0;i<6;++i)g->GetIntegerv(stores[i],&s->stores[i]);
-    for(unsigned i=0;i<4;++i){g->ActiveTexture(GL_TEXTURE0+i);g->GetIntegerv(GL_TEXTURE_BINDING_2D,&s->textures[i]);
-        g->GetIntegerv(GL_TEXTURE_BINDING_BUFFER,&s->buffer_textures[i]);}
+    for(unsigned i=0;i<8;++i)g->GetIntegerv(stores[i],&s->stores[i]);
+    for(unsigned i=0;i<5;++i){g->ActiveTexture(GL_TEXTURE0+i);g->GetIntegerv(GL_TEXTURE_BINDING_2D,&s->textures[i]);
+        g->GetIntegerv(GL_TEXTURE_BINDING_BUFFER,&s->buffer_textures[i]);
+        g->GetIntegerv(GL_TEXTURE_BINDING_2D_ARRAY,&s->array_textures[i]);}
     g->BindBuffer(GL_PIXEL_UNPACK_BUFFER,0);
-    for(unsigned i=0;i<6;++i)g->PixelStorei(stores[i],i==0?1:0);
+    for(unsigned i=0;i<8;++i)g->PixelStorei(stores[i],i==0?1:0);
     g->ColorMask(GL_TRUE,GL_TRUE,GL_TRUE,GL_TRUE);
 }
 static void state_restore(HdGl *g,const HdGlState *s) {
     g->UseProgram((GLuint)s->program);g->BindVertexArray((GLuint)s->vao);
     g->BindBuffer(GL_ARRAY_BUFFER,(GLuint)s->array_buffer);g->BindBuffer(GL_PIXEL_UNPACK_BUFFER,(GLuint)s->unpack_buffer);
-    for(unsigned i=0;i<6;++i)g->PixelStorei(stores[i],s->stores[i]);
-    for(unsigned i=0;i<4;++i){g->ActiveTexture(GL_TEXTURE0+i);g->BindTexture(GL_TEXTURE_2D,(GLuint)s->textures[i]);
-        g->BindTexture(GL_TEXTURE_BUFFER,(GLuint)s->buffer_textures[i]);}
+    for(unsigned i=0;i<8;++i)g->PixelStorei(stores[i],s->stores[i]);
+    for(unsigned i=0;i<5;++i){g->ActiveTexture(GL_TEXTURE0+i);g->BindTexture(GL_TEXTURE_2D,(GLuint)s->textures[i]);
+        g->BindTexture(GL_TEXTURE_BUFFER,(GLuint)s->buffer_textures[i]);
+        g->BindTexture(GL_TEXTURE_2D_ARRAY,(GLuint)s->array_textures[i]);}
     g->ActiveTexture((GLenum)s->active);g->Viewport(s->viewport[0],s->viewport[1],s->viewport[2],s->viewport[3]);
     g->Scissor(s->scissor[0],s->scissor[1],s->scissor[2],s->scissor[3]);
     g->ColorMask(s->mask[0],s->mask[1],s->mask[2],s->mask[3]);
@@ -131,48 +138,55 @@ static void image(CycHdGpu *s,unsigned unit,GLint format,unsigned w,unsigned h,G
     s->gl.TexImage2D(GL_TEXTURE_2D,0,format,(GLsizei)w,(GLsizei)h,0,GL_RGBA_INTEGER,type,data);
 }
 static bool frame_valid(CycHdGpu *s,const HdJobFrame *f,uint64_t *asset_bytes) {
-    if(!f || !f->pixels || !f->images || !f->image_count || !f->width || f->width>1280 || f->height!=240 ||
+    if(!f || !f->pixels || (!f->images && f->image_count) || !f->width || f->width>1280 || f->height!=240 ||
         !f->source_scale || f->source_scale>64 || f->width*2>s->max_texture ||
         f->under_end>f->mid_end || f->mid_end>f->background_count || f->background_count>s->max_texture ||
         (f->background_count && !f->backgrounds))return false;
-    uint64_t n=0;
-    if(f->pack_generation!=s->pack_generation){
-        for(unsigned i=0;i<f->image_count;++i){const HdJobImage *im=&f->images[i];
-            uint64_t count=(uint64_t)im->width*im->height;
-            if(!im->pixels || !im->width || !im->height || im->width>(1u<<20) || im->height>(1u<<20) ||
-                im->brightness>65025 || count>s->max_buffer || n/4+count>s->max_buffer)return false;
-            n+=count*4;
-        }
-        if((uint64_t)f->image_count>s->max_buffer)return false;
-    }else n=s->asset_bytes-(uint64_t)f->image_count*16;
-    for(unsigned i=0;i<f->background_count;++i){const HdJobBackground *b=&f->backgrounds[i];
-        if(b->image>=f->image_count || b->brightness>65025 || b->blend>2 ||
-            b->offset_x<-(1<<20) || b->offset_x>(1<<20) || b->offset_y<-(1<<20) || b->offset_y>(1<<20))return false;
+    for(unsigned i=0;i<f->background_count;++i){const HdJobBackground *bg=&f->backgrounds[i];
+        if(bg->offset_x<-(1<<20) || bg->offset_x>(1<<20) || bg->offset_y<-(1<<20) || bg->offset_y>(1<<20))return false;
     }
-    for(size_t i=0;i<(size_t)f->width*f->height;++i){const HdJobPixel *p=&f->pixels[i];
-        for(unsigned layer=0;layer<2;++layer){unsigned mode=(p->flags>>(layer*2))&3;
-            unsigned id=layer?p->sp_image:p->bg_image,uv=layer?p->sp_uv:p->bg_uv;
-            if(mode>HD_JOB_IMAGE)return false;
-            if(mode==HD_JOB_IMAGE && (id>=f->image_count || (uv&~0x707u) ||
-                f->images[id].width<f->source_scale*8 || f->images[id].height<f->source_scale*8))return false;
-        }
-    }
-    *asset_bytes=n+(uint64_t)f->image_count*16;return *asset_bytes<s->budget;
+    if(!cyc_hd_gpu_cache_prepare(&s->cache,f,s->cache_slots,s->max_buffer))return false;
+    *asset_bytes=(uint64_t)s->cache_slots*HD_GPU_PAGE_SIZE*HD_GPU_PAGE_SIZE*4+
+        (uint64_t)(s->cache.image_count?s->cache.image_count:1)*16+
+        (uint64_t)(s->cache.page_count?s->cache.page_count:1)*4;
+    return *asset_bytes<s->budget;
 }
-static bool upload_assets(CycHdGpu *s,const HdJobFrame *f,uint64_t bytes) {
-    if(s->pack_generation==f->pack_generation)return true;
-    uint32_t *meta=(uint32_t *)malloc((size_t)f->image_count*16);
-    if(!meta)return false;
-    HdGl *g=&s->gl;uint64_t offset=0;uint64_t pixels_bytes=bytes-(uint64_t)f->image_count*16;
-    g->BindBuffer(GL_ARRAY_BUFFER,s->buffers[0]);g->BufferData(GL_ARRAY_BUFFER,(GLsizeiptr)pixels_bytes,NULL,GL_STATIC_DRAW);
-    for(unsigned i=0;i<f->image_count;++i){const HdJobImage *im=&f->images[i];
-        uint64_t count=(uint64_t)im->width*im->height;
-        meta[i*4]=(uint32_t)offset;meta[i*4+1]=im->width;meta[i*4+2]=im->height;meta[i*4+3]=im->brightness;
-        g->BufferSubData(GL_ARRAY_BUFFER,(GLintptr)(offset*4),(GLsizeiptr)(count*4),im->pixels);offset+=count;
+static bool upload_assets(CycHdGpu *s,const HdJobFrame *f,uint64_t bytes,uint64_t *uploaded) {
+    HdGl *g=&s->gl;HdGpuPageCache *cache=&s->cache;
+    bool new_pack=s->pack_generation!=f->pack_generation,dirty=new_pack;
+    *uploaded=0;
+    if(new_pack){
+        const uint32_t zero[4]={0};size_t count=cache->image_count?cache->image_count:1;
+        g->BindBuffer(GL_ARRAY_BUFFER,s->buffers[0]);
+        g->BufferData(GL_ARRAY_BUFFER,(GLsizeiptr)(count*16),cache->image_count?cache->image_meta:zero,GL_STATIC_DRAW);
+        texture(s,2,GL_TEXTURE_BUFFER);g->TexBuffer(GL_TEXTURE_BUFFER,GL_RGBA32UI,s->buffers[0]);
+        *uploaded+=count*16;
     }
-    texture(s,1,GL_TEXTURE_BUFFER);g->TexBuffer(GL_TEXTURE_BUFFER,GL_R32UI,s->buffers[0]);
-    g->BindBuffer(GL_ARRAY_BUFFER,s->buffers[1]);g->BufferData(GL_ARRAY_BUFFER,(GLsizeiptr)((size_t)f->image_count*16),meta,GL_STATIC_DRAW);
-    texture(s,2,GL_TEXTURE_BUFFER);g->TexBuffer(GL_TEXTURE_BUFFER,GL_RGBA32UI,s->buffers[1]);free(meta);
+    for(unsigned i=0;i<cache->needed_count;++i){
+        uint32_t page=cache->needed_ids[i],slot=0;bool upload=false;
+        if(!cyc_hd_gpu_cache_reserve(cache,page,&slot,&upload))return false;
+        if(!upload)continue;
+        uint32_t image_id=cache->page_image[page];const HdJobImage *im=&f->images[image_id];
+        uint32_t local=page-cache->image_meta[(size_t)image_id*4];
+        uint32_t cols=(im->width+HD_GPU_PAGE_SIZE-1)/HD_GPU_PAGE_SIZE;
+        uint32_t x=(local%cols)*HD_GPU_PAGE_SIZE,y=(local/cols)*HD_GPU_PAGE_SIZE;
+        uint32_t w=im->width-x,h=im->height-y;
+        if(w>HD_GPU_PAGE_SIZE)w=HD_GPU_PAGE_SIZE;
+        if(h>HD_GPU_PAGE_SIZE)h=HD_GPU_PAGE_SIZE;
+        texture(s,1,GL_TEXTURE_2D_ARRAY);g->PixelStorei(GL_UNPACK_ROW_LENGTH,(GLint)im->width);
+        g->TexSubImage3D(GL_TEXTURE_2D_ARRAY,0,0,0,(GLint)slot,(GLsizei)w,(GLsizei)h,1,
+            GL_RED_INTEGER,GL_UNSIGNED_INT,im->pixels+(size_t)y*im->width+x);
+        *uploaded+=(uint64_t)w*h*4;dirty=true;
+    }
+    g->PixelStorei(GL_UNPACK_ROW_LENGTH,0);
+    if(dirty){
+        uint32_t absent=HD_GPU_PAGE_ABSENT;size_t count=cache->page_count?cache->page_count:1;
+        g->BindBuffer(GL_ARRAY_BUFFER,s->buffers[1]);
+        if(new_pack)g->BufferData(GL_ARRAY_BUFFER,(GLsizeiptr)(count*4),cache->page_count?cache->page_slots:&absent,GL_DYNAMIC_DRAW);
+        else g->BufferSubData(GL_ARRAY_BUFFER,0,(GLsizeiptr)(count*4),cache->page_slots);
+        texture(s,4,GL_TEXTURE_BUFFER);g->TexBuffer(GL_TEXTURE_BUFFER,GL_R32UI,s->buffers[1]);
+        *uploaded+=count*4;
+    }
     s->pack_generation=f->pack_generation;s->asset_bytes=bytes;return true;
 }
 static void query_collect(CycHdGpu *s,HdQuery *q) {
@@ -199,9 +213,10 @@ CycHdGpu *cyc_hd_gpu_create(SDL_Renderer *renderer,SDL_Texture *activation) {
     s->renderer=renderer;s->context=SDL_GL_GetCurrentContext();HdGl *g=&s->gl;
     const char *version=(const char *)g->GetString(GL_VERSION);int major=0,minor=0;
     if(!version || sscanf(version,"%d.%d",&major,&minor)!=2 || major<3 || (major==3 && minor<1)){free(s);return NULL;}
-    GLint units=0,limit=0,buffer_limit=0;g->GetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS,&units);
+    GLint units=0,limit=0,buffer_limit=0,layers=0;g->GetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS,&units);
     g->GetIntegerv(GL_MAX_TEXTURE_SIZE,&limit);g->GetIntegerv(GL_MAX_TEXTURE_BUFFER_SIZE,&buffer_limit);
-    if(units<4 || limit<1024 || buffer_limit<65536){free(s);return NULL;}
+    g->GetIntegerv(GL_MAX_ARRAY_TEXTURE_LAYERS,&layers);
+    if(units<5 || limit<1024 || buffer_limit<65536 || layers<16){free(s);return NULL;}
     s->max_texture=(unsigned)limit;s->max_buffer=(unsigned)buffer_limit;s->budget=256ull*1024*1024;
     const char *extensions=(const char *)g->GetString(GL_EXTENSIONS);
     if(extensions && strstr(extensions,"GL_NVX_gpu_memory_info")){
@@ -217,7 +232,18 @@ CycHdGpu *cyc_hd_gpu_create(SDL_Renderer *renderer,SDL_Texture *activation) {
     GLint linked=0;g->GetProgramiv(s->program,GL_LINK_STATUS,&linked);
     if(!linked){char log[4096]={0};g->GetProgramInfoLog(s->program,sizeof(log),NULL,log);
         fprintf(stderr,"[HD GPU] link: %s\n",log);cyc_hd_gpu_destroy(s,false);return NULL;}
-    g->GenTextures(4,s->textures);g->GenBuffers(2,s->buffers);g->GenVertexArrays(1,&s->vao);
+    g->GenTextures(5,s->textures);g->GenBuffers(2,s->buffers);g->GenVertexArrays(1,&s->vao);
+    s->cache_slots=(unsigned)layers<HD_GPU_PAGE_MAX_SLOTS?(unsigned)layers:HD_GPU_PAGE_MAX_SLOTS;
+    while(s->cache_slots>16 && (uint64_t)s->cache_slots*HD_GPU_PAGE_SIZE*HD_GPU_PAGE_SIZE*4>s->budget/4)s->cache_slots/=2;
+    HdGlState restore;state_take(g,&restore);texture(s,1,GL_TEXTURE_2D_ARRAY);
+    g->TexParameteri(GL_TEXTURE_2D_ARRAY,GL_TEXTURE_MIN_FILTER,GL_NEAREST);
+    g->TexParameteri(GL_TEXTURE_2D_ARRAY,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
+    g->TexParameteri(GL_TEXTURE_2D_ARRAY,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
+    g->TexParameteri(GL_TEXTURE_2D_ARRAY,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
+    g->TexImage3D(GL_TEXTURE_2D_ARRAY,0,GL_R32UI,HD_GPU_PAGE_SIZE,HD_GPU_PAGE_SIZE,(GLsizei)s->cache_slots,
+        0,GL_RED_INTEGER,GL_UNSIGNED_INT,NULL);
+    state_restore(g,&restore);
+    if(g->GetError()!=GL_NO_ERROR){cyc_hd_gpu_destroy(s,false);return NULL;}
     bool timer_capable=major>3 || (major==3 && minor>=3) ||
         (extensions && strstr(extensions,"GL_ARB_timer_query"));
     s->profile=getenv("NESRECOMP_GPU_PROFILE") && timer_capable && g->GenQueries && g->DeleteQueries && g->BeginQuery &&
@@ -268,7 +294,7 @@ SDL_Texture *cyc_hd_gpu_render(CycHdGpu *s,const HdJobFrame *f,unsigned requeste
     }
     HdGl *g=&s->gl;HdGlState restore;state_take(g,&restore);
     bool new_assets=s->pack_generation!=f->pack_generation;uint64_t upload_bytes=0;
-    bool good=upload_assets(s,f,asset_bytes);
+    uint64_t source_upload=0;bool good=upload_assets(s,f,asset_bytes,&source_upload);
     if(good && (s->serial!=f->serial || !s->plane_w || new_assets)){
         upload_bytes=(uint64_t)f->width*f->height*sizeof(HdJobPixel);
         if(s->plane_w!=f->width || s->plane_h!=f->height){
@@ -286,12 +312,12 @@ SDL_Texture *cyc_hd_gpu_render(CycHdGpu *s,const HdJobFrame *f,unsigned requeste
         }
         s->serial=f->serial;
     }
-    if(new_assets)upload_bytes+=asset_bytes;
+    upload_bytes+=source_upload;
     if(good){
-        texture(s,0,GL_TEXTURE_2D);texture(s,1,GL_TEXTURE_BUFFER);texture(s,2,GL_TEXTURE_BUFFER);texture(s,3,GL_TEXTURE_2D);
+        texture(s,0,GL_TEXTURE_2D);texture(s,1,GL_TEXTURE_2D_ARRAY);texture(s,2,GL_TEXTURE_BUFFER);texture(s,3,GL_TEXTURE_2D);texture(s,4,GL_TEXTURE_BUFFER);
         g->UseProgram(s->program);g->BindVertexArray(s->vao);
-        const char *names[]={"jobs","assets","images","backgrounds"};
-        for(unsigned i=0;i<4;++i)g->Uniform1i(g->GetUniformLocation(s->program,names[i]),(GLint)i);
+        const char *names[]={"jobs","source_pages","images","backgrounds","page_map"};
+        for(unsigned i=0;i<5;++i)g->Uniform1i(g->GetUniformLocation(s->program,names[i]),(GLint)i);
 #define HD_UNIFORM(name,value) g->Uniform1i(g->GetUniformLocation(s->program,name),(GLint)(value))
         HD_UNIFORM("output_scale",scale);HD_UNIFORM("source_scale",f->source_scale);HD_UNIFORM("image_count",f->image_count);
         HD_UNIFORM("under_end",f->under_end);HD_UNIFORM("mid_end",f->mid_end);HD_UNIFORM("bg_count",f->background_count);HD_UNIFORM("hud_rows",f->hud_rows);
@@ -333,11 +359,12 @@ void cyc_hd_gpu_destroy(CycHdGpu *s,bool lost){
     if(!s)return;
     if(!lost && s->context && SDL_GL_GetCurrentContext()==s->context){
         if(s->profile)for(unsigned i=0;i<4;++i){query_collect(s,&s->query[i]);s->gl.DeleteQueries(2,s->query[i].queries);}
-        s->gl.DeleteTextures(4,s->textures);s->gl.DeleteBuffers(2,s->buffers);
+        s->gl.DeleteTextures(5,s->textures);s->gl.DeleteBuffers(2,s->buffers);
         if(s->vao)s->gl.DeleteVertexArrays(1,&s->vao);
         if(s->program)s->gl.DeleteProgram(s->program);
     }
     if(s->output)SDL_DestroyTexture(s->output);
+    cyc_hd_gpu_cache_destroy(&s->cache);
     free(s);
 }
 #else

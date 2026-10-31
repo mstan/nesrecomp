@@ -13,6 +13,111 @@ extern void hdpack_gpu_probe_check(const HdJobFrame *, unsigned,
                                    const uint32_t *, size_t);
 #endif
 
+#ifdef NESRECOMP_HDPACK_CACHE_PROBE
+#include "../cyc_hd_gpu_cache.h"
+static void check_page_cache(void)
+{
+    /* The cache never reads or owns source pixels; synthetic large source
+     * extents exercise metadata/ROI admission without allocating that image. */
+    uint32_t source=0xff123456;
+    HdJobImage images[3]={{&source,8,8,255},{&source,8,8,255},{&source,8,8,255}};
+    HdJobPixel pixels[4]={{0}};
+    HdJobBackground bg={2,0,0,255,0};
+    HdJobFrame f={0};f.pack_generation=1;f.width=f.height=f.source_scale=1;
+    f.image_count=3;f.images=images;f.pixels=pixels;f.backgrounds=&bg;
+    pixels[0].flags=HD_JOB_IMAGE|(HD_JOB_IMAGE<<HD_JOB_SP_SHIFT);
+    pixels[0].bg_image=0;pixels[0].sp_image=1;
+    HdGpuPageCache c={0};uint32_t slot;bool upload;
+    assert(cyc_hd_gpu_cache_prepare(&c,&f,2,1000000));
+    assert(c.page_count==3 && c.needed_count==2);
+    assert(cyc_hd_gpu_cache_reserve(&c,0,&slot,&upload) && upload && slot==0);
+    assert(cyc_hd_gpu_cache_reserve(&c,1,&slot,&upload) && upload && slot==1);
+    assert(cyc_hd_gpu_cache_reserve(&c,1,&slot,&upload) && !upload && slot==1);
+    pixels[0].flags=HD_JOB_IMAGE;pixels[0].bg_image=2;
+    assert(cyc_hd_gpu_cache_prepare(&c,&f,2,1000000));
+    assert(cyc_hd_gpu_cache_reserve(&c,2,&slot,&upload) && upload && slot==0);
+    assert(c.page_slots[0]==HD_GPU_PAGE_ABSENT && c.page_slots[1]==1);
+    /* Page1 is older than page2, but the entire new needed set protects it
+     * before page0 is reserved (page0 is deliberately first in needed_ids). */
+    pixels[0].flags=HD_JOB_IMAGE|(HD_JOB_IMAGE<<HD_JOB_SP_SHIFT);pixels[0].bg_image=0;
+    assert(cyc_hd_gpu_cache_prepare(&c,&f,2,1000000));
+    assert(c.needed_ids[0]==0 && c.needed_ids[1]==1);
+    assert(cyc_hd_gpu_cache_reserve(&c,0,&slot,&upload) && upload && slot==0);
+    assert(cyc_hd_gpu_cache_reserve(&c,1,&slot,&upload) && !upload && slot==1);
+    uint32_t old_slots[2],old_pages[3];uint64_t old_tick=c.tick;
+    memcpy(old_slots,c.slot_pages,sizeof old_slots);memcpy(old_pages,c.page_slots,sizeof old_pages);
+    f.background_count=f.under_end=f.mid_end=1;
+    assert(!cyc_hd_gpu_cache_prepare(&c,&f,2,1000000));
+    assert(!memcmp(old_slots,c.slot_pages,sizeof old_slots));
+    assert(!memcmp(old_pages,c.page_slots,sizeof old_pages));
+    assert(c.tick==old_tick && c.needed_count==0);
+    assert(!cyc_hd_gpu_cache_reserve(&c,1,&slot,&upload));
+    f.background_count=f.under_end=f.mid_end=0;++f.pack_generation;
+    assert(cyc_hd_gpu_cache_prepare(&c,&f,2,1000000));
+    for(unsigned i=0;i<3;++i)assert(c.page_slots[i]==HD_GPU_PAGE_ABSENT);
+    assert(cyc_hd_gpu_cache_reserve(&c,0,&slot,&upload) && upload);
+    assert(cyc_hd_gpu_cache_reserve(&c,1,&slot,&upload) && upload);
+    c.tick=UINT64_MAX;
+    assert(cyc_hd_gpu_cache_reserve(&c,1,&slot,&upload) && !upload);
+    assert(c.tick>c.slot_count && c.tick<UINT64_MAX);
+    assert(!cyc_hd_gpu_cache_prepare(&c,&f,2049,1000000));
+    assert(!cyc_hd_gpu_cache_prepare(&c,&f,2,11));
+    cyc_hd_gpu_cache_destroy(&c);
+    assert(!c.image_meta && !c.page_slots && !c.slot_pages && !c.needed_count);
+
+    images[0]=(HdJobImage){&source,9216,3072,255};
+    images[1]=(HdJobImage){&source,512,512,255};
+    memset(pixels,0,sizeof pixels);f.image_count=2;f.width=f.height=1;f.source_scale=64;
+    pixels[0].flags=(HD_JOB_IMAGE<<HD_JOB_SP_SHIFT)|HD_JOB_HMIRROR|HD_JOB_VMIRROR;
+    pixels[0].sp_image=1;pixels[0].sp_uv=2u<<8;
+    bg=(HdJobBackground){0,2,3,255,0};f.background_count=f.under_end=f.mid_end=1;
+    ++f.pack_generation;
+    assert(cyc_hd_gpu_cache_prepare(&c,&f,2,1000000));
+    assert(c.page_count==72*24+16 && c.needed_count==2);
+    assert(c.needed[73] && c.needed[72*24+7]);
+    pixels[0].flags&=~(uint32_t)HD_JOB_VMIRROR;
+    assert(cyc_hd_gpu_cache_prepare(&c,&f,2,1000000));
+    assert(c.needed_count==2 && c.needed[72*24+7]);
+    /* Signed clipping and the HUD exclusion affect only under-backgrounds. */
+    memset(pixels,0,sizeof pixels);f.width=f.height=2;f.hud_rows=1;
+    bg.offset_x=bg.offset_y=-1;
+    assert(cyc_hd_gpu_cache_prepare(&c,&f,2,1000000));
+    assert(c.needed_count==1 && c.needed[0]);
+    f.hud_rows=2;
+    assert(cyc_hd_gpu_cache_prepare(&c,&f,2,1000000) && !c.needed_count);
+    f.under_end=0;
+    assert(cyc_hd_gpu_cache_prepare(&c,&f,2,1000000));
+    assert(c.needed_count==1 && c.needed[0]);
+    bg.offset_x=INT32_MAX;bg.offset_y=INT32_MIN;
+    assert(cyc_hd_gpu_cache_prepare(&c,&f,2,1000000) && !c.needed_count);
+    cyc_hd_gpu_cache_destroy(&c);
+
+    /* A source cell crossing a page corner needs four pages, not its whole
+     * 8x8-cell image. Output scale is intentionally absent from the API. */
+    images[0]=(HdJobImage){&source,504,504,255};f.image_count=1;
+    f.width=f.height=1;f.source_scale=63;f.hud_rows=0;
+    f.background_count=f.under_end=f.mid_end=0;
+    pixels[0].flags=HD_JOB_IMAGE;pixels[0].bg_image=0;pixels[0].bg_uv=2|(2u<<8);
+    ++f.pack_generation;
+    assert(cyc_hd_gpu_cache_prepare(&c,&f,4,1000000));
+    assert(c.page_count==16 && c.needed_count==4);
+    assert(c.needed[0] && c.needed[1] && c.needed[4] && c.needed[5]);
+    cyc_hd_gpu_cache_destroy(&c);
+
+    images[0]=(HdJobImage){&source,129,1,255};f.source_scale=1;f.width=2;f.height=1;
+    memset(pixels,0,sizeof pixels);bg=(HdJobBackground){0,127,0,255,0};
+    f.background_count=f.under_end=f.mid_end=1;++f.pack_generation;
+    assert(cyc_hd_gpu_cache_prepare(&c,&f,2,1000000));
+    assert(c.page_count==2 && c.needed_count==2 && c.needed[0] && c.needed[1]);
+    uint64_t generation=c.pack_generation;
+    images[0].width=128*1025;images[0].height=128*1024;++f.pack_generation;
+    assert(!cyc_hd_gpu_cache_prepare(&c,&f,2,UINT64_MAX));
+    assert(c.pack_generation==generation);
+    cyc_hd_gpu_cache_destroy(&c);
+    cyc_hd_gpu_cache_destroy(&c);
+}
+#endif
+
 uint8_t g_ram[0x800], g_ppuscroll_x, g_ppuscroll_y, g_ppuctrl;
 uint64_t g_frame_count;
 unsigned char *stbi_load(const char *p,int *w,int *h,int *c,int n) {
@@ -137,6 +242,9 @@ static void check_job_scales(const HdJobFrame *frame,const uint32_t *expected)
 }
 
 int main(void) {
+#ifdef NESRECOMP_HDPACK_CACHE_PROBE
+    check_page_cache();
+#endif
     for(int k=0;k<3;k++)for(int i=0;i<16;i++)patterns[k][i]=(uint8_t)(k*71+i*29);
     const int scales[]={1,2,3,10};unsigned count=0;
     const HdJobFrame *retained=NULL;uint32_t *retained_pixels=NULL;
