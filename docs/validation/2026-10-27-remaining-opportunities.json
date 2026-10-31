@@ -338,7 +338,7 @@
           "link": "../../runner/cyc/hw_machine.c#L57"
         }
       ],
-      "remaining": "Stable nonvisible NTSC device intervals selected after five-game stock output/performance qualification. Content-qualified CPU polling-loop elimination, visible rendering-off bulk output, PAL and additional boards remain residuals; no architectural exhaustion claim.",
+      "remaining": "Stable nonvisible NTSC device intervals selected after four-stock plus Zelda Fit output/performance qualification. Content-qualified CPU polling-loop elimination, visible rendering-off bulk output, PAL and additional boards remain residuals; no architectural exhaustion claim.",
       "affected_profiles": [
         "Content-qualified active-gameplay waits and rendering-off intervals"
       ],

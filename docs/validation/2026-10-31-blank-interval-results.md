@@ -5,13 +5,13 @@ Select [PR87](https://github.com/mstan/nesrecomp/pull/87), runtime
 settled nonvisible NTSC spans in bulk, including rendering-enabled VBlank.
 CPU instructions, bus accesses and elapsed guest cycles are retained.
 
-| Stock game | Baseline median CPU s | Candidate median CPU s | Raw reduction | Paired directions | Interpretation |
+| Game/profile | Baseline median CPU s | Candidate median CPU s | Raw reduction | Paired directions | Interpretation |
 | --- | ---: | ---: | ---: | --- | --- |
 | smb3 | 3.312500 | 3.171875 | +4.245% | 2 faster, 1 slower, 0 tied | Neutral/inconclusive |
 | smb | 3.546875 | 3.687500 | -3.965% | 2 faster, 1 slower, 0 tied | Neutral/inconclusive |
 | metroid | 3.531250 | 3.312500 | +6.195% | 3 faster, 0 slower, 0 tied | Observed positive |
 | gumshoe | 2.859375 | 2.796875 | +2.186% | 2 faster, 1 slower, 0 tied | Neutral/inconclusive |
-| zelda | 4.562500 | 4.609375 | -1.027% | 1 faster, 1 slower, 1 tied | Neutral/inconclusive |
+| zelda Fit | 4.562500 | 4.609375 | -1.027% | 1 faster, 1 slower, 1 tied | Neutral/inconclusive |
 
 Each first trial has three matched pairs on this PC after excluded warmups.
 All five routes have identical frame/device/memory, picture and PCM hashes.
@@ -63,3 +63,8 @@ raw CPU/wall samples, source/binary/settings/package identities, capacity
 receipts and hashes for the verified local evidence archives. Disposable live
 QA data is cleaned after archiving; selected binaries/sources remain for final
 integration. Owning issue: `beads-2dw.1.110`; campaign: `beads-2wy8.1`.
+
+Metadata correction: Zelda's retained setup is Seamless Fit at 426x240; the
+other four titles are stock at 256x240. Earlier all-stock wording was wrong.
+Both legs used matched settings; samples, identities, archives and disposition
+are unchanged. Original private harness labels remain historical records.

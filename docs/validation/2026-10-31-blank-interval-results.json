@@ -12287,7 +12287,7 @@
     },
     {
       "title": "zelda",
-      "profile": "stock native HLE, 1280x720 software SDL, audio emulated/mixed/queued to dummy, rewind 100/4",
+      "profile": "Zelda Seamless Fit 426x240, native HLE, 1280x720 software SDL, audio emulated/mixed/queued to dummy, rewind 100/4",
       "performance": {
         "host": "DESKTOP-HN15M1H",
         "title": "zelda",
@@ -15116,7 +15116,7 @@
     "NMI admission requires equal sampled/output level and no pending edge. Device/event boundaries, register settling, DMA/IRQ, trace, HD recording and unsupported configurations retain working adapters.",
     "HLE/LLE native-versus-coupled four-board/four-alignment fixtures pass high NMI, decay deadlines, register/status transitions, visible sprite output, DMA/IRQ/trace/PAL refusal, device/memory/picture/PCM and current snapshot replay.",
     "Only actual selected hardware-machine and PPU objects are replaced, using each original object own compile recipe. Other objects, packages and Zelda canvas order/identity are preserved. These are frozen relink experiments, not claims of five fresh supported regenerations.",
-    "Actual five-game stock correctness and current-build restored gameplay checks pass. Feature profiles, other platforms/backends and final combined supported five-title/CLI regeneration and owner approval remain pending.",
+    "Actual four-stock plus Zelda Fit correctness and current-build restored gameplay checks pass. Feature profiles, other platforms/backends and final combined supported five-title/CLI regeneration and owner approval remain pending.",
     "Local PC capacity permits coexistence; it is not a quiet-host performance guarantee. Three matched pairs plus excluded warmups per first trial; timer quantum and substantial variation are visible. SMB1 five-pair follow-up retained separately; do not pool affinities or count all raw median signs as wins.",
     "Metroid is positive in all three sampled pairs. SMB3, SMB1, Gumshoe and Zelda are neutral/inconclusive; no reproducible individual regression established. Retain exact negative samples/medians for later final combined review.",
     "Native save-state backward compatibility is not required. Native persistent owner saves/settings were isolated and preserved.",
@@ -15169,5 +15169,16 @@
     "utc": "2026-10-31T12:04:21.1795663Z",
     "retained": "Frozen source-blank-v1, products-blank-v1, fixture builds and validation records retained for final integration; no owner files or saves touched",
     "target": "G:\\Temp\\Codex\\nes110-blank-v1-20261031"
+  },
+  "scope_metadata_correction": {
+    "date": "2026-10-31",
+    "reason": "Retained runtime setup shows Zelda picture426x240 (Seamless Fit), while other four titles picture256x240. Earlier all-stock wording was inaccurate. A/B settings were matched; raw samples, identities, archives and disposition unchanged. Original raw harness labels remain historical records.",
+    "actual_profiles": [
+      "SMB3 stock",
+      "SMB1 stock",
+      "Metroid stock",
+      "Gumshoe stock",
+      "Zelda Seamless Fit"
+    ]
   }
 }

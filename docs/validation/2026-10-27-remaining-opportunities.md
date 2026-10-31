@@ -245,7 +245,7 @@ close the per-pixel raster or APU-event algorithm work under NES01/NES06.
   Scope: Content-qualified active-gameplay waits and rendering-off intervals.
 
   Evaluation: Selected settled nonvisible NTSC device intervals in
-  [PR87](https://github.com/mstan/nesrecomp/pull/87). All five stock outputs
+  [PR87](https://github.com/mstan/nesrecomp/pull/87). Four stock titles and Zelda Fit outputs
   and current-build restores match; Metroid is faster in all three sampled
   pairs (6.195% median CPU reduction), other games are neutral/inconclusive
   with all negative samples retained. HLE/LLE, held-high NMI, decay deadlines,
