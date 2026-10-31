@@ -17,7 +17,7 @@ original HD runtime. See [HD results](2026-10-28-hd-plan-results.md), including
 the rejected universal packages and SMB's unchanged-runtime proof. Zelda's
 fixed SNROM SRAM code now joins the native deadline service; see
 [SRAM results](2026-10-28-sram-native-results.md). SERVER Fit improves5.128%
-and Remastered1.442%; stock is neutral/inconclusive. Sixteen items now have
+and Remastered1.442%; stock is neutral/inconclusive. Seventeen items now have
 qualified evaluation decisions; NES01 is qualified for whole stable HLE raster
 jobs and NES29 remains parked.
 Guarded native ROM is now evaluated under NES09; see
@@ -456,20 +456,19 @@ close the per-pixel raster or APU-event algorithm work under NES01/NES06.
 ### State, replay and observation ownership
 
 
-- [ ] **NES21 · P2 · One authoritative state image for save, rewind and mod records**
+- [x] **NES21 · P2 · One authoritative state image for save, rewind and mod records**
 
   State serialization still copies machine/cart/frame products plus host/mod payloads. Prior fused digest and inactive-HD work are already baseline. Evaluate immutable frame images, mutation generations and derived-product reconstruction across the complete capture/restore lifetime.
 
   Scope: Current-build save/rewind-heavy games; active HD/world records when enabled.
 
-  Evaluation: Complete terrain viewport and old actor rectangle restoration
-  selected at Zelda `b2bd8fb`; engine runtime unchanged. Full seamless atlas
-  CPU median improves21.83% in five faster pairs; Fit is neutral/inconclusive.
-  Eight original/candidate boundary bundles pass, including bomb/menu/death,
-  real portals, resizing and current-build loads. See
-  [world viewport results](2026-10-30-world-canvas-results.md).
-  Camera changes still rebuild; incremental camera-shift reuse is explicitly
-  deferred, and upload remains NES24. Complete final combined owner builds.
+  Evaluation: Stable rewind-preview ownership selected at engine`8df7b50`.
+  Four stock title medians improve2.09–4.59% with per-pair variation retained;
+  Zelda's opposing exact trials are neutral/inconclusive. Real full-history
+  rewind/native-replay/current-load and independent lifetime fixtures pass.
+  Existing canonical state/ring ownership is baseline, not newly credited.
+  See [rewind history results](2026-10-31-rewind-history-results.md).
+  Serializer/directwriter and thumbnail residuals remain deferred, not exhausted.
 
   Preserve: Current-build save/load/rewind correctness and malformed-input rejection; persistent native saves protected. Old-state compatibility, old layout and private cache byte identity are not requirements.
 
