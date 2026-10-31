@@ -24,7 +24,8 @@
     "2026-10-28-retained-voxel-results.json",
     "2026-10-30-world-canvas-results.json",
     "2026-10-31-wide-view-results.json",
-    "2026-10-31-rewind-history-results.json"
+    "2026-10-31-rewind-history-results.json",
+    "2026-10-31-present-upload-results.json"
   ],
   "priorities": "Order expresses expected scope and evidence, not measured recoverable cost. Overlapping packages are not additive.",
   "acceptance": "Each game neutral or positive. Small mixed samples inconclusive. Shared original/candidate defects are separate. Native saves protected; old save-state compatibility never required.",
@@ -1032,7 +1033,7 @@
       "package": "host-delivery",
       "priority": "P2",
       "title": "Frame conversion, texture upload and GPU residency",
-      "status": "open-unmeasured",
+      "status": "evaluated-deferred-region-upload-prototypes",
       "evidence": [
         {
           "file": "runner/cyc/cyc_render.c",
@@ -1049,15 +1050,16 @@
           "link": "../../runner/cyc/cyc_sdl.c#L1203"
         }
       ],
-      "remaining": "Generation reuse for repeated paused presents already exists. Each new picture still goes through full texture upload. Consider indexed-palette presentation, dirty-region upload or direct resident render products together with the compositor.",
+      "remaining": "Both tiled SDL upload prototypes declined after negative atlas screening on software/D3D11. Indexed GPU/native-frame conversion and alternate resident producer/API designs remain unmeasured residuals; no architectural exhaustion claim.",
       "affected_profiles": [
         "Actual SDL stock/wide/HD/voxel presentation; software and selected GPU backend"
       ],
-      "next_decisive_check": "Measure actual active SDL/GPU presentation at stock and one expanded/HD size. Include upload, driver waits and UI composition; headless CRC throughput cannot select this.",
+      "next_decisive_check": "No third tiled-upload tuning trial. Revisit only with a materially different measured complete presentation design. Continue NES23 after independent durable handoff.",
       "required_behavior": "Palette/emphasis, screenshots, filters, resize, UI/HUD and output latency; retain software presentation and supported-platform fallback.",
       "prior_issue": null,
       "measured_additional_gain": null,
-      "execution_status": "remaining-evaluation"
+      "execution_status": "deferred-after-two-built-game-screening-experiments",
+      "result_file": "2026-10-31-present-upload-results.json"
     },
     {
       "id": "NES25",
@@ -1286,7 +1288,7 @@
   ],
   "execution": {
     "issue": "beads-2dw.1.110",
-    "branch": "perf/nes21-state-ownership",
+    "branch": "perf/nes24-present-pipeline",
     "base": "fc0bf3fa46a710464960c0a1f2d3b83b4d345600",
     "status": "in-progress",
     "evidence_root": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028",
@@ -1297,12 +1299,12 @@
     "owner_handoff_ready": false
   },
   "execution_summary": {
-    "evaluated_decisions": 17,
+    "evaluated_decisions": 18,
     "partial_ids": [],
     "parked_ids": [
       "NES29"
     ],
-    "other_unresolved": 13,
+    "other_unresolved": 12,
     "note": "Qualified scope decisions, not architectural exhaustion or a wall-clock completion estimate. Final combined builds and owner approval remain separate."
   }
 }

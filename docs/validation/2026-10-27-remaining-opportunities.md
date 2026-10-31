@@ -17,7 +17,7 @@ original HD runtime. See [HD results](2026-10-28-hd-plan-results.md), including
 the rejected universal packages and SMB's unchanged-runtime proof. Zelda's
 fixed SNROM SRAM code now joins the native deadline service; see
 [SRAM results](2026-10-28-sram-native-results.md). SERVER Fit improves5.128%
-and Remastered1.442%; stock is neutral/inconclusive. Seventeen items now have
+and Remastered1.442%; stock is neutral/inconclusive. Eighteen items now have
 qualified evaluation decisions; NES01 is qualified for whole stable HLE raster
 jobs and NES29 remains parked.
 Guarded native ROM is now evaluated under NES09; see
@@ -504,13 +504,19 @@ close the per-pixel raster or APU-event algorithm work under NES01/NES06.
 ### Host presentation and compiler policies
 
 
-- [ ] **NES24 · P2 · Frame conversion, texture upload and GPU residency**
+- [x] **NES24 · P2 · Frame conversion, texture upload and GPU residency**
 
-  Generation reuse for repeated paused presents already exists. Each new picture still goes through full texture upload. Consider indexed-palette presentation, dirty-region upload or direct resident render products together with the compositor.
+  Compositor generation reuse exists, but every shown picture is still fully
+  uploaded. Evaluate conversion and upload together with the selected producer.
 
   Scope: Actual SDL stock/wide/HD/voxel presentation; software and selected GPU backend.
 
-  Next: Measure actual active SDL/GPU presentation at stock and one expanded/HD size. Include upload, driver waits and UI composition; headless CRC throughput cannot select this.
+  Evaluation: Two pending-damage/retained-texture prototypes deferred after
+  actual full seamless-atlas software/D3D11 screening. v1 always hit rectangle
+  fallback; v2 reduced bytes but increased CPU/upload cost. Independent pixel
+  oracles pass; no runtime adoption. See [upload results](2026-10-31-present-upload-results.md).
+  Indexed conversion and alternate resident producer/API designs remain explicit
+  unmeasured residuals; no third tiled-upload tuning trial.
 
   Preserve: Palette/emphasis, screenshots, filters, resize, UI/HUD and output latency; retain software presentation and supported-platform fallback.
 

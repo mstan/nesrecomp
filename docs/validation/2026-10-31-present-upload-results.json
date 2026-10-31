@@ -1,0 +1,852 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-31",
+  "opportunity": "NES24",
+  "issue": "beads-2dw.1.110",
+  "campaign": "beads-2wy8.1",
+  "decision": "DEFERRED after two unsuccessful region-upload prototypes; no runtime adoption or PR",
+  "scope": "Standalone optional damage-provider registration, pending Zelda damage and retained SDL texture. v1 tiles64x32; v2 tiles128x64. Eligibility mode3>=1M pixels includes sufficiently large Follow views, but runtime measurements are full atlas only. CPU pictures and fallback unchanged by design; eligibility is not qualification.",
+  "runtime_commit": null,
+  "pull_request": null,
+  "engine_branch": "perf/nes24-present-pipeline",
+  "title_branch": "perf/resident-atlas-nes24",
+  "engine_base": "a9455b52edda9507f4d3a801569a40259455f52f",
+  "title_base": "b2bd8fb3219d4bb01605541183f738280f3ad7b5",
+  "results": [
+    {
+      "version": "v1",
+      "title": "The Legend of Zelda",
+      "profile": "Seamless world atlas4096x1472, all128rooms",
+      "host": "DESKTOP-HN15M1H",
+      "backend": "software",
+      "samples": [
+        {
+          "mode": "reference",
+          "index": 0,
+          "product_sha256": "111ae681984aa8f47a0c8e49952cef8a3ad67f761cdc6c0d13d024cddb773ad3",
+          "cpu_seconds": 13.5625,
+          "wall_seconds": 13.839405999999144,
+          "affinity_mask": 4096,
+          "renderer": {
+            "name": "software",
+            "flags": 13,
+            "video": "dummy",
+            "vsync_internal": false
+          },
+          "scopes": {
+            "first": 1802,
+            "last": 3000,
+            "shows": 1199,
+            "bytes": 28916580352,
+            "full": 1199,
+            "partial": 0,
+            "unchanged": 0,
+            "upload_ms": 1083.238
+          },
+          "world_state": {
+            "id": 0,
+            "ok": true,
+            "enabled": true,
+            "stage": "room-simulation",
+            "level": 0,
+            "decoded": 0,
+            "failures": 0,
+            "camera": [
+              0,
+              0
+            ],
+            "size": [
+              4096,
+              1472
+            ],
+            "adjacent_actors": true,
+            "seamless_traversal": true,
+            "simulated_rooms": 128,
+            "actors": 609,
+            "neighbor_ticks": 45085,
+            "handoffs": 0,
+            "menu": 0,
+            "game_mode": 5,
+            "submode": 0,
+            "updating": 1,
+            "scroll_y64": 64,
+            "mask64": 30,
+            "presentation": "world",
+            "scene_room": 119,
+            "scene_level": 0,
+            "ui_bounds": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "mode": "candidate",
+          "index": 0,
+          "product_sha256": "2ae6c79a76cc1c9f14b35a3ac9f92ae81e5037187b1bf34b5db3d3a112736363",
+          "cpu_seconds": 14.90625,
+          "wall_seconds": 15.202451799996197,
+          "affinity_mask": 4096,
+          "renderer": {
+            "name": "software",
+            "flags": 13,
+            "video": "dummy",
+            "vsync_internal": false
+          },
+          "scopes": {
+            "first": 1802,
+            "last": 3000,
+            "shows": 1199,
+            "bytes": 28916580352,
+            "full": 1199,
+            "partial": 0,
+            "unchanged": 0,
+            "upload_ms": 1263.8344
+          },
+          "world_state": {
+            "id": 0,
+            "ok": true,
+            "enabled": true,
+            "stage": "room-simulation",
+            "level": 0,
+            "decoded": 0,
+            "failures": 0,
+            "camera": [
+              0,
+              0
+            ],
+            "size": [
+              4096,
+              1472
+            ],
+            "adjacent_actors": true,
+            "seamless_traversal": true,
+            "simulated_rooms": 128,
+            "actors": 609,
+            "neighbor_ticks": 45085,
+            "handoffs": 0,
+            "menu": 0,
+            "game_mode": 5,
+            "submode": 0,
+            "updating": 1,
+            "scroll_y64": 64,
+            "mask64": 30,
+            "presentation": "world",
+            "scene_room": 119,
+            "scene_level": 0,
+            "ui_bounds": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "median_cpu_seconds": {
+        "reference": 13.5625,
+        "candidate": 14.90625
+      },
+      "median_cpu_reduction_percent": -9.907834101382495,
+      "decision": "not selected; no measured win in bounded screening pair",
+      "raw_archive": "present-upload-v1-evidence.zip",
+      "raw_path": "zelda-software/performance.json"
+    },
+    {
+      "version": "v1",
+      "title": "The Legend of Zelda",
+      "profile": "Seamless world atlas4096x1472, all128rooms",
+      "host": "DESKTOP-HN15M1H",
+      "backend": "direct3d11",
+      "samples": [
+        {
+          "mode": "reference",
+          "index": 0,
+          "product_sha256": "111ae681984aa8f47a0c8e49952cef8a3ad67f761cdc6c0d13d024cddb773ad3",
+          "cpu_seconds": 13.046875,
+          "wall_seconds": 13.204570600006264,
+          "affinity_mask": 4096,
+          "renderer": {
+            "name": "direct3d11",
+            "flags": 10,
+            "video": "windows",
+            "vsync_internal": false
+          },
+          "scopes": {
+            "first": 1802,
+            "last": 3000,
+            "shows": 1199,
+            "bytes": 28916580352,
+            "full": 1199,
+            "partial": 0,
+            "unchanged": 0,
+            "upload_ms": 1428.0944
+          },
+          "world_state": {
+            "id": 0,
+            "ok": true,
+            "enabled": true,
+            "stage": "room-simulation",
+            "level": 0,
+            "decoded": 0,
+            "failures": 0,
+            "camera": [
+              0,
+              0
+            ],
+            "size": [
+              4096,
+              1472
+            ],
+            "adjacent_actors": true,
+            "seamless_traversal": true,
+            "simulated_rooms": 128,
+            "actors": 609,
+            "neighbor_ticks": 45085,
+            "handoffs": 0,
+            "menu": 0,
+            "game_mode": 5,
+            "submode": 0,
+            "updating": 1,
+            "scroll_y64": 64,
+            "mask64": 30,
+            "presentation": "world",
+            "scene_room": 119,
+            "scene_level": 0,
+            "ui_bounds": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "mode": "candidate",
+          "index": 0,
+          "product_sha256": "97b7da1afd4218ccfa7415b6c40b70a0914142fc765c4713f36a906013081ca1",
+          "cpu_seconds": 13.96875,
+          "wall_seconds": 14.484655799999018,
+          "affinity_mask": 4096,
+          "renderer": {
+            "name": "direct3d11",
+            "flags": 10,
+            "video": "windows",
+            "vsync_internal": false
+          },
+          "scopes": {
+            "first": 1802,
+            "last": 3000,
+            "shows": 1199,
+            "bytes": 28916580352,
+            "full": 1199,
+            "partial": 0,
+            "unchanged": 0,
+            "upload_ms": 1635.2058
+          },
+          "world_state": {
+            "id": 0,
+            "ok": true,
+            "enabled": true,
+            "stage": "room-simulation",
+            "level": 0,
+            "decoded": 0,
+            "failures": 0,
+            "camera": [
+              0,
+              0
+            ],
+            "size": [
+              4096,
+              1472
+            ],
+            "adjacent_actors": true,
+            "seamless_traversal": true,
+            "simulated_rooms": 128,
+            "actors": 609,
+            "neighbor_ticks": 45085,
+            "handoffs": 0,
+            "menu": 0,
+            "game_mode": 5,
+            "submode": 0,
+            "updating": 1,
+            "scroll_y64": 64,
+            "mask64": 30,
+            "presentation": "world",
+            "scene_room": 119,
+            "scene_level": 0,
+            "ui_bounds": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "median_cpu_seconds": {
+        "reference": 13.046875,
+        "candidate": 13.96875
+      },
+      "median_cpu_reduction_percent": -7.065868263473063,
+      "decision": "not selected; no measured win in bounded screening pair",
+      "raw_archive": "present-upload-v1-evidence.zip",
+      "raw_path": "zelda-direct3d11/performance.json"
+    },
+    {
+      "version": "v2",
+      "title": "The Legend of Zelda",
+      "profile": "Seamless world atlas4096x1472, all128rooms",
+      "host": "DESKTOP-HN15M1H",
+      "backend": "software",
+      "samples": [
+        {
+          "mode": "reference",
+          "index": 0,
+          "product_sha256": "03921b3e6de673492aa44980bd062e9871076365207bc8dde05cf0b0940bd680",
+          "cpu_seconds": 12.609375,
+          "wall_seconds": 12.80878870000015,
+          "affinity_mask": 8192,
+          "renderer": {
+            "name": "software",
+            "flags": 13,
+            "video": "dummy",
+            "vsync_internal": false
+          },
+          "scopes": {
+            "first": 1802,
+            "last": 3000,
+            "shows": 1199,
+            "bytes": 28916580352,
+            "full": 1199,
+            "partial": 0,
+            "unchanged": 0,
+            "upload_ms": 936.092
+          },
+          "world_state": {
+            "id": 0,
+            "ok": true,
+            "enabled": true,
+            "stage": "room-simulation",
+            "level": 0,
+            "decoded": 0,
+            "failures": 0,
+            "camera": [
+              0,
+              0
+            ],
+            "size": [
+              4096,
+              1472
+            ],
+            "adjacent_actors": true,
+            "seamless_traversal": true,
+            "simulated_rooms": 128,
+            "actors": 609,
+            "neighbor_ticks": 45085,
+            "handoffs": 0,
+            "menu": 0,
+            "game_mode": 5,
+            "submode": 0,
+            "updating": 1,
+            "scroll_y64": 64,
+            "mask64": 30,
+            "presentation": "world",
+            "scene_room": 119,
+            "scene_level": 0,
+            "ui_bounds": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "mode": "candidate",
+          "index": 0,
+          "product_sha256": "59bb6ff1ea1dcfd8d6bbc5ce877e2dc31c207aea2b51f62e5bc1b8ac5d917daf",
+          "cpu_seconds": 13.03125,
+          "wall_seconds": 13.228358200009097,
+          "affinity_mask": 8192,
+          "renderer": {
+            "name": "software",
+            "flags": 13,
+            "video": "dummy",
+            "vsync_internal": false
+          },
+          "scopes": {
+            "first": 1802,
+            "last": 3000,
+            "shows": 1199,
+            "bytes": 16303915008,
+            "full": 0,
+            "partial": 158193,
+            "unchanged": 0,
+            "upload_ms": 965.3829
+          },
+          "world_state": {
+            "id": 0,
+            "ok": true,
+            "enabled": true,
+            "stage": "room-simulation",
+            "level": 0,
+            "decoded": 0,
+            "failures": 0,
+            "camera": [
+              0,
+              0
+            ],
+            "size": [
+              4096,
+              1472
+            ],
+            "adjacent_actors": true,
+            "seamless_traversal": true,
+            "simulated_rooms": 128,
+            "actors": 609,
+            "neighbor_ticks": 45085,
+            "handoffs": 0,
+            "menu": 0,
+            "game_mode": 5,
+            "submode": 0,
+            "updating": 1,
+            "scroll_y64": 64,
+            "mask64": 30,
+            "presentation": "world",
+            "scene_room": 119,
+            "scene_level": 0,
+            "ui_bounds": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "median_cpu_seconds": {
+        "reference": 12.609375,
+        "candidate": 13.03125
+      },
+      "median_cpu_reduction_percent": -3.3457249070631967,
+      "decision": "not selected; no measured win in bounded screening pair",
+      "raw_archive": "present-upload-v2-evidence.zip",
+      "raw_path": "zelda-software/performance.json"
+    },
+    {
+      "version": "v2",
+      "title": "The Legend of Zelda",
+      "profile": "Seamless world atlas4096x1472, all128rooms",
+      "host": "DESKTOP-HN15M1H",
+      "backend": "direct3d11",
+      "samples": [
+        {
+          "mode": "reference",
+          "index": 0,
+          "product_sha256": "03921b3e6de673492aa44980bd062e9871076365207bc8dde05cf0b0940bd680",
+          "cpu_seconds": 13.421875,
+          "wall_seconds": 13.734885300000315,
+          "affinity_mask": 16384,
+          "renderer": {
+            "name": "direct3d11",
+            "flags": 10,
+            "video": "windows",
+            "vsync_internal": false
+          },
+          "scopes": {
+            "first": 1802,
+            "last": 3000,
+            "shows": 1199,
+            "bytes": 28916580352,
+            "full": 1199,
+            "partial": 0,
+            "unchanged": 0,
+            "upload_ms": 1528.51
+          },
+          "world_state": {
+            "id": 0,
+            "ok": true,
+            "enabled": true,
+            "stage": "room-simulation",
+            "level": 0,
+            "decoded": 0,
+            "failures": 0,
+            "camera": [
+              0,
+              0
+            ],
+            "size": [
+              4096,
+              1472
+            ],
+            "adjacent_actors": true,
+            "seamless_traversal": true,
+            "simulated_rooms": 128,
+            "actors": 609,
+            "neighbor_ticks": 45085,
+            "handoffs": 0,
+            "menu": 0,
+            "game_mode": 5,
+            "submode": 0,
+            "updating": 1,
+            "scroll_y64": 64,
+            "mask64": 30,
+            "presentation": "world",
+            "scene_room": 119,
+            "scene_level": 0,
+            "ui_bounds": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "mode": "candidate",
+          "index": 0,
+          "product_sha256": "59bb6ff1ea1dcfd8d6bbc5ce877e2dc31c207aea2b51f62e5bc1b8ac5d917daf",
+          "cpu_seconds": 22.09375,
+          "wall_seconds": 22.443083999998635,
+          "affinity_mask": 16384,
+          "renderer": {
+            "name": "direct3d11",
+            "flags": 10,
+            "video": "windows",
+            "vsync_internal": false
+          },
+          "scopes": {
+            "first": 1802,
+            "last": 3000,
+            "shows": 1199,
+            "bytes": 16303915008,
+            "full": 0,
+            "partial": 158193,
+            "unchanged": 0,
+            "upload_ms": 10538.4172
+          },
+          "world_state": {
+            "id": 0,
+            "ok": true,
+            "enabled": true,
+            "stage": "room-simulation",
+            "level": 0,
+            "decoded": 0,
+            "failures": 0,
+            "camera": [
+              0,
+              0
+            ],
+            "size": [
+              4096,
+              1472
+            ],
+            "adjacent_actors": true,
+            "seamless_traversal": true,
+            "simulated_rooms": 128,
+            "actors": 609,
+            "neighbor_ticks": 45085,
+            "handoffs": 0,
+            "menu": 0,
+            "game_mode": 5,
+            "submode": 0,
+            "updating": 1,
+            "scroll_y64": 64,
+            "mask64": 30,
+            "presentation": "world",
+            "scene_room": 119,
+            "scene_level": 0,
+            "ui_bounds": [
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "median_cpu_seconds": {
+        "reference": 13.421875,
+        "candidate": 22.09375
+      },
+      "median_cpu_reduction_percent": -64.61001164144353,
+      "decision": "not selected; no measured win in bounded screening pair",
+      "raw_archive": "present-upload-v2-evidence.zip",
+      "raw_path": "zelda-direct3d11/performance.json"
+    }
+  ],
+  "diagnostics": [
+    {
+      "title": "smb3",
+      "backend": "software",
+      "renderer": {
+        "name": "software",
+        "flags": 13,
+        "video": "dummy",
+        "max_texture": [
+          0,
+          0
+        ],
+        "vsync_internal": false
+      },
+      "scopes": {
+        "first": 2402,
+        "last": 2700,
+        "picture_calls": 374,
+        "shows": 299,
+        "presents": 299,
+        "width": 256,
+        "height": 240,
+        "upload_bytes": 73482240,
+        "all_picture_ms": 5.156,
+        "show_picture_ms": 4.1536,
+        "preview_ms": 4.7748,
+        "texture_setup_ms": 0.0119,
+        "upload_ms": 1.3129,
+        "draw_ui_ms": 103.1539,
+        "present_ms": 0.4537,
+        "show_ms": 113.4142
+      },
+      "binary_sha256": "439e2074d19f3db435085c433b65438db9572f50d06b5e07cbb08b14adf6c18c",
+      "raw_path": "smb3-software/results.json"
+    },
+    {
+      "title": "smb3",
+      "backend": "direct3d11",
+      "renderer": {
+        "name": "direct3d11",
+        "flags": 10,
+        "video": "windows",
+        "max_texture": [
+          16384,
+          16384
+        ],
+        "vsync_internal": false
+      },
+      "scopes": {
+        "first": 2402,
+        "last": 2700,
+        "picture_calls": 374,
+        "shows": 299,
+        "presents": 299,
+        "width": 256,
+        "height": 240,
+        "upload_bytes": 73482240,
+        "all_picture_ms": 5.1088,
+        "show_picture_ms": 4.1211,
+        "preview_ms": 4.7902,
+        "texture_setup_ms": 0.0136,
+        "upload_ms": 10.8404,
+        "draw_ui_ms": 0.7705,
+        "present_ms": 70.8279,
+        "show_ms": 20.5441
+      },
+      "binary_sha256": "439e2074d19f3db435085c433b65438db9572f50d06b5e07cbb08b14adf6c18c",
+      "raw_path": "smb3-direct3d11/results.json"
+    },
+    {
+      "title": "zelda",
+      "backend": "software",
+      "renderer": {
+        "name": "software",
+        "flags": 13,
+        "video": "dummy",
+        "max_texture": [
+          0,
+          0
+        ],
+        "vsync_internal": false
+      },
+      "scopes": {
+        "first": 1802,
+        "last": 2100,
+        "picture_calls": 374,
+        "shows": 299,
+        "presents": 299,
+        "width": 4096,
+        "height": 1472,
+        "upload_bytes": 7211057152,
+        "all_picture_ms": 163.5326,
+        "show_picture_ms": 129.7815,
+        "preview_ms": 12.1784,
+        "texture_setup_ms": 0.0306,
+        "upload_ms": 249.1481,
+        "draw_ui_ms": 156.9453,
+        "present_ms": 1.4596,
+        "show_ms": 548.0913
+      },
+      "binary_sha256": "64462e0b328c74cb84da7eb0a7d4fc5e855f008df8f3b2d4677a725aa94eceec",
+      "raw_path": "zelda-software/results.json"
+    },
+    {
+      "title": "zelda",
+      "backend": "direct3d11",
+      "renderer": {
+        "name": "direct3d11",
+        "flags": 10,
+        "video": "windows",
+        "max_texture": [
+          16384,
+          16384
+        ],
+        "vsync_internal": false
+      },
+      "scopes": {
+        "first": 1802,
+        "last": 2100,
+        "picture_calls": 374,
+        "shows": 299,
+        "presents": 299,
+        "width": 4096,
+        "height": 1472,
+        "upload_bytes": 7211057152,
+        "all_picture_ms": 174.03,
+        "show_picture_ms": 138.8824,
+        "preview_ms": 13.8598,
+        "texture_setup_ms": 0.0509,
+        "upload_ms": 371.4414,
+        "draw_ui_ms": 2.4836,
+        "present_ms": 21.6555,
+        "show_ms": 526.726
+      },
+      "binary_sha256": "64462e0b328c74cb84da7eb0a7d4fc5e855f008df8f3b2d4677a725aa94eceec",
+      "raw_path": "zelda-direct3d11/results.json"
+    }
+  ],
+  "archives": [
+    {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\present-profile-v1-evidence.zip",
+      "sha256": "ee0fb70e298752337c5c94cdeae41b0737019c96440c34252fdf3e9c150653e1",
+      "bytes": 19006894,
+      "staging": "G:\\Temp\\Codex\\nes110-present-profile-v1-20261031"
+    },
+    {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\present-upload-v1-evidence.zip",
+      "sha256": "aa9b56a3f29277a361e07fbee683e0e1f2c6913abceb0afd34f1c85d6263616e",
+      "bytes": 31873662,
+      "staging": "G:\\Temp\\Codex\\nes110-present-upload-v1-20261031"
+    },
+    {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\present-upload-v2-evidence.zip",
+      "sha256": "997ef2fed5cb641e1275b212029a21de5b1d2699d7250f74a704767f4ae2e4cd",
+      "bytes": 31824421,
+      "staging": "G:\\Temp\\Codex\\nes110-present-upload-v2-20261031"
+    },
+    {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\present-upload-source-validation-evidence.zip",
+      "sha256": "e7bda63f0a12c998aec8937eb042ede13f28e967d8dd0919867a42f6cb13f671",
+      "bytes": 658011
+    }
+  ],
+  "correctness": {
+    "root": "Pure uploader ownership/pitch/failure/fallback unit executable exited0 under build lease",
+    "independent_v1": {
+      "source_sha256": {
+        "pixel_oracle.c": "067c60cfa5673516e3c4222eefc28e2c6f78267f3fdfa906fe61efa9f33e0f93",
+        "zelda_world_canvas.c": "f7f460fa0c71a322ecf601403b49d780f5a96fd718847088aadbeec8ea9a51a1",
+        "zelda_world_canvas.h": "df0c5ad06ddeaeb39925d7151e8556c28f8fcbea2ffd186aaa0e2e5fe65304ca",
+        "cyc_present_upload.c": "ca8a2ca528ff369508049db7b89aa4f995e0cf9d88aafa0e11d423874a1251ab",
+        "cyc_present_upload.h": "01d412716fd161443ba432801d0e3cd33ac7f39279c079ae0fb117335667c0d5"
+      },
+      "affinity_mask": 4096,
+      "compile_command": [
+        "C:/msys64/mingw64/bin/gcc.exe",
+        "-std=c11",
+        "-O2",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Wno-misleading-indentation",
+        "-I",
+        "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\validator-nes24",
+        "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\validator-nes24\\pixel_oracle.c",
+        "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\validator-nes24\\zelda_world_canvas.c",
+        "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\validator-nes24\\cyc_present_upload.c",
+        "-o",
+        "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\validator-nes24\\pixel_oracle.exe"
+      ],
+      "compile": {
+        "returncode": 0,
+        "seconds": 0.45300000000861473
+      },
+      "run": {
+        "returncode": 0,
+        "seconds": 0.8279999999940628
+      },
+      "oracle": {
+        "cpu_pictures": 55,
+        "pixel_comparisons": 83,
+        "backend_writes": 599,
+        "acks": 26,
+        "full": 23,
+        "partial": 573,
+        "unchanged": 1,
+        "failed_writes": 3,
+        "bytes": 699107460,
+        "result": "pass"
+      },
+      "exe_sha256": "87fcfb7c9a541d564e3fe94cec58e123951317d2401c9b109e0b08b66920833e"
+    },
+    "independent_v2": {
+      "source_sha256": {
+        "pixel_oracle.c": "067c60cfa5673516e3c4222eefc28e2c6f78267f3fdfa906fe61efa9f33e0f93",
+        "zelda_world_canvas.c": "9ba8bda3a2016e4f72560e8402b035a222baa7b6623655ab4e64fefee482ecd3",
+        "zelda_world_canvas.h": "df0c5ad06ddeaeb39925d7151e8556c28f8fcbea2ffd186aaa0e2e5fe65304ca",
+        "cyc_present_upload.c": "ca8a2ca528ff369508049db7b89aa4f995e0cf9d88aafa0e11d423874a1251ab",
+        "cyc_present_upload.h": "01d412716fd161443ba432801d0e3cd33ac7f39279c079ae0fb117335667c0d5"
+      },
+      "affinity_mask": 4096,
+      "compile_command": [
+        "C:/msys64/mingw64/bin/gcc.exe",
+        "-std=c11",
+        "-O2",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Wno-misleading-indentation",
+        "-I",
+        "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\validator-nes24\\v2",
+        "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\validator-nes24\\v2\\pixel_oracle.c",
+        "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\validator-nes24\\v2\\zelda_world_canvas.c",
+        "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\validator-nes24\\v2\\cyc_present_upload.c",
+        "-o",
+        "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\validator-nes24\\v2\\pixel_oracle.exe"
+      ],
+      "compile": {
+        "returncode": 0,
+        "seconds": 0.40600000000267755
+      },
+      "run": {
+        "returncode": 0,
+        "seconds": 0.8439999999973224
+      },
+      "oracle": {
+        "cpu_pictures": 55,
+        "pixel_comparisons": 83,
+        "backend_writes": 541,
+        "acks": 26,
+        "full": 22,
+        "partial": 516,
+        "unchanged": 1,
+        "failed_writes": 3,
+        "bytes": 703540228,
+        "result": "pass"
+      },
+      "exe_sha256": "7a3b790d6e839370915ed5cbc03e80639829e91e965661e34b62dce31dac8637"
+    },
+    "actual_candidate_GPU_pixel_gate": "Not run after negative runtime screening; synthetic correctness alone is not actual-game qualification"
+  },
+  "interpretation": [
+    "Four initial diagnostic runs used actual SDL software or Windows D3D11 accelerated renderer,299presents and excluded UI readback. Nested counters are CPU-side wall scopes, not exclusive GPU execution time or recoverable savings.",
+    "v1 cap fallback diagnostic:129eligible queries,1initial full flag,128rectangle-cap fallbacks,0coverage fallbacks. Ordinary completed frames are not native partial-frame cache invalidation proof.",
+    "v2 reduces upload bytes43.62% but makes158193rectangle writes over1199presents; D3D11 upload wall scope1528.51->10538.4172ms. Software upload wall936.092->965.3829ms. Lower traffic is not a runtime performance gain.",
+    "Each experiment/backend is one matched screening pair, not five-pair qualification or a host-independent regression claim. Negative screening was sufficient to decline complexity and stop tuning. Do not average across backends to accept a loss.",
+    "SMB3 control was built for both versions but not run after target failed; SMB1/Metroid/Gumshoe and HD/voxel remain unchanged and unmeasured here. Native-frame indexed GPU conversion, palette/emphasis, broader resident compositor products and alternate upload APIs remain explicit residuals.",
+    "D3D11 renderer name/accelerated flags verified; physical adapter and exclusive GPU timing unqualified. No GPU-specific universal claim.",
+    "Automated windows hidden, normal focus preserved, audio emulated/mixed/queued to dummy output at volume0. Headroom reservations/telemetry, source snapshots, all objects/binary IDs/settings/commands/raw samples retained. One matched pair per same host/configuration. No game launched for owner review.",
+    "Final supported combined five-game regeneration/build/feature/performance and owner visual check remain pending. No main/master merge or release. FDS remains parked."
+  ]
+}
