@@ -17,8 +17,9 @@ original HD runtime. See [HD results](2026-10-28-hd-plan-results.md), including
 the rejected universal packages and SMB's unchanged-runtime proof. Zelda's
 fixed SNROM SRAM code now joins the native deadline service; see
 [SRAM results](2026-10-28-sram-native-results.md). SERVER Fit improves5.128%
-and Remastered1.442%; stock is neutral/inconclusive. Seventeen areas have overlapping scoped selections and thirteen have actual prototype
-dispositions. One area remains open: unimplemented GPU work in NES32. Preparation does not count as completed candidate burndown;
+and Remastered1.442%; stock is neutral/inconclusive. Eighteen areas have overlapping scoped selections and thirteen have actual prototype
+dispositions. All active areas now have scoped candidate decisions; NES32 selects
+resident GPU HD rendering. Final combined validation remains pending;
 NES01 is qualified for whole stable HLE raster jobs and NES29 remains parked.
 Guarded native ROM is now evaluated under NES09; see
 [guarded ROM results](2026-10-28-guarded-rom-results.md).
@@ -26,8 +27,7 @@ Whole stable HLE raster jobs are now qualified across the five stock titles
 and Zelda Fit/HD profiles; see [raster results](2026-10-28-raster-job-results.md).
 Zelda isolated native execution is selected under NES18; NES20 now selects physical cartridge-storage ownership for isolated scopes. See
 [isolated service results](2026-10-28-isolated-native-results.md).
-Selected-package final game validation remains open alongside that GPU
-area. FDS remains parked. No main/master merge or new release is authorized
+Selected-package final combined game validation remains open. FDS remains parked. No main/master merge or new release is authorized
 before owner review.
 
 Source checkpoint: engine `957e9902de9b91107e61bc981f2ca871c8740446`;
@@ -686,41 +686,25 @@ close the per-pixel raster or APU-event algorithm work under NES01/NES06.
 
 ### Owner GPU rendering requirement added October 31
 
-- [ ] **NES32 · P1 · Resident GPU rendering from immutable jobs** (`open-unimplemented`)
+- [x] **NES32 · P1 · Resident GPU rendering from immutable jobs**
 
-  The October 30 owner guide was only partially represented by NES14 and NES24.
-  NES14 selected a CPU composition service; NES24 rejected tiled SDL uploads of
-  a finished CPU frame. Neither evaluated the required resident GPU pipeline or
-  used 16× internal resolution as an acceptance gate. Those CPU decisions remain
-  valid within their measured scopes.
+  Decision: Selected the independently reviewed Zelda HD GPU implementation.
+  Authored2x CPU median improves11.71% across five faster pairs. True16x
+  (4096x3840) runs93–108FPS in three600-frame intervals with zero fallback.
+  Canonical state and native-density pictures match baseline at1/2/4/16x;
+  save/load/rewind/resize, renderer recreation and portable Deck checks pass.
+  [Results and limitations](2026-10-31-resident-gpu-results.md).
 
-  Source: `C:/Users/Matthew/Desktop/GPU-HIGH-RESOLUTION-RENDERING-GUIDE.md`,
-  SHA-256 `644ec4bb9efa5330351908e78e81ce9df2ebee7f71187c64f3cf19c27f8521bd`.
+  Scope: Zelda Remastered HD composition, with bounded visible source-page
+  residency and shared portable jobs. Per-frame job uploads remain about1.97MB;
+  general native/voxel GPU paths, smaller streams and lower-end16x are residuals.
+  32x/64x remain experimental desired targets. GPU memory is modeled; no
+  historical GPU reduction percentage or architecture-exhaustion claim.
 
-  Scope: Actual supported internal-resolution/enhanced rendering workloads,
-  beginning with the existing active Zelda HD-pack gameplay. Use this engine's
-  code and the guide's in-house gbarecomp commits as design references.
-
-  Implement: Publish compact immutable jobs at natural rendering boundaries;
-  share preparation with exact native output; keep CHR/tile/OAM/palette/pack
-  source data resident on the GPU and upload only changed sources and jobs.
-  Draw visible work at output density on the GPU, with bounded intermediates,
-  graceful admission at device limits and an exact portable CPU fallback.
-
-  Acceptance: Required 16× internal resolution at full speed with headroom on
-  the owner's PC; desired 32×/64×. Compare matched built gameplay before/after,
-  recording CPU cost, GPU timestamps per pass, upload bytes and process/GPU
-  memory at native, 2×, 4× and the current maximum. CPU preparation and upload
-  must not grow with scale. Exercise save/load, rollback, reset and real resize;
-  verify native framebuffer, RAM and state hashes against the pre-change build
-  at every scale, and build/run the portable fallback on another target.
-  Enhanced caches stay outside canonical state and guest reads. Simulation
-  output requires the existing cross-vendor/netplay qualification contract.
-
-  Next: Reuse existing scale workloads and measurements to select the first
-  coherent implementation. No GPU implementation or scale qualification is
-  claimed here. Any necessary new instrumentation remains subject to the
-  owner's stop-and-ask rule. FDS remains parked under NES29.
+  Source: Owner GPU guide SHA-256
+  `644ec4bb9efa5330351908e78e81ce9df2ebee7f71187c64f3cf19c27f8521bd`.
+  Next: supported combined five-title regeneration and regression/runtime gate,
+  then owner visual handoff. No main/master merge or release before approval.
 
 
 ## Evidence reuse and stopping rules
@@ -760,12 +744,11 @@ working portable implementation. Netplay settles a common validated profile
 before frame 0; platform compilation alone is not compatibility qualification.
 
 Audit completion closes only `beads-2dw.1.109`'s investigation/deliverable.
-The execution campaign now tracks **32 areas: 30 scoped candidate decisions,
-one open area (NES32), and owner-parked NES29**. The 30 decisions
-comprise 17 overlapping scoped selections and 13 prototype dispositions; they
-are neither 30 independent wins nor architectural exhaustion. NES32 explicitly
-adds the previously uncovered GPU requirement. Final supported combined builds
-and owner visual acceptance remain pending.
+The execution campaign tracks **32 areas: 31 scoped candidate decisions and
+owner-parked NES29**. The31 decisions comprise18 overlapping scoped selections
+and13 prototype dispositions; they are neither31 independent wins nor
+architectural exhaustion. Final supported combined builds and owner visual
+acceptance remain pending.
 
 Recent actual candidate decisions: [NES07 DMA rejection](2026-10-31-native-dma-candidate-results.md),
 [NES15 CHR snapshot rejection](2026-10-31-chr-snapshot-candidate-results.md),
@@ -776,6 +759,6 @@ Recent actual candidate decisions: [NES07 DMA rejection](2026-10-31-native-dma-c
 NES20's live Atlas confirmation measured 4.76% lower median process CPU in five
 of five pairs; the five standard game profiles were neutral/inconclusive.
 
-NES30 now has an actual implemented/rejected MMC5 mapping decision: [results](2026-10-31-mmc5-mapping-candidate-results.md). NES32 remains open.
+NES30 now has an actual implemented/rejected MMC5 mapping decision: [results](2026-10-31-mmc5-mapping-candidate-results.md). NES32 is now selected in its scoped HD GPU workload.
 
-NES31 now has an actual implemented/not-selected empty-view service decision: [results](2026-10-31-empty-view-candidate-results.md). NES32 remains open.
+NES31 now has an actual implemented/not-selected empty-view service decision: [results](2026-10-31-empty-view-candidate-results.md). NES32 is now selected in its scoped HD GPU workload.

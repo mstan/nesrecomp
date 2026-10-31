@@ -1,0 +1,85 @@
+{
+  "status": "selected-scoped-HD-GPU-candidate-pending-final-combined-owner-gate",
+  "engine_head": "1ed8235ca2603ec41ab09cb3bc91d296399f535d",
+  "products": {
+    "reference": {
+      "exe": "G:\\Temp\\Codex\\nes110-gpu-candidate-20261031\\zelda-hd-v4\\reference\\LegendOfZeldaNESRecomp.exe",
+      "sha256": "52264a9a830f6cd2bb9a4c223995731b3bfcf5a52d28e79e74efc17bbb62ced9",
+      "engine_head": "1098ca83636c352991eae3c928cfc4c95171943c",
+      "original_exe": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-isolation-candidate\\zelda\\LegendOfZeldaNESRecomp.exe"
+    },
+    "candidate": {
+      "exe": "G:\\Temp\\Codex\\nes110-gpu-candidate-20261031\\zelda-hd-v4\\final-runtime\\candidate\\LegendOfZeldaNESRecomp.exe",
+      "sha256": "d255ad28f16ac9cca375961457f637b028ca70875e35fdfd1c8c0071e4afb52a",
+      "engine_head": "1ed8235",
+      "original_exe": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\gpu-build-zelda-v1\\LegendOfZeldaNESRecomp.exe"
+    }
+  },
+  "matched2x": {
+    "cpu_medians": {
+      "reference": 5.46875,
+      "candidate": 4.828125
+    },
+    "cpu_reduction_percent": 11.71428571428571,
+    "faster_cpu_pairs": 5,
+    "pairs": 5,
+    "raw": "G:\\Temp\\Codex\\nes110-gpu-candidate-20261031\\zelda-hd-v4\\final-runtime\\performance.json"
+  },
+  "headroom16": {
+    "fps": [
+      108.30183765493899,
+      93.73941037600116,
+      93.24492864528068
+    ],
+    "median_fps": 93.73941037600116,
+    "fallbacks": 0,
+    "scope": "3unprofiled600-frameintervals; requested/admitted4096x3840; audio+rewind on; resumedintervalplusnormalshutdown"
+  },
+  "profile16": {
+    "log": "G:\\Temp\\Codex\\nes110-gpu-candidate-20261031\\zelda-hd-v4\\final-runtime\\candidate-16-profile\\game.log",
+    "samples": 670,
+    "excluded_interleaved_lines": [
+      "hd_gpu_sample {\"serial\":624,\"scale\":16,\"width\":4096,\"height\":3840,\"prepare_ns\":2266600,\"submit_ns\":281300,\"composite_ns\":2456576,\"present_ns\":14336,\"upload_bytes\":1966window benchmark: ppu=HLE frames=2821 seconds=6.384546 fps=441.848 cycles=84008418 native_cycles=17188630 audio_device=1 audio_enabled=1 produced_samples=504704 queued_samples=309031"
+    ],
+    "summary": [
+      {
+        "attempted": 671,
+        "rendered": 671,
+        "fallback": 0
+      }
+    ],
+    "gpu_medians": {
+      "prepare_ns": 2063500.0,
+      "submit_ns": 264700.0,
+      "composite_ns": 1022976.0,
+      "present_ns": 13312.0,
+      "upload_bytes": 1966272.0,
+      "resident_bytes": 199734212.0
+    },
+    "caveat": "Caller failed parsing one interleavedrecord after successfulgame; intact GPU samples and summary retained. ProcessCPU/wall not retained for this profiled leg; use uninstru3legs forheadroom."
+  },
+  "scales_raw": "G:\\Temp\\Codex\\nes110-gpu-candidate-20261031\\zelda-hd-v4\\final-runtime\\scales\\result.json",
+  "canonical_sha256": "36a6aeca0fb94c62a11b215c7b71c25641c69607d7071c68ce4b495eb935b8f6",
+  "picture_sha256": "136cf06d37be2d0f3d4754ca13c7120b0c17ec3b9b75661efce4b640acf97a30",
+  "portable_raw": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\nes32-portable-check\\v3\\result.json",
+  "limitations": [
+    "Qualified realHDpackworkload isZeldaRemastered; no generalnativeGPUorvoxelrendererclaim.",
+    "32/64 are experimentaldesired, notqualifiedfullspeedtargets.",
+    "No historicalGPUtimestampcomparisonforoldCPUcompositor; no percentGPUreductionclaimed.",
+    "Packsharedunsupportedconditions/missingselectscreenbackgroundunchanged.",
+    "Per-pixelnative jobs uploadabout1.97MB/frame, independentofscale; furtherjobruncompressionnotqualified.",
+    "Finalcombined5titlegateandownerhandoffpending; no merge/release."
+  ],
+  "independent_review": "PASS gpu_guide_scope: accepted first scoped Zelda HD GPU candidate; proceed to supported combined five-title gate",
+  "guide_sha256": "644ec4bb9efa5330351908e78e81ce9df2ebee7f71187c64f3cf19c27f8521bd",
+  "profile_scales_raw": "G:\\Temp\\Codex\\nes110-gpu-candidate-20261031\\zelda-hd-v4\\gpu-scale-profile\\result.json",
+  "ui_raw": "G:\\Temp\\Codex\\nes110-gpu-candidate-20261031\\zelda-hd-v4\\sdl-gpu16\\result.json",
+  "fixture_log": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\gpu-hdpack-probe-v5.log",
+  "state_log": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\gpu-hdpack-state-selftest.log",
+  "excluded_attempts": [
+    "zelda-hd: missing placeholder and source admission caused CPU fallback; not GPU performance evidence",
+    "zelda-hd-v2: whole source catalog exceeded buffer limit; GPU-admission assertion correctly failed",
+    "zelda-hd-v3: valid paged rendering before duplicate-preview removal; neutral/inconclusive"
+  ],
+  "fallback_scope": "Portable CPU consumer uses authored pack resolution, not huge CPU16x/64x buffers; native PPU behavior is retained."
+}

@@ -20,6 +20,13 @@ you preview earlier moments and resume from one. Controller shortcuts are
 Back + L3 and Back + R3. History starts enabled and can be adjusted in the
 launcher. Local state changes are unavailable during online play.
 
+Desktop cycle titles with HD packs can choose **HD resolution** in Graphics.
+Compatible OpenGL contexts render shared jobs on the GPU from 1x to 64x;
+**Pack resolution** remains the default. 32x/64x are experimental. Unsupported
+contexts use the portable CPU path at pack resolution. Zelda Remastered's
+16x path is [qualified on the owner PC](docs/validation/2026-10-31-resident-gpu-results.md);
+higher density samples the existing artwork without adding detail.
+
 **[Play a game](#game-projects)** · **[Start a new port without AI](docs/GETTING_STARTED.md)**
 
 ## Super Mario Bros.: four players, one adventure

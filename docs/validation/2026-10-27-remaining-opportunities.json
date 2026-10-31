@@ -39,7 +39,8 @@
     "2026-10-31-complex-board-scope-results.json",
     "2026-10-31-startup-scope-results.json",
     "2026-10-31-mmc5-mapping-candidate-results.json",
-    "2026-10-31-empty-view-candidate-results.json"
+    "2026-10-31-empty-view-candidate-results.json",
+    "2026-10-31-resident-gpu-results.json"
   ],
   "priorities": "Order expresses expected scope and evidence, not measured recoverable cost. Overlapping packages are not additive.",
   "acceptance": "Each game neutral or positive. Small mixed samples inconclusive. Shared original/candidate defects are separate. Native saves protected; old save-state compatibility never required.",
@@ -1407,7 +1408,7 @@
       "package": "resident-gpu-rendering",
       "priority": "P1",
       "title": "Resident GPU rendering from immutable jobs",
-      "status": "open-unimplemented",
+      "status": "selected-qualified-scoped-HD-GPU",
       "evidence": [
         {
           "file": "C:/Users/Matthew/Desktop/GPU-HIGH-RESOLUTION-RENDERING-GUIDE.md",
@@ -1415,17 +1416,28 @@
           "kind": "owner-directive-2026-10-30"
         }
       ],
-      "remaining": "GPU consumes shared immutable jobs and resident source data; upload changed sources/jobs, render visible work on GPU, bound intermediates and retain exact portable CPU fallback. Earlier NES14 CPU composition and NES24 upload decisions do not qualify this architecture.",
+      "remaining": "First Zelda HD GPU candidate selected. General native/voxel GPU paths, smaller scanline streams, lower-end16x and desired32x/64x remain residuals; no architectural exhaustion claim.",
       "affected_profiles": [
         "Existing actual active Zelda HD-pack gameplay, then affected supported internal-resolution/enhanced consumers"
       ],
-      "next_decisive_check": "Reuse existing scale workloads and measurements to select one coherent implementation; seek owner approval before adding instrumentation if existing tools cannot answer the decision.",
+      "next_decisive_check": "Supported combined five-title regeneration/build, existing correctness/current-build restore/feature/per-game runtime gate, then owner visual handoff before merge/release.",
       "required_behavior": "Required 16x full speed with headroom on owner PC; desired 32x/64x. Matched built-game CPU/GPU-pass timestamp/upload/memory evidence at 1x/2x/4x/current maximum. Scale-independent CPU preparation/uploads; exact native framebuffer/RAM/state hashes; load/rollback/reset/resize; bounded memory/admission; portable fallback built/run on another target. Enhanced data remains presentation-local; GPU-fed simulation requires qualified cross-vendor/netplay profile.",
       "prior_issue": null,
-      "measured_additional_gain": null,
-      "execution_status": "scope-gap-recorded-not-implemented-or-qualified",
-      "candidate_state": "open-unimplemented",
-      "candidate_decision_recorded": false
+      "measured_additional_gain": {
+        "profile": "Zelda Remastered2x",
+        "median_cpu_reduction_percent": 11.71428571428571,
+        "matched_pairs_faster": 5,
+        "pairs": 5,
+        "true16x_fps": [
+          108.30183765493899,
+          93.73941037600116,
+          93.24492864528068
+        ]
+      },
+      "execution_status": "implemented-and-scoped-HD-GPU-qualified",
+      "candidate_state": "selected-qualified-scope",
+      "candidate_decision_recorded": true,
+      "result_file": "2026-10-31-resident-gpu-results.json"
     }
   ],
   "execution": {
@@ -1439,28 +1451,24 @@
     "retained_implementations": [],
     "new_performance_results": [],
     "owner_handoff_ready": false,
-    "phase": "serial-remaining-candidates",
-    "scope_extension": "NES32 records the previously uncovered owner GPU rendering requirement; original NES01-NES31 objective is not claimed complete."
+    "phase": "final-combined-build-and-owner-handoff",
+    "scope_extension": "NES32 first scoped HD GPU implementation is evaluated and selected; final supported combined gate and owner handoff remain."
   },
   "execution_summary": {
-    "evaluated_decisions": 30,
+    "evaluated_decisions": 31,
     "partial_ids": [],
     "parked_ids": [
       "NES29"
     ],
-    "other_unresolved": 1,
-    "note": "30 scoped candidate decisions:17 overlapping selections and13 actual prototype dispositions. NES32 resident GPU work remains open; NES29 owner-parked. Final supported combined builds and owner handoff pending.",
-    "candidate_decision_areas": 30,
-    "scoped_selection_areas": 17,
+    "other_unresolved": 0,
+    "note": "31 scoped candidate decisions:18 overlapping selections and13 actual prototype dispositions. NES29 owner-parked. Final supported combined builds and owner handoff pending; no architectural exhaustion or additive win count.",
+    "candidate_decision_areas": 31,
+    "scoped_selection_areas": 18,
     "prototype_disposition_areas": 13,
     "prepared_or_deferred_areas": 0,
     "deferred_ids": [],
     "total_areas": 32,
-    "open_ids": [
-      "NES32"
-    ],
-    "new_unimplemented_ids": [
-      "NES32"
-    ]
+    "open_ids": [],
+    "new_unimplemented_ids": []
   }
 }
