@@ -17,8 +17,8 @@ original HD runtime. See [HD results](2026-10-28-hd-plan-results.md), including
 the rejected universal packages and SMB's unchanged-runtime proof. Zelda's
 fixed SNROM SRAM code now joins the native deadline service; see
 [SRAM results](2026-10-28-sram-native-results.md). SERVER Fit improves5.128%
-and Remastered1.442%; stock is neutral/inconclusive. Seventeen areas have overlapping scoped selections and eight have actual prototype
-dispositions; five attribution/historical/inventory/conditional deferrals remain
+and Remastered1.442%; stock is neutral/inconclusive. Seventeen areas have overlapping scoped selections and nine have actual prototype
+dispositions; four attribution/historical/inventory/conditional deferrals remain
 preparation rather than completed candidate burndown; NES01 is qualified for whole stable HLE raster
 jobs and NES29 remains parked.
 Guarded native ROM is now evaluated under NES09; see
@@ -27,7 +27,7 @@ Whole stable HLE raster jobs are now qualified across the five stock titles
 and Zelda Fit/HD profiles; see [raster results](2026-10-28-raster-job-results.md).
 Zelda isolated native execution is selected under NES18; NES20 now selects physical cartridge-storage ownership for isolated scopes. See
 [isolated service results](2026-10-28-isolated-native-results.md).
-Selected-package final game validation remains open alongside five deferred
+Selected-package final game validation remains open alongside four deferred
 areas. FDS remains
 parked. No main/master merge or new release is authorized before owner review.
 
@@ -523,7 +523,7 @@ close the per-pixel raster or APU-event algorithm work under NES01/NES06.
   Evidence: [runner/cyc/cyc_net.c:84](../../runner/cyc/cyc_net.c#L84), [runner/cyc/cyc_session.c:197](../../runner/cyc/cyc_session.c#L197). Reuse `beads-2dw.1.100`.
 
 
-- [ ] **NES23 · P2 · Observer/history work integrated with semantic events**
+- [x] **NES23 · P2 · Observer/history work integrated with semantic events**
 
   Offline timed builds disable optional cycle tracing, but ordinary device history remains active. Netplay explicitly enables cycle tracing as a simulation setting. Derive required history/digests at semantic service boundaries and separate them from trace-detail production; preserve useful diagnostics rather than pretending legacy CMake keys disable the cycle ring.
 
@@ -723,8 +723,10 @@ Current execution has22scoped candidate-decision areas (16overlapping selections
 and6prototype dispositions),8prepared/deferred areas and parkedNES29. The implementation campaign and final combined owner
 handoff remain open; a scoped decision is not architectural exhaustion.
 
-NES07 now has an actual implemented/rejected DMA stream decision: [results](2026-10-31-native-dma-candidate-results.md). Five prepared/deferred areas remain.
+NES07 now has an actual implemented/rejected DMA stream decision: [results](2026-10-31-native-dma-candidate-results.md). Four prepared/deferred areas remain.
 
-NES15 now has an actual implemented/rejected CHR snapshot decision: [results](2026-10-31-chr-snapshot-candidate-results.md). Five prepared/deferred areas remain.
+NES15 now has an actual implemented/rejected CHR snapshot decision: [results](2026-10-31-chr-snapshot-candidate-results.md). Four prepared/deferred areas remain.
 
-NES20 now selects accessible cartridge-storage isolation: [results](2026-10-31-isolation-storage-results.md). Atlas improves4.76% in5/5confirmationpairs; standardfivegamesneutral. Five prepared/deferred areas remain.
+NES20 now selects accessible cartridge-storage isolation: [results](2026-10-31-isolation-storage-results.md). Atlas improves4.76% in5/5confirmationpairs; standardfivegamesneutral. Four prepared/deferred areas remain.
+
+NES23 has an implemented/rejected producer-admission candidate: [results](2026-10-31-observer-admission-results.md). Four prepared/deferred areas remain.

@@ -1082,7 +1082,7 @@
       "package": "state-ownership",
       "priority": "P2",
       "title": "Observer/history work integrated with semantic events",
-      "status": "evaluated-deferred-offline-semantic-history-already-small",
+      "status": "evaluated-prototype-rejected",
       "evidence": [
         {
           "file": "runner/cyc/cyc_ring.c",
@@ -1099,18 +1099,18 @@
           "link": "../../runner/cyc/cyc_net.c#L56"
         }
       ],
-      "remaining": "Offline semantic aggregation already exists; bounded instrumented ring-body scope is small, with0RAM-interpreter events. Broader dispatch/bookkeeping and actual common traced NET/profile policy remain explicit residuals, not exhausted.",
+      "remaining": "Typed producer history admission rejected after actual Atlas outputs/ring/continuation/runtime screen; other observation ownership designs remain possible.",
       "affected_profiles": [
         "Offline production history and netplay trace/digest consumers, measured separately"
       ],
-      "next_decisive_check": "No speculative tiny ring tuning. Continue NES07 DMA-heavy service attribution after independent durable handoff; NET profile only with real delayed-peer scope under NES22.",
+      "next_decisive_check": "Independent durable handoff, then NES25 actual audio ownership candidate.",
       "required_behavior": "Required fault information, ring consumers, hooks and agreed peer digests remain correct. Do not disable netplay hashing unilaterally; establish a common validated profile before changing its simulation identity.",
       "prior_issue": null,
       "measured_additional_gain": null,
-      "execution_status": "deferred-after-scoped-production-attribution",
-      "result_file": "2026-10-31-observer-results.json",
-      "candidate_state": "prepared-or-deferred",
-      "candidate_decision_recorded": false
+      "execution_status": "implemented-and-Atlas-screened-negative",
+      "result_file": "2026-10-31-observer-admission-results.json",
+      "candidate_state": "prototype-evaluated-not-selected",
+      "candidate_decision_recorded": true
     },
     {
       "id": "NES24",
@@ -1414,19 +1414,18 @@
     "phase": "serial-remaining-candidates"
   },
   "execution_summary": {
-    "evaluated_decisions": 25,
+    "evaluated_decisions": 26,
     "partial_ids": [],
     "parked_ids": [
       "NES29"
     ],
-    "other_unresolved": 5,
-    "note": "Seventeen overlapping scoped selections and eight actual prototype-disposition areas; not25independent wins or architectural exhaustion. Five prepared/deferred areas remain; FDS29 owner-parked. Final combined owner handoff pending.",
-    "candidate_decision_areas": 25,
+    "other_unresolved": 4,
+    "note": "Seventeen overlapping scoped selections and nine actual prototype-disposition areas; not26independent wins or architectural exhaustion. Four prepared/deferred areas remain; FDS29 owner-parked. Final combined owner handoff pending.",
+    "candidate_decision_areas": 26,
     "scoped_selection_areas": 17,
-    "prototype_disposition_areas": 8,
-    "prepared_or_deferred_areas": 5,
+    "prototype_disposition_areas": 9,
+    "prepared_or_deferred_areas": 4,
     "deferred_ids": [
-      "NES23",
       "NES25",
       "NES26",
       "NES30",

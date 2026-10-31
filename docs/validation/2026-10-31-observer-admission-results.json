@@ -1,0 +1,48 @@
+{
+  "candidate": "NES23 typed producer admission for muted history",
+  "base": "1098ca83636c352991eae3c928cfc4c95171943c",
+  "branch": "perf/nes23-native-observer-admission",
+  "decision": "prototype screened and rejected; selected NES20 runtime unchanged",
+  "scope": "One actual producer-admission candidate screened on the dominant live Atlas workload; other titles not qualified and no architectural exhaustion claimed",
+  "source_sha256": {
+    "runner/cyc/cyc_ring.h": "c96a1b2c9441bea364d5bef568feda7d0fc03a1007c02a066c628c9040e9b807",
+    "runner/cyc/cyc_ring.c": "4d026a9f293257d4af379761e6047ea15d0fca0d1e048012d7926243a4f311ac",
+    "runner/cyc/content_test.c": "14247dc8f0ba51ed23cab95a3be1e538af66231607c60f03a0617a89609d4554"
+  },
+  "test": {
+    "result": "PASS",
+    "log": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\ctest-observer-tests-HLE.log",
+    "coverage": "external ABI vs inline admission, argument side effects and mute/unmute, folded history, lengths and counters"
+  },
+  "workload": "Zelda full live Atlas,300 resumed frames",
+  "cpu_pairs_seconds": [
+    [
+      3.8125,
+      4.140625
+    ],
+    [
+      4.171875,
+      4.109375
+    ],
+    [
+      4.46875,
+      4.515625
+    ]
+  ],
+  "raw_median_cpu_seconds": {
+    "reference": 4.171875,
+    "candidate": 4.140625
+  },
+  "interpretation": "mixed one faster/two slower with drift; apparent0.749% median reduction is not a gain or precise regression finding",
+  "binary_sha256": {
+    "reference": "52264a9a830f6cd2bb9a4c223995731b3bfcf5a52d28e79e74efc17bbb62ced9",
+    "candidate": "ce247f33be86ace7245ae1bfd1cf01b61ffea551bb37a1fa40e669eb2e3ec36d"
+  },
+  "exact_outputs_including_ring": true,
+  "own_continuation_frames": 300,
+  "raw_case": "G:\\Temp\\Codex\\nes110-observer-candidate-20261031\\zelda",
+  "manifest": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-observer-candidate\\zelda\\manifest.json",
+  "measured_gain": null,
+  "selected": false,
+  "resource_policy": "Owner-authorized headroom-only direct serial runs; no lease claimed"
+}
