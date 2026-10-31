@@ -17,8 +17,8 @@ original HD runtime. See [HD results](2026-10-28-hd-plan-results.md), including
 the rejected universal packages and SMB's unchanged-runtime proof. Zelda's
 fixed SNROM SRAM code now joins the native deadline service; see
 [SRAM results](2026-10-28-sram-native-results.md). SERVER Fit improves5.128%
-and Remastered1.442%; stock is neutral/inconclusive. Sixteen areas have overlapping scoped selections and six have actual prototype
-dispositions; eight attribution/historical/inventory/conditional deferrals remain
+and Remastered1.442%; stock is neutral/inconclusive. Sixteen areas have overlapping scoped selections and seven have actual prototype
+dispositions; seven attribution/historical/inventory/conditional deferrals remain
 preparation rather than completed candidate burndown; NES01 is qualified for whole stable HLE raster
 jobs and NES29 remains parked.
 Guarded native ROM is now evaluated under NES09; see
@@ -28,7 +28,7 @@ and Zelda Fit/HD profiles; see [raster results](2026-10-28-raster-job-results.md
 Zelda isolated native execution is selected under NES18; NES20 snapshot
 replacement is deferred after measured attribution. See
 [isolated service results](2026-10-28-isolated-native-results.md).
-Selected-package final game validation remains open alongside eight deferred
+Selected-package final game validation remains open alongside seven deferred
 areas. FDS remains
 parked. No main/master merge or new release is authorized before owner review.
 
@@ -221,7 +221,7 @@ close the per-pixel raster or APU-event algorithm work under NES01/NES06.
   Evidence: [runner/cyc/hw_apu.c:350](../../runner/cyc/hw_apu.c#L350), [runner/cyc/hw_apu.c:601](../../runner/cyc/hw_apu.c#L601).
 
 
-- [ ] **NES07 · P2 · Native DMA transfer service with exact device deadlines**
+- [x] **NES07 · P2 · Native DMA transfer service with exact device deadlines**
 
   OAM and DMC DMA still traverse the ordinary cycle machinery. Consolidate safe transfer runs and device advancement rather than substituting an unqualified memcpy.
 
@@ -723,3 +723,5 @@ Audit completion closes only `beads-2dw.1.109`'s investigation/deliverable.
 Current execution has22scoped candidate-decision areas (16overlapping selections
 and6prototype dispositions),8prepared/deferred areas and parkedNES29. The implementation campaign and final combined owner
 handoff remain open; a scoped decision is not architectural exhaustion.
+
+NES07 now has an actual implemented/rejected DMA stream decision: [results](2026-10-31-native-dma-candidate-results.md). Seven prepared/deferred areas remain.
