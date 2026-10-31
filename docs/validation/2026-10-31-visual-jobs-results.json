@@ -4017,5 +4017,32 @@
     "CPU median0.859375->0.984375s,14.545%higher,3/3worse; wall1.0031724->1.0784738s,7.506%longer,3/3worse. MedianwholeprocesspeakWS103886848both, peakprivate167550976->167665664. Peakmemory includes setup; wall interval is not a per-frame latency distribution or physical display/input latency.",
     "Reject on observed added cost before extending qualification. No runtimePR/source adoption/merge/release. A different projected-command/binning design or current moving/animatedvoxel/HD job may remain useful; globals are refactorable ownership, not a permanent constraint. This is not architectural exhaustion or a general prohibition on threading.",
     "Raw originaldiagnostic JSON retains stale inherited top-level sourceSHA and old nested-scope wording. Canonical record above corrects metadata from exact diagnostic_compile manifest without changing binary/counters/samples. Sources/binaries and initial reservation declines retained. Final combined freshCLI/five-title checks and owner approval remain pending."
-  ]
+  ],
+  "storage": [
+    {
+      "path": "G:\\Temp\\Codex\\nes110-visual-jobs-profile-v1-20261031",
+      "removed": true,
+      "bytes": 22192725,
+      "reason": "Prelaunch duplicate EXE/DLL setup only; failed receipt retained, no game launch"
+    },
+    {
+      "path": "G:\\Temp\\Codex\\nes110-visual-jobs-profile-v2-20261031",
+      "removed": true,
+      "bytes": 22192725,
+      "reason": "Prelaunch duplicate EXE/DLL setup only; failed receipt retained, no game launch"
+    },
+    {
+      "path": "G:\\Temp\\Codex\\nes110-visual-jobs-profile-v3-20261031",
+      "removed": true,
+      "bytes": 23291026,
+      "reason": "CRC/SHA-verified raw archive retained"
+    },
+    {
+      "path": "G:\\Temp\\Codex\\nes110-visual-jobs-worker-v1-20261031",
+      "removed": true,
+      "bytes": 72249063,
+      "reason": "CRC/SHA-verified raw archive retained"
+    }
+  ],
+  "retention": "Verified raw/source archives and bounded private source/products retained. Four owned stage roots removed, two completed runs archived and two failed prelaunch duplicate asset stages with receipts retained. Remaining private products can be cleaned after final combined handoff."
 }
