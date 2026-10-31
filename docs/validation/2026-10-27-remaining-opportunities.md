@@ -17,7 +17,7 @@ original HD runtime. See [HD results](2026-10-28-hd-plan-results.md), including
 the rejected universal packages and SMB's unchanged-runtime proof. Zelda's
 fixed SNROM SRAM code now joins the native deadline service; see
 [SRAM results](2026-10-28-sram-native-results.md). SERVER Fit improves5.128%
-and Remastered1.442%; stock is neutral/inconclusive. Twenty-two items now have
+and Remastered1.442%; stock is neutral/inconclusive. Twenty-three items now have
 qualified evaluation decisions; NES01 is qualified for whole stable HLE raster
 jobs and NES29 remains parked.
 Guarded native ROM is now evaluated under NES09; see
@@ -329,13 +329,18 @@ close the per-pixel raster or APU-event algorithm work under NES01/NES06.
   Evidence: [runner/cyc/hw_ppu.c:752](../../runner/cyc/hw_ppu.c#L752), [runner/cyc/hw_ppu.c:839](../../runner/cyc/hw_ppu.c#L839), [runner/cyc/cyc_render.c:163](../../runner/cyc/cyc_render.c#L163).
 
 
-- [ ] **NES12 · P2 · Shared CHR/nametable/OAM preparation by mutation generation**
+- [x] **NES12 · P2 · Shared CHR/nametable/OAM preparation by mutation generation**
 
   Custom render helpers repeatedly decode rows and colors. Build reusable tile/row and sprite plans keyed to actual CHR, bank, nametable, palette and OAM revisions; share them with wide/HD/voxel consumers where contracts agree.
 
   Scope: Custom wide, HD and voxel consumers with repeated tile/sprite preparation.
 
-  Next: Measure repeated decode/preparation in the chosen full-view job; reuse previous CHR-shortcut prototypes only after auditing their invalidation and unqualified timing status.
+  Evaluation: Owned logical CHR capture/decode plan v1 is deferred and unselected.
+  Zelda Fit/Atlas output hashes match, but three matched CPU pairs per view
+  demonstrate no improvement. This is not a regression finding or positive-gain
+  floor. Fixture bank/mutation/owned-image checks pass; retained portal gameplay
+  remains unqualified. Other HD/voxel/nametable/OAM consumers and algorithms
+  remain residual opportunities. [Results](2026-10-31-chr-plan-results.md).
 
   Preserve: CHR RAM writes/bank changes, palette/scanline state, flips, clipping, transparency, sprite order and restore invalidation.
 
@@ -682,6 +687,6 @@ working portable implementation. Netplay settles a common validated profile
 before frame 0; platform compilation alone is not compatibility qualification.
 
 Audit completion closes only `beads-2dw.1.109`'s investigation/deliverable.
-Current execution has twenty-two scoped evaluation decisions, eight unresolved
+Current execution has twenty-three scoped evaluation decisions, seven unresolved
 items and parked NES29. The implementation campaign and final combined owner
 handoff remain open; a scoped decision is not architectural exhaustion.

@@ -29,7 +29,8 @@
     "2026-10-31-observer-results.json",
     "2026-10-31-dma-service-results.json",
     "2026-10-31-blank-interval-results.json",
-    "2026-10-31-native-service-results.json"
+    "2026-10-31-native-service-results.json",
+    "2026-10-31-chr-plan-results.json"
   ],
   "priorities": "Order expresses expected scope and evidence, not measured recoverable cost. Overlapping packages are not additive.",
   "acceptance": "Each game neutral or positive. Small mixed samples inconclusive. Shared original/candidate defects are separate. Native saves protected; old save-state compatibility never required.",
@@ -500,7 +501,7 @@
       "package": "visual-products",
       "priority": "P2",
       "title": "Shared CHR/nametable/OAM preparation by mutation generation",
-      "status": "open-unmeasured",
+      "status": "evaluated-deferred-shared-chr-plan",
       "evidence": [
         {
           "file": "runner/cyc/cyc_render.c",
@@ -517,15 +518,19 @@
           "link": "../../runner/cyc/cyc_render.c#L122"
         }
       ],
-      "remaining": "Custom render helpers repeatedly decode rows and colors. Build reusable tile/row and sprite plans keyed to actual CHR, bank, nametable, palette and OAM revisions; share them with wide/HD/voxel consumers where contracts agree.",
+      "remaining": "Owned CHR capture/decode plan v1 has matching measured outputs but no demonstrated gain in Zelda Fit/Atlas. Other consumers and ownership algorithms remain unmeasured residuals; retained portal gameplay remains unqualified.",
       "affected_profiles": [
         "Custom wide, HD and voxel consumers with repeated tile/sprite preparation"
       ],
-      "next_decisive_check": "Measure repeated decode/preparation in the chosen full-view job; reuse previous CHR-shortcut prototypes only after auditing their invalidation and unqualified timing status.",
+      "next_decisive_check": "Independent durable Beads handoff, then next serial item. Revisit only with a different measured consumer/algorithm; do not repeat accepted or no-benefit checks.",
       "required_behavior": "CHR RAM writes/bank changes, palette/scanline state, flips, clipping, transparency, sprite order and restore invalidation.",
       "prior_issue": null,
-      "measured_additional_gain": null,
-      "execution_status": "remaining-evaluation"
+      "measured_additional_gain": {
+        "zelda_fit": "neutral/inconclusive; equal median",
+        "zelda_atlas": "neutral/inconclusive; raw median -.2604%, mixed pairs"
+      },
+      "execution_status": "evaluated-unselected-prototype",
+      "result_file": "2026-10-31-chr-plan-results.json"
     },
     {
       "id": "NES13",
@@ -1302,7 +1307,7 @@
   ],
   "execution": {
     "issue": "beads-2dw.1.110",
-    "branch": "perf/nes10-hook-services",
+    "branch": "perf/nes12-world-ownership",
     "base": "fc0bf3fa46a710464960c0a1f2d3b83b4d345600",
     "status": "in-progress",
     "evidence_root": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028",
@@ -1313,12 +1318,12 @@
     "owner_handoff_ready": false
   },
   "execution_summary": {
-    "evaluated_decisions": 22,
+    "evaluated_decisions": 23,
     "partial_ids": [],
     "parked_ids": [
       "NES29"
     ],
-    "other_unresolved": 8,
+    "other_unresolved": 7,
     "note": "Qualified scope decisions, not architectural exhaustion or a wall-clock completion estimate. Final combined builds and owner approval remain separate."
   }
 }
