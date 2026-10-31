@@ -1,0 +1,2762 @@
+{
+  "schema_version": 1,
+  "opportunity": "NES16",
+  "issue": "beads-2dw.1.110",
+  "campaign": "beads-2wy8.1",
+  "date": "2026-10-31",
+  "decision": "DEFERRED: neither Metroid whole-view plan demonstrated a built-game CPU win; do not adopt either runtime prototype",
+  "status": "evaluated-scoped-deferred-independent-durable-handoff-pending",
+  "engine_docs_branch": "perf/nes16-wide-view",
+  "title_prototype_branch": "perf/whole-view-nes16",
+  "title_base": "caccee62a67daea083fac8af36b1d0065b902071",
+  "runtime_commit": null,
+  "pull_request": null,
+  "results": [
+    {
+      "title": "Metroid",
+      "version": "v1",
+      "profile": "21:9",
+      "host": "SERVER",
+      "median_cpu_seconds": {
+        "reference": 2.703125,
+        "candidate": 2.71875
+      },
+      "median_cpu_reduction_percent": -0.5780346820809301,
+      "pairs": [
+        {
+          "index": 0,
+          "reference": {
+            "cpu_seconds": 2.8125,
+            "wall_seconds": 3.2834164001978934,
+            "binary_sha256": "80fd8d06aa19280b1460df7b89bd0520e88b3e026a3408952b49cdca3b464762"
+          },
+          "candidate": {
+            "cpu_seconds": 2.609375,
+            "wall_seconds": 3.040100600104779,
+            "binary_sha256": "13bbfd1f7ac75f79d06b48ff4feafaa3e208df4867c6a11345c29b57e21b663f"
+          }
+        },
+        {
+          "index": 1,
+          "candidate": {
+            "cpu_seconds": 2.71875,
+            "wall_seconds": 3.150173299945891,
+            "binary_sha256": "13bbfd1f7ac75f79d06b48ff4feafaa3e208df4867c6a11345c29b57e21b663f"
+          },
+          "reference": {
+            "cpu_seconds": 2.75,
+            "wall_seconds": 2.998912800103426,
+            "binary_sha256": "80fd8d06aa19280b1460df7b89bd0520e88b3e026a3408952b49cdca3b464762"
+          }
+        },
+        {
+          "index": 2,
+          "reference": {
+            "cpu_seconds": 2.65625,
+            "wall_seconds": 3.0288137001916766,
+            "binary_sha256": "80fd8d06aa19280b1460df7b89bd0520e88b3e026a3408952b49cdca3b464762"
+          },
+          "candidate": {
+            "cpu_seconds": 2.71875,
+            "wall_seconds": 3.1600736998952925,
+            "binary_sha256": "13bbfd1f7ac75f79d06b48ff4feafaa3e208df4867c6a11345c29b57e21b663f"
+          }
+        },
+        {
+          "index": 3,
+          "candidate": {
+            "cpu_seconds": 2.71875,
+            "wall_seconds": 3.2676332998089492,
+            "binary_sha256": "13bbfd1f7ac75f79d06b48ff4feafaa3e208df4867c6a11345c29b57e21b663f"
+          },
+          "reference": {
+            "cpu_seconds": 2.6875,
+            "wall_seconds": 2.9714150996878743,
+            "binary_sha256": "80fd8d06aa19280b1460df7b89bd0520e88b3e026a3408952b49cdca3b464762"
+          }
+        },
+        {
+          "index": 4,
+          "reference": {
+            "cpu_seconds": 2.703125,
+            "wall_seconds": 2.9747953000478446,
+            "binary_sha256": "80fd8d06aa19280b1460df7b89bd0520e88b3e026a3408952b49cdca3b464762"
+          },
+          "candidate": {
+            "cpu_seconds": 2.640625,
+            "wall_seconds": 2.9574454999528825,
+            "binary_sha256": "13bbfd1f7ac75f79d06b48ff4feafaa3e208df4867c6a11345c29b57e21b663f"
+          }
+        }
+      ],
+      "pair_counts": {
+        "faster": 3,
+        "slower": 2,
+        "ties": 0
+      },
+      "decision": "neutral/inconclusive; no proven gain",
+      "correctness_hashes": {
+        "audio.wav": "e5750d1662a55355179a10f64cd4986d48605eeee2308773561a1ad4d1928e73",
+        "frames.bin": "a900d5cd4c4231e670ef5cee44a29c67e347c67df908b109b2959dd3c722067f",
+        "hardware.txt": "0bf6fa91b9cda55ddb83cc3ae4caea84f49751dcbb3674597be62793e49c3450",
+        "memory.txt": "d720b74f4523472744b5484100d06128db3d5deef9656d516fbe758d39b510ec",
+        "final.png": "021a3add1c43e8832804c147fc883e8d7986b66aa893f2fc7bd064efd541e0f1",
+        "final_00000.png": "2706fa38e24aba8ec98ac71bfb6d887451d77fe5cb78ce3bf8c4151e87fe9f9e",
+        "final_00100.png": "1553f7616235e6ec7fbee5ca94961e767daade0b4842bbf787a6dfacbf1a5360",
+        "final_00200.png": "70d7534e1ff224079e80b0bd6fab133f7e0c1e5b03a1aa4f1d6816198ded8614",
+        "final_00300.png": "70d7534e1ff224079e80b0bd6fab133f7e0c1e5b03a1aa4f1d6816198ded8614",
+        "final_00400.png": "997a9e7f88845d10749f0f6c1bdb25b139cdf397aabab9c90de92e90dc8aabd5",
+        "final_00500.png": "997a9e7f88845d10749f0f6c1bdb25b139cdf397aabab9c90de92e90dc8aabd5",
+        "final_00600.png": "997a9e7f88845d10749f0f6c1bdb25b139cdf397aabab9c90de92e90dc8aabd5",
+        "final_00700.png": "997a9e7f88845d10749f0f6c1bdb25b139cdf397aabab9c90de92e90dc8aabd5",
+        "final_00800.png": "997a9e7f88845d10749f0f6c1bdb25b139cdf397aabab9c90de92e90dc8aabd5",
+        "final_00900.png": "f7ebd1a6578b7f9e90771d0708f3f67610ee134477797cd9da73c7bda95c8ec1",
+        "final_01000.png": "c2508612e6aacf3d41ec6439a23de58d3e1b29b9ed1a637addcf6375b49ce730",
+        "final_01100.png": "e5322f185122a152f9738e18dbbbf2eb44ed9d1e8c721386c92b4f966dd42a26",
+        "final_01200.png": "86ced4df54d5cf7544311c0e6f05a76bb10ae9ec4d82c0e8c73630501bd1d2c9",
+        "final_01300.png": "3d84bbc64d5b3251d8de4d60f41b0cf34ac02b4c3b5aa3c81af77c57334f226b",
+        "final_01400.png": "b8ec3ef299a64964c339400fba6621d4af8916120e5b67a33d8491912c9121c9",
+        "final_01500.png": "021a3add1c43e8832804c147fc883e8d7986b66aa893f2fc7bd064efd541e0f1",
+        "present.png": "de9917bf6736538f54653526aee9a58cdec91357fc653d40e03552a0cc040099",
+        "present_00000.png": "88bb8aad8349062bd30f4644449659ab7e377de87dbf030ead6e8ee8df8f13e1",
+        "present_00100.png": "615a6892f73cfcc6188174f73dc7f46f6e86a553fce6a765e0b65e0728d6e432",
+        "present_00200.png": "b21bff3d691b869b6aa83a144a2429f0d1e3bac10396d98748830b56fffde7f9",
+        "present_00300.png": "b21bff3d691b869b6aa83a144a2429f0d1e3bac10396d98748830b56fffde7f9",
+        "present_00400.png": "d7282199672598b1b9feaf9ead9abb4656ad80bd2b6b4daf48f2493f265f46a1",
+        "present_00500.png": "d7282199672598b1b9feaf9ead9abb4656ad80bd2b6b4daf48f2493f265f46a1",
+        "present_00600.png": "d7282199672598b1b9feaf9ead9abb4656ad80bd2b6b4daf48f2493f265f46a1",
+        "present_00700.png": "d7282199672598b1b9feaf9ead9abb4656ad80bd2b6b4daf48f2493f265f46a1",
+        "present_00800.png": "d7282199672598b1b9feaf9ead9abb4656ad80bd2b6b4daf48f2493f265f46a1",
+        "present_00900.png": "b68a5ffb654cff290e48e501e42b188676c0fd1150e2a3370bdf79e45542109d",
+        "present_01000.png": "f9d24746cf9b2b0a8008babc6e70ba9000678a9593b5bfb619a51d03af40b36c",
+        "present_01100.png": "79a861e485ffee7cb15e855e0197cd35b5f70fed838f00d3be228f95dabdb70f",
+        "present_01200.png": "959d507667cf59ff297016b0b6f5955cf91476ef087e081f99d22058af910cbd",
+        "present_01300.png": "d01b103671457c104e40908a7a81346dacab07050cd7ea988aa6cf973aba9d37",
+        "present_01400.png": "9b1f00ceddce2ea188fb4904f1d225f3fa2fc75e19955dc070c5c3935fb05198",
+        "present_01500.png": "de9917bf6736538f54653526aee9a58cdec91357fc653d40e03552a0cc040099"
+      },
+      "affinity_mask": 1,
+      "settings": [
+        "G:\\Temp\\Codex\\nes110-wide-view-v1-20261031\\reference\\MetroidNESRecomp.exe",
+        "G:\\Temp\\Codex\\nes110-wide-view-v1-20261031\\baserom.nes",
+        "--hidden",
+        "--uncapped",
+        "--exit-after",
+        "1501",
+        "--no-save",
+        "--config",
+        "G:\\Temp\\Codex\\nes110-wide-view-v1-20261031\\21x9\\reference\\config.ini",
+        "--mods-root",
+        "G:\\Temp\\Codex\\nes110-wide-view-v1-20261031\\reference\\mods",
+        "--widescreen",
+        "21:9",
+        "--window-input",
+        "G:\\Temp\\Codex\\nes110-wide-view-v1-20261031\\moving.input",
+        "--tcp",
+        "53894"
+      ],
+      "capacity": {
+        "before": {
+          "eligible": true,
+          "reasons": [],
+          "requested": {
+            "cpu": 1.0,
+            "gpu": 0.0,
+            "memory": 1.5,
+            "disk": 2.0,
+            "class": "timing",
+            "priority": "normal"
+          },
+          "remaining": {
+            "cpu_cores": 2.015625,
+            "memory_gib": 7.324378967285156,
+            "gpu_percent": 44.0
+          },
+          "sample": {
+            "host": "SERVER",
+            "os": "windows",
+            "timestamp": 1793431806.7320552,
+            "physical_cores": 4,
+            "logical_cpus": 4,
+            "cpu_busy_percent": 49.609375,
+            "cpu_free_cores": 2.015625,
+            "memory_available_gib": 7.324378967285156,
+            "memory_total_gib": 15.939079284667969,
+            "gpu_busy_percent": 56.0,
+            "gpu_source": "WDDM per-engine aggregate maximum",
+            "storage": "G:\\",
+            "storage_free_gib": 3874.258892059326
+          },
+          "active_claims": 1,
+          "policy": "codex-benchmark-capacity-v1",
+          "token": "54efda4e70ec48a09ee7e7648a84f55c",
+          "phase": "pending",
+          "target": "server",
+          "alias": "server",
+          "other_targets": []
+        },
+        "after": {
+          "host": "SERVER",
+          "os": "windows",
+          "timestamp": 1793431881.4323637,
+          "physical_cores": 4,
+          "logical_cpus": 4,
+          "cpu_busy_percent": 13.28125,
+          "cpu_free_cores": 3.46875,
+          "memory_available_gib": 7.636852264404297,
+          "memory_total_gib": 15.939079284667969,
+          "gpu_busy_percent": 54.0,
+          "gpu_source": "WDDM per-engine aggregate maximum",
+          "storage": "G:\\",
+          "storage_free_gib": 3874.2261123657227
+        }
+      },
+      "raw_archive": "server-wide-view-v1-evidence.zip",
+      "raw_performance": "21x9/performance.json",
+      "raw_correctness": "21x9/correctness.json"
+    },
+    {
+      "title": "Metroid",
+      "version": "v1",
+      "profile": "32:9",
+      "host": "SERVER",
+      "median_cpu_seconds": {
+        "reference": 2.65625,
+        "candidate": 2.609375
+      },
+      "median_cpu_reduction_percent": 1.764705882352946,
+      "pairs": [
+        {
+          "index": 0,
+          "reference": {
+            "cpu_seconds": 2.71875,
+            "wall_seconds": 3.3636189000681043,
+            "binary_sha256": "80fd8d06aa19280b1460df7b89bd0520e88b3e026a3408952b49cdca3b464762"
+          },
+          "candidate": {
+            "cpu_seconds": 2.765625,
+            "wall_seconds": 3.221473699901253,
+            "binary_sha256": "13bbfd1f7ac75f79d06b48ff4feafaa3e208df4867c6a11345c29b57e21b663f"
+          }
+        },
+        {
+          "index": 1,
+          "candidate": {
+            "cpu_seconds": 2.609375,
+            "wall_seconds": 2.9833399998024106,
+            "binary_sha256": "13bbfd1f7ac75f79d06b48ff4feafaa3e208df4867c6a11345c29b57e21b663f"
+          },
+          "reference": {
+            "cpu_seconds": 2.65625,
+            "wall_seconds": 2.9984360998496413,
+            "binary_sha256": "80fd8d06aa19280b1460df7b89bd0520e88b3e026a3408952b49cdca3b464762"
+          }
+        },
+        {
+          "index": 2,
+          "reference": {
+            "cpu_seconds": 2.578125,
+            "wall_seconds": 2.884451999794692,
+            "binary_sha256": "80fd8d06aa19280b1460df7b89bd0520e88b3e026a3408952b49cdca3b464762"
+          },
+          "candidate": {
+            "cpu_seconds": 2.578125,
+            "wall_seconds": 2.939039200078696,
+            "binary_sha256": "13bbfd1f7ac75f79d06b48ff4feafaa3e208df4867c6a11345c29b57e21b663f"
+          }
+        },
+        {
+          "index": 3,
+          "candidate": {
+            "cpu_seconds": 2.515625,
+            "wall_seconds": 2.9532881998457015,
+            "binary_sha256": "13bbfd1f7ac75f79d06b48ff4feafaa3e208df4867c6a11345c29b57e21b663f"
+          },
+          "reference": {
+            "cpu_seconds": 2.640625,
+            "wall_seconds": 2.974487899802625,
+            "binary_sha256": "80fd8d06aa19280b1460df7b89bd0520e88b3e026a3408952b49cdca3b464762"
+          }
+        },
+        {
+          "index": 4,
+          "reference": {
+            "cpu_seconds": 2.65625,
+            "wall_seconds": 2.959553100168705,
+            "binary_sha256": "80fd8d06aa19280b1460df7b89bd0520e88b3e026a3408952b49cdca3b464762"
+          },
+          "candidate": {
+            "cpu_seconds": 2.625,
+            "wall_seconds": 3.0016658999957144,
+            "binary_sha256": "13bbfd1f7ac75f79d06b48ff4feafaa3e208df4867c6a11345c29b57e21b663f"
+          }
+        }
+      ],
+      "pair_counts": {
+        "faster": 3,
+        "slower": 1,
+        "ties": 1
+      },
+      "decision": "neutral/inconclusive; no proven gain",
+      "correctness_hashes": {
+        "audio.wav": "5c73f1ae7f17a9942c0cf26854adcb79c6d5a68c349f6eca4242f6c7f50dc615",
+        "frames.bin": "57ed2c605a0a08c6a0c9fe3c71d4363340f2258112db1297b1ad9eb03e3ac569",
+        "hardware.txt": "3754eb0305e7626b1fe23485347d8d6f4deeb41e1ea0ff7782a765f5fc2f1c1a",
+        "memory.txt": "655debc8e3d85924e5701f328128daf3f44688a19bd90f647fc893d617422bfe",
+        "final.png": "34ac981f21678be9f6e478b5c3856678c4582a627919bbc2ccc73ec8a31fc52f",
+        "final_00000.png": "2706fa38e24aba8ec98ac71bfb6d887451d77fe5cb78ce3bf8c4151e87fe9f9e",
+        "final_00100.png": "1553f7616235e6ec7fbee5ca94961e767daade0b4842bbf787a6dfacbf1a5360",
+        "final_00200.png": "70d7534e1ff224079e80b0bd6fab133f7e0c1e5b03a1aa4f1d6816198ded8614",
+        "final_00300.png": "70d7534e1ff224079e80b0bd6fab133f7e0c1e5b03a1aa4f1d6816198ded8614",
+        "final_00400.png": "997a9e7f88845d10749f0f6c1bdb25b139cdf397aabab9c90de92e90dc8aabd5",
+        "final_00500.png": "997a9e7f88845d10749f0f6c1bdb25b139cdf397aabab9c90de92e90dc8aabd5",
+        "final_00600.png": "997a9e7f88845d10749f0f6c1bdb25b139cdf397aabab9c90de92e90dc8aabd5",
+        "final_00700.png": "997a9e7f88845d10749f0f6c1bdb25b139cdf397aabab9c90de92e90dc8aabd5",
+        "final_00800.png": "997a9e7f88845d10749f0f6c1bdb25b139cdf397aabab9c90de92e90dc8aabd5",
+        "final_00900.png": "f7ebd1a6578b7f9e90771d0708f3f67610ee134477797cd9da73c7bda95c8ec1",
+        "final_01000.png": "c2508612e6aacf3d41ec6439a23de58d3e1b29b9ed1a637addcf6375b49ce730",
+        "final_01100.png": "e5322f185122a152f9738e18dbbbf2eb44ed9d1e8c721386c92b4f966dd42a26",
+        "final_01200.png": "86ced4df54d5cf7544311c0e6f05a76bb10ae9ec4d82c0e8c73630501bd1d2c9",
+        "final_01300.png": "3d84bbc64d5b3251d8de4d60f41b0cf34ac02b4c3b5aa3c81af77c57334f226b",
+        "final_01400.png": "b8ec3ef299a64964c339400fba6621d4af8916120e5b67a33d8491912c9121c9",
+        "final_01500.png": "34ac981f21678be9f6e478b5c3856678c4582a627919bbc2ccc73ec8a31fc52f",
+        "present.png": "b8ff86d25e8229513f87c3448c3cf37709535b79cf9c83ca7caa5da8a5965e03",
+        "present_00000.png": "b561e822cc5a3e11294c595ef33365497ef1d8b7f107822637d51ef486158a7b",
+        "present_00100.png": "3d1f785fabe176e1ee39c1f3489630924d54d85ce83df097c9ed54b20c07b31d",
+        "present_00200.png": "9c76faa1c6ba3f76b777719a4309bac3b9e456ae765453fc02536b9ec6a6ea61",
+        "present_00300.png": "9c76faa1c6ba3f76b777719a4309bac3b9e456ae765453fc02536b9ec6a6ea61",
+        "present_00400.png": "0510732e0946d89a0ed44aa0cbf62947416f2be75f2cd9599e559cb6ff322e14",
+        "present_00500.png": "0510732e0946d89a0ed44aa0cbf62947416f2be75f2cd9599e559cb6ff322e14",
+        "present_00600.png": "0510732e0946d89a0ed44aa0cbf62947416f2be75f2cd9599e559cb6ff322e14",
+        "present_00700.png": "0510732e0946d89a0ed44aa0cbf62947416f2be75f2cd9599e559cb6ff322e14",
+        "present_00800.png": "0510732e0946d89a0ed44aa0cbf62947416f2be75f2cd9599e559cb6ff322e14",
+        "present_00900.png": "9990b140c1668db0a972bb7784aa369d221a80aaf3f8912517d9ff3f639b056c",
+        "present_01000.png": "92692813447fcbbbfb86b0ff80d176648bbecde289b09ec0a7db0049a85622c5",
+        "present_01100.png": "efbf6caa894b0fc1202cc70f58be46daf60bcce7fbc2f3ca7c695e236777e7a5",
+        "present_01200.png": "227e5174c2dced325df351292333a5203cf1ab3c3d3f770ae2e85038bc27e8d9",
+        "present_01300.png": "f22beb1055d2318e35a30e0618ae894352438943c0846603aab28b9fc3b0f3b4",
+        "present_01400.png": "b35a5877fe6ad171a4badd90495c52344fbd13fb6aed85d5b9f48991b992023f",
+        "present_01500.png": "b8ff86d25e8229513f87c3448c3cf37709535b79cf9c83ca7caa5da8a5965e03"
+      },
+      "affinity_mask": 8,
+      "settings": [
+        "G:\\Temp\\Codex\\nes110-wide-view-v1-20261031\\reference\\MetroidNESRecomp.exe",
+        "G:\\Temp\\Codex\\nes110-wide-view-v1-20261031\\baserom.nes",
+        "--hidden",
+        "--uncapped",
+        "--exit-after",
+        "1501",
+        "--no-save",
+        "--config",
+        "G:\\Temp\\Codex\\nes110-wide-view-v1-20261031\\32x9\\reference\\config.ini",
+        "--mods-root",
+        "G:\\Temp\\Codex\\nes110-wide-view-v1-20261031\\reference\\mods",
+        "--widescreen",
+        "32:9",
+        "--window-input",
+        "G:\\Temp\\Codex\\nes110-wide-view-v1-20261031\\moving.input",
+        "--tcp",
+        "54385"
+      ],
+      "capacity": {
+        "before": {
+          "eligible": true,
+          "reasons": [],
+          "requested": {
+            "cpu": 1.0,
+            "gpu": 0.0,
+            "memory": 1.5,
+            "disk": 2.0,
+            "class": "timing",
+            "priority": "normal"
+          },
+          "remaining": {
+            "cpu_cores": 3.140625,
+            "memory_gib": 7.615234375,
+            "gpu_percent": 47.0
+          },
+          "sample": {
+            "host": "SERVER",
+            "os": "windows",
+            "timestamp": 1793431885.3967302,
+            "physical_cores": 4,
+            "logical_cpus": 4,
+            "cpu_busy_percent": 21.484375,
+            "cpu_free_cores": 3.140625,
+            "memory_available_gib": 7.615234375,
+            "memory_total_gib": 15.939079284667969,
+            "gpu_busy_percent": 53.0,
+            "gpu_source": "WDDM per-engine aggregate maximum",
+            "storage": "G:\\",
+            "storage_free_gib": 3874.2261123657227
+          },
+          "active_claims": 0,
+          "policy": "codex-benchmark-capacity-v1",
+          "token": "10548f542f6843ef929becc0cd299ce6",
+          "phase": "pending",
+          "target": "server",
+          "alias": "server",
+          "other_targets": []
+        },
+        "after": {
+          "host": "SERVER",
+          "os": "windows",
+          "timestamp": 1793431961.6010077,
+          "physical_cores": 4,
+          "logical_cpus": 4,
+          "cpu_busy_percent": 12.109375,
+          "cpu_free_cores": 3.515625,
+          "memory_available_gib": 7.551483154296875,
+          "memory_total_gib": 15.939079284667969,
+          "gpu_busy_percent": 58.0,
+          "gpu_source": "WDDM per-engine aggregate maximum",
+          "storage": "G:\\",
+          "storage_free_gib": 3874.1865730285645
+        }
+      },
+      "raw_archive": "server-wide-view-v1-evidence.zip",
+      "raw_performance": "32x9/performance.json",
+      "raw_correctness": "32x9/correctness.json"
+    },
+    {
+      "title": "Metroid",
+      "version": "v2",
+      "profile": "21:9",
+      "host": "SERVER",
+      "median_cpu_seconds": {
+        "reference": 2.609375,
+        "candidate": 2.671875
+      },
+      "median_cpu_reduction_percent": -2.39520958083832,
+      "pairs": [
+        {
+          "index": 0,
+          "reference": {
+            "cpu_seconds": 2.609375,
+            "wall_seconds": 2.9338533002883196,
+            "binary_sha256": "1fdaffc7d20f0bfd30461141ef5d9d34ccf27909d2b38fde41f7485475d1d4f7"
+          },
+          "candidate": {
+            "cpu_seconds": 2.609375,
+            "wall_seconds": 2.9831826998852193,
+            "binary_sha256": "a7dd0d6b36ac7886b65de3e41a5ee1cd320564983a7bc7b9e25d77cbe8986177"
+          }
+        },
+        {
+          "index": 1,
+          "candidate": {
+            "cpu_seconds": 2.703125,
+            "wall_seconds": 3.0905694998800755,
+            "binary_sha256": "a7dd0d6b36ac7886b65de3e41a5ee1cd320564983a7bc7b9e25d77cbe8986177"
+          },
+          "reference": {
+            "cpu_seconds": 2.65625,
+            "wall_seconds": 3.0685495999641716,
+            "binary_sha256": "1fdaffc7d20f0bfd30461141ef5d9d34ccf27909d2b38fde41f7485475d1d4f7"
+          }
+        },
+        {
+          "index": 2,
+          "reference": {
+            "cpu_seconds": 2.609375,
+            "wall_seconds": 3.1529768998734653,
+            "binary_sha256": "1fdaffc7d20f0bfd30461141ef5d9d34ccf27909d2b38fde41f7485475d1d4f7"
+          },
+          "candidate": {
+            "cpu_seconds": 2.671875,
+            "wall_seconds": 3.327416299842298,
+            "binary_sha256": "a7dd0d6b36ac7886b65de3e41a5ee1cd320564983a7bc7b9e25d77cbe8986177"
+          }
+        },
+        {
+          "index": 3,
+          "candidate": {
+            "cpu_seconds": 2.609375,
+            "wall_seconds": 2.9345184001140296,
+            "binary_sha256": "a7dd0d6b36ac7886b65de3e41a5ee1cd320564983a7bc7b9e25d77cbe8986177"
+          },
+          "reference": {
+            "cpu_seconds": 2.609375,
+            "wall_seconds": 2.9890535003505647,
+            "binary_sha256": "1fdaffc7d20f0bfd30461141ef5d9d34ccf27909d2b38fde41f7485475d1d4f7"
+          }
+        },
+        {
+          "index": 4,
+          "reference": {
+            "cpu_seconds": 2.59375,
+            "wall_seconds": 3.0592902996577322,
+            "binary_sha256": "1fdaffc7d20f0bfd30461141ef5d9d34ccf27909d2b38fde41f7485475d1d4f7"
+          },
+          "candidate": {
+            "cpu_seconds": 2.671875,
+            "wall_seconds": 2.9591872999444604,
+            "binary_sha256": "a7dd0d6b36ac7886b65de3e41a5ee1cd320564983a7bc7b9e25d77cbe8986177"
+          }
+        }
+      ],
+      "pair_counts": {
+        "faster": 0,
+        "slower": 3,
+        "ties": 2
+      },
+      "decision": "negative medians/mixed-or-tied samples; no demonstrated gain, not selected",
+      "correctness_hashes": {
+        "audio.wav": "e5750d1662a55355179a10f64cd4986d48605eeee2308773561a1ad4d1928e73",
+        "frames.bin": "a900d5cd4c4231e670ef5cee44a29c67e347c67df908b109b2959dd3c722067f",
+        "hardware.txt": "0bf6fa91b9cda55ddb83cc3ae4caea84f49751dcbb3674597be62793e49c3450",
+        "memory.txt": "d720b74f4523472744b5484100d06128db3d5deef9656d516fbe758d39b510ec",
+        "final.png": "021a3add1c43e8832804c147fc883e8d7986b66aa893f2fc7bd064efd541e0f1",
+        "final_00000.png": "2706fa38e24aba8ec98ac71bfb6d887451d77fe5cb78ce3bf8c4151e87fe9f9e",
+        "final_00100.png": "1553f7616235e6ec7fbee5ca94961e767daade0b4842bbf787a6dfacbf1a5360",
+        "final_00200.png": "70d7534e1ff224079e80b0bd6fab133f7e0c1e5b03a1aa4f1d6816198ded8614",
+        "final_00300.png": "70d7534e1ff224079e80b0bd6fab133f7e0c1e5b03a1aa4f1d6816198ded8614",
+        "final_00400.png": "997a9e7f88845d10749f0f6c1bdb25b139cdf397aabab9c90de92e90dc8aabd5",
+        "final_00500.png": "997a9e7f88845d10749f0f6c1bdb25b139cdf397aabab9c90de92e90dc8aabd5",
+        "final_00600.png": "997a9e7f88845d10749f0f6c1bdb25b139cdf397aabab9c90de92e90dc8aabd5",
+        "final_00700.png": "997a9e7f88845d10749f0f6c1bdb25b139cdf397aabab9c90de92e90dc8aabd5",
+        "final_00800.png": "997a9e7f88845d10749f0f6c1bdb25b139cdf397aabab9c90de92e90dc8aabd5",
+        "final_00900.png": "f7ebd1a6578b7f9e90771d0708f3f67610ee134477797cd9da73c7bda95c8ec1",
+        "final_01000.png": "c2508612e6aacf3d41ec6439a23de58d3e1b29b9ed1a637addcf6375b49ce730",
+        "final_01100.png": "e5322f185122a152f9738e18dbbbf2eb44ed9d1e8c721386c92b4f966dd42a26",
+        "final_01200.png": "86ced4df54d5cf7544311c0e6f05a76bb10ae9ec4d82c0e8c73630501bd1d2c9",
+        "final_01300.png": "3d84bbc64d5b3251d8de4d60f41b0cf34ac02b4c3b5aa3c81af77c57334f226b",
+        "final_01400.png": "b8ec3ef299a64964c339400fba6621d4af8916120e5b67a33d8491912c9121c9",
+        "final_01500.png": "021a3add1c43e8832804c147fc883e8d7986b66aa893f2fc7bd064efd541e0f1",
+        "present.png": "de9917bf6736538f54653526aee9a58cdec91357fc653d40e03552a0cc040099",
+        "present_00000.png": "88bb8aad8349062bd30f4644449659ab7e377de87dbf030ead6e8ee8df8f13e1",
+        "present_00100.png": "615a6892f73cfcc6188174f73dc7f46f6e86a553fce6a765e0b65e0728d6e432",
+        "present_00200.png": "b21bff3d691b869b6aa83a144a2429f0d1e3bac10396d98748830b56fffde7f9",
+        "present_00300.png": "b21bff3d691b869b6aa83a144a2429f0d1e3bac10396d98748830b56fffde7f9",
+        "present_00400.png": "d7282199672598b1b9feaf9ead9abb4656ad80bd2b6b4daf48f2493f265f46a1",
+        "present_00500.png": "d7282199672598b1b9feaf9ead9abb4656ad80bd2b6b4daf48f2493f265f46a1",
+        "present_00600.png": "d7282199672598b1b9feaf9ead9abb4656ad80bd2b6b4daf48f2493f265f46a1",
+        "present_00700.png": "d7282199672598b1b9feaf9ead9abb4656ad80bd2b6b4daf48f2493f265f46a1",
+        "present_00800.png": "d7282199672598b1b9feaf9ead9abb4656ad80bd2b6b4daf48f2493f265f46a1",
+        "present_00900.png": "b68a5ffb654cff290e48e501e42b188676c0fd1150e2a3370bdf79e45542109d",
+        "present_01000.png": "f9d24746cf9b2b0a8008babc6e70ba9000678a9593b5bfb619a51d03af40b36c",
+        "present_01100.png": "79a861e485ffee7cb15e855e0197cd35b5f70fed838f00d3be228f95dabdb70f",
+        "present_01200.png": "959d507667cf59ff297016b0b6f5955cf91476ef087e081f99d22058af910cbd",
+        "present_01300.png": "d01b103671457c104e40908a7a81346dacab07050cd7ea988aa6cf973aba9d37",
+        "present_01400.png": "9b1f00ceddce2ea188fb4904f1d225f3fa2fc75e19955dc070c5c3935fb05198",
+        "present_01500.png": "de9917bf6736538f54653526aee9a58cdec91357fc653d40e03552a0cc040099"
+      },
+      "affinity_mask": 8,
+      "settings": [
+        "G:\\Temp\\Codex\\nes110-wide-view-v2-20261031\\reference\\MetroidNESRecomp.exe",
+        "G:\\Temp\\Codex\\nes110-wide-view-v2-20261031\\baserom.nes",
+        "--hidden",
+        "--uncapped",
+        "--exit-after",
+        "1501",
+        "--no-save",
+        "--config",
+        "G:\\Temp\\Codex\\nes110-wide-view-v2-20261031\\21x9\\reference\\config.ini",
+        "--mods-root",
+        "G:\\Temp\\Codex\\nes110-wide-view-v2-20261031\\reference\\mods",
+        "--widescreen",
+        "21:9",
+        "--window-input",
+        "G:\\Temp\\Codex\\nes110-wide-view-v2-20261031\\moving.input",
+        "--tcp",
+        "55704"
+      ],
+      "capacity": {
+        "before": {
+          "eligible": true,
+          "reasons": [],
+          "requested": {
+            "cpu": 1.0,
+            "gpu": 0.0,
+            "memory": 1.5,
+            "disk": 2.0,
+            "class": "timing",
+            "priority": "normal"
+          },
+          "remaining": {
+            "cpu_cores": 2.6875,
+            "memory_gib": 7.525299072265625,
+            "gpu_percent": 43.0
+          },
+          "sample": {
+            "host": "SERVER",
+            "os": "windows",
+            "timestamp": 1793432103.2391212,
+            "physical_cores": 4,
+            "logical_cpus": 4,
+            "cpu_busy_percent": 32.8125,
+            "cpu_free_cores": 2.6875,
+            "memory_available_gib": 7.525299072265625,
+            "memory_total_gib": 15.939079284667969,
+            "gpu_busy_percent": 57.0,
+            "gpu_source": "WDDM per-engine aggregate maximum",
+            "storage": "G:\\",
+            "storage_free_gib": 3874.131031036377
+          },
+          "active_claims": 0,
+          "policy": "codex-benchmark-capacity-v1",
+          "token": "d1e24d56c71445f28d68a1a0bcee8f65",
+          "phase": "pending",
+          "target": "server",
+          "alias": "server",
+          "other_targets": []
+        },
+        "after": {
+          "host": "SERVER",
+          "os": "windows",
+          "timestamp": 1793432176.2433803,
+          "physical_cores": 4,
+          "logical_cpus": 4,
+          "cpu_busy_percent": 11.71875,
+          "cpu_free_cores": 3.53125,
+          "memory_available_gib": 7.6015777587890625,
+          "memory_total_gib": 15.939079284667969,
+          "gpu_busy_percent": 54.0,
+          "gpu_source": "WDDM per-engine aggregate maximum",
+          "storage": "G:\\",
+          "storage_free_gib": 3874.0982513427734
+        }
+      },
+      "raw_archive": "server-wide-view-v2-evidence.zip",
+      "raw_performance": "21x9/performance.json",
+      "raw_correctness": "21x9/correctness.json"
+    },
+    {
+      "title": "Metroid",
+      "version": "v2",
+      "profile": "32:9",
+      "host": "SERVER",
+      "median_cpu_seconds": {
+        "reference": 2.59375,
+        "candidate": 2.640625
+      },
+      "median_cpu_reduction_percent": -1.8072289156626509,
+      "pairs": [
+        {
+          "index": 0,
+          "reference": {
+            "cpu_seconds": 2.546875,
+            "wall_seconds": 2.870615900028497,
+            "binary_sha256": "1fdaffc7d20f0bfd30461141ef5d9d34ccf27909d2b38fde41f7485475d1d4f7"
+          },
+          "candidate": {
+            "cpu_seconds": 2.75,
+            "wall_seconds": 2.992063599638641,
+            "binary_sha256": "a7dd0d6b36ac7886b65de3e41a5ee1cd320564983a7bc7b9e25d77cbe8986177"
+          }
+        },
+        {
+          "index": 1,
+          "candidate": {
+            "cpu_seconds": 2.609375,
+            "wall_seconds": 2.9324264000169933,
+            "binary_sha256": "a7dd0d6b36ac7886b65de3e41a5ee1cd320564983a7bc7b9e25d77cbe8986177"
+          },
+          "reference": {
+            "cpu_seconds": 2.578125,
+            "wall_seconds": 2.9148614001460373,
+            "binary_sha256": "1fdaffc7d20f0bfd30461141ef5d9d34ccf27909d2b38fde41f7485475d1d4f7"
+          }
+        },
+        {
+          "index": 2,
+          "reference": {
+            "cpu_seconds": 2.609375,
+            "wall_seconds": 2.901060299947858,
+            "binary_sha256": "1fdaffc7d20f0bfd30461141ef5d9d34ccf27909d2b38fde41f7485475d1d4f7"
+          },
+          "candidate": {
+            "cpu_seconds": 2.75,
+            "wall_seconds": 2.924859399907291,
+            "binary_sha256": "a7dd0d6b36ac7886b65de3e41a5ee1cd320564983a7bc7b9e25d77cbe8986177"
+          }
+        },
+        {
+          "index": 3,
+          "candidate": {
+            "cpu_seconds": 2.59375,
+            "wall_seconds": 3.048321600072086,
+            "binary_sha256": "a7dd0d6b36ac7886b65de3e41a5ee1cd320564983a7bc7b9e25d77cbe8986177"
+          },
+          "reference": {
+            "cpu_seconds": 2.59375,
+            "wall_seconds": 2.943291800096631,
+            "binary_sha256": "1fdaffc7d20f0bfd30461141ef5d9d34ccf27909d2b38fde41f7485475d1d4f7"
+          }
+        },
+        {
+          "index": 4,
+          "reference": {
+            "cpu_seconds": 2.65625,
+            "wall_seconds": 2.9857759000733495,
+            "binary_sha256": "1fdaffc7d20f0bfd30461141ef5d9d34ccf27909d2b38fde41f7485475d1d4f7"
+          },
+          "candidate": {
+            "cpu_seconds": 2.640625,
+            "wall_seconds": 3.159205200150609,
+            "binary_sha256": "a7dd0d6b36ac7886b65de3e41a5ee1cd320564983a7bc7b9e25d77cbe8986177"
+          }
+        }
+      ],
+      "pair_counts": {
+        "faster": 1,
+        "slower": 3,
+        "ties": 1
+      },
+      "decision": "negative medians/mixed-or-tied samples; no demonstrated gain, not selected",
+      "correctness_hashes": {
+        "audio.wav": "5c73f1ae7f17a9942c0cf26854adcb79c6d5a68c349f6eca4242f6c7f50dc615",
+        "frames.bin": "57ed2c605a0a08c6a0c9fe3c71d4363340f2258112db1297b1ad9eb03e3ac569",
+        "hardware.txt": "3754eb0305e7626b1fe23485347d8d6f4deeb41e1ea0ff7782a765f5fc2f1c1a",
+        "memory.txt": "655debc8e3d85924e5701f328128daf3f44688a19bd90f647fc893d617422bfe",
+        "final.png": "34ac981f21678be9f6e478b5c3856678c4582a627919bbc2ccc73ec8a31fc52f",
+        "final_00000.png": "2706fa38e24aba8ec98ac71bfb6d887451d77fe5cb78ce3bf8c4151e87fe9f9e",
+        "final_00100.png": "1553f7616235e6ec7fbee5ca94961e767daade0b4842bbf787a6dfacbf1a5360",
+        "final_00200.png": "70d7534e1ff224079e80b0bd6fab133f7e0c1e5b03a1aa4f1d6816198ded8614",
+        "final_00300.png": "70d7534e1ff224079e80b0bd6fab133f7e0c1e5b03a1aa4f1d6816198ded8614",
+        "final_00400.png": "997a9e7f88845d10749f0f6c1bdb25b139cdf397aabab9c90de92e90dc8aabd5",
+        "final_00500.png": "997a9e7f88845d10749f0f6c1bdb25b139cdf397aabab9c90de92e90dc8aabd5",
+        "final_00600.png": "997a9e7f88845d10749f0f6c1bdb25b139cdf397aabab9c90de92e90dc8aabd5",
+        "final_00700.png": "997a9e7f88845d10749f0f6c1bdb25b139cdf397aabab9c90de92e90dc8aabd5",
+        "final_00800.png": "997a9e7f88845d10749f0f6c1bdb25b139cdf397aabab9c90de92e90dc8aabd5",
+        "final_00900.png": "f7ebd1a6578b7f9e90771d0708f3f67610ee134477797cd9da73c7bda95c8ec1",
+        "final_01000.png": "c2508612e6aacf3d41ec6439a23de58d3e1b29b9ed1a637addcf6375b49ce730",
+        "final_01100.png": "e5322f185122a152f9738e18dbbbf2eb44ed9d1e8c721386c92b4f966dd42a26",
+        "final_01200.png": "86ced4df54d5cf7544311c0e6f05a76bb10ae9ec4d82c0e8c73630501bd1d2c9",
+        "final_01300.png": "3d84bbc64d5b3251d8de4d60f41b0cf34ac02b4c3b5aa3c81af77c57334f226b",
+        "final_01400.png": "b8ec3ef299a64964c339400fba6621d4af8916120e5b67a33d8491912c9121c9",
+        "final_01500.png": "34ac981f21678be9f6e478b5c3856678c4582a627919bbc2ccc73ec8a31fc52f",
+        "present.png": "b8ff86d25e8229513f87c3448c3cf37709535b79cf9c83ca7caa5da8a5965e03",
+        "present_00000.png": "b561e822cc5a3e11294c595ef33365497ef1d8b7f107822637d51ef486158a7b",
+        "present_00100.png": "3d1f785fabe176e1ee39c1f3489630924d54d85ce83df097c9ed54b20c07b31d",
+        "present_00200.png": "9c76faa1c6ba3f76b777719a4309bac3b9e456ae765453fc02536b9ec6a6ea61",
+        "present_00300.png": "9c76faa1c6ba3f76b777719a4309bac3b9e456ae765453fc02536b9ec6a6ea61",
+        "present_00400.png": "0510732e0946d89a0ed44aa0cbf62947416f2be75f2cd9599e559cb6ff322e14",
+        "present_00500.png": "0510732e0946d89a0ed44aa0cbf62947416f2be75f2cd9599e559cb6ff322e14",
+        "present_00600.png": "0510732e0946d89a0ed44aa0cbf62947416f2be75f2cd9599e559cb6ff322e14",
+        "present_00700.png": "0510732e0946d89a0ed44aa0cbf62947416f2be75f2cd9599e559cb6ff322e14",
+        "present_00800.png": "0510732e0946d89a0ed44aa0cbf62947416f2be75f2cd9599e559cb6ff322e14",
+        "present_00900.png": "9990b140c1668db0a972bb7784aa369d221a80aaf3f8912517d9ff3f639b056c",
+        "present_01000.png": "92692813447fcbbbfb86b0ff80d176648bbecde289b09ec0a7db0049a85622c5",
+        "present_01100.png": "efbf6caa894b0fc1202cc70f58be46daf60bcce7fbc2f3ca7c695e236777e7a5",
+        "present_01200.png": "227e5174c2dced325df351292333a5203cf1ab3c3d3f770ae2e85038bc27e8d9",
+        "present_01300.png": "f22beb1055d2318e35a30e0618ae894352438943c0846603aab28b9fc3b0f3b4",
+        "present_01400.png": "b35a5877fe6ad171a4badd90495c52344fbd13fb6aed85d5b9f48991b992023f",
+        "present_01500.png": "b8ff86d25e8229513f87c3448c3cf37709535b79cf9c83ca7caa5da8a5965e03"
+      },
+      "affinity_mask": 4,
+      "settings": [
+        "G:\\Temp\\Codex\\nes110-wide-view-v2-20261031\\reference\\MetroidNESRecomp.exe",
+        "G:\\Temp\\Codex\\nes110-wide-view-v2-20261031\\baserom.nes",
+        "--hidden",
+        "--uncapped",
+        "--exit-after",
+        "1501",
+        "--no-save",
+        "--config",
+        "G:\\Temp\\Codex\\nes110-wide-view-v2-20261031\\32x9\\reference\\config.ini",
+        "--mods-root",
+        "G:\\Temp\\Codex\\nes110-wide-view-v2-20261031\\reference\\mods",
+        "--widescreen",
+        "32:9",
+        "--window-input",
+        "G:\\Temp\\Codex\\nes110-wide-view-v2-20261031\\moving.input",
+        "--tcp",
+        "56208"
+      ],
+      "capacity": {
+        "before": {
+          "eligible": true,
+          "reasons": [],
+          "requested": {
+            "cpu": 1.0,
+            "gpu": 0.0,
+            "memory": 1.5,
+            "disk": 2.0,
+            "class": "timing",
+            "priority": "normal"
+          },
+          "remaining": {
+            "cpu_cores": 3.546875,
+            "memory_gib": 7.587425231933594,
+            "gpu_percent": 43.0
+          },
+          "sample": {
+            "host": "SERVER",
+            "os": "windows",
+            "timestamp": 1793432180.2617922,
+            "physical_cores": 4,
+            "logical_cpus": 4,
+            "cpu_busy_percent": 11.328125,
+            "cpu_free_cores": 3.546875,
+            "memory_available_gib": 7.587425231933594,
+            "memory_total_gib": 15.939079284667969,
+            "gpu_busy_percent": 57.0,
+            "gpu_source": "WDDM per-engine aggregate maximum",
+            "storage": "G:\\",
+            "storage_free_gib": 3874.0982513427734
+          },
+          "active_claims": 0,
+          "policy": "codex-benchmark-capacity-v1",
+          "token": "4ff754927a84479ca328173d3460f73d",
+          "phase": "pending",
+          "target": "server",
+          "alias": "server",
+          "other_targets": []
+        },
+        "after": {
+          "host": "SERVER",
+          "os": "windows",
+          "timestamp": 1793432250.7520123,
+          "physical_cores": 4,
+          "logical_cpus": 4,
+          "cpu_busy_percent": 48.828125,
+          "cpu_free_cores": 2.046875,
+          "memory_available_gib": 7.491142272949219,
+          "memory_total_gib": 15.939079284667969,
+          "gpu_busy_percent": 58.0,
+          "gpu_source": "WDDM per-engine aggregate maximum",
+          "storage": "G:\\",
+          "storage_free_gib": 3874.0584678649902
+        }
+      },
+      "raw_archive": "server-wide-view-v2-evidence.zip",
+      "raw_performance": "32x9/performance.json",
+      "raw_correctness": "32x9/correctness.json"
+    }
+  ],
+  "scope": "Metroid existing horizontal8pixel spans reorganized into 2D tile-source/attribute resolution across visible rows. V1 emitted8strided rows per tile; v2 used fixed128-span/3072byte stack batches followed by contiguous scanlines. Neither is adopted. Other three scoped title compositors audited but unchanged/unmeasured; source already has span/metadata reuse. Broader whole-view producer design remains explicit residual, not exhausted.",
+  "attribution": {
+    "21:9": {
+      "scopes": {
+        "calls": 399,
+        "total_ms": 76.302,
+        "background_ms": 73.5287,
+        "actors_ms": 2.7657,
+        "camera_min": 660,
+        "camera_max": 1132
+      },
+      "timing": {
+        "cpu_seconds": 1.0625,
+        "wall_seconds": 1.1863317000097595,
+        "command": [
+          "G:\\Temp\\Codex\\nes110-wide-profile-v5-20261031\\MetroidNESRecomp.exe",
+          "G:\\Temp\\Codex\\nes110-wide-profile-v5-20261031\\baserom.nes",
+          "--no-save",
+          "--config",
+          "G:\\Temp\\Codex\\nes110-wide-profile-v5-20261031\\21x9\\config.ini",
+          "--mods-root",
+          "G:\\Temp\\Codex\\nes110-wide-profile-v5-20261031\\mods",
+          "--widescreen",
+          "21:9",
+          "--hidden",
+          "--uncapped",
+          "--exit-after",
+          "1501",
+          "--window-input",
+          "G:\\Temp\\Codex\\nes110-wide-profile-v5-20261031\\moving.input",
+          "--present-out",
+          "G:\\Temp\\Codex\\nes110-wide-profile-v5-20261031\\21x9\\final.png",
+          "--tcp",
+          "36760"
+        ],
+        "affinity_mask": null,
+        "priority": "Normal",
+        "first_frame": 1101,
+        "excluded_setup_cpu_seconds": 0.59375,
+        "excluded_setup_wall_seconds": 0.6660125999915181,
+        "interval_core_before": [
+          [
+            401613906250,
+            531996718750,
+            124453750000
+          ],
+          [
+            496201562500,
+            555696406250,
+            100753437500
+          ],
+          [
+            199498906250,
+            328017031250,
+            328432812500
+          ],
+          [
+            297915468750,
+            412755156250,
+            243694687500
+          ],
+          [
+            343541406250,
+            448099062500,
+            208350781250
+          ],
+          [
+            366697031250,
+            458974062500,
+            197475781250
+          ],
+          [
+            393507968750,
+            481799843750,
+            174650000000
+          ],
+          [
+            410935000000,
+            488726562500,
+            167723281250
+          ],
+          [
+            268309062500,
+            403546250000,
+            252903593750
+          ],
+          [
+            286038906250,
+            409914218750,
+            246535625000
+          ],
+          [
+            446160000000,
+            525371250000,
+            131078593750
+          ],
+          [
+            469796250000,
+            535859843750,
+            120590000000
+          ],
+          [
+            487563281250,
+            566970312500,
+            89479531250
+          ],
+          [
+            496446562500,
+            587692968750,
+            68756875000
+          ],
+          [
+            521816718750,
+            579038906250,
+            77410937500
+          ],
+          [
+            520200156250,
+            573248593750,
+            83201250000
+          ]
+        ],
+        "interval_core_after": [
+          [
+            401624843750,
+            532008593750,
+            124453750000
+          ],
+          [
+            496212968750,
+            555708125000,
+            100753593750
+          ],
+          [
+            199501093750,
+            328019687500,
+            328442031250
+          ],
+          [
+            297924843750,
+            412765625000,
+            243696093750
+          ],
+          [
+            343550468750,
+            448109375000,
+            208352343750
+          ],
+          [
+            366707812500,
+            458985781250,
+            197475937500
+          ],
+          [
+            393519687500,
+            481811718750,
+            174650000000
+          ],
+          [
+            410946562500,
+            488738437500,
+            167723281250
+          ],
+          [
+            268312656250,
+            403550781250,
+            252910937500
+          ],
+          [
+            286046718750,
+            409922968750,
+            246538750000
+          ],
+          [
+            446171250000,
+            525383125000,
+            131078593750
+          ],
+          [
+            469808125000,
+            535871718750,
+            120590000000
+          ],
+          [
+            487575156250,
+            566982187500,
+            89479531250
+          ],
+          [
+            496458437500,
+            587704843750,
+            68756875000
+          ],
+          [
+            521828593750,
+            579050781250,
+            77410937500
+          ],
+          [
+            520211875000,
+            573260468750,
+            83201250000
+          ]
+        ],
+        "scope": "Resumed SDL frames plus normal shutdown; TCP menu/load/window setup excluded",
+        "fixed_zapper": null,
+        "setup_state": {
+          "id": 0,
+          "ok": true,
+          "frame": 1101,
+          "menu_open": true,
+          "fds": false,
+          "side": -1,
+          "sides": 0,
+          "motor": false,
+          "writing": false,
+          "toast": {
+            "visible": false,
+            "title": "",
+            "body": ""
+          },
+          "hle": "",
+          "disk_save": "",
+          "disk_binding": "D / LB",
+          "picture": [
+            560,
+            240
+          ],
+          "dev_ui": false,
+          "recomp_ui": true,
+          "native": true,
+          "vsync_requested": false,
+          "vsync_active": true,
+          "pads": [],
+          "state_panel": "closed",
+          "state_slot": 1,
+          "rewind_count": 0,
+          "rewind_frame": -1,
+          "rewind_enabled": true,
+          "workload_ram": {
+            "id": 0,
+            "ok": true,
+            "hex": "29004902120798C1680400015CC4D40802290100010001002003000000000316F0F00F01000E0F0F01000000001E8F110100F016A869ADD067006414A372A3F0"
+          }
+        },
+        "zapper_state": null
+      },
+      "command": [
+        "G:\\Temp\\Codex\\nes110-wide-profile-v5-20261031\\MetroidNESRecomp.exe",
+        "G:\\Temp\\Codex\\nes110-wide-profile-v5-20261031\\baserom.nes",
+        "--no-save",
+        "--config",
+        "G:\\Temp\\Codex\\nes110-wide-profile-v5-20261031\\21x9\\config.ini",
+        "--mods-root",
+        "G:\\Temp\\Codex\\nes110-wide-profile-v5-20261031\\mods",
+        "--widescreen",
+        "21:9",
+        "--hidden",
+        "--uncapped",
+        "--exit-after",
+        "1501",
+        "--window-input",
+        "G:\\Temp\\Codex\\nes110-wide-profile-v5-20261031\\moving.input",
+        "--present-out",
+        "G:\\Temp\\Codex\\nes110-wide-profile-v5-20261031\\21x9\\final.png"
+      ],
+      "binary_sha256": "1810b46b9ccc307d453d62da36f064dea30d99d0fdd6baa3e5ccea1527f47df1",
+      "scope": "Nested diagnostic QPC wall scopes, not exclusive CPU or recoverable performance bound. Actual moving wide route1102..1500. Dummy video/software1280x720/dummy output with audio emulated/mixed/queued."
+    },
+    "32:9": {
+      "scopes": {
+        "calls": 399,
+        "total_ms": 116.5699,
+        "background_ms": 113.6589,
+        "actors_ms": 2.9026,
+        "camera_min": 660,
+        "camera_max": 1108
+      },
+      "picture": [
+        854,
+        240
+      ],
+      "binary_sha256": "1810b46b9ccc307d453d62da36f064dea30d99d0fdd6baa3e5ccea1527f47df1",
+      "scope": "Diagnostic QPC wall scopes only. Wrapper width assertion expected853 but actual established even-width preset854, after real run completed. No runtime failure, CPU claim or rerun; rawlog retained. Window CPU accounting was not retained by failed wrapper and is not claimed."
+    },
+    "scope": "Nested QPC wall attribution, not exclusive CPU or recoverable bound. Before optimization. Ordinary original wide compositor, corrected release-before-hold moving route. 21:9 and32:9 show real camera changes. Excluded v1-v4 attempts failed moving/title qualification and are not accepted moving evidence.",
+    "capacity_receipt": "pool-wide-profile-v5-run-receipt.json"
+  },
+  "archives": [
+    {
+      "file": "local-wide-view-v1-evidence.zip",
+      "sha256": "f3816a3124e59753e42861fa583fe43d0c49d3a3dc841e0a9f88957d216e11cf",
+      "bytes": 677524,
+      "entries": 95
+    },
+    {
+      "file": "server-wide-view-v1-evidence.zip",
+      "sha256": "47512a7336b0fe0706609bbf6f2676e7396f330a72ec083b643d55b7d9fbc7b7",
+      "bytes": 21702978,
+      "entries": 203
+    },
+    {
+      "file": "local-wide-view-v2-evidence.zip",
+      "sha256": "52fa42e04815b8e791d270fedc20ffc612e3c0a634bd3bb5dfb4760966ec3d87",
+      "bytes": 677518,
+      "entries": 95
+    },
+    {
+      "file": "server-wide-view-v2-evidence.zip",
+      "sha256": "5a9517d80ec528356a5f6044fb48408a89e14e079e93e8060d2dae88dbdfef48",
+      "bytes": 21702896,
+      "entries": 203
+    },
+    {
+      "file": "wide-view-source-attribution-evidence.zip",
+      "sha256": "f3785e8d0b4b4ee05ac92b61de529fcf0451e6aed79626c5db59835f31ca588d",
+      "bytes": 388389,
+      "entries": 192
+    }
+  ],
+  "storage": {
+    "retained_archives": {
+      "value": [
+        {
+          "file": "local-wide-view-v1-evidence.zip",
+          "sha256": "f3816a3124e59753e42861fa583fe43d0c49d3a3dc841e0a9f88957d216e11cf",
+          "bytes": 677524,
+          "entries": 95
+        },
+        {
+          "file": "server-wide-view-v1-evidence.zip",
+          "sha256": "47512a7336b0fe0706609bbf6f2676e7396f330a72ec083b643d55b7d9fbc7b7",
+          "bytes": 21702978,
+          "entries": 203
+        },
+        {
+          "file": "local-wide-view-v2-evidence.zip",
+          "sha256": "52fa42e04815b8e791d270fedc20ffc612e3c0a634bd3bb5dfb4760966ec3d87",
+          "bytes": 677518,
+          "entries": 95
+        },
+        {
+          "file": "server-wide-view-v2-evidence.zip",
+          "sha256": "5a9517d80ec528356a5f6044fb48408a89e14e079e93e8060d2dae88dbdfef48",
+          "bytes": 21702896,
+          "entries": 203
+        },
+        {
+          "file": "wide-view-source-attribution-evidence.zip",
+          "sha256": "f3785e8d0b4b4ee05ac92b61de529fcf0451e6aed79626c5db59835f31ca588d",
+          "bytes": 388389,
+          "entries": 192
+        }
+      ],
+      "Count": 5
+    },
+    "purpose": "Reproducibility of two nonselected experiments and final campaign evidence",
+    "cleanup": [
+      {
+        "value": [
+          {
+            "removed": true,
+            "host": "DESKTOP-HN15M1H",
+            "files": 118,
+            "root": "G:\\Temp\\Codex\\nes110-wide-view-v1-20261031",
+            "reparse_or_nested_git": false,
+            "bytes": 69013269
+          },
+          {
+            "removed": true,
+            "host": "DESKTOP-HN15M1H",
+            "files": 118,
+            "root": "G:\\Temp\\Codex\\nes110-wide-view-v2-20261031",
+            "reparse_or_nested_git": false,
+            "bytes": 69013247
+          },
+          {
+            "removed": true,
+            "host": "DESKTOP-HN15M1H",
+            "files": 18,
+            "root": "G:\\Temp\\Codex\\nes110-wide-profile-v1-20261031",
+            "reparse_or_nested_git": false,
+            "bytes": 22745765
+          },
+          {
+            "removed": true,
+            "host": "DESKTOP-HN15M1H",
+            "files": 19,
+            "root": "G:\\Temp\\Codex\\nes110-wide-profile-v2-20261031",
+            "reparse_or_nested_git": false,
+            "bytes": 22745774
+          },
+          {
+            "removed": true,
+            "host": "DESKTOP-HN15M1H",
+            "files": 20,
+            "root": "G:\\Temp\\Codex\\nes110-wide-profile-v3-20261031",
+            "reparse_or_nested_git": false,
+            "bytes": 23065004
+          },
+          {
+            "removed": true,
+            "host": "DESKTOP-HN15M1H",
+            "files": 19,
+            "root": "G:\\Temp\\Codex\\nes110-wide-profile-v4-20261031",
+            "reparse_or_nested_git": false,
+            "bytes": 22745775
+          },
+          {
+            "removed": true,
+            "host": "DESKTOP-HN15M1H",
+            "files": 27,
+            "root": "G:\\Temp\\Codex\\nes110-wide-profile-v5-20261031",
+            "reparse_or_nested_git": false,
+            "bytes": 23888715
+          }
+        ],
+        "Count": 7
+      },
+      {
+        "value": [
+          {
+            "removed": true,
+            "host": "SERVER",
+            "files": 248,
+            "root": "G:\\Temp\\Codex\\nes110-wide-view-v1-20261031",
+            "reparse_or_nested_git": false,
+            "bytes": 142209369
+          },
+          {
+            "removed": true,
+            "host": "SERVER",
+            "files": 248,
+            "root": "G:\\Temp\\Codex\\nes110-wide-view-v2-20261031",
+            "reparse_or_nested_git": false,
+            "bytes": 142209234
+          },
+          {
+            "host": "SERVER",
+            "sha256": "13a0278b229413b75fa042a654cff03a241d0fe7e64ce137b83080cba66af6d5",
+            "removed": true,
+            "file": "G:\\Temp\\Codex\\nes110-wide-view-v1-input.zip",
+            "bytes": 15817804
+          },
+          {
+            "host": "SERVER",
+            "sha256": "9b6cade8da96eb92c6d748a2c475490b15b4b106a97d08eabe1127e65011b748",
+            "removed": true,
+            "file": "G:\\Temp\\Codex\\nes110-wide-view-v2-input.zip",
+            "bytes": 15817623
+          }
+        ],
+        "Count": 4
+      },
+      [
+        {
+          "sha256": "13a0278b229413b75fa042a654cff03a241d0fe7e64ce137b83080cba66af6d5",
+          "removed": true,
+          "file": "wide-view-v1-input.zip",
+          "bytes": 15817804
+        },
+        {
+          "sha256": "9b6cade8da96eb92c6d748a2c475490b15b4b106a97d08eabe1127e65011b748",
+          "removed": true,
+          "file": "wide-view-v2-input.zip",
+          "bytes": 15817623
+        }
+      ]
+    ],
+    "cleanup_when": "After final campaign integration/evidence retention, remove obsolete private products/prototype worktree and unit executables; preserve useful source and raw archives and owner data.",
+    "retained_directories": [
+      "source-wide-profile-v1",
+      "products-wide-profile-v1",
+      "source-wide-view-v1",
+      "products-wide-view-v1",
+      "source-wide-view-v2",
+      "products-wide-view-v2",
+      "wide-view-unit-v1",
+      "wide-view-unit-v2",
+      "validator-nes16",
+      "validator-nes16-v2",
+      "engine-nes16",
+      "metroid-nes16"
+    ],
+    "item": "NES16"
+  },
+  "provenance_correction": {
+    "item": "NES16",
+    "field": "selected_ppu_object",
+    "affected": "v1 raw product convenience field only",
+    "incorrect": "products-sprite-span-v1/metroid/candidate/hw_ppu.c.obj",
+    "actual": "products-raster-v1/metroid/candidate/hw_ppu.c.obj",
+    "actual_sha256": "714f707f259623bd1f4c5fb1bdb85cf6b2a8b8eaf8ad7a479d18e6fa42b020a7",
+    "authority": "Both actual v1 link manifests and exact object hashes; A/B matched. Producer/v2 metadata corrected before staging. Raw records not rewritten."
+  },
+  "products": {
+    "v1": {
+      "metroid": {
+        "reference": {
+          "title": "metroid",
+          "mode": "reference",
+          "build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-raster-v1\\metroid\\candidate",
+          "target": "MetroidNESRecomp",
+          "engine": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\deadline-candidate-v2",
+          "engine_head": "0a80b31af371d6038fc07b9dc0d13fd0fa617b71+source-snapshot",
+          "title_head": "caccee62a67daea083fac8af36b1d0065b902071",
+          "rom": "F:\\Projects\\nesrecomp\\MetroidNESRecomp\\metroid.nes",
+          "rom_sha256": "e6e6b7014685adae447ebb3833242815747bc1e5df83ade79f693fb67cf565b6",
+          "configure": [
+            "-S",
+            "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\metroid",
+            "-B",
+            "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-metroid-candidate-v2",
+            "-G",
+            "Ninja",
+            "-DCMAKE_BUILD_TYPE=Release",
+            "-DCMAKE_C_COMPILER=C:/msys64/mingw64/bin/gcc.exe",
+            "-DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe",
+            "-DCMAKE_MAKE_PROGRAM=C:/msys64/mingw64/bin/ninja.exe",
+            "-DCMAKE_RC_COMPILER=C:/msys64/mingw64/bin/windres.exe",
+            "-DCMAKE_C_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+            "-DCMAKE_CXX_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+            "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+            "-DPython3_EXECUTABLE=C:/Users/Matthew/AppData/Local/Programs/Python/Python312/python.exe",
+            "-DNESRECOMP_ROOT=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\deadline-candidate-v2",
+            "-DNESRECOMP_HOST_COMPILER=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028/build-cli/NESRecomp.exe",
+            "-DNESRECOMP_ROM=F:\\Projects\\nesrecomp\\MetroidNESRecomp\\metroid.nes",
+            "-DNESRECOMP_RECOMP_UI=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+            "-DRECOMP_UI_ROOT=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+            "-DSDL2_DIR=G:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/cmake",
+            "-DNESRECOMP_RECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+            "-DRECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+            "-DNESRECOMP_RBENGINE_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/retcomm-rbengine",
+            "-DNESRECOMP_BACKEND=cycle",
+            "-DNESRECOMP_PPU_IMPL=HLE"
+          ],
+          "reuse_reference": false,
+          "owner_authorized_shared_host": true,
+          "exe": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-wide-view-v1\\metroid\\reference\\MetroidNESRecomp.exe",
+          "sha256": "80fd8d06aa19280b1460df7b89bd0520e88b3e026a3408952b49cdca3b464762",
+          "bytes": 16461551,
+          "package": "selected-CPU-sprite-APU-raster-plus-original-wide-row-spans",
+          "source_snapshot": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\source-wide-view-v1\\reference\\metroid_ws_render.c",
+          "source_sha256": "09e911ac9470cd75a9cf79ee8f9716f3e48d90015ac7b08cd37c66d09e498cdc",
+          "original_build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-metroid-candidate-v2",
+          "relink_manifest": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-wide-view-v1\\metroid\\reference\\manifest.json",
+          "selected_ppu_object": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-raster-v1\\metroid\\candidate\\hw_ppu.c.obj",
+          "selected_ppu_object_sha256": "2f49689737768560f7e2a0e3d9c3f88871cd92e0a8f75adb06d2909cf8943ca3",
+          "engine_base": "9c8cbf2; source snapshot records uncommitted raster job",
+          "raster_service": "whole-stable-tile-job"
+        },
+        "candidate": {
+          "title": "metroid",
+          "mode": "candidate",
+          "build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-raster-v1\\metroid\\candidate",
+          "target": "MetroidNESRecomp",
+          "engine": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\deadline-candidate-v2",
+          "engine_head": "0a80b31af371d6038fc07b9dc0d13fd0fa617b71+source-snapshot",
+          "title_head": "caccee62a67daea083fac8af36b1d0065b902071",
+          "rom": "F:\\Projects\\nesrecomp\\MetroidNESRecomp\\metroid.nes",
+          "rom_sha256": "e6e6b7014685adae447ebb3833242815747bc1e5df83ade79f693fb67cf565b6",
+          "configure": [
+            "-S",
+            "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\metroid",
+            "-B",
+            "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-metroid-candidate-v2",
+            "-G",
+            "Ninja",
+            "-DCMAKE_BUILD_TYPE=Release",
+            "-DCMAKE_C_COMPILER=C:/msys64/mingw64/bin/gcc.exe",
+            "-DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe",
+            "-DCMAKE_MAKE_PROGRAM=C:/msys64/mingw64/bin/ninja.exe",
+            "-DCMAKE_RC_COMPILER=C:/msys64/mingw64/bin/windres.exe",
+            "-DCMAKE_C_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+            "-DCMAKE_CXX_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+            "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+            "-DPython3_EXECUTABLE=C:/Users/Matthew/AppData/Local/Programs/Python/Python312/python.exe",
+            "-DNESRECOMP_ROOT=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\deadline-candidate-v2",
+            "-DNESRECOMP_HOST_COMPILER=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028/build-cli/NESRecomp.exe",
+            "-DNESRECOMP_ROM=F:\\Projects\\nesrecomp\\MetroidNESRecomp\\metroid.nes",
+            "-DNESRECOMP_RECOMP_UI=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+            "-DRECOMP_UI_ROOT=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+            "-DSDL2_DIR=G:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/cmake",
+            "-DNESRECOMP_RECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+            "-DRECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+            "-DNESRECOMP_RBENGINE_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/retcomm-rbengine",
+            "-DNESRECOMP_BACKEND=cycle",
+            "-DNESRECOMP_PPU_IMPL=HLE"
+          ],
+          "reuse_reference": false,
+          "owner_authorized_shared_host": true,
+          "exe": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-wide-view-v1\\metroid\\candidate\\MetroidNESRecomp.exe",
+          "sha256": "13bbfd1f7ac75f79d06b48ff4feafaa3e208df4867c6a11345c29b57e21b663f",
+          "bytes": 16461551,
+          "package": "selected-CPU-sprite-APU-raster-plus-whole-wide-tile-rectangles-v1",
+          "source_snapshot": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\source-wide-view-v1\\candidate\\metroid_ws_render.c",
+          "source_sha256": "16d68029f8755017368e852ee5cc399492f7ccac9d090f085ebd494a1781acd9",
+          "original_build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-metroid-candidate-v2",
+          "relink_manifest": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-wide-view-v1\\metroid\\candidate\\manifest.json",
+          "selected_ppu_object": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-raster-v1\\metroid\\candidate\\hw_ppu.c.obj",
+          "selected_ppu_object_sha256": "2f49689737768560f7e2a0e3d9c3f88871cd92e0a8f75adb06d2909cf8943ca3",
+          "engine_base": "9c8cbf2; source snapshot records uncommitted raster job",
+          "raster_service": "whole-stable-tile-job"
+        }
+      }
+    },
+    "v2": {
+      "metroid": {
+        "reference": {
+          "title": "metroid",
+          "mode": "reference",
+          "build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-raster-v1\\metroid\\candidate",
+          "target": "MetroidNESRecomp",
+          "engine": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\deadline-candidate-v2",
+          "engine_head": "0a80b31af371d6038fc07b9dc0d13fd0fa617b71+source-snapshot",
+          "title_head": "caccee62a67daea083fac8af36b1d0065b902071",
+          "rom": "F:\\Projects\\nesrecomp\\MetroidNESRecomp\\metroid.nes",
+          "rom_sha256": "e6e6b7014685adae447ebb3833242815747bc1e5df83ade79f693fb67cf565b6",
+          "configure": [
+            "-S",
+            "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\metroid",
+            "-B",
+            "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-metroid-candidate-v2",
+            "-G",
+            "Ninja",
+            "-DCMAKE_BUILD_TYPE=Release",
+            "-DCMAKE_C_COMPILER=C:/msys64/mingw64/bin/gcc.exe",
+            "-DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe",
+            "-DCMAKE_MAKE_PROGRAM=C:/msys64/mingw64/bin/ninja.exe",
+            "-DCMAKE_RC_COMPILER=C:/msys64/mingw64/bin/windres.exe",
+            "-DCMAKE_C_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+            "-DCMAKE_CXX_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+            "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+            "-DPython3_EXECUTABLE=C:/Users/Matthew/AppData/Local/Programs/Python/Python312/python.exe",
+            "-DNESRECOMP_ROOT=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\deadline-candidate-v2",
+            "-DNESRECOMP_HOST_COMPILER=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028/build-cli/NESRecomp.exe",
+            "-DNESRECOMP_ROM=F:\\Projects\\nesrecomp\\MetroidNESRecomp\\metroid.nes",
+            "-DNESRECOMP_RECOMP_UI=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+            "-DRECOMP_UI_ROOT=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+            "-DSDL2_DIR=G:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/cmake",
+            "-DNESRECOMP_RECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+            "-DRECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+            "-DNESRECOMP_RBENGINE_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/retcomm-rbengine",
+            "-DNESRECOMP_BACKEND=cycle",
+            "-DNESRECOMP_PPU_IMPL=HLE"
+          ],
+          "reuse_reference": false,
+          "owner_authorized_shared_host": true,
+          "exe": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-wide-view-v2\\metroid\\reference\\MetroidNESRecomp.exe",
+          "sha256": "1fdaffc7d20f0bfd30461141ef5d9d34ccf27909d2b38fde41f7485475d1d4f7",
+          "bytes": 16461551,
+          "package": "selected-CPU-sprite-APU-raster-plus-original-wide-row-spans",
+          "source_snapshot": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\source-wide-view-v2\\reference\\metroid_ws_render.c",
+          "source_sha256": "09e911ac9470cd75a9cf79ee8f9716f3e48d90015ac7b08cd37c66d09e498cdc",
+          "original_build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-metroid-candidate-v2",
+          "relink_manifest": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-wide-view-v2\\metroid\\reference\\manifest.json",
+          "selected_ppu_object": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-raster-v1\\metroid\\candidate\\hw_ppu.c.obj",
+          "selected_ppu_object_sha256": "2f49689737768560f7e2a0e3d9c3f88871cd92e0a8f75adb06d2909cf8943ca3",
+          "engine_base": "9c8cbf2; source snapshot records uncommitted raster job",
+          "raster_service": "whole-stable-tile-job"
+        },
+        "candidate": {
+          "title": "metroid",
+          "mode": "candidate",
+          "build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-raster-v1\\metroid\\candidate",
+          "target": "MetroidNESRecomp",
+          "engine": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\deadline-candidate-v2",
+          "engine_head": "0a80b31af371d6038fc07b9dc0d13fd0fa617b71+source-snapshot",
+          "title_head": "caccee62a67daea083fac8af36b1d0065b902071",
+          "rom": "F:\\Projects\\nesrecomp\\MetroidNESRecomp\\metroid.nes",
+          "rom_sha256": "e6e6b7014685adae447ebb3833242815747bc1e5df83ade79f693fb67cf565b6",
+          "configure": [
+            "-S",
+            "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\metroid",
+            "-B",
+            "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-metroid-candidate-v2",
+            "-G",
+            "Ninja",
+            "-DCMAKE_BUILD_TYPE=Release",
+            "-DCMAKE_C_COMPILER=C:/msys64/mingw64/bin/gcc.exe",
+            "-DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe",
+            "-DCMAKE_MAKE_PROGRAM=C:/msys64/mingw64/bin/ninja.exe",
+            "-DCMAKE_RC_COMPILER=C:/msys64/mingw64/bin/windres.exe",
+            "-DCMAKE_C_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+            "-DCMAKE_CXX_FLAGS_RELEASE=-O2 -g1 -DNDEBUG",
+            "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+            "-DPython3_EXECUTABLE=C:/Users/Matthew/AppData/Local/Programs/Python/Python312/python.exe",
+            "-DNESRECOMP_ROOT=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\deadline-candidate-v2",
+            "-DNESRECOMP_HOST_COMPILER=G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028/build-cli/NESRecomp.exe",
+            "-DNESRECOMP_ROM=F:\\Projects\\nesrecomp\\MetroidNESRecomp\\metroid.nes",
+            "-DNESRECOMP_RECOMP_UI=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+            "-DRECOMP_UI_ROOT=G:/Temp/Codex/nesrecomp/native-20261027/ui",
+            "-DSDL2_DIR=G:/Temp/Codex/nesrecomp/native-20261027/engine/runner/external/SDL2/cmake",
+            "-DNESRECOMP_RECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+            "-DRECOMP_NET_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/recomp-net",
+            "-DNESRECOMP_RBENGINE_ROOT=G:/Temp/Codex/nesrecomp/accuracy-perf-20261022/framework/lib/retcomm-rbengine",
+            "-DNESRECOMP_BACKEND=cycle",
+            "-DNESRECOMP_PPU_IMPL=HLE"
+          ],
+          "reuse_reference": false,
+          "owner_authorized_shared_host": true,
+          "exe": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-wide-view-v2\\metroid\\candidate\\MetroidNESRecomp.exe",
+          "sha256": "a7dd0d6b36ac7886b65de3e41a5ee1cd320564983a7bc7b9e25d77cbe8986177",
+          "bytes": 16461551,
+          "package": "selected-CPU-sprite-APU-raster-plus-whole-wide-tile-rectangles-v2",
+          "source_snapshot": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\source-wide-view-v2\\candidate\\metroid_ws_render.c",
+          "source_sha256": "030974db601dc9b3dccbc6309f809b69e5c5a8a67968d21eb5391c32d13e2a37",
+          "original_build": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-metroid-candidate-v2",
+          "relink_manifest": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-wide-view-v2\\metroid\\candidate\\manifest.json",
+          "selected_ppu_object": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-raster-v1\\metroid\\candidate\\hw_ppu.c.obj",
+          "selected_ppu_object_sha256": "2f49689737768560f7e2a0e3d9c3f88871cd92e0a8f75adb06d2909cf8943ca3",
+          "engine_base": "9c8cbf2; source snapshot records uncommitted raster job",
+          "raster_service": "whole-stable-tile-job"
+        }
+      }
+    }
+  },
+  "features": {
+    "v1": {
+      "ordinary/reference": {
+        "passed": true,
+        "initial": {
+          "id": 0,
+          "ok": true,
+          "frame": 1101,
+          "menu_open": true,
+          "fds": false,
+          "side": -1,
+          "sides": 0,
+          "motor": false,
+          "writing": false,
+          "toast": {
+            "visible": false,
+            "title": "",
+            "body": ""
+          },
+          "hle": "",
+          "disk_save": "",
+          "disk_binding": "D / LB",
+          "picture": [
+            560,
+            240
+          ],
+          "dev_ui": false,
+          "recomp_ui": true,
+          "native": true,
+          "vsync_requested": false,
+          "vsync_active": true,
+          "pads": [],
+          "state_panel": "closed",
+          "state_slot": 1,
+          "rewind_count": 0,
+          "rewind_frame": -1,
+          "rewind_enabled": true
+        },
+        "pictures": {
+          "initial21": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "79a861e485ffee7cb15e855e0197cd35b5f70fed838f00d3be228f95dabdb70f",
+            "margin_distinct_colors": 15
+          },
+          "fit16": {
+            "size": [
+              426,
+              240
+            ],
+            "sha256": "165ae9b94da02a2de32ee0276122183ca4cf3c3b95786e52c424ceb378da908e",
+            "margin_distinct_colors": 15
+          },
+          "fit21": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "79a861e485ffee7cb15e855e0197cd35b5f70fed838f00d3be228f95dabdb70f",
+            "margin_distinct_colors": 15
+          },
+          "fit32": {
+            "size": [
+              854,
+              240
+            ],
+            "sha256": "efbf6caa894b0fc1202cc70f58be46daf60bcce7fbc2f3ca7c695e236777e7a5",
+            "margin_distinct_colors": 15
+          },
+          "narrow": {
+            "size": [
+              256,
+              240
+            ],
+            "sha256": "e5322f185122a152f9738e18dbbbf2eb44ed9d1e8c721386c92b4f966dd42a26",
+            "margin_distinct_colors": 0
+          },
+          "portrait": {
+            "size": [
+              256,
+              240
+            ],
+            "sha256": "e5322f185122a152f9738e18dbbbf2eb44ed9d1e8c721386c92b4f966dd42a26",
+            "margin_distinct_colors": 0
+          },
+          "return21": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "79a861e485ffee7cb15e855e0197cd35b5f70fed838f00d3be228f95dabdb70f",
+            "margin_distinct_colors": 15
+          },
+          "saved": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "79a861e485ffee7cb15e855e0197cd35b5f70fed838f00d3be228f95dabdb70f",
+            "margin_distinct_colors": 15
+          },
+          "moving-end-loaded": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "de9917bf6736538f54653526aee9a58cdec91357fc653d40e03552a0cc040099",
+            "margin_distinct_colors": 16
+          },
+          "reloaded": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "79a861e485ffee7cb15e855e0197cd35b5f70fed838f00d3be228f95dabdb70f",
+            "margin_distinct_colors": 15
+          },
+          "stock": {
+            "size": [
+              256,
+              240
+            ],
+            "sha256": "e5322f185122a152f9738e18dbbbf2eb44ed9d1e8c721386c92b4f966dd42a26",
+            "margin_distinct_colors": 0
+          },
+          "back21": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "79a861e485ffee7cb15e855e0197cd35b5f70fed838f00d3be228f95dabdb70f",
+            "margin_distinct_colors": 15
+          }
+        }
+      },
+      "ordinary/candidate": {
+        "passed": true,
+        "initial": {
+          "id": 0,
+          "ok": true,
+          "frame": 1101,
+          "menu_open": true,
+          "fds": false,
+          "side": -1,
+          "sides": 0,
+          "motor": false,
+          "writing": false,
+          "toast": {
+            "visible": false,
+            "title": "",
+            "body": ""
+          },
+          "hle": "",
+          "disk_save": "",
+          "disk_binding": "D / LB",
+          "picture": [
+            560,
+            240
+          ],
+          "dev_ui": false,
+          "recomp_ui": true,
+          "native": true,
+          "vsync_requested": false,
+          "vsync_active": true,
+          "pads": [],
+          "state_panel": "closed",
+          "state_slot": 1,
+          "rewind_count": 0,
+          "rewind_frame": -1,
+          "rewind_enabled": true
+        },
+        "pictures": {
+          "initial21": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "79a861e485ffee7cb15e855e0197cd35b5f70fed838f00d3be228f95dabdb70f",
+            "margin_distinct_colors": 15
+          },
+          "fit16": {
+            "size": [
+              426,
+              240
+            ],
+            "sha256": "165ae9b94da02a2de32ee0276122183ca4cf3c3b95786e52c424ceb378da908e",
+            "margin_distinct_colors": 15
+          },
+          "fit21": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "79a861e485ffee7cb15e855e0197cd35b5f70fed838f00d3be228f95dabdb70f",
+            "margin_distinct_colors": 15
+          },
+          "fit32": {
+            "size": [
+              854,
+              240
+            ],
+            "sha256": "efbf6caa894b0fc1202cc70f58be46daf60bcce7fbc2f3ca7c695e236777e7a5",
+            "margin_distinct_colors": 15
+          },
+          "narrow": {
+            "size": [
+              256,
+              240
+            ],
+            "sha256": "e5322f185122a152f9738e18dbbbf2eb44ed9d1e8c721386c92b4f966dd42a26",
+            "margin_distinct_colors": 0
+          },
+          "portrait": {
+            "size": [
+              256,
+              240
+            ],
+            "sha256": "e5322f185122a152f9738e18dbbbf2eb44ed9d1e8c721386c92b4f966dd42a26",
+            "margin_distinct_colors": 0
+          },
+          "return21": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "79a861e485ffee7cb15e855e0197cd35b5f70fed838f00d3be228f95dabdb70f",
+            "margin_distinct_colors": 15
+          },
+          "saved": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "79a861e485ffee7cb15e855e0197cd35b5f70fed838f00d3be228f95dabdb70f",
+            "margin_distinct_colors": 15
+          },
+          "moving-end-loaded": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "de9917bf6736538f54653526aee9a58cdec91357fc653d40e03552a0cc040099",
+            "margin_distinct_colors": 16
+          },
+          "reloaded": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "79a861e485ffee7cb15e855e0197cd35b5f70fed838f00d3be228f95dabdb70f",
+            "margin_distinct_colors": 15
+          },
+          "stock": {
+            "size": [
+              256,
+              240
+            ],
+            "sha256": "e5322f185122a152f9738e18dbbbf2eb44ed9d1e8c721386c92b4f966dd42a26",
+            "margin_distinct_colors": 0
+          },
+          "back21": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "79a861e485ffee7cb15e855e0197cd35b5f70fed838f00d3be228f95dabdb70f",
+            "margin_distinct_colors": 15
+          }
+        }
+      },
+      "pc-actors/reference": {
+        "passed": true,
+        "initial": {
+          "id": 0,
+          "ok": true,
+          "frame": 1101,
+          "menu_open": true,
+          "fds": false,
+          "side": -1,
+          "sides": 0,
+          "motor": false,
+          "writing": false,
+          "toast": {
+            "visible": false,
+            "title": "",
+            "body": ""
+          },
+          "hle": "",
+          "disk_save": "",
+          "disk_binding": "D / LB",
+          "picture": [
+            560,
+            240
+          ],
+          "dev_ui": false,
+          "recomp_ui": true,
+          "native": true,
+          "vsync_requested": false,
+          "vsync_active": true,
+          "pads": [],
+          "state_panel": "closed",
+          "state_slot": 1,
+          "rewind_count": 0,
+          "rewind_frame": -1,
+          "rewind_enabled": true
+        },
+        "pictures": {
+          "initial21": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "e76d7248ef0966bdc4f409a37c297c9bca32d515c34c002ed852a1d9228c0549",
+            "margin_distinct_colors": 18
+          },
+          "fit16": {
+            "size": [
+              426,
+              240
+            ],
+            "sha256": "0a320d340cd8f1a2e74cbe24f75c88b7c4640ba0fa36c19abb090ce9d7cb6205",
+            "margin_distinct_colors": 18
+          },
+          "fit21": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "e76d7248ef0966bdc4f409a37c297c9bca32d515c34c002ed852a1d9228c0549",
+            "margin_distinct_colors": 18
+          },
+          "fit32": {
+            "size": [
+              854,
+              240
+            ],
+            "sha256": "448133d8f66aaa9c4fe1182231faf0ba7f3299c4d795596f2fec498b533f1b8a",
+            "margin_distinct_colors": 18
+          },
+          "narrow": {
+            "size": [
+              256,
+              240
+            ],
+            "sha256": "c0f9fb040601d3715aa3bb3fd4362e8775cfb159ce83865a6465290c1618546c",
+            "margin_distinct_colors": 0
+          },
+          "portrait": {
+            "size": [
+              256,
+              240
+            ],
+            "sha256": "c0f9fb040601d3715aa3bb3fd4362e8775cfb159ce83865a6465290c1618546c",
+            "margin_distinct_colors": 0
+          },
+          "return21": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "e76d7248ef0966bdc4f409a37c297c9bca32d515c34c002ed852a1d9228c0549",
+            "margin_distinct_colors": 18
+          },
+          "saved": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "e76d7248ef0966bdc4f409a37c297c9bca32d515c34c002ed852a1d9228c0549",
+            "margin_distinct_colors": 18
+          },
+          "moving-end-loaded": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "f35c97ad8888a3f05c22f7cc49301b8617cb288bbc43a7e56c50db673052e0b3",
+            "margin_distinct_colors": 18
+          },
+          "reloaded": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "e76d7248ef0966bdc4f409a37c297c9bca32d515c34c002ed852a1d9228c0549",
+            "margin_distinct_colors": 18
+          },
+          "stock": {
+            "size": [
+              256,
+              240
+            ],
+            "sha256": "c0f9fb040601d3715aa3bb3fd4362e8775cfb159ce83865a6465290c1618546c",
+            "margin_distinct_colors": 0
+          },
+          "back21": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "e76d7248ef0966bdc4f409a37c297c9bca32d515c34c002ed852a1d9228c0549",
+            "margin_distinct_colors": 18
+          }
+        }
+      },
+      "pc-actors/candidate": {
+        "passed": true,
+        "initial": {
+          "id": 0,
+          "ok": true,
+          "frame": 1101,
+          "menu_open": true,
+          "fds": false,
+          "side": -1,
+          "sides": 0,
+          "motor": false,
+          "writing": false,
+          "toast": {
+            "visible": false,
+            "title": "",
+            "body": ""
+          },
+          "hle": "",
+          "disk_save": "",
+          "disk_binding": "D / LB",
+          "picture": [
+            560,
+            240
+          ],
+          "dev_ui": false,
+          "recomp_ui": true,
+          "native": true,
+          "vsync_requested": false,
+          "vsync_active": true,
+          "pads": [],
+          "state_panel": "closed",
+          "state_slot": 1,
+          "rewind_count": 0,
+          "rewind_frame": -1,
+          "rewind_enabled": true
+        },
+        "pictures": {
+          "initial21": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "e76d7248ef0966bdc4f409a37c297c9bca32d515c34c002ed852a1d9228c0549",
+            "margin_distinct_colors": 18
+          },
+          "fit16": {
+            "size": [
+              426,
+              240
+            ],
+            "sha256": "0a320d340cd8f1a2e74cbe24f75c88b7c4640ba0fa36c19abb090ce9d7cb6205",
+            "margin_distinct_colors": 18
+          },
+          "fit21": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "e76d7248ef0966bdc4f409a37c297c9bca32d515c34c002ed852a1d9228c0549",
+            "margin_distinct_colors": 18
+          },
+          "fit32": {
+            "size": [
+              854,
+              240
+            ],
+            "sha256": "448133d8f66aaa9c4fe1182231faf0ba7f3299c4d795596f2fec498b533f1b8a",
+            "margin_distinct_colors": 18
+          },
+          "narrow": {
+            "size": [
+              256,
+              240
+            ],
+            "sha256": "c0f9fb040601d3715aa3bb3fd4362e8775cfb159ce83865a6465290c1618546c",
+            "margin_distinct_colors": 0
+          },
+          "portrait": {
+            "size": [
+              256,
+              240
+            ],
+            "sha256": "c0f9fb040601d3715aa3bb3fd4362e8775cfb159ce83865a6465290c1618546c",
+            "margin_distinct_colors": 0
+          },
+          "return21": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "e76d7248ef0966bdc4f409a37c297c9bca32d515c34c002ed852a1d9228c0549",
+            "margin_distinct_colors": 18
+          },
+          "saved": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "e76d7248ef0966bdc4f409a37c297c9bca32d515c34c002ed852a1d9228c0549",
+            "margin_distinct_colors": 18
+          },
+          "moving-end-loaded": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "f35c97ad8888a3f05c22f7cc49301b8617cb288bbc43a7e56c50db673052e0b3",
+            "margin_distinct_colors": 18
+          },
+          "reloaded": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "e76d7248ef0966bdc4f409a37c297c9bca32d515c34c002ed852a1d9228c0549",
+            "margin_distinct_colors": 18
+          },
+          "stock": {
+            "size": [
+              256,
+              240
+            ],
+            "sha256": "c0f9fb040601d3715aa3bb3fd4362e8775cfb159ce83865a6465290c1618546c",
+            "margin_distinct_colors": 0
+          },
+          "back21": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "e76d7248ef0966bdc4f409a37c297c9bca32d515c34c002ed852a1d9228c0549",
+            "margin_distinct_colors": 18
+          }
+        }
+      }
+    },
+    "v2": {
+      "ordinary/reference": {
+        "passed": true,
+        "initial": {
+          "id": 0,
+          "ok": true,
+          "frame": 1101,
+          "menu_open": true,
+          "fds": false,
+          "side": -1,
+          "sides": 0,
+          "motor": false,
+          "writing": false,
+          "toast": {
+            "visible": false,
+            "title": "",
+            "body": ""
+          },
+          "hle": "",
+          "disk_save": "",
+          "disk_binding": "D / LB",
+          "picture": [
+            560,
+            240
+          ],
+          "dev_ui": false,
+          "recomp_ui": true,
+          "native": true,
+          "vsync_requested": false,
+          "vsync_active": true,
+          "pads": [],
+          "state_panel": "closed",
+          "state_slot": 1,
+          "rewind_count": 0,
+          "rewind_frame": -1,
+          "rewind_enabled": true
+        },
+        "pictures": {
+          "initial21": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "79a861e485ffee7cb15e855e0197cd35b5f70fed838f00d3be228f95dabdb70f",
+            "margin_distinct_colors": 15
+          },
+          "fit16": {
+            "size": [
+              426,
+              240
+            ],
+            "sha256": "165ae9b94da02a2de32ee0276122183ca4cf3c3b95786e52c424ceb378da908e",
+            "margin_distinct_colors": 15
+          },
+          "fit21": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "79a861e485ffee7cb15e855e0197cd35b5f70fed838f00d3be228f95dabdb70f",
+            "margin_distinct_colors": 15
+          },
+          "fit32": {
+            "size": [
+              854,
+              240
+            ],
+            "sha256": "efbf6caa894b0fc1202cc70f58be46daf60bcce7fbc2f3ca7c695e236777e7a5",
+            "margin_distinct_colors": 15
+          },
+          "narrow": {
+            "size": [
+              256,
+              240
+            ],
+            "sha256": "e5322f185122a152f9738e18dbbbf2eb44ed9d1e8c721386c92b4f966dd42a26",
+            "margin_distinct_colors": 0
+          },
+          "portrait": {
+            "size": [
+              256,
+              240
+            ],
+            "sha256": "e5322f185122a152f9738e18dbbbf2eb44ed9d1e8c721386c92b4f966dd42a26",
+            "margin_distinct_colors": 0
+          },
+          "return21": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "79a861e485ffee7cb15e855e0197cd35b5f70fed838f00d3be228f95dabdb70f",
+            "margin_distinct_colors": 15
+          },
+          "saved": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "79a861e485ffee7cb15e855e0197cd35b5f70fed838f00d3be228f95dabdb70f",
+            "margin_distinct_colors": 15
+          },
+          "moving-end-loaded": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "de9917bf6736538f54653526aee9a58cdec91357fc653d40e03552a0cc040099",
+            "margin_distinct_colors": 16
+          },
+          "reloaded": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "79a861e485ffee7cb15e855e0197cd35b5f70fed838f00d3be228f95dabdb70f",
+            "margin_distinct_colors": 15
+          },
+          "stock": {
+            "size": [
+              256,
+              240
+            ],
+            "sha256": "e5322f185122a152f9738e18dbbbf2eb44ed9d1e8c721386c92b4f966dd42a26",
+            "margin_distinct_colors": 0
+          },
+          "back21": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "79a861e485ffee7cb15e855e0197cd35b5f70fed838f00d3be228f95dabdb70f",
+            "margin_distinct_colors": 15
+          }
+        }
+      },
+      "ordinary/candidate": {
+        "passed": true,
+        "initial": {
+          "id": 0,
+          "ok": true,
+          "frame": 1101,
+          "menu_open": true,
+          "fds": false,
+          "side": -1,
+          "sides": 0,
+          "motor": false,
+          "writing": false,
+          "toast": {
+            "visible": false,
+            "title": "",
+            "body": ""
+          },
+          "hle": "",
+          "disk_save": "",
+          "disk_binding": "D / LB",
+          "picture": [
+            560,
+            240
+          ],
+          "dev_ui": false,
+          "recomp_ui": true,
+          "native": true,
+          "vsync_requested": false,
+          "vsync_active": true,
+          "pads": [],
+          "state_panel": "closed",
+          "state_slot": 1,
+          "rewind_count": 0,
+          "rewind_frame": -1,
+          "rewind_enabled": true
+        },
+        "pictures": {
+          "initial21": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "79a861e485ffee7cb15e855e0197cd35b5f70fed838f00d3be228f95dabdb70f",
+            "margin_distinct_colors": 15
+          },
+          "fit16": {
+            "size": [
+              426,
+              240
+            ],
+            "sha256": "165ae9b94da02a2de32ee0276122183ca4cf3c3b95786e52c424ceb378da908e",
+            "margin_distinct_colors": 15
+          },
+          "fit21": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "79a861e485ffee7cb15e855e0197cd35b5f70fed838f00d3be228f95dabdb70f",
+            "margin_distinct_colors": 15
+          },
+          "fit32": {
+            "size": [
+              854,
+              240
+            ],
+            "sha256": "efbf6caa894b0fc1202cc70f58be46daf60bcce7fbc2f3ca7c695e236777e7a5",
+            "margin_distinct_colors": 15
+          },
+          "narrow": {
+            "size": [
+              256,
+              240
+            ],
+            "sha256": "e5322f185122a152f9738e18dbbbf2eb44ed9d1e8c721386c92b4f966dd42a26",
+            "margin_distinct_colors": 0
+          },
+          "portrait": {
+            "size": [
+              256,
+              240
+            ],
+            "sha256": "e5322f185122a152f9738e18dbbbf2eb44ed9d1e8c721386c92b4f966dd42a26",
+            "margin_distinct_colors": 0
+          },
+          "return21": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "79a861e485ffee7cb15e855e0197cd35b5f70fed838f00d3be228f95dabdb70f",
+            "margin_distinct_colors": 15
+          },
+          "saved": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "79a861e485ffee7cb15e855e0197cd35b5f70fed838f00d3be228f95dabdb70f",
+            "margin_distinct_colors": 15
+          },
+          "moving-end-loaded": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "de9917bf6736538f54653526aee9a58cdec91357fc653d40e03552a0cc040099",
+            "margin_distinct_colors": 16
+          },
+          "reloaded": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "79a861e485ffee7cb15e855e0197cd35b5f70fed838f00d3be228f95dabdb70f",
+            "margin_distinct_colors": 15
+          },
+          "stock": {
+            "size": [
+              256,
+              240
+            ],
+            "sha256": "e5322f185122a152f9738e18dbbbf2eb44ed9d1e8c721386c92b4f966dd42a26",
+            "margin_distinct_colors": 0
+          },
+          "back21": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "79a861e485ffee7cb15e855e0197cd35b5f70fed838f00d3be228f95dabdb70f",
+            "margin_distinct_colors": 15
+          }
+        }
+      },
+      "pc-actors/reference": {
+        "passed": true,
+        "initial": {
+          "id": 0,
+          "ok": true,
+          "frame": 1101,
+          "menu_open": true,
+          "fds": false,
+          "side": -1,
+          "sides": 0,
+          "motor": false,
+          "writing": false,
+          "toast": {
+            "visible": false,
+            "title": "",
+            "body": ""
+          },
+          "hle": "",
+          "disk_save": "",
+          "disk_binding": "D / LB",
+          "picture": [
+            560,
+            240
+          ],
+          "dev_ui": false,
+          "recomp_ui": true,
+          "native": true,
+          "vsync_requested": false,
+          "vsync_active": true,
+          "pads": [],
+          "state_panel": "closed",
+          "state_slot": 1,
+          "rewind_count": 0,
+          "rewind_frame": -1,
+          "rewind_enabled": true
+        },
+        "pictures": {
+          "initial21": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "e76d7248ef0966bdc4f409a37c297c9bca32d515c34c002ed852a1d9228c0549",
+            "margin_distinct_colors": 18
+          },
+          "fit16": {
+            "size": [
+              426,
+              240
+            ],
+            "sha256": "0a320d340cd8f1a2e74cbe24f75c88b7c4640ba0fa36c19abb090ce9d7cb6205",
+            "margin_distinct_colors": 18
+          },
+          "fit21": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "e76d7248ef0966bdc4f409a37c297c9bca32d515c34c002ed852a1d9228c0549",
+            "margin_distinct_colors": 18
+          },
+          "fit32": {
+            "size": [
+              854,
+              240
+            ],
+            "sha256": "448133d8f66aaa9c4fe1182231faf0ba7f3299c4d795596f2fec498b533f1b8a",
+            "margin_distinct_colors": 18
+          },
+          "narrow": {
+            "size": [
+              256,
+              240
+            ],
+            "sha256": "c0f9fb040601d3715aa3bb3fd4362e8775cfb159ce83865a6465290c1618546c",
+            "margin_distinct_colors": 0
+          },
+          "portrait": {
+            "size": [
+              256,
+              240
+            ],
+            "sha256": "c0f9fb040601d3715aa3bb3fd4362e8775cfb159ce83865a6465290c1618546c",
+            "margin_distinct_colors": 0
+          },
+          "return21": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "e76d7248ef0966bdc4f409a37c297c9bca32d515c34c002ed852a1d9228c0549",
+            "margin_distinct_colors": 18
+          },
+          "saved": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "e76d7248ef0966bdc4f409a37c297c9bca32d515c34c002ed852a1d9228c0549",
+            "margin_distinct_colors": 18
+          },
+          "moving-end-loaded": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "f35c97ad8888a3f05c22f7cc49301b8617cb288bbc43a7e56c50db673052e0b3",
+            "margin_distinct_colors": 18
+          },
+          "reloaded": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "e76d7248ef0966bdc4f409a37c297c9bca32d515c34c002ed852a1d9228c0549",
+            "margin_distinct_colors": 18
+          },
+          "stock": {
+            "size": [
+              256,
+              240
+            ],
+            "sha256": "c0f9fb040601d3715aa3bb3fd4362e8775cfb159ce83865a6465290c1618546c",
+            "margin_distinct_colors": 0
+          },
+          "back21": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "e76d7248ef0966bdc4f409a37c297c9bca32d515c34c002ed852a1d9228c0549",
+            "margin_distinct_colors": 18
+          }
+        }
+      },
+      "pc-actors/candidate": {
+        "passed": true,
+        "initial": {
+          "id": 0,
+          "ok": true,
+          "frame": 1101,
+          "menu_open": true,
+          "fds": false,
+          "side": -1,
+          "sides": 0,
+          "motor": false,
+          "writing": false,
+          "toast": {
+            "visible": false,
+            "title": "",
+            "body": ""
+          },
+          "hle": "",
+          "disk_save": "",
+          "disk_binding": "D / LB",
+          "picture": [
+            560,
+            240
+          ],
+          "dev_ui": false,
+          "recomp_ui": true,
+          "native": true,
+          "vsync_requested": false,
+          "vsync_active": true,
+          "pads": [],
+          "state_panel": "closed",
+          "state_slot": 1,
+          "rewind_count": 0,
+          "rewind_frame": -1,
+          "rewind_enabled": true
+        },
+        "pictures": {
+          "initial21": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "e76d7248ef0966bdc4f409a37c297c9bca32d515c34c002ed852a1d9228c0549",
+            "margin_distinct_colors": 18
+          },
+          "fit16": {
+            "size": [
+              426,
+              240
+            ],
+            "sha256": "0a320d340cd8f1a2e74cbe24f75c88b7c4640ba0fa36c19abb090ce9d7cb6205",
+            "margin_distinct_colors": 18
+          },
+          "fit21": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "e76d7248ef0966bdc4f409a37c297c9bca32d515c34c002ed852a1d9228c0549",
+            "margin_distinct_colors": 18
+          },
+          "fit32": {
+            "size": [
+              854,
+              240
+            ],
+            "sha256": "448133d8f66aaa9c4fe1182231faf0ba7f3299c4d795596f2fec498b533f1b8a",
+            "margin_distinct_colors": 18
+          },
+          "narrow": {
+            "size": [
+              256,
+              240
+            ],
+            "sha256": "c0f9fb040601d3715aa3bb3fd4362e8775cfb159ce83865a6465290c1618546c",
+            "margin_distinct_colors": 0
+          },
+          "portrait": {
+            "size": [
+              256,
+              240
+            ],
+            "sha256": "c0f9fb040601d3715aa3bb3fd4362e8775cfb159ce83865a6465290c1618546c",
+            "margin_distinct_colors": 0
+          },
+          "return21": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "e76d7248ef0966bdc4f409a37c297c9bca32d515c34c002ed852a1d9228c0549",
+            "margin_distinct_colors": 18
+          },
+          "saved": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "e76d7248ef0966bdc4f409a37c297c9bca32d515c34c002ed852a1d9228c0549",
+            "margin_distinct_colors": 18
+          },
+          "moving-end-loaded": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "f35c97ad8888a3f05c22f7cc49301b8617cb288bbc43a7e56c50db673052e0b3",
+            "margin_distinct_colors": 18
+          },
+          "reloaded": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "e76d7248ef0966bdc4f409a37c297c9bca32d515c34c002ed852a1d9228c0549",
+            "margin_distinct_colors": 18
+          },
+          "stock": {
+            "size": [
+              256,
+              240
+            ],
+            "sha256": "c0f9fb040601d3715aa3bb3fd4362e8775cfb159ce83865a6465290c1618546c",
+            "margin_distinct_colors": 0
+          },
+          "back21": {
+            "size": [
+              560,
+              240
+            ],
+            "sha256": "e76d7248ef0966bdc4f409a37c297c9bca32d515c34c002ed852a1d9228c0549",
+            "margin_distinct_colors": 18
+          }
+        }
+      }
+    }
+  },
+  "fixture_root": {
+    "v1": {
+      "command": [
+        "C:/msys64/mingw64/bin/gcc.exe",
+        "-std=c11",
+        "-O2",
+        "-Wall",
+        "-Wextra",
+        "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\wide-view-unit-v1\\wide_view_test.c",
+        "-o",
+        "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\wide-view-unit-v1\\wide_view_test.exe"
+      ],
+      "passed": true,
+      "source_sha256": "e1a077a949d1f254a2dd56887e46199e2fd2cf518d76d947e54cf5f69247614b",
+      "binary_sha256": "d7844e4fa1faed74cdd3fba6b19fe1ba5d2f6101c62e4f0ff53de809ef4b5688",
+      "output": "PASS 336 complete color/opacity canvases; baseline source calls6551984 candidate843282; guards/fallback/HUD/priority included\r\n"
+    },
+    "v2": {
+      "command": [
+        "C:/msys64/mingw64/bin/gcc.exe",
+        "-std=c11",
+        "-O2",
+        "-Wall",
+        "-Wextra",
+        "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\wide-view-unit-v2\\wide_view_test.c",
+        "-o",
+        "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\wide-view-unit-v2\\wide_view_test.exe"
+      ],
+      "passed": true,
+      "source_sha256": "e7e60bfe886f13c8667c92aab08ed98dc80c1f5dc3ba2317e352576c8dc69261",
+      "binary_sha256": "89a89a20050f44e0cc53a59e9c61a1227a07eaaeff10143050c646bc27499e3c",
+      "output": "PASS 336 complete color/opacity canvases; baseline source calls6551984 candidate843282; guards/fallback/HUD/priority included\r\n"
+    }
+  },
+  "fixture_independent": {
+    "v1": {
+      "inputs": {
+        "reference_sha256": "09e911ac9470cd75a9cf79ee8f9716f3e48d90015ac7b08cd37c66d09e498cdc",
+        "candidate_sha256": "16d68029f8755017368e852ee5cc399492f7ccac9d090f085ebd494a1781acd9"
+      },
+      "cases": {
+        "portable": {
+          "passed": true,
+          "output": "PASS actual cell_source, streamed and unready room sources, cold decoder/cache, horizontal/vertical camera, masks, full color/opacity guards and fallback\r\n1536 canvases; source calls baseline27377260 candidate3529028\r\n",
+          "error": "",
+          "argv": [
+            "C:/msys64/mingw64/bin/gcc.exe",
+            "-O2",
+            "-std=c11",
+            "-Wall",
+            "-Wextra",
+            "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\validator-nes16\\actual_source_fixture.c",
+            "-o",
+            "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\validator-nes16\\portable.exe"
+          ],
+          "exe_sha256": "14a37199adc87bcc7940542d0cdbc917ba570afad191c2005852dea44700dc44"
+        },
+        "cycle": {
+          "passed": true,
+          "output": "PASS actual cell_source, streamed and unready room sources, cold decoder/cache, horizontal/vertical camera, masks, full color/opacity guards and fallback\r\n1536 canvases; source calls baseline27378892 candidate3532789\r\n",
+          "error": "",
+          "argv": [
+            "C:/msys64/mingw64/bin/gcc.exe",
+            "-O2",
+            "-std=c11",
+            "-Wall",
+            "-Wextra",
+            "-DMETROID_CYCLE",
+            "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\validator-nes16\\actual_source_fixture.c",
+            "-o",
+            "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\validator-nes16\\cycle.exe"
+          ],
+          "exe_sha256": "4dc7c3101ae40a62a8f0769adc98d63e09942c8160aba837f03960486005ef00"
+        }
+      },
+      "fixture_sha256": "58784c5e5a041a100fcb38f03f379f672f171d388e1261483061c28ea2927d91"
+    },
+    "v2": {
+      "inputs": {
+        "reference_sha256": "09e911ac9470cd75a9cf79ee8f9716f3e48d90015ac7b08cd37c66d09e498cdc",
+        "candidate_sha256": "030974db601dc9b3dccbc6309f809b69e5c5a8a67968d21eb5391c32d13e2a37"
+      },
+      "cases": {
+        "portable": {
+          "passed": true,
+          "output": "PASS actual cell_source, streamed and unready room sources, cold decoder/cache, horizontal/vertical camera, masks, full color/opacity guards and fallback\r\n1536 canvases; source calls baseline27377260 candidate3529028\r\n",
+          "error": "",
+          "argv": [
+            "C:/msys64/mingw64/bin/gcc.exe",
+            "-O2",
+            "-std=c11",
+            "-Wall",
+            "-Wextra",
+            "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\validator-nes16-v2\\actual_source_fixture.c",
+            "-o",
+            "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\validator-nes16-v2\\portable.exe"
+          ],
+          "exe_sha256": "faea68900a8280de44bc31139515547d1a77f43f9059b797e0466e1c3fb85519"
+        },
+        "cycle": {
+          "passed": true,
+          "output": "PASS actual cell_source, streamed and unready room sources, cold decoder/cache, horizontal/vertical camera, masks, full color/opacity guards and fallback\r\n1536 canvases; source calls baseline27378892 candidate3532789\r\n",
+          "error": "",
+          "argv": [
+            "C:/msys64/mingw64/bin/gcc.exe",
+            "-O2",
+            "-std=c11",
+            "-Wall",
+            "-Wextra",
+            "-DMETROID_CYCLE",
+            "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\validator-nes16-v2\\actual_source_fixture.c",
+            "-o",
+            "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\validator-nes16-v2\\cycle.exe"
+          ],
+          "exe_sha256": "ebd59f8f22fe8adb29761879b48d49d96eb4a1bff1bbe9b488d0e827cdb99ace"
+        }
+      },
+      "fixture_sha256": "d317a441837c1383911e1027753adf30b61b93bc95ad623a16a520d55fc1d03d"
+    }
+  },
+  "settings": "Actual hidden SDL dummy video/software1280x720, audio emulated/mixed/queued to dummy output. Frames1101..1501 after excluded warmup/load/menu/window setup. Explicit input release1101..1102 thenRIGHT+A+B at1103 overcomes correct menu held-input latch. Actual initial GameMode0/MainRoutine3, width560/854. All five alternating pairs remain on SERVER with one fixed logical CPU per profile; both versions separate.",
+  "limitations": [
+    "QPC attribution is nested wall timing, not exclusive CPU or recoverable bound. Fixture source-call reduction (~87%) is operation count, not runtime performance.",
+    "V1 small mixed medians are neutral/inconclusive. V2 negative medians do not establish broad host-independent regression; enough evidence to decline added complexity without a third tuning trial. Do not offset a profile loss with another profile gain.",
+    "Initial diagnostic attempts held input after menu-close and did not move; one altered boot route stayed on START/CONTINUE. They are excluded fixture attempts, retained separately. Qualified v5 moves camera660..1132 and660..1108. Actual even 32:9 width854 corrected an initial853 wrapper assertion after completed run; no runtime failure or repeated measurement.",
+    "Root actual-body fixture336 cases pervariant; independent1536 portable+1536 METROID_CYCLE full canvases pervariant use actual cell_source and cover room/camera/source/clip/HUD/priority/fallbacks. Actual ordinary+optionalPC features pass current-build loads; historical shared Metroid restore caveats remain separate.",
+    "SMB1/SMB3/Gumshoe and broader whole-view producer alternatives remain deferred/unmeasured. No performance inference for their unchanged packages; no blanket architecture-exhaustion claim.",
+    "Final combined supported five-title generation/link, feature/performance and owner visual approval remain pending. No new owner-facing window, merge or release. NES29/FDS parked."
+  ],
+  "independent_validator": "/root/validate_nes16",
+  "evidence_root": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028"
+}

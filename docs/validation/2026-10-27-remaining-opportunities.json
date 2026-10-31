@@ -22,7 +22,8 @@
     "2026-10-28-presentation-bridge-results.json",
     "2026-10-28-prepared-picture-results.json",
     "2026-10-28-retained-voxel-results.json",
-    "2026-10-30-world-canvas-results.json"
+    "2026-10-30-world-canvas-results.json",
+    "2026-10-31-wide-view-results.json"
   ],
   "priorities": "Order expresses expected scope and evidence, not measured recoverable cost. Overlapping packages are not additive.",
   "acceptance": "Each game neutral or positive. Small mixed samples inconclusive. Shared original/candidate defects are separate. Native saves protected; old save-state compatibility never required.",
@@ -636,7 +637,7 @@
       "package": "visual-products",
       "priority": "P2",
       "title": "Whole-view widescreen preparation and span composition",
-      "status": "open-unmeasured",
+      "status": "evaluated-deferred-Metroid-whole-view-plans",
       "evidence": [
         {
           "file": "runner/cyc/cyc_render.c",
@@ -653,15 +654,45 @@
           "link": "../../runner/cyc/cyc_render.c#L122"
         }
       ],
-      "remaining": "The canvas is cleared, margins reconstructed and sprites decoded/composited on each new frame. Use one view plan, clipped spans and explicit dirty products rather than separate native-center and margin work.",
+      "remaining": "Metroid 2D source/attribute plans v1/v2 deferred: no demonstrated built CPU gain. SMB1/SMB3/Gumshoe and broader whole-view producer alternatives remain unchanged/unmeasured residual; not architecture exhaustion.",
       "affected_profiles": [
         "SMB1/SMB3/Metroid/Gumshoe real widened gameplay and Fit resizing"
       ],
-      "next_decisive_check": "Attribute a real 21:9/32:9 moving-camera interval and compare the full view, including changing window aspect and composed HUD.",
+      "next_decisive_check": "No third tuning trial. Revisit only when measured inclusive whole-view cost selects a different substantial replacement; GPU/upload is NES24. Continue another campaign candidate after independent durable disposition gate.",
       "required_behavior": "Real margin content, entity visibility, priority, camera wrap, HUD placement and arbitrary Fit resize behavior; no black-margin speedup.",
       "prior_issue": null,
-      "measured_additional_gain": null,
-      "execution_status": "remaining-evaluation"
+      "measured_additional_gain": [
+        {
+          "version": "v1",
+          "profile": "21:9",
+          "host": "SERVER",
+          "median_cpu_reduction_percent": -0.5780346820809301,
+          "decision": "neutral/inconclusive; no proven gain"
+        },
+        {
+          "version": "v1",
+          "profile": "32:9",
+          "host": "SERVER",
+          "median_cpu_reduction_percent": 1.764705882352946,
+          "decision": "neutral/inconclusive; no proven gain"
+        },
+        {
+          "version": "v2",
+          "profile": "21:9",
+          "host": "SERVER",
+          "median_cpu_reduction_percent": -2.39520958083832,
+          "decision": "negative medians/mixed-or-tied samples; no demonstrated gain, not selected"
+        },
+        {
+          "version": "v2",
+          "profile": "32:9",
+          "host": "SERVER",
+          "median_cpu_reduction_percent": -1.8072289156626509,
+          "decision": "negative medians/mixed-or-tied samples; no demonstrated gain, not selected"
+        }
+      ],
+      "execution_status": "deferred-after-two-built-game-experiments",
+      "result_file": "2026-10-31-wide-view-results.json"
     },
     {
       "id": "NES17",
@@ -1214,7 +1245,7 @@
   ],
   "execution": {
     "issue": "beads-2dw.1.110",
-    "branch": "perf/nes15-presentation-bridge",
+    "branch": "perf/nes16-wide-view",
     "base": "fc0bf3fa46a710464960c0a1f2d3b83b4d345600",
     "status": "in-progress",
     "evidence_root": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028",
@@ -1225,12 +1256,12 @@
     "owner_handoff_ready": false
   },
   "execution_summary": {
-    "evaluated_decisions": 15,
+    "evaluated_decisions": 16,
     "partial_ids": [],
     "parked_ids": [
       "NES29"
     ],
-    "other_unresolved": 15,
+    "other_unresolved": 14,
     "note": "Qualified scope decisions, not architectural exhaustion or a wall-clock completion estimate. Final combined builds and owner approval remain separate."
   }
 }

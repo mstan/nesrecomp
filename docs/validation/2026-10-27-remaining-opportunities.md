@@ -17,7 +17,7 @@ original HD runtime. See [HD results](2026-10-28-hd-plan-results.md), including
 the rejected universal packages and SMB's unchanged-runtime proof. Zelda's
 fixed SNROM SRAM code now joins the native deadline service; see
 [SRAM results](2026-10-28-sram-native-results.md). SERVER Fit improves5.128%
-and Remastered1.442%; stock is neutral/inconclusive. Fifteen items now have
+and Remastered1.442%; stock is neutral/inconclusive. Sixteen items now have
 qualified evaluation decisions; NES01 is qualified for whole stable HLE raster
 jobs and NES29 remains parked.
 Guarded native ROM is now evaluated under NES09; see
@@ -366,13 +366,19 @@ close the per-pixel raster or APU-event algorithm work under NES01/NES06.
   Evidence: [runner/cyc/cyc_presentation.c:16](../../runner/cyc/cyc_presentation.c#L16).
 
 
-- [ ] **NES16 · P2 · Whole-view widescreen preparation and span composition**
+- [x] **NES16 · P2 · Whole-view widescreen preparation and span composition**
 
   The canvas is cleared, margins reconstructed and sprites decoded/composited on each new frame. Use one view plan, clipped spans and explicit dirty products rather than separate native-center and margin work.
 
   Scope: SMB1/SMB3/Metroid/Gumshoe real widened gameplay and Fit resizing.
 
-  Next: Attribute a real 21:9/32:9 moving-camera interval and compare the full view, including changing window aspect and composed HUD.
+  Evaluation: Metroid two-dimensional tile source/attribute plans v1/v2
+  deferred after actual moving21:9/32:9 matched built-game runs showed no
+  demonstrated CPU gain. Source/fixtures/actual adaptive pictures and current
+  loads pass; operation-count reduction is not performance. See
+  [wide-view results](2026-10-31-wide-view-results.md). Other three title
+  runtimes are unchanged/unmeasured; broader producer alternatives remain
+  an explicit deferred residual, not architectural exhaustion.
 
   Preserve: Real margin content, entity visibility, priority, camera wrap, HUD placement and arbitrary Fit resize behavior; no black-margin speedup.
 
