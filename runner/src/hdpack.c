@@ -53,6 +53,7 @@ typedef struct HdTile {
     int            brightness;      /* 0..255 (or >255 for HDR; rare) */
     int            has_transparent; /* any pixel with alpha != 0xFF */
     int            fully_transparent;
+    uint32_t       job_image;      /* presentation-owned immutable asset ID */
     struct HdCond **conds; int *neg; int ncond;  /* [cond] gate; 0 = unconditional */
     struct HdTile *next;            /* primary hash chain */
 } HdTile;
@@ -148,6 +149,7 @@ typedef struct {
     char      name[256];
     uint32_t *px;            /* premultiplied ARGB, w*h */
     int       w, h;
+    uint32_t  job_image;
 } HdBgImg;
 
 typedef struct HdBg {
@@ -169,6 +171,9 @@ static int       s_bg_unrenderable = 0; /* parsed but PNG missing */
 static HdBg    **s_actbg = NULL;        /* active this frame (ascending priority) */
 static int       s_nact = 0, s_band_mid = 0, s_band_fg = 0;
 static int       s_hud_rows = 0;        /* top native rows masked by an opaque HUD overlay */
+
+static int hd_jobs_owns_assets(void);
+static void hd_jobs_unload(void);
 
 /* ── Small helpers ────────────────────────────────────────────────────────── */
 
@@ -733,6 +738,7 @@ int hdpack_resize(int native_w) {
 }
 
 void hdpack_unload(void) {
+    int jobs_own_pixels = hd_jobs_owns_assets();
 #if defined(NESRECOMP_HDPACK_LAYER_PLANS) && NESRECOMP_HDPACK_LAYER_PLANS
     hd_layer_unload();
 #endif
@@ -743,7 +749,11 @@ void hdpack_unload(void) {
         s_buckets[i] = NULL;
     }
     for (int i = 0; i < s_all_count; i++) {
-        if (s_all[i]) { free(s_all[i]->conds); free(s_all[i]->neg); free(s_all[i]->data); free(s_all[i]); }
+        if (s_all[i]) {
+            free(s_all[i]->conds); free(s_all[i]->neg);
+            if (!jobs_own_pixels) free(s_all[i]->data);
+            free(s_all[i]);
+        }
     }
     free(s_all); s_all = NULL; s_all_count = s_all_cap = 0;
     for (int i = 0; i < s_sheet_count; i++) free(s_sheets[i].px);
@@ -758,7 +768,12 @@ void hdpack_unload(void) {
     free(s_bgs); s_bgs = NULL; s_bg_count = s_bg_cap = 0;
     free(s_bg_sorted); s_bg_sorted = NULL;
     free(s_actbg); s_actbg = NULL; s_nact = 0;
-    for (int i = 0; i < s_bgimg_count; i++) { free(s_bgimgs[i]->px); free(s_bgimgs[i]); }
+    for (int i = 0; i < s_bgimg_count; i++) {
+        if (!s_bgimgs[i]) continue;
+        if (!jobs_own_pixels || s_bgimgs[i]->job_image == HD_JOB_NO_IMAGE)
+            free(s_bgimgs[i]->px);
+        free(s_bgimgs[i]);
+    }
     free(s_bgimgs); s_bgimgs = NULL; s_bgimg_count = s_bgimg_cap = 0;
     s_missing_cond = s_bg_unrenderable = 0; s_disable_orig = 0;
 
@@ -766,6 +781,7 @@ void hdpack_unload(void) {
     s_active = 0; s_scale = 1; s_version = 0;
     s_skipped_cond = 0; s_has_overscan = 0; s_native_w = 0;
     s_dir[0] = '\0';
+    hd_jobs_unload();
 }
 
 int hdpack_load(const char *dir, int is_chr_ram_game, int native_w) {
@@ -1135,6 +1151,16 @@ static void blend_bg_block(uint32_t *dst, int hd_w, const HdBg *b, int sx, int s
 
 void hdpack_upscale(const uint32_t *native_fb, int native_w, uint32_t *hd_buf) {
     if (!s_active) return;
+#if !(defined(NESRECOMP_HDPACK_PLAN_REFERENCE) && NESRECOMP_HDPACK_PLAN_REFERENCE) && \
+    !(defined(NESRECOMP_HDPACK_JOBS_REFERENCE) && NESRECOMP_HDPACK_JOBS_REFERENCE)
+    const HdJobFrame *jobs = hdpack_prepare_jobs(native_fb, native_w);
+    if (jobs) {
+        int result = hdpack_render_jobs(jobs, (unsigned)s_scale, hd_buf,
+                                       (size_t)native_w * (unsigned)s_scale);
+        hdpack_jobs_release(jobs);
+        if (!result) return;
+    }
+#endif
     if (s_opt_debug < 0)     s_opt_debug = getenv("NESRECOMP_HDPACK_DEBUG") ? 1 : 0;
     if (s_opt_hide_orig < 0) s_opt_hide_orig = getenv("NESRECOMP_HDPACK_HIDE_ORIGINALS") ? 1 : 0;
     int s = s_scale, hd_w = native_w * s;
@@ -1199,3 +1225,5 @@ void hdpack_upscale(const uint32_t *native_fb, int native_w, uint32_t *hd_buf) {
 #if defined(NESRECOMP_HDPACK_LAYER_PLANS) && NESRECOMP_HDPACK_LAYER_PLANS
 #include "hdpack_layered.inc"
 #endif
+
+#include "hdpack_jobs.inc"

@@ -67,6 +67,8 @@
 #include "cyc_settings.h"
 #ifdef NESRECOMP_CYCLE_HDPACK
 #include "cyc_hdpack.h"
+#include "cyc_hd_gpu.h"
+#include "hdpack.h"
 #endif
 #include "cyc_ring.h"
 #include "cyc_state.h"
@@ -267,6 +269,10 @@ static long          s_frames_done;
 static bool          s_running = true;
 static bool          s_have_menu;
 static SDL_AudioDeviceID s_audio_dev;
+#ifdef NESRECOMP_CYCLE_HDPACK
+static CycHdGpu *s_hd_gpu;
+static bool s_hd_gpu_tried,s_gpu_picture;
+#endif
 
 /* VSync belongs to presentation. The guest retains its own deadline, and
  * fast-forward / measurement must be able to turn blocking presents off.
@@ -288,7 +294,17 @@ static bool renderer_vsync(bool enabled)
 static bool create_renderer(void)
 {
     s_vsync_supported = s_vsync_active = false;
-    s_ren = s_win ? SDL_CreateRenderer(s_win, -1, SDL_RENDERER_ACCELERATED) : NULL;
+    int preferred=-1;
+#ifdef NESRECOMP_CYCLE_HDPACK
+    /* A configured pack can publish source jobs directly to this backend.
+     * Explicit driver selection and unsupported hosts retain their renderer. */
+    if(hdpack_active() && !getenv("SDL_RENDER_DRIVER")) {
+        for(int i=0;i<SDL_GetNumRenderDrivers();++i){SDL_RendererInfo info={0};
+            if(!SDL_GetRenderDriverInfo(i,&info) && !strcmp(info.name,"opengl")){preferred=i;break;}}
+    }
+#endif
+    s_ren = s_win ? SDL_CreateRenderer(s_win, preferred, SDL_RENDERER_ACCELERATED) : NULL;
+    if(s_win && !s_ren && preferred>=0)s_ren=SDL_CreateRenderer(s_win,-1,SDL_RENDERER_ACCELERATED);
     /* offscreen / headless video drivers have no accelerated renderer */
     if (s_win && !s_ren) s_ren = SDL_CreateRenderer(s_win, -1, SDL_RENDERER_SOFTWARE);
     if (!s_ren) return false;
@@ -339,6 +355,19 @@ static const uint32_t *picture(int *w, int *h)
     s_picture_rendered = true;
     return cyc_render_present(w, h);
 }
+
+#ifdef CYC_WITH_RECOMP_UI
+static const uint32_t *state_picture(int *w,int *h)
+{
+#ifdef NESRECOMP_CYCLE_HDPACK
+    if(hdpack_active()){
+        *w=256;*h=240;
+        return cyc_hdpack_thumbnail(cyc_frame_argb());
+    }
+#endif
+    return picture(w,h);
+}
+#endif
 
 /* ---- save states: one slot beside the executable ---- */
 
@@ -1178,9 +1207,35 @@ static void present_shot(long frame)
 static void show(bool loading, const char *toast_title, const char *toast_body)
 {
     int w, h;
-    const uint32_t *pic = picture(&w, &h);
+    const uint32_t *pic = NULL;
+    SDL_Texture *gpu_texture=NULL;
+#ifdef NESRECOMP_CYCLE_HDPACK
+    s_gpu_picture=false;
+    bool allow_gpu=hdpack_active()!=0;
+#ifndef CYC_WITH_RECOMP_UI
+    allow_gpu=allow_gpu && !toast_title;
+#endif
+    if(allow_gpu){
+        w=256*hdpack_scale();h=240*hdpack_scale();
+        if(!ensure_texture(w,h))return;
+        if(!s_hd_gpu_tried){s_hd_gpu=cyc_hd_gpu_create(s_ren,s_tex);s_hd_gpu_tried=true;
+            if(!s_hd_gpu)fprintf(stderr,"[HD GPU] unavailable; portable pack resolution %d\n",hdpack_scale());}
+        if(s_hd_gpu){
+            uint64_t begin=SDL_GetPerformanceCounter();
+            const HdJobFrame *jobs=cyc_hdpack_jobs(cyc_frame_argb());
+            uint64_t prep_ns=(uint64_t)((SDL_GetPerformanceCounter()-begin)*1000000000.0/SDL_GetPerformanceFrequency());
+            gpu_texture=cyc_hd_gpu_render(s_hd_gpu,jobs,(unsigned)s_set.hd_resolution,prep_ns);
+            if(gpu_texture){s_gpu_picture=true;s_picture_rendered=false;}
+        }
+    }
+#endif
+    if(!gpu_texture)pic=picture(&w,&h);
 #ifdef CYC_WITH_RECOMP_UI
-    cyc_state_ui_picture(pic, w, h);
+    if(gpu_texture){
+        int preview_w,preview_h;
+        const uint32_t *preview=state_picture(&preview_w,&preview_h);
+        cyc_state_ui_picture(preview,preview_w,preview_h);
+    }else cyc_state_ui_picture(pic,w,h);
 #endif
     if (!ensure_texture(w, h)) return;
 #ifndef CYC_WITH_RECOMP_UI
@@ -1200,11 +1255,17 @@ static void show(bool loading, const char *toast_title, const char *toast_body)
     (void)toast_title;
     (void)toast_body;
 #endif
-    SDL_UpdateTexture(s_tex, NULL, pic, w * 4);
+    if(!gpu_texture)SDL_UpdateTexture(s_tex, NULL, pic, w * 4);
     SDL_SetRenderDrawColor(s_ren, 0, 0, 0, 255);
     SDL_RenderClear(s_ren);
     SDL_Rect dst = { 0, 0, w, h };
-    SDL_RenderCopy(s_ren, s_tex, NULL, &dst);
+#ifdef NESRECOMP_CYCLE_HDPACK
+    if(gpu_texture){
+        SDL_SetTextureScaleMode(gpu_texture,s_set.linear_filter?SDL_ScaleModeLinear:SDL_ScaleModeNearest);
+        cyc_hd_gpu_present_begin(s_hd_gpu);
+    }
+#endif
+    SDL_RenderCopy(s_ren, gpu_texture?gpu_texture:s_tex, NULL, &dst);
     CycZapperState gun;
     cyc_zapper_state(&gun);
     int aim_x = -1, aim_y = -1;
@@ -1337,6 +1398,11 @@ int cyc_sdl_main(const char *title_in, int scale)
     s_bar = s_fds;
 #endif
     int w, h;
+#ifdef NESRECOMP_CYCLE_HDPACK
+    s_hd_gpu=NULL;s_hd_gpu_tried=s_gpu_picture=false;
+    if(hdpack_active()){w=256*hdpack_scale();h=240*hdpack_scale();}
+    else
+#endif
     picture(&w, &h);
     s_tex_w = w;
     s_tex_h = h;
@@ -1446,6 +1512,12 @@ int cyc_sdl_main(const char *title_in, int scale)
                 cyc_session_event(&ev, player);
             }
             if (ev.type == SDL_QUIT) s_running = false;
+#ifdef NESRECOMP_CYCLE_HDPACK
+            else if(ev.type==SDL_RENDER_TARGETS_RESET || ev.type==SDL_RENDER_DEVICE_RESET){
+                cyc_hd_gpu_destroy(s_hd_gpu,ev.type==SDL_RENDER_DEVICE_RESET);
+                s_hd_gpu=NULL;s_hd_gpu_tried=s_gpu_picture=false;
+            }
+#endif
             else if (ev.type == SDL_WINDOWEVENT && ev.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
                 int ow = 0, oh = 0;
                 SDL_GetRendererOutputSize(s_ren, &ow, &oh);
@@ -1583,7 +1655,7 @@ int cyc_sdl_main(const char *title_in, int scale)
 #ifdef CYC_WITH_RECOMP_UI
             if (s_have_menu) {
                 if (cyc_state_ui_capture_due(s_frames_done)) {
-                    int pw, ph; const uint32_t *pic = picture(&pw, &ph);
+                    int pw, ph; const uint32_t *pic = state_picture(&pw, &ph);
                     cyc_state_ui_picture(pic, pw, ph);
                 }
                 cyc_state_ui_frame(s_frames_done);
@@ -1621,6 +1693,9 @@ int cyc_sdl_main(const char *title_in, int scale)
             (!loading || tnow - shown >= frame_ticks)) {
             show(loading, toast_title, toast_body);
             if (s_present_out && s_present_every > 0 && loops % s_present_every == 0) present_shot(s_frames_done);
+#ifdef NESRECOMP_CYCLE_HDPACK
+            if(s_gpu_picture)cyc_hd_gpu_present_end(s_hd_gpu);
+#endif
             SDL_RenderPresent(s_ren);
             shown = SDL_GetPerformanceCounter();
             /* the one point a new width applies: after this present, before the next picture */
@@ -1683,6 +1758,9 @@ int cyc_sdl_main(const char *title_in, int scale)
     s_audio_dev = 0;
     for (int i = 0; i < s_pad_count; ++i) SDL_GameControllerClose(s_pads[i]);
     if (s_vpad_joy) SDL_JoystickClose(s_vpad_joy);
+#ifdef NESRECOMP_CYCLE_HDPACK
+    cyc_hd_gpu_destroy(s_hd_gpu,false);s_hd_gpu=NULL;
+#endif
     SDL_DestroyTexture(s_tex);
     SDL_DestroyRenderer(s_ren);
     SDL_DestroyWindow(s_win);

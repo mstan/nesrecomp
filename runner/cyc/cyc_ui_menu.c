@@ -45,6 +45,11 @@ static char s_shortcut_label[CYC_SC_COUNT][96];
 static char s_axis_key[MAX_AXES][24];
 static char s_shortcut_key[CYC_SC_COUNT][24];
 static uint64_t s_quit_armed;
+static const int s_hd_resolution_values[] = {0, 1, 2, 4, 8, 16, 32, 64};
+static const char *const s_hd_resolution_choices[] = {
+    "Pack resolution", "1×", "2×", "4×", "8×", "16×",
+    "32× (Experimental)", "64× (Experimental)"
+};
 
 /* ---- Mods: every feature of the mod runtime's catalog (cyc_session.h), with
  * its options, edited live. A change goes to the runtime (the same calls the
@@ -303,6 +308,7 @@ static int get_value(void *ctx, const RecompRuntimeUiItem *it, int *out)
     else if (is_key(it, RECOMP_RUNTIME_UI_KEY_WINDOW_SCALE)) *out = s->window_scale;
     else if (is_key(it, RECOMP_RUNTIME_UI_KEY_INTEGER_SCALE)) *out = s->integer_scale;
     else if (is_key(it, RECOMP_RUNTIME_UI_KEY_LINEAR_FILTER)) *out = s->linear_filter;
+    else if (is_key(it, "cyc.hd.resolution")) *out = s->hd_resolution;
     else if (is_key(it, RECOMP_RUNTIME_UI_KEY_AUDIO)) *out = s->audio_enabled;
     else if (is_key(it, RECOMP_RUNTIME_UI_KEY_VOLUME)) *out = s->volume;
     else if (is_key(it, "cyc.zapper.mouse")) *out = s->zapper_mouse;
@@ -332,7 +338,13 @@ static int set_value(void *ctx, const RecompRuntimeUiItem *it, int v)
     else if (is_key(it, RECOMP_RUNTIME_UI_KEY_WINDOW_SCALE)) s->window_scale = v < 1 ? 1 : v > 8 ? 8 : v;
     else if (is_key(it, RECOMP_RUNTIME_UI_KEY_INTEGER_SCALE)) s->integer_scale = v != 0;
     else if (is_key(it, RECOMP_RUNTIME_UI_KEY_LINEAR_FILTER)) s->linear_filter = v != 0;
-    else if (is_key(it, RECOMP_RUNTIME_UI_KEY_AUDIO)) s->audio_enabled = v != 0;
+    else if (is_key(it, "cyc.hd.resolution")) {
+        size_t i;
+        for (i = 0; i < sizeof(s_hd_resolution_values) / sizeof(s_hd_resolution_values[0]); ++i)
+            if (s_hd_resolution_values[i] == v) break;
+        if (i == sizeof(s_hd_resolution_values) / sizeof(s_hd_resolution_values[0])) return 0;
+        s->hd_resolution = v;
+    } else if (is_key(it, RECOMP_RUNTIME_UI_KEY_AUDIO)) s->audio_enabled = v != 0;
     else if (is_key(it, RECOMP_RUNTIME_UI_KEY_VOLUME)) s->volume = v < 0 ? 0 : v > 100 ? 100 : v;
     else if (is_key(it, "cyc.zapper.mouse")) s->zapper_mouse = v != 0;
     else if (is_key(it, "cyc.zapper.crosshair")) s->zapper_crosshair = v != 0;
@@ -460,6 +472,12 @@ RecompRuntimeUi *cyc_ui_menu_create(const CycUiHost *host)
     s_host = *host;
     s_item_count = 0;
     const CycHostExtras *x = host->extras;
+#ifdef NESRECOMP_CYCLE_HDPACK
+    add("cyc.hd.resolution", "Graphics", "HD resolution",
+        "Choose the rendering resolution for HD packs. Pack resolution uses the original pack size.",
+        RECOMP_RUNTIME_UI_CHOICE, 0, 64, 1, s_hd_resolution_choices,
+        sizeof(s_hd_resolution_values) / sizeof(s_hd_resolution_values[0]), s_hd_resolution_values);
+#endif
     if (host->fds) {
         unsigned sides = cyc_fds_side_count();
         if (sides > MAX_SIDES) sides = MAX_SIDES;

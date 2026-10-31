@@ -576,3 +576,15 @@ add_test(NAME cyc_prg_guards_test
             --out ${CMAKE_CURRENT_BINARY_DIR}/prg_guards_test
             --ppu ${NESRECOMP_PPU_IMPL} ${NESRECOMP_NESTED_BUILD_ARGS})
 set_tests_properties(cyc_prg_guards_test PROPERTIES TIMEOUT 900)
+
+if(TARGET SDL2::SDL2)
+    # Existing HD corpus, also consumed by the real resident renderer. Hosts
+    # without a usable GL context skip this optional check; CPU tests still run.
+    add_executable(cyc_hdpack_gpu_test tests/hdpack_plan_probe.c tests/hdpack_gpu_probe.c cyc_hd_gpu.c)
+    target_compile_definitions(cyc_hdpack_gpu_test PRIVATE CYC_WITH_SDL=1 NESRECOMP_HDPACK_GPU_PROBE=1)
+    target_include_directories(cyc_hdpack_gpu_test PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS}
+        ${CMAKE_CURRENT_SOURCE_DIR}/../include ${CMAKE_CURRENT_SOURCE_DIR}/../src ${CMAKE_CURRENT_SOURCE_DIR}/../external)
+    target_link_libraries(cyc_hdpack_gpu_test PRIVATE SDL2::SDL2 ${NESRECOMP_CYC_LIBRARIES})
+    add_test(NAME cyc_hdpack_gpu COMMAND cyc_hdpack_gpu_test)
+    set_tests_properties(cyc_hdpack_gpu PROPERTIES TIMEOUT 180 SKIP_RETURN_CODE 77)
+endif()

@@ -22,6 +22,8 @@ static uint8_t fingerprint[20];
 static HdPipeline pipeline;
 static HdRecordedPixel recorded[256*240];
 static bool presentation_valid;
+/* Display-only invalidation, deliberately absent from every serialized part. */
+static uint64_t presentation_epoch;
 
 /* Version 3 represents an exactly zero inactive payload. Nonzero and
  * active records retain their complete bytes; no generation/invalidation key. */
@@ -78,5 +80,5 @@ static int load_part(unsigned part,const uint8_t *buf,int len) {
     void *payload=part==4?(void *)&pipeline:(void *)&recorded[part*256*60];
     HdStateHeader h;memcpy(&h,buf,sizeof h);
     if(h.version==3)memset(payload,0,size);else memcpy(payload,buf+sizeof h,size);
-    presentation_valid=false;return 1;
+    presentation_valid=false;++presentation_epoch;return 1;
 }
