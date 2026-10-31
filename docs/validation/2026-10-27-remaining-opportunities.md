@@ -17,7 +17,7 @@ original HD runtime. See [HD results](2026-10-28-hd-plan-results.md), including
 the rejected universal packages and SMB's unchanged-runtime proof. Zelda's
 fixed SNROM SRAM code now joins the native deadline service; see
 [SRAM results](2026-10-28-sram-native-results.md). SERVER Fit improves5.128%
-and Remastered1.442%; stock is neutral/inconclusive. Twenty items now have
+and Remastered1.442%; stock is neutral/inconclusive. Twenty-one items now have
 qualified evaluation decisions; NES01 is qualified for whole stable HLE raster
 jobs and NES29 remains parked.
 Guarded native ROM is now evaluated under NES09; see
@@ -238,13 +238,21 @@ close the per-pixel raster or APU-event algorithm work under NES01/NES06.
   Evidence: [runner/cyc/hw_machine.c:197](../../runner/cyc/hw_machine.c#L197), [runner/cyc/hw_apu.c:601](../../runner/cyc/hw_apu.c#L601).
 
 
-- [ ] **NES08 · P2 · Qualified polling-loop and blank-interval fast forwarding**
+- [x] **NES08 · P2 · Qualified polling-loop and blank-interval fast forwarding**
 
   Native code can still execute an expensive guest wait. A verified loop can advance to its first observable event while accounting for repeated reads and elapsed device work; rendering-off intervals are another opportunity.
 
   Scope: Content-qualified active-gameplay waits and rendering-off intervals.
 
-  Next: Identify the exact active wait on gameplay traces. Reject menu/boot-only counts as gameplay attribution; prove a complete loop service on one content-qualified loop.
+  Evaluation: Selected settled nonvisible NTSC device intervals in
+  [PR87](https://github.com/mstan/nesrecomp/pull/87). All five stock outputs
+  and current-build restores match; Metroid is faster in all three sampled
+  pairs (6.195% median CPU reduction), other games are neutral/inconclusive
+  with all negative samples retained. HLE/LLE, held-high NMI, decay deadlines,
+  register/status, visible sprite and existing fallback fixtures pass.
+  [Results and limits](2026-10-31-blank-interval-results.md). Content-qualified
+  polling-loop replacement and visible rendering-off bulk output remain
+  residuals. Final combined builds and owner approval are still pending.
 
   Preserve: Final registers/RAM, loop exit, side-effectful reads, interrupt sampling, device time and input latency. No arbitrary dropped cycles.
 
@@ -665,5 +673,6 @@ working portable implementation. Netplay settles a common validated profile
 before frame 0; platform compilation alone is not compatibility qualification.
 
 Audit completion closes only `beads-2dw.1.109`'s investigation/deliverable.
-The thirty-one opportunities and existing child issues remain unresolved;
-this is not an architectural-exhaustion or new performance-gain claim.
+Current execution has twenty-one scoped evaluation decisions, nine unresolved
+items and parked NES29. The implementation campaign and final combined owner
+handoff remain open; a scoped decision is not architectural exhaustion.
