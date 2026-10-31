@@ -28,7 +28,8 @@
     "2026-10-31-present-upload-results.json",
     "2026-10-31-observer-results.json",
     "2026-10-31-dma-service-results.json",
-    "2026-10-31-blank-interval-results.json"
+    "2026-10-31-blank-interval-results.json",
+    "2026-10-31-native-service-results.json"
   ],
   "priorities": "Order expresses expected scope and evidence, not measured recoverable cost. Overlapping packages are not additive.",
   "acceptance": "Each game neutral or positive. Small mixed samples inconclusive. Shared original/candidate defects are separate. Native saves protected; old save-state compatibility never required.",
@@ -391,7 +392,7 @@
       "package": "native-content",
       "priority": "P2",
       "title": "Whole game-service native replacements",
-      "status": "open-unmeasured",
+      "status": "evaluated-selected-native-neighbor-sprite-service",
       "evidence": [
         {
           "file": "runner/cyc/cyc_hooks.c",
@@ -408,15 +409,19 @@
           "link": "../../runner/cyc/cyc_mod.c#L420"
         }
       ],
-      "remaining": "Trusted hooks provide a boundary for content-qualified native decompression, tile streaming, collision or entity update services. Translating the old instruction algorithm is not the only allowed implementation.",
+      "remaining": "A complete content-qualified Zelda neighboring-room sprite reset/cursor job is selected. Atlas is observed positive; Fit neutral/inconclusive with exact outputs. Other entity/collision/decompression/streaming services remain residuals, not architectural exhaustion.",
       "affected_profiles": [
         "A title with a demonstrated expensive decompression/streaming/collision/entity service"
       ],
-      "next_decisive_check": "Choose a repeatedly expensive service from an actual title profile, verify the ROM/disassembly contract, and replace the complete job rather than selected opcodes.",
+      "next_decisive_check": "Independent actual engine/title PR and durable Beads handoff, then next serial item. Final combined supported regeneration, feature/performance and owner review remain pending.",
       "required_behavior": "Inputs/outputs, shared RAM, RNG, relevant timing/device effects and failure paths; unsupported content keeps the original path. No guessed game logic.",
       "prior_issue": null,
-      "measured_additional_gain": null,
-      "execution_status": "remaining-evaluation"
+      "measured_additional_gain": {
+        "zelda_atlas_observed_median_cpu_reduction_percent": 4.5698924731182755,
+        "zelda_fit": "neutral/inconclusive; mixed samples retained"
+      },
+      "execution_status": "selected-for-final-combined-integration",
+      "result_file": "2026-10-31-native-service-results.json"
     },
     {
       "id": "NES11",
@@ -1297,7 +1302,7 @@
   ],
   "execution": {
     "issue": "beads-2dw.1.110",
-    "branch": "perf/nes08-native-blank",
+    "branch": "perf/nes10-hook-services",
     "base": "fc0bf3fa46a710464960c0a1f2d3b83b4d345600",
     "status": "in-progress",
     "evidence_root": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028",
@@ -1308,12 +1313,12 @@
     "owner_handoff_ready": false
   },
   "execution_summary": {
-    "evaluated_decisions": 21,
+    "evaluated_decisions": 22,
     "partial_ids": [],
     "parked_ids": [
       "NES29"
     ],
-    "other_unresolved": 9,
+    "other_unresolved": 8,
     "note": "Qualified scope decisions, not architectural exhaustion or a wall-clock completion estimate. Final combined builds and owner approval remain separate."
   }
 }
