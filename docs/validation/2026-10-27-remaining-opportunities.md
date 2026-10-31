@@ -17,7 +17,7 @@ original HD runtime. See [HD results](2026-10-28-hd-plan-results.md), including
 the rejected universal packages and SMB's unchanged-runtime proof. Zelda's
 fixed SNROM SRAM code now joins the native deadline service; see
 [SRAM results](2026-10-28-sram-native-results.md). SERVER Fit improves5.128%
-and Remastered1.442%; stock is neutral/inconclusive. Eighteen items now have
+and Remastered1.442%; stock is neutral/inconclusive. Nineteen items now have
 qualified evaluation decisions; NES01 is qualified for whole stable HLE raster
 jobs and NES29 remains parked.
 Guarded native ROM is now evaluated under NES09; see
@@ -488,13 +488,18 @@ close the per-pixel raster or APU-event algorithm work under NES01/NES06.
   Evidence: [runner/cyc/cyc_net.c:84](../../runner/cyc/cyc_net.c#L84), [runner/cyc/cyc_session.c:197](../../runner/cyc/cyc_session.c#L197). Reuse `beads-2dw.1.100`.
 
 
-- [ ] **NES23 · P2 · Observer/history work integrated with semantic events**
+- [x] **NES23 · P2 · Observer/history work integrated with semantic events**
 
   Offline timed builds disable optional cycle tracing, but ordinary device history remains active. Netplay explicitly enables cycle tracing as a simulation setting. Derive required history/digests at semantic service boundaries and separate them from trace-detail production; preserve useful diagnostics rather than pretending legacy CMake keys disable the cycle ring.
 
   Scope: Offline production history and netplay trace/digest consumers, measured separately.
 
-  Next: Measure offline history and actual netplay trace/digest cost separately after the larger ownership decision. Keep qualification observers out of timed binaries and verify required diagnostic/digest results separately.
+  Evaluation: Offline rewrite deferred after actual stockSMB3/fullZelda-atlas
+  attribution. Existing semantic aggregation remains baseline; instrumented
+  outermost ring bodies account for about0.035% observed wall, not a recoverable
+  bound or an A/B gain. Both RAM-interpreter counts are0. See
+  [observer results](2026-10-31-observer-results.md). Broader bookkeeping and
+  separately qualified common NET profiles remain explicit residuals.
 
   Preserve: Required fault information, ring consumers, hooks and agreed peer digests remain correct. Do not disable netplay hashing unilaterally; establish a common validated profile before changing its simulation identity.
 

@@ -25,7 +25,8 @@
     "2026-10-30-world-canvas-results.json",
     "2026-10-31-wide-view-results.json",
     "2026-10-31-rewind-history-results.json",
-    "2026-10-31-present-upload-results.json"
+    "2026-10-31-present-upload-results.json",
+    "2026-10-31-observer-results.json"
   ],
   "priorities": "Order expresses expected scope and evidence, not measured recoverable cost. Overlapping packages are not additive.",
   "acceptance": "Each game neutral or positive. Small mixed samples inconclusive. Shared original/candidate defects are separate. Native saves protected; old save-state compatibility never required.",
@@ -1001,7 +1002,7 @@
       "package": "state-ownership",
       "priority": "P2",
       "title": "Observer/history work integrated with semantic events",
-      "status": "open-unmeasured",
+      "status": "evaluated-deferred-offline-semantic-history-already-small",
       "evidence": [
         {
           "file": "runner/cyc/cyc_ring.c",
@@ -1018,15 +1019,16 @@
           "link": "../../runner/cyc/cyc_net.c#L56"
         }
       ],
-      "remaining": "Offline timed builds disable optional cycle tracing, but ordinary device history remains active. Netplay explicitly enables cycle tracing as a simulation setting. Derive required history/digests at semantic service boundaries and separate them from trace-detail production; preserve useful diagnostics rather than pretending legacy CMake keys disable the cycle ring.",
+      "remaining": "Offline semantic aggregation already exists; bounded instrumented ring-body scope is small, with0RAM-interpreter events. Broader dispatch/bookkeeping and actual common traced NET/profile policy remain explicit residuals, not exhausted.",
       "affected_profiles": [
         "Offline production history and netplay trace/digest consumers, measured separately"
       ],
-      "next_decisive_check": "Measure offline history and actual netplay trace/digest cost separately after the larger ownership decision. Keep qualification observers out of timed binaries and verify required diagnostic/digest results separately.",
+      "next_decisive_check": "No speculative tiny ring tuning. Continue NES07 DMA-heavy service attribution after independent durable handoff; NET profile only with real delayed-peer scope under NES22.",
       "required_behavior": "Required fault information, ring consumers, hooks and agreed peer digests remain correct. Do not disable netplay hashing unilaterally; establish a common validated profile before changing its simulation identity.",
       "prior_issue": null,
       "measured_additional_gain": null,
-      "execution_status": "remaining-evaluation"
+      "execution_status": "deferred-after-scoped-production-attribution",
+      "result_file": "2026-10-31-observer-results.json"
     },
     {
       "id": "NES24",
@@ -1288,7 +1290,7 @@
   ],
   "execution": {
     "issue": "beads-2dw.1.110",
-    "branch": "perf/nes24-present-pipeline",
+    "branch": "perf/nes23-observer-products",
     "base": "fc0bf3fa46a710464960c0a1f2d3b83b4d345600",
     "status": "in-progress",
     "evidence_root": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028",
@@ -1299,12 +1301,12 @@
     "owner_handoff_ready": false
   },
   "execution_summary": {
-    "evaluated_decisions": 18,
+    "evaluated_decisions": 19,
     "partial_ids": [],
     "parked_ids": [
       "NES29"
     ],
-    "other_unresolved": 12,
+    "other_unresolved": 11,
     "note": "Qualified scope decisions, not architectural exhaustion or a wall-clock completion estimate. Final combined builds and owner approval remain separate."
   }
 }

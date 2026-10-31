@@ -1,0 +1,1063 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-31",
+  "opportunity": "NES23",
+  "issue": "beads-2dw.1.110",
+  "campaign": "beads-2wy8.1",
+  "engine_base": "9e4897cabe07f9a3f188dfc4fc85e8f1fff3c24e",
+  "runtime_base": "a9455b52edda9507f4d3a801569a40259455f52f",
+  "engine_branch": "perf/nes23-observer-products",
+  "decision": "DEFERRED offline observer rewrite after source and bounded actual production attribution; no runtime candidate/adoption/PR",
+  "runtime_commit": null,
+  "pull_request": null,
+  "results": [
+    {
+      "title": "smb3",
+      "host": "DESKTOP-HN15M1H",
+      "profile": "stock",
+      "binary_sha256": "b0c331560fd7c8e4e41b714214e22c20d7b7e09732a1ab0d65b2f16f0cbdb2c0",
+      "scope": {
+        "first": 2402,
+        "last": 3600,
+        "root_calls": 300,
+        "muted_calls": 0,
+        "inclusive_wall_ms": 2.3553,
+        "trace_enabled_at_exit": false,
+        "total_since_power": 326,
+        "calls_by_kind": {
+          "none": 0,
+          "fds.read": 0,
+          "fds.write": 0,
+          "fds.irq": 0,
+          "fds.ack": 0,
+          "fds.byte": 0,
+          "fds.motor": 0,
+          "fds.rewind": 0,
+          "fds.ready": 0,
+          "fds.end": 0,
+          "fds.side": 0,
+          "fds.crc": 0,
+          "fds.wrun": 0,
+          "fds.wblock": 0,
+          "fds.save": 0,
+          "fds.load": 0,
+          "view.valid": 0,
+          "view.reject": 0,
+          "view.invalid": 0,
+          "view.exit": 0,
+          "ram.interp": 0,
+          "view.frame": 0,
+          "fds.env": 0,
+          "fds.audio": 0,
+          "fds.idreq": 0,
+          "fds.idbytes": 0,
+          "fds.span": 0,
+          "fds.hle": 0,
+          "mod.hook": 0,
+          "mod.call": 0,
+          "mod.fail": 0,
+          "state": 300,
+          "video": 0
+        }
+      },
+      "window": {
+        "cpu_seconds": 4.46875,
+        "wall_seconds": 6.442869000005885,
+        "command": [
+          "G:\\Temp\\Codex\\nes110-observer-profile-v1-20261031\\observer-server-input\\inputs\\smb3\\SuperMarioBros3Recomp.exe",
+          "G:\\Temp\\Codex\\nes110-observer-profile-v1-20261031\\observer-server-input\\inputs\\smb3\\baserom.nes",
+          "--hidden",
+          "--uncapped",
+          "--exit-after",
+          "3601",
+          "--no-save",
+          "--config",
+          "G:\\Temp\\Codex\\nes110-observer-profile-v1-20261031\\observer-server-input\\results\\smb3\\config.ini",
+          "--mods-root",
+          "G:\\Temp\\Codex\\nes110-observer-profile-v1-20261031\\observer-server-input\\inputs\\smb3\\mods",
+          "--window-input",
+          "G:\\Temp\\Codex\\nes110-observer-profile-v1-20261031\\observer-server-input\\inputs\\smb3\\moving.input",
+          "--tcp",
+          "26521"
+        ],
+        "affinity_mask": 8,
+        "priority": "Normal",
+        "first_frame": 2401,
+        "excluded_setup_cpu_seconds": 0.625,
+        "excluded_setup_wall_seconds": 1.353253900000709,
+        "interval_core_before": [
+          [
+            465138125000,
+            612594375000,
+            145604218750
+          ],
+          [
+            574532031250,
+            641740468750,
+            116457500000
+          ],
+          [
+            229069843750,
+            375026718750,
+            383171250000
+          ],
+          [
+            343603906250,
+            475077500000,
+            283120468750
+          ],
+          [
+            395781250000,
+            514502187500,
+            243695781250
+          ],
+          [
+            428640312500,
+            534971093750,
+            223226875000
+          ],
+          [
+            454588593750,
+            554517031250,
+            203680937500
+          ],
+          [
+            482395156250,
+            571212812500,
+            186985156250
+          ],
+          [
+            314078125000,
+            469730000000,
+            288467968750
+          ],
+          [
+            340174375000,
+            483136718750,
+            275061250000
+          ],
+          [
+            522745156250,
+            613063125000,
+            145134843750
+          ],
+          [
+            550858437500,
+            625792031250,
+            132405937500
+          ],
+          [
+            573552968750,
+            661451718750,
+            96746250000
+          ],
+          [
+            583029062500,
+            682700000000,
+            75497968750
+          ],
+          [
+            605030468750,
+            669235625000,
+            88962343750
+          ],
+          [
+            605833593750,
+            665308125000,
+            92889843750
+          ]
+        ],
+        "interval_core_after": [
+          [
+            465158750000,
+            612635312500,
+            145627656250
+          ],
+          [
+            574562343750,
+            641780312500,
+            116482031250
+          ],
+          [
+            229082812500,
+            375050312500,
+            383212031250
+          ],
+          [
+            343604843750,
+            475092031250,
+            283170312500
+          ],
+          [
+            395799687500,
+            514532968750,
+            243729375000
+          ],
+          [
+            428660156250,
+            535002656250,
+            223259687500
+          ],
+          [
+            454610781250,
+            554551718750,
+            203710625000
+          ],
+          [
+            482419062500,
+            571247500000,
+            187014843750
+          ],
+          [
+            314090156250,
+            469754843750,
+            288507500000
+          ],
+          [
+            340190781250,
+            483166562500,
+            275095781250
+          ],
+          [
+            522766093750,
+            613097812500,
+            145164531250
+          ],
+          [
+            550888593750,
+            625830156250,
+            132432187500
+          ],
+          [
+            573582968750,
+            661494062500,
+            96768281250
+          ],
+          [
+            583063437500,
+            682744687500,
+            75517656250
+          ],
+          [
+            605060937500,
+            669278750000,
+            88983593750
+          ],
+          [
+            605868281250,
+            665349375000,
+            92912968750
+          ]
+        ],
+        "scope": "Resumed SDL frames plus normal shutdown; TCP menu/load/window setup excluded",
+        "fixed_zapper": null,
+        "setup_state": {
+          "id": 0,
+          "ok": true,
+          "frame": 2401,
+          "menu_open": true,
+          "fds": false,
+          "side": -1,
+          "sides": 0,
+          "motor": false,
+          "writing": false,
+          "toast": {
+            "visible": false,
+            "title": "",
+            "body": ""
+          },
+          "hle": "",
+          "disk_save": "",
+          "disk_binding": "D / LB",
+          "picture": [
+            256,
+            240
+          ],
+          "dev_ui": false,
+          "recomp_ui": true,
+          "native": true,
+          "vsync_requested": false,
+          "vsync_active": true,
+          "pads": [],
+          "state_panel": "closed",
+          "state_slot": 1,
+          "rewind_count": 0,
+          "rewind_frame": -1,
+          "rewind_enabled": true,
+          "workload_scene": {
+            "id": 0,
+            "ok": true,
+            "hex": "00000000000009000000012B35000400"
+          },
+          "workload_ram": {
+            "id": 0,
+            "ok": true,
+            "hex": "000000D50000000D003801020100400000000000003D1841000000000100000000000A1101808080808080808080808080808080808080808080808040404040"
+          }
+        },
+        "zapper_state": null,
+        "world_state": null
+      },
+      "observer_inclusive_wall_percent": 0.0365566954721235,
+      "settings": "# NESRecomp cycle-backend settings: the launcher, the in-game menu and the\n# window write this file. Keys are SDL key and controller names.\n[Display]\nWindowScale = 3\nFullscreen = 0\nIntegerScale = 1\nLinearFilter = 0\nVSync = 0\nHdPackEnabled = 1\nHdPackDir = \n[Audio]\nEnabled = 1\nVolume = 0\n[Input]\nPlayer1Source = 1\nPlayer1Device = \nPlayer1Deadzone = 30\nPlayer2Source = 2\nPlayer2Device = \nPlayer2Deadzone = 30\n[Launcher]\nSkipLauncher = 0\n[Rewind]\nEnabled = 1\nDepth = 100\nInterval = 4\n[Netplay]\nPlayerName = \n[Zapper]\nMouse = 1\nCrosshair = 1\n[FDS]\n# on, off, or default (the game's own setting)\nAutoSwap = default\nFastLoad = default\n# the FDS BIOS file, any name (checked by size and CRC); empty: the launcher asks for it\nBios = \n[Keyboard.Player1]\na = Z\nb = X\nselect = \\\nstart = Return\nup = Up\ndown = Down\nleft = Left\nright = Right\n[Gamepad.Player1]\na = a\nb = x\nselect = back\nstart = start\nup = dpup\ndown = dpdown\nleft = dpleft\nright = dpright\n[Keyboard.Player2]\na = None\nb = None\nselect = None\nstart = None\nup = None\ndown = None\nleft = None\nright = None\n[Gamepad.Player2]\na = a\nb = x\nselect = back\nstart = start\nup = dpup\ndown = dpdown\nleft = dpleft\nright = dpright\n[Keyboard.Shortcuts]\ndisk = D\nmenu = Escape\nfast_forward = Tab\nscreenshot = F12\nfullscreen = F11\nstate_menu = F7\nrewind = F8\n[Gamepad.Shortcuts]\ndisk = leftshoulder\nmenu = rightshoulder\nfast_forward = righttrigger+\nscreenshot = none\nfullscreen = none\nstate_menu = back+leftstick\nrewind = back+rightstick\n[Game]\nViewMode = 0\n",
+      "capacity": {
+        "before": {
+          "eligible": true,
+          "reasons": [],
+          "requested": {
+            "cpu": 1.0,
+            "gpu": 0.0,
+            "memory": 2.0,
+            "disk": 1.0,
+            "class": "timing",
+            "priority": "normal"
+          },
+          "remaining": {
+            "cpu_cores": 2.6251217137293086,
+            "memory_gib": 19.541793823242188,
+            "gpu_percent": 27.0
+          },
+          "sample": {
+            "host": "DESKTOP-HN15M1H",
+            "os": "windows",
+            "timestamp": 1793441639.7964933,
+            "physical_cores": 8,
+            "logical_cpus": 16,
+            "cpu_busy_percent": 67.18597857838364,
+            "cpu_free_cores": 2.6251217137293086,
+            "memory_available_gib": 19.541793823242188,
+            "memory_total_gib": 61.5560188293457,
+            "gpu_busy_percent": 73.0,
+            "gpu_source": "nvidia-smi utilization.gpu",
+            "storage": "G:\\",
+            "storage_free_gib": 7200.047527313232
+          },
+          "active_claims": 3,
+          "policy": "codex-benchmark-capacity-v1",
+          "token": "eef101968bb1417e8d5bed83d83d6785",
+          "phase": "pending",
+          "target": "local",
+          "alias": null,
+          "other_targets": []
+        },
+        "command": [
+          "C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe",
+          "-NoProfile",
+          "-NonInteractive",
+          "-File",
+          "G:/Temp/Codex/nes110-observer-profile-v1-20261031/observer-server-input/run.ps1",
+          "-Title",
+          "smb3"
+        ],
+        "exit_code": 0,
+        "after": {
+          "host": "DESKTOP-HN15M1H",
+          "os": "windows",
+          "timestamp": 1793441651.5666265,
+          "physical_cores": 8,
+          "logical_cpus": 16,
+          "cpu_busy_percent": 56.4453125,
+          "cpu_free_cores": 3.484375,
+          "memory_available_gib": 19.662761688232422,
+          "memory_total_gib": 61.5560188293457,
+          "gpu_busy_percent": 72.0,
+          "gpu_source": "nvidia-smi utilization.gpu",
+          "storage": "G:\\",
+          "storage_free_gib": 7199.987903594971
+        }
+      },
+      "raw_archive": "observer-local-evidence.zip",
+      "raw_path": "observer-server-input/results/smb3/results.json"
+    },
+    {
+      "title": "zelda",
+      "host": "SERVER",
+      "profile": "full seamless atlas4096x1472/all128simulatedrooms",
+      "binary_sha256": "0899dfae1d119803849a90254da9d0f9f5dc593af1676f1683d2a6835c6d0e5f",
+      "scope": {
+        "first": 1802,
+        "last": 3000,
+        "root_calls": 1031659,
+        "muted_calls": 1025011,
+        "inclusive_wall_ms": 16.3155,
+        "trace_enabled_at_exit": false,
+        "total_since_power": 6673,
+        "calls_by_kind": {
+          "none": 0,
+          "fds.read": 0,
+          "fds.write": 0,
+          "fds.irq": 0,
+          "fds.ack": 0,
+          "fds.byte": 0,
+          "fds.motor": 0,
+          "fds.rewind": 0,
+          "fds.ready": 0,
+          "fds.end": 0,
+          "fds.side": 0,
+          "fds.crc": 0,
+          "fds.wrun": 0,
+          "fds.wblock": 0,
+          "fds.save": 0,
+          "fds.load": 0,
+          "view.valid": 1025015,
+          "view.reject": 0,
+          "view.invalid": 0,
+          "view.exit": 0,
+          "ram.interp": 0,
+          "view.frame": 1199,
+          "fds.env": 0,
+          "fds.audio": 0,
+          "fds.idreq": 0,
+          "fds.idbytes": 0,
+          "fds.span": 0,
+          "fds.hle": 0,
+          "mod.hook": 3946,
+          "mod.call": 1199,
+          "mod.fail": 0,
+          "state": 300,
+          "video": 0
+        }
+      },
+      "window": {
+        "cpu_seconds": 43.171875,
+        "wall_seconds": 46.38461889978498,
+        "command": [
+          "G:\\Temp\\Codex\\nes110-observer-profile-v1-20261031\\observer-server-input\\inputs\\zelda\\LegendOfZeldaNESRecomp.exe",
+          "G:\\Temp\\Codex\\nes110-observer-profile-v1-20261031\\observer-server-input\\inputs\\zelda\\baserom.nes",
+          "--hidden",
+          "--uncapped",
+          "--exit-after",
+          "3001",
+          "--no-save",
+          "--config",
+          "G:\\Temp\\Codex\\nes110-observer-profile-v1-20261031\\observer-server-input\\results\\zelda\\config.ini",
+          "--mods-root",
+          "G:\\Temp\\Codex\\nes110-observer-profile-v1-20261031\\observer-server-input\\inputs\\zelda\\mods",
+          "--window-input",
+          "G:\\Temp\\Codex\\nes110-observer-profile-v1-20261031\\observer-server-input\\inputs\\zelda\\moving.input",
+          "--world-view",
+          "seamless-atlas",
+          "--tcp",
+          "53474"
+        ],
+        "affinity_mask": 8,
+        "priority": "Normal",
+        "first_frame": 1801,
+        "excluded_setup_cpu_seconds": 1.15625,
+        "excluded_setup_wall_seconds": 1.8345845001749694,
+        "interval_core_before": [
+          [
+            16110357812500,
+            19006639843750,
+            2994379687500
+          ],
+          [
+            16870960156250,
+            18599990781250,
+            3401027343750
+          ],
+          [
+            17051538750000,
+            18639499375000,
+            3361518750000
+          ],
+          [
+            16341441875000,
+            18151177031250,
+            3849841093750
+          ]
+        ],
+        "interval_core_after": [
+          [
+            16110610781250,
+            19006975000000,
+            2994508281250
+          ],
+          [
+            16870960156250,
+            18600036718750,
+            3401445156250
+          ],
+          [
+            17051761250000,
+            18639787031250,
+            3361694843750
+          ],
+          [
+            16341443125000,
+            18151188593750,
+            3850293281250
+          ]
+        ],
+        "scope": "Resumed SDL frames plus normal shutdown; TCP menu/load/window setup excluded",
+        "fixed_zapper": null,
+        "setup_state": {
+          "id": 0,
+          "ok": true,
+          "frame": 1801,
+          "menu_open": true,
+          "fds": false,
+          "side": -1,
+          "sides": 0,
+          "motor": false,
+          "writing": false,
+          "toast": {
+            "visible": false,
+            "title": "",
+            "body": ""
+          },
+          "hle": "",
+          "disk_save": "",
+          "disk_binding": "D / LB",
+          "picture": [
+            4096,
+            1472
+          ],
+          "dev_ui": false,
+          "recomp_ui": true,
+          "native": true,
+          "vsync_requested": false,
+          "vsync_active": true,
+          "pads": [],
+          "state_panel": "closed",
+          "state_slot": 1,
+          "rewind_count": 0,
+          "rewind_frame": -1,
+          "rewind_enabled": true,
+          "workload_scene": {
+            "id": 0,
+            "ok": true,
+            "hex": "00000000000000000000000000000000"
+          },
+          "workload_ram": {
+            "id": 0,
+            "ok": true,
+            "hex": "888D0C0E000000FF7F060801010300000001050000C30000C055D57ED42981D2D174D63F93000200000000000000000000000000000000000000000000000000"
+          }
+        },
+        "zapper_state": null,
+        "world_state": {
+          "id": 0,
+          "ok": true,
+          "enabled": true,
+          "stage": "room-simulation",
+          "level": 0,
+          "decoded": 0,
+          "failures": 0,
+          "camera": [
+            0,
+            0
+          ],
+          "size": [
+            4096,
+            1472
+          ],
+          "adjacent_actors": true,
+          "seamless_traversal": true,
+          "simulated_rooms": 128,
+          "actors": 609,
+          "neighbor_ticks": 45085,
+          "handoffs": 0,
+          "menu": 0,
+          "game_mode": 5,
+          "submode": 0,
+          "updating": 1,
+          "scroll_y64": 64,
+          "mask64": 30,
+          "presentation": "world",
+          "scene_room": 119,
+          "scene_level": 0,
+          "ui_bounds": [
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      },
+      "observer_inclusive_wall_percent": 0.035174375443829786,
+      "settings": "# NESRecomp cycle-backend settings: the launcher, the in-game menu and the\n# window write this file. Keys are SDL key and controller names.\n[Display]\nWindowScale = 3\nFullscreen = 0\nIntegerScale = 1\nLinearFilter = 0\nVSync = 0\nHdPackEnabled = 1\nHdPackDir = \n[Audio]\nEnabled = 1\nVolume = 0\n[Input]\nPlayer1Source = 1\nPlayer1Device = \nPlayer1Deadzone = 30\nPlayer2Source = 2\nPlayer2Device = \nPlayer2Deadzone = 30\n[Launcher]\nSkipLauncher = 0\n[Rewind]\nEnabled = 1\nDepth = 100\nInterval = 4\n[Netplay]\nPlayerName = \n[Zapper]\nMouse = 1\nCrosshair = 1\n[FDS]\n# on, off, or default (the game's own setting)\nAutoSwap = default\nFastLoad = default\n# the FDS BIOS file, any name (checked by size and CRC); empty: the launcher asks for it\nBios = \n[Keyboard.Player1]\na = Z\nb = X\nselect = \\\nstart = Return\nup = Up\ndown = Down\nleft = Left\nright = Right\n[Gamepad.Player1]\na = a\nb = x\nselect = back\nstart = start\nup = dpup\ndown = dpdown\nleft = dpleft\nright = dpright\n[Keyboard.Player2]\na = None\nb = None\nselect = None\nstart = None\nup = None\ndown = None\nleft = None\nright = None\n[Gamepad.Player2]\na = a\nb = x\nselect = back\nstart = start\nup = dpup\ndown = dpdown\nleft = dpleft\nright = dpright\n[Keyboard.Shortcuts]\ndisk = D\nmenu = Escape\nfast_forward = Tab\nscreenshot = F12\nfullscreen = F11\nstate_menu = F7\nrewind = F8\n[Gamepad.Shortcuts]\ndisk = leftshoulder\nmenu = rightshoulder\nfast_forward = righttrigger+\nscreenshot = none\nfullscreen = none\nstate_menu = back+leftstick\nrewind = back+rightstick\n[Game]\nViewMode = 0\n",
+      "capacity": {
+        "before": {
+          "eligible": true,
+          "reasons": [],
+          "requested": {
+            "cpu": 1.0,
+            "gpu": 0.0,
+            "memory": 2.0,
+            "disk": 1.0,
+            "class": "timing",
+            "priority": "normal"
+          },
+          "remaining": {
+            "cpu_cores": 1.625,
+            "memory_gib": 7.009860992431641,
+            "gpu_percent": 92.0
+          },
+          "sample": {
+            "host": "SERVER",
+            "os": "windows",
+            "timestamp": 1793441656.2001772,
+            "physical_cores": 4,
+            "logical_cpus": 4,
+            "cpu_busy_percent": 59.375,
+            "cpu_free_cores": 1.625,
+            "memory_available_gib": 7.009860992431641,
+            "memory_total_gib": 15.939079284667969,
+            "gpu_busy_percent": 8.0,
+            "gpu_source": "WDDM per-engine aggregate maximum",
+            "storage": "G:\\",
+            "storage_free_gib": 3867.6152954101562
+          },
+          "active_claims": 2,
+          "policy": "codex-benchmark-capacity-v1",
+          "token": "d2dee73e171141a4981066e125d06ab6",
+          "phase": "pending",
+          "target": "server",
+          "alias": "server",
+          "other_targets": []
+        },
+        "command": [
+          "C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe",
+          "-NoProfile",
+          "-NonInteractive",
+          "-File",
+          "G:/Temp/Codex/nes110-observer-profile-v1-20261031/observer-server-input/run.ps1",
+          "-Title",
+          "zelda"
+        ],
+        "exit_code": 0,
+        "after": {
+          "host": "SERVER",
+          "os": "windows",
+          "timestamp": 1793441708.8251536,
+          "physical_cores": 4,
+          "logical_cpus": 4,
+          "cpu_busy_percent": 38.671875,
+          "cpu_free_cores": 2.453125,
+          "memory_available_gib": 7.266960144042969,
+          "memory_total_gib": 15.939079284667969,
+          "gpu_busy_percent": 53.0,
+          "gpu_source": "WDDM per-engine aggregate maximum",
+          "storage": "G:\\",
+          "storage_free_gib": 3867.6004333496094
+        }
+      },
+      "raw_archive": "observer-server-evidence.zip",
+      "raw_path": "results.json"
+    }
+  ],
+  "archives": [
+    {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\observer-local-evidence.zip",
+      "bytes": 18747786,
+      "sha256": "e26eb0dfcae8c4d82c31e7ed06e5f9bd8bf557807ed6ec7b648a3277a9614180"
+    },
+    {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\observer-server-evidence.zip",
+      "bytes": 23003,
+      "sha256": "66484ed93e85408360a9196a265289707178f608214283dfcac03a219772456b"
+    },
+    {
+      "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\observer-source-validation-evidence.zip",
+      "bytes": 160931,
+      "sha256": "005d7e2d4b3724acd2a9917334b833004b424cd6cb63e6201e57344da4d32cc1"
+    }
+  ],
+  "storage": {
+    "item": "NES23",
+    "windows_staging_cleanup": [
+      {
+        "reparse_or_git": false,
+        "files": 34,
+        "title": "smb3",
+        "raw_result_sha256": "c1e31fc5d88c6d080fda18b94ddd75324960f88847f5e4879cc332f192db3994",
+        "host": "DESKTOP-HN15M1H",
+        "removed": true,
+        "root": "G:\\Temp\\Codex\\nes110-observer-profile-v1-20261031",
+        "bytes": 55827541
+      },
+      {
+        "reparse_or_git": false,
+        "files": 34,
+        "title": "zelda",
+        "raw_result_sha256": "50e0fadcc4189841d16faaa4176a85bd05f669bb10a7409358bec0962b0c4390",
+        "host": "SERVER",
+        "removed": true,
+        "root": "G:\\Temp\\Codex\\nes110-observer-profile-v1-20261031",
+        "bytes": 55819431
+      }
+    ],
+    "retained_archives": [
+      {
+        "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\observer-local-evidence.zip",
+        "bytes": 18747786,
+        "sha256": "e26eb0dfcae8c4d82c31e7ed06e5f9bd8bf557807ed6ec7b648a3277a9614180"
+      },
+      {
+        "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\observer-server-evidence.zip",
+        "bytes": 23003,
+        "sha256": "66484ed93e85408360a9196a265289707178f608214283dfcac03a219772456b"
+      },
+      {
+        "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\observer-source-validation-evidence.zip",
+        "bytes": 160931,
+        "sha256": "005d7e2d4b3724acd2a9917334b833004b424cd6cb63e6201e57344da4d32cc1"
+      }
+    ],
+    "retained_deck": {
+      "path": "/home/deck/codex-nes110-observer-20261031/deck-proton-qualification-evidence.zip",
+      "bytes": 11189677,
+      "sha256": "93c11d68c33cd69041c7a9e053bc0b7e5d617827d9df70f6553f400e86012340",
+      "status": "partial-runtime-qualified; renderer metadata/log transport unresolved; no timing result",
+      "retained_root": "/home/deck/codex-nes110-observer-20261031",
+      "retained_regular_bytes": 333147421,
+      "purpose": "Bounded isolated Proton prefix and frozen state/PNG/RAM verification for possible later campaign use; source file-sink diagnostic prepared but unbuilt",
+      "cleanup_when": "Before final campaign handoff or when further Deck qualification is no longer useful; inspect own prefix process state and symlinks, preserve Steam/user data"
+    },
+    "retained_preparations": [
+      "prepared-nes22",
+      "prepared-nes25",
+      "prepared-nes27",
+      "prepared-final-worktrees.json",
+      "prepared-complex-board-inventory.json",
+      "source-observer-profile-file-logs"
+    ],
+    "retained_products": [
+      "products-observer-profile-v1",
+      "source-observer-profile-v1",
+      "observer-server-input",
+      "deck-verification-input"
+    ],
+    "cleanup_when": "Remove obsolete products/inputs/prototypes and Deck prefix at final campaign handoff after retaining exact evidence; keep owner saves/settings and requested deliverables"
+  },
+  "independent_source": {
+    "schema_version": 1,
+    "item": "NES23",
+    "state": "prepared-built-static-reviewed-not-runtime-measured",
+    "instrumentation_source_sha256": "dd1020bfc07f2875dc297a0e24f46a93020a607deb37eed024a149322fefd61b",
+    "base_source_sha256": "0c34603619990cdf38ab2cc6dd4375c27c44119aa12d4a6f0df26c1a2df10aa5",
+    "ring_body_mechanical_restoration_equal": true,
+    "products": [
+      {
+        "title": "smb3",
+        "exe": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-observer-profile-v1\\smb3\\SuperMarioBros3Recomp.exe",
+        "sha256": "b0c331560fd7c8e4e41b714214e22c20d7b7e09732a1ab0d65b2f16f0cbdb2c0",
+        "base_sha256": "c3fb012b2068f30a536fa8dd5bf4a8beae48faf6a6f70e477774e6076f4390b6",
+        "objects": 136,
+        "changed_objects": [
+          {
+            "index": 12,
+            "before": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-smb3-candidate-v2\\CMakeFiles\\SuperMarioBros3Recomp.dir\\G_\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\deadline-candidate-v2\\runner\\cyc\\cyc_ring.c.obj",
+            "after": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-observer-profile-v1\\smb3\\cyc_ring.c.obj"
+          }
+        ]
+      },
+      {
+        "title": "zelda",
+        "exe": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-observer-profile-v1\\zelda\\LegendOfZeldaNESRecomp.exe",
+        "sha256": "0899dfae1d119803849a90254da9d0f9f5dc593af1676f1683d2a6835c6d0e5f",
+        "base_sha256": "6b3ec493d912634f1c88b049707137692595696d8ba73210153e3a2a711c9730",
+        "objects": 122,
+        "changed_objects": [
+          {
+            "index": 12,
+            "before": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\build-zelda-guarded-rom-v2-candidate\\CMakeFiles\\LegendOfZeldaNESRecomp.dir\\G_\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\engine\\runner\\cyc\\cyc_ring.c.obj",
+            "after": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-observer-profile-v1\\zelda\\cyc_ring.c.obj"
+          }
+        ]
+      }
+    ],
+    "profile_counting": "Outermost public push/push_len calls counted once; nested wrapper depth balanced. Muted calls remain counted and classified. Original production bodies untouched.",
+    "measurement_scope": "Offline trace-off diagnostic attribution only. Per-call QPC inclusive wall overhead included. Active frame labels start+1 through end-1: 1199 labels; wall denominator 1200 resumed frames plus shutdown. Cannot establish A/B gain, exclusive CPU cost, exact recoverable share or netplay trace/digest cost.",
+    "recipe_review": [
+      "Executable SHA checked on staging and before launch.",
+      "Paused TCP state/menu/window/atlas setup precedes timing. Zelda asserts 128 simulated rooms.",
+      "Audio dummy and Volume 0; hidden SDL dummy/software. Disposable local profiles preserve owner saves/settings.",
+      "Shared pool run declares 1 CPU / 0 GPU / 2 GiB RAM / 1 GiB disk and rotates eligible Windows targets. Capacity decline code 2 alone retries after 30 minutes; actual job failure stops.",
+      "No runtime candidate. Actual netplay common-profile redesign is separate pending NES22 scope; immutable trace policy is not inferred."
+    ],
+    "runtime_tests": []
+  },
+  "independent_raw": {
+    "schema_version": 1,
+    "item": "NES23",
+    "role": "independent-validator",
+    "state": "offline-deferral-evidence-reviewed-awaiting-durable-disposition",
+    "scope": "Read-only audit of existing raw measurements, instrumentation, recipe, setup and host telemetry. No validator game launches or additional measurements.",
+    "checks": [
+      "Profile source mechanically preserves ring body; one relinked object per product; executable hashes match.",
+      "Raw log and results JSON ring fields match; kind sums and reported wall percentages recompute exactly.",
+      "Leased Windows jobs were eligible and exited 0. CPU/GPU/RAM/storage headroom and interval per-core counters retained.",
+      "Actual native HLE runtime has accepted native interval counts; trace is off. Current rewind is enabled at depth 100, interval 4.",
+      "Zelda initial setup explicitly contains full 128-room atlas with 609 actors.",
+      "Both selected cases have zero interpreted RAM history events."
+    ],
+    "cases": [
+      {
+        "title": "smb3",
+        "host": "DESKTOP-HN15M1H",
+        "target": "local",
+        "raw_result": "G:/Temp/Codex/nes110-observer-profile-v1-20261031/observer-server-input/results/smb3/results.json",
+        "raw_sha256": "c1e31fc5d88c6d080fda18b94ddd75324960f88847f5e4879cc332f192db3994",
+        "log": "G:\\Temp\\Codex\\nes110-observer-profile-v1-20261031\\observer-server-input\\results\\smb3\\window.log",
+        "log_sha256": "e348f1c57a825ba91615a6c5787c7ad2bc20122153f4b7f8930e8ccce9f01b1a",
+        "receipt": "G:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/pool-observer-profile-v1-queue-smb3-try2-receipt.json",
+        "receipt_sha256": "462254f474689fef79a381d71cd3433f4a6206ef73284f2f1f66e6bb4fcbb3a0",
+        "scope": {
+          "first": 2402,
+          "last": 3600,
+          "root_calls": 300,
+          "muted_calls": 0,
+          "inclusive_wall_ms": 2.3553,
+          "trace_enabled_at_exit": false,
+          "total_since_power": 326,
+          "calls_by_kind": {
+            "none": 0,
+            "fds.read": 0,
+            "fds.write": 0,
+            "fds.irq": 0,
+            "fds.ack": 0,
+            "fds.byte": 0,
+            "fds.motor": 0,
+            "fds.rewind": 0,
+            "fds.ready": 0,
+            "fds.end": 0,
+            "fds.side": 0,
+            "fds.crc": 0,
+            "fds.wrun": 0,
+            "fds.wblock": 0,
+            "fds.save": 0,
+            "fds.load": 0,
+            "view.valid": 0,
+            "view.reject": 0,
+            "view.invalid": 0,
+            "view.exit": 0,
+            "ram.interp": 0,
+            "view.frame": 0,
+            "fds.env": 0,
+            "fds.audio": 0,
+            "fds.idreq": 0,
+            "fds.idbytes": 0,
+            "fds.span": 0,
+            "fds.hle": 0,
+            "mod.hook": 0,
+            "mod.call": 0,
+            "mod.fail": 0,
+            "state": 300,
+            "video": 0
+          }
+        },
+        "cpu_seconds": 4.46875,
+        "wall_seconds": 6.442869000005885,
+        "instrumented_body_wall_percent": 0.0365566954721235,
+        "pinned_core_elapsed_seconds": 6.4375,
+        "pinned_core_busy_seconds": 6.34375,
+        "estimated_other_pinned_core_busy_seconds": 1.875,
+        "initial_simulated_rooms": null,
+        "initial_actors": null,
+        "product_sha256": "b0c331560fd7c8e4e41b714214e22c20d7b7e09732a1ab0d65b2f16f0cbdb2c0",
+        "rom_sha256": "6ea0777ca520ba7ad7b0ea0f6452140d59aa0b1dffe5045cb1e8020dde10c267",
+        "eligible_reservation": {
+          "eligible": true,
+          "reasons": [],
+          "requested": {
+            "cpu": 1.0,
+            "gpu": 0.0,
+            "memory": 2.0,
+            "disk": 1.0,
+            "class": "timing",
+            "priority": "normal"
+          },
+          "remaining": {
+            "cpu_cores": 2.6251217137293086,
+            "memory_gib": 19.541793823242188,
+            "gpu_percent": 27.0
+          },
+          "sample": {
+            "host": "DESKTOP-HN15M1H",
+            "os": "windows",
+            "timestamp": 1793441639.7964933,
+            "physical_cores": 8,
+            "logical_cpus": 16,
+            "cpu_busy_percent": 67.18597857838364,
+            "cpu_free_cores": 2.6251217137293086,
+            "memory_available_gib": 19.541793823242188,
+            "memory_total_gib": 61.5560188293457,
+            "gpu_busy_percent": 73.0,
+            "gpu_source": "nvidia-smi utilization.gpu",
+            "storage": "G:\\",
+            "storage_free_gib": 7200.047527313232
+          },
+          "active_claims": 3,
+          "policy": "codex-benchmark-capacity-v1",
+          "token": "eef101968bb1417e8d5bed83d83d6785",
+          "phase": "pending",
+          "target": "local",
+          "alias": null,
+          "other_targets": []
+        },
+        "after_telemetry": {
+          "host": "DESKTOP-HN15M1H",
+          "os": "windows",
+          "timestamp": 1793441651.5666265,
+          "physical_cores": 8,
+          "logical_cpus": 16,
+          "cpu_busy_percent": 56.4453125,
+          "cpu_free_cores": 3.484375,
+          "memory_available_gib": 19.662761688232422,
+          "memory_total_gib": 61.5560188293457,
+          "gpu_busy_percent": 72.0,
+          "gpu_source": "nvidia-smi utilization.gpu",
+          "storage": "G:\\",
+          "storage_free_gib": 7199.987903594971
+        }
+      },
+      {
+        "title": "zelda",
+        "host": "SERVER",
+        "target": "server",
+        "raw_result": "G:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/observer-server-results-zelda/results.json",
+        "raw_sha256": "50e0fadcc4189841d16faaa4176a85bd05f669bb10a7409358bec0962b0c4390",
+        "log": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\observer-server-results-zelda\\window.log",
+        "log_sha256": "23750228eb4e5cea0cd9501d1e474ea3afb39453723463116f2481c556ab5c6c",
+        "receipt": "G:/Temp/Codex/nesrecomp/pipeline-burndown-20261028/pool-observer-profile-v1-queue-zelda-try1-receipt.json",
+        "receipt_sha256": "cb044ffced51fa71cfd68bad55d65a06687aa493f7f1aceb5fc73d8f05ee0c85",
+        "scope": {
+          "first": 1802,
+          "last": 3000,
+          "root_calls": 1031659,
+          "muted_calls": 1025011,
+          "inclusive_wall_ms": 16.3155,
+          "trace_enabled_at_exit": false,
+          "total_since_power": 6673,
+          "calls_by_kind": {
+            "none": 0,
+            "fds.read": 0,
+            "fds.write": 0,
+            "fds.irq": 0,
+            "fds.ack": 0,
+            "fds.byte": 0,
+            "fds.motor": 0,
+            "fds.rewind": 0,
+            "fds.ready": 0,
+            "fds.end": 0,
+            "fds.side": 0,
+            "fds.crc": 0,
+            "fds.wrun": 0,
+            "fds.wblock": 0,
+            "fds.save": 0,
+            "fds.load": 0,
+            "view.valid": 1025015,
+            "view.reject": 0,
+            "view.invalid": 0,
+            "view.exit": 0,
+            "ram.interp": 0,
+            "view.frame": 1199,
+            "fds.env": 0,
+            "fds.audio": 0,
+            "fds.idreq": 0,
+            "fds.idbytes": 0,
+            "fds.span": 0,
+            "fds.hle": 0,
+            "mod.hook": 3946,
+            "mod.call": 1199,
+            "mod.fail": 0,
+            "state": 300,
+            "video": 0
+          }
+        },
+        "cpu_seconds": 43.171875,
+        "wall_seconds": 46.38461889978498,
+        "instrumented_body_wall_percent": 0.03517437544382979,
+        "pinned_core_elapsed_seconds": 46.375,
+        "pinned_core_busy_seconds": 46.25,
+        "estimated_other_pinned_core_busy_seconds": 3.078125,
+        "initial_simulated_rooms": 128,
+        "initial_actors": 609,
+        "product_sha256": "0899dfae1d119803849a90254da9d0f9f5dc593af1676f1683d2a6835c6d0e5f",
+        "rom_sha256": "8f72dc2e98572eb4ba7c3a902bca5f69c448fc4391837e5f8f0d4556280440ac",
+        "eligible_reservation": {
+          "eligible": true,
+          "reasons": [],
+          "requested": {
+            "cpu": 1.0,
+            "gpu": 0.0,
+            "memory": 2.0,
+            "disk": 1.0,
+            "class": "timing",
+            "priority": "normal"
+          },
+          "remaining": {
+            "cpu_cores": 1.625,
+            "memory_gib": 7.009860992431641,
+            "gpu_percent": 92.0
+          },
+          "sample": {
+            "host": "SERVER",
+            "os": "windows",
+            "timestamp": 1793441656.2001772,
+            "physical_cores": 4,
+            "logical_cpus": 4,
+            "cpu_busy_percent": 59.375,
+            "cpu_free_cores": 1.625,
+            "memory_available_gib": 7.009860992431641,
+            "memory_total_gib": 15.939079284667969,
+            "gpu_busy_percent": 8.0,
+            "gpu_source": "WDDM per-engine aggregate maximum",
+            "storage": "G:\\",
+            "storage_free_gib": 3867.6152954101562
+          },
+          "active_claims": 2,
+          "policy": "codex-benchmark-capacity-v1",
+          "token": "d2dee73e171141a4981066e125d06ab6",
+          "phase": "pending",
+          "target": "server",
+          "alias": "server",
+          "other_targets": []
+        },
+        "after_telemetry": {
+          "host": "SERVER",
+          "os": "windows",
+          "timestamp": 1793441708.8251536,
+          "physical_cores": 4,
+          "logical_cpus": 4,
+          "cpu_busy_percent": 38.671875,
+          "cpu_free_cores": 2.453125,
+          "memory_available_gib": 7.266960144042969,
+          "memory_total_gib": 15.939079284667969,
+          "gpu_busy_percent": 53.0,
+          "gpu_source": "WDDM per-engine aggregate maximum",
+          "storage": "G:\\",
+          "storage_free_gib": 3867.6004333496094
+        }
+      }
+    ],
+    "judgment": "Support deferring an offline ring rewrite: measured ring bodies show no demonstrated substantial cost in these selected actual workloads; baseline already aggregates useful summaries at semantic boundaries. This is a deferral, not a qualified optimization.",
+    "limits": [
+      "QPC-instrumented inclusive wall includes instrumentation and scheduling; no exclusive CPU attribution, strict recoverable bound or A/B gain is established.",
+      "Only 1199 frame labels were instrumented within 1200 resumed frames plus shutdown. Caller bookkeeping and all observer paths were not exhausted.",
+      "Hosts were shared and pinned-core counters show other work; small diagnostic values are not precise cross-host comparisons.",
+      "No actual netplay trace/digest or common-profile evaluation. Future NES22 profile is independently pending.",
+      "No runtime implementation candidate, PR acceptance, merge, release or repeated owner check."
+    ],
+    "remaining_final_gate": [
+      "Evidence archive and cleanup record, preserving useful raw records and identities.",
+      "Final docs accurately distinguish offline deferral from NES22 netplay residual.",
+      "Exact durable owning issue and campaign Beads notes independently read back."
+    ],
+    "next_item_recommendation": "After the final deferral gate only, select NES07 native DMA service for smallest actual DMA-heavy gameplay attribution. Prototype only if post-HLE cost warrants it."
+  },
+  "limitations": [
+    "Each row is one diagnostic baseline, not A/B or a speedup. Hosts differ; do not compare their CPU times or pool them as one experiment.",
+    "1199 instrumented labels (2402..3600 or1802..3000) divided by nominal1200resumedframes plus normal shutdown wall. QPC time is inclusive instrumented outermost push/push_len body wall, nesting excluded; it is not exclusive CPU, recoverable upper bound, or complete callsite/bookkeeping cost.",
+    "Source restores exactly after stripping diagnostic block/wrappers. One selected cyc_ring.c.obj changed per binary; source/binary/objects and capacity settings are retained. No optional trace/CRC observer was silently disabled as a claimed optimization. Offline cycle tracing is baselineoff; semantic ring remainsenabled.",
+    "Coexistence/variation is visible: pinned logical-core busy6.34375s vs SMB3 process4.46875s; SERVER46.25s vs Zelda process43.171875s. No quiet-host inference or precise optimization claim.",
+    "Most Zelda API attempts are already-muted view-valid notifications, not retained1M events; summaries and late-probe history remain preserved. Both RAM-interpreter counts0. Do not credit existing semantic aggregation anew.",
+    "Other three titles and traced NET behavior remain unchanged/unmeasured. A separate actual delayed-peer common simulation profile can revisit forced tracing/native-interval gating under NES22; private old digest/state byte identity is not an owner requirement across new versions. Requested tracing semantics and same-profile agreement remain required.",
+    "Deck has no native compiler installed. Proton10 ran the exact Windows SMB3 build: frozen native PNG and2048RAM/current-load/UI-readback checks pass, but required renderer metadata/log transport is unresolved. No Deck timing or native Linux qualification is claimed. Bounded333147421B regular data retained for possible later qualification and tracked cleanup.",
+    "Prepared work while capacity was unavailable is not evaluated/built/tested/accepted: real-device audio profiler unbuilt, NET/compiler recipes unbuilt, five final source worktrees unbuilt, board inventory only. Serial independent disposition gates stay intact.",
+    "No numerical performance retention floor was applied. The measured scope selects another substantial job instead of speculative bookkeeping tuning. Broader observer costs and new policies are explicit residuals, not exhausted.",
+    "Final supported combined five-game generation/build/features/performance and owner visual approval remain pending. No main/master merge/release; FDS parked."
+  ]
+}
