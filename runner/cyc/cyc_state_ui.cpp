@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <deque>
 #include <ctime>
 #include <filesystem>
 #include <fstream>
@@ -35,7 +36,9 @@ CycUiHost host{};
 SDL_Renderer *renderer;
 ImFont *font;
 RbeSnapRing *ring;
-std::vector<Entry> history;
+/* Entries own large immutable previews. Eviction must destroy only the
+ * oldest entry, rather than move every retained preview on every capture. */
+std::deque<Entry> history;
 std::array<Slot, Slots> slots;
 Thumb live;
 std::string message;
@@ -226,7 +229,7 @@ extern "C" void cyc_state_ui_frame(long frame) {
     size_t bytes = n; for (const auto &e : history) bytes += e.bytes;
     while (!history.empty() && (bytes > HistoryBudget || history.size() >= static_cast<size_t>(depth))) {
         bytes -= history.front().bytes; rbe_snap_ring_drop_tick(ring, history.front().tick);
-        release(history.front().thumb); history.erase(history.begin());
+        release(history.front().thumb); history.pop_front();
     }
     uint32_t tick = static_cast<uint32_t>(frame);
     if (!rbe_snap_ring_store(ring, tick, blob, n)) { std::free(blob); announce("Could not retain rewind snapshot"); return; }
