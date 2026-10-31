@@ -1,0 +1,110 @@
+{
+  "candidate": "NES26 backend-independent deadline presentation admission",
+  "base": "b6aaf74",
+  "branch": "perf/nes26-deadline-presentation",
+  "decision": "implemented candidate screened/rejected; selected NES20 unchanged",
+  "scope": "One actual deadline/presentation design, separate from historical timer/guard rejection; no architectural exhaustion",
+  "source_sha256": {
+    "runner/cyc/cyc_frame_pacing.h": "325db076ec8890338ea04e625c8ebdd4898f92f6edfc5b253e41cb2f11cf17e6",
+    "runner/cyc/cyc_sdl.c": "a2e990bb63743c80ee3e7c099ce18b520ead47baf08b034eeb326092c9ec27d1",
+    "runner/cyc/frame_pacing_test.c": "9c16a9eb541d108a78cbc00871dbec65c33cb4aaa2a45e92296b9cfbc08cc0be"
+  },
+  "test": {
+    "result": "PASS",
+    "log": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\test-pacing-admission.log",
+    "coverage": "existing elapsed guest-time model, costly unsynced render, 6period heartbeat, unpaced bypass"
+  },
+  "profile": "full live Atlas; requested3840x2160 softwareSDL; volume0, WASAPI requested; both current packages include identical existing pacing capture",
+  "cpu_pairs_seconds": [
+    [
+      3.953125,
+      3.96875
+    ],
+    [
+      4.046875,
+      4.015625
+    ],
+    [
+      4.171875,
+      3.78125
+    ]
+  ],
+  "raw_median_cpu_seconds": {
+    "reference": 4.046875,
+    "candidate": 3.96875
+  },
+  "raw_median_reduction_percent": 1.9305019305019266,
+  "presents": {
+    "reference": [
+      299,
+      299,
+      299
+    ],
+    "candidate": [
+      281,
+      284,
+      285
+    ]
+  },
+  "present_calls_per_measured_wall_second": {
+    "reference": [
+      59.68879499974006,
+      58.89415373289658,
+      59.675290577649136
+    ],
+    "candidate": [
+      56.23962644086537,
+      55.16843116290865,
+      56.70459401522252
+    ]
+  },
+  "wall_seconds": {
+    "reference": [
+      5.009315400006017,
+      5.076904600005946,
+      5.010449000008521
+    ],
+    "candidate": [
+      4.99647699999332,
+      5.147871599998325,
+      5.026047799998196
+    ]
+  },
+  "endwait_p99_us": {
+    "reference": [
+      137298.8,
+      126968.0,
+      139931.3
+    ],
+    "candidate": [
+      125296.1,
+      112863.1,
+      106524.9
+    ]
+  },
+  "paced_endstate_sha256": "9521240b10392e81d6baf90504b85fd483862454a5e667af29bd8639e1bc7238",
+  "native_pixels": "1cd1b552",
+  "paced_pcm_hashes": {
+    "reference": [
+      "4e2aa72cdbeacec3fd21d24a8b3c3e82a045d20297d18c62972e9d842adfc7ee",
+      "57562b80b37749019d4474e7cbf8710a29d841370629e803ad374fe6a17f8852",
+      "64a94fc80709fd997304b2a336524dfb9451dcc1a0735ed270a72e29bbf00af7"
+    ],
+    "candidate": [
+      "4e2aa72cdbeacec3fd21d24a8b3c3e82a045d20297d18c62972e9d842adfc7ee",
+      "57562b80b37749019d4474e7cbf8710a29d841370629e803ad374fe6a17f8852",
+      "64a94fc80709fd997304b2a336524dfb9451dcc1a0735ed270a72e29bbf00af7"
+    ]
+  },
+  "limits": [
+    "Mixed CPU/apparent1.93%median is not established gain",
+    "Lower present-call rate is not by itself proof of worse perceived smoothness; no balanced default tradeoff qualified",
+    "Endwaitlateness is not physical input/display or inter-present latency",
+    "Paced PCM varies in both baselines/candidates; no paced bitexact claim or candidate-only audio defect"
+  ],
+  "raw_case": "G:\\Temp\\Codex\\nes110-pacing-candidate-20261031\\zelda",
+  "products": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\products-pacing-capture.json",
+  "header_provenance": "Reference -iquote final-engine/cyc; candidate -iquote engine-pacing-service/cyc; actual hashes in product manifests",
+  "selected": false,
+  "measured_gain": null
+}

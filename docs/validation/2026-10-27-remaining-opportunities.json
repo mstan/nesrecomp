@@ -1187,7 +1187,7 @@
       "package": "host-delivery",
       "priority": "P3",
       "title": "Pacing and presentation deadlines",
-      "status": "evaluated-deferred-pacing-reuse",
+      "status": "evaluated-new-admission-prototype-rejected",
       "evidence": [
         {
           "file": "runner/cyc/cyc_sdl.c",
@@ -1204,18 +1204,18 @@
           "link": "../../runner/cyc/cyc_frame_pacing.h#L9"
         }
       ],
-      "remaining": "Historical high-resolution waitable design retained as rejected on end-wait lateness; no materially different new admission/presentation service implemented/qualified. Current-package cost and actual input/display latency remain unmeasured residuals.",
+      "remaining": "Backend-independent admission package rejected after actual paced Atlas CPU/delivery/state screen; not merely historical timer reuse or architectural exhaustion.",
       "affected_profiles": [
         "Normal paced play, fast-forward and slow-display presentation"
       ],
-      "next_decisive_check": "Independent durable Beads handoff, then next serial item. Revisit a coherent admission/presentation service with actual event/admit/present cadence and latency metrics, not another fixed timer guard.",
+      "next_decisive_check": "Independent durable handoff, then remaining NES30/NES31 candidates.",
       "required_behavior": "No worse user-visible pacing/latency or broken fast-forward. Retain the earlier failed candidate as rejected, not an open ready-to-ship win.",
       "prior_issue": null,
       "measured_additional_gain": null,
-      "execution_status": "evaluated-historical-negative-reused",
-      "result_file": "2026-10-31-pacing-reuse-results.json",
-      "candidate_state": "prepared-or-deferred",
-      "candidate_decision_recorded": false
+      "execution_status": "implemented-and-paced-Atlas-screened-negative",
+      "result_file": "2026-10-31-presentation-admission-results.json",
+      "candidate_state": "prototype-evaluated-not-selected",
+      "candidate_decision_recorded": true
     },
     {
       "id": "NES27",
@@ -1414,19 +1414,18 @@
     "phase": "serial-remaining-candidates"
   },
   "execution_summary": {
-    "evaluated_decisions": 27,
+    "evaluated_decisions": 28,
     "partial_ids": [],
     "parked_ids": [
       "NES29"
     ],
-    "other_unresolved": 3,
-    "note": "Seventeen overlapping scoped selections and ten actual prototype-disposition areas; not27independent wins or architectural exhaustion. Three prepared/deferred areas remain; FDS29 owner-parked. Final combined owner handoff pending.",
-    "candidate_decision_areas": 27,
+    "other_unresolved": 2,
+    "note": "Seventeen overlapping scoped selections and eleven actual prototype-disposition areas; not28independent wins or architectural exhaustion. Two prepared/deferred areas remain; FDS29 owner-parked. Final combined owner handoff pending.",
+    "candidate_decision_areas": 28,
     "scoped_selection_areas": 17,
-    "prototype_disposition_areas": 10,
-    "prepared_or_deferred_areas": 3,
+    "prototype_disposition_areas": 11,
+    "prepared_or_deferred_areas": 2,
     "deferred_ids": [
-      "NES26",
       "NES30",
       "NES31"
     ]
