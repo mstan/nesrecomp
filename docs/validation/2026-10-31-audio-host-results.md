@@ -20,7 +20,7 @@ or a claim that all audio ownership opportunities are exhausted.
 | Other enumerated worker CPU | 0.015625 s, one accounting tick |
 
 The current selected post-NES08 SMB3 package runs hidden with software SDL at
-1280x720, VSync off, rewind 100/4 and a fixed gameplay route. The first 60
+1280x720 with stock 256x240 content, VSync off, rewind 100/4 and a fixed gameplay route. The first 60
 resumed frames and final frame are outside the audio scope. The actual device
 reports enabled synthesis/output and playing status; this is not dummy-device
 timing. Volume zero mutes delivery while drain and mixing still run. Its

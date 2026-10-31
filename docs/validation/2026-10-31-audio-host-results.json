@@ -566,7 +566,7 @@
     "sha256": "7e9e82a36db2fb59ed9eb250416f752db85e968f3a5bfec99a0b91469ecb119f"
   },
   "limitations": [
-    "One actual normal paced1200frame SMB3 gameplay interval on this PC. Current selected post-NES08 package, private instrumentation only. Fit/native/defaultstock source settings retained; actual picture from setup_state. No A/B optimization or accepted runtime gain.",
+    "One actual normal paced1200frame SMB3 gameplay interval on this PC. Current selected post-NES08 package, private instrumentation only. Stock256x240 source settings retained; actual picture verified in setup_state. No A/B optimization or accepted runtime gain.",
     "Opened default WASAPI device2 at48000Hz AUDIO_S16SYS32784 mono1024samples and PLAYINGstatus, audio synthesis enabled/outputEnabled1/Volume0. Muted volume scaling is included in the measured loop; normal Volume100 scaling differs. Draining and game mix remain enabled.",
     "The outer host drain/mix/volume/queue scope is2.0911ms elapsed over1139normal loops2462..3600, after60resumedwarmupframes and excludingfinalframe. It includes diagnostic queue query, timing overhead and preemption. Guest APU synthesis and backend worker execution are outside this scope; it is not exclusive CPU or recoverable savings.",
     "909702samples produced and equally many submitted to SDL_QueueAudio in this scope; its return is not checked, so successful submission is not independently verified. Three empty SDL software queue observations (min0/max3540/mean2024.571bytes) do not prove audible underruns or physical latency; driver/hardware buffers are not represented.",
