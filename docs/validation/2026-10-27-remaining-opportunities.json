@@ -1152,7 +1152,7 @@
       "package": "host-delivery",
       "priority": "P3",
       "title": "Audio host buffering and queue ownership",
-      "status": "evaluated-deferred-real-device-host-audio",
+      "status": "evaluated-prototype-package-rejected",
       "evidence": [
         {
           "file": "runner/cyc/cyc_sdl.c",
@@ -1169,18 +1169,18 @@
           "link": "../../runner/cyc/hw_apu.c#L192"
         }
       ],
-      "remaining": "SMB3 real WASAPI host loop2.0911ms across1139frames, observed other enumerated workerCPU one15.625ms tick. No queue ownership change selected. External audio-service/hardware, other titles/devices and physical latency remain unmeasured residuals.",
+      "remaining": "Delivered callback-plus-fallback queue package rejected after actual paced game screen; callback activation/physical audio remain unqualified and broader designs remain possible.",
       "affected_profiles": [
         "Real audio-device gameplay; queues/underruns distinct from dummy output timing"
       ],
-      "next_decisive_check": "Independent durable Beads handoff, then next serial item. Revisit with reported audible glitches or a different measured device/host bottleneck; do not infer underruns from an empty software queue.",
+      "next_decisive_check": "Independent durable handoff, then NES26 candidate with existing pacing checks.",
       "required_behavior": "PCM, latency, pause/resume, volume and fast-forward behavior; muting or disabling emulation is not an optimization win.",
       "prior_issue": null,
       "measured_additional_gain": null,
-      "execution_status": "evaluated-attribution-only",
-      "result_file": "2026-10-31-audio-host-results.json",
-      "candidate_state": "prepared-or-deferred",
-      "candidate_decision_recorded": false
+      "execution_status": "implemented-and-paced-WASAPI-requested-screen-negative",
+      "result_file": "2026-10-31-audio-queue-candidate-results.json",
+      "candidate_state": "prototype-evaluated-not-selected",
+      "candidate_decision_recorded": true
     },
     {
       "id": "NES26",
@@ -1414,19 +1414,18 @@
     "phase": "serial-remaining-candidates"
   },
   "execution_summary": {
-    "evaluated_decisions": 26,
+    "evaluated_decisions": 27,
     "partial_ids": [],
     "parked_ids": [
       "NES29"
     ],
-    "other_unresolved": 4,
-    "note": "Seventeen overlapping scoped selections and nine actual prototype-disposition areas; not26independent wins or architectural exhaustion. Four prepared/deferred areas remain; FDS29 owner-parked. Final combined owner handoff pending.",
-    "candidate_decision_areas": 26,
+    "other_unresolved": 3,
+    "note": "Seventeen overlapping scoped selections and ten actual prototype-disposition areas; not27independent wins or architectural exhaustion. Three prepared/deferred areas remain; FDS29 owner-parked. Final combined owner handoff pending.",
+    "candidate_decision_areas": 27,
     "scoped_selection_areas": 17,
-    "prototype_disposition_areas": 9,
-    "prepared_or_deferred_areas": 4,
+    "prototype_disposition_areas": 10,
+    "prepared_or_deferred_areas": 3,
     "deferred_ids": [
-      "NES25",
       "NES26",
       "NES30",
       "NES31"

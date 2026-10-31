@@ -1,0 +1,66 @@
+{
+  "candidate": "NES25 callback-owned bounded PCM queue package",
+  "base": "0d41235",
+  "branch": "perf/nes25-audio-queue-ownership",
+  "decision": "implemented package screened and rejected; selected NES20 unchanged",
+  "scope": "Actual delivered callback-plus-fallback package on paced SMB3, not universal callback or audio architecture verdict",
+  "source_sha256": {
+    "runner/cyc/cyc_sdl.c": "e8152a045461df627a8b8a9452f571e4ed4ae8b6136ebb56f6dcb4539108898e",
+    "runner/cyc/cyc_pcm_queue.h": "29ebd143fb1dfa7308ecbcd882b87e6ebbfd833cd31ebcbfb6892e560760f062",
+    "runner/cyc/console_audio_test.c": "9bab95ac2cda573d2650cc9b101c4fb67a676bb2b13222f1da615d30724bce60"
+  },
+  "test": {
+    "result": "PASS",
+    "checks": 3481,
+    "log": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\test-audio-queue-tests-HLE.log",
+    "coverage": "existing console/audio checks plus ring full/wrap/partial/silence/clear/maximum producer chunk"
+  },
+  "cpu_pairs_seconds": [
+    [
+      4.015625,
+      3.8125
+    ],
+    [
+      3.90625,
+      3.96875
+    ],
+    [
+      3.640625,
+      3.953125
+    ]
+  ],
+  "median_cpu_seconds": {
+    "reference": 3.90625,
+    "candidate": 3.953125
+  },
+  "raw_median_reduction_percent": -1.200000000000001,
+  "interpretation": "one faster/two slower; no established benefit, not a precise regression finding",
+  "binary_sha256": {
+    "reference": "0a7d68c7d542418f423fc9856a64db461ecffaa3bc6c8e730adc69834d962a00",
+    "candidate": "f52952831c977abd331e1a9d57b6e68d8c1a072374ad5a266002c3fc2744fa5d"
+  },
+  "exact_outputs": true,
+  "own_continuation_frames": 600,
+  "raw_case": "G:\\Temp\\Codex\\nes110-audio-candidate-20261031\\smb3",
+  "performance_invocation": {
+    "kind": "inline Python -c through hidden Invoke-NesTool",
+    "headless_part": "Existing stage/run.py prefix through current-build continuation, before first=core_clock()",
+    "paced_part": "Existing host_measure.run_sdl_interval called with actual argv in performance.samples, each own mid.state at2401 through3601; warmups then3alternatingpairs",
+    "timeout": 90,
+    "affinity": 16384,
+    "audio_driver_request": "wasapi",
+    "audio_volume": 0,
+    "video_driver": "actual normal SDL, hidden",
+    "renderer_request": "software",
+    "process_cpu": "existing GetProcessTimes measurement includes all owned threads"
+  },
+  "limits": [
+    "Callback activation not separately observed after possible original-queue open retry",
+    "No software queue occupancy, host PCM, audible-underrun or physical-latency qualification",
+    "VSync requested false; initial setup readback active true, so active VSync-off is not established",
+    "On-disk run.py remains the600-frame dummy/uncapped template; actual paced1200-frame commands and outer invocation described separately"
+  ],
+  "selected": false,
+  "measured_gain": null,
+  "resource_policy": "owner-authorized headroom-only direct serial runs; no lease claim"
+}
