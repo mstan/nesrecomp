@@ -1231,10 +1231,15 @@ static void show(bool loading, const char *toast_title, const char *toast_body)
 #endif
     if(!gpu_texture)pic=picture(&w,&h);
 #ifdef CYC_WITH_RECOMP_UI
+    /* Rewind captures refresh their exact preview above the presentation step.
+     * A paused menu also needs the current preview. Ordinary GPU presents do
+     * not need a second CPU composition of the same frame. */
     if(gpu_texture){
-        int preview_w,preview_h;
-        const uint32_t *preview=state_picture(&preview_w,&preview_h);
-        cyc_state_ui_picture(preview,preview_w,preview_h);
+        if(menu_open()){
+            int preview_w,preview_h;
+            const uint32_t *preview=state_picture(&preview_w,&preview_h);
+            cyc_state_ui_picture(preview,preview_w,preview_h);
+        }
     }else cyc_state_ui_picture(pic,w,h);
 #endif
     if (!ensure_texture(w, h)) return;
@@ -1570,7 +1575,7 @@ int cyc_sdl_main(const char *title_in, int scale)
         }
 #ifdef CYC_WITH_RECOMP_UI
         if (s_have_menu && (edge[CYC_SC_STATE_MENU] || edge[CYC_SC_REWIND])) {
-            int pw, ph; const uint32_t *pic = picture(&pw, &ph);
+            int pw, ph; const uint32_t *pic = state_picture(&pw, &ph);
             cyc_state_ui_picture(pic, pw, ph);
             cyc_ui_open_states(edge[CYC_SC_REWIND]);
         }
