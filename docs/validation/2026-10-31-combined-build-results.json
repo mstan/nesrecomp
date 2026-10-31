@@ -612,5 +612,11 @@
     "status": "built-not-yet-tested",
     "compiler_package": "Current supported CLI Release"
   },
-  "resource_policy": "Original build/maincase reservations retained. Owner2026-10-31 nowexplicitlyauthorizes headroom-onlyoperation; finaltwoZeldahistorychecks direct at17%CPU/24.52GiBfree, no held-leaseclaim."
+  "resource_policy": "Original build/maincase reservations retained. Owner2026-10-31 nowexplicitlyauthorizes headroom-onlyoperation; finaltwoZeldahistorychecks direct at17%CPU/24.52GiBfree, no held-leaseclaim.",
+  "review_assignment": {
+    "requested": "TechnicallyComputers",
+    "eligibility_http": 404,
+    "actual_assignees": [],
+    "status": "unavailable; requires repository access change outside this task"
+  }
 }

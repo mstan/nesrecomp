@@ -8,7 +8,8 @@ No owner visual approval, main/master merge or release yet.
 |---|---:|---:|---|
 | smb | 1.750000 | 1.734375 | Neutral/inconclusive |
 | smb3 | 1.390625 | 1.375000 | Neutral/inconclusive |
-| metroid | 1.437500 | 1.500000 | Neutral/inconclusive |
+| metroid initial window | 1.437500 | 1.500000 | Initial negative; retained |
+| metroid unchanged confirmation | 1.375000 | 1.390625 | Neutral/inconclusive; paired median zero |
 | gumshoe | 1.281250 | 1.265625 | Neutral/inconclusive |
 | zelda | 2.093750 | 2.015625 | Neutral/inconclusive |
 
@@ -33,3 +34,7 @@ and6prototype dispositions),8prepared/deferred areas and owner-parkedNES29.
 Selections overlap and are not16independent speedups. Deferred/inventory work
 is not completed candidate burndown. Continue remaining areas serially before
 the next final owner handoff; preserve accepted checks unless code changes.
+
+Requested engine reviewer/assignee `TechnicallyComputers` is not assignable
+(GitHub eligibility404). PR89 has no assignee; repository access is an unresolved
+ownership detail.
