@@ -703,8 +703,9 @@ close the per-pixel raster or APU-event algorithm work under NES01/NES06.
 
   Source: Owner GPU guide SHA-256
   `644ec4bb9efa5330351908e78e81ce9df2ebee7f71187c64f3cf19c27f8521bd`.
-  Next: supported combined five-title regeneration and regression/runtime gate,
-  then owner visual handoff. No main/master merge or release before approval.
+  Final supported combined five-title gate: PASS. All five owner windows are
+  open with normal audio. [Final handoff](2026-10-31-final-campaign-handoff.md).
+  No main/master merge or release before owner visual approval.
 
 
 ## Evidence reuse and stopping rules
@@ -747,8 +748,9 @@ Audit completion closes only `beads-2dw.1.109`'s investigation/deliverable.
 The execution campaign tracks **32 areas: 31 scoped candidate decisions and
 owner-parked NES29**. The31 decisions comprise18 overlapping scoped selections
 and13 prototype dispositions; they are neither31 independent wins nor
-architectural exhaustion. Final supported combined builds and owner visual
-acceptance remain pending.
+architectural exhaustion. Final supported combined builds and the technical
+gate pass; five games are open for owner visual acceptance. Merge/releases
+remain pending that approval. [Final handoff](2026-10-31-final-campaign-handoff.md).
 
 Recent actual candidate decisions: [NES07 DMA rejection](2026-10-31-native-dma-candidate-results.md),
 [NES15 CHR snapshot rejection](2026-10-31-chr-snapshot-candidate-results.md),

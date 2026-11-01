@@ -1,0 +1,381 @@
+{
+  "schema_version": 1,
+  "issue": "beads-2dw.1.110",
+  "campaign": "beads-2wy8.1",
+  "status": "technical-gate-pass-owner-visual-pending",
+  "qualified_engine": {
+    "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-engine",
+    "head": "5c749a2ec3d3ff32a9f8ea0225db2a9ede5c8387",
+    "branch": "perf/final-native-campaign-20261031",
+    "remote_master": "fc0bf3fa46a710464960c0a1f2d3b83b4d345600",
+    "previous_head": "ed180c19e3d7fdb56b93967e88aa55dd0c96a7cd"
+  },
+  "source_freeze": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-source-freeze-v3.json",
+  "owner_handoff": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\owner-handoff-v3.json",
+  "counts": {
+    "total": 32,
+    "decisions": 31,
+    "overlapping_selections": 18,
+    "prototype_dispositions": 13,
+    "parked": [
+      "NES29"
+    ]
+  },
+  "games": {
+    "smb": {
+      "source": {
+        "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-smb",
+        "cmake_source": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-smb",
+        "head": "df6b2316917d83352176df7418029df8dbb07d4f",
+        "branch": "qa/optimization-final-20261031-smb",
+        "target": "SuperMarioBrosRecomp",
+        "rom": "F:\\Projects\\nesrecomp\\SuperMarioBrosRecomp\\baserom.nes",
+        "rom_sha256": "f61548fdf1670cffefcc4f0b7bdcdd9eaba0c226e3b74f8666071496988248de",
+        "engine_gitlink": "160000 commit 5c749a2ec3d3ff32a9f8ea0225db2a9ede5c8387\tnesrecomp",
+        "remote_default_heads": "45f95754f8ad6e04fc39966505c94af9783bd787\trefs/heads/master",
+        "compiler_package": "qualified O3 targetIPO",
+        "previous_head": "b004a5021710817d83ce11a5c2abd7031d378faa",
+        "release_version": "1.12.5"
+      },
+      "product": {
+        "exe": "candidate/SuperMarioBrosRecomp.exe",
+        "sha256": "56f5a6aa65fa020f79f8b4bcd42f60541a7df1eeeb11ba7764c5b16135fb6207",
+        "bytes": 8335245,
+        "engine_head": "5c749a2ec3d3ff32a9f8ea0225db2a9ede5c8387",
+        "title_head": "df6b2316917d83352176df7418029df8dbb07d4f",
+        "rom_sha256": "f61548fdf1670cffefcc4f0b7bdcdd9eaba0c226e3b74f8666071496988248de",
+        "compiler_package": "SMB1 qualified Win64GNU15.2 O3 targetIPO",
+        "binary_files": {
+          "SuperMarioBrosRecomp.exe": {
+            "sha256": "56f5a6aa65fa020f79f8b4bcd42f60541a7df1eeeb11ba7764c5b16135fb6207",
+            "bytes": 8335245
+          },
+          "SDL2.dll": {
+            "sha256": "df6be1cd49d741d1a3963eca3f32dea9aa78c39de6e876aabfe74bd2ae528872",
+            "bytes": 2529792
+          },
+          "libgcc_s_seh-1.dll": {
+            "sha256": "54549c2946c3ccee5d8bd3680fd351539c30018acedea64568e474c40d0900db",
+            "bytes": 150196
+          },
+          "libstdc++-6.dll": {
+            "sha256": "dc352127b8f399f95536d75745fcbc76c5b498d44d8fc55469fba1d8abac1823",
+            "bytes": 2460660
+          },
+          "libwinpthread-1.dll": {
+            "sha256": "b0d84f7b6346cf835ef19ecc95991cdaa6272bb8ad6fee43f446c07aa97fcbd9",
+            "bytes": 65018
+          }
+        }
+      },
+      "correctness": {
+        "passed": true,
+        "matching_products": 24,
+        "evidence": "G:\\Temp\\Codex\\nes110-final-check-v3-20261031\\smb\\evidence\\correctness.json"
+      },
+      "own_continuation": {
+        "passed": true,
+        "evidence": "G:\\Temp\\Codex\\nes110-final-check-v3-20261031\\smb\\evidence\\continuation.json"
+      },
+      "sdl_ui": {
+        "passed": true,
+        "evidence": "G:\\Temp\\Codex\\nes110-final-check-v3-20261031\\smb\\sdl-candidate\\result.json"
+      },
+      "performance": {
+        "disposition": "neutral-inconclusive-no-new-gain-claim",
+        "median_cpu_seconds": {
+          "reference": 1.828125,
+          "candidate": 1.765625
+        },
+        "host": "DESKTOP-HN15M1H",
+        "evidence": "G:\\Temp\\Codex\\nes110-final-check-v3-20261031\\smb\\confirmation-v1\\performance.json"
+      }
+    },
+    "smb3": {
+      "source": {
+        "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-smb3",
+        "cmake_source": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-smb3",
+        "head": "ae55cb35c360cadafabcca303bbb878d16a6b536",
+        "branch": "qa/optimization-final-20261031-smb3",
+        "target": "SuperMarioBros3Recomp",
+        "rom": "F:\\Projects\\nesrecomp\\SuperMarioBros3Recomp\\Super Mario Bros. 3 (USA).nes",
+        "rom_sha256": "6ea0777ca520ba7ad7b0ea0f6452140d59aa0b1dffe5045cb1e8020dde10c267",
+        "engine_gitlink": "160000 commit 5c749a2ec3d3ff32a9f8ea0225db2a9ede5c8387\tnesrecomp",
+        "remote_default_heads": "99e5d3b852eb8ace6a9344583cb53990ac8e29cb\trefs/heads/master",
+        "compiler_package": "explicit O2g1 campaign package",
+        "previous_head": "c22487f4b097453af8db4826cd6aa80afab81924",
+        "release_version": "0.2.5"
+      },
+      "product": {
+        "exe": "candidate/SuperMarioBros3Recomp.exe",
+        "sha256": "2f92e8808a9baa581ee6507d6c8b9c0f36eefcf3bb215a5ba7426f06e04a5500",
+        "bytes": 26074200,
+        "engine_head": "5c749a2ec3d3ff32a9f8ea0225db2a9ede5c8387",
+        "title_head": "ae55cb35c360cadafabcca303bbb878d16a6b536",
+        "rom_sha256": "6ea0777ca520ba7ad7b0ea0f6452140d59aa0b1dffe5045cb1e8020dde10c267",
+        "compiler_package": "Explicit O2g1 qualified campaign package",
+        "binary_files": {
+          "SuperMarioBros3Recomp.exe": {
+            "sha256": "2f92e8808a9baa581ee6507d6c8b9c0f36eefcf3bb215a5ba7426f06e04a5500",
+            "bytes": 26074200
+          },
+          "SDL2.dll": {
+            "sha256": "df6be1cd49d741d1a3963eca3f32dea9aa78c39de6e876aabfe74bd2ae528872",
+            "bytes": 2529792
+          },
+          "libgcc_s_seh-1.dll": {
+            "sha256": "54549c2946c3ccee5d8bd3680fd351539c30018acedea64568e474c40d0900db",
+            "bytes": 150196
+          },
+          "libstdc++-6.dll": {
+            "sha256": "dc352127b8f399f95536d75745fcbc76c5b498d44d8fc55469fba1d8abac1823",
+            "bytes": 2460660
+          },
+          "libwinpthread-1.dll": {
+            "sha256": "b0d84f7b6346cf835ef19ecc95991cdaa6272bb8ad6fee43f446c07aa97fcbd9",
+            "bytes": 65018
+          }
+        }
+      },
+      "correctness": {
+        "passed": true,
+        "matching_products": 28,
+        "evidence": "G:\\Temp\\Codex\\nes110-final-check-v3-20261031\\smb3\\evidence\\correctness.json"
+      },
+      "own_continuation": {
+        "passed": true,
+        "evidence": "G:\\Temp\\Codex\\nes110-final-check-v3-20261031\\smb3\\evidence\\continuation.json"
+      },
+      "sdl_ui": {
+        "passed": true,
+        "evidence": "G:\\Temp\\Codex\\nes110-final-check-v3-20261031\\smb3\\sdl-candidate\\result.json"
+      },
+      "performance": {
+        "disposition": "neutral-inconclusive-no-new-gain-claim",
+        "median_cpu_seconds": {
+          "reference": 1.5,
+          "candidate": 1.5
+        },
+        "host": "DESKTOP-HN15M1H",
+        "evidence": "G:\\Temp\\Codex\\nes110-final-check-v3-20261031\\smb3\\evidence\\performance.json"
+      }
+    },
+    "metroid": {
+      "source": {
+        "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-metroid",
+        "cmake_source": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-metroid",
+        "head": "458cbc3e841600d84a2791b9df1050162d26d7ad",
+        "branch": "qa/optimization-final-20261031-metroid",
+        "target": "MetroidNESRecomp",
+        "rom": "F:\\Projects\\nesrecomp\\MetroidNESRecomp\\metroid.nes",
+        "rom_sha256": "e6e6b7014685adae447ebb3833242815747bc1e5df83ade79f693fb67cf565b6",
+        "engine_gitlink": "160000 commit 5c749a2ec3d3ff32a9f8ea0225db2a9ede5c8387\tnesrecomp",
+        "remote_default_heads": "caccee62a67daea083fac8af36b1d0065b902071\trefs/heads/main",
+        "compiler_package": "explicit O2g1 campaign package",
+        "previous_head": "aa055d12f7948046a1d6cff8a1f5c153b7ba8806",
+        "release_version": "0.2.5"
+      },
+      "product": {
+        "exe": "candidate/MetroidNESRecomp.exe",
+        "sha256": "3dd694e8d38e3dfeeb96144b1cbabd7b7097dc77cdfa32265d19cfe60510c66a",
+        "bytes": 16478187,
+        "engine_head": "5c749a2ec3d3ff32a9f8ea0225db2a9ede5c8387",
+        "title_head": "458cbc3e841600d84a2791b9df1050162d26d7ad",
+        "rom_sha256": "e6e6b7014685adae447ebb3833242815747bc1e5df83ade79f693fb67cf565b6",
+        "compiler_package": "Explicit O2g1 qualified campaign package",
+        "binary_files": {
+          "MetroidNESRecomp.exe": {
+            "sha256": "3dd694e8d38e3dfeeb96144b1cbabd7b7097dc77cdfa32265d19cfe60510c66a",
+            "bytes": 16478187
+          },
+          "SDL2.dll": {
+            "sha256": "df6be1cd49d741d1a3963eca3f32dea9aa78c39de6e876aabfe74bd2ae528872",
+            "bytes": 2529792
+          },
+          "libgcc_s_seh-1.dll": {
+            "sha256": "54549c2946c3ccee5d8bd3680fd351539c30018acedea64568e474c40d0900db",
+            "bytes": 150196
+          },
+          "libstdc++-6.dll": {
+            "sha256": "dc352127b8f399f95536d75745fcbc76c5b498d44d8fc55469fba1d8abac1823",
+            "bytes": 2460660
+          },
+          "libwinpthread-1.dll": {
+            "sha256": "b0d84f7b6346cf835ef19ecc95991cdaa6272bb8ad6fee43f446c07aa97fcbd9",
+            "bytes": 65018
+          }
+        }
+      },
+      "correctness": {
+        "passed": true,
+        "matching_products": 24,
+        "evidence": "G:\\Temp\\Codex\\nes110-final-check-v3-20261031\\metroid\\evidence\\correctness.json"
+      },
+      "own_continuation": {
+        "passed": true,
+        "evidence": "G:\\Temp\\Codex\\nes110-final-check-v3-20261031\\metroid\\evidence\\continuation.json"
+      },
+      "sdl_ui": {
+        "passed": true,
+        "evidence": "G:\\Temp\\Codex\\nes110-final-check-v3-20261031\\metroid\\sdl-candidate\\result.json"
+      },
+      "performance": {
+        "disposition": "neutral-inconclusive-no-new-gain-claim",
+        "median_cpu_seconds": {
+          "reference": 1.515625,
+          "candidate": 1.484375
+        },
+        "host": "DESKTOP-HN15M1H",
+        "evidence": "G:\\Temp\\Codex\\nes110-final-check-v3-20261031\\metroid\\evidence\\performance.json"
+      }
+    },
+    "gumshoe": {
+      "source": {
+        "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-gumshoe",
+        "cmake_source": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-gumshoe",
+        "head": "758dd9cf1f437b4e5b3ded827f5b4eadd385ec19",
+        "branch": "qa/optimization-final-20261031-gumshoe",
+        "target": "GumshoeRecomp",
+        "rom": "F:\\Projects\\nesrecomp\\GumshoeNESRecomp\\Gumshoe (USA, Europe).nes",
+        "rom_sha256": "f62529ff98015d8feb6b7288200a4d8a3acfd2fbcbb90ce0b4a6379be342f38a",
+        "engine_gitlink": "160000 commit 5c749a2ec3d3ff32a9f8ea0225db2a9ede5c8387\tnesrecomp",
+        "remote_default_heads": "867a0091f3e2381d5507df3a95f24acb1b133465\trefs/heads/master",
+        "compiler_package": "explicit O2g1 campaign package",
+        "previous_head": "3f253c2a331e4a9517baaf9fc2f685eda3d40251",
+        "release_version": "1.5.3"
+      },
+      "product": {
+        "exe": "candidate/GumshoeRecomp.exe",
+        "sha256": "dd0e4a8739ba3de51f39721a848f2e270a19574c7c384c5d97f0de24aa52cd1f",
+        "bytes": 12694494,
+        "engine_head": "5c749a2ec3d3ff32a9f8ea0225db2a9ede5c8387",
+        "title_head": "758dd9cf1f437b4e5b3ded827f5b4eadd385ec19",
+        "rom_sha256": "f62529ff98015d8feb6b7288200a4d8a3acfd2fbcbb90ce0b4a6379be342f38a",
+        "compiler_package": "Explicit O2g1 qualified campaign package",
+        "binary_files": {
+          "GumshoeRecomp.exe": {
+            "sha256": "dd0e4a8739ba3de51f39721a848f2e270a19574c7c384c5d97f0de24aa52cd1f",
+            "bytes": 12694494
+          },
+          "SDL2.dll": {
+            "sha256": "df6be1cd49d741d1a3963eca3f32dea9aa78c39de6e876aabfe74bd2ae528872",
+            "bytes": 2529792
+          },
+          "libgcc_s_seh-1.dll": {
+            "sha256": "54549c2946c3ccee5d8bd3680fd351539c30018acedea64568e474c40d0900db",
+            "bytes": 150196
+          },
+          "libstdc++-6.dll": {
+            "sha256": "dc352127b8f399f95536d75745fcbc76c5b498d44d8fc55469fba1d8abac1823",
+            "bytes": 2460660
+          },
+          "libwinpthread-1.dll": {
+            "sha256": "b0d84f7b6346cf835ef19ecc95991cdaa6272bb8ad6fee43f446c07aa97fcbd9",
+            "bytes": 65018
+          }
+        }
+      },
+      "correctness": {
+        "passed": true,
+        "matching_products": 24,
+        "evidence": "G:\\Temp\\Codex\\nes110-final-check-v3-20261031\\gumshoe\\evidence\\correctness.json"
+      },
+      "own_continuation": {
+        "passed": true,
+        "evidence": "G:\\Temp\\Codex\\nes110-final-check-v3-20261031\\gumshoe\\evidence\\continuation.json"
+      },
+      "sdl_ui": {
+        "passed": true,
+        "evidence": "G:\\Temp\\Codex\\nes110-final-check-v3-20261031\\gumshoe\\sdl-candidate\\result.json"
+      },
+      "performance": {
+        "disposition": "neutral-inconclusive-no-new-gain-claim",
+        "median_cpu_seconds": {
+          "reference": 1.28125,
+          "candidate": 1.3125
+        },
+        "host": "DESKTOP-HN15M1H",
+        "evidence": "G:\\Temp\\Codex\\nes110-final-check-v3-20261031\\gumshoe\\evidence\\performance.json"
+      }
+    },
+    "zelda": {
+      "source": {
+        "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-zelda",
+        "cmake_source": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-zelda",
+        "head": "69dc0aeccd946dcfcb8807898bded0fd19302d9e",
+        "branch": "qa/optimization-final-20261031-zelda",
+        "target": "LegendOfZeldaNESRecomp",
+        "rom": "F:\\Projects\\nesrecomp\\LegendOfZeldaNESRecomp\\Legend of Zelda.NES",
+        "rom_sha256": "8f72dc2e98572eb4ba7c3a902bca5f69c448fc4391837e5f8f0d4556280440ac",
+        "engine_gitlink": "160000 commit 5c749a2ec3d3ff32a9f8ea0225db2a9ede5c8387\tnesrecomp",
+        "remote_default_heads": "07c3004786f36b73e58fe00bfece9ad648ba7d96\trefs/heads/master",
+        "compiler_package": "explicit O2g1 campaign package",
+        "previous_head": "40f215b7982b2beb30c18159325872793c4da373",
+        "release_version": "1.11.0"
+      },
+      "product": {
+        "exe": "candidate/LegendOfZeldaNESRecomp.exe",
+        "sha256": "a00e0505c98e0e41321490262daa5532f96e3828fe0f2284fc8c240f4f2b34ad",
+        "bytes": 17023267,
+        "engine_head": "5c749a2ec3d3ff32a9f8ea0225db2a9ede5c8387",
+        "title_head": "69dc0aeccd946dcfcb8807898bded0fd19302d9e",
+        "rom_sha256": "8f72dc2e98572eb4ba7c3a902bca5f69c448fc4391837e5f8f0d4556280440ac",
+        "compiler_package": "Explicit O2g1 qualified campaign package",
+        "binary_files": {
+          "LegendOfZeldaNESRecomp.exe": {
+            "sha256": "a00e0505c98e0e41321490262daa5532f96e3828fe0f2284fc8c240f4f2b34ad",
+            "bytes": 17023267
+          },
+          "SDL2.dll": {
+            "sha256": "df6be1cd49d741d1a3963eca3f32dea9aa78c39de6e876aabfe74bd2ae528872",
+            "bytes": 2529792
+          },
+          "libgcc_s_seh-1.dll": {
+            "sha256": "54549c2946c3ccee5d8bd3680fd351539c30018acedea64568e474c40d0900db",
+            "bytes": 150196
+          },
+          "libstdc++-6.dll": {
+            "sha256": "dc352127b8f399f95536d75745fcbc76c5b498d44d8fc55469fba1d8abac1823",
+            "bytes": 2460660
+          },
+          "libwinpthread-1.dll": {
+            "sha256": "b0d84f7b6346cf835ef19ecc95991cdaa6272bb8ad6fee43f446c07aa97fcbd9",
+            "bytes": 65018
+          }
+        }
+      },
+      "correctness": {
+        "passed": true,
+        "matching_products": 24,
+        "evidence": "G:\\Temp\\Codex\\nes110-final-check-v3-20261031\\zelda\\evidence\\correctness.json"
+      },
+      "own_continuation": {
+        "passed": true,
+        "evidence": "G:\\Temp\\Codex\\nes110-final-check-v3-20261031\\zelda\\evidence\\continuation.json"
+      },
+      "sdl_ui": {
+        "passed": true,
+        "evidence": "G:\\Temp\\Codex\\nes110-final-check-v3-20261031\\zelda\\sdl-candidate\\result.json"
+      },
+      "performance": {
+        "disposition": "neutral-inconclusive-no-new-gain-claim",
+        "median_cpu_seconds": {
+          "reference": 1.953125,
+          "candidate": 1.984375
+        },
+        "host": "DESKTOP-HN15M1H",
+        "evidence": "G:\\Temp\\Codex\\nes110-final-check-v3-20261031\\zelda\\evidence\\performance.json"
+      }
+    }
+  },
+  "cli": {
+    "version": "0.5.0",
+    "archive": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\cli-050-stage\\nesrecomp-cli-windows-x86_64.zip",
+    "sha256": "fa1d75fc1c9fadc7d6b522ea6a877083be5f9ab772b1d7cd3b01571a430f80a7",
+    "qualified_engine": "5c749a2ec3d3ff32a9f8ea0225db2a9ede5c8387",
+    "scope": "Official wrapper/native core/nine public headers; version/help/source-header/payload checks pass"
+  },
+  "release_staging": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\release-staging-v3",
+  "independent_review": "Final combined v3 gate PASS; proceed to owner five-title handoff; no further routine fixtures/matrices.",
+  "merge_and_publication": "Pending owner visual approval; no merge, tags, publication or delivery replacement."
+}

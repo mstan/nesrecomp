@@ -1444,15 +1444,16 @@
     "issue": "beads-2dw.1.110",
     "branch": "perf/final-native-campaign-20261031",
     "base": "fc0bf3fa46a710464960c0a1f2d3b83b4d345600",
-    "status": "in-progress",
+    "status": "candidate-decisions-complete-owner-visual-pending",
     "evidence_root": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028",
     "checkpoint": "2026-10-28-pipeline-progress.md",
     "first_selection": "Native stable-interval CPU/memory/PPU/APU service; whole-goal scope remains NES01-NES31",
     "retained_implementations": [],
     "new_performance_results": [],
-    "owner_handoff_ready": false,
-    "phase": "final-combined-build-and-owner-handoff",
-    "scope_extension": "NES32 first scoped HD GPU implementation is evaluated and selected; final supported combined gate and owner handoff remain."
+    "owner_handoff_ready": true,
+    "phase": "owner-visual-check",
+    "scope_extension": "NES32 scoped HD GPU selected; supported combined CLI and five-game gate PASS; five owner windows opened. FDS parked; approval/merge/releases pending.",
+    "final_handoff": "2026-10-31-final-campaign-handoff.json"
   },
   "execution_summary": {
     "evaluated_decisions": 31,
@@ -1461,7 +1462,7 @@
       "NES29"
     ],
     "other_unresolved": 0,
-    "note": "31 scoped candidate decisions:18 overlapping selections and13 actual prototype dispositions. NES29 owner-parked. Final supported combined builds and owner handoff pending; no architectural exhaustion or additive win count.",
+    "note": "31 scoped candidate decisions:18 overlapping selections and13 prototype dispositions. NES29 owner-parked. Final supported combined gate PASS and owner windows opened; visual approval and releases pending. No architectural exhaustion or additive win count.",
     "candidate_decision_areas": 31,
     "scoped_selection_areas": 18,
     "prototype_disposition_areas": 13,
