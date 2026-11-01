@@ -27,10 +27,12 @@ namespace {
 ImGuiContext *s_ctx;
 SDL_Renderer *s_ren;
 bool s_ready;
+const CycHostExtras *s_game_extras;
 }
 
 extern "C" bool cyc_ui_init(SDL_Window *win, SDL_Renderer *ren, const CycUiHost *host)
 {
+    s_game_extras = host ? host->extras : nullptr;
     if (!cyc_ui_menu_create(host)) {
         std::fprintf(stderr, "cyc ui: the runtime menu could not be created\n");
         return false;
@@ -87,7 +89,10 @@ extern "C" void cyc_ui_render(void)
 {
     RecompRuntimeUi *ui = cyc_ui_runtime();
     if (!s_ready || !ui) return;
-    if (!recomp_runtime_ui_is_open(ui) && !recomp_runtime_ui_toast_visible(ui) && !cyc_state_ui_is_open()) return;
+    if (!recomp_runtime_ui_is_open(ui) && !recomp_runtime_ui_toast_visible(ui) && !cyc_state_ui_is_open()) {
+        bool game_open = s_game_extras && s_game_extras->ui_is_open && s_game_extras->ui_is_open(s_game_extras->ctx);
+        if (!game_open) return;
+    }
     cyc_ui_menu_refresh();
     // The picture uses a logical size; the menu uses the whole drawable, then
     // the picture's logical size and viewport come back for the next frame.
@@ -103,6 +108,7 @@ extern "C" void cyc_ui_render(void)
     ImGui::NewFrame();
     recomp_runtime_ui_render_imgui(ui);
     cyc_state_ui_render();
+    if (s_game_extras && s_game_extras->ui_render) s_game_extras->ui_render(s_game_extras->ctx);
     ImGui::Render();
     ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData(), s_ren);
     SDL_RenderSetLogicalSize(s_ren, lw, lh);
