@@ -9814,7 +9814,9 @@ const uint32_t *cyc_frame_argb(void) { return cyc_framebuffer; }
 const uint16_t *cyc_frame_index(void) { return cyc_frame_index_buffer; }
 bool cyc_audio_enable(int) { return false; }
 size_t cyc_audio_read(int16_t *, size_t) { return 0; }
-// No audio output, so no output stage: the console model is accepted and ignored.
+// No audio output, so synthesis and the output stage are accepted and ignored.
+void cyc_set_audio_synthesis(CycAudioSynthesis) {}
+CycAudioSynthesis cyc_audio_synthesis(void) { return CYC_AUDIO_SYNTH_LEGACY; }
 void cyc_set_console(CycConsole) {}
 CycConsole cyc_console(void) { return CYC_CONSOLE_DEFAULT; }
 const char *cyc_console_name(CycConsole console)
