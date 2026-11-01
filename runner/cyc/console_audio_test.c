@@ -185,6 +185,69 @@ static void test_step(void)
     }
 }
 
+static void synth_reset(CycAudioSynthesis mode)
+{
+    cyc_audio_enable(0);
+    cyc_set_audio_synthesis(mode);
+    CHECK(cyc_audio_enable(RATE));
+    CHECK(cyc_audio_synthesis() == mode);
+    int16_t drain[64];
+    while (apu_audio_read(drain, 64)) {}
+}
+
+/* A sine at the output rate, fed one value per CPU cycle. Returns its gain
+ * through the selected synthesizer and console stage, fitted over the second
+ * half so the startup edge and the kernel's lookahead are not sampled. */
+static double synth_sine_gain(CycAudioSynthesis mode, double f, double *rms)
+{
+    reset_stage(CYC_CONSOLE_NES);
+    synth_reset(mode);
+    const double cpu_hz = cyc_cpu_hz();
+    size_t n = (size_t)(0.5 * cpu_hz); /* half a second of CPU cycles */
+    size_t got = 0;
+    for (size_t i = 0; i < n; i++) {
+        double level = 0.5 * sin(2 * PI * f * (double)i / cpu_hz);
+        apu_debug_synthesis_level(level);
+        got += apu_audio_read(out + got, RATE * 2 - got);
+    }
+    CHECK(got > RATE / 4);
+    double re = 0, im = 0, power = 0;
+    size_t from = got / 2;
+    for (size_t i = from; i < got; i++) {
+        re += out[i] * cos(2 * PI * f * (double)i / RATE);
+        im += out[i] * sin(2 * PI * f * (double)i / RATE);
+        power += (double)out[i] * out[i];
+    }
+    *rms = sqrt(power / (double)(got - from));
+    return 2 * sqrt(re * re + im * im) / (double)(got - from) / (0.5 * 30000.0);
+}
+
+static void test_synthesis(void)
+{
+    /* Opt-in selection and its reset boundary. */
+    synth_reset(CYC_AUDIO_SYNTH_LEGACY);
+    synth_reset(CYC_AUDIO_SYNTH_BAND_LIMITED);
+
+    double legacy_1k, legacy_30k, legacy_47k, rms;
+    double band_1k, band_30k, band_47k;
+    legacy_1k = synth_sine_gain(CYC_AUDIO_SYNTH_LEGACY, 1000, &rms);
+    legacy_30k = synth_sine_gain(CYC_AUDIO_SYNTH_LEGACY, 30000, &rms);
+    legacy_47k = synth_sine_gain(CYC_AUDIO_SYNTH_LEGACY, 47000, &rms);
+    band_1k = synth_sine_gain(CYC_AUDIO_SYNTH_BAND_LIMITED, 1000, &rms);
+    band_30k = synth_sine_gain(CYC_AUDIO_SYNTH_BAND_LIMITED, 30000, &rms);
+    band_47k = synth_sine_gain(CYC_AUDIO_SYNTH_BAND_LIMITED, 47000, &rms);
+    printf("synthesis: 1 kHz legacy %.4f band %.4f; 30 kHz %.6f -> %.6f; 47 kHz %.6f -> %.6f\n",
+           legacy_1k, band_1k, legacy_30k, band_30k, legacy_47k, band_47k);
+
+    /* In-band content survives: this is a cleaner reconstruction, not a mute
+     * or a different output stage. */
+    CHECK(fabs(band_1k / legacy_1k - 1) < 0.05);
+    /* Above the output Nyquist the band-limited path rejects what would fold
+     * back into the audible band; the box average leaks it. */
+    CHECK(band_30k < legacy_30k * 0.02);
+    CHECK(band_47k < legacy_47k * 0.02);
+}
+
 static void test_defaults(const char *fds_dir)
 {
     static const struct { int mapper; CycConsole want; } CASES[] = {
@@ -235,31 +298,39 @@ static void test_defaults(const char *fds_dir)
 
 static void test_machine_unchanged(void)
 {
-    /* The same program under both models: the traced bus, memories and
-     * hardware state match frame for frame; only the samples differ. */
+    /* The same program under both console models and both synthesizers: the
+     * traced bus, memories and hardware state match frame for frame; only the
+     * samples differ. */
     make_cart(0);
-    uint64_t hash[2][30];
+    uint64_t hash[2][2][30];
     for (int m = 0; m < 2; m++) {
-        CHECK(cyc_load_ines(cart, sizeof(cart)));
-        cyc_set_console(m ? CYC_CONSOLE_FAMICOM : CYC_CONSOLE_NES);
-        cyc_power_on(0);
-        cyc_run_power_on();
-        CHECK(cyc_audio_enable(RATE));
-        for (int f = 0; f < 30; f++) {
-            cyc_run_frame();
-            int16_t drain[4096];
-            while (cyc_audio_read(drain, 4096)) {}
-            hash[m][f] = cyc_mem_state_hash() ^ (cyc_hw_state_hash() * 31);
+        for (int s = 0; s < 2; s++) {
+            CHECK(cyc_load_ines(cart, sizeof(cart)));
+            cyc_set_console(m ? CYC_CONSOLE_FAMICOM : CYC_CONSOLE_NES);
+            cyc_set_audio_synthesis(s ? CYC_AUDIO_SYNTH_BAND_LIMITED : CYC_AUDIO_SYNTH_LEGACY);
+            cyc_power_on(0);
+            cyc_run_power_on();
+            CHECK(cyc_audio_enable(RATE));
+            for (int f = 0; f < 30; f++) {
+                cyc_run_frame();
+                int16_t drain[4096];
+                while (cyc_audio_read(drain, 4096)) {}
+                hash[m][s][f] = cyc_mem_state_hash() ^ (cyc_hw_state_hash() * 31);
+            }
         }
     }
-    CHECK(!memcmp(hash[0], hash[1], sizeof(hash[0])));
+    CHECK(!memcmp(hash[0][0], hash[0][1], sizeof(hash[0][0])));
+    CHECK(!memcmp(hash[0][0], hash[1][0], sizeof(hash[0][0])));
+    CHECK(!memcmp(hash[0][0], hash[1][1], sizeof(hash[0][0])));
 }
 
 int main(int argc, char **argv)
 {
+    CHECK(cyc_audio_synthesis() == CYC_AUDIO_SYNTH_LEGACY);
     test_defaults(argc > 1 ? argv[1] : NULL);
     test_response();
     test_step();
+    test_synthesis();
     test_machine_unchanged();
     printf("cyc_console_audio_test: %u checks passed\n", checks);
     return 0;
