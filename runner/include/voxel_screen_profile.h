@@ -74,6 +74,20 @@ typedef struct NesVoxelScreenProfile {
      * adapter follows its existing orbit-camera behavior exactly. */
     NesVoxelScreenCameraFn camera;
     NesVoxelScreenSpriteVisibleFn sprite_visible;
+    /* Suppress the adapter's per-piece sprite contact shadows. Zero (the
+     * default) draws them, as before; a profile that sets this gets a
+     * shadow-free scene. The renderer's only off-switch is a NULL callback,
+     * so this is where a game says "no shadows". */
+    int suppress_sprite_shadows;
+    /* Keep the source pixels under the sprites in the floor texture. The
+     * sprite mask covers a sprite's whole OAM box, and the default
+     * substitutes the cell's dominant colour for it -- a fully masked cell
+     * has no dominant colour and becomes the backdrop, i.e. a hole in the
+     * floor that reads as a dark block beside every character. A profile
+     * that has put the game's own background under the sprites in the
+     * picture it hands over asks for those pixels to be kept (zero keeps
+     * today's behaviour). */
+    int keep_sprite_pixels;
     int terrain_layout;
     int side_group_tiles;
     /* Optional live pixel offset for aligning grouped cells to a scrolling

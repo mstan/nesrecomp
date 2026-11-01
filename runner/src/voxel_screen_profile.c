@@ -191,9 +191,21 @@ static void screen_tile_pixels(uint32_t *pixels, int stride, uint8_t tile,
                      tile_x * TILE_SIZE + px;
             int sy = base_y + py;
             if (sx < 0 || sx >= SCREEN_WIDTH ||
-                tile_y < profile->blank_source_rows ||
-                state->sprite_mask[sy * SCREEN_WIDTH + sx]) {
+                tile_y < profile->blank_source_rows) {
                 pixels[py * stride + px] = replacement;
+            } else if (state->sprite_mask[sy * SCREEN_WIDTH + sx]) {
+                /* The mask covers a sprite's whole OAM box. The picture under
+                 * it is the sprite's art or the background showing through a
+                 * transparent pixel, and the default substitution (the
+                 * cell's dominant colour) turns a fully masked cell into the
+                 * backdrop -- a hole in the floor, which reads as a dark
+                 * block beside every character. A profile that has put the
+                 * game's background under the sprites asks for the source
+                 * pixels to be kept. */
+                pixels[py * stride + px] = profile->keep_sprite_pixels
+                    ? state->flat_framebuffer[
+                          sy * g_render_width + source_x + sx]
+                    : replacement;
             } else {
                 pixels[py * stride + px] = state->flat_framebuffer[
                     sy * g_render_width + source_x + sx];
@@ -469,7 +481,8 @@ void nes_voxel_screen_post_render(NesVoxelScreenState *state,
         profile->terrain_layout == NES_VOXEL_LAYOUT_SIDE ? 0 : 1;
     scene.clip_sprites_to_source = 1;
     scene.sprite_depth_bias = 1.0f;
-    scene.sprite_shadow = screen_sprite_shadow;
+    scene.sprite_shadow =
+        profile->suppress_sprite_shadows ? NULL : screen_sprite_shadow;
     scene.sprite_visible = profile->sprite_visible;
     scene.sprite_connect = profile->sprite_connect ? screen_sprite_connect : NULL;
     scene.sprite_members_visible = profile->sprite_members_visible
