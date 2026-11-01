@@ -15,7 +15,7 @@ import time
 import tomllib
 
 
-VERSION = "0.4.3"
+VERSION = "0.5.0"
 REQUIRED_HEADERS = {
     "legacy": ("coroutine.h", "nes_runtime.h", "recomp_stack.h", "mod_function_hooks.h"),
     "cycle": ("cyc_recomp.h", "cpu6502.h", "cyc_trace.h", "cyc_hooks.h", "hw.h"),
