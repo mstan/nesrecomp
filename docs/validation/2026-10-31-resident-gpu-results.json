@@ -81,5 +81,33 @@
     "zelda-hd-v2: whole source catalog exceeded buffer limit; GPU-admission assertion correctly failed",
     "zelda-hd-v3: valid paged rendering before duplicate-preview removal; neutral/inconclusive"
   ],
-  "fallback_scope": "Portable CPU consumer uses authored pack resolution, not huge CPU16x/64x buffers; native PPU behavior is retained."
+  "fallback_scope": "Portable CPU consumer uses authored pack resolution, not huge CPU16x/64x buffers; native PPU behavior is retained.",
+  "combined_gate_metroid": {
+    "rejected_source": "ed180c19",
+    "rejected_exe_sha256": "2180ce26bbf2ac42c62592c6668340bcd8be3e32dcde3c942d31c996e52c0be7",
+    "initial_cpu_regression_percent": 11.64383561643836,
+    "confirmation_cpu_regression_percent": 10.606060606060597,
+    "confirmation_pairs_slower": 5,
+    "rejected_raw": "G:/Temp/Codex/nes110-final-check-v2-20261031/metroid/confirmation-v1/performance.json",
+    "isolations": [
+      {
+        "scope": "legacy settings/menu bodies against current header",
+        "raw": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\metroid-settings-isolation\\performance.json",
+        "decision": "No demonstrated recovery; three-pair medians equal; no causal claim."
+      },
+      {
+        "source": "035051c6325724eb4ea72dd3f0cd990d12c853c9",
+        "scope": "HD-only setting/layout/parser/menu compiled only with supported HD provider",
+        "exe_sha256": "5104bf066049783eaebe6afe8010da9257d80213674414a189ca2804adee6812",
+        "decision": "Independently accepted unchanged-runtime control; all ten named runtime PE sections byte-identical to selected Metroid b6b87, same RVAs/sizes/execution headers; mixed +3.60% timing neutral/inconclusive, not a win.",
+        "raw": "G:/Temp/Codex/nes110-metroid-hd-scope-20261031/metroid",
+        "pe_comparison": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\metroid-pe-comparison.json",
+        "input_checks": [
+          880,
+          1120
+        ]
+      }
+    ],
+    "qualification_note": "This restores the original runtime image for the tested HD-disabled build, not proof of the precise timing mechanism. Supported final artifacts must be refreshed from the scoped integration. The HD-enabled GPU path is unchanged."
+  }
 }

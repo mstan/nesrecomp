@@ -62,6 +62,30 @@ measurement. Paused working set is 2.283 GB versus 2.270 GB for the baseline;
 private commit is 2.642 GB versus 2.354 GB, including the pack and driver
 allocations. No total process-memory reduction is claimed.
 
+## Combined-gate Metroid finding
+
+The initial fresh combined Metroid artifact (`2180ce26`) is rejected: its
+CPU median regresses 11.64%, then 10.61% in five slower confirmation pairs.
+Zelda's gains do not offset that result. All raw negative evidence is retained.
+
+Only settings/menu object code differed; the CPU/PPU/APU, generated code, SDL,
+compiler, DLLs and object order matched. Restoring the two old settings/menu
+bodies against the current header did not establish a recovery. The coherent
+fix scopes the HD-only field, parser, persistence and menu code to targets that
+compile the HD provider, preserving the old unsupported-target layout. Existing
+HD-enabled two/four-player input tests pass 880/1120 checks.
+
+The supported scoped Metroid control (`5104bf06`, source `035051c`) has
+byte-identical `.text`, `.data`, `.rdata`, `.pdata`, `.xdata`, `.bss`, `.idata`,
+`.tls`, `.rsrc` and `.reloc` sections versus selected `b6b87add`, including their
+RVAs and virtual/raw sizes. Execution headers are identical; only debug extent
+differs by one page. Exact outputs, both 600-frame continuations and SDL checks
+pass. Its five mixed CPU pairs have a 3.60% higher unpaired median, classified
+independently as neutral/inconclusive for this unchanged runtime image. No gain
+or precise causal timing mechanism is claimed. The original slower artifact
+stays rejected. Final supported artifacts must use the scoped integration;
+HD-enabled rendering behavior is unchanged.
+
 ## Scope and limits
 
 This selects Zelda Remastered's HD composition path. General native PPU and
