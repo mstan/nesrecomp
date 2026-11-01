@@ -430,8 +430,14 @@ static int run_action(void *ctx, const RecompRuntimeUiItem *it)
             "Press again to quit");
         return 0;
     }
-    if (game_row(it) && x && x->menu_callbacks && x->menu_callbacks->run_action)
-        return x->menu_callbacks->run_action(x->menu_callbacks->context, it);
+    if (game_row(it) && x && x->menu_callbacks && x->menu_callbacks->run_action) {
+        int ret = x->menu_callbacks->run_action(x->menu_callbacks->context, it);
+        /* If the game's action opened an overlay (e.g. a replay browser), close
+         * the runtime menu so the overlay has the foreground. Mirrors the
+         * cyc.states / cyc.rewind pattern in this same function. */
+        if (ret && x->ui_is_open && x->ui_is_open(x->ctx)) recomp_runtime_ui_close(s_ui);
+        return ret;
+    }
     return 0;
 }
 
@@ -574,7 +580,11 @@ void cyc_ui_menu_refresh(void)
     if (s_ui) refresh();
 }
 
-bool cyc_ui_menu_open(void) { return (s_ui && recomp_runtime_ui_is_open(s_ui)) || cyc_state_ui_is_open(); }
+bool cyc_ui_menu_open(void) {
+    const CycHostExtras *x = s_host.extras;
+    return (s_ui && recomp_runtime_ui_is_open(s_ui)) || cyc_state_ui_is_open() ||
+           (x && x->ui_is_open && x->ui_is_open(x->ctx));
+}
 
 void cyc_ui_toggle_menu(void)
 {
@@ -594,6 +604,8 @@ bool cyc_ui_open_states(bool rewind)
 
 void cyc_ui_nav(int input, bool repeat)
 {
+    const CycHostExtras *x = s_host.extras;
+    if (x && x->ui_is_open && x->ui_is_open(x->ctx)) return;
     if (cyc_state_ui_is_open()) return;
     if (s_ui) recomp_runtime_ui_handle_input(s_ui, (RecompRuntimeUiInput)input, 1, repeat ? 1 : 0);
 }
