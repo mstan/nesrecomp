@@ -29,7 +29,9 @@ void cyc_settings_default(CycSettings *s)
     s->view_mode = 0;
     s->zapper_mouse = s->zapper_crosshair = 1;
     s->hdpack_enabled = 1;
+#ifdef NESRECOMP_CYCLE_HDPACK
     s->hd_resolution = 0;
+#endif
     s->fds_hle = NES_FDS_HLE_ASK_NONE;
     cyc_bindings_default(&s->bind);
 }
@@ -78,6 +80,7 @@ static bool parse_int(const char *v, int *out)
     return true;
 }
 
+#ifdef NESRECOMP_CYCLE_HDPACK
 static bool parse_hd_resolution(const char *v, int *out)
 {
     char *end;
@@ -87,6 +90,7 @@ static bool parse_hd_resolution(const char *v, int *out)
     *out = (int)scale;
     return true;
 }
+#endif
 
 typedef enum { SEC_NONE, SEC_DISPLAY, SEC_AUDIO, SEC_INPUT, SEC_LAUNCHER, SEC_FDS, SEC_KEYS, SEC_PADS, SEC_GAME, SEC_ZAPPER, SEC_NETPLAY, SEC_REWIND } Section;
 
@@ -142,7 +146,9 @@ bool cyc_settings_load(CycSettings *s, const char *path, FILE *log, const CycSet
             else if (eq_ci(key, "VSync")) bad = !parse_int(val, &v) || (s->vsync = v != 0, 0);
             else if (eq_ci(key, "HdPackEnabled")) bad = !parse_int(val, &v) || (s->hdpack_enabled = v != 0, 0);
             else if (eq_ci(key, "HdPackDir")) snprintf(s->hdpack_dir,sizeof s->hdpack_dir,"%s",val);
+#ifdef NESRECOMP_CYCLE_HDPACK
             else if (eq_ci(key, "HDResolution")) bad = !parse_hd_resolution(val, &s->hd_resolution);
+#endif
             break;
         case SEC_AUDIO:
             if (eq_ci(key, "Volume")) bad = !parse_int(val, &v) || (s->volume = clampi(v, 0, 100), 0);
@@ -231,7 +237,9 @@ bool cyc_settings_save(const CycSettings *s, const char *path, const CycSettings
     fprintf(f, "[Display]\nWindowScale = %d\nFullscreen = %d\nIntegerScale = %d\nLinearFilter = %d\nVSync = %d\n",
             s->window_scale, s->fullscreen, s->integer_scale, s->linear_filter, s->vsync);
     fprintf(f,"HdPackEnabled = %d\nHdPackDir = %s\n",s->hdpack_enabled,s->hdpack_dir);
+#ifdef NESRECOMP_CYCLE_HDPACK
     fprintf(f, "HDResolution = %d\n", s->hd_resolution);
+#endif
     fprintf(f, "[Audio]\nEnabled = %d\nVolume = %d\n", s->audio_enabled, s->volume);
     fprintf(f, "[Input]\n");
     for (int p = 0; p < CYC_INPUT_PLAYERS; ++p)
