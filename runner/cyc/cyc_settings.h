@@ -50,7 +50,9 @@ typedef struct CycSettings {
     NesFdsHleAsk fds_hle;   /* the player's saved HLE choices (the plan's "settings" source) */
     char fds_bios[512];     /* [FDS] Bios: the player's FDS BIOS file; "" looks for one */
     CycBindings  bind;
+#ifdef NESRECOMP_CYCLE_HDPACK
     int hd_resolution;     /* local HD output scale; 0 = pack's original scale */
+#endif
 } CycSettings;
 
 /* A game's own [Game] keys (cyc_host_extras.h load_setting / save_settings). */
