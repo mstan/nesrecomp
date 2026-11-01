@@ -1,8 +1,9 @@
 # Final campaign handoff
 
-The supported combined five-title v3 gate passes. All five games are open in
-normal windows with normal audio for the owner's visual check. No main/master
-merge, tag, publication or delivery replacement has occurred.
+The supported combined five-title v3 gate passes. The owner approved all five
+NES titles ("all nes passe"). Approved branches are merged to their remote
+defaults; all six releases are published and delivered with verified SHA256.
+Owner playtest windows, native saves and settings are preserved.
 
 The 32-area burndown has 31 actual scoped candidate decisions: 18 overlapping
 selections and 13 prototype dispositions. NES29/FDS remains owner-parked.
@@ -64,9 +65,17 @@ commands or game binaries. Packaging/documentation-only followups are recorded
 separately from the qualified runtime source; they do not require another
 routine gameplay gate.
 
-The remaining gate is the owner's visual approval. Then merge the reviewed
-integration and game branches, publish the versioned CLI/game releases,
-replace each delivery archive only after verification, and close
-`beads-2dw.1.110` with links to the landed heads and delivered builds. Preserve
-native saves/settings and the running owner playtests. Symbols, raw evidence
-and temporary staging stay outside the one-current-build delivery folder.
+The owner approval and release handoff are complete. Current archives are in
+`G:\Nextcloud\Games\NES`, with one build per title and the new CLI; unrelated
+Faxanadu delivery was preserved. Zelda symbols remain separate. SMB
+packaging-only followup `89e4d5d` adds four full license notices; executable
+and runtime are unchanged. Ten obsolete compiler caches were removed (113.89MiB);
+qualified binaries, raw evidence and owner profiles are retained. NES29/FDS
+remains parked by the owner.
+
+- [engine 0.5.0](https://github.com/mstan/nesrecomp/releases/tag/v0.5.0)
+- [smb 1.12.5](https://github.com/mstan/SuperMarioBrosNESRecomp/releases/tag/v1.12.5)
+- [smb3 0.2.5](https://github.com/mstan/SuperMarioBros3Recomp/releases/tag/v0.2.5)
+- [metroid 0.2.5](https://github.com/mstan/MetroidNESRecomp/releases/tag/v0.2.5)
+- [gumshoe 1.5.3](https://github.com/mstan/GumshoeNESRecomp/releases/tag/v1.5.3)
+- [zelda 1.11.0](https://github.com/mstan/LegendOfZeldaNESRecomp/releases/tag/v1.11.0)

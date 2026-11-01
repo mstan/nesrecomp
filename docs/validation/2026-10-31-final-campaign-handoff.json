@@ -2,7 +2,7 @@
   "schema_version": 1,
   "issue": "beads-2dw.1.110",
   "campaign": "beads-2wy8.1",
-  "status": "technical-gate-pass-owner-visual-pending",
+  "status": "owner-approved-merged-released-delivered",
   "qualified_engine": {
     "path": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\final-engine",
     "head": "5c749a2ec3d3ff32a9f8ea0225db2a9ede5c8387",
@@ -377,5 +377,243 @@
   },
   "release_staging": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\release-staging-v3",
   "independent_review": "Final combined v3 gate PASS; proceed to owner five-title handoff; no further routine fixtures/matrices.",
-  "merge_and_publication": "Pending owner visual approval; no merge, tags, publication or delivery replacement."
+  "merge_and_publication": "Approved branches fast-forward merged to remote defaults; all six releases published and current delivery archives SHA256 verified. SMB packaging-only89e4d5d adds full license notices; runtime remains qualifieddf6b231. NES29/FDS remains owner-parked.",
+  "owner_approval": "Owner: all nes passe",
+  "releases": {
+    "engine": {
+      "repo": "nesrecomp",
+      "pr": 89,
+      "base": "master",
+      "version": "0.5.0",
+      "head": "886692be5c047069e326afcf8dc96006660cd18f",
+      "previous_default": "fc0bf3fa46a710464960c0a1f2d3b83b4d345600",
+      "archive": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\cli-050-stage\\nesrecomp-cli-windows-x86_64.zip",
+      "sha256": "fa1d75fc1c9fadc7d6b522ea6a877083be5f9ab772b1d7cd3b01571a430f80a7",
+      "landed_head": "886692be5c047069e326afcf8dc96006660cd18f",
+      "release_url": "https://github.com/mstan/nesrecomp/releases/tag/v0.5.0",
+      "release_id": 430321738,
+      "independent_verification": {
+        "checked_at_utc": "2026-11-01T02:43:44.978Z",
+        "status": "PASS",
+        "asset_digest": "sha256:fa1d75fc1c9fadc7d6b522ea6a877083be5f9ab772b1d7cd3b01571a430f80a7",
+        "published_non_draft": true,
+        "repo_visibility": "public",
+        "tag_head": "886692be5c047069e326afcf8dc96006660cd18f",
+        "default_head": "886692be5c047069e326afcf8dc96006660cd18f",
+        "delivery_path": "G:\\Nextcloud\\Games\\NES\\nesrecomp-cli-windows-x86_64.zip",
+        "delivery_sha256": "fa1d75fc1c9fadc7d6b522ea6a877083be5f9ab772b1d7cd3b01571a430f80a7"
+      },
+      "aggregate_pr_verification": {
+        "number": 89,
+        "state": "closed",
+        "merged": true,
+        "merged_at": "2026-11-01T02:40:12Z",
+        "merge_commit_sha": "886692be5c047069e326afcf8dc96006660cd18f"
+      },
+      "selected_component_pr_verification": {
+        "checked_at_utc": "2026-11-01T02:43:44.978Z",
+        "prs": {
+          "mstan/nesrecomp#88": {
+            "state": "open",
+            "merged": false,
+            "merged_at": null
+          },
+          "mstan/nesrecomp#87": {
+            "state": "open",
+            "merged": false,
+            "merged_at": null
+          },
+          "mstan/nesrecomp#86": {
+            "state": "open",
+            "merged": false,
+            "merged_at": null
+          },
+          "mstan/nesrecomp#85": {
+            "state": "open",
+            "merged": false,
+            "merged_at": null
+          },
+          "mstan/nesrecomp#91": {
+            "state": "open",
+            "merged": false,
+            "merged_at": null
+          },
+          "mstan/LegendOfZeldaNESRecomp#14": {
+            "state": "open",
+            "merged": false,
+            "merged_at": null
+          },
+          "mstan/LegendOfZeldaNESRecomp#13": {
+            "state": "open",
+            "merged": false,
+            "merged_at": null
+          },
+          "mstan/LegendOfZeldaNESRecomp#12": {
+            "state": "open",
+            "merged": false,
+            "merged_at": null
+          },
+          "mstan/LegendOfZeldaNESRecomp#11": {
+            "state": "open",
+            "merged": false,
+            "merged_at": null
+          },
+          "mstan/SuperMarioBrosNESRecomp#16": {
+            "state": "closed",
+            "merged": true,
+            "merged_at": "2026-11-01T02:40:19Z"
+          }
+        }
+      }
+    },
+    "smb": {
+      "repo": "SuperMarioBrosNESRecomp",
+      "pr": 17,
+      "base": "master",
+      "version": "1.12.5",
+      "head": "df6b2316917d83352176df7418029df8dbb07d4f",
+      "previous_default": "45f95754f8ad6e04fc39966505c94af9783bd787",
+      "archive": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\release-staging-v3\\smb-license-fix\\SuperMarioBrosRecomp-1.12.5-windows-x64.zip",
+      "sha256": "7519c518703ec61632e4ebc79aac891f8ed70fa1cd3b2cdfe038a4a1bf7365c4",
+      "landed_head": "89e4d5d308d6e962142ae38d941c65635d7dea30",
+      "release_url": "https://github.com/mstan/SuperMarioBrosNESRecomp/releases/tag/v1.12.5",
+      "release_id": 430321793,
+      "packaging_head": "89e4d5d308d6e962142ae38d941c65635d7dea30",
+      "aggregate_pr_verification": {
+        "number": 17,
+        "state": "closed",
+        "merged": true,
+        "merged_at": "2026-11-01T02:40:19Z",
+        "merge_commit_sha": "df6b2316917d83352176df7418029df8dbb07d4f"
+      }
+    },
+    "smb3": {
+      "repo": "SuperMarioBros3Recomp",
+      "pr": 6,
+      "base": "master",
+      "version": "0.2.5",
+      "head": "ae55cb35c360cadafabcca303bbb878d16a6b536",
+      "previous_default": "99e5d3b852eb8ace6a9344583cb53990ac8e29cb",
+      "archive": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\release-staging-v3\\SuperMarioBros3Recomp-windows-x64.zip",
+      "sha256": "ff40e8ef62e7b1a32c5968b68761072090a68c86ccea9876d175e57e4cfb735e",
+      "landed_head": "ae55cb35c360cadafabcca303bbb878d16a6b536",
+      "release_url": "https://github.com/mstan/SuperMarioBros3Recomp/releases/tag/v0.2.5",
+      "release_id": 430321843,
+      "independent_verification": {
+        "checked_at_utc": "2026-11-01T02:43:44.978Z",
+        "status": "PASS",
+        "asset_digest": "sha256:ff40e8ef62e7b1a32c5968b68761072090a68c86ccea9876d175e57e4cfb735e",
+        "published_non_draft": true,
+        "repo_visibility": "private",
+        "tag_head": "ae55cb35c360cadafabcca303bbb878d16a6b536",
+        "default_head": "ae55cb35c360cadafabcca303bbb878d16a6b536",
+        "delivery_path": "G:\\Nextcloud\\Games\\NES\\SuperMarioBros3Recomp-windows-x64.zip",
+        "delivery_sha256": "ff40e8ef62e7b1a32c5968b68761072090a68c86ccea9876d175e57e4cfb735e"
+      },
+      "aggregate_pr_verification": {
+        "number": 6,
+        "state": "closed",
+        "merged": true,
+        "merged_at": "2026-11-01T02:40:28Z",
+        "merge_commit_sha": "ae55cb35c360cadafabcca303bbb878d16a6b536"
+      }
+    },
+    "metroid": {
+      "repo": "MetroidNESRecomp",
+      "pr": 5,
+      "base": "main",
+      "version": "0.2.5",
+      "head": "458cbc3e841600d84a2791b9df1050162d26d7ad",
+      "previous_default": "caccee62a67daea083fac8af36b1d0065b902071",
+      "archive": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\release-staging-v3\\MetroidNESRecomp-0.2.5-USA-NTSC-windows-x64.zip",
+      "sha256": "b030656354aefce66a44267d7c1be50731665e38db3a0530c2a99267d191f059",
+      "landed_head": "458cbc3e841600d84a2791b9df1050162d26d7ad",
+      "release_url": "https://github.com/mstan/MetroidNESRecomp/releases/tag/v0.2.5",
+      "release_id": 430321906,
+      "independent_verification": {
+        "checked_at_utc": "2026-11-01T02:43:44.978Z",
+        "status": "PASS",
+        "asset_digest": "sha256:b030656354aefce66a44267d7c1be50731665e38db3a0530c2a99267d191f059",
+        "published_non_draft": true,
+        "repo_visibility": "public",
+        "tag_head": "458cbc3e841600d84a2791b9df1050162d26d7ad",
+        "default_head": "458cbc3e841600d84a2791b9df1050162d26d7ad",
+        "delivery_path": "G:\\Nextcloud\\Games\\NES\\MetroidNESRecomp-0.2.5-USA-NTSC-windows-x64.zip",
+        "delivery_sha256": "b030656354aefce66a44267d7c1be50731665e38db3a0530c2a99267d191f059"
+      },
+      "aggregate_pr_verification": {
+        "number": 5,
+        "state": "closed",
+        "merged": true,
+        "merged_at": "2026-11-01T02:40:37Z",
+        "merge_commit_sha": "458cbc3e841600d84a2791b9df1050162d26d7ad"
+      }
+    },
+    "gumshoe": {
+      "repo": "GumshoeNESRecomp",
+      "pr": 4,
+      "base": "master",
+      "version": "1.5.3",
+      "head": "758dd9cf1f437b4e5b3ded827f5b4eadd385ec19",
+      "previous_default": "867a0091f3e2381d5507df3a95f24acb1b133465",
+      "archive": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\release-staging-v3\\GumshoeRecomp-windows-x64.zip",
+      "sha256": "1c22d22df567edb19d59a3f15225cba9245a4fcba4ee0c9c1d15b174f14676bd",
+      "landed_head": "758dd9cf1f437b4e5b3ded827f5b4eadd385ec19",
+      "release_url": "https://github.com/mstan/GumshoeNESRecomp/releases/tag/v1.5.3",
+      "release_id": 430321950,
+      "independent_verification": {
+        "checked_at_utc": "2026-11-01T02:43:44.978Z",
+        "status": "PASS",
+        "asset_digest": "sha256:1c22d22df567edb19d59a3f15225cba9245a4fcba4ee0c9c1d15b174f14676bd",
+        "published_non_draft": true,
+        "repo_visibility": "public",
+        "tag_head": "758dd9cf1f437b4e5b3ded827f5b4eadd385ec19",
+        "default_head": "758dd9cf1f437b4e5b3ded827f5b4eadd385ec19",
+        "delivery_path": "G:\\Nextcloud\\Games\\NES\\GumshoeRecomp-windows-x64.zip",
+        "delivery_sha256": "1c22d22df567edb19d59a3f15225cba9245a4fcba4ee0c9c1d15b174f14676bd"
+      },
+      "aggregate_pr_verification": {
+        "number": 4,
+        "state": "closed",
+        "merged": true,
+        "merged_at": "2026-11-01T02:40:44Z",
+        "merge_commit_sha": "758dd9cf1f437b4e5b3ded827f5b4eadd385ec19"
+      }
+    },
+    "zelda": {
+      "repo": "LegendOfZeldaNESRecomp",
+      "pr": 15,
+      "base": "master",
+      "version": "1.11.0",
+      "head": "8579fa8eb04fca3a2c296b9d53dd2c395a570b4d",
+      "previous_default": "07c3004786f36b73e58fe00bfece9ad648ba7d96",
+      "archive": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\release-staging-v3\\LegendOfZeldaNESRecomp-USA-NTSC-cycle-mods-preview-windows-x64.zip",
+      "sha256": "f11a660dcd89b670e85015ba0b608588256c684a91c33fe1674589558613fc4b",
+      "landed_head": "8579fa8eb04fca3a2c296b9d53dd2c395a570b4d",
+      "release_url": "https://github.com/mstan/LegendOfZeldaNESRecomp/releases/tag/v1.11.0",
+      "release_id": 430322002,
+      "independent_verification": {
+        "checked_at_utc": "2026-11-01T02:43:44.978Z",
+        "status": "PASS",
+        "asset_digest": "sha256:f11a660dcd89b670e85015ba0b608588256c684a91c33fe1674589558613fc4b",
+        "published_non_draft": true,
+        "repo_visibility": "public",
+        "tag_head": "8579fa8eb04fca3a2c296b9d53dd2c395a570b4d",
+        "default_head": "8579fa8eb04fca3a2c296b9d53dd2c395a570b4d",
+        "delivery_path": "G:\\Nextcloud\\Games\\NES\\LegendOfZeldaNESRecomp-USA-NTSC-cycle-mods-preview-windows-x64.zip",
+        "delivery_sha256": "f11a660dcd89b670e85015ba0b608588256c684a91c33fe1674589558613fc4b",
+        "symbols_digest": "sha256:b8e61227f838e5606df32bda1a5172c3056235b4a31f70b7307e3a21a92d2b3b"
+      },
+      "aggregate_pr_verification": {
+        "number": 15,
+        "state": "closed",
+        "merged": true,
+        "merged_at": "2026-11-01T02:40:52Z",
+        "merge_commit_sha": "8579fa8eb04fca3a2c296b9d53dd2c395a570b4d"
+      }
+    }
+  },
+  "delivery_receipt": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\approved-delivery-receipt.json",
+  "pr_closeout": "G:\\Temp\\Codex\\nesrecomp\\pipeline-burndown-20261028\\approved-pr-closeout.json",
+  "cleanup": "Removed only ten obsolete CMakeFiles caches,119421729bytes; retained qualified binaries/raw evidence and owner playtests."
 }

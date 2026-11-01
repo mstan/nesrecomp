@@ -764,3 +764,8 @@ of five pairs; the five standard game profiles were neutral/inconclusive.
 NES30 now has an actual implemented/rejected MMC5 mapping decision: [results](2026-10-31-mmc5-mapping-candidate-results.md). NES32 is now selected in its scoped HD GPU workload.
 
 NES31 now has an actual implemented/not-selected empty-view service decision: [results](2026-10-31-empty-view-candidate-results.md). NES32 is now selected in its scoped HD GPU workload.
+
+Final closeout: owner approved all five NES titles; approved remote branches
+merged, CLI0.5.0 and five game releases published and delivery hashes verified.
+[Final release handoff](2026-10-31-final-campaign-handoff.md). NES29/FDS remains
+owner-parked.
