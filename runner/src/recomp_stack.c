@@ -196,13 +196,18 @@ void bail_trace(uint16_t caller_pc, uint8_t expected_sp)
             }
         }
         if (s_bail_log) {
-            fprintf(s_bail_log, "%llu,$%04X,$%02X,$%02X,%d,%d,%d,%s,%s,$%04X,$%04X,$%04X,%d\n",
+            fprintf(s_bail_log, "%llu,$%04X,$%02X,$%02X,%d,%d,%d,%s,%s,$%04X,$%04X,$%04X,%d",
                     (unsigned long long)e->frame, e->caller_pc,
                     e->expected_sp, e->actual_sp, e->sp_delta,
                     e->vblank_depth, e->recomp_stack_top,
                     e->recomp_stack_0 ? e->recomp_stack_0 : "?",
                     e->recomp_stack_1 ? e->recomp_stack_1 : "?",
                     e->rts_target, e->rti_target, e->rti_source, e->rti_bank);
+            /* Stack window from the expected boundary upward: reveals what an
+             * unwinding callee consumed and the interrupted frame's address. */
+            for (int si = 0; si <= 0x20; si++)
+                fprintf(s_bail_log, " %02X", g_ram[0x100 + (uint8_t)(e->expected_sp + si)]);
+            fputc('\n', s_bail_log);
             fflush(s_bail_log);
         }
     }
