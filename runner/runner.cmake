@@ -189,6 +189,10 @@ else()
 endif()
 
 include(${NESRECOMP_RUNNER_ROOT}/recomp_net.cmake)
+if(APPLE)
+    # launcher.c disables the press-and-hold accent panel before window creation.
+    link_libraries("-framework CoreFoundation")
+endif()
 # Existing projects can opt into the cycle backend using
 # runner/cyc/project.cmake; see runner/cyc/PROJECTS.md for build integration
 # and the migration boundary for legacy enhancements.
