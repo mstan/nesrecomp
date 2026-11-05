@@ -71,9 +71,28 @@ static void rom_read_overrides(void) {
     CHECK(cyc_mod_rom_read_override_count() == 0);
     CHECK(cpu_read(0x8000, 0) == 0 && cpu_read_rom(0x8000, 0, 0) == 0);
 }
+static void prg_override_removal(void) {
+    boot(false);
+    cyc_mod_clear_rom_read_overrides();
+    CHECK(cyc_mod_set_prg_read_override(0x0010, 0x00, 0x42) && cyc_mod_set_prg_read_override(0x0011, 0x00, 0x43));
+    CHECK(cyc_mod_rom_read_override_count() == 2 && cyc_mod_rom_read_overrides);
+    CHECK(cpu_read_rom(0x8010, 0, 0) == 0x42 && cpu_read_rom(0x8011, 0, 0) == 0x43);
+    CHECK(cyc_mod_remove_prg_read_override(0x0010));
+    CHECK(!cyc_mod_remove_prg_read_override(0x0010));      /* already gone */
+    CHECK(cyc_mod_rom_read_override_count() == 1);
+    CHECK(cpu_read_rom(0x8010, 0, 0) == 0 && cpu_read_rom(0x8011, 0, 0) == 0x43);
+    CHECK(cyc_mod_remove_prg_read_override(0x0011));
+    CHECK(cyc_mod_rom_read_override_count() == 0 && cyc_mod_rom_read_overrides == NULL);
+    CHECK(cpu_read_rom(0x8011, 0, 0) == 0);
+    /* a Game Genie style entry is not an offset override */
+    CHECK(cyc_mod_set_rom_read_override(0x8010, 0x77));
+    CHECK(!cyc_mod_remove_prg_read_override(0x0010));
+    cyc_mod_clear_rom_read_overrides();
+}
 int main(void) {
     traced_power_on();
     rom_read_overrides();
+    prg_override_removal();
     boot(false);
     CHECK(!hw_prg_modified);
     size_t n = 99;

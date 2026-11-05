@@ -69,6 +69,17 @@ bool cyc_mod_set_prg_read_override(uint32_t offset, uint8_t compare, uint8_t val
     return true;
 }
 
+bool cyc_mod_remove_prg_read_override(uint32_t offset)
+{
+    for (unsigned i = 0; i < read_override_count; i++) {
+        if (!read_overrides[i].qualified || read_overrides[i].prg_offset != offset) continue;
+        memmove(&read_overrides[i], &read_overrides[i + 1], (read_override_count - i - 1) * sizeof read_overrides[0]);
+        if (--read_override_count == 0) cyc_mod_rom_read_overrides = NULL;
+        return true;
+    }
+    return false;
+}
+
 void cyc_mod_clear_rom_read_overrides(void)
 {
     read_override_count = 0;

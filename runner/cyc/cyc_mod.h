@@ -92,6 +92,9 @@ bool cyc_mod_set_rom_read_override(uint16_t addr, uint8_t value);
  * May be registered before loading a ROM (launcher activation); when a ROM is
  * already loaded, an out-of-range or mismatching request is refused. */
 bool cyc_mod_set_prg_read_override(uint32_t offset, uint8_t compare, uint8_t value);
+/* Drop one qualified override (a mod whose policy applies only while a state lasts removes it when
+ * the state ends, so the table - and the ROM-read slow path - is empty again). False if absent. */
+bool cyc_mod_remove_prg_read_override(uint32_t offset);
 void cyc_mod_clear_rom_read_overrides(void);
 
 /* Optional trusted content tools. Obtaining writable PRG disables generated
