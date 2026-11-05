@@ -97,6 +97,9 @@ struct ExternalRom {
     /* An optional resource may stay unselected; once a path is selected it
      * is verified exactly like a required one. */
     bool required = true;
+    /* shared = true: another feature of the package may declare the same resource id with an identical
+     * definition, so one picked file serves both (selection and path are package-scoped). */
+    bool shared = false;
 };
 
 struct HdPack {
@@ -706,6 +709,9 @@ bool read_manifest(const fs::path& path, Package& out, std::string* error) {
                 } else if (key == "required") {
                     parsed = parse_bool(value, bool_value);
                     if (parsed) external_rom->required = bool_value;
+                } else if (key == "shared") {
+                    parsed = parse_bool(value, bool_value);
+                    if (parsed) external_rom->shared = bool_value;
                 } else known = false;
                 break;
         }
@@ -743,7 +749,7 @@ bool read_manifest(const fs::path& path, Package& out, std::string* error) {
     /* State and provider callbacks address owner resources at package scope,
      * so their ids must be package-wide unique rather than merely unique
      * within one feature. This also makes cache/state keys unambiguous. */
-    std::set<std::string> resource_ids;
+    std::map<std::string, const ExternalRom*> resource_ids;
     for (const ExternalRom& item : out.external_roms) {
         const bool hashes_valid = !item.normalized_sha1s.empty() &&
             std::all_of(item.normalized_sha1s.begin(),
@@ -755,10 +761,22 @@ bool read_manifest(const fs::path& path, Package& out, std::string* error) {
             item.label.empty() || item.identity.empty() || item.size == 0 ||
             (item.format != "raw" && item.format != "n64" &&
              item.format != "nes") ||
-            !hashes_valid ||
-            !resource_ids.insert(item.id).second) {
+            !hashes_valid) {
             set_error(error, "manifest has an invalid external ROM resource");
             return false;
+        }
+        const auto seen = resource_ids.emplace(item.id, &item);
+        if (!seen.second) {
+            /* a repeated id is allowed only between shared resources that are identical */
+            const ExternalRom& first = *seen.first->second;
+            if (!item.shared || !first.shared || item.label != first.label ||
+                item.description != first.description || item.format != first.format ||
+                item.identity != first.identity || item.size != first.size ||
+                item.normalized_sha1s != first.normalized_sha1s ||
+                item.required != first.required) {
+                set_error(error, "manifest has an invalid external ROM resource");
+                return false;
+            }
         }
     }
     std::set<std::pair<std::string, std::string>> option_ids;

@@ -423,6 +423,31 @@ int main() {
                "duplicate id reports external ROM manifest error");
     }
 
+    {   /* shared = true lets two features of a package use one picked file */
+        auto write_shared = [&](const fs::path& root, const char* second_identity) {
+            const fs::path package = root / "packages" / kPackageId / "1.0.0";
+            fs::create_directories(package);
+            std::ofstream manifest(package / "manifest.toml", std::ios::trunc);
+            manifest << "format_version = 1\nid = \"" << kPackageId << "\"\nversion = \"1.0.0\"\n"
+                     << "name = \"Shared\"\nresolver = \"declarative\"\n\n[[target]]\ngame_id = \"test-game\"\n"
+                     << "rom_crc32 = \"00000000\"\n\n";
+            for (const char* feature : {"one", "two"})
+                manifest << "[[feature]]\nid = \"" << feature << "\"\nname = \"F\"\ndefault_enabled = false\n\n";
+            int n = 0;
+            for (const char* feature : {"one", "two"})
+                manifest << "[[external_rom]]\nfeature = \"" << feature << "\"\nid = \"donor\"\nlabel = \"Donor\"\n"
+                         << "format = \"raw\"\nidentity = \"" << (n++ ? second_identity : "Donor image") << "\"\n"
+                         << "size = " << kRomSize << "\nshared = true\nnormalized_sha1 = \"" << kSha1 << "\"\n\n";
+        };
+        const fs::path same = base / "shared-same", differ = base / "shared-differ";
+        write_shared(same, "Donor image");
+        write_shared(differ, "Another image");
+        std::string error;
+        expect(initialize(same, error), "identical shared resources of two features are accepted");
+        error.clear();
+        expect(!initialize(differ, error), "shared resources that differ are rejected");
+    }
+
     std::error_code cleanup_error;
     fs::remove_all(base, cleanup_error);
     if (cleanup_error) {
