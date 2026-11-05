@@ -257,6 +257,13 @@ if(MSVC)
     target_compile_definitions(cyc_video_test PRIVATE _CRT_SECURE_NO_WARNINGS)
 endif()
 add_test(NAME cyc_video_test COMMAND cyc_video_test)
+# QA pokes and holds (cyc_cheat.h) against a flat RAM stand-in.
+add_executable(cyc_cheat_test cheat_test.c cyc_cheat.c)
+target_include_directories(cyc_cheat_test PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})
+if(MSVC)
+    target_compile_definitions(cyc_cheat_test PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()
+add_test(NAME cyc_cheat_test COMMAND cyc_cheat_test)
 
 # The light gun: connector bits, beam timing, sensor decay, offscreen aim,
 # and save/snapshot restoration, including refusal of a damaged sensor state.

@@ -135,6 +135,9 @@ typedef enum {
     CYC_EV_MOD_FAIL,
     CYC_EV_STATE,
     CYC_EV_VIDEO,
+    /* A QA route's scheduled RAM write changed a byte (cyc_cheat.h): addr =
+     * the address, value = CycCheatMode << 16 | old << 8 | new. */
+    CYC_EV_CHEAT,
     CYC_EV_KINDS
 } CycRingKind;
 

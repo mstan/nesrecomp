@@ -50,6 +50,7 @@ set(NESRECOMP_CYC_SOURCES
     ${NESRECOMP_CYC_DIR}/cyc_session.c
     ${NESRECOMP_CYC_DIR}/cyc_hooks.c
     ${NESRECOMP_CYC_DIR}/cyc_mod.c
+    ${NESRECOMP_CYC_DIR}/cyc_cheat.c
     ${NESRECOMP_CYC_DIR}/cyc_state.c
     ${NESRECOMP_CYC_DIR}/cyc_video.c
     ${NESRECOMP_CYC_DIR}/cyc_render.c

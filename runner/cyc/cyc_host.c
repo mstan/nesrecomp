@@ -168,6 +168,7 @@
 #include "cyc_disk_action.h"
 #include "cyc_fds_bios.h"
 #include "cyc_overlay.h"
+#include "cyc_cheat.h"
 
 #ifndef CYC_ORACLE
 #include "cyc_diagnostics.h"
@@ -456,6 +457,7 @@ static uint8_t parse_buttons(const char *s) {
     return b;
 }
 
+static int cheat_count;
 static bool load_input(const char *path) {
     FILE *f = fopen(path, "r");
     if (!f) {
@@ -474,6 +476,23 @@ static bool load_input(const char *path) {
         if (end == p) continue;
         p = end;
         while (*p == ' ' || *p == '\t') p++;
+        if (cyc_cheat_is_command(p)) {
+#ifdef CYC_ORACLE
+            fprintf(stderr, "%s: cheat commands are not available in the oracle: %s", path, p);
+            fclose(f);
+            return false;
+#else
+            CycCheat cheat;
+            char err[96] = "out of memory";
+            if (!cyc_cheat_parse(p, &cheat, err, sizeof err) || !cyc_cheat_schedule(frame, &cheat)) {
+                fprintf(stderr, "%s: %s: %s", path, err, p);
+                fclose(f);
+                return false;
+            }
+            cheat_count++;
+            continue;
+#endif
+        }
         if (!strncmp(p, "DISK_", 5)) {
             char action[32] = "", arg[32] = "";
             if (sscanf(p, "%31s %31s", action, arg) < 1 || !add_disk_event(frame, action, arg)) {
@@ -495,7 +514,8 @@ static bool load_input(const char *path) {
         input_count++;
     }
     fclose(f);
-    printf("input: %d steps, %d disk events from %s\n", input_count, disk_event_count, path);
+    printf("input: %d steps, %d disk events, %d cheat commands from %s\n", input_count, disk_event_count, cheat_count,
+           path);
     return true;
 }
 
@@ -1602,6 +1622,7 @@ session_restart:
         frame = s_loaded_frame;
         /* what happened before the state is already in it */
         while (disk_event_next < disk_event_count && disk_events[disk_event_next].frame < frame) disk_event_next++;
+        cyc_cheat_seek(frame);
         printf("state: loaded %s, continuing at frame %ld\n", load_state, frame);
     }
     if (zapper_input) {
@@ -1647,6 +1668,7 @@ session_restart:
         cyc_host_disk_frame(emulated_ms(frame), frame);
         observe_frame = frame;
         double frame_start = wall_seconds();
+        if (!online && cheat_count) cyc_cheat_frame(frame);
         cyc_session_frame_begin();
         cyc_run_frame();
         cyc_session_frame_end();

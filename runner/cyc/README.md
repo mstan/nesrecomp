@@ -1249,12 +1249,39 @@ the executable for port 4370): JSON over newline as in [debug protocol](../../do
 `key` and `pad` (an SDL virtual controller) hold input through the bindings,
 `action` holds an action, `disk`, `menu`, `hle`, `screenshot` (layer
 `picture`: the game alone; `ui`: everything the window drew), `state`,
-`read_ram`, `ring_dump`, `save_state` / `load_state` (path), `video` (the
+`read_ram`, `write_ram` / `cheat` (QA pokes and holds, below), `ring_dump`, `save_state` / `load_state` (path), `video` (the
 presented width and mode, optionally setting the mode), `window_size` (w, h:
 Fit follows the new drawable), `mod_stats` (hook sites, isolated calls,
 compositor counts), `quit`, and the game's own (`tcp_setup`). With `--hidden` and `SDL_VIDEODRIVER=dummy`
 nothing reaches a desktop; `tools/cyc/test_cyc_window.py` (CTest
 `cyc_window_run`) drives production and dev windows that way.
+
+### QA cheats (scheduled pokes and holds)
+
+Assisted QA routes (teleports, survival, one-hit bosses) write RAM between
+frames without touching the program. An `--input` or `--window-input`
+schedule accepts, beside its pad lines:
+
+```
+120 POKE     002A 05        # one write before frame 120 runs
+300 HOLD     06C0 1C        # write before every frame from 300 on
+300 HOLD_MAX 06C1-06DF 01   # clamp: if RAM > 01, write 01 (each frame)
+900 UNHOLD   06C1-06DF      # or UNHOLD ALL
+300 HOLD_MAX 06C1 01 IF 00B1 >= 02   # conditional: only while the condition holds
+```
+
+`IF addr op byte` (op `==` `!=` `<` `<=` `>` `>=`, `&` any bit, `!&` no bit)
+gates a POKE or hold on the program's own state, so assistance can wait for
+an event (a boss's health bar having filled) instead of a guessed frame.
+
+Values are hex (`$`/`0x` optional); targets are CPU RAM or cartridge/PRG RAM.
+Writes go through `cyc_mod_poke`, are identical in native and
+`--interp-only` runs (so parity stays a valid check of an assisted route), and
+every write that changes a byte leaves a `cheat` event in the ring. TCP
+`cheat` (`text`: one command, applied now; no text lists the holds) and
+`write_ram` (`addr`, `val`) do the same in a window. They are refused online
+and the oracle rejects them; holds are host state, not save-state content
+(`--load-state` replays the hold changes scheduled before the loaded frame).
 
 ## Game mods
 

@@ -93,7 +93,7 @@ const char *cyc_ring_kind_name(unsigned kind)
         "view.valid", "view.reject", "view.invalid", "view.exit", "ram.interp", "view.frame",
         "fds.env", "fds.audio",
         "fds.idreq", "fds.idbytes", "fds.span", "fds.hle",
-        "mod.hook", "mod.call", "mod.fail", "state", "video",
+        "mod.hook", "mod.call", "mod.fail", "state", "video", "cheat",
     };
     return kind < CYC_EV_KINDS ? NAMES[kind] : "?";
 }
@@ -201,6 +201,13 @@ static void describe(FILE *f, const CycRingEvent *e)
         break;
     }
     case CYC_EV_VIDEO: fprintf(f, "width=%u mode=%u drawable=%u", e->addr, e->value, e->repeat); break;
+    case CYC_EV_CHEAT: {
+        static const char *const MODE[] = { "poke", "hold", "hold_max", "hold_min" };
+        unsigned m = e->value >> 16;
+        fprintf(f, "%s addr=%04X old=%02X new=%02X", m < 4 ? MODE[m] : "?", e->addr, (e->value >> 8) & 0xFF,
+                e->value & 0xFF);
+        break;
+    }
     default: fprintf(f, "addr=%04X value=%08X", e->addr, e->value); break;
     }
 }

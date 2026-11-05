@@ -58,6 +58,7 @@
 #include "cyc_hooks.h"
 #include "cyc_input.h"
 #include "cyc_mod.h"
+#include "cyc_cheat.h"
 #include "cyc_overlay.h"
 #include "cyc_png.h"
 #include "cyc_recomp.h"
@@ -877,6 +878,53 @@ static void tcp_read_ram(int id, const char *line)
     free(hex);
 }
 
+/* QA cheats (cyc_cheat.h): {"cmd":"cheat","text":"HOLD 06C0 1C"} applies one
+ * command now; {"cmd":"write_ram","addr":N,"val":N} is a one-byte poke. */
+static bool cheats_refused_online(int id)
+{
+#ifdef NESRECOMP_NET
+    if (nes_netplay_active()) { cyc_tcp_err(id, "cheats are unavailable during online play"); return true; }
+#else
+    (void)id;
+#endif
+    return false;
+}
+
+static void tcp_cheat_reply(int id)
+{
+    char list[1024], q[1100], fl[1200];
+    cyc_cheat_describe(list, sizeof list);
+    cyc_tcp_quote(list, q, sizeof q);
+    snprintf(fl, sizeof fl, "\"holds\":%u,\"active\":%s", cyc_cheat_hold_count(), q);
+    cyc_tcp_ok(id, fl);
+}
+
+static void tcp_cheat(int id, const char *line)
+{
+    if (cheats_refused_online(id)) return;
+    char text[128] = "";
+    if (cyc_tcp_str(line, "text", text, sizeof text)) {
+        CycCheat cheat;
+        char err[96];
+        if (!cyc_cheat_parse(text, &cheat, err, sizeof err)) { cyc_tcp_err(id, err); return; }
+        cyc_cheat_apply_now(&cheat);
+    }
+    tcp_cheat_reply(id);
+}
+
+static void tcp_write_ram(int id, const char *line)
+{
+    if (cheats_refused_online(id)) return;
+    long addr = -1, val = -1;
+    cyc_tcp_long(line, "addr", &addr);
+    cyc_tcp_long(line, "val", &val);
+    bool ram = (addr >= 0 && addr < 0x2000) || (addr >= 0x6000 && addr < 0xE000);
+    if (!ram || val < 0 || val > 255) { cyc_tcp_err(id, "write_ram: addr ($0000-$1FFF, $6000-$DFFF), val 0..255"); return; }
+    CycCheat poke = { CYC_CHEAT_POKE, (uint16_t)addr, (uint16_t)addr, (uint8_t)val };
+    cyc_cheat_apply_now(&poke);
+    tcp_cheat_reply(id);
+}
+
 static void tcp_ring(int id, const char *line)
 {
     char path[1024];
@@ -1070,6 +1118,8 @@ static void tcp_setup(void)
     cyc_tcp_register("hle", "an HLE axis as the menu sets it: axis, value on|off|default", tcp_hle);
     cyc_tcp_register("screenshot", "layer picture (the game) | ui (what the window presents), path", tcp_screenshot);
     cyc_tcp_register("read_ram", "CPU address space bytes: addr, len", tcp_read_ram);
+    cyc_tcp_register("write_ram", "QA poke one RAM byte: addr, val", tcp_write_ram);
+    cyc_tcp_register("cheat", "QA cheat: text \"POKE|HOLD|HOLD_MAX|HOLD_MIN addr[-last] byte [IF addr op byte]\" or \"UNHOLD addr|ALL\"; no text lists holds", tcp_cheat);
     cyc_tcp_register("ring_dump", "the always-on event ring to a file: path, first, last", tcp_ring);
     cyc_tcp_register("save_state", "write a save state (cyc_state.h): path", tcp_save_state);
     cyc_tcp_register("load_state", "load a save state: path", tcp_load_state);
@@ -1648,6 +1698,7 @@ int cyc_sdl_main(const char *title_in, int scale)
             cyc_set_controller(0, buttons[0]);
             cyc_set_controller(1, buttons[1]);
             zapper_mouse_frame();
+            cyc_cheat_frame(s_frames_done);
             }
             cyc_session_frame_begin();
             cyc_run_frame();
