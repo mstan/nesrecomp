@@ -163,6 +163,9 @@ static bool condition(const CycCheat *c)
     return false;
 }
 
+/* The diagnostic replay (cyc_replay.h) records every byte a cheat changed. */
+void (*cyc_cheat_change_hook)(uint16_t addr, uint8_t value);
+
 static void write_byte(CycCheatMode mode, uint16_t addr, uint8_t value)
 {
     uint8_t old = 0;
@@ -170,8 +173,10 @@ static void write_byte(CycCheatMode mode, uint16_t addr, uint8_t value)
     if (mode == CYC_CHEAT_HOLD_MAX && old <= value) return;
     if (mode == CYC_CHEAT_HOLD_MIN && old >= value) return;
     if (old == value) return;
-    if (cyc_mod_poke(addr, value))
+    if (cyc_mod_poke(addr, value)) {
         cyc_ring_push(CYC_EV_CHEAT, addr, (uint32_t)mode << 16 | (uint32_t)old << 8 | value);
+        if (cyc_cheat_change_hook) cyc_cheat_change_hook(addr, value);
+    }
 }
 
 static void apply(const CycCheat *c)

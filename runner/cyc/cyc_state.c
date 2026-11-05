@@ -27,6 +27,9 @@
 #define TAG(a, b, c, d) ((uint32_t)(a) | (uint32_t)(b) << 8 | (uint32_t)(c) << 16 | (uint32_t)(d) << 24)
 #define MOD_ID_BYTES  64u
 
+/* Loads completed, for the diagnostic replay (cyc_replay.h) to notice a replaced machine. */
+uint32_t cyc_state_load_count;
+
 static CycStateHost s_state_host;
 void cyc_state_set_host(const CycStateHost *host) { if (host) s_state_host = *host; else memset(&s_state_host, 0, sizeof(s_state_host)); }
 
@@ -399,6 +402,7 @@ bool cyc_state_load(const uint8_t *data, size_t len, char *err, size_t err_len)
             fprintf(stderr, "[cyc state] mod '%s' did not take its state\n", id);
     }
     cyc_ring_push_len(CYC_EV_STATE, CYC_STATE_EV_LOAD, cyc_ring_frame, (uint32_t)len);
+    ++cyc_state_load_count;
     free(c);
     return true;
 }

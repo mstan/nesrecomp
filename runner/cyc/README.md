@@ -1485,3 +1485,75 @@ wrapping, default-off behavior, redirection, re-enable, unwritable storage,
 ordinary failures and Windows access violation/abort/stack-overflow dumps.
 Configure it with `RECOMP_UI_ROOT`, then build and run CTest. Deliberate crash
 switches exist only in that test executable.
+
+## Diagnostic replay (always-on, windowed builds)
+
+An owner playtest can be captured without doing anything and reproduced
+exactly, headless, later. The window records rolling **segments** from power-on
+(`cyc_replay.c`, `cyc_replay.h`); `tools/cyc/replay_diagnostic.py` plays them
+back. It works for every cycle title (NES carts and FDS) and needs no game
+code.
+
+**Owner.** Recording is on by default. When something odd happens (a black
+pause screen, a wrong sprite), quit the game normally (a kill can lose the last
+100 ms) and zip the newest `<title>-replay-<date>-<pid>-*` files from the
+`diagnostics` folder beside the executable (`%LOCALAPPDATA%\NESRecomp\diagnostics`
+when that is read-only) together with the session's `nesrecomp-*.log`: every
+`.cycreplay`, `.cycreplay.state`, `.cycreplay.config.ini` and `.cycreplay.mods.toml`
+of the session. The files hold no ROM bytes. They do hold the machine's RAM and
+the game's save data. `NESRECOMP_REPLAY_RECORD=0` turns recording off;
+`NESRECOMP_REPLAY_DIR` picks the folder.
+
+**Developer.**
+
+```
+python -I tools/cyc/replay_diagnostic.py <diagnostics folder | segment> --exe Game.exe --rom "Game.nes" \
+       [--segment N] [--until N] [--screenshot-every K] [--check] [--work-dir NEW]
+```
+
+The tool runs the SAME executable headless per segment with the host's own
+options (`--load-state <segment checkpoint> --input --zapper-input --hash-out
+--replay-exact`) and compares each frame's hashes with the recording. It stops
+at the first mismatch, prints the frame and fields, saves the machine just
+after that frame as `replay-divergence-NNNNNN.cycstate`, and exits 1. Exit 2
+is a bad capture, 3 a final input with no checkpoint (the recorded frame hung
+or crashed; playback still executes it so it can recur under a debugger), 4 a
+host failure (wrong program: "save state of another program"). `--check`
+inspects the files without running. `--screenshot-every K` writes PNGs under
+`<work>/shots` so you can look at the captured moment.
+
+**What is recorded.** A segment is a pure continuous run: a checkpoint (an
+ordinary save state, `<stem>-NNNNNN.cycreplay.state`) and a text file
+(`.cycreplay`) with, per frame, `I` the pads (before the game's input hook,
+the logical seats mods see, and the bytes the machine latched), `Z` the Zapper
+when it changes, `P` every RAM byte a QA cheat/poke changed (TCP `write_ram`,
+`cheat`, a route's POKE/HOLD lines; as results, so conditional holds replay
+exactly), `D` FDS drive ejects/inserts (as results: the Disk action's timers
+and toast clock are not needed), and `H` the `--hash-out` hashes (memory +
+picture, hardware, CPU registers, cycle count) after the frame. The trace hash
+is not recorded (it only runs for `--hash-out`).
+A state load or rewind, a mod or FDS HLE selection change, a view-mode change,
+any skipped frame or machine replaced under the recorder, and online play end
+the segment and start a new one with a fresh checkpoint; 600 frames end one
+too. Online play is **not** recorded (the rollback session owns the machine);
+recording is paused with a log line and resumes with a new segment. The header
+carries the program identity, region, FDS HLE plan, extra scanlines and the
+game's own `--options`; a checkpoint is refused by a different program or build,
+so a replay never runs on the wrong machine.
+
+**Retention and cost.** Up to 360 segments (one hour) and 256 MiB of
+checkpoints (about 330 KiB each), oldest evicted first
+(`NESRECOMP_REPLAY_HISTORY_MIB` 2-256, `NESRECOMP_REPLAY_SEGMENT_FRAMES` 2-600
+shrink them for tests). The emulation thread formats a few hundred bytes per
+frame and copies them into a fixed 16 MiB queue; one writer thread owns all
+files and flushes every 100 ms. A full queue or a failed write stops recording
+with a log line (`[replay] recording stopped: ...`, a `replay` ring event) and
+never blocks the game; the queue never grows. Frame cost (mostly the hashes) is
+printed at exit: about 65-75 us per frame, about 0.4% of a 60 Hz frame.
+
+**Not covered.** The Datach barcode scanner and run-ahead have no window
+route; a single frame whose cheats change more than 256 KiB of event text
+checkpoints instead of logging. View modes that change the simulation are
+recorded as a policy digest only: the headless host plays the game's default
+view, so a replay of such a segment may diverge, which the hashes will show.
+`tools/cyc/test_cyc_replay.py` (CTest `cyc_replay`) is the acceptance test.

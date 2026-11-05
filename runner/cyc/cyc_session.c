@@ -69,6 +69,19 @@ bool cyc_session_take_option(int argc, char **argv, int *i, bool *bad)
     return false;
 }
 
+size_t cyc_session_taken_options(char *out, size_t cap)
+{
+    size_t at = 0;
+    if (cap) out[0] = 0;
+    for (size_t k = 0; k < s_taken_n && at + 1 < cap; ++k) {
+        int n = snprintf(out + at, cap - at, "OPTION %s%s%s\n", s_taken[k].name, s_taken[k].value ? " " : "",
+                         s_taken[k].value ? s_taken[k].value : "");
+        if (n < 0 || (size_t)n >= cap - at) { out[at] = 0; break; }
+        at += (size_t)n;
+    }
+    return at;
+}
+
 void cyc_session_print_options(FILE *f)
 {
     const CycHostExtras *x = cyc_session_extras();
@@ -82,6 +95,7 @@ void cyc_session_print_options(FILE *f)
 /* ---- mods ---- */
 
 static bool s_mods;
+uint32_t cyc_session_mods_revision;   /* bumped when the mod selection is (re)activated */
 
 bool cyc_session_mods_init(const char *root, char *err, size_t err_len)
 {
@@ -130,6 +144,7 @@ bool cyc_session_mods_start(const char *image_path, char *err, size_t err_len)
         return false;
     }
     nes_mod_runtime_activate_plugins_c();
+    ++cyc_session_mods_revision;
     return true;
 #else
     (void)image_path;
@@ -145,6 +160,7 @@ void cyc_session_mods_reapply(void)
 #if NESRECOMP_ENABLE_MODS
     if (s_mods) nes_mod_runtime_activate_plugins_c();
 #endif
+    ++cyc_session_mods_revision;
 }
 
 /* ---- the run ---- */

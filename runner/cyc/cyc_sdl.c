@@ -61,6 +61,7 @@
 #include "cyc_cheat.h"
 #include "cyc_overlay.h"
 #include "cyc_png.h"
+#include "cyc_replay.h"
 #include "cyc_recomp.h"
 #include "cyc_render.h"
 #include "cyc_run.h"
@@ -1519,6 +1520,8 @@ int cyc_sdl_main(const char *title_in, int scale)
     if (s_vpad_path && vpad_load(s_vpad_path)) vpad_attach();
     tcp_setup();
     open_pads();
+    cyc_replay_set_config_path(s_set_path);
+    cyc_replay_init(title);
 
     char disk_hint[64];
     const double frame_seconds = cyc_host_frame_seconds();
@@ -1683,12 +1686,14 @@ int cyc_sdl_main(const char *title_in, int scale)
                 else hold_input = false;
             }
             uint8_t buttons[2] = {pad0, pad1};
+            const uint8_t phys[2] = {pad0, pad1};
 #ifdef NESRECOMP_NET
             if(online) {
                 int player=nes_netplay_input_player();if(player<0||player>=CYC_INPUT_PLAYERS)player=0;
                 int admit=cyc_net_admit(open||inactive||hold_input?0:st.buttons[player]);
                 if(!admit){SDL_Delay(1);continue;}
                 s_frames_done=(long)cyc_ring_frame;replay=cyc_net_replaying();cyc_net_input(buttons);
+                cyc_replay_suspend("online play");
             } else
 #endif
             {
@@ -1699,10 +1704,18 @@ int cyc_sdl_main(const char *title_in, int scale)
             cyc_set_controller(1, buttons[1]);
             zapper_mouse_frame();
             cyc_cheat_frame(s_frames_done);
+            {
+                /* diagnostic replay: the inputs the machine is about to consume */
+                uint8_t logical[4] = {0, 0, 0, 0};
+                for (int p = 0; p < CYC_INPUT_PLAYERS && p < 4; ++p) logical[p] = st.buttons[p];
+                cyc_replay_set_policy(s_extras && s_extras->get_view_mode ? (uint32_t)s_extras->get_view_mode(s_extras->ctx) : 0);
+                cyc_replay_frame_begin(phys, logical, buttons);
+            }
             }
             cyc_session_frame_begin();
             cyc_run_frame();
             cyc_session_frame_end();
+            cyc_replay_frame_end();
 #ifdef NESRECOMP_NET
             if(online)cyc_net_finish();
 #endif
@@ -1807,6 +1820,7 @@ int cyc_sdl_main(const char *title_in, int scale)
     cyc_diagnostics_note("game loop ended; releasing SDL resources");
     save_settings();
     cyc_tcp_stop();
+    cyc_replay_shutdown();
 #ifdef CYC_WITH_RECOMP_UI
     if (s_have_menu) cyc_ui_shutdown();
 #endif

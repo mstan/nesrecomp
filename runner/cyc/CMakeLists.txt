@@ -26,6 +26,8 @@ project(nesrecomp_cyc C CXX)
 #   cyc_window_run   the window over its TCP server, hidden, dummy video driver:
 #                    bindings, the Disk action and toast, the controller, the
 #                    menu (with recomp-ui), HLE settings, dev vs production
+#   cyc_replay       the always-on diagnostic replay: a hidden window records
+#                    segments, headless playback matches every frame's hashes
 #   cyc_disk_action_run  the Disk action on the whole machine (cyc_interp):
 #                    swaps, peeks, time-outs, cycling, and the toast never in
 #                    --hash-out / --frame-log / screenshots
@@ -207,6 +209,14 @@ if(SDL2_FOUND)
                 --window $<TARGET_FILE:cyc_window> --dev-window $<TARGET_FILE:cyc_window_dev> ${window_ui}
                 --out ${CMAKE_CURRENT_BINARY_DIR}/window_run)
     set_tests_properties(cyc_window_run PROPERTIES TIMEOUT 900)
+    # The always-on diagnostic replay (cyc_replay.h): a hidden window records,
+    # tools/cyc/replay_diagnostic.py replays headless with exact per-frame hash
+    # equality, across a mid-session state load and segment rollovers; corrupted
+    # input / hashes / program / a half-finished frame are each detected.
+    add_test(NAME cyc_replay
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_cyc_replay.py
+                --window $<TARGET_FILE:cyc_window> --out ${CMAKE_CURRENT_BINARY_DIR}/replay_test)
+    set_tests_properties(cyc_replay PROPERTIES TIMEOUT 900)
     add_test(NAME cyc_cart_saves
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_cyc_cart_saves.py
                 --exe $<TARGET_FILE:cyc_window> --out ${CMAKE_CURRENT_BINARY_DIR}/cart_saves)
