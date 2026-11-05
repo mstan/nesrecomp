@@ -179,9 +179,21 @@ rather than an address:
   the last 16KB on UxROM. Both are cheap: a return to the scheduler is a
   function return and one table lookup, and the hardware model, not dispatch,
   dominates the clock (see below);
-- an instruction whose bytes cross a slot boundary is left to the interpreter,
-  like one that wraps past `$FFFF`: its later bytes come from a bank chosen at
-  run time, so neither its operands nor its length can be folded.
+- an instruction whose bytes cross a slot boundary is compiled too, because
+  its later bytes are known in two cases. If the board fixes the next slot
+  (`$F000` after `$E000` on MMC3, any slot on NROM) they come from that bank
+  and nothing is checked. Otherwise they are assumed to be the physically
+  next 4KB of PRG (true of every contiguous mapping: a 16KB or 32KB MMC1
+  mode, an 8KB bank, a fixed 16KB bank), and the dispatch enters the
+  instruction only while `hw_prg_bank4()` says the next slot really holds that
+  bank (`cross_ok()` in `<prefix>_cyc.c`); the interpreter runs it when the
+  mapping is discontiguous at that moment (`$BFFF` into `$C000` with another
+  16KB bank under it). Nothing jumps into such an instruction except through
+  that dispatch, and a mapper write ends the block, so the check cannot go
+  stale. With patched PRG (`NESRECOMP_NATIVE_PRG_GUARDS`) the dispatch also
+  compares the folded operand bytes with the image. Only an instruction that
+  wraps past `$FFFF` (the program counter becomes `$0000`) is always left to
+  the interpreter. `tools/cyc/test_cyc_crossslot.py` covers both directions.
 
 Static discovery therefore reaches only what the fixed slots lead to — for
 SMB3, 534 instructions from the vectors. Everything behind a bank switch comes

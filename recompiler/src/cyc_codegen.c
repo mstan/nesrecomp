@@ -37,7 +37,9 @@
  * (hw_prg_bank), and a write that can reach the mapper's registers ends the
  * block so the next instruction is dispatched afresh. Control flow that
  * leaves the slot it started in returns to the scheduler for the same reason,
- * unless the target slot's bank is fixed by the board. Everything the static
+ * unless the target slot's bank is fixed by the board. An instruction whose
+ * bytes run into the next slot is compiled under a dispatch-time check of that
+ * slot's bank (next_slot_src()). Everything the static
  * walk cannot resolve - an entry point reached only through a bank switch -
  * comes from a run, the way RTS and JMP-indirect targets already do
  * (--miss-log, which reports the bank it saw).
@@ -659,15 +661,73 @@ static int power_on_bank_for(int mapper, uint32_t banks, uint32_t slot) {
     return power_on_bank8_for(mapper, banks / 2, slot / 2) * 2 + (slot & 1);
 }
 
+/* ---- instructions that run past the end of their 4KB slot ----
+ *
+ * A block is generated for one bank in one slot, so the bytes of an
+ * instruction that starts in its last two bytes and ends in the next slot are
+ * only known if the next slot's bank is. Two cases make it known:
+ *
+ *  - the board wires the next slot permanently (fixed[]): the operand comes
+ *    from that bank, always, and nothing is checked;
+ *  - otherwise the next slot is assumed to hold the bank that follows this one
+ *    physically (bank + 1), which is true of every contiguous mapping - any
+ *    16KB or 32KB PRG mode, any 8KB bank - and the generated dispatch
+ *    (cross_ok() in the umbrella) enters the instruction only while
+ *    hw_prg_bank4() says the next slot really holds that bank. When it does
+ *    not, the instruction is left to the interpreter, which reads the live
+ *    bytes. The guard cannot go stale inside a block: the next slot's bank
+ *    changes only through a write to the mapper, which ends the block, and
+ *    nothing else jumps into the instruction (is_label() refuses it).
+ *
+ * The slot after $F000 is $0000, where the CPU's program counter wraps into
+ * RAM: those instructions stay interpreted. So does an unfixed slot whose
+ * successor bank would lie past the end of the (padded) image. */
+static bool next_slot_src(const Program *p, uint32_t bank, uint32_t slot, uint32_t *src, bool *guarded) {
+    if (slot + 1 >= SLOT_COUNT) return false;
+    if (p->fixed[slot + 1] >= 0) {
+        *src = (uint32_t)p->fixed[slot + 1];
+        *guarded = false;
+        return true;
+    }
+    if (bank + 1 >= p->banks) return false;
+    *src = bank + 1;
+    *guarded = true;
+    return true;
+}
+
+/* Byte j of the instruction that starts at offset k of (bank, slot): in the
+ * block's own bank up to the end of the slot, then in next_slot_src()'s. */
+static uint8_t prg_insn_byte(const Program *p, uint32_t bank, uint32_t slot, uint32_t k, uint32_t j) {
+    if (k + j < SLOT_SIZE) return prg_byte(p, bank, k + j);
+    uint32_t src;
+    bool guarded;
+    if (!next_slot_src(p, bank, slot, &src, &guarded)) return 0;
+    return prg_byte(p, src, k + j - SLOT_SIZE);
+}
+
+/* The PRG image offset of byte j of that instruction (it must be compilable). */
+static uint32_t prg_insn_offset(const Program *p, uint32_t bank, uint32_t slot, uint32_t k, uint32_t j) {
+    if (k + j < SLOT_SIZE) return (bank << SLOT_SHIFT) + k + j;
+    uint32_t src;
+    bool guarded;
+    next_slot_src(p, bank, slot, &src, &guarded);
+    return (src << SLOT_SHIFT) + k + j - SLOT_SIZE;
+}
+
+/* Does an instruction of `len` bytes at offset k of a slot reach the next one? */
+static bool crosses_slot(uint32_t k, int len) { return k + (uint32_t)len > SLOT_SIZE; }
+
 /* Whether every byte of the instruction is a byte this block knows: inside
- * $8000-$FFFF (the program counter wraps from $FFFF to $0000) and inside the
- * one slot whose bank the block was generated for. An instruction that
- * reaches into the next slot reads a byte from a bank chosen at run time, so
- * neither its operand nor its length can be folded; the interpreter runs it. */
-static bool fits_in_slot(const Pos *at, int len) {
+ * $8000-$FFFF (the program counter wraps from $FFFF to $0000) and either in
+ * the one slot whose bank the block was generated for or in a next slot that
+ * next_slot_src() can resolve. */
+static bool compilable(const Program *p, const Pos *at, int len) {
     uint16_t addr = pos_addr(at);
     if ((uint32_t)addr + (uint32_t)len - 1 > 0xFFFF) return false;
-    return at->k + (uint32_t)len <= SLOT_SIZE;
+    if (!crosses_slot(at->k, len)) return true;
+    uint32_t src;
+    bool guarded;
+    return next_slot_src(p, at->bank, at->slot, &src, &guarded);
 }
 
 /* Where control goes when it reaches CPU address addr from a block generated
@@ -704,7 +764,7 @@ static void discover(Program *p, const uint32_t *seeds, int seed_count) {
         uint8_t opcode = prg_byte(p, at.bank, at.k);
         const OpDef *d = &OPS[opcode];
         int len = op_length(opcode);
-        if (!fits_in_slot(&at, len)) continue;
+        if (!compilable(p, &at, len)) continue;
         p->is_insn[packed] = 1;
         uint16_t addr = pos_addr(&at);
         uint16_t next = (uint16_t)(addr + len);
@@ -712,16 +772,16 @@ static void discover(Program *p, const uint32_t *seeds, int seed_count) {
         int n = 0;
         switch (d->kind) {
         case K_BRANCH: {
-            int8_t rel = (int8_t)prg_byte(p, at.bank, at.k + 1);
+            int8_t rel = (int8_t)prg_insn_byte(p, at.bank, at.slot, at.k, 1);
             succ[n++] = next;
             succ[n++] = (uint16_t)(next + rel);
             break;
         }
         case K_JMP:
-            succ[n++] = (uint16_t)(prg_byte(p, at.bank, at.k + 1) | prg_byte(p, at.bank, at.k + 2) << 8);
+            succ[n++] = (uint16_t)(prg_insn_byte(p, at.bank, at.slot, at.k, 1) | prg_insn_byte(p, at.bank, at.slot, at.k, 2) << 8);
             break;
         case K_JSR: {
-            uint16_t target = (uint16_t)(prg_byte(p, at.bank, at.k + 1) | prg_byte(p, at.bank, at.k + 2) << 8);
+            uint16_t target = (uint16_t)(prg_insn_byte(p, at.bank, at.slot, at.k, 1) | prg_insn_byte(p, at.bank, at.slot, at.k, 2) << 8);
             succ[n++] = target;
             succ[n++] = (uint16_t)(next + p->inline_jsr[target]);  /* return address, past inline arguments */
             break;
@@ -780,7 +840,7 @@ typedef struct {
 /* Byte k of the instruction being emitted, from ROM or from the RAM image. */
 static uint8_t insn_byte(const Emit *e, int k) {
     if (e->img) return e->img->bytes[(uint32_t)(e->P - e->img->base) + (uint32_t)k];
-    return prg_byte(e->p, e->at.bank, e->at.k + (uint32_t)k);
+    return prg_insn_byte(e->p, e->at.bank, e->at.slot, e->at.k, (uint32_t)k);
 }
 
 static bool view_has(const RamView *v, uint16_t addr) {
@@ -849,6 +909,14 @@ static bool known_byte(const Emit *e, uint16_t addr, uint8_t *out) {
         *out = insn_byte(e, k);
         return true;
     }
+    /* The bytes of an instruction that runs into the next slot come from
+     * the bank next_slot_src() chose (the dispatch checked it). */
+    uint16_t off = (uint16_t)(addr - e->P);
+    if (off < (uint16_t)op_length(e->opcode) && crosses_slot(e->at.k, op_length(e->opcode)) &&
+        ((addr >> SLOT_SHIFT) & (SLOT_COUNT - 1)) != e->at.slot) {
+        *out = insn_byte(e, off);
+        return true;
+    }
     Pos to;
     if (!target_pos(e->p, &e->at, addr, &to)) return false;
     *out = prg_byte(e->p, to.bank, to.k);
@@ -885,8 +953,8 @@ static uint16_t insn_operand16(const Emit *e) {
     return (uint16_t)(insn_byte(e, 1) | insn_byte(e, 2) << 8);
 }
 
-/* An instruction's own operand bytes. fits_in_slot() kept the whole
- * instruction inside one slot, so these are always the block's own bank. */
+/* An instruction's own operand bytes: the block's own bank, or for an
+ * instruction that runs into the next slot the bank next_slot_src() chose. */
 static const char *operand(Emit *e, int k) {
     if (LIVE(e)) return k == 1 ? "b1" : "b2";
     return str("0x%02X", insn_byte(e, k));
@@ -914,7 +982,10 @@ static bool is_label(Emit *e, uint16_t addr) {
     if (!target_pos(e->p, &e->at, addr, &to)) return false;
     if (to.bank != e->at.bank || to.slot != e->at.slot) return false;
     if ((to.k >> CHUNK_SHIFT) != e->chunk) return false;
-    return e->p->is_insn[POS_PACK(to.bank, to.slot, to.k)] != 0;
+    if (!e->p->is_insn[POS_PACK(to.bank, to.slot, to.k)]) return false;
+    /* An instruction that runs into the next slot is entered only through the
+     * dispatch, which checks that slot's bank (see next_slot_src()). */
+    return !crosses_slot(to.k, op_length(prg_byte(e->p, to.bank, to.k)));
 }
 
 /* Continue at a constant address (compiled mode). */
@@ -1533,6 +1604,77 @@ static void emit_c_string(FILE *f, const char *s) {
 
 static void ram_emit_table(FILE *f, const RamProgram *r);
 
+/* The instructions that run into the next slot, as the umbrella's dispatch
+ * sees them: for each (bank, slot) the one that starts at offset $FFE and the
+ * one at $FFF, with where its bytes in the next slot come from. A game that
+ * has none gets a dispatch without the check. Returns how many there are. */
+/* How many compiled instructions run into the next slot, and how many of
+ * those depend on the run-time guard. */
+static uint32_t count_cross(const Program *p, uint32_t *guarded_count) {
+    uint32_t count = 0, guarded_n = 0;
+    for (uint32_t bank = 0; bank < p->banks; bank++)
+        for (uint32_t slot = 0; slot < SLOT_COUNT; slot++)
+            for (uint32_t i = 0; i < 2; i++) {
+                uint32_t k = SLOT_SIZE - 2 + i;
+                if (!p->is_insn[POS_PACK(bank, slot, k)]) continue;
+                if (!crosses_slot(k, op_length(prg_byte(p, bank, k)))) continue;
+                uint32_t src;
+                bool guarded;
+                next_slot_src(p, bank, slot, &src, &guarded);
+                count++;
+                guarded_n += guarded;
+            }
+    *guarded_count = guarded_n;
+    return count;
+}
+
+static uint32_t emit_cross_table(FILE *f, const Program *p) {
+    uint32_t guarded_n;
+    uint32_t count = count_cross(p, &guarded_n);
+    if (!count) {
+        fprintf(f, "static bool cross_ok(unsigned bank, unsigned slot, unsigned k, uint16_t addr) {\n"
+                   "    (void)bank; (void)slot; (void)k; (void)addr; return true;\n}\n\n");
+        return 0;
+    }
+    fprintf(f, "/* Instructions that run past the end of their 4KB slot (cyc_codegen.c,\n"
+               " * next_slot_src()): their operand bytes were folded from the physical\n"
+               " * bank at `src`. guard: the next slot is not wired by the board, so the\n"
+               " * instruction may only run while it holds bank + 1. */\n"
+               "typedef struct { uint32_t src; uint8_t n, guard, exp[2]; } CycCross;\n"
+               "static const CycCross CROSS[CYC_BANKS][%u][2] = {\n", SLOT_COUNT);
+    for (uint32_t bank = 0; bank < p->banks; bank++)
+        for (uint32_t slot = 0; slot < SLOT_COUNT; slot++)
+            for (uint32_t i = 0; i < 2; i++) {
+                uint32_t k = SLOT_SIZE - 2 + i;
+                if (!p->is_insn[POS_PACK(bank, slot, k)]) continue;
+                int len = op_length(prg_byte(p, bank, k));
+                if (!crosses_slot(k, len)) continue;
+                uint32_t src;
+                bool guarded;
+                next_slot_src(p, bank, slot, &src, &guarded);
+                unsigned n = (unsigned)(k + (uint32_t)len - SLOT_SIZE);
+                fprintf(f, "    [%u][%u][%u] = { 0x%06Xu, %u, %u, { 0x%02X, 0x%02X } },\n", bank, slot, i,
+                        src << SLOT_SHIFT, n, guarded, prg_byte(p, src, 0), n > 1 ? prg_byte(p, src, 1) : 0);
+            }
+    fprintf(f, "};\n\n"
+               "static bool cross_ok(unsigned bank, unsigned slot, unsigned k, uint16_t addr) {\n"
+               "    if (k < %uu) return true;\n"
+               "    const CycCross *c = &CROSS[bank][slot][k - %uu];\n"
+               "    if (!c->n) return true;\n"
+               "    if (c->guard && hw_prg_bank4((uint16_t)(addr + %uu)) != bank + 1) return false;\n"
+               "#if NESRECOMP_NATIVE_PRG_GUARDS\n"
+               "    if (hw_prg_modified) {\n"
+               "        size_t size; const uint8_t *image = hw_prg_guard_image(&size);\n"
+               "        if (!image || c->src + c->n > size) return false;\n"
+               "        for (unsigned i = 0; i < c->n; ++i)\n"
+               "            if (image[c->src + i] != c->exp[i]) return false;\n"
+               "    }\n"
+               "#endif\n"
+               "    return true;\n}\n\n",
+            SLOT_SIZE - 2, SLOT_SIZE - 2, SLOT_SIZE);
+    return count;
+}
+
 static void emit_umbrella(const Program *p, const char *path, const char *prefix, const CycFdsProgram *fds,
                           const RamProgram *ram, uint8_t console, const char *display_name) {
     FILE *f = open_out(path);
@@ -1591,7 +1733,7 @@ static void emit_umbrella(const Program *p, const char *path, const char *prefix
                 if (!p->is_insn[POS_PACK(bank, slot, k)]) continue;
                 unsigned length = op_length(prg_byte(p, bank, k));
                 for (unsigned j = 0; j < length; j++) {
-                    uint32_t offset = bank * SLOT_SIZE + k + j;
+                    uint32_t offset = prg_insn_offset(p, bank, slot, k, j);
                     if (offset < p->prg_len) dependency[offset >> 3] |= (uint8_t)(1u << (offset & 7));
                 }
             }
@@ -1641,6 +1783,8 @@ static void emit_umbrella(const Program *p, const char *path, const char *prefix
                SLOT_SIZE, (1u << CHUNK_SHIFT) - 1, CHUNK_SHIFT,
                (1u << CHUNK_SHIFT) + 2, SLOT_SIZE);
 
+    emit_cross_table(f, p);
+
     uint32_t prg_hash = 2166136261u;
     fprintf(f, "const uint32_t cyc_native_cart_hash = 0x%08Xu;\n", nes_cart_identity(&p->rom->cart));
     fprintf(f, "const uint32_t cyc_native_fds_bios_crc32 = 0x%08Xu;\n", fds ? fds->bios_crc32 : 0u);
@@ -1672,6 +1816,7 @@ static void emit_umbrella(const Program *p, const char *path, const char *prefix
         "    const CycNativeView *v = &VIEWS[bank][slot];\n"
         "#endif\n"
         "    *out_k = addr & %uu;\n"
+        "    if (!cross_ok(bank, slot, *out_k, addr)) return 0;\n"
         "    return v->bits ? v : 0;\n"
         "}\n\n"
         "bool cyc_native_has(uint16_t addr) {\n"
@@ -1949,7 +2094,7 @@ static int ram_add_cartridge_images(RamProgram *r, const Program *p, const GameC
                 if (!p->is_insn[POS_PACK(bank, slot, k)]) continue;
                 const OpDef *op = &OPS[prg_byte(p, bank, k)];
                 if ((op->kind == K_JSR || op->kind == K_JMP) && op->am == AM_ABS)
-                    ram_add_gseed(r, prg_byte(p, bank, k + 1) | (uint32_t)prg_byte(p, bank, k + 2) << 8);
+                    ram_add_gseed(r, prg_insn_byte(p, bank, slot, k, 1) | (uint32_t)prg_insn_byte(p, bank, slot, k, 2) << 8);
             }
     return count;
 }
@@ -2777,7 +2922,9 @@ bool cyc_codegen_emit(const NESRom *rom, const GameConfig *cfg, const char *outp
 
     printf("[NESRecomp] cycle-accurate (%s, %u KB PRG in %u banks of 4KB): %u instructions compiled",
            board, p->prg_len / 1024, p->banks, count);
-    if (tails) printf(", %u left to the interpreter (they cross a bank or $FFFF)", tails);
+    uint32_t cross_guarded, cross = count_cross(p, &cross_guarded);
+    if (cross) printf(", %u of them run into the next slot (%u under a run-time bank guard)", cross, cross_guarded);
+    if (tails) printf(", %u left to the interpreter (they cross $FFFF or into a bank the board does not fix)", tails);
     printf(" -> generated/%s_cyc.c + %d bank file%s", output_prefix, files, files == 1 ? "" : "s");
     if (ram_files) printf(" + %d RAM view file%s", ram_files, ram_files == 1 ? "" : "s");
     printf("\n");

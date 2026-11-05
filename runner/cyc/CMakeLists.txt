@@ -372,6 +372,14 @@ add_test(NAME cyc_rom_read_override
         ${NESRECOMP_NESTED_BUILD_ARGS})
 set_tests_properties(cyc_rom_read_override PROPERTIES TIMEOUT 300)
 
+# Instructions that run past the end of a 4KB slot: compiled natively, under a
+# run-time guard on the next slot's bank where the board does not wire it.
+add_test(NAME cyc_crossslot_test
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_cyc_crossslot.py
+        --recompiler $<TARGET_FILE:NESRecomp> --out ${CMAKE_CURRENT_BINARY_DIR}/crossslot
+        ${NESRECOMP_NESTED_BUILD_ARGS})
+set_tests_properties(cyc_crossslot_test PROPERTIES TIMEOUT 600)
+
 add_test(NAME cyc_data_mods
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_cyc_data_mods.py
         --recompiler $<TARGET_FILE:NESRecomp> --out ${CMAKE_CURRENT_BINARY_DIR}/data-mods

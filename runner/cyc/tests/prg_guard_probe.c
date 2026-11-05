@@ -40,6 +40,7 @@ int main(int argc, char **argv)
     check(cyc_audio_enable(48000), "audio enable");
     check(cyc_mod_copy_cart_payload(payload, sizeof(payload)) == sizeof(payload), "copy payload");
     check(cyc_native_has(0x8F00) && cyc_native_has(0xC000) && cyc_native_has(0xC400), "explicit seeds compiled");
+    check(cyc_native_has(0xAFFF), "instruction running into the next slot compiled");
     uint64_t pcm = UINT64_C(1469598103934665603), samples = 0;
     uint64_t modified_native = 0, modified_intervals = 0;
     int16_t audio[2048];
@@ -58,12 +59,16 @@ int main(int argc, char **argv)
             payload[0x4401] = 2;
         }
         if (frame == 9 || frame == 13) {
+            /* The immediate of the instruction at $AFFF lives in the next slot:
+             * its image guard must follow a patch there and a restore. */
+            payload[0x3000] = (frame == 9) ? 0x33 : 0x11;
             payload[0x4401] = (frame == 9) ? 3 : 2;
             check(cyc_mod_apply_cart_payload(payload, sizeof(payload)), "atomic code edit/restore");
             /* The predecessor's conservative operand tail may also reject
              * C000; the independent bank containing 8F00 must stay native. */
             check(cyc_native_has(0x8F00), "independent unchanged chunk retained");
             check(cyc_native_has(0xC400) == (frame == 13), "changed chunk fallback then readmission");
+            check(cyc_native_has(0xAFFF) == (frame == 13), "patched operand in the next slot: fallback then readmission");
         }
         if (frame == 17) {
             size_t size; uint8_t *rw = cyc_mod_prg_data_rw(&size);
