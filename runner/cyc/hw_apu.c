@@ -303,6 +303,17 @@ static void audio_half_frame(void)
     }
 }
 
+/* Host policy, not machine state: channels (bit 0 pulse 1, 1 pulse 2, 2 triangle, 3 noise, 4 DMC) whose output is
+ * silenced in the audio stream.  The APU keeps running (registers, counters, IRQs, hashes are unchanged); only the
+ * mix drops them, so a mod can give a channel to a sound it plays itself and hand it back cleanly. */
+static uint8_t audio_mute_mask;
+void apu_set_audio_mute(uint8_t mask)
+{
+    mask &= 0x1F;
+    if (mask != audio_mute_mask) audio.level_dirty = 1;
+    audio_mute_mask = mask;
+}
+
 void apu_channel_levels(uint8_t out[5])
 {
     /* The duty waveforms in output order from the step a $4003/$4007 write
@@ -318,6 +329,8 @@ void apu_channel_levels(uint8_t out[5])
     out[2] = apu.tri_out;
     out[3] = (uint8_t)((apu.len[CH_NOISE].count && !(apu.noise_lfsr & 1)) ? envelope_volume(&apu.noise_env, apu.reg[12]) : 0);
     out[4] = apu.dmc_level;
+    for (int i = 0; i < 5; i++)
+        if (audio_mute_mask >> i & 1) out[i] = 0;
 }
 
 bool apu_irq_output(void) { return (apu.frame_irq_out | apu.dmc_irq) != 0; }

@@ -230,6 +230,8 @@ size_t cyc_mod_copy_cart_payload(uint8_t *out, size_t capacity) {
     }
     return size;
 }
+void cyc_mod_set_apu_audio_mute(uint8_t mask) { apu_set_audio_mute(mask); }
+
 bool cyc_mod_chr_poke(uint16_t addr, uint8_t value) {
     if (s_open || addr >= 0x2000 || !hw_cart.chr_write[addr >> 10]) return false;
     hw_cart.chr[hw_cart_chr_index(addr)] = value;

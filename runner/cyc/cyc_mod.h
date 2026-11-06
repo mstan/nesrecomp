@@ -118,6 +118,10 @@ bool cyc_mod_apply_cart_data_payload(const uint8_t *payload, size_t size);
 size_t cyc_mod_copy_cart_payload(uint8_t *out, size_t capacity);
 /* Mapped CHR RAM only; for a finished tile transfer, outside isolated calls. */
 bool cyc_mod_chr_poke(uint16_t ppu_addr, uint8_t value);
+/* Audio-only channel mute (bit 0 pulse 1, 1 pulse 2, 2 triangle, 3 noise, 4 DMC): the mix drops those channels, the
+ * APU's state, timing and the machine hashes are untouched.  A mod that plays a sound of its own on a channel takes it
+ * for the sound's duration and passes 0 to give it back.  Host policy: not saved in states. */
+void cyc_mod_set_apu_audio_mute(uint8_t mask);
 /* Trusted physical CIRAM upload, for a native room handoff completed outside
  * guest time. Offset is into cyc_ppu_ciram(), NOT a mirrored PPU address.
  * Caller owns mirroring/nametable layout. Refused in isolation, on NULL input

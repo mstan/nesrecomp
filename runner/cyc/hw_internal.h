@@ -492,6 +492,8 @@ void    apu_debug_emit(double level);
  * (0-15) and DMC (0-127), and the APU's IRQ output. For co-simulation; the
  * tone generators only run while audio is enabled. */
 void    apu_channel_levels(uint8_t out[5]);
+/* Silence channels in the audio stream only (bit 0 P1, 1 P2, 2 triangle, 3 noise, 4 DMC); 0 restores all. */
+void    apu_set_audio_mute(uint8_t mask);
 bool    apu_irq_output(void);
 uint16_t apu_noise_lfsr(void);
 /* The DMC timer's free-running phase is not defined at power-on; lets a
