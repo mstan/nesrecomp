@@ -50,6 +50,8 @@ set(NESRECOMP_CYC_SOURCES
     ${NESRECOMP_CYC_DIR}/cyc_session.c
     ${NESRECOMP_CYC_DIR}/cyc_hooks.c
     ${NESRECOMP_CYC_DIR}/cyc_mod.c
+    ${NESRECOMP_CYC_DIR}/cyc_cheat.c
+    ${NESRECOMP_CYC_DIR}/cyc_replay.c
     ${NESRECOMP_CYC_DIR}/cyc_state.c
     ${NESRECOMP_CYC_DIR}/cyc_video.c
     ${NESRECOMP_CYC_DIR}/cyc_render.c
@@ -177,4 +179,42 @@ function(nesrecomp_cyc_enable_recomp_ui target)
     if(RUI_ROM_SHA256)
         target_compile_definitions(${target} PRIVATE "CYC_LAUNCHER_ROM_SHA256=\"${RUI_ROM_SHA256}\"")
     endif()
+endfunction()
+
+# The framework's replay-capture package (cyc_replay.h): the Mods feature "Replay
+# capture" (group Developer), ON by default - the one deliberate exception to
+# docs/MOD_PACKAGES.md "built-in features default to disabled". It targets one
+# game id and image identity, so it is generated next to the executable at
+# build-system generation time instead of being kept in every game; the trusted
+# plugin it names ("nesrecomp.replay-capture") is in the shared cyc_replay.c.
+# Called by nesrecomp_add_cycle_game(... MODS) for every mods title.
+function(nesrecomp_cyc_stage_replay_package target game_id rom_crc32)
+    string(TOLOWER "${rom_crc32}" crc)
+    file(GENERATE
+        OUTPUT "$<TARGET_FILE_DIR:${target}>/mods/packages/nesrecomp.developer.replay/1.0.0/manifest.toml"
+        CONTENT "format_version = 1
+id = \"nesrecomp.developer.replay\"
+version = \"1.0.0\"
+name = \"Replay Capture\"
+author = \"NESRecomp\"
+description = \"Keeps a rolling recording of your play so a bug can be reproduced exactly. Files stay on your computer.\"
+license = \"MIT\"
+resolver = \"declarative\"
+save_compatibility = \"stock\"
+
+[[target]]
+game_id = \"${game_id}\"
+rom_crc32 = \"${crc}\"
+
+[[feature]]
+id = \"replay-capture\"
+name = \"Replay capture\"
+description = \"Records the last hour of play (inputs and checkpoints, no ROM) in the diagnostics folder beside the program. To report a bug, quit the game, then zip the newest <game>-replay-* files there together with the session .log. Turn off to stop recording; it takes effect at once.\"
+group = \"Developer\"
+default_enabled = true
+
+[[plugin]]
+feature = \"replay-capture\"
+id = \"nesrecomp.replay-capture\"
+")
 endfunction()

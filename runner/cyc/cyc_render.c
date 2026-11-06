@@ -15,6 +15,7 @@ static int             s_composed_width;
 static int             s_origin, s_origin_request;
 static bool            s_origin_requested;
 static CycRenderStats  s_stats;
+static bool            s_stock_compositing, s_stock_painted;
 
 void cyc_render_set_compositor(CycCompositorFn fn, void *user)
 {
@@ -24,6 +25,14 @@ void cyc_render_set_compositor(CycCompositorFn fn, void *user)
 }
 
 bool cyc_render_has_compositor(void) { return s_fn != NULL; }
+
+void cyc_render_set_stock_compositing(bool enabled)
+{
+    if (enabled != s_stock_compositing) s_generation++;
+    s_stock_compositing = enabled;
+}
+
+bool cyc_render_stock_compositing(void) { return s_stock_compositing; }
 
 void cyc_render_set_margins(int left, int right)
 {
@@ -166,12 +175,28 @@ const uint32_t *cyc_render_present(int *width, int *height)
     *height = 240;
     if (w <= 256) {
         *width = 256;
-        if (s_composed_generation != s_generation || s_composed_width != 256) {
-            s_stats.native++;
-            s_composed_generation = s_generation;
-            s_composed_width = 256;
+        const uint32_t *native = cyc_frame_argb();
+        if (!s_stock_compositing || !s_fn) {
+            if (s_composed_generation != s_generation || s_composed_width != 256) {
+                s_stats.native++;
+                s_composed_generation = s_generation;
+                s_composed_width = 256;
+            }
+            s_stock_painted = false;
+            return native;
         }
-        return cyc_frame_argb();
+        /* stock-width compositing: composed once per frame like a wide picture; origin 0, no margins */
+        if (s_composed_generation == s_generation && s_composed_width == 256)
+            return s_stock_painted ? s_canvas : native;
+        for (int i = 0; i < 256 * 240; ++i) s_canvas[i] = 0xFF000000u;
+        s_origin_requested = false;
+        s_stock_painted = s_fn(s_canvas, 256, 240, 0, native, s_user) != 0;
+        s_origin = 0;
+        if (s_stock_painted) s_stats.composed++;
+        else s_stats.native++;
+        s_composed_generation = s_generation;
+        s_composed_width = 256;
+        return s_stock_painted ? s_canvas : native;
     }
     *width = w;
     if (s_composed_generation == s_generation && s_composed_width == w) return s_canvas;

@@ -69,6 +69,17 @@ bool cyc_mod_set_prg_read_override(uint32_t offset, uint8_t compare, uint8_t val
     return true;
 }
 
+bool cyc_mod_remove_prg_read_override(uint32_t offset)
+{
+    for (unsigned i = 0; i < read_override_count; i++) {
+        if (!read_overrides[i].qualified || read_overrides[i].prg_offset != offset) continue;
+        memmove(&read_overrides[i], &read_overrides[i + 1], (read_override_count - i - 1) * sizeof read_overrides[0]);
+        if (--read_override_count == 0) cyc_mod_rom_read_overrides = NULL;
+        return true;
+    }
+    return false;
+}
+
 void cyc_mod_clear_rom_read_overrides(void)
 {
     read_override_count = 0;
@@ -79,6 +90,10 @@ bool cyc_background_enabled;
 uint8_t cyc_background_pipe[4];
 static uint16_t background_frame[256*240];
 static bool background_registered;
+/* The captured picture is whole: a frame's last pixel was written, or a save state's record was loaded.  Enabling
+ * the capture, or loading a state saved without it, leaves it unset until the next frame completes: a compositor
+ * then declines (the native picture is shown) instead of drawing over a stale or empty background. */
+static bool background_valid;
 static int save_background(uint8_t *out,int capacity) {
     if(!cyc_background_enabled)return 0;
     const int size=8+(int)sizeof background_frame;
@@ -86,8 +101,11 @@ static int save_background(uint8_t *out,int capacity) {
     memcpy(out,"BG01",4);memcpy(out+4,cyc_background_pipe,4);
     memcpy(out+8,background_frame,sizeof background_frame);return size;
 }
+/* The capture is presentation only, so a state is accepted whether or not it was saved with it: a record this
+ * session does not capture is ignored, and its absence (a state saved before the capture was on) leaves the
+ * background to the next frame (cyc_render_background reports false until then). */
 static int validate_background(const uint8_t *in,int length) {
-    if(!cyc_background_enabled)return length==0;
+    if(!cyc_background_enabled||length==0)return 1;
     if(!in||length!=8+(int)sizeof background_frame||memcmp(in,"BG01",4))return 0;
     for(int i=0;i<4;i++)if(in[4+i]>63)return 0;
     for(unsigned i=0;i<256*240;i++){uint16_t value;memcpy(&value,in+8+i*2,2);if(value>511)return 0;}
@@ -95,7 +113,10 @@ static int validate_background(const uint8_t *in,int length) {
 }
 static int load_background(const uint8_t *in,int length) {
     if(!validate_background(in,length))return 0;
-    if(length){memcpy(cyc_background_pipe,in+4,4);memcpy(background_frame,in+8,sizeof background_frame);}return 1;
+    if(!cyc_background_enabled)return 1;
+    if(length){memcpy(cyc_background_pipe,in+4,4);memcpy(background_frame,in+8,sizeof background_frame);background_valid=true;}
+    else background_valid=false;
+    return 1;
 }
 void cyc_render_capture_background(bool enabled) {
     if(enabled&&!background_registered){
@@ -105,15 +126,16 @@ void cyc_render_capture_background(bool enabled) {
         }
         background_registered=true;
     }
-    cyc_background_enabled=enabled;
+    cyc_background_enabled=enabled;background_valid=false;
     memset(cyc_background_pipe,0,sizeof cyc_background_pipe);memset(background_frame,0,sizeof background_frame);
 }
 void cyc_render_background_output(unsigned pixel,unsigned emphasis,bool grey) {
     uint8_t value=cyc_background_pipe[3];if(grey)value&=0x30;
     background_frame[pixel]=(uint16_t)(value|(emphasis<<6));
+    if(pixel==256*240-1)background_valid=true;
 }
 bool cyc_render_background(uint32_t *out) {
-    if(!cyc_background_enabled||!out)return false;
+    if(!cyc_background_enabled||!background_valid||!out)return false;
     for(unsigned i=0;i<256*240;i++)out[i]=hw_palette_argb[background_frame[i]];
     return true;
 }
@@ -219,6 +241,8 @@ size_t cyc_mod_copy_cart_payload(uint8_t *out, size_t capacity) {
     }
     return size;
 }
+void cyc_mod_set_apu_audio_mute(uint8_t mask) { apu_set_audio_mute(mask); }
+
 bool cyc_mod_chr_poke(uint16_t addr, uint8_t value) {
     if (s_open || addr >= 0x2000 || !hw_cart.chr_write[addr >> 10]) return false;
     hw_cart.chr[hw_cart_chr_index(addr)] = value;

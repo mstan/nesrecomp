@@ -57,6 +57,18 @@ try {
         New-Item -ItemType Directory -Path (Join-Path $stage 'mods') | Out-Null
         Copy-Item -LiteralPath $preloaded -Destination (Join-Path $stage 'mods/packages') -Recurse
     }
+    # Framework packages the build staged beside the executable (nesrecomp.*,
+    # e.g. the default-on replay capture: nesrecomp_cyc_stage_replay_package).
+    $built = Join-Path $bin 'mods/packages'
+    if (Test-Path -LiteralPath $built) {
+        foreach ($package in Get-ChildItem -LiteralPath $built -Directory -Filter 'nesrecomp.*') {
+            $destination = Join-Path $stage 'mods/packages'
+            New-Item -ItemType Directory -Path $destination -Force | Out-Null
+            if (-not (Test-Path -LiteralPath (Join-Path $destination $package.Name))) {
+                Copy-Item -LiteralPath $package.FullName -Destination $destination -Recurse
+            }
+        }
+    }
     $licenses = @{
         'NESRecomp-LICENSE.txt' = (Join-Path $EngineRoot 'LICENSE')
         'SDL2-COPYING.txt' = (Join-Path $EngineRoot 'runner/external/SDL2/COPYING.txt')

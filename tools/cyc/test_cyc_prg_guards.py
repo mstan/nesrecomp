@@ -19,7 +19,11 @@ def fixture():
     for addr, value in ((0x2001, 0x1E), (0x4017, 0xC0), (0x4015, 1),
                         (0x4000, 0x9F), (0x4002, 0x80), (0x4003, 8)):
         code.extend((0xA9, value, 0x8D, addr & 255, addr >> 8))
+    # A subroutine that starts in the last byte of a 4KB slot: LDA #imm with the
+    # immediate in the next slot ($B000), then STA $06, RTS.
+    code.extend((0x20, 0xFF, 0xAF))
     code.extend((0x4C, 0, 0x8F)); prg[:len(code)] = code
+    prg[0x2FFF:0x3004] = bytes((0xA9, 0x11, 0x85, 0x06, 0x60))
     prg[0x0E00:0x0E02] = bytes((0, 0xC0))
     prg[0x0F00:0x0F03] = bytes((0x6C, 0, 0x8E))
     prg[0x4000:0x4005] = bytes((0xE6, 1, 0x4C, 0, 0x8F))
@@ -41,7 +45,7 @@ def main():
     out = args.out.resolve(); out.mkdir(parents=True, exist_ok=True)
     source = args.source.resolve()
     (out / 'test.nes').write_bytes(fixture())
-    (out / 'seeds.txt').write_text('4k:00:8000\n4k:00:8F00\n4k:04:C000\n4k:04:C400\n4k:04:C100\n')
+    (out / 'seeds.txt').write_text('4k:00:8000\n4k:00:8F00\n4k:04:C000\n4k:04:C400\n4k:04:C100\n4k:02:AFFF\n4k:03:B001\n')
     (out / 'game.toml').write_text('[game]\noutput_prefix="guard"\ncycle_accurate=true\ncycle_seed_file="seeds.txt"\n')
     def run(argv, name):
         result = subprocess.run([str(x) for x in argv], cwd=out, capture_output=True,

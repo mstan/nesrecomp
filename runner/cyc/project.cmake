@@ -224,6 +224,8 @@ function(nesrecomp_add_cycle_game target)
         target_compile_definitions(${target} PRIVATE NESRECOMP_ENABLE_MODS=1 "CYC_MOD_GAME_ID=\"${CYC_GAME_ID}\""
             "CYC_MOD_ROM_CRC32=\"${CYC_PROJECT_MOD_CRC32}\"")
         set(RECOMP_UI_ENABLE_MODS ON)
+        # "Replay capture" (default on) for every title with mods: cyc_replay.h.
+        nesrecomp_cyc_stage_replay_package(${target} "${CYC_GAME_ID}" "${CYC_PROJECT_MOD_CRC32}")
     endif()
     if(CYC_HD_PACKS)
         if(NOT CYC_MODS)

@@ -121,6 +121,9 @@
  *   Save states (cyc_state.h): the whole machine, the host's frame counter and
  *   drive, and the mods' records, at a frame's end:
  *     --save-state F:FILE  write one after frame F (repeatable)
+ *     --replay-exact       a diagnostic replay (tools/cyc/replay_diagnostic.py,
+ *                          cyc_replay.h): the Disk action's own timer is off, so
+ *                          the drive changes only as the --input file says
  *     --load-state FILE    start from one: the run continues at the frame it
  *                          was saved after (inputs and disk events before it
  *                          are skipped), and its --hash-out lines continue the
@@ -168,6 +171,7 @@
 #include "cyc_disk_action.h"
 #include "cyc_fds_bios.h"
 #include "cyc_overlay.h"
+#include "cyc_cheat.h"
 
 #ifndef CYC_ORACLE
 #include "cyc_diagnostics.h"
@@ -319,12 +323,19 @@ static void write_miss_log(const char *path) {
 typedef struct {
     long    frame;
     uint8_t port, buttons;
+    uint8_t logical;      /* 1: sets the logical seat `port` (L<n>:), 2: returns it to following the pad */
 } InputStep;
 
 static InputStep *input_steps;
 static int        input_count, input_next;
 static bool       window_scripted_input;
 static uint8_t    input_held[4];
+/* A logical seat (what mods see, cyc_session.h) normally equals the pad; a
+ * diagnostic replay (cyc_replay.h) records the rare frames where the window's
+ * menu-release gate made them differ, as `L<n>:` lines. */
+static uint8_t    input_logical[4];
+static bool       input_logical_set[4];
+static bool       replay_exact;   /* --replay-exact: the drive changes only as the input file says */
 
 #ifndef CYC_ORACLE
 typedef struct { long frame; int x, y, trigger; } ZapperStep;
@@ -456,6 +467,7 @@ static uint8_t parse_buttons(const char *s) {
     return b;
 }
 
+static int cheat_count;
 static bool load_input(const char *path) {
     FILE *f = fopen(path, "r");
     if (!f) {
@@ -474,6 +486,23 @@ static bool load_input(const char *path) {
         if (end == p) continue;
         p = end;
         while (*p == ' ' || *p == '\t') p++;
+        if (cyc_cheat_is_command(p)) {
+#ifdef CYC_ORACLE
+            fprintf(stderr, "%s: cheat commands are not available in the oracle: %s", path, p);
+            fclose(f);
+            return false;
+#else
+            CycCheat cheat;
+            char err[96] = "out of memory";
+            if (!cyc_cheat_parse(p, &cheat, err, sizeof err) || !cyc_cheat_schedule(frame, &cheat)) {
+                fprintf(stderr, "%s: %s: %s", path, err, p);
+                fclose(f);
+                return false;
+            }
+            cheat_count++;
+            continue;
+#endif
+        }
         if (!strncmp(p, "DISK_", 5)) {
             char action[32] = "", arg[32] = "";
             if (sscanf(p, "%31s %31s", action, arg) < 1 || !add_disk_event(frame, action, arg)) {
@@ -483,30 +512,44 @@ static bool load_input(const char *path) {
             }
             continue;
         }
-        uint8_t port = 0;
+        uint8_t port = 0, logical = 0;
         if (p[0] >= '1' && p[0] <= '4' && p[1] == ':') port = (uint8_t)(p[0]-'1'), p += 2;
+        else if ((p[0] == 'L' || p[0] == 'l') && p[1] >= '1' && p[1] <= '4' && p[2] == ':') {
+            port = (uint8_t)(p[1]-'1'), p += 3;
+            logical = *p == '=' ? 2 : 1;
+        }
         if (input_count == cap) {
             cap *= 2;
             input_steps = (InputStep *)realloc(input_steps, sizeof(InputStep) * cap);
         }
         input_steps[input_count].frame = frame;
         input_steps[input_count].port = port;
-        input_steps[input_count].buttons = (*p == '-') ? 0 : parse_buttons(p);
+        input_steps[input_count].buttons = (*p == '-' || logical == 2) ? 0 : parse_buttons(p);
+        input_steps[input_count].logical = logical;
         input_count++;
     }
     fclose(f);
-    printf("input: %d steps, %d disk events from %s\n", input_count, disk_event_count, path);
+    printf("input: %d steps, %d disk events, %d cheat commands from %s\n", input_count, disk_event_count, cheat_count,
+           path);
     return true;
 }
 
 static void input_tick(long frame) {
     while (input_next < input_count && input_steps[input_next].frame <= frame) {
-        input_held[input_steps[input_next].port] = input_steps[input_next].buttons;
+        const InputStep *st = &input_steps[input_next];
+        if (st->logical) {
+            input_logical_set[st->port] = st->logical == 1;
+            input_logical[st->port] = st->buttons;
+        } else {
+            input_held[st->port] = st->buttons;
+        }
         input_next++;
     }
     uint8_t buttons[2] = {input_held[0], input_held[1]};
 #ifndef CYC_ORACLE
-    cyc_session_logical_input(input_held,4);
+    uint8_t logical[4];
+    for (int i = 0; i < 4; ++i) logical[i] = input_logical_set[i] ? input_logical[i] : input_held[i];
+    cyc_session_logical_input(logical,4);
     cyc_session_input(buttons);
 #endif
     cyc_set_controller(0, buttons[0]);
@@ -548,7 +591,7 @@ bool cyc_host_window_replay(long frame, uint8_t *buttons, size_t count)
 {
     if (!window_scripted_input) return false;
     while (input_next < input_count && input_steps[input_next].frame <= frame) {
-        input_held[input_steps[input_next].port] = input_steps[input_next].buttons;
+        if (!input_steps[input_next].logical) input_held[input_steps[input_next].port] = input_steps[input_next].buttons;
         ++input_next;
     }
     memcpy(buttons, input_held, count < 4 ? count : 4);
@@ -601,7 +644,10 @@ static void hle_describe(void) {
              !p->auto_swap && !p->fast_load ? " OFF" : "", p->auto_swap_denied ? " (NO SWAP)" : "");
 }
 
+uint32_t cyc_host_settings_revision;   /* bumped when the FDS HLE plan changes (cyc_replay.h) */
+
 static void hle_apply(bool banner) {
+    ++cyc_host_settings_revision;
     hle_plan = nes_fds_hle_plan(hle_req);
     hle_core.auto_swap = hle_plan.auto_swap;
     hle_core.fast_load = hle_plan.fast_load;
@@ -1166,6 +1212,7 @@ static int host_main(int argc, char **argv) {
             headless = true;
         }
         else if (!strcmp(argv[i], "--load-state") && i + 1 < argc) load_state = argv[++i], headless = true;
+        else if (!strcmp(argv[i], "--replay-exact")) replay_exact = true, headless = true;
         else if (!strcmp(argv[i], "--mods-root") && i + 1 < argc) mods_root = argv[++i];
         else if ((!strcmp(argv[i], "--virtual-pad") || !strcmp(argv[i], "--exit-after") ||
                   !strcmp(argv[i], "--config") || !strcmp(argv[i], "--tcp")) && i + 1 < argc) {
@@ -1602,6 +1649,9 @@ session_restart:
         frame = s_loaded_frame;
         /* what happened before the state is already in it */
         while (disk_event_next < disk_event_count && disk_events[disk_event_next].frame < frame) disk_event_next++;
+        cyc_cheat_seek(frame);
+        /* a swap the checkpoint had in flight is in the input file as eject/insert lines */
+        if (replay_exact && cyc_is_fds()) cyc_disk_action_cancel(cyc_host_disk_action());
         printf("state: loaded %s, continuing at frame %ld\n", load_state, frame);
     }
     if (zapper_input) {
@@ -1644,9 +1694,10 @@ session_restart:
 #else
         zapper_tick(frame);
         if (disk_event_count) disk_tick(frame);
-        cyc_host_disk_frame(emulated_ms(frame), frame);
+        if (!replay_exact) cyc_host_disk_frame(emulated_ms(frame), frame);
         observe_frame = frame;
         double frame_start = wall_seconds();
+        if (!online && cheat_count) cyc_cheat_frame(frame);
         cyc_session_frame_begin();
         cyc_run_frame();
         cyc_session_frame_end();

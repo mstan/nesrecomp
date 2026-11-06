@@ -179,9 +179,21 @@ rather than an address:
   the last 16KB on UxROM. Both are cheap: a return to the scheduler is a
   function return and one table lookup, and the hardware model, not dispatch,
   dominates the clock (see below);
-- an instruction whose bytes cross a slot boundary is left to the interpreter,
-  like one that wraps past `$FFFF`: its later bytes come from a bank chosen at
-  run time, so neither its operands nor its length can be folded.
+- an instruction whose bytes cross a slot boundary is compiled too, because
+  its later bytes are known in two cases. If the board fixes the next slot
+  (`$F000` after `$E000` on MMC3, any slot on NROM) they come from that bank
+  and nothing is checked. Otherwise they are assumed to be the physically
+  next 4KB of PRG (true of every contiguous mapping: a 16KB or 32KB MMC1
+  mode, an 8KB bank, a fixed 16KB bank), and the dispatch enters the
+  instruction only while `hw_prg_bank4()` says the next slot really holds that
+  bank (`cross_ok()` in `<prefix>_cyc.c`); the interpreter runs it when the
+  mapping is discontiguous at that moment (`$BFFF` into `$C000` with another
+  16KB bank under it). Nothing jumps into such an instruction except through
+  that dispatch, and a mapper write ends the block, so the check cannot go
+  stale. With patched PRG (`NESRECOMP_NATIVE_PRG_GUARDS`) the dispatch also
+  compares the folded operand bytes with the image. Only an instruction that
+  wraps past `$FFFF` (the program counter becomes `$0000`) is always left to
+  the interpreter. `tools/cyc/test_cyc_crossslot.py` covers both directions.
 
 Static discovery therefore reaches only what the fixed slots lead to — for
 SMB3, 534 instructions from the vectors. Everything behind a bank switch comes
@@ -1249,12 +1261,39 @@ the executable for port 4370): JSON over newline as in [debug protocol](../../do
 `key` and `pad` (an SDL virtual controller) hold input through the bindings,
 `action` holds an action, `disk`, `menu`, `hle`, `screenshot` (layer
 `picture`: the game alone; `ui`: everything the window drew), `state`,
-`read_ram`, `ring_dump`, `save_state` / `load_state` (path), `video` (the
+`read_ram`, `write_ram` / `cheat` (QA pokes and holds, below), `ring_dump`, `save_state` / `load_state` (path), `video` (the
 presented width and mode, optionally setting the mode), `window_size` (w, h:
 Fit follows the new drawable), `mod_stats` (hook sites, isolated calls,
-compositor counts), `quit`, and the game's own (`tcp_setup`). With `--hidden` and `SDL_VIDEODRIVER=dummy`
+compositor counts), `mod_feature` (package, feature, enabled: a Mods row as the menu applies it, with the recomp-ui menu), `quit`, and the game's own (`tcp_setup`). With `--hidden` and `SDL_VIDEODRIVER=dummy`
 nothing reaches a desktop; `tools/cyc/test_cyc_window.py` (CTest
 `cyc_window_run`) drives production and dev windows that way.
+
+### QA cheats (scheduled pokes and holds)
+
+Assisted QA routes (teleports, survival, one-hit bosses) write RAM between
+frames without touching the program. An `--input` or `--window-input`
+schedule accepts, beside its pad lines:
+
+```
+120 POKE     002A 05        # one write before frame 120 runs
+300 HOLD     06C0 1C        # write before every frame from 300 on
+300 HOLD_MAX 06C1-06DF 01   # clamp: if RAM > 01, write 01 (each frame)
+900 UNHOLD   06C1-06DF      # or UNHOLD ALL
+300 HOLD_MAX 06C1 01 IF 00B1 >= 02   # conditional: only while the condition holds
+```
+
+`IF addr op byte` (op `==` `!=` `<` `<=` `>` `>=`, `&` any bit, `!&` no bit)
+gates a POKE or hold on the program's own state, so assistance can wait for
+an event (a boss's health bar having filled) instead of a guessed frame.
+
+Values are hex (`$`/`0x` optional); targets are CPU RAM or cartridge/PRG RAM.
+Writes go through `cyc_mod_poke`, are identical in native and
+`--interp-only` runs (so parity stays a valid check of an assisted route), and
+every write that changes a byte leaves a `cheat` event in the ring. TCP
+`cheat` (`text`: one command, applied now; no text lists the holds) and
+`write_ram` (`addr`, `val`) do the same in a window. They are refused online
+and the oracle rejects them; holds are host state, not save-state content
+(`--load-state` replays the hold changes scheduled before the loaded frame).
 
 ## Game mods
 
@@ -1314,7 +1353,14 @@ picture and its background opacity, each line's scroll, PPUCTRL and PPUMASK
 as captured at dot 1 of the line, OAM, CHR, nametables and palette, with tile
 and sprite helpers. Without a compositor, or when it declines a frame, the
 native picture is pillarboxed. A picture is composed once per frame, on the
-first present or in the game's `frame_end`.
+first present or in the game's `frame_end`. `cyc_render_set_stock_compositing(true)`
+also calls the compositor at width 256 (native_x0 0, no margins; it paints or
+declines like a wide picture): a compositor that changes the picture without
+widening it, such as redrawing sprites the console would drop. With
+`cyc_render_capture_background` it composes against the exact background;
+that capture is presentation only, so save states load with it on or off
+(`cyc_render_background` reports false until a frame completes after enabling it
+or loading a state without it).
 
 **Runtime.** `nesrecomp_add_cycle_game(... MODS GAME_ID <id>)` builds the mod
 runtime in (the catalog is `mods/` beside the executable; headless
@@ -1446,3 +1492,87 @@ wrapping, default-off behavior, redirection, re-enable, unwritable storage,
 ordinary failures and Windows access violation/abort/stack-overflow dumps.
 Configure it with `RECOMP_UI_ROOT`, then build and run CTest. Deliberate crash
 switches exist only in that test executable.
+
+## Diagnostic replay (always-on, windowed builds)
+
+An owner playtest can be captured without doing anything and reproduced
+exactly, headless, later. The window records rolling **segments** from power-on
+(`cyc_replay.c`, `cyc_replay.h`); `tools/cyc/replay_diagnostic.py` plays them
+back. It works for every cycle title (NES carts and FDS) and needs no game
+code.
+
+**Owner.** Recording is on by default. When something odd happens (a black
+pause screen, a wrong sprite), quit the game normally (a kill can lose the last
+100 ms) and zip the newest `<title>-replay-<date>-<pid>-*` files from the
+`diagnostics` folder beside the executable (`%LOCALAPPDATA%\NESRecomp\diagnostics`
+when that is read-only) together with the session's `nesrecomp-*.log`: every
+`.cycreplay`, `.cycreplay.state`, `.cycreplay.config.ini` and `.cycreplay.mods.toml`
+of the session. The files hold no ROM bytes. They do hold the machine's RAM and
+the game's save data. `NESRECOMP_REPLAY_RECORD=0` turns recording off;
+`NESRECOMP_REPLAY_DIR` picks the folder.
+
+**Mods switch (default on).** A title built with mods lists **Replay capture**
+(group Developer) in Mods, on by default and persisted in `mods/state.toml`.
+Off in the launcher: nothing is created (no folder, thread or file). Off in the
+running game's menu: the current segment closes whole and recording stops; on
+again opens a new segment (`WHY recording resumed`). The package is framework
+provided (`nesrecomp_cyc_stage_replay_package`, written by
+`nesrecomp_add_cycle_game ... MODS`; plugin `nesrecomp.replay-capture` in
+`cyc_replay.c`); games do nothing. `NESRECOMP_REPLAY_RECORD=0` wins over it. A
+catalog without the package, and a build without `MODS`, record. See
+[docs/MOD_PACKAGES.md](../../docs/MOD_PACKAGES.md#replay-capture-framework-package-default-on).
+
+**Developer.**
+
+```
+python -I tools/cyc/replay_diagnostic.py <diagnostics folder | segment> --exe Game.exe --rom "Game.nes" \
+       [--segment N] [--until N] [--screenshot-every K] [--check] [--work-dir NEW]
+```
+
+The tool runs the SAME executable headless per segment with the host's own
+options (`--load-state <segment checkpoint> --input --zapper-input --hash-out
+--replay-exact`) and compares each frame's hashes with the recording. It stops
+at the first mismatch, prints the frame and fields, saves the machine just
+after that frame as `replay-divergence-NNNNNN.cycstate`, and exits 1. Exit 2
+is a bad capture, 3 a final input with no checkpoint (the recorded frame hung
+or crashed; playback still executes it so it can recur under a debugger), 4 a
+host failure (wrong program: "save state of another program"). `--check`
+inspects the files without running. `--screenshot-every K` writes PNGs under
+`<work>/shots` so you can look at the captured moment.
+
+**What is recorded.** A segment is a pure continuous run: a checkpoint (an
+ordinary save state, `<stem>-NNNNNN.cycreplay.state`) and a text file
+(`.cycreplay`) with, per frame, `I` the pads (before the game's input hook,
+the logical seats mods see, and the bytes the machine latched), `Z` the Zapper
+when it changes, `P` every RAM byte a QA cheat/poke changed (TCP `write_ram`,
+`cheat`, a route's POKE/HOLD lines; as results, so conditional holds replay
+exactly), `D` FDS drive ejects/inserts (as results: the Disk action's timers
+and toast clock are not needed), and `H` the `--hash-out` hashes (memory +
+picture, hardware, CPU registers, cycle count) after the frame. The trace hash
+is not recorded (it only runs for `--hash-out`).
+A state load or rewind, a mod or FDS HLE selection change, a view-mode change,
+any skipped frame or machine replaced under the recorder, and online play end
+the segment and start a new one with a fresh checkpoint; 600 frames end one
+too. Online play is **not** recorded (the rollback session owns the machine);
+recording is paused with a log line and resumes with a new segment. The header
+carries the program identity, region, FDS HLE plan, extra scanlines and the
+game's own `--options`; a checkpoint is refused by a different program or build,
+so a replay never runs on the wrong machine.
+
+**Retention and cost.** Up to 360 segments (one hour) and 256 MiB of
+checkpoints (about 330 KiB each), oldest evicted first
+(`NESRECOMP_REPLAY_HISTORY_MIB` 2-256, `NESRECOMP_REPLAY_SEGMENT_FRAMES` 2-600
+shrink them for tests). The emulation thread formats a few hundred bytes per
+frame and copies them into a fixed 16 MiB queue; one writer thread owns all
+files and flushes every 100 ms. A full queue or a failed write stops recording
+with a log line (`[replay] recording stopped: ...`, a `replay` ring event) and
+never blocks the game; the queue never grows. Frame cost (mostly the hashes) is
+printed at exit: about 65-75 us per frame, about 0.4% of a 60 Hz frame.
+
+**Not covered.** The Datach barcode scanner and run-ahead have no window
+route; a single frame whose cheats change more than 256 KiB of event text
+checkpoints instead of logging. View modes that change the simulation are
+recorded as a policy digest only: the headless host plays the game's default
+view, so a replay of such a segment may diverge, which the hashes will show.
+`tools/cyc/test_cyc_replay.py` (CTest `cyc_replay`; `cyc_replay_mods` for the Mods switch,
+with the mods-built `cyc_window_mods`) is the acceptance test.

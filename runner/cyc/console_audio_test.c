@@ -255,12 +255,64 @@ static void test_machine_unchanged(void)
     CHECK(!memcmp(hash[0], hash[1], sizeof(hash[0])));
 }
 
+static void apu_write_reg(uint16_t addr, uint8_t value)
+{
+    hw_cycle_start(addr, HW_WRITE);
+    hw_write(addr, value);
+    hw_cycle_finish(false);
+}
+
+static double frame_rms(void)
+{
+    cyc_run_frame();
+    static int16_t pcm[4096];
+    size_t n, total = 0;
+    double sum = 0;
+    while ((n = cyc_audio_read(pcm, 4096)) > 0)
+        for (size_t i = 0; i < n; i++, total++) sum += (double)pcm[i] * pcm[i];
+    return total ? sqrt(sum / (double)total) : 0;
+}
+
+static void test_channel_mute(void)
+{
+    /* The audio-only channel mute (apu_set_audio_mute): a triangle tone goes silent in the stream while muted and
+     * comes back when released, and the machine's hashes are the same as in a run that never muted. */
+    make_cart(0);
+    uint64_t hash[2][12];
+    double rms_on = 0, rms_muted = 0, rms_back = 0;
+    for (int run = 0; run < 2; run++) {
+        CHECK(cyc_load_ines(cart, sizeof(cart)));
+        cyc_set_console(CYC_CONSOLE_NES);
+        cyc_power_on(0);
+        cyc_run_power_on();
+        CHECK(cyc_audio_enable(RATE));
+        apu_write_reg(0x4015, 0x04);
+        apu_write_reg(0x4008, 0xFF);
+        apu_write_reg(0x400A, 0x40);
+        apu_write_reg(0x400B, 0xF8);
+        for (int f = 0; f < 12; f++) {
+            if (run == 0) apu_set_audio_mute(f >= 4 && f < 8 ? 0x04 : 0);
+            double r = frame_rms();
+            if (run == 0 && f == 3) rms_on = r;
+            if (run == 0 && f == 7) rms_muted = r;
+            if (run == 0 && f == 11) rms_back = r;
+            hash[run][f] = cyc_mem_state_hash() ^ (cyc_hw_state_hash() * 31);
+        }
+    }
+    apu_set_audio_mute(0);
+    CHECK(rms_on > 100.0);
+    CHECK(rms_muted < rms_on * 0.02);
+    CHECK(rms_back > rms_on * 0.5);
+    CHECK(!memcmp(hash[0], hash[1], sizeof(hash[0])));
+}
+
 int main(int argc, char **argv)
 {
     test_defaults(argc > 1 ? argv[1] : NULL);
     test_response();
     test_step();
     test_machine_unchanged();
+    test_channel_mute();
     printf("cyc_console_audio_test: %u checks passed\n", checks);
     return 0;
 }

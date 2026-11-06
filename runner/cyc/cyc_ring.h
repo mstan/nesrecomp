@@ -135,6 +135,12 @@ typedef enum {
     CYC_EV_MOD_FAIL,
     CYC_EV_STATE,
     CYC_EV_VIDEO,
+    /* A QA route's scheduled RAM write changed a byte (cyc_cheat.h): addr =
+     * the address, value = CycCheatMode << 16 | old << 8 | new. */
+    CYC_EV_CHEAT,
+    /* The diagnostic replay recorder (cyc_replay.h): addr = CYC_REPLAY_EV_*,
+     * value = the segment number (or the evicted one), length = the frame. */
+    CYC_EV_REPLAY,
     CYC_EV_KINDS
 } CycRingKind;
 

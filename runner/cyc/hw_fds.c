@@ -261,19 +261,26 @@ bool fds_drive_insert(unsigned side, unsigned source)
     return true;
 }
 
+/* The diagnostic replay (cyc_replay.h) records the drive changes a host made. */
+void (*cyc_fds_change_hook)(char action, unsigned side);
+
 /* A host's eject or insert also takes the drive back from the HLE tier. */
 bool cyc_fds_eject(void)
 {
     if (media.side < 0) return false;
     fds_hle_host_disk_change();
-    return fds_drive_eject(CYC_FDS_SIDE_HOST);
+    bool ok = fds_drive_eject(CYC_FDS_SIDE_HOST);
+    if (ok && cyc_fds_change_hook) cyc_fds_change_hook('E', 0);
+    return ok;
 }
 
 bool cyc_fds_insert(unsigned side)
 {
     if (media.side >= 0 || side >= media.count) return false;
     fds_hle_host_disk_change();
-    return fds_drive_insert(side, CYC_FDS_SIDE_HOST);
+    bool ok = fds_drive_insert(side, CYC_FDS_SIDE_HOST);
+    if (ok && cyc_fds_change_hook) cyc_fds_change_hook('I', side);
+    return ok;
 }
 
 /* ------------------------------------------------------------------------- */

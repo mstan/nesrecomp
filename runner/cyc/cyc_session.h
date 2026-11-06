@@ -18,6 +18,7 @@
 #pragma once
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 
 #include "cyc_host_extras.h"
@@ -32,6 +33,10 @@ const CycHostExtras *cyc_session_extras(void);
  * *i) and return true; *bad when its value is missing. */
 bool cyc_session_take_option(int argc, char **argv, int *i, bool *bad);
 void cyc_session_print_options(FILE *f);
+/* The game's options this run took, as "OPTION --name [value]" lines (the
+ * diagnostic replay records them so playback runs the same game). */
+size_t cyc_session_taken_options(char *out, size_t cap);
+extern uint32_t cyc_session_mods_revision;
 
 /* The mod catalog (root NULL: none this run). False only for a catalog that
  * cannot be read. */

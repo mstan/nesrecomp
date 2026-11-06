@@ -48,6 +48,17 @@ static void background(void) {
     CHECK(cyc_state_save(&again,&m,err,sizeof err));CHECK(n==m && !memcmp(state,again,n));free(again);
     for(int i=0;i<3;i++)cyc_run_frame();
     CHECK(cyc_state_load(state,n,err,sizeof err));CHECK(cyc_render_background(captured));CHECK(!memcmp(captured,cyc_frame_argb(),sizeof captured));
+    /* presentation only: a state saved with the capture on loads with it off (record ignored), and one saved
+     * without it loads with it on (no record: the background is reported unavailable until a frame completes) */
+    cyc_render_capture_background(false);
+    CHECK(cyc_state_load(state,n,err,sizeof err));CHECK(!cyc_render_background(captured));
+    uint8_t *plain=NULL;size_t pn=0;CHECK(cyc_state_save(&plain,&pn,err,sizeof err));
+    cyc_render_capture_background(true);
+    CHECK(!cyc_render_background(captured));                    /* just enabled: not whole yet */
+    CHECK(cyc_state_load(plain,pn,err,sizeof err));CHECK(!cyc_render_background(captured));
+    cyc_run_frame();CHECK(cyc_render_background(captured));CHECK(!memcmp(captured,cyc_frame_argb(),sizeof captured));
+    CHECK(cyc_state_load(state,n,err,sizeof err));CHECK(cyc_render_background(captured));   /* a whole record: at once */
+    free(plain);
     free(state);cyc_render_capture_background(false);CHECK(!cyc_render_background(captured));
 }
 int main(void) {

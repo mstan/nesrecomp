@@ -105,7 +105,30 @@ mods/
         manifest.toml
 ```
 
-Built-in features should default to disabled.
+Built-in features should default to disabled. The one deliberate exception is
+the framework's own **Replay capture** (below), which is on by default.
+
+### Replay capture (framework package, default on)
+
+Every cycle title built with `MODS` is given the package
+`nesrecomp.developer.replay` automatically: `nesrecomp_add_cycle_game` writes
+its manifest beside the executable (`mods/packages/nesrecomp.developer.replay/1.0.0`),
+targeting that game's `GAME_ID` and image CRC32, and the trusted plugin it names
+(`nesrecomp.replay-capture`) is linked from the shared host. A game provides
+nothing. Its feature `replay-capture` ("Replay capture", group **Developer**)
+controls the always-on diagnostic replay recorder (`runner/cyc/cyc_replay.h`)
+and is `default_enabled = true`, because a bug report is only useful if the
+recording already exists when something goes wrong. Players switch it off in
+Mods (launcher or the running game's menu); it takes effect at once: the
+current segment is closed whole and nothing more is written until it is
+switched on again (a new segment with a fresh checkpoint). It changes no
+simulation state, hash, save-state or netplay compatibility identity.
+
+Precedence: `NESRECOMP_REPLAY_RECORD=0` always forces recording off. Otherwise
+a catalog that carries the feature decides (the selection committed at PLAY
+or applied in game); a catalog without the package, and programs built without
+`MODS`, record. Online play commits no mods and pauses recording either way.
+Do not copy this exception: other built-in features stay default-off.
 
 A `[[feature]]` may set `experimental = true` to show recomp-ui's standard
 Experimental badge in the Mods menu. This metadata does not enable the feature

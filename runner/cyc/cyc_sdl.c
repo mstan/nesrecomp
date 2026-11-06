@@ -58,8 +58,10 @@
 #include "cyc_hooks.h"
 #include "cyc_input.h"
 #include "cyc_mod.h"
+#include "cyc_cheat.h"
 #include "cyc_overlay.h"
 #include "cyc_png.h"
+#include "cyc_replay.h"
 #include "cyc_recomp.h"
 #include "cyc_render.h"
 #include "cyc_run.h"
@@ -83,6 +85,7 @@
 #include "cyc_ui.h"
 #include "cyc_state_ui.h"
 #include "recomp_runtime_ui.h"
+#include "recomp_launcher.h"
 #endif
 
 #include <stdio.h>
@@ -877,6 +880,53 @@ static void tcp_read_ram(int id, const char *line)
     free(hex);
 }
 
+/* QA cheats (cyc_cheat.h): {"cmd":"cheat","text":"HOLD 06C0 1C"} applies one
+ * command now; {"cmd":"write_ram","addr":N,"val":N} is a one-byte poke. */
+static bool cheats_refused_online(int id)
+{
+#ifdef NESRECOMP_NET
+    if (nes_netplay_active()) { cyc_tcp_err(id, "cheats are unavailable during online play"); return true; }
+#else
+    (void)id;
+#endif
+    return false;
+}
+
+static void tcp_cheat_reply(int id)
+{
+    char list[1024], q[1100], fl[1200];
+    cyc_cheat_describe(list, sizeof list);
+    cyc_tcp_quote(list, q, sizeof q);
+    snprintf(fl, sizeof fl, "\"holds\":%u,\"active\":%s", cyc_cheat_hold_count(), q);
+    cyc_tcp_ok(id, fl);
+}
+
+static void tcp_cheat(int id, const char *line)
+{
+    if (cheats_refused_online(id)) return;
+    char text[128] = "";
+    if (cyc_tcp_str(line, "text", text, sizeof text)) {
+        CycCheat cheat;
+        char err[96];
+        if (!cyc_cheat_parse(text, &cheat, err, sizeof err)) { cyc_tcp_err(id, err); return; }
+        cyc_cheat_apply_now(&cheat);
+    }
+    tcp_cheat_reply(id);
+}
+
+static void tcp_write_ram(int id, const char *line)
+{
+    if (cheats_refused_online(id)) return;
+    long addr = -1, val = -1;
+    cyc_tcp_long(line, "addr", &addr);
+    cyc_tcp_long(line, "val", &val);
+    bool ram = (addr >= 0 && addr < 0x2000) || (addr >= 0x6000 && addr < 0xE000);
+    if (!ram || val < 0 || val > 255) { cyc_tcp_err(id, "write_ram: addr ($0000-$1FFF, $6000-$DFFF), val 0..255"); return; }
+    CycCheat poke = { CYC_CHEAT_POKE, (uint16_t)addr, (uint16_t)addr, (uint8_t)val };
+    cyc_cheat_apply_now(&poke);
+    tcp_cheat_reply(id);
+}
+
 static void tcp_ring(int id, const char *line)
 {
     char path[1024];
@@ -957,6 +1007,32 @@ static void tcp_mod_stats(int id, const char *line)
              (unsigned long long)rs.composed, (unsigned long long)rs.pillarboxed, (unsigned long long)rs.native);
     cyc_tcp_ok(id, f);
 }
+
+#ifdef CYC_WITH_RECOMP_UI
+/* QA: one Mods feature on/off exactly as the runtime menu's row does it: the
+ * provider's feature_enable, a commit for the running image (which persists
+ * it), then the plugins activate again (state_mods_changed). */
+static void tcp_mod_feature(int id, const char *line)
+{
+    const RecompLauncherCModProvider *p = (const RecompLauncherCModProvider *)cyc_session_mods_provider();
+    char package[RECOMP_LAUNCHER_MOD_ID_MAX], feature[RECOMP_LAUNCHER_MOD_ID_MAX];
+    bool enabled = false;
+    if (!p || !p->feature_enable || !p->commit) { cyc_tcp_err(id, "mod_feature: this program has no mod catalog"); return; }
+    if (!cyc_tcp_str(line, "package", package, sizeof(package)) || !cyc_tcp_str(line, "feature", feature, sizeof(feature)) ||
+        !cyc_tcp_bool(line, "enabled", &enabled)) {
+        cyc_tcp_err(id, "mod_feature: package, feature, enabled (true|false)");
+        return;
+    }
+    int ok = p->feature_enable(p->ctx, package, feature, enabled ? 1 : 0) && p->commit(p->ctx, s_image);
+    if (!ok) {
+        const char *why = p->last_error ? p->last_error(p->ctx) : NULL;
+        cyc_tcp_err(id, why && *why ? why : "mod_feature: not applied");
+        return;
+    }
+    state_mods_changed();
+    cyc_tcp_ok(id, NULL);
+}
+#endif
 
 static void tcp_quit(int id, const char *line)
 {
@@ -1070,12 +1146,17 @@ static void tcp_setup(void)
     cyc_tcp_register("hle", "an HLE axis as the menu sets it: axis, value on|off|default", tcp_hle);
     cyc_tcp_register("screenshot", "layer picture (the game) | ui (what the window presents), path", tcp_screenshot);
     cyc_tcp_register("read_ram", "CPU address space bytes: addr, len", tcp_read_ram);
+    cyc_tcp_register("write_ram", "QA poke one RAM byte: addr, val", tcp_write_ram);
+    cyc_tcp_register("cheat", "QA cheat: text \"POKE|HOLD|HOLD_MAX|HOLD_MIN addr[-last] byte [IF addr op byte]\" or \"UNHOLD addr|ALL\"; no text lists holds", tcp_cheat);
     cyc_tcp_register("ring_dump", "the always-on event ring to a file: path, first, last", tcp_ring);
     cyc_tcp_register("save_state", "write a save state (cyc_state.h): path", tcp_save_state);
     cyc_tcp_register("load_state", "load a save state: path", tcp_load_state);
     cyc_tcp_register("video", "the presented width: mode stock|16:9|21:9|32:9|fit (optional)", tcp_video);
     cyc_tcp_register("window_size", "resize the window (Fit follows its drawable): w, h", tcp_window_size);
     cyc_tcp_register("mod_stats", "hook sites, isolated calls, compositor counts", tcp_mod_stats);
+#ifdef CYC_WITH_RECOMP_UI
+    cyc_tcp_register("mod_feature", "a Mods feature on/off as the menu does: package, feature, enabled", tcp_mod_feature);
+#endif
     cyc_tcp_register("quit", "close the window (the disk save is written first)", tcp_quit);
     if (s_extras && s_extras->tcp_setup) s_extras->tcp_setup(s_extras->ctx);
     if (cyc_tcp_start(port)) printf("[cyc tcp] listening on 127.0.0.1:%d\n", port);
@@ -1469,6 +1550,8 @@ int cyc_sdl_main(const char *title_in, int scale)
     if (s_vpad_path && vpad_load(s_vpad_path)) vpad_attach();
     tcp_setup();
     open_pads();
+    cyc_replay_set_config_path(s_set_path);
+    cyc_replay_init(title);
 
     char disk_hint[64];
     const double frame_seconds = cyc_host_frame_seconds();
@@ -1633,12 +1716,14 @@ int cyc_sdl_main(const char *title_in, int scale)
                 else hold_input = false;
             }
             uint8_t buttons[2] = {pad0, pad1};
+            const uint8_t phys[2] = {pad0, pad1};
 #ifdef NESRECOMP_NET
             if(online) {
                 int player=nes_netplay_input_player();if(player<0||player>=CYC_INPUT_PLAYERS)player=0;
                 int admit=cyc_net_admit(open||inactive||hold_input?0:st.buttons[player]);
                 if(!admit){SDL_Delay(1);continue;}
                 s_frames_done=(long)cyc_ring_frame;replay=cyc_net_replaying();cyc_net_input(buttons);
+                cyc_replay_suspend("online play");
             } else
 #endif
             {
@@ -1648,10 +1733,19 @@ int cyc_sdl_main(const char *title_in, int scale)
             cyc_set_controller(0, buttons[0]);
             cyc_set_controller(1, buttons[1]);
             zapper_mouse_frame();
+            cyc_cheat_frame(s_frames_done);
+            {
+                /* diagnostic replay: the inputs the machine is about to consume */
+                uint8_t logical[4] = {0, 0, 0, 0};
+                for (int p = 0; p < CYC_INPUT_PLAYERS && p < 4; ++p) logical[p] = st.buttons[p];
+                cyc_replay_set_policy(s_extras && s_extras->get_view_mode ? (uint32_t)s_extras->get_view_mode(s_extras->ctx) : 0);
+                cyc_replay_frame_begin(phys, logical, buttons);
+            }
             }
             cyc_session_frame_begin();
             cyc_run_frame();
             cyc_session_frame_end();
+            cyc_replay_frame_end();
 #ifdef NESRECOMP_NET
             if(online)cyc_net_finish();
 #endif
@@ -1756,6 +1850,7 @@ int cyc_sdl_main(const char *title_in, int scale)
     cyc_diagnostics_note("game loop ended; releasing SDL resources");
     save_settings();
     cyc_tcp_stop();
+    cyc_replay_shutdown();
 #ifdef CYC_WITH_RECOMP_UI
     if (s_have_menu) cyc_ui_shutdown();
 #endif
