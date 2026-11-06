@@ -55,6 +55,8 @@ int nes_mod_runtime_commit_c(const char* rom_path);
 int nes_mod_runtime_commit_netplay_c(const char* rom_path);
 /* 1 when a feature is enabled in the player's offline SELECTION. */
 int nes_mod_feature_selected(const char* package_id, const char* feature_id);
+/* 1 when the catalog carries this feature (installed and loaded), enabled or not. */
+int nes_mod_feature_present(const char* package_id, const char* feature_id);
 void nes_mod_runtime_activate_plugins_c(void);
 const struct RecompLauncherCModProvider*
 nes_mod_runtime_launcher_provider_c(void);

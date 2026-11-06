@@ -43,6 +43,20 @@
  * Retention: CYC_REPLAY_SEGMENTS segments (one hour at 600 frames) and a
  * CYC_REPLAY_HISTORY_BYTES budget for checkpoints, oldest evicted first.
  *
+ * Control. Titles built with mods (nesrecomp_add_cycle_game MODS) get the
+ * framework package CYC_REPLAY_MOD_PACKAGE, staged beside the executable, whose
+ * feature "Replay capture" (group Developer) is ON by default and can be turned
+ * off in Mods (launcher or the running game's menu). This is the deliberate
+ * exception to docs/MOD_PACKAGES.md "built-in features default to disabled".
+ * Turning it off ends the current segment cleanly (the queue drains, the file
+ * closes) and writes nothing more; turning it back on opens a new segment with
+ * a fresh checkpoint. Precedence: NESRECOMP_REPLAY_RECORD=0 always wins and
+ * cannot be re-enabled from Mods; otherwise a catalog that carries the feature
+ * decides (the selection is the one committed at PLAY or applied in game); a
+ * catalog without it, or a program built without mods, records. Online play
+ * commits no mods and pauses recording either way. None of this touches the
+ * simulation, its hashes or any save/netplay compatibility identity.
+ *
  * Environment: NESRECOMP_REPLAY_RECORD=0 turns recording off;
  * NESRECOMP_REPLAY_DIR names the destination (default <exe dir>/diagnostics, or
  * NESRECOMP_DIAGNOSTICS_DIR); NESRECOMP_REPLAY_HISTORY_MIB (2..256) shrinks the
@@ -74,9 +88,18 @@ enum {
     CYC_REPLAY_EV_EVICT   = 5,   /* the oldest segment was removed (value = its number) */
 };
 
+/* Mods ids of the framework package (project.cmake writes its manifest). */
+#define CYC_REPLAY_MOD_PACKAGE "nesrecomp.developer.replay"
+#define CYC_REPLAY_MOD_FEATURE "replay-capture"
+#define CYC_REPLAY_MOD_PLUGIN  "nesrecomp.replay-capture"
+/* The mod plan was committed or re-applied (cyc_session.h): re-read whether the
+ * feature is on. Recording starts, stops or resumes at the next frame. */
+void cyc_replay_mods_applied(void);
+
 /* The window, before its loop (after power-on and the session start). title
- * names the files. False when recording is off or cannot start; the reason
- * is logged and the game runs on. */
+ * names the files. False when recording is off (environment, or Mods: it then
+ * starts when the feature is enabled) or cannot start; the reason is logged and
+ * the game runs on. */
 /* The configuration file the window uses (copied beside each segment); before cyc_replay_init. */
 void cyc_replay_set_config_path(const char *path);
 bool cyc_replay_init(const char *title);

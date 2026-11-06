@@ -7,6 +7,7 @@
 #include "cyc_hooks.h"
 #include "cyc_mod.h"
 #include "cyc_render.h"
+#include "cyc_replay.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -144,6 +145,7 @@ bool cyc_session_mods_start(const char *image_path, char *err, size_t err_len)
         return false;
     }
     nes_mod_runtime_activate_plugins_c();
+    cyc_replay_mods_applied();
     ++cyc_session_mods_revision;
     return true;
 #else
@@ -159,6 +161,7 @@ void cyc_session_mods_reapply(void)
     cyc_diagnostics_sync();
 #if NESRECOMP_ENABLE_MODS
     if (s_mods) nes_mod_runtime_activate_plugins_c();
+    cyc_replay_mods_applied();
 #endif
     ++cyc_session_mods_revision;
 }

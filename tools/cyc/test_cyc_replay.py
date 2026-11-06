@@ -26,6 +26,15 @@ driven over its TCP server; every file goes under --out (never %TEMP%).
   off       NESRECOMP_REPLAY_RECORD=0 writes nothing.
   cap       a tiny NESRECOMP_REPLAY_HISTORY_MIB evicts the oldest segments, keeps the
             newest within the budget, and the survivors still replay.
+  mods      (--window-mods: the same window built with mods, as a title is) the framework
+            package "Replay capture" is staged, on by default, and records; turned off
+            at run time through the Mods path (TCP mod_feature: feature_enable, commit,
+            re-activation) the current segment ends whole and nothing more is written
+            (even across rollovers); turned on again it opens a new segment and every
+            segment still replays exactly; the selection persists in mods/state.toml
+            (a later launch with it off creates no file and no folder; enabling it then
+            starts a first segment); NESRECOMP_REPLAY_RECORD=0 wins over an enabled
+            feature; a catalog without the package records.
 
 python tools/cyc/test_cyc_replay.py --window build/cyc_window.exe --out build/replay_test
 """
@@ -44,6 +53,8 @@ import time
 HERE = Path(__file__).resolve().parent
 NO_WINDOW = getattr(subprocess, 'CREATE_NO_WINDOW', 0)
 SEGMENT_FRAMES = 40
+BELOW_NORMAL = getattr(subprocess, 'BELOW_NORMAL_PRIORITY_CLASS', 0)   # other sessions share this machine
+MOD_PACKAGE, MOD_FEATURE = 'nesrecomp.developer.replay', 'replay-capture'
 checks = 0
 OPEN = []
 
@@ -78,6 +89,10 @@ def free_port():
 
 
 def make_nes_rom(path, variant=0):
+    path.write_bytes(nes_rom_bytes(variant))
+
+
+def nes_rom_bytes(variant=0):
     """NROM: NMI every frame; reads both pads and folds them into RAM $00-$13."""
     code = bytearray()
 
@@ -101,7 +116,7 @@ def make_nes_rom(path, variant=0):
     for off, addr in ((0x3FFA, nmi), (0x3FFC, 0xC000), (0x3FFE, 0xC000)):
         prg[off], prg[off + 1] = addr & 255, addr >> 8
     chr_rom = bytes((i * 7 + 3) & 255 for i in range(8192))
-    path.write_bytes(b'NES\x1a' + bytes([1, 1, 0, 0]) + bytes(8) + bytes(prg) + chr_rom)
+    return b'NES\x1a' + bytes([1, 1, 0, 0]) + bytes(8) + bytes(prg) + chr_rom
 
 
 class Window:
@@ -122,7 +137,7 @@ class Window:
         self.log = open(self.out / 'stdout.log', 'w')
         self.proc = subprocess.Popen([str(exe), str(image), '--config', str(self.out / 'config.ini'), '--tcp', str(self.port),
                                       '--hidden', '--no-save', *args], cwd=self.out, env=env, stdout=self.log,
-                                     stderr=subprocess.STDOUT, creationflags=NO_WINDOW)
+                                     stderr=subprocess.STDOUT, creationflags=NO_WINDOW | BELOW_NORMAL)
         OPEN.append(self.proc)
         self.sock, self.buf, self.next_id = None, b'', 1
         deadline = time.time() + 30
@@ -439,12 +454,137 @@ def scenario_cap(exe, out):
     print(f'PASS cap: kept segments {segs[0].number}-{segs[-1].number} in {size} checkpoint bytes', flush=True)
 
 
+def mods_app(exe_mods, out, name, keep_package=True):
+    """A private copy of the mods-built window and its staged catalog (the catalog and the player's
+    selection, mods/state.toml, live beside the executable)."""
+    app = out / f'app-{name}'
+    if app.exists():
+        shutil.rmtree(app)
+    app.mkdir(parents=True)
+    for f in exe_mods.parent.iterdir():
+        if f.is_file() and (f == exe_mods or f.suffix.lower() in ('.dll', '.so', '.dylib')):
+            shutil.copy2(f, app / f.name)
+    shutil.copytree(exe_mods.parent / 'mods', app / 'mods', ignore=shutil.ignore_patterns('state.toml'))
+    if not keep_package:
+        shutil.rmtree(app / 'mods' / 'packages' / MOD_PACKAGE)
+    return app / exe_mods.name
+
+
+def mod_feature(w, on):
+    w.cmd('mod_feature', package=MOD_PACKAGE, feature=MOD_FEATURE, enabled=on)
+
+
+def snapshot(rec):
+    return {p.name: p.stat().st_size for p in sorted(rec.glob('*')) if p.is_file()} if rec.exists() else {}
+
+
+def settle(rec):
+    """The writer flushes every 100 ms: wait until nothing in the folder changes."""
+    last = None
+    for _ in range(100):
+        now = snapshot(rec)
+        if now == last:
+            return now
+        last = now
+        time.sleep(0.25)
+    check(False, 'the recording folder never settled')
+
+
+def scenario_mods(exe, exe_mods, out):
+    rom = out / 'test.nes'
+    app_exe = mods_app(exe_mods, out, 'a')
+    manifest = (app_exe.parent / 'mods' / 'packages' / MOD_PACKAGE / '1.0.0' / 'manifest.toml').read_text()
+    for needle in ('default_enabled = true', 'group = "Developer"', f'id = "{MOD_FEATURE}"',
+                   'id = "nesrecomp.replay-capture"', 'game_id = "cyc-replay-test"'):
+        check(needle in manifest, f'the staged package lacks {needle!r}')
+    state_file = app_exe.parent / 'mods' / 'state.toml'
+    check(not state_file.exists(), 'a fresh catalog has no player selection')
+
+    # 1. default on; a run-time off ends the segment whole; nothing more is written; on resumes
+    w = Window(app_exe, rom, out, 'mods-on')
+    w.wait_until_frame(SEGMENT_FRAMES + 15)
+    time.sleep(0.5)                              # the writer flushes every 100 ms
+    before_off = snapshot(w.rec)
+    check(any(n.endswith('.cycreplay') for n in before_off), 'Replay capture is on by default: segments are written')
+    first = [rd.Segment(p) for p in segments(w.rec)]
+    check(all(s.header.get('MODS') == '1' for s in first), 'the header says the run had mods')
+    mod_feature(w, False)
+    off_frame = w.frame()
+    w.wait_frames(2 * SEGMENT_FRAMES + 20)       # would be two more rollovers if it were recording
+    closed = settle(w.rec)
+    segs = [rd.Segment(p) for p in segments(w.rec)]
+    check(all(s.unfinished is None for s in segs), 'turning it off ends the segment on a finished frame')
+    check(max(s.last_frame for s in segs) <= off_frame + 2, f'frames after the toggle were recorded (off at {off_frame})')
+    n_off = len(segs)
+    w.wait_frames(SEGMENT_FRAMES + 20)
+    check(settle(w.rec) == closed, 'a disabled recorder writes nothing')
+    mod_feature(w, True)
+    on_frame = w.frame()
+    w.wait_frames(SEGMENT_FRAMES + 20)
+    time.sleep(0.5)
+    segs = [rd.Segment(p) for p in segments(w.rec)]
+    check(len(segs) > n_off, 'enabling it again opens a new segment')
+    resumed = segs[n_off]
+    check(resumed.header['WHY'] == 'recording resumed' and resumed.first_frame >= on_frame - 3, f'resume segment: {resumed.header}')
+    check(resumed.state_path.is_file(), 'the new segment has its checkpoint')
+    mod_feature(w, False)                        # leave the player's selection OFF for the next launch
+    w.wait_frames(5)
+    check(w.quit() == 0, 'window exit status')
+    parsed = [rd.Segment(p) for p in segments(w.rec)]
+    check(all(s.unfinished is None for s in parsed), 'a normal quit leaves every frame finished')
+    text = run_tool([w.rec, '--exe', app_exe, '--rom', rom, '--work-dir', out / 'mods-on-play'], out, 0)
+    check(text.count('OK ') == len(parsed), f'every segment (before and after the gap) replays exactly:\n{text}')
+    check('replay-capture' in state_file.read_text(), 'the selection persisted in mods/state.toml')
+
+    # 2. the persisted OFF selection: no folder, no file; enabling it in game starts the first segment
+    w = Window(app_exe, rom, out, 'mods-persisted-off')
+    w.wait_until_frame(2 * SEGMENT_FRAMES + 10)
+    check(not w.rec.exists() or not any(w.rec.iterdir()), 'a selection that is off creates no replay folder or file')
+    mod_feature(w, True)
+    w.wait_frames(SEGMENT_FRAMES + 20)
+    time.sleep(0.5)
+    segs = [rd.Segment(p) for p in segments(w.rec)]
+    check(segs and segs[0].header['WHY'] == 'start' and segs[0].number == 1,
+          f'a first segment starts when enabled: {[s.header["WHY"] for s in segs]}')
+    check(w.quit() == 0, 'window exit status')
+    text = run_tool([w.rec, '--exe', app_exe, '--rom', rom, '--work-dir', out / 'mods-persisted-off-play'], out, 0)
+    check(text.count('OK ') == len(segments(w.rec)), text)
+
+    # 3. the environment opt-out wins over an enabled feature (and Mods cannot re-enable it)
+    w = Window(app_exe, rom, out, 'mods-env-off', env_extra={'NESRECOMP_REPLAY_RECORD': '0'})
+    w.wait_until_frame(30)
+    mod_feature(w, False)
+    mod_feature(w, True)
+    w.wait_frames(SEGMENT_FRAMES + 10)
+    check(not w.rec.exists() or not any(w.rec.iterdir()), 'NESRECOMP_REPLAY_RECORD=0 records nothing whatever Mods say')
+    check(w.quit() == 0, 'window exit status')
+
+    # 4. a catalog without the package (removed by hand) keeps the build default: it records
+    app2 = mods_app(exe_mods, out, 'b', keep_package=False)
+    w = Window(app2, rom, out, 'mods-no-package')
+    w.wait_until_frame(SEGMENT_FRAMES + 10)
+    time.sleep(0.5)
+    check(snapshot(w.rec), 'without the package the build default (on) applies')
+    check(w.quit() == 0, 'window exit status')
+    print('PASS mods: default on, run-time off/on, persisted off, env opt-out, no package -> records', flush=True)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('--window', type=Path, required=True)
-    ap.add_argument('--out', type=Path, required=True)
+    ap.add_argument('--window', type=Path)
+    ap.add_argument('--window-mods', type=Path, help='the window built with mods (cyc_window_mods): the mods scenario')
+    ap.add_argument('--rom-crc32', action='store_true', help="print the synthetic program's mod target CRC32 and exit")
+    ap.add_argument('--out', type=Path)
     ap.add_argument('--only', default='')
     args = ap.parse_args()
+    if args.rom_crc32:
+        import zlib
+        print('%08x' % (zlib.crc32(nes_rom_bytes()[16:]) & 0xFFFFFFFF))
+        return
+    if not args.window:
+        ap.error('--window is required')
+    if not args.out:
+        ap.error('--out is required')
     exe = args.window.resolve()
     out = args.out.resolve()
     if out.exists():
@@ -453,8 +593,12 @@ def main():
     rom = out / 'test.nes'
     make_nes_rom(rom)
     for name, fn in (('nes', scenario_nes), ('fds', scenario_fds), ('zapper', scenario_zapper),
-                     ('overflow', scenario_overflow), ('off', scenario_off), ('cap', scenario_cap)):
+                     ('overflow', scenario_overflow), ('off', scenario_off), ('cap', scenario_cap),
+                     ('mods', lambda e, o: scenario_mods(e, args.window_mods.resolve(), o))):
         if args.only and name not in args.only.split(','):
+            continue
+        if name == 'mods' and not args.window_mods:
+            check(not args.only, '--only mods needs --window-mods')
             continue
         fn(exe, out)
     print(f'cyc_replay: {checks} checks passed')

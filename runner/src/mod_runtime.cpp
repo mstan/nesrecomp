@@ -2954,6 +2954,16 @@ extern "C" int nes_mod_feature_selected(const char* package_id,
     return feature && NESRecomp::feature_enabled(runtime, *package, *feature) ? 1 : 0;
 }
 
+extern "C" int nes_mod_feature_present(const char* package_id,
+                                       const char* feature_id) {
+    if (!package_id || !feature_id) return 0;
+    NESRecomp::Runtime& runtime = NESRecomp::state();
+    if (!runtime.initialized) return 0;
+    const NESRecomp::Package* package =
+        NESRecomp::selected_package(runtime, package_id);
+    return package && NESRecomp::find_feature(*package, feature_id) ? 1 : 0;
+}
+
 extern "C" const char* nes_mod_external_rom_path(
     const char* package_id, const char* feature_id, const char* resource_id) {
     if (!package_id || !feature_id || !resource_id) return nullptr;

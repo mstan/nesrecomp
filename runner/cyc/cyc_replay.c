@@ -18,6 +18,38 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* ---- the Mods feature "Replay capture" (cyc_replay.h, Mods control) ----
+ * Every program built with mods carries the framework package
+ * CYC_REPLAY_MOD_PACKAGE (staged beside the executable by project.cmake) whose
+ * feature is on by default. The trusted plugin below is what the committed plan
+ * activates: the reset callback runs first on every activation pass, so a plan
+ * without the feature leaves it off. cyc_replay_mods_applied() snapshots the
+ * result once per (re)activation; the frame loop only reads the snapshot. */
+#ifndef NESRECOMP_ENABLE_MODS
+#define NESRECOMP_ENABLE_MODS 0
+#endif
+#if NESRECOMP_ENABLE_MODS
+#include "../include/mod_runtime.h"
+#include "cyc_session.h"
+static volatile int s_plan_has_feature;   /* the committed plan activated the plugin */
+static void replay_plan_reset(void) { s_plan_has_feature = 0; }
+static void replay_plan_activate(void) { s_plan_has_feature = 1; }
+NES_MOD_CONSTRUCTOR(register_replay_capture)
+{
+    nes_mod_register_reset_callback(replay_plan_reset);
+    nes_mod_register_activation_plugin(CYC_REPLAY_MOD_PLUGIN, replay_plan_activate);
+}
+#endif
+/* False: the player's Mods selection (a catalog that carries the feature) turned recording off. */
+static volatile int s_mod_allows = 1;
+void cyc_replay_mods_applied(void)
+{
+#if NESRECOMP_ENABLE_MODS
+    s_mod_allows = !cyc_session_mods_enabled() ||
+                   !nes_mod_feature_present(CYC_REPLAY_MOD_PACKAGE, CYC_REPLAY_MOD_FEATURE) || s_plan_has_feature;
+#endif
+}
+
 #ifndef CYC_WITH_SDL
 
 void cyc_replay_set_config_path(const char *path) { (void)path; }
@@ -288,7 +320,7 @@ static const char *const WHY_NAME[] = { "", "start", "segment length", "frames s
 #define EV_CAP (256u * 1024u)
 
 static struct {
-    bool enabled, failed, started, suspended;
+    bool enabled, failed, started, suspended, mod_paused;   /* enabled: armed (not forced off by the environment) */
     Writer *writer;
     char stem[1300], dir[1100], title[64], path[1400];
     unsigned segment, oldest, rows;
@@ -312,7 +344,7 @@ static struct {
     uint64_t frames, opens;
 } S;
 
-bool cyc_replay_active(void) { return S.recording && !S.failed && !S.suspended; }
+bool cyc_replay_active(void) { return S.recording && !S.failed && !S.suspended && !S.mod_paused; }
 const char *cyc_replay_path(void) { return S.recording ? S.path : ""; }
 void cyc_replay_set_policy(uint32_t digest) { S.policy = digest; }
 
@@ -450,6 +482,8 @@ static void abspath(char *p, size_t n)
 static char s_config_path[1100];
 void cyc_replay_set_config_path(const char *path) { snprintf(s_config_path, sizeof(s_config_path), "%s", path ? path : ""); }
 
+static bool start_recorder(void);
+
 bool cyc_replay_init(const char *title)
 {
     const char *off = getenv("NESRECOMP_REPLAY_RECORD");
@@ -477,9 +511,24 @@ bool cyc_replay_init(const char *title)
         S.title[t++] = ((*c >= '0' && *c <= '9') || (*c >= 'A' && *c <= 'Z') || (*c >= 'a' && *c <= 'z')) ? *c : '-';
     S.title[t] = 0;
     if (!t) strcpy(S.title, "game");
+    S.enabled = true;
+    if (!s_mod_allows) {
+        /* Mods: Replay capture is off. Nothing is created (no folder, thread or file)
+         * until the feature is turned on. */
+        S.mod_paused = true;
+        cyc_diagnostics_note("[replay] recording off (Mods: Replay capture is disabled; enable it in Mods to record)");
+        return false;
+    }
+    return start_recorder();
+}
+
+/* The folder, the writer thread and the session stem: once, when recording first starts. */
+static bool start_recorder(void)
+{
     if (!choose_directory(S.dir, sizeof(S.dir))) {
         fprintf(stderr, "[replay] no writable diagnostics folder; replay recording is off\n");
         cyc_diagnostics_error("[replay] no writable diagnostics folder; replay recording is off\n");
+        S.enabled = false;
         return false;
     }
     abspath(S.dir, sizeof(S.dir));
@@ -490,11 +539,10 @@ bool cyc_replay_init(const char *title)
     snprintf(S.stem, sizeof(S.stem), "%s/%s-replay-%s-%ld", S.dir, S.title, stamp, replay_pid());
     S.ev = (char *)malloc(EV_CAP);
     Writer *w = (Writer *)calloc(1, sizeof(Writer));
-    if (!S.ev || !w) { free(S.ev); free(w); S.ev = NULL; return false; }
+    if (!S.ev || !w) { free(S.ev); free(w); S.ev = NULL; S.enabled = false; return false; }
     w->thread = SDL_CreateThread(w_worker, "cyc-replay-writer", w);
-    if (!w->thread) { free(S.ev); free(w); S.ev = NULL; return false; }
+    if (!w->thread) { free(S.ev); free(w); S.ev = NULL; S.enabled = false; return false; }
     S.writer = w;
-    S.enabled = true;
     S.oldest = 1;
     S.seen_loads = cyc_state_load_count;
     S.seen_hle = cyc_host_settings_revision;
@@ -662,14 +710,39 @@ void cyc_replay_suspend(const char *why)
     ring_event(CYC_REPLAY_EV_SUSPEND, S.segment, cyc_ring_frame);
 }
 
+/* Mods turned Replay capture off: close the segment (the queue drains in order,
+ * so every frame already recorded is whole), then record nothing until it is on again. */
+static void pause_for_mods(void)
+{
+    if (S.mod_paused) return;
+    S.mod_paused = true;
+    if (!S.started) return;
+    end_segment();
+    char msg[200];
+    snprintf(msg, sizeof(msg), "[replay] recording stopped (Mods: Replay capture disabled); segment %u closed", S.segment);
+    fprintf(stderr, "%s\n", msg);
+    cyc_diagnostics_note("%s", msg);
+    ring_event(CYC_REPLAY_EV_SUSPEND, S.segment, cyc_ring_frame);
+}
+
 static void frame_begin_impl(const uint8_t phys[2], const uint8_t logical[4], const uint8_t final_pads[2])
 {
     S.pending_hash = false;
     if (!S.enabled || S.failed) return;
+    if (!s_mod_allows) { pause_for_mods(); return; }
+    if (!S.started && !start_recorder()) return;
     if (!check_writer()) return;
     unsigned why = 0;
     uint32_t frame = cyc_ring_frame;
+    if (S.mod_paused) {
+        S.mod_paused = false;
+        why = S.segment ? WHY_RESUME : WHY_FIRST;     /* never recorded yet: the first segment is a start */
+        const char *what = S.segment ? "resumed" : "started";
+        fprintf(stderr, "[replay] recording %s (Mods: Replay capture enabled)\n", what);
+        cyc_diagnostics_note("[replay] recording %s (Mods: Replay capture enabled)", what);
+    }
     if (S.suspended) { S.suspended = false; why = WHY_RESUME; }
+    else if (why) { /* set above: Mods turned recording on */ }
     else if (!S.recording) why = WHY_FIRST;
     else if (S.rows >= S.segment_frames) why = WHY_CAP;
     else if (S.seen_loads != cyc_state_load_count) why = WHY_LOAD;
@@ -722,9 +795,10 @@ void cyc_replay_frame_end(void)
 {
     if (!S.enabled) return;
     uint64_t t = SDL_GetPerformanceCounter();
+    bool recorded = S.pending_hash;
     frame_end_impl();
     S.t_end += SDL_GetPerformanceCounter() - t;
-    ++S.frames;
+    if (recorded) ++S.frames;
 }
 
 void cyc_replay_shutdown(void)

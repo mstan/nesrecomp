@@ -85,6 +85,7 @@
 #include "cyc_ui.h"
 #include "cyc_state_ui.h"
 #include "recomp_runtime_ui.h"
+#include "recomp_launcher.h"
 #endif
 
 #include <stdio.h>
@@ -1007,6 +1008,32 @@ static void tcp_mod_stats(int id, const char *line)
     cyc_tcp_ok(id, f);
 }
 
+#ifdef CYC_WITH_RECOMP_UI
+/* QA: one Mods feature on/off exactly as the runtime menu's row does it: the
+ * provider's feature_enable, a commit for the running image (which persists
+ * it), then the plugins activate again (state_mods_changed). */
+static void tcp_mod_feature(int id, const char *line)
+{
+    const RecompLauncherCModProvider *p = (const RecompLauncherCModProvider *)cyc_session_mods_provider();
+    char package[RECOMP_LAUNCHER_MOD_ID_MAX], feature[RECOMP_LAUNCHER_MOD_ID_MAX];
+    bool enabled = false;
+    if (!p || !p->feature_enable || !p->commit) { cyc_tcp_err(id, "mod_feature: this program has no mod catalog"); return; }
+    if (!cyc_tcp_str(line, "package", package, sizeof(package)) || !cyc_tcp_str(line, "feature", feature, sizeof(feature)) ||
+        !cyc_tcp_bool(line, "enabled", &enabled)) {
+        cyc_tcp_err(id, "mod_feature: package, feature, enabled (true|false)");
+        return;
+    }
+    int ok = p->feature_enable(p->ctx, package, feature, enabled ? 1 : 0) && p->commit(p->ctx, s_image);
+    if (!ok) {
+        const char *why = p->last_error ? p->last_error(p->ctx) : NULL;
+        cyc_tcp_err(id, why && *why ? why : "mod_feature: not applied");
+        return;
+    }
+    state_mods_changed();
+    cyc_tcp_ok(id, NULL);
+}
+#endif
+
 static void tcp_quit(int id, const char *line)
 {
     (void)line;
@@ -1127,6 +1154,9 @@ static void tcp_setup(void)
     cyc_tcp_register("video", "the presented width: mode stock|16:9|21:9|32:9|fit (optional)", tcp_video);
     cyc_tcp_register("window_size", "resize the window (Fit follows its drawable): w, h", tcp_window_size);
     cyc_tcp_register("mod_stats", "hook sites, isolated calls, compositor counts", tcp_mod_stats);
+#ifdef CYC_WITH_RECOMP_UI
+    cyc_tcp_register("mod_feature", "a Mods feature on/off as the menu does: package, feature, enabled", tcp_mod_feature);
+#endif
     cyc_tcp_register("quit", "close the window (the disk save is written first)", tcp_quit);
     if (s_extras && s_extras->tcp_setup) s_extras->tcp_setup(s_extras->ctx);
     if (cyc_tcp_start(port)) printf("[cyc tcp] listening on 127.0.0.1:%d\n", port);

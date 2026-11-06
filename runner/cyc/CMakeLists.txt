@@ -217,6 +217,39 @@ if(SDL2_FOUND)
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_cyc_replay.py
                 --window $<TARGET_FILE:cyc_window> --out ${CMAKE_CURRENT_BINARY_DIR}/replay_test)
     set_tests_properties(cyc_replay PROPERTIES TIMEOUT 900)
+    if(NESRECOMP_RECOMP_UI)
+        # The same window built the way a title with mods is (MODS GAME_ID): the
+        # framework's "Replay capture" package is staged beside it and the replay
+        # recorder follows the Mods selection (cyc_replay.h Control). The test
+        # image is the synthetic program of test_cyc_replay.py; its payload CRC32
+        # is the mod target.
+        execute_process(COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_cyc_replay.py
+            --rom-crc32 OUTPUT_VARIABLE replay_mod_crc OUTPUT_STRIP_TRAILING_WHITESPACE RESULT_VARIABLE replay_mod_rc)
+        if(NOT replay_mod_rc EQUAL 0)
+            message(FATAL_ERROR "test_cyc_replay.py --rom-crc32 failed")
+        endif()
+        add_executable(cyc_window_mods ${NESRECOMP_CYC_SOURCES} cyc_native_none.c
+            ${CMAKE_CURRENT_SOURCE_DIR}/../src/mod_runtime.cpp ${CMAKE_CURRENT_SOURCE_DIR}/../src/crc32.c)
+        target_include_directories(cyc_window_mods PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS}
+            ${CMAKE_CURRENT_SOURCE_DIR}/../include)
+        target_link_libraries(cyc_window_mods PRIVATE ${NESRECOMP_CYC_LIBRARIES})
+        target_compile_features(cyc_window_mods PRIVATE cxx_std_17)
+        target_compile_definitions(cyc_window_mods PRIVATE NESRECOMP_ENABLE_MODS=1 "CYC_MOD_GAME_ID=\"cyc-replay-test\""
+            "CYC_MOD_ROM_CRC32=\"${replay_mod_crc}\"")
+        if(MSVC)
+            target_compile_definitions(cyc_window_mods PRIVATE _CRT_SECURE_NO_WARNINGS)
+        endif()
+        nesrecomp_cyc_enable_sdl(cyc_window_mods NO_DEV_UI)
+        set(RECOMP_UI_ENABLE_MODS ON)
+        nesrecomp_cyc_enable_recomp_ui(cyc_window_mods)
+        unset(RECOMP_UI_ENABLE_MODS)
+        nesrecomp_cyc_stage_replay_package(cyc_window_mods "cyc-replay-test" "${replay_mod_crc}")
+        add_test(NAME cyc_replay_mods
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_cyc_replay.py
+                    --window $<TARGET_FILE:cyc_window> --window-mods $<TARGET_FILE:cyc_window_mods>
+                    --only mods --out ${CMAKE_CURRENT_BINARY_DIR}/replay_mods_test)
+        set_tests_properties(cyc_replay_mods PROPERTIES TIMEOUT 900)
+    endif()
     add_test(NAME cyc_cart_saves
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_cyc_cart_saves.py
                 --exe $<TARGET_FILE:cyc_window> --out ${CMAKE_CURRENT_BINARY_DIR}/cart_saves)

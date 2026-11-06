@@ -1264,7 +1264,7 @@ the executable for port 4370): JSON over newline as in [debug protocol](../../do
 `read_ram`, `write_ram` / `cheat` (QA pokes and holds, below), `ring_dump`, `save_state` / `load_state` (path), `video` (the
 presented width and mode, optionally setting the mode), `window_size` (w, h:
 Fit follows the new drawable), `mod_stats` (hook sites, isolated calls,
-compositor counts), `quit`, and the game's own (`tcp_setup`). With `--hidden` and `SDL_VIDEODRIVER=dummy`
+compositor counts), `mod_feature` (package, feature, enabled: a Mods row as the menu applies it, with the recomp-ui menu), `quit`, and the game's own (`tcp_setup`). With `--hidden` and `SDL_VIDEODRIVER=dummy`
 nothing reaches a desktop; `tools/cyc/test_cyc_window.py` (CTest
 `cyc_window_run`) drives production and dev windows that way.
 
@@ -1504,6 +1504,17 @@ of the session. The files hold no ROM bytes. They do hold the machine's RAM and
 the game's save data. `NESRECOMP_REPLAY_RECORD=0` turns recording off;
 `NESRECOMP_REPLAY_DIR` picks the folder.
 
+**Mods switch (default on).** A title built with mods lists **Replay capture**
+(group Developer) in Mods, on by default and persisted in `mods/state.toml`.
+Off in the launcher: nothing is created (no folder, thread or file). Off in the
+running game's menu: the current segment closes whole and recording stops; on
+again opens a new segment (`WHY recording resumed`). The package is framework
+provided (`nesrecomp_cyc_stage_replay_package`, written by
+`nesrecomp_add_cycle_game ... MODS`; plugin `nesrecomp.replay-capture` in
+`cyc_replay.c`); games do nothing. `NESRECOMP_REPLAY_RECORD=0` wins over it. A
+catalog without the package, and a build without `MODS`, record. See
+[docs/MOD_PACKAGES.md](../../docs/MOD_PACKAGES.md#replay-capture-framework-package-default-on).
+
 **Developer.**
 
 ```
@@ -1556,4 +1567,5 @@ route; a single frame whose cheats change more than 256 KiB of event text
 checkpoints instead of logging. View modes that change the simulation are
 recorded as a policy digest only: the headless host plays the game's default
 view, so a replay of such a segment may diverge, which the hashes will show.
-`tools/cyc/test_cyc_replay.py` (CTest `cyc_replay`) is the acceptance test.
+`tools/cyc/test_cyc_replay.py` (CTest `cyc_replay`; `cyc_replay_mods` for the Mods switch,
+with the mods-built `cyc_window_mods`) is the acceptance test.
