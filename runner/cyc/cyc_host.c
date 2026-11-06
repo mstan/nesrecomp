@@ -324,6 +324,7 @@ typedef struct {
     long    frame;
     uint8_t port, buttons;
     uint8_t logical;      /* 1: sets the logical seat `port` (L<n>:), 2: returns it to following the pad */
+    uint32_t game_buttons; /* logical == 3: optional host actions X<n>:L+R */
 } InputStep;
 
 static InputStep *input_steps;
@@ -335,6 +336,8 @@ static uint8_t    input_held[4];
  * menu-release gate made them differ, as `L<n>:` lines. */
 static uint8_t    input_logical[4];
 static bool       input_logical_set[4];
+static uint32_t   input_game[4];
+static bool       input_game_set[4];
 static bool       replay_exact;   /* --replay-exact: the drive changes only as the input file says */
 
 #ifndef CYC_ORACLE
@@ -467,6 +470,20 @@ static uint8_t parse_buttons(const char *s) {
     return b;
 }
 
+static uint32_t parse_game_buttons(const char *s) {
+    uint32_t bits = 0;
+    while (*s) {
+        while (*s == '+' || *s == ' ' || *s == '\t') s++;
+        size_t n = 0;
+        while (s[n] && s[n] != '+' && s[n] != ' ' && s[n] != '\t' && s[n] != '\n' && s[n] != '\r') n++;
+        if (!n) break;
+        if (name_is(s, n, "L")) bits |= 1u;
+        if (name_is(s, n, "R")) bits |= 2u;
+        s += n;
+    }
+    return bits;
+}
+
 static int cheat_count;
 static bool load_input(const char *path) {
     FILE *f = fopen(path, "r");
@@ -513,7 +530,9 @@ static bool load_input(const char *path) {
             continue;
         }
         uint8_t port = 0, logical = 0;
-        if (p[0] >= '1' && p[0] <= '4' && p[1] == ':') port = (uint8_t)(p[0]-'1'), p += 2;
+        if ((p[0] == 'X' || p[0] == 'x') && p[1] >= '1' && p[1] <= '4' && p[2] == ':')
+            port = (uint8_t)(p[1]-'1'), p += 3, logical = 3;
+        else if (p[0] >= '1' && p[0] <= '4' && p[1] == ':') port = (uint8_t)(p[0]-'1'), p += 2;
         else if ((p[0] == 'L' || p[0] == 'l') && p[1] >= '1' && p[1] <= '4' && p[2] == ':') {
             port = (uint8_t)(p[1]-'1'), p += 3;
             logical = *p == '=' ? 2 : 1;
@@ -526,6 +545,7 @@ static bool load_input(const char *path) {
         input_steps[input_count].port = port;
         input_steps[input_count].buttons = (*p == '-' || logical == 2) ? 0 : parse_buttons(p);
         input_steps[input_count].logical = logical;
+        input_steps[input_count].game_buttons = logical == 3 ? parse_game_buttons(p) : 0;
         input_count++;
     }
     fclose(f);
@@ -537,7 +557,10 @@ static bool load_input(const char *path) {
 static void input_tick(long frame) {
     while (input_next < input_count && input_steps[input_next].frame <= frame) {
         const InputStep *st = &input_steps[input_next];
-        if (st->logical) {
+        if (st->logical == 3) {
+            input_game[st->port] = st->game_buttons;
+            input_game_set[st->port] = true;
+        } else if (st->logical) {
             input_logical_set[st->port] = st->logical == 1;
             input_logical[st->port] = st->buttons;
         } else {
@@ -550,6 +573,7 @@ static void input_tick(long frame) {
     uint8_t logical[4];
     for (int i = 0; i < 4; ++i) logical[i] = input_logical_set[i] ? input_logical[i] : input_held[i];
     cyc_session_logical_input(logical,4);
+    cyc_session_game_input(input_game,4);
     cyc_session_input(buttons);
 #endif
     cyc_set_controller(0, buttons[0]);
@@ -591,12 +615,18 @@ bool cyc_host_window_replay(long frame, uint8_t *buttons, size_t count)
 {
     if (!window_scripted_input) return false;
     while (input_next < input_count && input_steps[input_next].frame <= frame) {
-        if (!input_steps[input_next].logical) input_held[input_steps[input_next].port] = input_steps[input_next].buttons;
+        if (input_steps[input_next].logical == 3) {
+            input_game[input_steps[input_next].port] = input_steps[input_next].game_buttons;
+            input_game_set[input_steps[input_next].port] = true;
+        } else if (!input_steps[input_next].logical) input_held[input_steps[input_next].port] = input_steps[input_next].buttons;
         ++input_next;
     }
     memcpy(buttons, input_held, count < 4 ? count : 4);
     if (disk_event_count) disk_tick(frame);
     return true;
+}
+void cyc_host_window_game_input(uint32_t *buttons, size_t count) {
+    for (size_t p = 0; p < count && p < 4; p++) if (input_game_set[p]) buttons[p] = input_game[p];
 }
 /* ---- the FDS HLE tier: requests, capability facts, the plan ---- */
 static NesFdsHleRequest hle_req;

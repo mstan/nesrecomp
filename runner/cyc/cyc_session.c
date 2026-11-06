@@ -189,6 +189,13 @@ bool cyc_session_start(void)
 }
 
 uint8_t g_logical_input[4];
+uint32_t g_game_input[4];
+uint32_t nes_input_game_buttons(int seat) { return seat >= 1 && seat <= 4 ? g_game_input[seat-1] : 0; }
+void cyc_session_game_input(const uint32_t *buttons, unsigned seats) {
+    memset(g_game_input, 0, sizeof g_game_input);
+    if (seats > 4) seats = 4;
+    if (buttons) memcpy(g_game_input, buttons, seats * sizeof *buttons);
+}
 uint8_t nes_input_seat(int seat) {
     return seat >= 1 && seat <= 4 ? g_logical_input[seat-1] : 0;
 }

@@ -12,6 +12,7 @@
  * module compiles to hooks that do nothing.
  */
 #include "cyc_replay.h"
+#include "logical_input.h"
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -654,7 +655,7 @@ static bool open_segment_impl(unsigned why, uint32_t frame)
     size_t cap = sizeof(b->header), at = 0;
 #define H(...) do { int w_ = snprintf(h + at, cap - at, __VA_ARGS__); if (w_ > 0 && (size_t)w_ < cap - at) at += (size_t)w_; } while (0)
     const NesFdsHlePlan *plan = cyc_is_fds() ? cyc_host_hle_plan() : NULL;
-    H("CYCREPLAY 1\nSEGMENT %u\nSESSION %s\nFIRST_FRAME %u\nWHY %s\n", S.segment, S.stem, frame,
+    H("CYCREPLAY 2\nSEGMENT %u\nSESSION %s\nFIRST_FRAME %u\nWHY %s\n", S.segment, S.stem, frame,
       WHY_NAME[why < sizeof(WHY_NAME) / sizeof(WHY_NAME[0]) ? why : 0]);
     H("PROGRAM %s prg=%08X cart=%08X\n", cyc_native_program_name ? cyc_native_program_name : "", cyc_native_prg_hash,
       cyc_native_cart_hash);
@@ -760,6 +761,8 @@ static void frame_begin_impl(const uint8_t phys[2], const uint8_t logical[4], co
     S.ev_len = 0;
     zapper_line(buf, sizeof(buf), frame, S.rows == 0);
     size_t n = strlen(buf);
+    n += (size_t)snprintf(buf + n, sizeof(buf) - n, "E %u %08X %08X %08X %08X\n", frame,
+        (unsigned)g_game_input[0], (unsigned)g_game_input[1], (unsigned)g_game_input[2], (unsigned)g_game_input[3]);
     n += (size_t)snprintf(buf + n, sizeof(buf) - n, "I %u %02X %02X %02X %02X %02X %02X %02X %02X\n", frame, phys[0], phys[1],
                           logical[0], logical[1], logical[2], logical[3], final_pads[0], final_pads[1]);
     if (!line(buf, n)) { check_writer(); return; }

@@ -66,6 +66,7 @@ class Segment:
         self.header = {}
         self.options = []
         self.inputs = []        # (frame, [b0,b1,l0,l1,l2,l3,f0,f1])
+        self.game_inputs = {}   # frame -> host game-action bits for each logical seat
         self.pokes = []         # (frame, addr, value)
         self.drive = []         # (frame, 'E'|'I', side)
         self.zapper = []        # (frame, x, y, trigger)
@@ -82,8 +83,9 @@ class Segment:
         # the writer flushes whole lines but a killed process can leave a partial last one
         if lines:
             lines.pop()                      # the terminator after the last whole line, or a partial line
-        if not lines or lines[0] != 'CYCREPLAY 1':
-            raise CaptureError(f'{self.path.name}: not a CYCREPLAY 1 file')
+        if not lines or lines[0] not in ('CYCREPLAY 1', 'CYCREPLAY 2'):
+            raise CaptureError(f'{self.path.name}: not a supported CYCREPLAY file')
+        version = int(lines[0].split()[1])
         i = 1
         while i < len(lines) and lines[i] != 'BEGIN':
             key, _, value = lines[i].partition(' ')
@@ -113,10 +115,17 @@ class Segment:
                     self.drive.append((int(f[1]), f[2], int(f[3]) if len(f) == 4 else 0))
                 elif kind == 'Z' and len(f) == 5:
                     self.zapper.append((int(f[1]), int(f[2]), int(f[3]), int(f[4])))
+                elif kind == 'E' and len(f) == 6:
+                    frame = int(f[1])
+                    if frame in self.game_inputs:
+                        raise CaptureError(f'{self.path.name}: duplicate game input frame {frame}')
+                    self.game_inputs[frame] = [int(x, 16) for x in f[2:]]
                 elif kind == 'I' and len(f) == 10:
                     if open_frame is not None:
                         raise CaptureError(f'{self.path.name}: input for frame {f[1]} while frame {open_frame} is open')
                     frame = int(f[1])
+                    if version >= 2 and frame not in self.game_inputs:
+                        raise CaptureError(f'{self.path.name}: missing game input frame {frame}')
                     if frame != expect:
                         raise CaptureError(f'{self.path.name}: frame {frame} follows {expect - 1}')
                     self.inputs.append((frame, [int(x, 16) for x in f[2:]]))
@@ -187,8 +196,16 @@ def write_input_files(seg, until, work):
     names = ['', '2:', '3:', '4:']
     held = [0, 0, 0, 0]
     logical_set = [False, False]
+    game_held = [None] * 4
     lines = []
     for frame, v in seg.inputs[:until]:
+        for port, value in enumerate(seg.game_inputs.get(frame, [])):
+            if game_held[port] != value:
+                if value & ~3:
+                    raise CaptureError(f'{seg.path.name}: unsupported game input bits {value:08X}')
+                text = '+'.join(n for n, bit in [('L', 1), ('R', 2)] if value & bit) or '-'
+                lines.append(f'{frame} X{port + 1}:{text}')
+                game_held[port] = value
         b0, b1, l0, l1, l2, l3, _f0, _f1 = v
         for port, value in ((0, b0), (1, b1), (2, l2), (3, l3)):
             if held[port] != value:

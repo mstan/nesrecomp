@@ -78,6 +78,7 @@ int cyc_net_admit(uint8_t local) {
     return a;
 }
 void cyc_net_input(uint8_t buttons[2]) {
+    cyc_session_game_input(NULL,0); /* unsynchronized host actions never reach simulation */
     cyc_session_logical_input(s_rows,4);buttons[0]=s_rows[0];buttons[1]=s_rows[1];cyc_session_input(buttons);
     cyc_set_controller(0,buttons[0]);cyc_set_controller(1,buttons[1]);
 }

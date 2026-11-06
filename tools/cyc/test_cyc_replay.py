@@ -233,6 +233,8 @@ def scenario_nes(exe, out):
     w.hold('a', 9)
     w.hold('right', 6)
     w.hold('b', 7, player=2)
+    w.hold('l', 5)
+    w.hold('r', 6, player=2)
     w.cmd('write_ram', addr=0x20, val=0x5A)               # a QA poke: recorded as a cheat write
     w.wait_until_frame(100)
     state = w.out / 'mid.cycstate'
@@ -248,6 +250,8 @@ def scenario_nes(exe, out):
     segs = segments(w.rec)
     check(len(segs) >= 6, f'expected rollover segments, got {len(segs)}')
     parsed = [rd.Segment(p) for p in segs]
+    check(any(v[0] & 1 for s in parsed for v in s.game_inputs.values()), 'seat 1 L recorded')
+    check(any(v[1] & 2 for s in parsed for v in s.game_inputs.values()), 'seat 2 R recorded')
     for s in parsed:
         check(s.state_path.is_file(), f'{s.path.name}: checkpoint missing')
         check(s.unfinished is None, f'{s.path.name}: a normal quit must leave every frame finished')

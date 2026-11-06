@@ -1297,6 +1297,34 @@ and the oracle rejects them; holds are host state, not save-state content
 
 ## Game mods
 
+### Optional host game buttons
+
+The cycle host exposes L/R as optional per-logical-seat game actions, separate
+from the NES's eight-bit controller ports. Both start unbound. A game may append
+an `input_profile` (`CycInputProfile`, `cyc_input.h`) to its `CycHostExtras` to
+provide action labels, default keyboard/controller bindings and replacement
+controller shortcuts. Apply these defaults before loading settings, then call
+`cyc_settings_profile` to migrate factory shortcut values once. Custom values
+and explicit unbound actions survive; `[Input] GameProfile` records migration.
+
+Adapters read `nes_input_game_buttons(seat)` from `logical_input.h` during the
+input callback. Bits 0/1 are L/R. Bindings persist as `l`/`r` under each
+`[Keyboard.PlayerN]` / `[Gamepad.PlayerN]`, with the existing controller ownership
+and shortcut-priority rules. Launcher host-action rows expose them; older
+recomp-ui revisions cap visible rows at their capacity, leaving other seats
+editable in config.ini. Sixteen host-action rows accommodate all four seats.
+
+Schedules use `FRAME X1:L`, `X1:R`, `X1:L+R`, `X1:-` (seats 1–4).
+TCP `action` accepts `name=l|r`, `player`, `frames`. Diagnostic format
+`CYCREPLAY 2` adds an `E` record with four 32-bit action masks before each `I`;
+the playback tool also accepts version 1 recordings.
+
+Current online transport carries the native NES byte only. Online frames clear
+these extra actions; an adapter that consumes them must declare its feature
+local-only until the transport and compatibility identity are qualified for it.
+The input callback must serialize its own edge/held state when needed for
+save/load and rewind, just as for native buttons.
+
 A game's mods are trusted C in the game's `HOST_EXTRAS`, selected and
 configured through the mod runtime (`runner/src/mod_runtime.cpp`; packages and
 manifests as in [docs/MOD_PACKAGES.md](../../docs/MOD_PACKAGES.md)). The

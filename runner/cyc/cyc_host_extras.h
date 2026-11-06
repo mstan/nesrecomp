@@ -69,6 +69,7 @@ extern "C" {
 
 struct RecompRuntimeUiItem;
 struct RecompRuntimeUiCallbacks;
+struct CycInputProfile;
 
 typedef struct {
     const char *name;         /* "--widescreen" */
@@ -105,6 +106,7 @@ typedef struct CycHostExtras {
     unsigned audio_rate;
     void (*audio_mix)(void *ctx, int16_t *samples, size_t count);
     void (*state_loaded)(void *ctx);
+    const struct CycInputProfile *input_profile; /* optional title-specific binding defaults */
 } CycHostExtras;
 
 const CycHostExtras *cyc_host_extras(void);

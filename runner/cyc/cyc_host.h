@@ -66,6 +66,7 @@ bool   cyc_host_frame_unpaced(void);
 
 /* Optional fixed-route replay for the normal SDL render/audio loop. */
 bool cyc_host_window_replay(long frame, uint8_t *buttons, size_t count);
+void cyc_host_window_game_input(uint32_t *buttons, size_t count);
 
 #ifdef __cplusplus
 }
