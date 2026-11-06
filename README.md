@@ -536,3 +536,15 @@ up as a test in `runner/cyc/tests/accuracycoin`.
 <p align="center">
   <a href="https://discord.gg/Ad9BwSzctP"><img src=".github/raid-discord.png" alt="Join the Retro AI Development (R.A.I.D.) Discord" width="200"></a>
 </p>
+
+## License
+
+For this project's code covered by the [PolyForm Noncommercial License](LICENSE),
+[PERMISSIONS.md](PERMISSIONS.md) grants standing permission for voluntary
+donations, sponsorships, and advertising revenue, including support for broader
+development initiatives. Payment must not buy access to the software, games
+built with it, or their updates, features, or game content, including early access.
+
+Matthew Stanley has authority from the relevant copyright holders to grant
+these permissions for the project's PolyForm-covered code. Third-party
+components and code explicitly licensed under other terms retain those terms.
