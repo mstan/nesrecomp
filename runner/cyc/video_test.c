@@ -22,6 +22,18 @@ static int anchored(uint32_t *out, int width, int height, int native_x0, const u
     return s_paint;
 }
 
+/* A stock-width compositor: paints one marked pixel; records what it was given */
+static int s_stock_calls, s_stock_paint, s_stock_args_ok, s_stock_native_x0;
+static int stock(uint32_t *out, int width, int height, int native_x0, const uint32_t *native, void *user)
+{
+    (void)user;
+    s_stock_calls++;
+    s_stock_native_x0 = native_x0;
+    s_stock_args_ok = (width == 256 && height == 240 && native_x0 == 0 && native == cyc_frame_argb() && out[5] == 0xFF000000u);
+    out[0] = 0xFF123456u;
+    return s_stock_paint;
+}
+
 int main(void)
 {
     /* the numbers: square pixels, 240 rows, even widths, STOCK explicit */
@@ -108,6 +120,41 @@ int main(void)
     cyc_render_present(&w, &h);
     CHECK(cyc_render_native_origin(560) == 152);
     cyc_render_set_compositor(NULL, NULL);
+
+    /* stock-width compositing: off, the compositor is not called at 256; on, it is, with origin 0 and the native
+     * picture, and a decline presents the native picture itself */
+    cyc_video_request_width(256);
+    CHECK(cyc_video_apply_pending() && cyc_video_width() == 256);
+    cyc_render_set_compositor(stock, NULL);
+    s_stock_calls = 0;
+    s_stock_paint = 1;
+    cyc_render_frame_done();
+    const uint32_t *pic = cyc_render_present(&w, &h);
+    CHECK(w == 256 && h == 240 && s_stock_calls == 0 && pic == cyc_frame_argb());
+    CHECK(!cyc_render_stock_compositing());
+    cyc_render_set_stock_compositing(true);
+    CHECK(cyc_render_stock_compositing());
+    pic = cyc_render_present(&w, &h);
+    CHECK(w == 256 && h == 240 && s_stock_calls == 1 && pic != cyc_frame_argb() && pic[0] == 0xFF123456u);
+    CHECK(s_stock_args_ok);
+    CHECK(cyc_render_present(&w, &h) == pic && s_stock_calls == 1);   /* composed once per frame */
+    cyc_render_frame_done();
+    s_stock_paint = 0;                                                /* declined: the native picture */
+    pic = cyc_render_present(&w, &h);
+    CHECK(s_stock_calls == 2 && pic == cyc_frame_argb());
+    CHECK(cyc_render_present(&w, &h) == cyc_frame_argb() && s_stock_calls == 2);
+    CHECK(cyc_render_native_origin(256) == 0);
+    cyc_render_set_stock_compositing(false);
+    cyc_render_frame_done();
+    CHECK(cyc_render_present(&w, &h) == cyc_frame_argb() && s_stock_calls == 2);
+    cyc_render_set_stock_compositing(true);
+    cyc_video_request_width(560);                                     /* wide: the same compositor, the wide contract */
+    CHECK(cyc_video_apply_pending() && cyc_video_width() == 560);
+    s_stock_paint = 1;
+    cyc_render_present(&w, &h);
+    CHECK(w == 560 && s_stock_native_x0 == 152);
+    cyc_render_set_compositor(NULL, NULL);
+    cyc_render_set_stock_compositing(false);
     printf("%s (%d failures)\n", failures ? "FAILED" : "cyc_video_test passed", failures);
     return failures != 0;
 }

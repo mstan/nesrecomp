@@ -8,7 +8,11 @@
  * compositor paints the canvas and returns nonzero, or returns 0 to have the
  * native picture pillarboxed at native_x0 (title screens, menus, anything it
  * does not extend). At width 256 the native picture is presented as it is and
- * the compositor is not called.
+ * the compositor is not called, unless the game asked for stock-width
+ * compositing (cyc_render_set_stock_compositing): a compositor that changes
+ * the picture without widening it (sprites the console would drop or flicker).
+ * It is then called with width 256, native_x0 0 and the native picture, and
+ * the same contract: nonzero presents what it painted, 0 the native picture.
  *
  * The compositor runs when the window presents (and for headless --present-out),
  * after the frame's end: reading the state the game left then is safe, and
@@ -49,6 +53,12 @@ typedef int (*CycCompositorFn)(uint32_t *out, int width, int height, int native_
 void cyc_render_set_compositor(CycCompositorFn fn, void *user);
 bool cyc_render_has_compositor(void);
 void cyc_render_set_margins(int left, int right);
+/* Whether the compositor is also called when the presented width is 256 (see
+ * above).  Off by default; changing it recomposes the next present.  A
+ * compositor that serves both must treat width 256 as "no margins": margins
+ * and native origin do not apply there. */
+void cyc_render_set_stock_compositing(bool enabled);
+bool cyc_render_stock_compositing(void);
 /* Called by a compositor that placed the native picture somewhere other than
  * the native_x0 it was given (a camera anchored at an area's edge): the canvas
  * column of native column 0 in the picture being painted. The host maps the
@@ -60,7 +70,11 @@ void cyc_render_set_native_origin(int x0);
 int  cyc_render_native_origin(int width);
 /* Exact background capture for host-drawn sprite replacements. Native sprite
  * evaluation, hits and overflow remain unchanged. The capture travels in a
- * separate presentation savestate record. */
+ * separate presentation savestate record, which is presentation only: a state
+ * loads whether or not it was saved with the capture on.  cyc_render_background
+ * returns false (a compositor then declines the frame) while the capture is off
+ * or not yet whole: from enabling it, or from loading a state that carries no
+ * record, until the next frame completes. */
 void cyc_render_capture_background(bool enabled);
 bool cyc_render_background(uint32_t *out); /* 256x240 ARGB, false if disabled */
 extern bool cyc_background_enabled;

@@ -1353,7 +1353,14 @@ picture and its background opacity, each line's scroll, PPUCTRL and PPUMASK
 as captured at dot 1 of the line, OAM, CHR, nametables and palette, with tile
 and sprite helpers. Without a compositor, or when it declines a frame, the
 native picture is pillarboxed. A picture is composed once per frame, on the
-first present or in the game's `frame_end`.
+first present or in the game's `frame_end`. `cyc_render_set_stock_compositing(true)`
+also calls the compositor at width 256 (native_x0 0, no margins; it paints or
+declines like a wide picture): a compositor that changes the picture without
+widening it, such as redrawing sprites the console would drop. With
+`cyc_render_capture_background` it composes against the exact background;
+that capture is presentation only, so save states load with it on or off
+(`cyc_render_background` reports false until a frame completes after enabling it
+or loading a state without it).
 
 **Runtime.** `nesrecomp_add_cycle_game(... MODS GAME_ID <id>)` builds the mod
 runtime in (the catalog is `mods/` beside the executable; headless
