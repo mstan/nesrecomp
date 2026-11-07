@@ -2426,10 +2426,25 @@ int provider_remove(void*, const char* package_id,
     return 1;
 }
 
-int provider_enable(void*, const char* package_id, int enabled) {
+int provider_feature_enable(void*, const char*, const char*, int);
+
+int provider_enable(void* ctx, const char* package_id, int enabled) {
     if (!package_id) return 0;
     const Package* package = selected_package(state(), package_id);
     if (!package) return 0;
+    if (catalog_has_requirements(state())) {
+        const auto before = state().selections;
+        for (const Feature& feature : package->features) {
+            if (!provider_feature_enable(ctx, package_id, feature.id.c_str(), enabled)) {
+                const std::string error = state().error;
+                state().selections = before;
+                refresh_validation();
+                state().error = error;
+                return 0;
+            }
+        }
+        return 1;
+    }
     if (enabled) {
         for (const Feature& feature : package->features) {
             std::vector<Diagnostic> diagnostics;

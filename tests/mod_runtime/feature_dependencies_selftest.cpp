@@ -43,7 +43,7 @@ int main() {
         package(good, "test.other", "exclusive_group=\"body\"");
         initialize(good);
         const auto* p = NESRecomp::mod_runtime_launcher_provider();
-        check(p->feature_enable(p->ctx, "test.a", "mode", 1), "enable root and its transitive dependencies");
+        check(p->set_enabled(p->ctx, "test.a", 1), "package toggle did not enable transitive dependencies");
         check(enabled("test.a") && enabled("test.y") && enabled("test.z"), "required feature remains disabled");
         std::string error;
         check(NESRecomp::mod_runtime_commit({}, &error), error.c_str());
@@ -61,10 +61,10 @@ int main() {
         check(enabled("test.y") && enabled("test.z") && !enabled("test.other"), "failed enable changed selections");
         check(p->feature_enable(p->ctx, "test.a", "mode", 1), "restore root");
         nes_mod_lock_feature("test.a", "mode");
-        check(!p->feature_enable(p->ctx, "test.z", "mode", 0), "dependency cascade bypassed a running feature lock");
+        check(!p->set_enabled(p->ctx, "test.z", 0), "package dependency cascade bypassed a running feature lock");
         check(enabled("test.a") && enabled("test.y") && enabled("test.z"), "failed cascade partially changed selections");
         initialize(good);
-        check(p->feature_enable(p->ctx, "test.z", "mode", 0), "disable dependency cascade");
+        check(p->set_enabled(p->ctx, "test.z", 0), "package disable did not cascade to dependents");
         check(!enabled("test.a") && !enabled("test.y") && !enabled("test.z"), "dependent remained enabled without its requirement");
         check(NESRecomp::mod_runtime_commit({}, &error), error.c_str());
         initialize(good);
