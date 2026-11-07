@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <string>
 #include <vector>
 
@@ -411,6 +412,34 @@ int main() {
         NESRecomp::mod_runtime_activate_plugins();
         expect(activations == 0,
                "failed recommit clears the previously committed plugin plan");
+    }
+
+    {
+        const fs::path root=base/"netplay-source", source=base/"netplay-source.z64";
+        write_bytes(source,bytes);write_catalog(root,source);
+        std::string error;expect(initialize(root,error),"netplay source initializes");
+        std::ifstream before_file(root/"state.toml");
+        const std::string before((std::istreambuf_iterator<char>(before_file)),{});
+        activations=0;expect(nes_mod_runtime_commit_netplay_c(nullptr)==1,"vanilla netplay commit succeeds");
+        expect(nes_mod_external_rom_path(kPackageId,kFeatureId,"source-rom")==nullptr,"netplay source cannot populate committed plugin lookup");
+        const char* selected=nes_mod_netplay_external_rom_path(kPackageId,kFeatureId,"source-rom");
+        expect(selected && fs::path(selected)==source,"trusted preboot lookup returns verified local selection");
+        expect(nes_mod_netplay_external_rom_path(kPackageId,"other-feature","source-rom")==nullptr,"preboot source rejects wrong feature");
+        expect(nes_mod_netplay_external_rom_path(kPackageId,kFeatureId,"wrong-resource")==nullptr,"preboot source rejects wrong resource");
+        NESRecomp::mod_runtime_activate_plugins();expect(activations==0,"source lookup leaves vanilla activation plan empty");
+        expect(nes_mod_external_rom_path(kPackageId,kFeatureId,"source-rom")==nullptr,"source lookup never authorizes plugin lookup");
+        std::ifstream after_file(root/"state.toml");
+        const std::string after((std::istreambuf_iterator<char>(after_file)),{});
+        expect(before==after,"source lookup preserves offline selections");
+        const auto timestamp=fs::last_write_time(source);
+        {std::fstream file(source,std::ios::in|std::ios::out|std::ios::binary);file.seekp(4096);file.put(1);}
+        fs::last_write_time(source,timestamp);
+        expect(nes_mod_netplay_external_rom_path(kPackageId,kFeatureId,"source-rom")==nullptr,"preboot source force-rehashes even unchanged size and timestamp");
+        fs::remove(source);
+        expect(nes_mod_netplay_external_rom_path(kPackageId,kFeatureId,"source-rom")==nullptr,"preboot source rejects missing file after earlier success");
+        write_bytes(source,bytes);
+        (void)NESRecomp::mod_runtime_initialize(root,"wrong-game","00000000",&error);
+        expect(nes_mod_netplay_external_rom_path(kPackageId,kFeatureId,"source-rom")==nullptr,"preboot source rejects wrong target");
     }
 
     {

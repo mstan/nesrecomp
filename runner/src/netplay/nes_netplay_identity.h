@@ -26,6 +26,15 @@ int         nes_netplay_identity_set_rom_file(const char *path);
 const char *nes_netplay_identity_rom_sha256(void);   /* "" before set_rom */
 uint32_t    nes_netplay_identity_build_fp(void);
 uint32_t    nes_netplay_identity_content_fp(void);
+const uint8_t *nes_netplay_identity_build_sha256(void);
+/* Full canonical image referenced in the lobby's 64-byte field (50 + NUL). */
+void nes_netplay_session_reference(const char *text,char out[64]);
+
+/* Distinct fixed simulation contracts; these never select/switch a backend. */
+enum {NES_NET_PROFILE_CYCLE_LLE=1, NES_NET_PROFILE_LEGACY_C=2, NES_NET_PROFILE_CYCLE_HLE=4};
+uint32_t nes_netplay_cycle_profile(const char *implementation);
+const char *nes_netplay_cycle_contract(const char *implementation);
+int nes_netplay_profile_compatible(uint32_t selected,uint32_t local,uint32_t remote);
 
 /* SHA-256 (FIPS 180-4). out: 32 bytes. */
 void nes_sha256(const uint8_t *data, size_t len, uint8_t out[32]);

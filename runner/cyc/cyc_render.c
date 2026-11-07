@@ -103,6 +103,11 @@ uint32_t cyc_render_color(int entry)
     unsigned emphasis = hw_frame_lines[239].mask >> 5;
     return hw_palette_argb[(ppu.palette[entry & 31] & 0x3F) | emphasis << 6];
 }
+uint32_t cyc_render_color_value(uint8_t value)
+{
+    unsigned emphasis = hw_frame_lines[239].mask >> 5;
+    return hw_palette_argb[(value & 0x3F) | emphasis << 6];
+}
 
 /* ---- drawing ---- */
 

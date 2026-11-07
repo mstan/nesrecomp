@@ -98,3 +98,41 @@ ICE (`NESRECOMP_NET_ICE`) still builds libjuice into recomp-net, but the NES
 host does not start an ICE session; on Windows the build supplies the narrow
 mutex/error-code shim for it. Windows and macOS builds of the rollback stack
 have not been verified.
+
+## Input and preboot contract
+
+Input version 2 uses two bytes per logical seat: the NES pad followed by
+bit 0=L and bit 1=R. Four-seat snapshots and digests include both fields.
+Only published rows reach game input during live play and resimulation.
+A local binding row may be selected before the first admitted tick; it does
+not change logical ownership or the canonical simulation profile.
+
+The lobby's 64-byte options field carries a `sha256:` reference to the full
+canonical configuration (43 base64url characters plus the prefix and NUL).
+Before frame 0, a reliable tagged bootstrap verifies that reference and
+settles the full configuration, exact executable/ROM hashes and host SRAM.
+Occupied seats report compiled architecture, actual CPU feature bits,
+available backends and supported simulation profiles once. The chosen
+profile stays fixed for the match; the existing build checks remain required.
+The fixed contracts are `cycle-lle-c1` (profile 1), `cycle-hle-c1` (profile 4),
+and `legacy-c1` (profile 2). Their identifiers
+are protocol identities, not evidence of cross-build or cross-host qualification.
+
+Cycle sessions also seal region and extra scanlines. Titles may override
+the width key to separate local presentation from canonical simulation
+rectangles. Unknown local-only features still refuse a session.
+
+A trusted title adapter may use `nes_mod_netplay_external_rom_path` during
+setup to force-verify a locally selected manifest resource. This is separate
+from the committed-plugin path API: it changes neither the vanilla activation
+plan nor saved offline selections. The adapter seals source hashes and keeps
+its loaded data immutable before admission; local paths and bytes stay local.
+
+Cycle HLE keeps its own contract rather than being mislabeled LLE or refused
+by the LLE-only profile check. Its same-build Windows qualification uses SMB
+four-player gameplay with occupied masks 0x9 and 0x5, extended input rows,
+rollback restores and exact common-tick digests. These checks run at normal
+60 Hz with the default 40-snapshot history. An accelerated unpaced case with
+25 ms receive delay plus 8 ms jitter exceeded that history and is retained as
+a rejected stress case, not accepted compatibility evidence. No cross-build,
+cross-platform or spectator qualification is inferred from this profile name.

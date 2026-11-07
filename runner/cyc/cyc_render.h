@@ -100,6 +100,8 @@ uint8_t  cyc_render_nametable(uint16_t ppu_addr); /* $2000-$2FFF */
 uint8_t  cyc_render_palette(int entry);           /* palette RAM $3F00 + entry (0-31), 6 bits */
 /* A palette RAM entry as ARGB, with the emphasis the picture's last line had. */
 uint32_t cyc_render_color(int entry);
+/* A six-bit NES color value, using the picture's emphasis. No palette write. */
+uint32_t cyc_render_color_value(uint8_t value);
 
 /* ---- drawing ---- */
 enum {

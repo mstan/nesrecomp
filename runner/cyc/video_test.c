@@ -155,6 +155,21 @@ int main(void)
     CHECK(w == 560 && s_stock_native_x0 == 152);
     cyc_render_set_compositor(NULL, NULL);
     cyc_render_set_stock_compositing(false);
+    /* Playback restores the committed width, including a Fit width which
+     * differs from the default drawable, and cancels stale resize requests. */
+    cyc_video_set_mode(NES_VIDEO_FIT);
+    CHECK(cyc_video_restore(NES_VIDEO_FIT, 426, 1920, 1080));
+    int dw, dh;cyc_video_drawable_size(&dw, &dh);
+    CHECK(cyc_video_mode()==NES_VIDEO_FIT && cyc_video_width()==426 && dw==1920 && dh==1080);
+    CHECK(!cyc_video_apply_pending());
+    CHECK(!cyc_video_restore(-1,426,1920,1080));
+    CHECK(!cyc_video_restore(NES_VIDEO_FIT,425,1920,1080));
+    CHECK(!cyc_video_restore(NES_VIDEO_FIT,866,1920,1080));
+    CHECK(!cyc_video_restore(NES_VIDEO_FIT,426,1920,0));
+    CHECK(!cyc_video_restore(NES_VIDEO_FIT,426,-1,1080));
+    CHECK(cyc_video_mode()==NES_VIDEO_FIT && cyc_video_width()==426);
+    cyc_video_window_resized(3440,1440);
+    CHECK(cyc_video_apply_pending() && cyc_video_width()==574);
     printf("%s (%d failures)\n", failures ? "FAILED" : "cyc_video_test passed", failures);
     return failures != 0;
 }

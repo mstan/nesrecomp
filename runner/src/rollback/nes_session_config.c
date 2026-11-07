@@ -50,6 +50,10 @@ int nes_netplay_session_describe_offer(char *out, int cap)
     return n;
 }
 
+int nes_netplay_session_has(const char *key) {
+    for(int i=0;i<s_key_count;i++)if(!strcmp(key,s_keys[i].key))return 1;return 0;
+}
+
 int nes_netplay_session_register(const char *key, NesSessionGetFn get,
                                  NesSessionApplyFn apply,
                                  NesSessionRestoreFn restore)

@@ -23,7 +23,7 @@ typedef struct NesNetplayRbBindings {
     uint32_t occupied_mask;
     int  force_turn;
     /* Rows for one tick (seat i -> rows[i]), replay = 1 inside a resim. */
-    void (*publish)(uint32_t tick, const uint8_t *rows, int slots, int replay);
+    void (*publish)(uint32_t tick, const uint16_t *rows, int slots, int replay);
     void (*resim)(int begin);
     void (*refused)(const char *code);
 } NesNetplayRbBindings;
@@ -31,7 +31,7 @@ typedef struct NesNetplayRbBindings {
 void nes_netplay_rb_bind(const NesNetplayRbBindings *b);
 int  nes_netplay_rb_start(void);
 void nes_netplay_rb_shutdown(void);
-void nes_netplay_rb_stage_local(uint8_t pad);
+void nes_netplay_rb_stage_local(uint16_t pad);
 /* RNET_RB_ADMIT_* */
 int  nes_netplay_rb_poll_admit(void);
 void nes_netplay_rb_finish_frame(void);

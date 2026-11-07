@@ -50,6 +50,7 @@ typedef struct CycSettings {
     NesFdsHleAsk fds_hle;   /* the player's saved HLE choices (the plan's "settings" source) */
     char fds_bios[512];     /* [FDS] Bios: the player's FDS BIOS file; "" looks for one */
     CycBindings  bind;
+    char input_profile[64]; /* migration marker; explicit bindings overlay game defaults */
 #ifdef NESRECOMP_CYCLE_HDPACK
     int hd_resolution;     /* local HD output scale; 0 = pack's original scale */
 #endif
@@ -63,6 +64,7 @@ typedef struct {
 } CycSettingsGame;
 
 void cyc_settings_default(CycSettings *s);
+void cyc_settings_profile(CycSettings *s, const CycInputProfile *profile);
 /* Overlay `path` onto *s. Returns false if the file does not exist (s keeps
  * what it had). Warnings for unreadable values go to `log` (may be NULL);
  * `game` (may be NULL) gets every other [Game] key. */

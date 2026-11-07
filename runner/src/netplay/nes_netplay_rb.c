@@ -40,7 +40,7 @@ void nes_rb_log_bridge(void);   /* main_runner.c */
  * invent neutral is 0xFFFF (PSX, active low); 8-bit rows can never be 0xFFFF,
  * so that sentinel from an older peer maps to neutral. */
 #define RB_PSX_NEUTRAL 0xFFFFu
-#define RB_BUTTON_MASK 0x00FFu
+#define RB_BUTTON_MASK 0x03FFu
 /* Validation injector (FORCE_MISPREDICT) flips A|START: the title screen
  * reads START and gameplay reads A, so an injected mispredict always reaches
  * the guest. The driver's historical 0x0040 is B here, which the SMB title
@@ -55,7 +55,7 @@ static struct {
     RNetRbDriver *drv;
     RbeSnapRing  *snaps;
     uint32_t      snap_depth;
-    uint8_t       resolved[RB_MAX_SLOTS];
+    uint16_t      resolved[RB_MAX_SLOTS];
     int           last_admit;
     uint32_t      last_admit_tick;
     uint32_t      live_tick[RB_LIVE_RING];
@@ -174,7 +174,7 @@ static void rb_host_publish(void *ctx, uint32_t tick, const RNetRbFrame *rows,
     (void)ctx;
     memset(g_rb.resolved, 0, sizeof(g_rb.resolved));
     for (i = 0; i < slots && i < RB_MAX_SLOTS; ++i)
-        g_rb.resolved[i] = (uint8_t)(rows[i].buttons & RB_BUTTON_MASK);
+        g_rb.resolved[i] = rows[i].buttons & RB_BUTTON_MASK;
     g_rb.last_admit_tick = tick;
     if (getenv("NES_RB_DEBUG_ROWS"))
         fprintf(stderr, "RB_ROWS tick=%u replay=%d rows=%02x %02x %02x %02x\n",
@@ -227,7 +227,8 @@ static void rb_host_decode(void *ctx, int slot, const RNetInputSample *in,
 {
     (void)ctx;
     (void)slot;
-    out->buttons = (uint16_t)(in->size >= 1 ? in->bytes[0] : 0u);
+    out->buttons = in->size==2 ? (uint16_t)(in->bytes[0]|((in->bytes[1]&3u)<<8)) : 0u;
+    if(in->size!=2)out->is_valid=0;
     out->stick_x = 0;
     out->stick_y = 0;
     out->analog = 0;
@@ -401,7 +402,7 @@ int nes_netplay_rb_start(void)
     cfg.log_prefix = "nes_netplay";
     cfg.env_alias = "NES_RB";
     cfg.inject_flip_bits = (uint16_t)rb_env_int("NES_RB_INJECT_BITS", NULL,
-                                                (int)RB_INJECT_BITS, 1, 0xFF);
+                                                (int)RB_INJECT_BITS, 1, RB_BUTTON_MASK);
 
     memset(&host, 0, sizeof(host));
     host.snap_save = &rb_host_snap_save;
@@ -442,7 +443,7 @@ void nes_netplay_rb_shutdown(void)
     }
 }
 
-void nes_netplay_rb_stage_local(uint8_t pad)
+void nes_netplay_rb_stage_local(uint16_t pad)
 {
     /* The driver samples the local seat through the session's host vtable
      * (nes_netplay.c host_sample_local); nothing to keep here. */

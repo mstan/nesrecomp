@@ -10,7 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define TRAILER 12u
+#define TRAILER 16u
 static uint8_t *s_image;
 static size_t s_len;
 static int s_valid;
@@ -71,7 +71,8 @@ const uint8_t *nes_rb_state_image(size_t *len) {
         }
         uint8_t *grown=(uint8_t *)realloc(raw,n+TRAILER);
         if(!grown){free(raw);if(len)*len=0;return NULL;}
-        memcpy(grown+n,"CYCRBIN1",8);memcpy(grown+n+8,g_logical_input,4);
+        memcpy(grown+n,"CYCRBIN2",8);memcpy(grown+n+8,g_logical_input,4);
+        for(int i=0;i<4;i++)grown[n+12+i]=(uint8_t)(g_game_input[i]&3u);
         free(s_image);s_image=grown;s_len=n+TRAILER;s_valid=1;
         measured(0,begin);nes_rb_digest_image(s_image,s_len,&s_digest);
     }
@@ -83,11 +84,13 @@ size_t nes_rb_state_save(uint8_t *buf,size_t cap,size_t *need) {
 }
 int nes_rb_state_load(const uint8_t *buf,size_t len) {
     Uint64 begin=SDL_GetPerformanceCounter();char err[256];
-    if(!buf||len<32+TRAILER||memcmp(buf+len-TRAILER,"CYCRBIN1",8))return 0;
+    if(!buf||len<32+TRAILER||memcmp(buf+len-TRAILER,"CYCRBIN2",8))return 0;
     if(!cyc_state_load(buf,len-TRAILER,err,sizeof err)) {
         fprintf(stderr,"[cycle rollback] load: %s\n",err);return 0;
     }
-    memcpy(g_logical_input,buf+len-4,4);cyc_session_state_loaded();
+    memcpy(g_logical_input,buf+len-8,4);
+    for(int i=0;i<4;i++)g_game_input[i]=buf[len-4+i]&3u;
+    cyc_session_state_loaded();
     nes_rb_state_invalidate();measured(1,begin);return 1;
 }
 void nes_rb_state_digest(NesRbDigest *out){size_t n;if(nes_rb_state_image(&n))*out=s_digest;else memset(out,0,sizeof *out);}

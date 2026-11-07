@@ -431,6 +431,49 @@ static void persistence(const char *dir)
     remove(logpath);
 }
 
+static void game_actions(const char *dir)
+{
+    static const CycInputProfile profile = {
+        "test-actions", {"Previous", "Next"}, {"Q", NULL},
+        {"leftshoulder", "rightshoulder"}, {"none", "leftstick+rightstick"}
+    };
+    CycBindings b; cyc_bindings_default(&b);
+    for (int p = 0; p < CYC_INPUT_PLAYERS; p++) for (int i = 0; i < CYC_GAME_BUTTONS; i++)
+        CHECK(b.game_button[p][i].key == 0 && b.game_button[p][i].pad == 0);
+    cyc_bindings_profile(&b, &profile);
+    uint8_t keys[SDL_NUM_SCANCODES] = {0};
+    CycInputFrame f = {0}; f.keys = keys; f.key_count = SDL_NUM_SCANCODES; f.pad_count = 2;
+    f.pad_buttons[0] = (1u << SDL_CONTROLLER_BUTTON_LEFTSHOULDER) | (1u << SDL_CONTROLLER_BUTTON_A);
+    f.pad_buttons[1] = 1u << SDL_CONTROLLER_BUTTON_RIGHTSHOULDER;
+    CycInputState s; cyc_input_eval(&b, &f, &s);
+    CHECK(s.buttons[0] == 0x80 && s.buttons[1] == 0);
+    CHECK(s.game_buttons[0] == CYC_GAME_L && s.game_buttons[1] == CYC_GAME_R);
+    CHECK(!s.shortcut[CYC_SC_DISK] && !s.shortcut[CYC_SC_MENU]);
+    f.pad_buttons[0] = (1u << SDL_CONTROLLER_BUTTON_LEFTSHOULDER) | (1u << SDL_CONTROLLER_BUTTON_RIGHTSHOULDER);
+    cyc_input_eval(&b, &f, &s); CHECK(s.game_buttons[0] == (CYC_GAME_L | CYC_GAME_R));
+    f.pad_buttons[0] = (1u << SDL_CONTROLLER_BUTTON_LEFTSTICK) | (1u << SDL_CONTROLLER_BUTTON_RIGHTSTICK);
+    cyc_input_eval(&b, &f, &s); CHECK(s.shortcut[CYC_SC_MENU] && !s.game_buttons[0]);
+    f.pad_buttons[0] = 0; keys[SDL_SCANCODE_Q] = 1;
+    cyc_input_eval(&b, &f, &s); CHECK(s.game_buttons[0] == CYC_GAME_L);
+    b.shortcut[CYC_SC_MENU].key = SDL_SCANCODE_Q;
+    cyc_input_eval(&b, &f, &s); CHECK(s.shortcut[CYC_SC_MENU] && !s.game_buttons[0]);
+    char path[1024]; snprintf(path, sizeof path, "%s/game-actions.ini", dir);
+    FILE *file = fopen(path, "w"); CHECK(file != NULL);
+    fputs("[Gamepad.Shortcuts]\nmenu = rightshoulder\ndisk = leftshoulder\n[Gamepad.Player1]\nr = none\n", file); fclose(file);
+    CycSettings settings; cyc_settings_default(&settings); cyc_bindings_profile(&settings.bind, &profile);
+    CHECK(cyc_settings_load(&settings, path, NULL, NULL));
+    cyc_settings_profile(&settings, &profile);
+    CHECK(settings.bind.shortcut[CYC_SC_MENU].pad == CYC_PAD_COMBO((1u << SDL_CONTROLLER_BUTTON_LEFTSTICK) | (1u << SDL_CONTROLLER_BUTTON_RIGHTSTICK)));
+    CHECK(settings.bind.shortcut[CYC_SC_DISK].pad == 0 && settings.bind.game_button[0][1].pad == 0);
+    settings.bind.shortcut[CYC_SC_MENU].pad = CYC_PAD_BUTTON(SDL_CONTROLLER_BUTTON_START);
+    CHECK(cyc_settings_save(&settings, path, NULL));
+    CycSettings back; cyc_settings_default(&back); cyc_bindings_profile(&back.bind, &profile);
+    CHECK(cyc_settings_load(&back, path, NULL, NULL)); cyc_settings_profile(&back, &profile);
+    CHECK(back.bind.shortcut[CYC_SC_MENU].pad == settings.bind.shortcut[CYC_SC_MENU].pad);
+    CHECK(back.bind.game_button[0][0].key == SDL_SCANCODE_Q && back.bind.game_button[0][1].pad == 0);
+    CHECK(!strcmp(back.input_profile, profile.id)); remove(path);
+}
+
 int main(int argc, char **argv)
 {
     text_forms();
@@ -438,6 +481,7 @@ int main(int argc, char **argv)
     evaluation();
     logical_seats();
     persistence(argc > 1 ? argv[1] : ".");
+    game_actions(argc > 1 ? argv[1] : ".");
     printf("input_test: %u checks passed\n", checks);
     return 0;
 }

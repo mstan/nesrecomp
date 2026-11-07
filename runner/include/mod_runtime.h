@@ -127,6 +127,13 @@ int nes_mod_option_value(const char* package_id,
  * This exposes a path only. Plugins open the owner-supplied file themselves;
  * the mod runtime never supplies ROM bytes.
  */
+/* Trusted title adapters may inspect a manifest-verified local source during
+ * netplay setup without activating a mod plan. This force-verifies the current
+ * selection; adapters seal content hashes and retain their own immutable data
+ * before admission. No paths or source bytes belong in the session wire image. */
+const char* nes_mod_netplay_external_rom_path(const char* package_id,
+                                              const char* feature_id,
+                                              const char* resource_id);
 const char* nes_mod_external_rom_path(const char* package_id,
                                       const char* feature_id,
                                       const char* resource_id);

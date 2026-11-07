@@ -89,6 +89,12 @@ static void to_launcher(const CycSettings *s, RecompLauncherCSettings *io, const
         io->assist_key_bind[i] = s->bind.shortcut[shortcuts[i]].key;
         io->assist_pad_bind[i] = s->bind.shortcut[shortcuts[i]].pad;
     }
+    for (int p = 0; p < CYC_GAME_PLAYERS; p++) for (int b = 0; b < CYC_GAME_BUTTONS; b++) {
+        int slot = count + p * CYC_GAME_BUTTONS + b;
+        if (slot >= RECOMP_LAUNCHER_MAX_ASSIST_BINDINGS) continue;
+        io->assist_key_bind[slot] = s->bind.game_button[p][b].key;
+        io->assist_pad_bind[slot] = s->bind.game_button[p][b].pad;
+    }
 }
 
 static void from_launcher(const RecompLauncherCSettings *io, CycSettings *s, const int *shortcuts, int count)
@@ -126,6 +132,12 @@ static void from_launcher(const RecompLauncherCSettings *io, CycSettings *s, con
     for (int i = 0; i < count; ++i) {
         s->bind.shortcut[shortcuts[i]].key = io->assist_key_bind[i];
         s->bind.shortcut[shortcuts[i]].pad = io->assist_pad_bind[i];
+    }
+    for (int p = 0; p < CYC_GAME_PLAYERS; p++) for (int b = 0; b < CYC_GAME_BUTTONS; b++) {
+        int slot = count + p * CYC_GAME_BUTTONS + b;
+        if (slot >= RECOMP_LAUNCHER_MAX_ASSIST_BINDINGS) continue;
+        s->bind.game_button[p][b].key = io->assist_key_bind[slot];
+        s->bind.game_button[p][b].pad = io->assist_pad_bind[slot];
     }
 }
 
@@ -186,7 +198,8 @@ int cyc_ui_launcher(CycSettings *settings, const char *settings_path, const CycH
     static char out_rom[1024], name[256];
     static uint8_t sha[1][32];
     static const char *const FDS_PATTERNS[] = { "*.fds", "*.qd" };
-    static const char *shortcut_labels[CYC_SC_COUNT];
+    static const char *shortcut_labels[RECOMP_LAUNCHER_MAX_ASSIST_BINDINGS];
+    static char game_labels[CYC_INPUT_PLAYERS][CYC_GAME_BUTTONS][96];
     static int default_key[RECOMP_LAUNCHER_MAX_ASSIST_BINDINGS], default_pad[RECOMP_LAUNCHER_MAX_ASSIST_BINDINGS];
     int shortcuts[CYC_SC_COUNT];
     int count = shortcut_list(fds, shortcuts);
@@ -196,12 +209,23 @@ int cyc_ui_launcher(CycSettings *settings, const char *settings_path, const CycH
     /* "Restore defaults" and the per-player / shortcut resets go back to these. */
     CycSettings d;
     cyc_settings_default(&d);
+    if (extras) cyc_bindings_profile(&d.bind, extras->input_profile);
     memset(&defaults, 0, sizeof(defaults));
     to_launcher(&d, &defaults, shortcuts, count);
     for (int i = 0; i < count; ++i) {
         shortcut_labels[i] = cyc_shortcut_label(shortcuts[i]);
         default_key[i] = d.bind.shortcut[shortcuts[i]].key;
         default_pad[i] = d.bind.shortcut[shortcuts[i]].pad;
+    }
+    for (int p = 0; p < CYC_GAME_PLAYERS; p++) for (int b = 0; b < CYC_GAME_BUTTONS; b++) {
+        int slot = count + p * CYC_GAME_BUTTONS + b;
+        if (slot >= RECOMP_LAUNCHER_MAX_ASSIST_BINDINGS) continue;
+        const char *label = extras && extras->input_profile && extras->input_profile->game_label[b] ?
+            extras->input_profile->game_label[b] : cyc_game_button_label(b);
+        snprintf(game_labels[p][b], sizeof game_labels[p][b], "Player %d: %s", p + 1, label);
+        shortcut_labels[slot] = game_labels[p][b];
+        default_key[slot] = d.bind.game_button[p][b].key;
+        default_pad[slot] = d.bind.game_button[p][b].pad;
     }
 
     memset(&gi, 0, sizeof(gi));
@@ -268,7 +292,11 @@ int cyc_ui_launcher(CycSettings *settings, const char *settings_path, const CycH
     gi.mods = (const RecompLauncherCModProvider *)cyc_diagnostics_provider(mods);
     gi.default_settings = &defaults;
     gi.assist_binding_labels = shortcut_labels;
-    gi.assist_binding_count = count;
+    gi.assist_binding_count = count + CYC_GAME_PLAYERS * CYC_GAME_BUTTONS;
+    /* Older UI revisions have only eight host-action rows. Keep them usable;
+     * settings outside their capacity remain editable through config.ini. */
+    if (gi.assist_binding_count > RECOMP_LAUNCHER_MAX_ASSIST_BINDINGS)
+        gi.assist_binding_count = RECOMP_LAUNCHER_MAX_ASSIST_BINDINGS;
     gi.assist_default_key_bind = default_key;
     gi.assist_default_pad_bind = default_pad;
     if (fds) {
