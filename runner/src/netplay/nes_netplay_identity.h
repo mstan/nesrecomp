@@ -26,6 +26,9 @@ int         nes_netplay_identity_set_rom_file(const char *path);
 const char *nes_netplay_identity_rom_sha256(void);   /* "" before set_rom */
 uint32_t    nes_netplay_identity_build_fp(void);
 uint32_t    nes_netplay_identity_content_fp(void);
+const uint8_t *nes_netplay_identity_build_sha256(void);
+/* Full canonical image referenced in the lobby's 64-byte field (50 + NUL). */
+void nes_netplay_session_reference(const char *text,char out[64]);
 
 /* SHA-256 (FIPS 180-4). out: 32 bytes. */
 void nes_sha256(const uint8_t *data, size_t len, uint8_t out[32]);

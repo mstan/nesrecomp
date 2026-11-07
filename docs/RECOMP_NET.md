@@ -98,3 +98,25 @@ ICE (`NESRECOMP_NET_ICE`) still builds libjuice into recomp-net, but the NES
 host does not start an ICE session; on Windows the build supplies the narrow
 mutex/error-code shim for it. Windows and macOS builds of the rollback stack
 have not been verified.
+
+## Input and preboot contract
+
+Input version 2 uses two bytes per logical seat: the NES pad followed by
+bit 0=L and bit 1=R. Four-seat snapshots and digests include both fields.
+Only published rows reach game input during live play and resimulation.
+A local binding row may be selected before the first admitted tick; it does
+not change logical ownership or the canonical simulation profile.
+
+The lobby's 64-byte options field carries a `sha256:` reference to the full
+canonical configuration (43 base64url characters plus the prefix and NUL).
+Before frame 0, a reliable tagged bootstrap verifies that reference and
+settles the full configuration, exact executable/ROM hashes and host SRAM.
+Occupied seats report compiled architecture, actual CPU feature bits,
+available backends and supported simulation profiles once. The chosen
+profile stays fixed for the match; the existing build checks remain required.
+The current contracts are `cycle-lle-c1` and `legacy-c1`. Their identifiers
+are protocol identities, not evidence of cross-build or cross-host qualification.
+
+Cycle sessions also seal region and extra scanlines. Titles may override
+the width key to separate local presentation from canonical simulation
+rectangles. Unknown local-only features still refuse a session.

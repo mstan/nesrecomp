@@ -16,8 +16,8 @@ extern "C" {
 extern uint8_t g_logical_input[4];
 uint8_t nes_input_seat(int seat);
 /* Optional host game actions (bit 0 L, bit 1 R), published with the seat.
- * These are distinct from the NES byte. Current online transport does not
- * carry them; adapters consuming them must declare a local-only capability. */
+ * These are distinct from the NES byte. Version 2 online seat payloads carry
+ * both bits, and rollback snapshots/digests retain them for all four seats. */
 extern uint32_t g_game_input[4];
 uint32_t nes_input_game_buttons(int seat);
 #ifdef __cplusplus

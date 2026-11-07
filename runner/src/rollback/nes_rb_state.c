@@ -15,8 +15,8 @@
 
 /* Image = [u32 v7_len][V7 image][trailer]. */
 #define RB_TRAILER_MAGIC "NRBX"
-#define RB_TRAILER_VERSION 1u
-#define RB_TRAILER_BYTES (4u + 1u + 4u)
+#define RB_TRAILER_VERSION 2u
+#define RB_TRAILER_BYTES (4u + 1u + 4u + 4u)
 
 static const char *const k_part_names[3] = { "cpu_wram", "ppu", "apu_io_mods" };
 
@@ -146,6 +146,7 @@ size_t nes_rb_state_save(uint8_t *buf, size_t cap, size_t *need)
         memcpy(t, RB_TRAILER_MAGIC, 4);
         t[4] = (uint8_t)RB_TRAILER_VERSION;
         memcpy(t + 5, g_logical_input, 4);
+        for(int i=0;i<4;i++)t[9+i]=(uint8_t)(g_game_input[i]&3u);
     }
     n = 4u + n + RB_TRAILER_BYTES;
     if (need) *need = n;
@@ -169,6 +170,7 @@ int nes_rb_state_load(const uint8_t *buf, size_t len)
     if (!savestate_deserialize(buf + 4, v7_len, SAVESTATE_LOAD_QUIET))
         return 0;
     memcpy(g_logical_input, t + 5, 4);
+    for(int i=0;i<4;i++)g_game_input[i]=t[9+i]&3u;
     nes_rb_state_invalidate();
     sample_add(&s_load_t, now_us() - t0);
     return 1;

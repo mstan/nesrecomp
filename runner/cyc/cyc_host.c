@@ -1572,6 +1572,10 @@ session_restart:
     fds_save_powered_on();
     cyc_state_set_host(&HOST_STATE);
     if (present_w > 0) cyc_video_window_resized(present_w, present_h);
+    if (!cyc_session_start()) return 2;
+    if (extra_scanlines >= 0 && !cyc_set_extra_scanlines((unsigned)extra_scanlines)) {
+        fprintf(stderr, "--extra-scanlines requires an MMC1 or MMC3 cartridge\n"); return 2;
+    }
 #ifdef NESRECOMP_NET
     if(cyc_net_start(&netcfg,rom_path)!=0) {
         char why[96];snprintf(why,sizeof why,"%s",nes_netplay_last_error());
@@ -1586,7 +1590,6 @@ session_restart:
     }
 #endif
     cyc_diagnostics_note("initializing game presentation");
-    if (!cyc_session_start()) return 2;
     if (replay_view >= 0) {
         const CycHostExtras *x = cyc_session_extras();
         if (!replay_exact || !x || !x->set_view_mode || !x->set_view_mode(x->ctx, replay_view)) {
@@ -1598,9 +1601,7 @@ session_restart:
         fprintf(stderr, "--replay-video: invalid geometry\n"); return 2;
     }
     cyc_diagnostics_note("game presentation ready");
-    if (extra_scanlines >= 0 && !cyc_set_extra_scanlines((unsigned)extra_scanlines)) {
-        fprintf(stderr, "--extra-scanlines requires an MMC1 or MMC3 cartridge\n"); return 2;
-    }
+
 #endif
 
 #if defined(CYC_WITH_SDL) && !defined(CYC_ORACLE)
@@ -1716,7 +1717,11 @@ session_restart:
         while (zapper_next < zapper_count && zapper_steps[zapper_next].frame < frame) zapper_next++;
     }
     /* An explicit command-line choice overrides a loaded state's selection. */
-    if (extra_scanlines >= 0 && !cyc_set_extra_scanlines((unsigned)extra_scanlines)) {
+    if (extra_scanlines >= 0
+#ifdef NESRECOMP_NET
+        && !nes_netplay_active()
+#endif
+        && !cyc_set_extra_scanlines((unsigned)extra_scanlines)) {
         fprintf(stderr, "--extra-scanlines requires an MMC1 or MMC3 cartridge\n"); return 2;
     }
 #endif

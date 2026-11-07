@@ -1746,7 +1746,8 @@ int cyc_sdl_main(const char *title_in, int scale)
 #ifdef NESRECOMP_NET
             if(online) {
                 int player=nes_netplay_input_player();if(player<0||player>=CYC_INPUT_PLAYERS)player=0;
-                int admit=cyc_net_admit(open||inactive||hold_input?0:st.buttons[player]);
+                int admit=cyc_net_admit_game(open||inactive||hold_input?0:st.buttons[player],
+                    open||inactive||hold_input?0:st.game_buttons[player]);
                 if(!admit){SDL_Delay(1);continue;}
                 s_frames_done=(long)cyc_ring_frame;replay=cyc_net_replaying();cyc_net_input(buttons);
                 cyc_replay_suspend("online play");

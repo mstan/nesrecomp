@@ -83,25 +83,13 @@ static const RNetLobbyCapsCodec s_codec = { caps_write, caps_parse, NULL };
 static void fill_caps(void *ctx, const RecompLauncherCSettings *settings,
                       RNetLobbyMatchCaps *caps)
 {
-    char text[512], wire[512];
-    const char *body;
-    (void)ctx;
-    (void)settings;
-    nes_netplay_session_describe_offer(text, (int)sizeof(text));
-    nes_netplay_session_to_wire(text, wire, (int)sizeof(wire));
-    body = wire;
-    if (!strncmp(body, SESSION_HEADER_WIRE, strlen(SESSION_HEADER_WIRE)))
-        body += strlen(SESSION_HEADER_WIRE);
-    memset(caps->ext.bytes, 0, sizeof(caps->ext.bytes));
-    if (strlen(body) >= sizeof(caps->ext.bytes)) {
-        fprintf(stderr, "nes_lobby: session configuration '%s' exceeds the caps "
-                        "field (%u bytes) — the room publishes none\n",
-                body, (unsigned)sizeof(caps->ext.bytes) - 1u);
-        /* No NUL anywhere: caps_write refuses and the caps are withheld. */
-        memset(caps->ext.bytes, 'x', sizeof(caps->ext.bytes));
-        return;
-    }
-    snprintf((char *)caps->ext.bytes, sizeof(caps->ext.bytes), "%s", body);
+    char text[512], reference[64];
+    (void)ctx;(void)settings;
+    int n=nes_netplay_session_describe_offer(text,sizeof text);
+    memset(caps->ext.bytes,0,sizeof caps->ext.bytes);
+    if(n<=0 || n>=sizeof text){memset(caps->ext.bytes,'x',sizeof caps->ext.bytes);return;}
+    nes_netplay_session_reference(text,reference);
+    snprintf((char *)caps->ext.bytes,sizeof caps->ext.bytes,"%s",reference);
 }
 
 static int exe_dir_path(void *ctx, const char *leaf, char *out, size_t cap)
@@ -225,9 +213,12 @@ int nes_host_lobby_config_from_launch(const RecompLauncherCNetplayLaunch *l,
     caps = rnet_lobby_match_caps();
     if (caps && caps->valid && caps->ext.bytes[0] &&
         memchr(caps->ext.bytes, 0, sizeof(caps->ext.bytes))) {
-        char wire[160];
-        snprintf(wire, sizeof(wire), "%s%s", SESSION_HEADER_WIRE, (const char *)caps->ext.bytes);
-        nes_netplay_session_from_wire(wire, c->session_config, (int)sizeof(c->session_config));
+        const char *body=(const char *)caps->ext.bytes;
+        if(!strncmp(body,"sha256:",7))snprintf(c->session_config,sizeof c->session_config,"%s",body);
+        else {
+            char wire[160];snprintf(wire,sizeof wire,"%s%s",SESSION_HEADER_WIRE,body);
+            nes_netplay_session_from_wire(wire,c->session_config,sizeof c->session_config);
+        }
     } else if (!l->force_input_relay && l->local_slot != 0) {
         /* LAN rooms carry no caps: every peer runs its OWN configuration and
          * the in-band mod-set handshake refuses the match if they differ. */

@@ -16,9 +16,9 @@
  *     ... rows arrive through the publish hook, applied right before the NMI
  *     ... a == NES_NETPLAY_ADMIT_REPLAY: run the tick, present nothing
  *
- * Input: 1 byte per seat (the NES pad byte, active high, 0 = neutral), up to
- * NES_NETPLAY_MAX_SLOTS seats. Seat i's byte reaches the guest as seat i+1 of
- * nes_input_seat(): seats 0/1 are the two controller ports, seats 2/3 the
+ * Input v2: 2 bytes per seat (NES pad, then L/R bits; active high, 0 = neutral), up to
+ * NES_NETPLAY_MAX_SLOTS seats. Seat i's NES byte reaches seat i+1 of
+ * nes_input_seat(), and L/R reaches nes_input_game_buttons(): seats 0/1 are the two controller ports, seats 2/3 the
  * logical seats a multi-player mod reads (g_logical_input). While a session is
  * active the published rows are the ONLY source of any seat's input.
  */
@@ -28,7 +28,13 @@
 extern "C" {
 #endif
 
-#define NES_NETPLAY_PAD_BYTES 1
+#define NES_NETPLAY_INPUT_VERSION 2
+#define NES_NETPLAY_PAD_BYTES 2
+#define NES_NETPLAY_INPUT_MASK 0x03FFu
+typedef uint16_t NesNetplayInput;
+static inline NesNetplayInput nes_netplay_input(uint8_t pad,uint32_t game) {
+    return (NesNetplayInput)(pad|((game&3u)<<8));
+}
 #define NES_NETPLAY_MAX_SLOTS 4
 
 enum {
@@ -102,18 +108,25 @@ const char *nes_netplay_transport_name(void);
 
 /* ---- the per-tick gate (main_runner.c) --------------------------------- */
 /* Stage the local seat's pad byte for the next admit. */
-void nes_netplay_stage_local(uint8_t pad);
+void nes_netplay_stage_local(NesNetplayInput pad);
 /* Pump + admit. Returns NES_NETPLAY_ADMIT_*. */
 int  nes_netplay_poll_admit(void);
 /* After the admitted tick has run (called at the top of the next callback). */
 void nes_netplay_frame_end(void);
 /* Rows for the admitted tick: delivered through this hook by the driver.
  * rows[i] is seat i's pad byte; slots <= NES_NETPLAY_MAX_SLOTS. */
-typedef void (*NesNetplayPublishFn)(const uint8_t *rows, int slots, int replay);
+typedef void (*NesNetplayPublishFn)(const NesNetplayInput *rows, int slots, int replay);
 void nes_netplay_set_publish_hook(NesNetplayPublishFn fn);
 /* Resim bracket (presentation / audio suppression) hooks, set by the runner. */
 typedef void (*NesNetplayResimFn)(int begin);
 void nes_netplay_set_resim_hook(NesNetplayResimFn fn);
+/* New profiles can require the occupied-seat capability exchange, including
+ * refusing observer joins until their upload path is qualified. */
+void nes_netplay_require_capabilities(int required);
+void nes_netplay_require_player_count(int required);
+/* Local physical binding row, selected before the first admitted tick; -1 restores config default. */
+void nes_netplay_set_input_player(int player);
+void nes_netplay_register_input_contract(void);
 
 /* ---- leaving ------------------------------------------------------------ */
 void nes_netplay_request_return_to_lobby(const char *why);
