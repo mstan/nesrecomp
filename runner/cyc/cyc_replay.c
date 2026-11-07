@@ -80,6 +80,7 @@ const char *cyc_replay_path(void) { return ""; }
 #include "cyc_settings.h"
 #include "cyc_state.h"
 #include "cyc_trace.h"
+#include "cyc_video.h"
 
 #ifdef _WIN32
 #include <direct.h>
@@ -332,6 +333,7 @@ static struct {
     uint32_t next_frame;
     uint64_t last_cycles;
     uint32_t seen_loads, seen_hle, seen_mods, seen_policy, policy;
+    int seen_mode, seen_width, seen_draw_w, seen_draw_h;
     bool zapper_valid;
     int zapx, zapy, zaptrig;
     char *ev;
@@ -663,6 +665,12 @@ static bool open_segment_impl(unsigned why, uint32_t frame)
       cyc_is_fds() ? 1 : 0, cyc_extra_scanlines(), cyc_run_native ? 1 : 0);
     if (plan) H("HLE auto_swap=%d fast_load=%d\n", plan->auto_swap ? 1 : 0, plan->fast_load ? 1 : 0);
     H("POLICY %08X\nMODS %d\n", S.policy, cyc_session_mods_enabled() ? 1 : 0);
+    int draw_w, draw_h;
+    cyc_video_drawable_size(&draw_w, &draw_h);
+    H("VIDEO %d %d %d %d\n", cyc_video_mode(), cyc_video_width(), draw_w, draw_h);
+    const CycHostExtras *extras = cyc_session_extras();
+    if (extras && extras->get_view_mode)
+        H("VIEW_MODE %d\n", extras->get_view_mode(extras->ctx));
     char opts[2048];
     cyc_session_taken_options(opts, sizeof(opts));
     H("%s", opts);
@@ -684,6 +692,8 @@ static bool open_segment_impl(unsigned why, uint32_t frame)
     free(state);
     if (!ok || !check_writer()) { if (!S.failed) stop_recording(w_error(S.writer) ? w_error(S.writer) : "queue refused a write"); return false; }
     S.recording = true;
+    S.seen_mode = cyc_video_mode(); S.seen_width = cyc_video_width();
+    S.seen_draw_w = draw_w; S.seen_draw_h = draw_h;
     S.rows = 0;
     S.zapper_valid = false;
     S.seen_loads = cyc_state_load_count;
@@ -734,6 +744,8 @@ static void frame_begin_impl(const uint8_t phys[2], const uint8_t logical[4], co
     if (!S.started && !start_recorder()) return;
     if (!check_writer()) return;
     unsigned why = 0;
+    int draw_w, draw_h;
+    cyc_video_drawable_size(&draw_w, &draw_h);
     uint32_t frame = cyc_ring_frame;
     if (S.mod_paused) {
         S.mod_paused = false;
@@ -748,7 +760,8 @@ static void frame_begin_impl(const uint8_t phys[2], const uint8_t logical[4], co
     else if (S.rows >= S.segment_frames) why = WHY_CAP;
     else if (S.seen_loads != cyc_state_load_count) why = WHY_LOAD;
     else if (S.seen_hle != cyc_host_settings_revision || S.seen_mods != cyc_session_mods_revision ||
-             S.seen_policy != S.policy) why = WHY_SETTINGS;
+             S.seen_policy != S.policy || S.seen_mode != cyc_video_mode() ||
+             S.seen_width != cyc_video_width() || S.seen_draw_w != draw_w || S.seen_draw_h != draw_h) why = WHY_SETTINGS;
     else if (frame != S.next_frame || cyc_cycle_count() != S.last_cycles) why = WHY_SKIP;
     if (why && !open_segment(why, frame)) return;
     char buf[512];

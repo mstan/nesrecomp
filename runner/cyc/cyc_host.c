@@ -1093,6 +1093,7 @@ static int host_main(int argc, char **argv) {
     const char *present_out = NULL, *load_state = NULL, *mods_root = NULL;
     long present_every = 0;
     int present_w = 0, present_h = 0;
+    int replay_video[4] = {-1, 0, 0, 0}, replay_view = -1;
     int extra_scanlines = -1;
     int region = -1;
     int zapper_port = -1;
@@ -1235,6 +1236,19 @@ static int host_main(int argc, char **argv) {
             if (sscanf(argv[++i], "%dx%d", &present_w, &present_h) != 2 || present_w <= 0 || present_h <= 0) {
                 fprintf(stderr, "--present-size: WxH\n");
                 return 2;
+            }
+        }
+        else if (!strcmp(argv[i], "--replay-video") && i + 1 < argc) {
+            char tail;
+            if (sscanf(argv[++i], "%d,%d,%d,%d%c", &replay_video[0], &replay_video[1],
+                       &replay_video[2], &replay_video[3], &tail) != 4 || replay_video[0] < 0) {
+                fprintf(stderr, "--replay-video: MODE,WIDTH,DRAWABLE_W,DRAWABLE_H\n"); return 2;
+            }
+        }
+        else if (!strcmp(argv[i], "--replay-view") && i + 1 < argc) {
+            char tail;
+            if (sscanf(argv[++i], "%d%c", &replay_view, &tail) != 1 || replay_view < 0) {
+                fprintf(stderr, "--replay-view: nonnegative view mode\n"); return 2;
             }
         }
         else if (!strcmp(argv[i], "--save-state") && i + 1 < argc) {
@@ -1573,6 +1587,16 @@ session_restart:
 #endif
     cyc_diagnostics_note("initializing game presentation");
     if (!cyc_session_start()) return 2;
+    if (replay_view >= 0) {
+        const CycHostExtras *x = cyc_session_extras();
+        if (!replay_exact || !x || !x->set_view_mode || !x->set_view_mode(x->ctx, replay_view)) {
+            fprintf(stderr, "--replay-view: unavailable view mode\n"); return 2;
+        }
+    }
+    if (replay_video[0] >= 0 && (!replay_exact ||
+        !cyc_video_restore(replay_video[0], replay_video[1], replay_video[2], replay_video[3]))) {
+        fprintf(stderr, "--replay-video: invalid geometry\n"); return 2;
+    }
     cyc_diagnostics_note("game presentation ready");
     if (extra_scanlines >= 0 && !cyc_set_extra_scanlines((unsigned)extra_scanlines)) {
         fprintf(stderr, "--extra-scanlines requires an MMC1 or MMC3 cartridge\n"); return 2;

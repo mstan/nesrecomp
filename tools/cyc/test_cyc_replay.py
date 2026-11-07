@@ -253,6 +253,7 @@ def scenario_nes(exe, out):
     check(any(v[0] & 1 for s in parsed for v in s.game_inputs.values()), 'seat 1 L recorded')
     check(any(v[1] & 2 for s in parsed for v in s.game_inputs.values()), 'seat 2 R recorded')
     for s in parsed:
+        check(len(s.header.get('VIDEO', '').split()) == 4, f'{s.path.name}: committed geometry missing')
         check(s.state_path.is_file(), f'{s.path.name}: checkpoint missing')
         check(s.unfinished is None, f'{s.path.name}: a normal quit must leave every frame finished')
         check(s.completed <= SEGMENT_FRAMES, f'{s.path.name}: {s.completed} frames in a {SEGMENT_FRAMES}-frame segment')
@@ -433,6 +434,31 @@ def scenario_overflow(exe, out):
     print('PASS overflow: stopped loudly after %d segments, 400 frames ran in %.1fs' % (len(segs), elapsed), flush=True)
 
 
+def scenario_video(exe, out):
+    import struct
+    w = Window(exe, out / 'test.nes', out, 'video')
+    w.cmd('video', mode='fit')
+    w.cmd('window_size', w=1920, h=1080)
+    w.wait_frames(12)
+    w.cmd('window_size', w=640, h=480)
+    w.wait_frames(12)
+    check(w.quit() == 0, 'video window exit')
+    parsed = [rd.Segment(p) for p in segments(w.rec)]
+    widths = {int(s.header['VIDEO'].split()[1]) for s in parsed}
+    check({320, 426} <= widths, f'Fit resize must start geometry segments: {widths}')
+    for s in parsed:
+        if not s.inputs:
+            continue
+        work = out / f'video-play-{s.number}'
+        run_tool([s.path, '--exe', exe, '--rom', out / 'test.nes', '--work-dir', work,
+                  '--host-arg=--present-out', '--host-arg=picture.png'], out, 0)
+        png = (work / 'picture.png').read_bytes()
+        width, height = struct.unpack('>II', png[16:24])
+        check(width == int(s.header['VIDEO'].split()[1]) and height == 240,
+              f'headless geometry differs from recording: {width}x{height}, {s.header["VIDEO"]}')
+    print('PASS video: Fit resizes create segments and headless playback restores exact widths', flush=True)
+
+
 def scenario_off(exe, out):
     rom = out / 'test.nes'
     w = Window(exe, rom, out, 'off', env_extra={'NESRECOMP_REPLAY_RECORD': '0'})
@@ -597,7 +623,7 @@ def main():
     rom = out / 'test.nes'
     make_nes_rom(rom)
     for name, fn in (('nes', scenario_nes), ('fds', scenario_fds), ('zapper', scenario_zapper),
-                     ('overflow', scenario_overflow), ('off', scenario_off), ('cap', scenario_cap),
+                     ('overflow', scenario_overflow), ('video', scenario_video), ('off', scenario_off), ('cap', scenario_cap),
                      ('mods', lambda e, o: scenario_mods(e, args.window_mods.resolve(), o))):
         if args.only and name not in args.only.split(','):
             continue

@@ -283,6 +283,13 @@ def host_command(seg, args, work, frames_end, extra):
         cmd += ['--mods-root', stage_mods(seg, args.exe, work).name]
     for option in seg.options:
         cmd += option.split(' ', 1)
+    if 'VIEW_MODE' in seg.header:
+        cmd += ['--replay-view', seg.header['VIEW_MODE']]
+    if 'VIDEO' in seg.header:
+        values = seg.header['VIDEO'].split()
+        if len(values) != 4:
+            raise CaptureError(f'{seg.path.name}: invalid VIDEO geometry')
+        cmd += ['--replay-video', ','.join(values)]
     return cmd + list(args.host_arg) + extra
 
 
@@ -293,7 +300,7 @@ def run_host(cmd, work, timeout, log_name):
     with log.open('wb') as out:
         try:
             result = subprocess.run(cmd, cwd=work, env=env, stdout=out, stderr=subprocess.STDOUT, timeout=timeout,
-                                    creationflags=NO_WINDOW)
+                                    creationflags=NO_WINDOW | getattr(subprocess, 'BELOW_NORMAL_PRIORITY_CLASS', 0))
         except subprocess.TimeoutExpired:
             return None, log
     return result.returncode, log

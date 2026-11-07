@@ -1583,8 +1583,11 @@ any skipped frame or machine replaced under the recorder, and online play end
 the segment and start a new one with a fresh checkpoint; 600 frames end one
 too. Online play is **not** recorded (the rollback session owns the machine);
 recording is paused with a log line and resumes with a new segment. The header
-carries the program identity, region, FDS HLE plan, extra scanlines and the
-game's own `--options`; a checkpoint is refused by a different program or build,
+carries the program identity, region, FDS HLE plan, extra scanlines, the committed
+video mode/width/drawable and the game's view mode and `--options`. A drawable,
+width or view change starts a new segment; playback restores those values before
+loading its checkpoint, so adaptive Fit simulation follows the recorded geometry.
+A checkpoint is refused by a different program or build,
 so a replay never runs on the wrong machine.
 
 **Retention and cost.** Up to 360 segments (one hour) and 256 MiB of
@@ -1599,8 +1602,8 @@ printed at exit: about 65-75 us per frame, about 0.4% of a 60 Hz frame.
 
 **Not covered.** The Datach barcode scanner and run-ahead have no window
 route; a single frame whose cheats change more than 256 KiB of event text
-checkpoints instead of logging. View modes that change the simulation are
-recorded as a policy digest only: the headless host plays the game's default
-view, so a replay of such a segment may diverge, which the hashes will show.
+checkpoints instead of logging. Captures made before the `VIDEO`/`VIEW_MODE`
+header fields still load, but lack the geometry needed to reproduce a game
+whose simulation depended on its window or view mode.
 `tools/cyc/test_cyc_replay.py` (CTest `cyc_replay`; `cyc_replay_mods` for the Mods switch,
 with the mods-built `cyc_window_mods`) is the acceptance test.
