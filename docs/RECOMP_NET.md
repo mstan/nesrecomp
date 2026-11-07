@@ -120,3 +120,9 @@ are protocol identities, not evidence of cross-build or cross-host qualification
 Cycle sessions also seal region and extra scanlines. Titles may override
 the width key to separate local presentation from canonical simulation
 rectangles. Unknown local-only features still refuse a session.
+
+A trusted title adapter may use `nes_mod_netplay_external_rom_path` during
+setup to force-verify a locally selected manifest resource. This is separate
+from the committed-plugin path API: it changes neither the vanilla activation
+plan nor saved offline selections. The adapter seals source hashes and keeps
+its loaded data immutable before admission; local paths and bytes stay local.

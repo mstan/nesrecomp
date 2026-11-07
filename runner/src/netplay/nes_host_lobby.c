@@ -7,9 +7,9 @@
  *
  *   - its identity (game_version = version + exe hash, content_fingerprint =
  *     ROM SHA-256; nes_netplay_identity.c),
- *   - the session configuration seal: the host's canonical session text rides
- *     the room's match_caps as "nes_session" and every peer applies it at
- *     launch (nes_netplay_session_*),
+ *   - the session seal: a full SHA-256 reference rides match_caps as
+ *     "nes_session"; reliable preboot setup carries and verifies the full
+ *     canonical image before every peer applies it (nes_netplay_session_*),
  *   - the persisted display name (config.ini [Netplay]),
  *   - the rollback engine's fork report.
  *
@@ -51,9 +51,9 @@ static int s_inited;
 static char s_game_name[96];
 
 /* ---- match caps: the session configuration image ------------------------
- * ext holds the wire text without its header line (64 bytes). A text that
- * does not fit withholds the whole caps object rather than publishing a
- * truncated configuration. */
+ * ext holds a NUL-terminated full SHA-256 reference (50 characters). The
+ * canonical image travels through the reliable preboot barrier, without
+ * truncating either the digest or the selected configuration. */
 #define SESSION_HEADER_WIRE "nes-session/1;"
 
 static int caps_write(const RNetLobbyMatchCaps *caps, char *out, size_t cap, void *ctx)
