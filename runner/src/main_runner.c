@@ -33,6 +33,8 @@
 #include "mod_runtime.h"
 #endif
 uint8_t g_logical_input[4];
+uint32_t g_game_input[4];
+uint32_t nes_input_game_buttons(int seat) {return seat>=1&&seat<=4?g_game_input[seat-1]:0;}
 uint8_t nes_input_seat(int seat) {
     if (seat == 1) return g_controller1_buttons;
     if (seat == 2) return g_controller2_buttons;
@@ -246,9 +248,10 @@ static Uint64  s_rb_tick_t0 = 0;        /* admit time of the running tick */
 static uint8_t s_rb_local_test_pad(void);
 
 #ifdef NESRECOMP_NET
-static void rb_on_publish(const uint8_t *rows, int slots, int replay) {
+static void rb_on_publish(const NesNetplayInput *rows, int slots, int replay) {
     memset(s_rb_rows, 0, sizeof(s_rb_rows));
-    for (int i = 0; i < slots && i < 4; ++i) s_rb_rows[i] = rows[i];
+    memset(g_game_input,0,sizeof g_game_input);
+    for (int i = 0; i < slots && i < 4; ++i) {s_rb_rows[i]=(uint8_t)rows[i];g_game_input[i]=(rows[i]>>8)&3u;}
     s_rb_rows_valid = 1;
     s_rb_tick_replay = replay ? 1 : 0;
 }
@@ -380,6 +383,9 @@ static int rb_restart_every_tick(void) {
  * the room publishes its caps (the room's text must already carry every key
  * a peer will require). Idempotent. */
 void nes_runner_register_session_keys(void) {
+#ifdef NESRECOMP_NET
+    nes_netplay_register_input_contract();
+#endif
     (void)nes_netplay_session_register("widescreen", ws_get, ws_apply, ws_restore);
     (void)nes_netplay_session_set_offer("widescreen", ws_offer);
 }
@@ -2230,6 +2236,7 @@ int nesrecomp_runner_run(int argc, char *argv[]) {
      * A netplay guest resolves to its sandbox (nes_netplay_start). */
     save_ram_init(game_get_name(), s_rom_has_battery);
 #ifdef NESRECOMP_NET
+    if(net_on){memset(g_logical_input,0,sizeof g_logical_input);memset(g_game_input,0,sizeof g_game_input);memset(s_rb_rows,0,sizeof s_rb_rows);nes_rb_state_invalidate();}
     if (net_on && nes_netplay_boot_barrier() != 0) {
         fprintf(stderr, "[Netplay] Match could not boot (%s) — back to the lobby.\n",
                 nes_netplay_last_error());

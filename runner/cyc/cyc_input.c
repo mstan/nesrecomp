@@ -26,6 +26,18 @@ const char *cyc_button_key(int b) { return b >= 0 && b < CYC_INPUT_BUTTONS ? BUT
 const char *cyc_button_label(int b) { return b >= 0 && b < CYC_INPUT_BUTTONS ? BUTTON_LABELS[b] : ""; }
 const char *cyc_shortcut_key(int s) { return s >= 0 && s < CYC_SC_COUNT ? SHORTCUT_KEYS[s] : ""; }
 const char *cyc_shortcut_label(int s) { return s >= 0 && s < CYC_SC_COUNT ? SHORTCUT_LABELS[s] : ""; }
+const char *cyc_game_button_key(int b) { return b == 0 ? "l" : b == 1 ? "r" : ""; }
+const char *cyc_game_button_label(int b) { return b == 0 ? "Game L" : b == 1 ? "Game R" : ""; }
+
+void cyc_bindings_profile(CycBindings *b, const CycInputProfile *profile) {
+    if (!profile) return;
+    for (int p = 0; p < CYC_INPUT_PLAYERS; p++) for (int i = 0; i < CYC_GAME_BUTTONS; i++) {
+        if (p == 0 && profile->game_key[i]) cyc_key_parse(profile->game_key[i], &b->game_button[p][i].key);
+        if (profile->game_pad[i]) cyc_pad_parse(profile->game_pad[i], &b->game_button[p][i].pad);
+    }
+    for (int i = 0; i < CYC_SC_COUNT; i++)
+        if (profile->shortcut_pad[i]) cyc_pad_parse(profile->shortcut_pad[i], &b->shortcut[i].pad);
+}
 
 void cyc_bindings_default(CycBindings *b)
 {
@@ -301,5 +313,15 @@ void cyc_input_eval(const CycBindings *b, const CycInputFrame *f, CycInputState 
         if ((bits & 0x0C) == 0x0C) bits &= (uint8_t)~0x0C;
         if ((bits & 0x03) == 0x03) bits &= (uint8_t)~0x03;
         out->buttons[p] = bits;
+        for (int i = 0; i < CYC_GAME_BUTTONS; i++) {
+            const CycBinding *pb = &b->game_button[p][i];
+            bool on = b->source[p] == 1 && key_down(f, pb->key) && !key_taken[pb->key];
+            if (!on && b->source[p] != 0 && pad >= 0 && pb->pad) {
+                uint32_t m;
+                on = pad_down(f, pad, pb->pad, threshold, &m) && !(m & pad_taken[pad]) &&
+                    !(CYC_PAD_IS_AXIS(pb->pad) && axis_taken[pad] == pb->pad);
+            }
+            if (on) out->game_buttons[p] |= 1u << i;
+        }
     }
 }

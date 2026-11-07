@@ -78,6 +78,7 @@ void nes_sha256(const uint8_t *data, size_t len, uint8_t out[32])
 static char     s_version[96];
 static char     s_rom_hex[65];
 static uint32_t s_build_fp, s_content_fp;
+static uint8_t s_build_sha256[32];
 
 static int exe_bytes(uint8_t **out, size_t *len)
 {
@@ -125,6 +126,7 @@ const char *nes_netplay_identity_game_version(void)
             nes_sha256(exe, len, d);
             free(exe);
             s_build_fp = fold(d);
+            memcpy(s_build_sha256,d,sizeof d);
             /* The lobby carries RNET_LOBBY_VERSION_LEN-1 = 31 characters and
              * a longer string is truncated on one path and not the other
              * (measured: every join refused "version_mismatch"). Keep the
@@ -181,3 +183,33 @@ uint32_t nes_netplay_identity_build_fp(void)
 }
 
 uint32_t nes_netplay_identity_content_fp(void) { return s_content_fp; }
+
+const uint8_t *nes_netplay_identity_build_sha256(void) {
+    (void)nes_netplay_identity_game_version();return s_build_sha256;
+}
+
+void nes_netplay_session_reference(const char *text,char out[64]) {
+    static const char b64[]="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    uint8_t d[32];nes_sha256((const uint8_t *)text,strlen(text),d);
+    memcpy(out,"sha256:",7);unsigned bits=0,value=0;int at=7;
+    for(int i=0;i<32;i++){value=(value<<8)|d[i];bits+=8;while(bits>=6){bits-=6;out[at++]=b64[(value>>bits)&63];}}
+    if(bits)out[at++]=b64[(value<<(6-bits))&63];out[at]=0;
+}
+
+uint32_t nes_netplay_cycle_profile(const char *implementation) {
+    if(implementation&&!strcmp(implementation,"LLE"))return NES_NET_PROFILE_CYCLE_LLE;
+    if(implementation&&!strcmp(implementation,"HLE"))return NES_NET_PROFILE_CYCLE_HLE;
+    return 0;
+}
+const char *nes_netplay_cycle_contract(const char *implementation) {
+    switch(nes_netplay_cycle_profile(implementation)) {
+        case NES_NET_PROFILE_CYCLE_LLE:return "cycle-lle-c1";
+        case NES_NET_PROFILE_CYCLE_HLE:return "cycle-hle-c1";
+        default:return "cycle-unsupported";
+    }
+}
+int nes_netplay_profile_compatible(uint32_t selected,uint32_t local,uint32_t remote) {
+    const uint32_t known=NES_NET_PROFILE_CYCLE_LLE|NES_NET_PROFILE_LEGACY_C|NES_NET_PROFILE_CYCLE_HLE;
+    return selected && !(selected&(selected-1u)) && !(selected&~known) &&
+           (local&selected) && (remote&selected);
+}

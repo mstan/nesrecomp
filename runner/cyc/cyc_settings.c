@@ -36,6 +36,18 @@ void cyc_settings_default(CycSettings *s)
     cyc_bindings_default(&s->bind);
 }
 
+void cyc_settings_profile(CycSettings *s, const CycInputProfile *profile) {
+    if (!profile || !profile->id || !strcmp(s->input_profile, profile->id)) return;
+    CycBindings stock, desired;
+    cyc_bindings_default(&stock); desired = stock;
+    cyc_bindings_profile(&desired, profile);
+    /* Migrate factory shortcut assignments once. Customized values survive. */
+    for (int i = 0; i < CYC_SC_COUNT; i++)
+        if (profile->shortcut_pad[i] && s->bind.shortcut[i].pad == stock.shortcut[i].pad)
+            s->bind.shortcut[i].pad = desired.shortcut[i].pad;
+    snprintf(s->input_profile, sizeof s->input_profile, "%s", profile->id);
+}
+
 const char *cyc_settings_default_path(void)
 {
     static char path[1024];
@@ -166,6 +178,7 @@ bool cyc_settings_load(CycSettings *s, const char *path, FILE *log, const CycSet
             else if (eq_ci(key,"Interval")) bad = !parse_int(val,&v) || (s->rewind_interval = clampi(v,1,60), 0);
             break;
         case SEC_INPUT:
+            if (eq_ci(key, "GameProfile")) snprintf(s->input_profile, sizeof s->input_profile, "%s", val);
             if (!strncmp(key, "Player", 6) && key[6] >= '1' && key[6] < '1' + CYC_INPUT_PLAYERS) {
                 int p = key[6] - '1';
                 const char *what = key + 7;
@@ -208,6 +221,8 @@ bool cyc_settings_load(CycSettings *s, const char *path, FILE *log, const CycSet
             if (player >= 0) {
                 for (int i = 0; i < CYC_INPUT_BUTTONS; ++i)
                     if (eq_ci(key, cyc_button_key(i))) target = &s->bind.button[player][i];
+                for (int i = 0; i < CYC_GAME_BUTTONS; ++i)
+                    if (eq_ci(key, cyc_game_button_key(i))) target = &s->bind.game_button[player][i];
             } else {
                 for (int i = 0; i < CYC_SC_COUNT; ++i)
                     if (eq_ci(key, cyc_shortcut_key(i))) target = &s->bind.shortcut[i];
@@ -242,6 +257,7 @@ bool cyc_settings_save(const CycSettings *s, const char *path, const CycSettings
 #endif
     fprintf(f, "[Audio]\nEnabled = %d\nVolume = %d\n", s->audio_enabled, s->volume);
     fprintf(f, "[Input]\n");
+    if (s->input_profile[0]) fprintf(f, "GameProfile = %s\n", s->input_profile);
     for (int p = 0; p < CYC_INPUT_PLAYERS; ++p)
         fprintf(f, "Player%dSource = %d\nPlayer%dDevice = %s\nPlayer%dDeadzone = %d\n", p + 1, s->bind.source[p], p + 1,
                 s->bind.device[p], p + 1, s->bind.deadzone[p]);
@@ -265,10 +281,18 @@ bool cyc_settings_save(const CycSettings *s, const char *path, const CycSettings
             cyc_key_text(s->bind.button[p][i].key, text, sizeof(text));
             fprintf(f, "%s = %s\n", cyc_button_key(i), text);
         }
+        for (int i = 0; i < CYC_GAME_BUTTONS; ++i) {
+            cyc_key_text(s->bind.game_button[p][i].key, text, sizeof(text));
+            fprintf(f, "%s = %s\n", cyc_game_button_key(i), text);
+        }
         fprintf(f, "[Gamepad.Player%d]\n", p + 1);
         for (int i = 0; i < CYC_INPUT_BUTTONS; ++i) {
             cyc_pad_text(s->bind.button[p][i].pad, text, sizeof(text));
             fprintf(f, "%s = %s\n", cyc_button_key(i), text);
+        }
+        for (int i = 0; i < CYC_GAME_BUTTONS; ++i) {
+            cyc_pad_text(s->bind.game_button[p][i].pad, text, sizeof(text));
+            fprintf(f, "%s = %s\n", cyc_game_button_key(i), text);
         }
     }
     fprintf(f, "[Keyboard.Shortcuts]\n");

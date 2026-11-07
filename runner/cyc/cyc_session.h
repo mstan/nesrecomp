@@ -60,6 +60,7 @@ void cyc_session_input(uint8_t buttons[2]);
 /* Publish all logical seats before input/frame callbacks. Physical NES ports
  * still consume only the first two bytes. Other seats are for trusted mods. */
 void cyc_session_logical_input(const uint8_t *buttons, unsigned seats);
+void cyc_session_game_input(const uint32_t *buttons, unsigned seats);
 unsigned cyc_session_audio_rate(unsigned fallback);
 void cyc_session_audio_mix(int16_t *samples, size_t count);
 void cyc_session_event(const void *event, int player);

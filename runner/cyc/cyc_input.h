@@ -46,6 +46,8 @@ extern "C" {
 #define CYC_INPUT_BUTTONS 8      /* NES bit order, MSB first: A B Select Start Up Down Left Right */
 #define CYC_INPUT_MAX_PADS 8
 #define CYC_INPUT_PAD_AXES 6     /* SDL_CONTROLLER_AXIS_MAX */
+#define CYC_GAME_BUTTONS 2
+enum { CYC_GAME_L = 1u, CYC_GAME_R = 2u };
 
 typedef enum {
     CYC_SC_DISK,
@@ -57,6 +59,16 @@ typedef enum {
     CYC_SC_REWIND,
     CYC_SC_COUNT
 } CycShortcut;
+
+/* Optional game actions, separate from the eight physical NES pad bits.
+ * Strings use the same portable names as config.ini; NULL keeps a default. */
+typedef struct CycInputProfile {
+    const char *id;
+    const char *game_label[CYC_GAME_BUTTONS];
+    const char *game_key[CYC_GAME_BUTTONS];
+    const char *game_pad[CYC_GAME_BUTTONS];
+    const char *shortcut_pad[CYC_SC_COUNT];
+} CycInputProfile;
 
 /* recomp-ui's portable controller-binding encoding (recomp_launcher.h). */
 #define CYC_PAD_BUTTON(code) (1 + (code))
@@ -77,9 +89,13 @@ typedef struct {
     int  deadzone[CYC_INPUT_PLAYERS];          /* 0..100 percent of full stick travel */
     CycBinding button[CYC_INPUT_PLAYERS][CYC_INPUT_BUTTONS];
     CycBinding shortcut[CYC_SC_COUNT];
+    CycBinding game_button[CYC_INPUT_PLAYERS][CYC_GAME_BUTTONS];
 } CycBindings;
 
 void cyc_bindings_default(CycBindings *b);
+void cyc_bindings_profile(CycBindings *b, const CycInputProfile *profile);
+const char *cyc_game_button_key(int button);
+const char *cyc_game_button_label(int button);
 
 /* Names: settings keys ("a", "disk") and player-facing labels. */
 const char *cyc_button_key(int button);        /* "a" "b" "select" "start" "up" "down" "left" "right" */
@@ -109,6 +125,7 @@ typedef struct {
     uint8_t buttons[CYC_INPUT_PLAYERS];        /* NES pad bits, opposite directions resolved */
     bool    shortcut[CYC_SC_COUNT];            /* held this frame */
     int     player_pad[CYC_INPUT_PLAYERS];     /* index into the frame's pads, -1 none */
+    uint32_t game_buttons[CYC_INPUT_PLAYERS];  /* CYC_GAME_*; never latched by the NES */
 } CycInputState;
 
 /* Which pad each gamepad-source player reads: its device GUID if connected,

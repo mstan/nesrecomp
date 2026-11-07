@@ -285,7 +285,8 @@ int main(int argc, char **argv)
     CHECK(!strcmp(seen_game.rom_noun, "Disk") && seen_game.num_rom_patterns == 2);
     CHECK(!strcmp(seen_game.rom_patterns[0], "*.fds") && !strcmp(seen_game.rom_patterns[1], "*.qd"));
     CHECK(!strcmp(seen_game.name, "TestGame"));
-    CHECK(seen_game.assist_binding_count == CYC_SC_COUNT);            /* Disk offered: an FDS program */
+    int actions = CYC_SC_COUNT + CYC_INPUT_PLAYERS * CYC_GAME_BUTTONS;
+    CHECK(seen_game.assist_binding_count == (actions < RECOMP_LAUNCHER_MAX_ASSIST_BINDINGS ? actions : RECOMP_LAUNCHER_MAX_ASSIST_BINDINGS));
     CHECK(!strcmp(seen_game.assist_binding_labels[0], cyc_shortcut_label(CYC_SC_DISK)));
     CHECK(seen_game.assist_default_key_bind[0] == SDL_SCANCODE_D);
     CHECK(seen_game.assist_default_pad_bind[0] == RECOMP_LAUNCHER_PAD_BUTTON(SDL_CONTROLLER_BUTTON_LEFTSHOULDER));
@@ -318,7 +319,8 @@ int main(int argc, char **argv)
     /* a cartridge: no Disk row, no disk media names */
     cyc_settings_default(&s);
     CHECK(cyc_ui_launcher(&s, cfg, NULL, &rom, false, NULL, NULL) == 1);
-    CHECK(seen_game.assist_binding_count == CYC_SC_COUNT - 1);
+    actions--;
+    CHECK(seen_game.assist_binding_count == (actions < RECOMP_LAUNCHER_MAX_ASSIST_BINDINGS ? actions : RECOMP_LAUNCHER_MAX_ASSIST_BINDINGS));
     CHECK(strcmp(seen_game.assist_binding_labels[0], cyc_shortcut_label(CYC_SC_DISK)));
     CHECK(seen_game.num_rom_patterns == 0);
 #ifdef NESRECOMP_CYCLE_HDPACK

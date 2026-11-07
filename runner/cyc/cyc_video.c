@@ -63,6 +63,19 @@ void cyc_video_drawable_size(int *drawable_w, int *drawable_h)
     if (drawable_h) *drawable_h = s_draw_h;
 }
 
+bool cyc_video_restore(int mode, int width, int drawable_w, int drawable_h)
+{
+    if (mode < 0 || mode >= NES_VIDEO_MODE_COUNT || width < 256 ||
+        width > CYC_VIDEO_MAX_WIDTH || (width & 1) || drawable_w < 0 || drawable_h < 0 ||
+        (!drawable_w != !drawable_h)) return false;
+    s_mode = mode;
+    s_draw_w = drawable_w;
+    s_draw_h = drawable_h;
+    s_pending = false;
+    commit(width);
+    return true;
+}
+
 bool cyc_video_apply_pending(void)
 {
     if (!s_pending) return false;

@@ -19,6 +19,7 @@ extern "C" {
 typedef int  (*NesSessionGetFn)(char *out, int cap);       /* current value */
 typedef int  (*NesSessionApplyFn)(const char *value);      /* 1 = applied */
 typedef void (*NesSessionRestoreFn)(void);                 /* offline value */
+int  nes_netplay_session_has(const char *key);
 int  nes_netplay_session_register(const char *key, NesSessionGetFn get,
                                   NesSessionApplyFn apply,
                                   NesSessionRestoreFn restore);

@@ -193,7 +193,9 @@ int cyc_sdl_prelaunch(const char **rom_path, const char *cli_bios, NesFdsHleAsk 
     s_extras = cyc_session_extras();
     if (!s_set_path[0]) snprintf(s_set_path, sizeof(s_set_path), "%s", cyc_settings_default_path());
     cyc_settings_default(&s_set);
+    if (s_extras) cyc_bindings_profile(&s_set.bind, s_extras->input_profile);
     bool had_config = cyc_settings_load(&s_set, s_set_path, stderr, &GAME_KEYS);
+    if (s_extras) cyc_settings_profile(&s_set, s_extras->input_profile);
     /* Preserve legacy Zapper choices without modifying the old keybind file. */
     CycSettings legacy;
     cyc_settings_default(&legacy);
@@ -640,6 +642,7 @@ static void vpad_tick(long frame)
 
 static int      s_pad_hold[SDL_CONTROLLER_BUTTON_MAX];
 static int      s_act_hold[CYC_INPUT_PLAYERS][CYC_INPUT_BUTTONS];
+static int      s_game_hold[CYC_INPUT_PLAYERS][CYC_GAME_BUTTONS];
 static int      s_sc_hold[CYC_SC_COUNT];
 static char     s_ui_shot[1024];
 static int      s_ui_shot_id = -1;
@@ -723,7 +726,11 @@ static void tcp_action(int id, const char *line)
             cyc_tcp_ok(id, NULL);
             return;
         }
-    cyc_tcp_err(id, "action: a shortcut (disk, menu, fast_forward, screenshot, fullscreen) or a button (a ... right)");
+    for (int b = 0; b < CYC_GAME_BUTTONS; ++b)
+        if (!strcmp(name, cyc_game_button_key(b)) && player >= 1 && player <= CYC_INPUT_PLAYERS) {
+            s_game_hold[player - 1][b] = frames; cyc_tcp_ok(id, NULL); return;
+        }
+    cyc_tcp_err(id, "action: a shortcut, NES button (a ... right), or game button (l, r)");
 }
 
 static void tcp_state(int id, const char *line)
@@ -1174,6 +1181,9 @@ static void tcp_tick(void)
     for (int p = 0; p < CYC_INPUT_PLAYERS; ++p)
         for (int b = 0; b < CYC_INPUT_BUTTONS; ++b)
             if (s_act_hold[p][b]) --s_act_hold[p][b];
+    for (int p = 0; p < CYC_INPUT_PLAYERS; ++p)
+        for (int b = 0; b < CYC_GAME_BUTTONS; ++b)
+            if (s_game_hold[p][b]) --s_game_hold[p][b];
     for (int s = 0; s < CYC_SC_COUNT; ++s)
         if (s_sc_hold[s]) --s_sc_hold[s];
 }
@@ -1477,7 +1487,14 @@ int cyc_sdl_main(const char *title_in, int scale)
         cyc_sdl_error_box("Cannot start game", message);
         return 1;
     }
-    if (!s_set_path[0]) cyc_settings_default(&s_set);   /* prelaunch did not run */
+    if (!s_set_path[0]) {
+        cyc_settings_default(&s_set);
+        if (s_extras) {
+            cyc_bindings_profile(&s_set.bind, s_extras->input_profile);
+            cyc_settings_profile(&s_set, s_extras->input_profile);
+        }
+    }
+    memset(s_game_hold, 0, sizeof s_game_hold);
     if (scale > 0) s_set.window_scale = scale;
     s_fds = cyc_is_fds();
 #ifdef CYC_DEV_UI
@@ -1635,6 +1652,9 @@ int cyc_sdl_main(const char *title_in, int scale)
         for (int p = 0; p < CYC_INPUT_PLAYERS; ++p)            /* TCP-held actions */
             for (int b = 0; b < CYC_INPUT_BUTTONS; ++b)
                 if (s_act_hold[p][b]) st.buttons[p] |= (uint8_t)(0x80 >> b);
+        for (int p = 0; p < CYC_INPUT_PLAYERS; ++p)
+            for (int b = 0; b < CYC_GAME_BUTTONS; ++b)
+                if (s_game_hold[p][b]) st.game_buttons[p] |= 1u << b;
         for (int i = 0; i < CYC_SC_COUNT; ++i)
             if (s_sc_hold[i]) st.shortcut[i] = true;
         bool edge[CYC_SC_COUNT];
@@ -1710,9 +1730,15 @@ int cyc_sdl_main(const char *title_in, int scale)
 #endif
         if (online || (!open && !inactive)) {
             cyc_host_window_replay(s_frames_done, st.buttons, CYC_INPUT_PLAYERS);
+            cyc_host_window_game_input(st.game_buttons, CYC_INPUT_PLAYERS);
             uint8_t pad0 = st.buttons[0], pad1 = st.buttons[1];
             if (hold_input) {
-                if (pad0 || pad1) pad0 = pad1 = 0;
+                bool any_game = false;
+                for (int p = 0; p < CYC_INPUT_PLAYERS; p++) any_game |= st.game_buttons[p] != 0;
+                if (pad0 || pad1 || any_game) {
+                    pad0 = pad1 = 0;
+                    memset(st.game_buttons, 0, sizeof st.game_buttons);
+                }
                 else hold_input = false;
             }
             uint8_t buttons[2] = {pad0, pad1};
@@ -1720,7 +1746,8 @@ int cyc_sdl_main(const char *title_in, int scale)
 #ifdef NESRECOMP_NET
             if(online) {
                 int player=nes_netplay_input_player();if(player<0||player>=CYC_INPUT_PLAYERS)player=0;
-                int admit=cyc_net_admit(open||inactive||hold_input?0:st.buttons[player]);
+                int admit=cyc_net_admit_game(open||inactive||hold_input?0:st.buttons[player],
+                    open||inactive||hold_input?0:st.game_buttons[player]);
                 if(!admit){SDL_Delay(1);continue;}
                 s_frames_done=(long)cyc_ring_frame;replay=cyc_net_replaying();cyc_net_input(buttons);
                 cyc_replay_suspend("online play");
@@ -1729,6 +1756,7 @@ int cyc_sdl_main(const char *title_in, int scale)
             {
             cyc_host_disk_frame(now, s_frames_done);
             cyc_session_logical_input(st.buttons,CYC_INPUT_PLAYERS);
+            cyc_session_game_input(st.game_buttons,CYC_INPUT_PLAYERS);
             cyc_session_input(buttons);
             cyc_set_controller(0, buttons[0]);
             cyc_set_controller(1, buttons[1]);

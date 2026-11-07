@@ -198,6 +198,7 @@ struct Runtime {
      * not consult staged selections from a plugin API: the UI may have changed
      * them after the last successful commit. */
     std::map<std::string, std::string> committed_external_rom_paths;
+    std::map<std::string, std::string> netplay_source_paths;
     std::string committed_hd_directory;
     std::vector<uint8_t> committed_hd_payload;
     NESModHdPack committed_hd{};
@@ -2962,6 +2963,27 @@ extern "C" int nes_mod_feature_present(const char* package_id,
     const NESRecomp::Package* package =
         NESRecomp::selected_package(runtime, package_id);
     return package && NESRecomp::find_feature(*package, feature_id) ? 1 : 0;
+}
+
+extern "C" const char* nes_mod_netplay_external_rom_path(
+    const char* package_id, const char* feature_id, const char* resource_id) {
+    if (!package_id || !feature_id || !resource_id) return nullptr;
+    NESRecomp::Runtime& runtime = NESRecomp::state();
+    if (!runtime.initialized) return nullptr;
+    const NESRecomp::Package* package =
+        NESRecomp::selected_package(runtime, package_id);
+    if (!package || !NESRecomp::target_matches(*package, runtime) || !NESRecomp::find_feature(*package, feature_id)) return nullptr;
+    const auto resource = std::find_if(package->external_roms.begin(),
+        package->external_roms.end(), [&](const NESRecomp::ExternalRom& candidate) {
+            return candidate.feature_id == feature_id && candidate.id == resource_id;
+        });
+    if (resource == package->external_roms.end()) return nullptr;
+    const auto verdict = NESRecomp::verify_external_rom(runtime, *package, *resource, true);
+    if (!verdict.verified) {runtime.error=resource->label+": "+verdict.status;return nullptr;}
+    const auto& selected = NESRecomp::package_selection(runtime, *package).resources;
+    const auto path=selected.find(resource_id);if(path==selected.end())return nullptr;
+    std::string& stable=runtime.netplay_source_paths[NESRecomp::external_rom_key(package_id,feature_id,resource_id)];
+    stable=path->second;return stable.c_str();
 }
 
 extern "C" const char* nes_mod_external_rom_path(

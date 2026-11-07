@@ -10,6 +10,7 @@ void cyc_net_prepare(NesNetplayConfig *cfg);
 int cyc_net_start(const NesNetplayConfig *cfg, const char *rom);
 int cyc_net_boot(void);
 int cyc_net_admit(uint8_t local);
+int cyc_net_admit_game(uint8_t local,uint32_t game);
 void cyc_net_input(uint8_t buttons[2]);
 void cyc_net_finish(void);
 bool cyc_net_replaying(void);

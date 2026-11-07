@@ -1,4 +1,5 @@
 #include "cyc_net.h"
+#include "cyc_state.h"
 #include "cyc_core.h"
 #include "cyc_ring.h"
 #include "cyc_session.h"
@@ -13,7 +14,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-static uint8_t s_rows[4];
+static NesNetplayInput s_rows[4];
 static bool s_replay,s_guest;
 static int s_width=256,s_offline_mode=-1,s_offline_width;
 static Uint64 s_tick_start;
@@ -30,9 +31,32 @@ static void width_restore(void) {
     if(s_offline_mode==NES_VIDEO_STOCK)cyc_video_request_width(s_offline_width);else cyc_video_set_mode(s_offline_mode);
     cyc_video_apply_pending();s_offline_mode=-1;
 }
-void nes_runner_register_session_keys(void){nes_netplay_session_register("vw",width_get,width_apply,width_restore);}
-static void publish(const uint8_t *rows,int slots,int replay) {
-    memset(s_rows,0,sizeof s_rows);if(slots>4)slots=4;if(slots>0)memcpy(s_rows,rows,(size_t)slots);
+static int timing_get(char *out,int cap){return snprintf(out,cap,"%d:%u",(int)cyc_region(),cyc_extra_scanlines());}
+static int timing_apply(const char *v){int region;unsigned lines;char tail;if(sscanf(v,"%d:%u%c",&region,&lines,&tail)!=2||region!=(int)cyc_region()||lines>262)return 0;return cyc_set_extra_scanlines(lines);}
+#ifdef NESRECOMP_NET_TEST_BOOT
+/* Test target only: both peers independently verify one build-specific fixture.
+ * The production target never reads this environment variable or registers it. */
+static int fixture_get(char *out,int cap) {
+    const char *path=getenv("NES_NET_TEST_BOOT");if(!path||!*path)return snprintf(out,cap,"-");
+    FILE *f=fopen(path,"rb");if(!f)return snprintf(out,cap,"missing");
+    fseek(f,0,SEEK_END);long n=ftell(f);rewind(f);
+    if(n<=0||n>8*1024*1024){fclose(f);return snprintf(out,cap,"invalid");}
+    uint8_t *p=malloc((size_t)n),d[32];if(!p){fclose(f);return 0;}
+    int ok=fread(p,1,(size_t)n,f)==(size_t)n;fclose(f);if(!ok){free(p);return 0;}
+    nes_sha256(p,(size_t)n,d);free(p);char h[65];for(int i=0;i<32;i++)snprintf(h+i*2,3,"%02x",d[i]);return snprintf(out,cap,"%s",h);
+}
+static int fixture_apply(const char *v){char mine[96];fixture_get(mine,sizeof mine);return !strcmp(v,mine)&&strcmp(v,"missing")&&strcmp(v,"invalid");}
+#endif
+void nes_runner_register_session_keys(void){
+    nes_netplay_register_input_contract();
+#ifdef NESRECOMP_NET_TEST_BOOT
+    if(!nes_netplay_session_has("fixture"))nes_netplay_session_register("fixture",fixture_get,fixture_apply,NULL);
+#endif
+    if(!nes_netplay_session_has("timing"))nes_netplay_session_register("timing",timing_get,timing_apply,NULL);
+    if(!nes_netplay_session_has("vw"))nes_netplay_session_register("vw",width_get,width_apply,width_restore);
+}
+static void publish(const NesNetplayInput *rows,int slots,int replay) {
+    memset(s_rows,0,sizeof s_rows);if(slots>4)slots=4;if(slots>0)memcpy(s_rows,rows,(size_t)slots*sizeof *rows);
     s_replay=replay!=0;
 }
 static void resim(int begin){(void)begin;/* each admitted frame carries its replay flag */}
@@ -55,9 +79,18 @@ int cyc_net_boot(void) {
      * this peer writes diagnostics or has a working sound device. */
     cyc_trace_enabled=true;
     cyc_audio_enable(cyc_session_audio_rate(48000));
-    cyc_video_request_width(s_width);cyc_video_apply_pending();
-    memset(g_logical_input,0,4);nes_rb_state_invalidate();
-    return nes_netplay_boot_barrier();
+    cyc_video_apply_pending();
+    memset(g_logical_input,0,4);memset(g_game_input,0,sizeof g_game_input);nes_rb_state_invalidate();
+    int boot=nes_netplay_boot_barrier();
+#ifdef NESRECOMP_NET_TEST_BOOT
+    const char *fixture=getenv("NES_NET_TEST_BOOT");
+    if(!boot&&fixture&&*fixture) {
+        char why[256];if(!cyc_state_load_file(fixture,why,sizeof why)){fprintf(stderr,"[netplay test] fixture: %s\n",why);return -1;}
+        cyc_session_state_loaded();nes_rb_state_invalidate();
+        fprintf(stderr,"NET_TEST_BOOT preadmission_digest=%08x\n",nes_rb_state_digest_master());
+    }
+#endif
+    return boot;
 }
 static uint8_t test_pad(uint8_t local) {
     const char *v=getenv("NES_NET_TEST_PAD");if(!v||!*v)return local;
@@ -68,17 +101,21 @@ static uint8_t test_pad(uint8_t local) {
     uint8_t b=0x01;if((t+seed*17)%180>150)b=0x02;
     if((t+seed*11)%51<13)b|=0x80;if((t+seed*7)%80<65)b|=0x40;return b;
 }
-int cyc_net_admit(uint8_t local) {
+int cyc_net_admit_game(uint8_t local,uint32_t game) {
     const char *ticks=getenv("NES_NET_MATCH_TICKS");
     if(ticks&&atoi(ticks)>0&&nes_netplay_sim_tick()>=(uint32_t)atoi(ticks))nes_netplay_request_quiesce();
     if(cyc_net_leaving())return NES_NETPLAY_ADMIT_STALL;
-    nes_netplay_stage_local(test_pad(local));
+    nes_netplay_stage_local(nes_netplay_input(test_pad(local),game));
     int a=nes_netplay_poll_admit();
     if(a){nes_rb_state_invalidate();s_tick_start=SDL_GetPerformanceCounter();}
     return a;
 }
+int cyc_net_admit(uint8_t local) {return cyc_net_admit_game(local,0);}
 void cyc_net_input(uint8_t buttons[2]) {
-    cyc_session_logical_input(s_rows,4);buttons[0]=s_rows[0];buttons[1]=s_rows[1];cyc_session_input(buttons);
+    uint8_t pads[4];uint32_t game[4];
+    for(int i=0;i<4;i++){pads[i]=(uint8_t)s_rows[i];game[i]=(s_rows[i]>>8)&3u;}
+    cyc_session_game_input(game,4);
+    cyc_session_logical_input(pads,4);buttons[0]=pads[0];buttons[1]=pads[1];cyc_session_input(buttons);
     cyc_set_controller(0,buttons[0]);cyc_set_controller(1,buttons[1]);
 }
 void cyc_net_finish(void) {
