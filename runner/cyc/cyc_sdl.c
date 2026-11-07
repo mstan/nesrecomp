@@ -122,6 +122,7 @@ static int         s_key_hold[SDL_NUM_SCANCODES];   /* host loops a TCP-held key
 static bool        s_hidden;
 static bool        s_uncapped; /* measurement pacing only; render and audio still run */
 static bool        s_pause_unfocused;
+static bool        s_fullscreen_chord; /* consume Enter until released, even if Alt comes up first */
 static char        s_image[1024];                   /* the image running (the save state slot's name) */
 bool cyc_sdl_force_launcher;
 #ifdef NESRECOMP_NET
@@ -544,6 +545,12 @@ static void read_frame(CycInputFrame *f)
     /* the TCP server's held keys are down too (cyc_tcp.h `key`) */
     static uint8_t keys[SDL_NUM_SCANCODES];
     for (int i = 0; i < SDL_NUM_SCANCODES; ++i) keys[i] = (uint8_t)((i < n && real[i]) || s_key_hold[i] > 0);
+    bool alt=keys[SDL_SCANCODE_LALT] || keys[SDL_SCANCODE_RALT];
+    bool enter=keys[SDL_SCANCODE_RETURN] || keys[SDL_SCANCODE_KP_ENTER];
+    if(!enter)s_fullscreen_chord=false;
+    else if(alt)s_fullscreen_chord=true;
+    if(s_fullscreen_chord && !alt)
+        keys[SDL_SCANCODE_RETURN]=keys[SDL_SCANCODE_KP_ENTER]=0;
     f->keys = keys;
     f->key_count = SDL_NUM_SCANCODES;
     f->pad_count = s_pad_count;
@@ -1598,6 +1605,13 @@ int cyc_sdl_main(const char *title_in, int scale)
         SDL_Event ev;
         bool open = menu_open();
         while (SDL_PollEvent(&ev)) {
+            /* The fullscreen chord belongs to the window, including while
+             * the runtime menu is open; it must not also accept a menu row. */
+            if ((ev.type == SDL_KEYDOWN || ev.type == SDL_KEYUP) &&
+                ((ev.key.keysym.mod & KMOD_ALT) || s_key_hold[SDL_SCANCODE_LALT] ||
+                 s_key_hold[SDL_SCANCODE_RALT] || s_fullscreen_chord) &&
+                (ev.key.keysym.scancode == SDL_SCANCODE_RETURN || ev.key.keysym.scancode == SDL_SCANCODE_KP_ENTER))
+                continue;
 #ifdef CYC_WITH_RECOMP_UI
             cyc_ui_process_event(&ev);
 #endif

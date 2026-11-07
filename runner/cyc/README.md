@@ -1178,7 +1178,7 @@ the keyboard and every controller. Defaults (the nesrecomp NES layout):
 | Fast-forward (held) | Tab | RT |
 | Screenshot (the picture, `cyc_shot_NNNN.png`) | F12 | - |
 | Save state / load state (`saves/<image>.state`) | F8 / F9 | - |
-| Fullscreen | F11 | - |
+| Fullscreen | F11 or Alt+Enter | - |
 
 A key or button bound to a shortcut belongs to the shortcut while it is
 held. config.ini beside the executable (`cyc_settings.h`; `--config FILE`)
