@@ -74,6 +74,8 @@ struct Feature {
     std::string group = "General";
     std::string exclusive_group;
     std::vector<std::string> exclusive_groups;
+    std::vector<std::string> requirements;
+    std::string migrate_from_option;
     bool default_enabled = false;
     bool experimental = false;
     bool camera_controls = false;
@@ -382,6 +384,20 @@ bool valid_crc32(const std::string& value) {
         });
 }
 
+std::vector<std::string> reference_parts(const std::string& value, size_t count) {
+    std::vector<std::string> parts;
+    size_t start = 0;
+    for (;;) {
+        const size_t end = value.find('/', start);
+        const std::string part = value.substr(start, end - start);
+        if (!valid_id(part)) return {};
+        parts.push_back(part);
+        if (end == std::string::npos) break;
+        start = end + 1;
+    }
+    return parts.size() == count ? parts : std::vector<std::string>{};
+}
+
 bool valid_sha1(const std::string& value) {
     return value.size() == 40 &&
         std::all_of(value.begin(), value.end(), [](unsigned char c) {
@@ -606,6 +622,12 @@ bool read_manifest(const fs::path& path, Package& out, std::string* error) {
                 else if (key == "exclusive_groups") {
                     parsed = parse_string_array(value, feature->exclusive_groups);
                 }
+                else if (key == "requires") {
+                    parsed = parse_string_array(value, feature->requirements);
+                }
+                else if (key == "migrate_from_option") {
+                    parsed = string_field(feature->migrate_from_option);
+                }
                 else if (key == "default_enabled") {
                     parsed = parse_bool(value, bool_value);
                     if (parsed) feature->default_enabled = bool_value;
@@ -742,6 +764,9 @@ bool read_manifest(const fs::path& path, Package& out, std::string* error) {
             (!item.exclusive_group.empty() &&
              !valid_id(item.exclusive_group)) ||
             !std::all_of(item.exclusive_groups.begin(), item.exclusive_groups.end(), valid_id) ||
+            !std::all_of(item.requirements.begin(), item.requirements.end(),
+                [](const std::string& ref) { return reference_parts(ref, 2).size() == 2; }) ||
+            (!item.migrate_from_option.empty() && reference_parts(item.migrate_from_option, 3).size() != 3) ||
             !feature_ids.insert(item.id).second) {
             set_error(error, "manifest has an invalid or duplicate feature");
             return false;
@@ -891,8 +916,110 @@ bool target_matches(const Package& package, const Runtime& runtime) {
         });
 }
 
+using FeatureKey = std::pair<std::string, std::string>;
+
+bool catalog_has_requirements(const Runtime& runtime) {
+    for (const auto& [id, versions] : runtime.packages) {
+        (void)versions;
+        const Package* package = selected_package(runtime, id);
+        if (package) for (const Feature& feature : package->features)
+            if (!feature.requirements.empty()) return true;
+    }
+    return false;
+}
+
+bool requirement_order(Runtime& runtime, const FeatureKey& key,
+                       const FeatureKey& root, std::set<FeatureKey>& visiting,
+                       std::set<FeatureKey>& done, std::vector<FeatureKey>& order,
+                       std::vector<Diagnostic>& diagnostics) {
+    if (done.count(key)) return true;
+    const Package* package = selected_package(runtime, key.first);
+    const Feature* feature = package ? find_feature(*package, key.second) : nullptr;
+    auto fail = [&](const std::string& message) {
+        diagnostics.push_back({root.first, root.second, key.first, key.second,
+                               "dependency", message + ": " + key.first + "/" + key.second});
+        return false;
+    };
+    if (!feature || !target_matches(*package, runtime))
+        return fail("Required mod is missing or does not support this game");
+    if (visiting.count(key)) return fail("Mod dependency cycle");
+    if (visiting.size() >= 64) return fail("Mod dependency chain is too deep");
+    visiting.insert(key);
+    for (const std::string& ref : feature->requirements) {
+        const auto parts = reference_parts(ref, 2);
+        if (!requirement_order(runtime, {parts[0], parts[1]}, root,
+                               visiting, done, order, diagnostics)) {
+            visiting.erase(key);
+            return false;
+        }
+    }
+    visiting.erase(key);
+    done.insert(key);
+    order.push_back(key);
+    return true;
+}
+
+bool resolve_requirements(Runtime& runtime, std::vector<FeatureKey>& order,
+                          std::vector<Diagnostic>& diagnostics) {
+    if (!catalog_has_requirements(runtime)) return true;
+    std::set<FeatureKey> visiting, done;
+    bool ok = true, active_requirements = false;
+    for (const auto& [id, versions] : runtime.packages) {
+        (void)versions;
+        const Package* package = selected_package(runtime, id);
+        if (!package) continue;
+        for (const Feature& feature : package->features) {
+            if (!feature_enabled(runtime, *package, feature)) continue;
+            active_requirements |= !feature.requirements.empty();
+            const FeatureKey key{package->id, feature.id};
+            if (!requirement_order(runtime, key, key, visiting, done, order, diagnostics)) ok = false;
+        }
+    }
+    if (ok) for (const FeatureKey& key : order) {
+        const Package* package = selected_package(runtime, key.first);
+        auto& selection = package_selection(runtime, *package).features[key.second];
+        selection.enabled = selection.has_enabled = true;
+    }
+    if (!active_requirements) order.clear();
+    return ok;
+}
+
+/* Move a former boolean option to a first-class feature once. Explicit new
+ * selections win; matching declared options carry across without erasing the
+ * old profile, resources, or other feature choices. */
+void migrate_feature_selections(Runtime& runtime) {
+    for (const auto& [id, versions] : runtime.packages) {
+        (void)versions;
+        const Package* package = selected_package(runtime, id);
+        if (!package) continue;
+        for (const Feature& feature : package->features) {
+            if (feature.migrate_from_option.empty()) continue;
+            const auto parts = reference_parts(feature.migrate_from_option, 3);
+            auto source_package = runtime.selections.find(parts[0]);
+            if (source_package == runtime.selections.end()) continue;
+            auto source = source_package->second.features.find(parts[1]);
+            if (source == source_package->second.features.end()) continue;
+            const auto old = source->second.values.find(parts[2]);
+            if (old == source->second.values.end() || (old->second != "true" && old->second != "false")) continue;
+            const FeatureSelection previous = source->second;
+            auto& next = package_selection(runtime, *package).features[feature.id];
+            if (next.has_enabled) continue;
+            next.enabled = previous.enabled && old->second == "true";
+            next.has_enabled = true;
+            for (const Option& option : package->options) {
+                if (option.feature_id != feature.id || next.values.count(option.id)) continue;
+                const auto value = previous.values.find(option.id);
+                if (value != previous.values.end() && validate_option_value(option, value->second, nullptr))
+                    next.values[option.id] = value->second;
+            }
+        }
+    }
+}
+
 Validation validate(Runtime& runtime) {
     Validation result;
+    std::vector<FeatureKey> order;
+    result.ok = resolve_requirements(runtime, order, result.diagnostics);
     std::map<std::string, ResolvedPlugin> claimed;
     std::map<std::string, std::pair<std::string, std::string>>
         claimed_exclusive_groups;
@@ -995,6 +1122,22 @@ Validation validate(Runtime& runtime) {
     for (const auto& [id, plugin] : claimed) {
         (void)id;
         result.plugins.push_back(plugin);
+    }
+    if (result.ok && !order.empty()) {
+        /* Retain historical plugin-ID priority for unrelated features; only
+         * move prerequisites ahead of the plugins that require them. */
+        std::set<FeatureKey> visiting, done;
+        order.clear();
+        for (const ResolvedPlugin& plugin : result.plugins) {
+            const FeatureKey key{plugin.package_id, plugin.feature_id};
+            requirement_order(runtime, key, key, visiting, done, order, result.diagnostics);
+        }
+        std::map<FeatureKey, size_t> rank;
+        for (size_t i = 0; i < order.size(); ++i) rank[order[i]] = i;
+        std::stable_sort(result.plugins.begin(), result.plugins.end(),
+            [&](const ResolvedPlugin& a, const ResolvedPlugin& b) {
+                return rank.at({a.package_id, a.feature_id}) < rank.at({b.package_id, b.feature_id});
+            });
     }
     return result;
 }
@@ -2413,6 +2556,14 @@ int provider_feature_get(void*, int index,
         });
     copy_text(out->status, out->has_error ? "Needs attention" :
                    (out->enabled ? "Enabled" : "Disabled"));
+    if (out->enabled && !out->has_error) for (const auto& other : selected_features(state())) {
+        if (!feature_enabled(state(), *other.package, *other.feature)) continue;
+        const std::string ref = package.id + "/" + feature.id;
+        if (std::find(other.feature->requirements.begin(), other.feature->requirements.end(), ref) != other.feature->requirements.end()) {
+            copy_text(out->status, "Required by " + other.feature->name);
+            break;
+        }
+    }
     return 1;
 }
 
@@ -2463,7 +2614,7 @@ int provider_feature_choice_get(
     return 1;
 }
 
-int provider_feature_enable(void*, const char* package_id,
+int provider_feature_enable_one(void*, const char* package_id,
                             const char* feature_id, int enabled) {
     if (!package_id || !feature_id) return 0;
     if (nes_mod_feature_requires_restart(package_id, feature_id)) {
@@ -2518,6 +2669,66 @@ int provider_feature_enable(void*, const char* package_id,
     selection.has_enabled = true;
     refresh_validation();
     state().error.clear();
+    return 1;
+}
+
+int provider_feature_enable(void* ctx, const char* package_id,
+                            const char* feature_id, int enabled) {
+    Runtime& runtime = state();
+    if (!catalog_has_requirements(runtime))
+        return provider_feature_enable_one(ctx, package_id, feature_id, enabled);
+    if (!package_id || !feature_id) return 0;
+    const auto before = runtime.selections;
+    auto rollback = [&](std::string message) {
+        runtime.selections = before;
+        refresh_validation();
+        runtime.error = message;
+        return 0;
+    };
+    if (enabled) {
+        std::set<FeatureKey> visiting, done;
+        std::vector<FeatureKey> order;
+        std::vector<Diagnostic> diagnostics;
+        const FeatureKey root{package_id, feature_id};
+        if (!requirement_order(runtime, root, root, visiting, done, order, diagnostics))
+            return rollback(diagnostics.front().message);
+        for (const FeatureKey& key : order) {
+            const Package* package = selected_package(runtime, key.first);
+            const Feature* feature = find_feature(*package, key.second);
+            if (key != root && feature_enabled(runtime, *package, *feature)) continue;
+            if (!provider_feature_enable_one(ctx, key.first.c_str(), key.second.c_str(), 1))
+                return rollback(runtime.error);
+        }
+        if (!runtime.validation.ok) return rollback(runtime.validation.diagnostics.front().message);
+    } else {
+        const Package* package = selected_package(runtime, package_id);
+        const Feature* feature = package ? find_feature(*package, feature_id) : nullptr;
+        if (!feature) return 0;
+        std::set<FeatureKey> disabled{{package_id, feature_id}};
+        bool changed;
+        do {
+            changed = false;
+            for (const auto& other : selected_features(runtime)) {
+                if (!feature_enabled(runtime, *other.package, *other.feature)) continue;
+                for (const std::string& ref : other.feature->requirements) {
+                    const auto parts = reference_parts(ref, 2);
+                    if (disabled.count({parts[0], parts[1]}))
+                        changed |= disabled.insert({other.package->id, other.feature->id}).second;
+                }
+            }
+        } while (changed);
+        for (const FeatureKey& key : disabled)
+            if (nes_mod_feature_requires_restart(key.first.c_str(), key.second.c_str()))
+                return rollback("Change this mod in the launcher, then restart the game.");
+        for (const FeatureKey& key : disabled) {
+            const Package* owner = selected_package(runtime, key.first);
+            auto& selection = package_selection(runtime, *owner).features[key.second];
+            selection.enabled = false;
+            selection.has_enabled = true;
+        }
+        refresh_validation();
+    }
+    runtime.error.clear();
     return 1;
 }
 
@@ -2720,6 +2931,7 @@ bool mod_runtime_initialize(const fs::path& root,
     /* A legacy/manual state file cannot keep a feature effectively enabled
      * without its newly declared owner ROM. Preserve the path, but fail closed
      * to a disabled selection until the user verifies and enables it again. */
+    migrate_feature_selections(runtime);
     disable_invalid_persisted_features(runtime);
     runtime.validation = validate(runtime);
     runtime.initialized = true;
