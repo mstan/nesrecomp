@@ -114,7 +114,8 @@ settles the full configuration, exact executable/ROM hashes and host SRAM.
 Occupied seats report compiled architecture, actual CPU feature bits,
 available backends and supported simulation profiles once. The chosen
 profile stays fixed for the match; the existing build checks remain required.
-The current contracts are `cycle-lle-c1` and `legacy-c1`. Their identifiers
+The fixed contracts are `cycle-lle-c1` (profile 1), `cycle-hle-c1` (profile 4),
+and `legacy-c1` (profile 2). Their identifiers
 are protocol identities, not evidence of cross-build or cross-host qualification.
 
 Cycle sessions also seal region and extra scanlines. Titles may override
@@ -126,3 +127,12 @@ setup to force-verify a locally selected manifest resource. This is separate
 from the committed-plugin path API: it changes neither the vanilla activation
 plan nor saved offline selections. The adapter seals source hashes and keeps
 its loaded data immutable before admission; local paths and bytes stay local.
+
+Cycle HLE keeps its own contract rather than being mislabeled LLE or refused
+by the LLE-only profile check. Its same-build Windows qualification uses SMB
+four-player gameplay with occupied masks 0x9 and 0x5, extended input rows,
+rollback restores and exact common-tick digests. These checks run at normal
+60 Hz with the default 40-snapshot history. An accelerated unpaced case with
+25 ms receive delay plus 8 ms jitter exceeded that history and is retained as
+a rejected stress case, not accepted compatibility evidence. No cross-build,
+cross-platform or spectator qualification is inferred from this profile name.

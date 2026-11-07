@@ -195,3 +195,21 @@ void nes_netplay_session_reference(const char *text,char out[64]) {
     for(int i=0;i<32;i++){value=(value<<8)|d[i];bits+=8;while(bits>=6){bits-=6;out[at++]=b64[(value>>bits)&63];}}
     if(bits)out[at++]=b64[(value<<(6-bits))&63];out[at]=0;
 }
+
+uint32_t nes_netplay_cycle_profile(const char *implementation) {
+    if(implementation&&!strcmp(implementation,"LLE"))return NES_NET_PROFILE_CYCLE_LLE;
+    if(implementation&&!strcmp(implementation,"HLE"))return NES_NET_PROFILE_CYCLE_HLE;
+    return 0;
+}
+const char *nes_netplay_cycle_contract(const char *implementation) {
+    switch(nes_netplay_cycle_profile(implementation)) {
+        case NES_NET_PROFILE_CYCLE_LLE:return "cycle-lle-c1";
+        case NES_NET_PROFILE_CYCLE_HLE:return "cycle-hle-c1";
+        default:return "cycle-unsupported";
+    }
+}
+int nes_netplay_profile_compatible(uint32_t selected,uint32_t local,uint32_t remote) {
+    const uint32_t known=NES_NET_PROFILE_CYCLE_LLE|NES_NET_PROFILE_LEGACY_C|NES_NET_PROFILE_CYCLE_HLE;
+    return selected && !(selected&(selected-1u)) && !(selected&~known) &&
+           (local&selected) && (remote&selected);
+}

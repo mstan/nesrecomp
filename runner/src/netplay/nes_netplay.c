@@ -95,7 +95,7 @@ void nes_netplay_require_capabilities(int required){s_require_caps=required!=0;}
 void nes_netplay_require_player_count(int required){s_required_players=required;}
 static const char *core_contract(void) {
 #ifdef NESRECOMP_CYCLE_NET
-    return "cycle-lle-c1";
+    return nes_netplay_cycle_contract(cyc_ppu_implementation());
 #else
     return "legacy-c1";
 #endif
@@ -447,9 +447,9 @@ static void put32(uint8_t *p,uint32_t v){for(int i=0;i<4;i++)p[i]=(uint8_t)(v>>(
 static uint32_t get32(const uint8_t *p){return p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24;}
 static unsigned portable_profile(void) {
 #ifdef NESRECOMP_CYCLE_NET
-    return !strcmp(cyc_ppu_implementation(),"LLE")?1u:0u;
+    return nes_netplay_cycle_profile(cyc_ppu_implementation());
 #else
-    return 2u;
+    return NES_NET_PROFILE_LEGACY_C;
 #endif
 }
 static void make_caps(uint8_t out[96]) {
@@ -478,8 +478,8 @@ static void make_caps(uint8_t out[96]) {
     for(int i=0;i<32 && strlen(hex)==64;i++){unsigned v=0;sscanf(hex+i*2,"%2x",&v);out[64+i]=(uint8_t)v;}
 }
 static int accept_caps(const uint8_t *p,size_t n) {
-    if(n!=96||memcmp(p,"NESCAP2",8)||get32(p+24)!=1||!portable_profile()||
-       !(get32(p+20)&portable_profile())||memcmp(p+32,g_np.local_caps+32,64))return 0;
+    if(n!=96||memcmp(p,"NESCAP2",8)||get32(p+24)!=1||!nes_netplay_profile_compatible(portable_profile(),portable_profile(),get32(p+20))||
+       memcmp(p+32,g_np.local_caps+32,64))return 0;
     uint8_t any=0;for(int i=32;i<64;i++)any|=p[i];return any!=0;
 }
 static void log_caps(int seat,const uint8_t *p) {

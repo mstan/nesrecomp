@@ -39,6 +39,18 @@ static void check(const uint8_t *image, size_t len) {
 }
 static uint32_t rng = 0x70925f2bu;
 static uint32_t random32(void) { rng ^= rng<<13; rng ^= rng>>17; rng ^= rng<<5; return rng; }
+static void capability_contract(void) {
+    assert(nes_netplay_cycle_profile("LLE")==1);assert(nes_netplay_cycle_profile("HLE")==4);
+    assert(!nes_netplay_cycle_profile(NULL));assert(!nes_netplay_cycle_profile("unknown"));
+    assert(!strcmp(nes_netplay_cycle_contract("LLE"),"cycle-lle-c1"));
+    assert(!strcmp(nes_netplay_cycle_contract("HLE"),"cycle-hle-c1"));
+    assert(!strcmp(nes_netplay_cycle_contract("unknown"),"cycle-unsupported"));
+    assert(nes_netplay_profile_compatible(1,1,1));assert(nes_netplay_profile_compatible(4,4,4));
+    assert(nes_netplay_profile_compatible(2,2,2));
+    assert(!nes_netplay_profile_compatible(1,1,4));assert(!nes_netplay_profile_compatible(4,4,1));
+    assert(!nes_netplay_profile_compatible(0,0,0));assert(!nes_netplay_profile_compatible(8,8,8));
+    assert(!nes_netplay_profile_compatible(5,5,5));
+}
 static void config_reference(void) {
     char guarded[80];memset(guarded,0x5a,sizeof guarded);
     const char *canonical="nes-session/1\ninput=2:03ff:cycle-lle-c1\nk0=0000000000000000000000000000000000000000000000000000000000000000\nk1=0000000000000000000000000000000000000000000000000000000000000001\nk2=0000000000000000000000000000000000000000000000000000000000000002\nk3=0000000000000000000000000000000000000000000000000000000000000003\n";
@@ -66,7 +78,7 @@ static void input_snapshot(void) {
     image[32]='X';assert(!nes_rb_state_load(image,n));assert(rb_test_loaded==1);
 }
 int main(void) {
-    input_snapshot();config_reference();
+    input_snapshot();config_reference();capability_contract();
     uint8_t *image = malloc(1024 * 1024); assert(image);
     check(NULL, 0); check(NULL, 100);
     for (size_t n = 0; n < 80; ++n) { memset(image, 0xff, 80); check(image, n); }
