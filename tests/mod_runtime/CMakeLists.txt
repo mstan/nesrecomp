@@ -32,4 +32,8 @@ if(RECOMP_UI_ROOT)
     target_include_directories(hd_pack_selftest PRIVATE ../../runner/include "${RECOMP_UI_ROOT}/src")
     target_compile_definitions(hd_pack_selftest PRIVATE RECOMP_LAUNCHER)
     add_test(NAME hd_pack_selftest COMMAND hd_pack_selftest)
+    add_executable(mesen_import_selftest mesen_import_selftest.cpp
+        ../../runner/src/mod_runtime.cpp ../../runner/src/crc32.c)
+    target_include_directories(mesen_import_selftest PRIVATE ../../runner/include "${RECOMP_UI_ROOT}/src")
+    target_compile_definitions(mesen_import_selftest PRIVATE RECOMP_LAUNCHER)
 endif()
