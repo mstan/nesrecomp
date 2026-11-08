@@ -255,6 +255,14 @@ def production(exe, image, bios, out, recomp_ui):
         w.ok('key', name='Escape', frames=3)
         w.until(lambda s: not s['menu_open'], 30, 'the menu closing')
         w.wait_frames(10)
+    # Alt+Enter works alongside the rebindable shortcut and persists exactly
+    # one toggle for a held chord. Both Alt keys and keypad Enter are accepted.
+    for alt, enter, expected in [('Left Alt', 'Return', 1), ('Right Alt', 'Keypad Enter', 0)]:
+        w.ok('key', name=alt, frames=20)
+        w.ok('key', name=enter, frames=5)
+        w.wait_frames(10)
+        check(f'Fullscreen = {expected}' in w.config.read_text(), f'{alt}+{enter} fullscreen')
+        w.wait_frames(20)
     rc = w.quit()
     check(rc == 0, f'window exit {rc}')
     cfg = w.config.read_text()

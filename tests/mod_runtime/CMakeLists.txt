@@ -22,6 +22,11 @@ add_test(NAME external_rom_gate_selftest COMMAND external_rom_gate_selftest)
 
 set(RECOMP_UI_ROOT "" CACHE PATH "Optional recomp-ui checkout for launcher provider tests")
 if(RECOMP_UI_ROOT)
+    add_executable(feature_dependencies_selftest feature_dependencies_selftest.cpp
+        ../../runner/src/mod_runtime.cpp ../../runner/src/crc32.c)
+    target_include_directories(feature_dependencies_selftest PRIVATE ../../runner/include "${RECOMP_UI_ROOT}/src")
+    target_compile_definitions(feature_dependencies_selftest PRIVATE RECOMP_LAUNCHER)
+    add_test(NAME feature_dependencies_selftest COMMAND feature_dependencies_selftest)
     add_executable(feature_constraints_selftest feature_constraints_selftest.cpp
         ../../runner/src/mod_runtime.cpp ../../runner/src/crc32.c)
     target_include_directories(feature_constraints_selftest PRIVATE ../../runner/include "${RECOMP_UI_ROOT}/src")

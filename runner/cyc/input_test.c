@@ -474,11 +474,34 @@ static void game_actions(const char *dir)
     CHECK(!strcmp(back.input_profile, profile.id)); remove(path);
 }
 
+static void fullscreen_chord(void)
+{
+    CycBindings b; cyc_bindings_default(&b);
+    CycInputFrame f = frame(0); CycInputState out;
+    b.source[1] = 1; b.button[1][3].key = SDL_SCANCODE_RETURN;
+    const int alts[] = {SDL_SCANCODE_LALT, SDL_SCANCODE_RALT};
+    const int enters[] = {SDL_SCANCODE_RETURN, SDL_SCANCODE_KP_ENTER};
+    for (int a = 0; a < 2; a++) for (int e = 0; e < 2; e++) {
+        memset(keys, 0, sizeof keys); keys[alts[a]] = keys[enters[e]] = 1;
+        b.button[0][3].key = enters[e];
+        cyc_input_eval(&b, &f, &out);
+        CHECK(out.shortcut[CYC_SC_FULLSCREEN]);
+        CHECK(!(out.buttons[0] & 0x10) && !(out.buttons[1] & 0x10));
+        keys[alts[a]] = 0; cyc_input_eval(&b, &f, &out);
+        CHECK(!out.shortcut[CYC_SC_FULLSCREEN] && (out.buttons[0] & 0x10));
+    }
+    memset(keys, 0, sizeof keys);
+    keys[b.shortcut[CYC_SC_FULLSCREEN].key] = 1;
+    cyc_input_eval(&b, &f, &out); CHECK(out.shortcut[CYC_SC_FULLSCREEN]);
+    memset(keys, 0, sizeof keys);
+}
+
 int main(int argc, char **argv)
 {
     text_forms();
     defaults();
     evaluation();
+    fullscreen_chord();
     logical_seats();
     persistence(argc > 1 ? argv[1] : ".");
     game_actions(argc > 1 ? argv[1] : ".");

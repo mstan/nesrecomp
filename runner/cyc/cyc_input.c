@@ -265,6 +265,14 @@ void cyc_input_eval(const CycBindings *b, const CycInputFrame *f, CycInputState 
 
     /* Shortcuts first: what they hold is theirs. */
     bool key_taken[SDL_NUM_SCANCODES] = { false };
+    /* Standard window shortcut, in addition to the configurable binding.
+     * Consume both halves so Enter never leaks into a player's Start. */
+    if ((key_down(f, SDL_SCANCODE_LALT) || key_down(f, SDL_SCANCODE_RALT)) &&
+        (key_down(f, SDL_SCANCODE_RETURN) || key_down(f, SDL_SCANCODE_KP_ENTER))) {
+        out->shortcut[CYC_SC_FULLSCREEN] = true;
+        key_taken[SDL_SCANCODE_RETURN] = key_taken[SDL_SCANCODE_KP_ENTER] = true;
+        key_taken[SDL_SCANCODE_LALT] = key_taken[SDL_SCANCODE_RALT] = true;
+    }
     uint32_t pad_taken[CYC_INPUT_MAX_PADS] = { 0 };
     int axis_taken[CYC_INPUT_MAX_PADS] = { 0 };      /* the axis bindings a held shortcut uses */
     for (int s = 0; s < CYC_SC_COUNT; ++s) {

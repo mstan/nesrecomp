@@ -94,6 +94,20 @@ with the disk info block, `*NINTENDO-HVC*`). Games on the cycle backend
 
 ## Package layout
 
+A feature can require another installed feature with
+`requires = ["package-id/feature-id"]` in its `[[feature]]` block. Enabling
+it also selects its requirements, including in a saved/headless profile.
+Required plugins activate first. Missing targets, cycles, incompatible games,
+resource failures and conflicting selections are rejected. Disabling a
+requirement also disables its dependents; running feature locks apply to the
+whole change. Disabling a dependent leaves its supporting features selected.
+
+When moving a former boolean option into its own feature,
+`migrate_from_option = "old-package/old-feature/old-option"` performs a
+one-time selection migration before defaults are populated. The old feature
+must have been enabled. Matching declared option IDs are copied when valid;
+explicit new selections, unrelated options and resource paths are preserved.
+
 Installed and preloaded packages use the same executable-relative catalog:
 
 ```text
