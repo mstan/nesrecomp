@@ -12,7 +12,10 @@
 static int g_test_mapper_type = 0;
 static jmp_buf s_discarded_tail;
 static int s_tail_test_mode, s_tail_test_calls;
-enum { TAIL_COUNT, TAIL_DISCARD, TAIL_CYCLE, TAIL_NESTED_CALL };
+enum { TAIL_COUNT, TAIL_DISCARD, TAIL_CYCLE, TAIL_NESTED_CALL, TAIL_JSR_LAP };
+static uint8_t s_lap_before_s;
+static uint64_t s_lap_epoch;
+static int s_lap_guard_ok, s_lap_inline_data;
 uint16_t g_rts_target = 0;
 uint16_t g_rti_target = 0;
 uint16_t g_rti_source = 0;
@@ -74,6 +77,20 @@ int call_by_address_cb(uint16_t addr, int caller_bank) {
             g_cpu.S -= 2;
             call_by_address_tail(addr, caller_bank);
             g_cpu.S += 2;
+        } else if (s_tail_test_mode == TAIL_JSR_LAP) {
+            /* Generated JSR site pushed its return; an indexed dispatcher
+             * callee pops that operand (net-zero S) and tail-jumps back
+             * into the active loop, which defers as a cycle lap. The JSR
+             * guard must then reject the equal-S "return" so the pending
+             * lap unwinds to the ancestor instead of falling through into
+             * inline table bytes. */
+            g_ram[0x100 + g_cpu.S--] = 0xC5;
+            g_ram[0x100 + g_cpu.S--] = 0x31;
+            g_cpu.S += 2;
+            call_by_address_tail(addr, caller_bank);
+            s_lap_guard_ok = nes_jsr_stack_ok_after_call(s_lap_before_s, s_lap_epoch);
+            if (s_lap_guard_ok)
+                s_lap_inline_data++;  /* fallthrough would execute table data */
         }
     }
     return 1;
@@ -194,10 +211,43 @@ static int test_resume_discards_abandoned_tail_ancestor(void) {
     return 1;
 }
 
+static int test_pending_tail_lap_unwinds_jsr_caller(void) {
+    runtime_prepare_guest_resume(0xC0CC, 0);
+    g_cpu.S = 0xFF;
+    s_tail_test_mode = TAIL_JSR_LAP;
+    s_tail_test_calls = 0;
+    s_lap_before_s = g_cpu.S;
+    s_lap_epoch = runtime_get_interrupt_epoch();
+    s_lap_guard_ok = s_lap_inline_data = 0;
+    /* Ancestor tail frame; its dispatch defers the lap, then the pending
+     * lap must unwind back and be consumed by this same frame. */
+    call_by_address_tail(0xC531, -1);
+    if (s_lap_guard_ok != 0) {
+        fputs("JSR guard accepted a return with a pending tail lap\n", stderr);
+        return 0;
+    }
+    if (s_lap_inline_data != 0) {
+        fputs("JSR caller fell through over a pending tail lap\n", stderr);
+        return 0;
+    }
+    if (s_tail_test_calls != 2 || g_cpu.S != 0xFF) {
+        fprintf(stderr, "pending lap unwound wrong: calls=%d S=$%02X\n",
+                s_tail_test_calls, g_cpu.S);
+        return 0;
+    }
+    /* Ordinary equal-S returns must stay accepted once the lap is consumed. */
+    if (!nes_jsr_stack_ok_after_call(g_cpu.S, runtime_get_interrupt_epoch())) {
+        fputs("JSR guard rejects ordinary equal-S return after the lap\n", stderr);
+        return 0;
+    }
+    return 1;
+}
+
 int main(int argc, char **argv) {
     if (argc == 2 && strcmp(argv[1], "--tail-resume") == 0) {
         if (!test_live_tail_cycles_still_iterate() ||
-            !test_resume_discards_abandoned_tail_ancestor())
+            !test_resume_discards_abandoned_tail_ancestor() ||
+            !test_pending_tail_lap_unwinds_jsr_caller())
             return 1;
         puts("runtime tail resume self-test passed");
         return 0;
@@ -205,7 +255,8 @@ int main(int argc, char **argv) {
     test_projected_boundary_skips_resume_tick();
     test_unprojected_boundary_skips_resume_tick();
     if (!test_live_tail_cycles_still_iterate() ||
-        !test_resume_discards_abandoned_tail_ancestor())
+        !test_resume_discards_abandoned_tail_ancestor() ||
+        !test_pending_tail_lap_unwinds_jsr_caller())
         return 1;
     test_ppumask_preserves_native_bits();
     test_nested_nmi_flag_is_opt_in();

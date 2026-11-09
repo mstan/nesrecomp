@@ -2265,12 +2265,29 @@ static void emit_logical(FILE *f, const char *op, AddrMode am, uint8_t op1, uint
  * memory form wraps `body_mem` with the standard read-modify-write scaffold.
  * `body_mem` operates on local `v` (uint8_t), updating g_cpu.C as needed. */
 static void emit_shift(FILE *f, const char *body_acc, const char *body_mem,
-                       AddrMode am, uint8_t op1, uint8_t op2) {
+                       AddrMode am, uint8_t op1, uint8_t op2,
+                       const char *old_write) {
     if (am == AM_ACC)
         fprintf(f, "%s\n", body_acc);
     else
-        fprintf(f, "{ uint16_t a=%s; uint8_t v=nes_read(a); %s nes_write(a,v); FLAG_NZ(v); }\n",
-                operand_addr_expr(am, op1, op2), body_mem);
+        fprintf(f, "{ uint16_t a=%s; uint8_t v=nes_read(a); %s%s nes_write(a,v); FLAG_NZ(v); }\n",
+                operand_addr_expr(am, op1, op2), old_write, body_mem);
+}
+
+/* A native continuation belongs to a physical bank, not just a CPU address.
+ * The interpreter consumes the existing guest return frame, with no new push.
+ * Declare this generated-only handoff locally to keep the runtime ABI intact. */
+static void emit_uxrom_bank_guard(FILE *f, uint16_t pc, int bank, int tick_charged,
+                                 int pop_stack) {
+    fprintf(f,
+            "    { extern int g_current_bank;\n"
+            "      if (g_current_bank != %d) {\n"
+            "        extern int nes_interp_uxrom_continue(uint16_t, int, uint8_t);\n"
+            "        (void)nes_interp_uxrom_continue(0x%04X, %d, _uxrom_entry_s);\n"
+            "%s"
+            "        return;\n"
+            "      } }\n", bank, pc, tick_charged,
+            pop_stack ? "#ifdef RECOMP_STACK_TRACKING\n        recomp_stack_pop();\n#endif\n" : "");
 }
 
 /* Set true while emitting a function that uses the "PLA PLA RTS = return two
@@ -2292,7 +2309,7 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                             int effective_bank,
                             const uint16_t *merge_partners, int merge_partner_count,
                             const uint16_t *emitted_addrs, int emitted_count,
-                            uint16_t sched_reset_addr) {
+                            uint16_t sched_reset_addr, int is_multi_entry) {
     uint8_t opcode = rom_read(rom, bank, pc);
     const OpcodeEntry *e = &g_opcode_table[opcode];
     uint8_t op1 = (e->size > 1) ? rom_read(rom, bank, pc+1) : 0;
@@ -2307,6 +2324,10 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
     const char *insn_boundary = instruction_boundary_func(rom);
     fprintf(f, "    /* $%04X: %02X */ %s(0x%04X, %d); ",
             pc, opcode, insn_boundary, pc, e->cycles);
+    if (rom->mapper == 2 && !sram_sourced && pc >= 0x8000 && pc < 0xC000)
+        emit_uxrom_bank_guard(f, pc, bank, 1, !is_multi_entry);
+
+    const char *old_write = rom->mapper == 2 ? "if (a >= 0x8000) nes_write(a,v); " : "";
 
     if (e->mnemonic == MN_ILLEGAL) {
         fprintf(f, "/* ILLEGAL $%02X — skip %d */\n", opcode, e->size);
@@ -2394,35 +2415,35 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
             emit_shift(f,
                 "g_cpu.C = (g_cpu.A>>7)&1; g_cpu.A = (g_cpu.A<<1)&0xFF; FLAG_NZ(g_cpu.A);",
                 "g_cpu.C=(v>>7)&1; v=(v<<1)&0xFF;",
-                e->addr_mode, op1, op2);
+                e->addr_mode, op1, op2, old_write);
             break;
         case MN_LSR:
             emit_shift(f,
                 "g_cpu.C = g_cpu.A&1; g_cpu.A >>= 1; FLAG_NZ(g_cpu.A);",
                 "g_cpu.C=v&1; v>>=1;",
-                e->addr_mode, op1, op2);
+                e->addr_mode, op1, op2, old_write);
             break;
         case MN_ROL:
             emit_shift(f,
                 "{ uint8_t c=g_cpu.C; g_cpu.C=(g_cpu.A>>7)&1; g_cpu.A=((g_cpu.A<<1)|c)&0xFF; FLAG_NZ(g_cpu.A); }",
                 "uint8_t c=g_cpu.C; g_cpu.C=(v>>7)&1; v=((v<<1)|c)&0xFF;",
-                e->addr_mode, op1, op2);
+                e->addr_mode, op1, op2, old_write);
             break;
         case MN_ROR:
             emit_shift(f,
                 "{ uint8_t c=g_cpu.C; g_cpu.C=g_cpu.A&1; g_cpu.A=((g_cpu.A>>1)|(c<<7))&0xFF; FLAG_NZ(g_cpu.A); }",
                 "uint8_t c=g_cpu.C; g_cpu.C=v&1; v=((v>>1)|(c<<7))&0xFF;",
-                e->addr_mode, op1, op2);
+                e->addr_mode, op1, op2, old_write);
             break;
 
         /* Inc/Dec */
         case MN_INC:
-            fprintf(f, "{ uint16_t a=%s; uint8_t v=(nes_read(a)+1)&0xFF; nes_write(a,v); FLAG_NZ(v); }\n",
-                    operand_addr_expr(e->addr_mode, op1, op2));
+            fprintf(f, "{ uint16_t a=%s; uint8_t v=nes_read(a); %sv=(v+1)&0xFF; nes_write(a,v); FLAG_NZ(v); }\n",
+                    operand_addr_expr(e->addr_mode, op1, op2), old_write);
             break;
         case MN_DEC:
-            fprintf(f, "{ uint16_t a=%s; uint8_t v=(nes_read(a)-1)&0xFF; nes_write(a,v); FLAG_NZ(v); }\n",
-                    operand_addr_expr(e->addr_mode, op1, op2));
+            fprintf(f, "{ uint16_t a=%s; uint8_t v=nes_read(a); %sv=(v-1)&0xFF; nes_write(a,v); FLAG_NZ(v); }\n",
+                    operand_addr_expr(e->addr_mode, op1, op2), old_write);
             break;
         case MN_INX: fprintf(f, "g_cpu.X = (g_cpu.X+1)&0xFF; FLAG_NZ(g_cpu.X);\n"); break;
         case MN_DEX: fprintf(f, "g_cpu.X = (g_cpu.X-1)&0xFF; FLAG_NZ(g_cpu.X);\n"); break;
@@ -2431,28 +2452,28 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
 
         /* Stable unofficial RMW + ALU combos (memory op then accumulator op). */
         case MN_SLO: /* ASL mem; ORA A */
-            fprintf(f, "{ uint16_t a=%s; uint8_t v=nes_read(a); g_cpu.C=(v>>7)&1; v=(v<<1)&0xFF; nes_write(a,v); g_cpu.A|=v; FLAG_NZ(g_cpu.A); }\n",
-                    operand_addr_expr(e->addr_mode, op1, op2));
+            fprintf(f, "{ uint16_t a=%s; uint8_t v=nes_read(a); %sg_cpu.C=(v>>7)&1; v=(v<<1)&0xFF; nes_write(a,v); g_cpu.A|=v; FLAG_NZ(g_cpu.A); }\n",
+                    operand_addr_expr(e->addr_mode, op1, op2), old_write);
             break;
         case MN_RLA: /* ROL mem; AND A */
-            fprintf(f, "{ uint16_t a=%s; uint8_t v=nes_read(a); uint8_t c=g_cpu.C; g_cpu.C=(v>>7)&1; v=((v<<1)|c)&0xFF; nes_write(a,v); g_cpu.A&=v; FLAG_NZ(g_cpu.A); }\n",
-                    operand_addr_expr(e->addr_mode, op1, op2));
+            fprintf(f, "{ uint16_t a=%s; uint8_t v=nes_read(a); %suint8_t c=g_cpu.C; g_cpu.C=(v>>7)&1; v=((v<<1)|c)&0xFF; nes_write(a,v); g_cpu.A&=v; FLAG_NZ(g_cpu.A); }\n",
+                    operand_addr_expr(e->addr_mode, op1, op2), old_write);
             break;
         case MN_SRE: /* LSR mem; EOR A */
-            fprintf(f, "{ uint16_t a=%s; uint8_t v=nes_read(a); g_cpu.C=v&1; v>>=1; nes_write(a,v); g_cpu.A^=v; FLAG_NZ(g_cpu.A); }\n",
-                    operand_addr_expr(e->addr_mode, op1, op2));
+            fprintf(f, "{ uint16_t a=%s; uint8_t v=nes_read(a); %sg_cpu.C=v&1; v>>=1; nes_write(a,v); g_cpu.A^=v; FLAG_NZ(g_cpu.A); }\n",
+                    operand_addr_expr(e->addr_mode, op1, op2), old_write);
             break;
         case MN_RRA: /* ROR mem; ADC A */
-            fprintf(f, "{ uint16_t a=%s; uint8_t v=nes_read(a); uint8_t c=g_cpu.C; g_cpu.C=v&1; v=((v>>1)|(c<<7))&0xFF; nes_write(a,v); uint16_t r=g_cpu.A+v+g_cpu.C; FLAG_NZC_ADD(r,g_cpu.A,v); g_cpu.A=r&0xFF; }\n",
-                    operand_addr_expr(e->addr_mode, op1, op2));
+            fprintf(f, "{ uint16_t a=%s; uint8_t v=nes_read(a); %suint8_t c=g_cpu.C; g_cpu.C=v&1; v=((v>>1)|(c<<7))&0xFF; nes_write(a,v); uint16_t r=g_cpu.A+v+g_cpu.C; FLAG_NZC_ADD(r,g_cpu.A,v); g_cpu.A=r&0xFF; }\n",
+                    operand_addr_expr(e->addr_mode, op1, op2), old_write);
             break;
         case MN_DCP: /* DEC mem; CMP A */
-            fprintf(f, "{ uint16_t a=%s; uint8_t v=(nes_read(a)-1)&0xFF; nes_write(a,v); g_cpu.C=(g_cpu.A>=v)?1:0; FLAG_NZ((uint8_t)(g_cpu.A-v)); }\n",
-                    operand_addr_expr(e->addr_mode, op1, op2));
+            fprintf(f, "{ uint16_t a=%s; uint8_t v=nes_read(a); %sv=(v-1)&0xFF; nes_write(a,v); g_cpu.C=(g_cpu.A>=v)?1:0; FLAG_NZ((uint8_t)(g_cpu.A-v)); }\n",
+                    operand_addr_expr(e->addr_mode, op1, op2), old_write);
             break;
         case MN_ISC: /* INC mem; SBC A */
-            fprintf(f, "{ uint16_t a=%s; uint8_t v=(nes_read(a)+1)&0xFF; nes_write(a,v); int16_t r=g_cpu.A-v-(1-g_cpu.C); FLAG_NZC_SUB(r,g_cpu.A,v); g_cpu.A=r&0xFF; }\n",
-                    operand_addr_expr(e->addr_mode, op1, op2));
+            fprintf(f, "{ uint16_t a=%s; uint8_t v=nes_read(a); %sv=(v+1)&0xFF; nes_write(a,v); int16_t r=g_cpu.A-v-(1-g_cpu.C); FLAG_NZC_SUB(r,g_cpu.A,v); g_cpu.A=r&0xFF; }\n",
+                    operand_addr_expr(e->addr_mode, op1, op2), old_write);
             break;
         case MN_ANC: /* AND #imm; C = bit7 of result */
             fprintf(f, "g_cpu.A &= 0x%02X; FLAG_NZ(g_cpu.A); g_cpu.C=(g_cpu.A>>7)&1;\n", op1);
@@ -2494,11 +2515,12 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
             for (int _ei = 0; _ei < emitted_count; _ei++) { \
                 if (emitted_addrs[_ei] == _tgt) { _label_emitted = true; break; } \
             } \
-            /* Cross-function if target is not in this function's valid_starts    \
-             * (pre-scan now stops at the function boundary, so valid_starts       \
-             * accurately reflects the function's extent). No need to check        \
-             * is_func_entry — valid_starts is the ground truth. */                \
-            bool _cross = !_valid_local || (_tgt < func_base) || \
+            /* An already emitted instruction is a real local label even when \
+             * the conservative pre-scan omitted it. Dispatching that backward \
+             * edge would create a new interpreter stack boundary mid-frame. \
+             * Forward targets still require pre-scan evidence; backward targets \
+             * must actually have been emitted, not merely pre-scanned. */ \
+            bool _cross = (!_valid_local && !_label_emitted) || (_tgt < func_base) || \
                           (_tgt <= pc && !_label_emitted); \
             if (_cross) { \
                 if (rom->mapper == 4 || rom->mapper == 40) { \
@@ -3187,7 +3209,10 @@ static int emit_instruction(FILE *f, const NESRom *rom, int bank,
                         emit_call_target(f, rom, abs16, bank, fixed_bank, o);
                     } else if (abs16 == func_base && pc == func_base) {
                         /* JMP $self at function start: true idle spin. */
-                        fprintf(f, "while(1) { %s(0x%04X, 2); }\n", insn_boundary, abs16);
+                        if (rom->mapper == 2)
+                            fprintf(f, "goto label_%04X;\n", abs16);
+                        else
+                            fprintf(f, "while(1) { %s(0x%04X, 2); }\n", insn_boundary, abs16);
                     } else if (abs16 == func_base || is_merge) {
                         /* JMP to own entry or merge partner: loop-back via goto. */
                         fprintf(f, "%s(0x%04X, 2);\n    goto label_%04X;\n", insn_boundary, abs16, abs16);
@@ -3829,6 +3854,8 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
     const char *sym_name = g_symtab ? symbol_lookup_bank(g_symtab, pc, bank) : NULL;
     if (is_multi_entry) {
         emit_function_body_open(f, pc, bank, fixed_bank, sym_name);
+        if (rom->mapper == 2 && !sram_sourced)
+            fprintf(f, "    uint8_t _uxrom_entry_s = g_cpu.S; (void)_uxrom_entry_s;\n");
         /* Capture entry S before the entry-dispatch switch so it is initialized
          * on every secondary-entry path (the switch's gotos must not skip it). */
         if (s_abort_idiom_func) fprintf(f, "    uint8_t _entryS = g_cpu.S; (void)_entryS;\n");
@@ -3840,6 +3867,8 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
         fprintf(f, "    }\n");
     } else {
         emit_function_open(f, cfg, pc, bank, fixed_bank, sym_name);
+        if (rom->mapper == 2 && !sram_sourced)
+            fprintf(f, "    uint8_t _uxrom_entry_s = g_cpu.S; (void)_uxrom_entry_s;\n");
         if (s_abort_idiom_func) fprintf(f, "    uint8_t _entryS = g_cpu.S; (void)_entryS;\n");
     }
 
@@ -3907,6 +3936,8 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
         uint8_t opcode = rom_read(rom, bank, cursor);
         const OpcodeEntry *e = &g_opcode_table[opcode];
         int instruction_size = e->size > 0 ? e->size : 1;
+        if (rom->mapper == 2 && !sram_sourced && cursor >= 0x8000 && cursor < 0xC000)
+            emit_uxrom_bank_guard(f, cursor, bank, 0, !is_multi_entry);
         bool boundary_straddles = false;
         bool boundary_after = mapper40_reaches_8k_boundary(
             rom, cursor, instruction_size, &boundary_straddles);
@@ -4005,7 +4036,7 @@ static void emit_function(FILE *f, const NESRom *rom, const FunctionEntry *fe,
                                         effective_bank,
                                         merge_partners, merge_partner_count,
                                         emitted_addrs, emitted_count,
-                                        sched_reset_addr);
+                                        sched_reset_addr, is_multi_entry);
 
         if (boundary_after && e->mnemonic != MN_JMP &&
             e->mnemonic != MN_RTS && e->mnemonic != MN_RTI &&
@@ -4259,7 +4290,10 @@ static void emit_dispatch(FILE *f, const EmittedWrapper *wrappers, int wrapper_c
              * $A295, which limped on via the caller-bank fallback).  Guard on _bank;
              * on a live-bank mismatch fall through to interp, which reads the live
              * bank correctly.  Gated to mapper 4 so non-MMC3 output is unchanged. */
-            if (rom->mapper == 4 && addr >= 0x8000 && addr < 0xC000) {
+            if (rom->mapper == 2 && addr >= 0x8000 && addr < 0xC000) {
+                fprintf(f, "            if (g_current_bank != %d) return nes_interp_force(addr);\n", variants[0]);
+                fprintf(f, "            %s(); break;\n", nm);
+            } else if (rom->mapper == 4 && addr >= 0x8000 && addr < 0xC000) {
                 fprintf(f, "            switch (_bank) {\n");
                 fprintf(f, "                case %d: %s(); break;\n", variants[0], nm);
                 fprintf(f, "                default: return nes_interp_dispatch_bank(_cpu_addr, addr, _bank);\n");
@@ -4291,8 +4325,11 @@ static void emit_dispatch(FILE *f, const EmittedWrapper *wrappers, int wrapper_c
                 for (int fi = 0; fi < wrapper_count; fi++) {
                     if (wrappers[fi].addr == fb_equiv &&
                         wrappers[fi].bank == fixed_bank) {
-                        fprintf(f, "                case %d: func_%04X(); break;\n",
-                                fixed_bank, fb_equiv);
+                        if (rom->mapper == 2)
+                            fprintf(f, "                case %d: return nes_interp_force(addr);\n", fixed_bank);
+                        else
+                            fprintf(f, "                case %d: func_%04X(); break;\n",
+                                    fixed_bank, fb_equiv);
                         break;
                     }
                 }
