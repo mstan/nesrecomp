@@ -48,6 +48,7 @@
 #endif
 #include <SDL.h>
 
+#include "cyc_chat.h"
 #include "cyc_core.h"
 #include "cyc_disk_action.h"
 #include "cyc_fds_bios.h"
@@ -1172,6 +1173,7 @@ static void tcp_setup(void)
     cyc_tcp_register("mod_feature", "a Mods feature on/off as the menu does: package, feature, enabled", tcp_mod_feature);
 #endif
     cyc_tcp_register("quit", "close the window (the disk save is written first)", tcp_quit);
+    cyc_chat_register_tcp();
     if (s_extras && s_extras->tcp_setup) s_extras->tcp_setup(s_extras->ctx);
     if (cyc_tcp_start(port)) printf("[cyc tcp] listening on 127.0.0.1:%d\n", port);
     else fprintf(stderr, "[cyc tcp] cannot listen on port %d\n", port);
@@ -1388,6 +1390,7 @@ static void show(bool loading, const char *toast_title, const char *toast_body)
 #else
     (void)loading;
 #endif
+    cyc_chat_draw(s_ren);                                       /* live chat (cyc_chat.h), under the menu */
 #ifdef CYC_WITH_RECOMP_UI
     cyc_ui_render();
 #endif
@@ -1755,6 +1758,7 @@ int cyc_sdl_main(const char *title_in, int scale)
                 }
                 else hold_input = false;
             }
+            pad0 = cyc_chat_frame(pad0);
             uint8_t buttons[2] = {pad0, pad1};
             const uint8_t phys[2] = {pad0, pad1};
 #ifdef NESRECOMP_NET

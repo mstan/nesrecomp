@@ -132,7 +132,8 @@ function(nesrecomp_cyc_enable_sdl target)
         return()
     endif()
     target_sources(${target} PRIVATE ${NESRECOMP_CYC_DIR}/cyc_sdl.c ${NESRECOMP_CYC_DIR}/cyc_input.c
-        ${NESRECOMP_CYC_DIR}/cyc_settings.c ${NESRECOMP_CYC_DIR}/cyc_tcp.c)
+        ${NESRECOMP_CYC_DIR}/cyc_settings.c ${NESRECOMP_CYC_DIR}/cyc_tcp.c
+        ${NESRECOMP_CYC_DIR}/cyc_chat.c)
     if(WIN32)
         target_link_libraries(${target} PRIVATE ws2_32)
     endif()
@@ -216,5 +217,37 @@ default_enabled = true
 [[plugin]]
 feature = \"replay-capture\"
 id = \"nesrecomp.replay-capture\"
+")
+endfunction()
+
+# Windowed mod-enabled titles carry this content-free, default-off package.
+function(nesrecomp_cyc_stage_chat_package target game_id rom_crc32)
+    string(TOLOWER "${rom_crc32}" crc)
+    file(GENERATE
+        OUTPUT "$<TARGET_FILE_DIR:${target}>/mods/packages/nesrecomp.twitch-chat/1.0.0/manifest.toml"
+        CONTENT "format_version = 1
+id = \"nesrecomp.twitch-chat\"
+version = \"1.0.0\"
+name = \"Twitch Chat\"
+author = \"NESRecomp\"
+description = \"Optional Twitch chat overlay and chat-driven game effects.\"
+license = \"MIT\"
+resolver = \"declarative\"
+save_compatibility = \"stock\"
+
+[[target]]
+game_id = \"${game_id}\"
+rom_crc32 = \"${crc}\"
+
+[[feature]]
+id = \"chat\"
+name = \"Twitch chat and effects\"
+description = \"Allows the separately started Twitch bridge to display chat and apply effects. Turning off clears messages and pending effects immediately. Game effects are blocked during online play.\"
+group = \"Streaming\"
+default_enabled = false
+
+[[plugin]]
+feature = \"chat\"
+id = \"nesrecomp.twitch-chat\"
 ")
 endfunction()
