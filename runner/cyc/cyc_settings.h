@@ -7,7 +7,7 @@
  * LinearFilter; [Audio] Volume; [Input] PlayerNSource / PlayerNDevice /
  * PlayerNDeadzone; [Launcher] SkipLauncher). The cycle host adds:
  *
- *   [Audio]    Enabled
+ *   [Audio]    Enabled; Synthesis = legacy (default) or band-limited
  *   [Display]  HDResolution: 0 uses the pack resolution; otherwise 1/2/4/8/16/32/64
  *   [FDS]      one key per HLE axis (common/nes_fds_hle.h nes_fds_hle_axes():
  *              AutoSwap, FastLoad, ...): on, off or default (game.toml decides);
@@ -54,6 +54,7 @@ typedef struct CycSettings {
 #ifdef NESRECOMP_CYCLE_HDPACK
     int hd_resolution;     /* local HD output scale; 0 = pack's original scale */
 #endif
+    int audio_synthesis;    /* 0 current/legacy (default), 1 band-limited */
 } CycSettings;
 
 /* A game's own [Game] keys (cyc_host_extras.h load_setting / save_settings). */

@@ -205,6 +205,17 @@ const uint8_t *cyc_frame_bg_opaque(void);
  * if the machine has no audio output. */
 bool   cyc_audio_enable(int sample_rate);
 size_t cyc_audio_read(int16_t *out, size_t max);
+/* Synthesis before the console's analog output stage. LEGACY is the existing
+ * per-sample box average and remains the default. BAND_LIMITED replaces that
+ * average with band-limited step synthesis of the post-mixer waveform. The
+ * selection takes effect at cyc_audio_enable and changes no emulated machine
+ * state: channel clocks, the nonlinear mixer and the output stage are shared. */
+typedef enum {
+    CYC_AUDIO_SYNTH_LEGACY,
+    CYC_AUDIO_SYNTH_BAND_LIMITED
+} CycAudioSynthesis;
+void             cyc_set_audio_synthesis(CycAudioSynthesis synthesis);
+CycAudioSynthesis cyc_audio_synthesis(void);
 /* Which console's analog output stage shapes the audio (hw_apu.c):
  *   NES      the front-loader's 90 Hz and 440 Hz high-pass and 14 kHz
  *            low-pass (nesdev APU Mixer);

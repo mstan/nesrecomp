@@ -45,6 +45,7 @@ static char s_shortcut_label[CYC_SC_COUNT][96];
 static char s_axis_key[MAX_AXES][24];
 static char s_shortcut_key[CYC_SC_COUNT][24];
 static uint64_t s_quit_armed;
+static const char *const s_synthesis_choices[] = { "Legacy (default)", "Band-limited" };
 #ifdef NESRECOMP_CYCLE_HDPACK
 static const int s_hd_resolution_values[] = {0, 1, 2, 4, 8, 16, 32, 64};
 static const char *const s_hd_resolution_choices[] = {
@@ -315,6 +316,7 @@ static int get_value(void *ctx, const RecompRuntimeUiItem *it, int *out)
 #endif
     else if (is_key(it, RECOMP_RUNTIME_UI_KEY_AUDIO)) *out = s->audio_enabled;
     else if (is_key(it, RECOMP_RUNTIME_UI_KEY_VOLUME)) *out = s->volume;
+    else if (is_key(it, "audio.synthesis")) *out = s->audio_synthesis;
     else if (is_key(it, "cyc.zapper.mouse")) *out = s->zapper_mouse;
     else if (is_key(it, "cyc.zapper.crosshair")) *out = s->zapper_crosshair;
     else if (is_key(it, RECOMP_RUNTIME_UI_KEY_VIEW_MODE)) *out = x && x->get_view_mode ? x->get_view_mode(x->ctx) : s->view_mode;
@@ -353,6 +355,10 @@ static int set_value(void *ctx, const RecompRuntimeUiItem *it, int v)
 #endif
     else if (is_key(it, RECOMP_RUNTIME_UI_KEY_AUDIO)) s->audio_enabled = v != 0;
     else if (is_key(it, RECOMP_RUNTIME_UI_KEY_VOLUME)) s->volume = v < 0 ? 0 : v > 100 ? 100 : v;
+    else if (is_key(it, "audio.synthesis")) {
+        if (v < 0 || v > 1) return 0;
+        s->audio_synthesis = v;
+    }
     else if (is_key(it, "cyc.zapper.mouse")) s->zapper_mouse = v != 0;
     else if (is_key(it, "cyc.zapper.crosshair")) s->zapper_crosshair = v != 0;
     else if (is_key(it, RECOMP_RUNTIME_UI_KEY_VIEW_MODE)) {
@@ -485,6 +491,9 @@ RecompRuntimeUi *cyc_ui_menu_create(const CycUiHost *host)
     s_host = *host;
     s_item_count = 0;
     const CycHostExtras *x = host->extras;
+    add("audio.synthesis", "Audio", "Audio synthesis",
+        "Applies immediately. Legacy keeps the current sound.",
+        RECOMP_RUNTIME_UI_CHOICE, 0, 1, 1, s_synthesis_choices, 2, NULL);
 #ifdef NESRECOMP_CYCLE_HDPACK
     add("cyc.hd.resolution", "Graphics", "HD resolution",
         "Choose the rendering resolution for HD packs. Pack resolution uses the original pack size.",

@@ -122,12 +122,27 @@ static const uint16_t noise_period_table[16] = {
 /* ------------------------------------------------------------------------- */
 
 #define AUDIO_RING 32768u
+/* Clean-room band-limited step synthesis. The kernel is an ideal Nyquist
+ * low-pass (a sinc) truncated by a four-term Blackman-Harris window. Thirty-two
+ * samples on either side of a transition keep the rejection band well below the
+ * audible range; 256 tabulated phases plus linear interpolation give sub-sample
+ * transition placement without evaluating trigonometric functions at run time. */
+#define AUDIO_BAND_HALF 32
+#define AUDIO_BAND_PHASES 256
+#define AUDIO_BAND_TAPS (2 * AUDIO_BAND_HALF + 1)
+#define AUDIO_BAND_RING 256u /* power of two, comfortably longer than 2*HALF */
 static struct {
     bool     on;
     int      console;              /* CYC_CONSOLE_NES or CYC_CONSOLE_FAMICOM, while on */
+    CycAudioSynthesis synthesis;
     double   cycles_per_sample, phase;
     double   acc;
     uint32_t count;
+    struct {
+        uint64_t cycles, next_sample;
+        double previous_level, value;
+        double delta[AUDIO_BAND_RING];
+    } band;
     double   hp90_prev_in, hp90_prev_out, hp440_prev_in, hp440_prev_out, lp_out;
     double   hp90_a, hp440_a, lp_a;
     double   hp37_prev_in, hp37_prev_out, hp37_a;
@@ -140,6 +155,9 @@ static struct {
     uint8_t  level_dirty, level_dmc;
 } audio;
 
+static double audio_band_kernel[(AUDIO_BAND_PHASES + 1) * AUDIO_BAND_TAPS];
+static bool audio_band_kernel_ready;
+static CycAudioSynthesis synthesis_request = CYC_AUDIO_SYNTH_LEGACY;
 static int console_request = CYC_CONSOLE_DEFAULT;
 
 int apu_console(void)
@@ -152,6 +170,17 @@ void apu_set_console(int console)
 {
     console_request = console;
     if (audio.on) audio.console = apu_console();
+}
+
+void apu_set_audio_synthesis(CycAudioSynthesis synthesis)
+{
+    synthesis_request = synthesis == CYC_AUDIO_SYNTH_BAND_LIMITED
+        ? CYC_AUDIO_SYNTH_BAND_LIMITED : CYC_AUDIO_SYNTH_LEGACY;
+}
+
+CycAudioSynthesis apu_audio_synthesis(void)
+{
+    return audio.on ? audio.synthesis : synthesis_request;
 }
 
 /*
@@ -190,6 +219,47 @@ static void audio_stage_setup(int sample_rate)
     audio.hp37_a = rc37 / (rc37 + dt);
 }
 
+static void audio_band_kernel_init(void)
+{
+    if (audio_band_kernel_ready) return;
+    const double pi = 3.14159265358979323846;
+    for (int p = 0; p <= AUDIO_BAND_PHASES; p++) {
+        double *row = audio_band_kernel + p * AUDIO_BAND_TAPS;
+        double fraction = (double)p / AUDIO_BAND_PHASES;
+        double sum = 0;
+        for (int k = 0; k < AUDIO_BAND_TAPS; k++) {
+            double x = k - AUDIO_BAND_HALF - fraction;
+            double ax = fabs(x);
+            double h = 0;
+            if (ax < AUDIO_BAND_HALF) {
+                double sinc = ax < 1e-12 ? 1.0 : sin(pi * x) / (pi * x);
+                /* Four-term Blackman-Harris, shifted onto [-HALF, HALF]. */
+                double window = 0.35875
+                    + 0.48829 * cos(pi * x / AUDIO_BAND_HALF)
+                    + 0.14128 * cos(2 * pi * x / AUDIO_BAND_HALF)
+                    + 0.01168 * cos(3 * pi * x / AUDIO_BAND_HALF);
+                h = sinc * window;
+            }
+            row[k] = h;
+            sum += h;
+        }
+        /* Every phase interpolates two unit-DC rows, so integration cannot
+         * accumulate a phase-dependent DC error. */
+        for (int k = 0; k < AUDIO_BAND_TAPS; k++) row[k] /= sum;
+    }
+    audio_band_kernel_ready = true;
+}
+
+static void audio_band_reset(void)
+{
+    audio_band_kernel_init();
+    audio.band.cycles = 0;
+    audio.band.next_sample = 0;
+    audio.band.previous_level = 0;
+    audio.band.value = 0;
+    memset(audio.band.delta, 0, sizeof(audio.band.delta));
+}
+
 void apu_audio_enable(bool on, int sample_rate)
 {
     audio.level_dirty = 1;
@@ -199,6 +269,8 @@ void apu_audio_enable(bool on, int sample_rate)
     audio.cycles_per_sample = cpu_rate / sample_rate;
     audio.phase = audio.acc = 0;
     audio.count = 0;
+    audio.synthesis = synthesis_request;
+    if (audio.synthesis == CYC_AUDIO_SYNTH_BAND_LIMITED) audio_band_reset();
     audio.console = apu_console();
     audio_stage_setup(sample_rate);
     for (int i = 0; i < 31; i++) audio.pulse_mix[i] = i ? (float)(95.52 / (8128.0 / i + 100)) : 0;
@@ -239,6 +311,85 @@ static void audio_emit(double level)
 }
 
 void apu_debug_emit(double level) { audio_emit(level); }
+
+static void audio_band_flush(double position)
+{
+    while ((double)(audio.band.next_sample + AUDIO_BAND_HALF) <= position) {
+        size_t slot = audio.band.next_sample & (AUDIO_BAND_RING - 1);
+        audio.band.value += audio.band.delta[slot];
+        audio.band.delta[slot] = 0;
+        audio_emit(audio.band.value);
+        audio.band.next_sample++;
+    }
+}
+
+static void audio_band_cycle(double level)
+{
+    double position = audio.band.cycles / audio.cycles_per_sample;
+    double change = level - audio.band.previous_level;
+    if (change != 0) {
+        double whole = floor(position);
+        int64_t base = (int64_t)whole;
+        double phase = (position - whole) * AUDIO_BAND_PHASES;
+        int p = (int)phase;
+        double blend = phase - p;
+        if (p >= AUDIO_BAND_PHASES) { p = AUDIO_BAND_PHASES - 1; blend = 1; }
+        const double *row0 = audio_band_kernel + p * AUDIO_BAND_TAPS;
+        const double *row1 = row0 + AUDIO_BAND_TAPS;
+        int64_t first = base - AUDIO_BAND_HALF;
+        for (int k = 0; k < AUDIO_BAND_TAPS; k++) {
+            int64_t n = first + k;
+            if (n < 0) continue; /* the pre-enable half of a startup edge */
+            double coefficient = row0[k] + (row1[k] - row0[k]) * blend;
+            audio.band.delta[(uint64_t)n & (AUDIO_BAND_RING - 1)] += change * coefficient;
+        }
+    }
+    audio.band.previous_level = level;
+
+    /* A sample is ready only after every transition inside the kernel's right
+     * half has arrived. This is a fixed HALF-sample synthesis delay, not a
+     * dependence on the host's read size or wall clock. */
+    audio_band_flush(position);
+    audio.band.cycles++;
+}
+
+/* A run of cycles whose level does not change. There is no transition to
+ * integrate, so the kernel contributes nothing and only the samples the span
+ * made ready need emitting — which is exactly what the per-cycle path would
+ * have done, at a quarter of the calls. The APU's constant-output fast path
+ * advances the output clock without ever reaching audio_output_cycle, so
+ * without this the band-limited synthesizer would stall for the whole span. */
+static void audio_band_advance(unsigned cycles)
+{
+    if (cycles == 0) return;
+    /* audio_band_cycle reads the position BEFORE incrementing the cycle
+     * counter, so the span's last examined position is cycles-1, not cycles. */
+    double position = (double)(audio.band.cycles + cycles - 1) / audio.cycles_per_sample;
+    audio.band.cycles += cycles;
+    audio_band_flush(position);
+}
+
+static void audio_output_cycle(double level)
+{
+    if (audio.synthesis == CYC_AUDIO_SYNTH_BAND_LIMITED) {
+        audio_band_cycle(level);
+        return;
+    }
+    audio.acc += level;
+    audio.count++;
+    audio.phase += 1.0;
+    if (audio.phase >= audio.cycles_per_sample) {
+        audio.phase -= audio.cycles_per_sample;
+        audio_emit(audio.acc / audio.count);
+        audio.acc = 0;
+        audio.count = 0;
+    }
+}
+
+void apu_debug_synthesis_level(double level)
+{
+    if (audio.on) audio_output_cycle(level);
+}
 
 /* The sweep's target period. Pulse 1 negates by ones' complement, pulse 2 by
  * two's complement; a negated target below 0 never mutes the channel. */
@@ -425,15 +576,7 @@ static void audio_cycle(void)
 #endif
 
     level += hw_cart_audio_level();
-    audio.acc += level;
-    audio.count++;
-    audio.phase += 1.0;
-    if (audio.phase >= audio.cycles_per_sample) {
-        audio.phase -= audio.cycles_per_sample;
-        audio_emit(audio.acc / audio.count);
-        audio.acc = 0;
-        audio.count = 0;
-    }
+    audio_output_cycle(level);
 }
 
 /* ------------------------------------------------------------------------- */
@@ -848,11 +991,15 @@ static void constant_output_run(unsigned cycles)
     apu.len[CH_PULSE2].halt = (apu.reg[4] & 0x20) != 0;
     apu.len[CH_TRIANGLE].halt = (apu.reg[8] & 0x80) != 0;
     apu.len[CH_NOISE].halt = (apu.reg[12] & 0x20) != 0;
-    for (unsigned i = 0; i < cycles; ++i) {
-        audio.acc += audio.base_level;
-        audio.phase += 1.0;
+    if (audio.synthesis == CYC_AUDIO_SYNTH_BAND_LIMITED) {
+        audio_band_advance(cycles);
+    } else {
+        for (unsigned i = 0; i < cycles; ++i) {
+            audio.acc += audio.base_level;
+            audio.phase += 1.0;
+        }
+        audio.count += cycles;
     }
-    audio.count += cycles;
     apu.put ^= cycles & 1;
     ++apu_native_event_spans;
     apu_native_event_cycles += cycles;

@@ -481,6 +481,8 @@ void    hw_set_controller(int port, uint8_t buttons);
 /* Audio (hw_apu.c). */
 void    apu_audio_enable(bool on, int sample_rate);
 size_t  apu_audio_read(int16_t *out, size_t max);
+void    apu_set_audio_synthesis(CycAudioSynthesis synthesis);
+CycAudioSynthesis apu_audio_synthesis(void);
 /* The console output stage (cyc_set_console): 0 = by board, 1 = NES,
  * 2 = Famicom (CycConsole). apu_console() is the model in effect. */
 void    apu_set_console(int console);
@@ -488,6 +490,9 @@ int     apu_console(void);
 /* One output sample's level straight into the output stage, as the mixer's
  * per-sample average would be (tests: the stage's impulse response). */
 void    apu_debug_emit(double level);
+/* One CPU cycle's post-mixer level through the selected synthesizer, before
+ * the console output stage (tests: step and frequency responses). */
+void    apu_debug_synthesis_level(double level);
 /* The channels' current output levels: pulse 1, pulse 2, triangle, noise
  * (0-15) and DMC (0-127), and the APU's IRQ output. For co-simulation; the
  * tone generators only run while audio is enabled. */

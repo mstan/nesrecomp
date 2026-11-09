@@ -852,6 +852,10 @@ bool cyc_audio_enable(int sample_rate)
 
 size_t cyc_audio_read(int16_t *out, size_t max) { return apu_audio_read(out, max); }
 
+void cyc_set_audio_synthesis(CycAudioSynthesis synthesis) { apu_set_audio_synthesis(synthesis); }
+
+CycAudioSynthesis cyc_audio_synthesis(void) { return apu_audio_synthesis(); }
+
 void cyc_set_console(CycConsole console) { apu_set_console((int)console); }
 
 CycConsole cyc_console(void) { return (CycConsole)apu_console(); }
