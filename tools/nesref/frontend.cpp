@@ -10,24 +10,54 @@
  *   NESREF_TRACE_FILE=<path>   per-frame RAM-delta JSONL   (default nesref_trace.jsonl)
  *   NESREF_FRAMES=<N>          headless: run N frames (no input), flush, quit
  *   NESREF_DUMP="a,b,c"        also print RAM $00..$0F at these frame numbers (oracle readback)
+ *   NESREF_STATUS_FILE=<path> JSONL {type:"frame",f} after each flushed snapshot,
+ *                            then {type:"complete",f,requested_frames,reason}.
+ *                            Require exit 0 AND completion; deltas alone cannot
+ *                            prove that a frame with no memory changes ran.
+ * Cycle/PPU extraction supports Mesen 0.9.9 MST v13 (see tools/build-oracle.sh
+ * in the parent project for the tested source pin), not arbitrary libretro cores.
  *
  * Keys: arrows=D-pad, Z=B, X=A, Enter=Start, RShift=Select, Esc=quit.
  */
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
 #define SDL_MAIN_HANDLED
 #include <SDL.h>
 #include <cstdio>
 #include <cstdint>
 #include <cstring>
 #include <cstdlib>
+#include <cerrno>
+#include <climits>
+#include <stdexcept>
+#include <string>
 #include <vector>
 #include "libretro.h"
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
 // ---- core function pointers ----
-static HMODULE g_core;
+static void* g_core;
+static bool g_headless = false;
+static bool g_initialized = false, g_loaded = false;
+static FILE *g_cycle_log, *g_ppu_log, *g_status;
+static void fail(const char* message) { throw std::runtime_error(message); }
+static FILE* open_output(const char* path) {
+    FILE* f = fopen(path, "wb");
+    if (!f) throw std::runtime_error(std::string("cannot open output ") + path + ": " + strerror(errno));
+    return f;
+}
+static FILE* optional_output(const char* name) {
+    const char* path = getenv(name);
+    return path && path[0] ? open_output(path) : nullptr;
+}
+static void flush_output(FILE* f) {
+    if (f && (fflush(f) != 0 || ferror(f))) fail("trace/capture write failed");
+}
+static void close_output(FILE*& f) {
+    if (!f) return;
+    FILE* closing = f;
+    f = nullptr;
+    if (fclose(closing) != 0) fail("output close failed");
+}
 #define LR(sym) static decltype(&sym) p_##sym;
 LR(retro_init) LR(retro_deinit) LR(retro_api_version)
 LR(retro_get_system_info) LR(retro_get_system_av_info)
@@ -41,8 +71,8 @@ LR(retro_get_memory_data) LR(retro_get_memory_size)
 #undef LR
 
 template<class T> static void bind(T& fn, const char* name) {
-    fn = (T)GetProcAddress(g_core, name);
-    if (!fn) { fprintf(stderr, "missing core symbol: %s\n", name); exit(2); }
+    fn = (T)SDL_LoadFunction(g_core, name);
+    if (!fn) throw std::runtime_error(std::string("missing core symbol ") + name + ": " + SDL_GetError());
 }
 
 // ---- video state ----
@@ -73,9 +103,10 @@ static void store_rgb(const void* data, unsigned w, unsigned h, size_t pitch) {
     }
 }
 static void write_shot(const char* path) {
-    if (g_rgb_w<=0) { fprintf(stderr,"[nesref shot] no frame yet\n"); return; }
+    if (g_rgb_w<=0) fail("screenshot requested but no frame received");
     if (stbi_write_png(path, g_rgb_w, g_rgb_h, 3, g_rgb.data(), g_rgb_w*3))
         printf("[nesref shot] %s (%dx%d)\n", path, g_rgb_w, g_rgb_h);
+    else fail("screenshot write failed");
     fflush(stdout);
 }
 
@@ -92,20 +123,116 @@ static const char* trace_path() {
     return (p && p[0]) ? p : "nesref_trace.jsonl";
 }
 static void emit(int addr, uint8_t o, uint8_t n) {
-    if (!g_log) { g_log = fopen(trace_path(), "a"); if (!g_log) return; }
     fprintf(g_log, "{\"f\":%u,\"adr\":\"0x%04x\",\"old\":\"0x%02x\",\"val\":\"0x%02x\"}\n",
             g_frame, addr, o, n);
 }
 static void trace_tick() {
     uint8_t* ram = (uint8_t*)p_retro_get_memory_data(RETRO_MEMORY_SYSTEM_RAM);
     size_t sz = p_retro_get_memory_size(RETRO_MEMORY_SYSTEM_RAM);
-    if (!ram || sz <= WRAM_HI) return;
+    if (!ram || sz <= WRAM_HI) fail("core does not expose 2048 bytes of SYSTEM_RAM");
     if (!g_primed) {
         for (int a=WRAM_LO;a<=WRAM_HI;a++){ g_prev[a-WRAM_LO]=ram[a]; emit(a,0,ram[a]); }
         g_primed=true; return;
     }
     for (int a=WRAM_LO;a<=WRAM_HI;a++){ uint8_t v=ram[a]; if(v!=g_prev[a-WRAM_LO]){ emit(a,g_prev[a-WRAM_LO],v); g_prev[a-WRAM_LO]=v; } }
-    if (g_log && (g_frame % 30)==0) fflush(g_log);
+}
+
+// Mesen 0.9.9 / MST v13, libretro/Mesen 0102910c39ad1a62bc3f784466f3f67ca9eae335.
+// Console::SaveState writes CPU, PPU, RAM, APU, controllers, mapper snapshots.
+// Snapshotable wraps each Stream block in two equal u32 lengths; arrays have
+// one u32 element count. Parse lengths rather than WRAM-relative offsets:
+// PPU sprite blocks and mapper CHR/work/save RAM change subsequent positions.
+static void trace_state(const std::vector<uint8_t>& blob) {
+    auto range = [&](size_t pos, size_t count, size_t end) {
+        if (end > blob.size() || pos > end || count > end-pos)
+            fail("truncated or unsupported Mesen savestate layout");
+    };
+    auto u32 = [&](size_t pos) -> uint32_t {
+        range(pos, 4, blob.size());
+        return uint32_t(blob[pos]) | (uint32_t(blob[pos+1]) << 8) |
+               (uint32_t(blob[pos+2]) << 16) | (uint32_t(blob[pos+3]) << 24);
+    };
+    auto block = [&](size_t& pos, size_t end, size_t& length) -> size_t {
+        range(pos, 8, end);
+        length = u32(pos);
+        if (length != u32(pos+4)) fail("unsupported Mesen Stream block");
+        size_t data = pos+8;
+        range(data, length, end);
+        pos = data+length;
+        return data;
+    };
+    range(0, 58, blob.size());
+    if (memcmp(blob.data(), "MST", 3) || u32(3) != 0x909 || u32(7) != 13)
+        fail("cycle/PPU traces require Mesen 0.9.9 MST format 13");
+    range(58, u32(54), blob.size()); // ROM filename is variable length, including spaces.
+    size_t pos = 58+u32(54), starts[6], ends[6];
+    for (int i=0; i<6; ++i) {
+        uint32_t n = u32(pos);
+        starts[i] = pos+4;
+        range(starts[i], n, blob.size());
+        pos = ends[i] = starts[i]+n;
+    }
+    size_t n, cursor = starts[0];
+    size_t cpu = block(cursor, ends[0], n);
+    if (n != 50) fail("unsupported Mesen CPU state size");
+    uint64_t cycles = 0;
+    for (unsigned i=0; i<8; ++i) cycles |= uint64_t(blob[cpu+7+i]) << (i*8);
+    static uint64_t previous_cycles = 0;
+    if (cycles <= previous_cycles) fail("Mesen CPU cycle counter is not monotonic");
+    previous_cycles = cycles;
+    if (g_cycle_log) fprintf(g_cycle_log, "{\"f\":%u,\"cyc\":%llu}\n", g_frame, (unsigned long long)cycles);
+    if (!g_ppu_log) return;
+
+    cursor = starts[1];
+    size_t ppu = block(cursor, ends[1], n);
+    if (n != 489 || u32(ppu+101) != 32 || u32(ppu+137) != 256 || u32(ppu+397) != 32)
+        fail("unsupported Mesen PPU state layout");
+    size_t pal = ppu+105, oam = ppu+141;
+    cursor = starts[2];
+    size_t ram = block(cursor, ends[2], n);
+    if (n != 2052 || u32(ram) != 2048 ||
+        memcmp(&blob[ram+4], p_retro_get_memory_data(RETRO_MEMORY_SYSTEM_RAM), 2048))
+        fail("Mesen serialized RAM does not match live SYSTEM_RAM");
+    ram += 4;
+    cursor = starts[5];
+    size_t count = block(cursor, ends[5], n);
+    if (n != 1 || blob[count] != 2) fail("PPU trace requires two physical nametables");
+    size_t mapper = block(cursor, ends[5], n), mapper_end = mapper+n;
+    pos = mapper+4; // MirroringType (32-bit enum).
+    for (int i=0; i<3; ++i) { // Skip CHR RAM, mapper work RAM, battery save RAM.
+        range(pos, 4, mapper_end);
+        uint32_t bytes = u32(pos);
+        range(pos+4, bytes, mapper_end);
+        pos += 4+bytes;
+    }
+    range(pos, 4+2048, mapper_end);
+    if (u32(pos) != 2048) fail("unsupported Mesen nametable array size");
+    size_t nt = pos+4;
+    // Retain explicit upstream offset overrides for existing diagnostic runs.
+    const char* vars[] = {"NESREF_PPU_OAM_D", "NESREF_PPU_PAL_D", "NESREF_PPU_NT_D"};
+    size_t* offsets[] = {&oam, &pal, &nt};
+    const size_t lengths[] = {256, 32, 2048};
+    for (int i=0; i<3; ++i) if (const char* value = getenv(vars[i])) {
+        char* end; errno = 0;
+        long delta = strtol(value, &end, 0);
+        if (errno || end == value || *end || delta < -long(blob.size()) || delta > long(ram))
+            fail("invalid PPU offset override");
+        *offsets[i] = size_t(long(ram)-delta);
+        range(*offsets[i], lengths[i], blob.size());
+    }
+    if (g_frame == 1) fprintf(stderr,
+        "[nesref state] MST v13 cycle=0x%zx RAM=0x%zx OAM=0x%zx palette=0x%zx NT=0x%zx (mapper=%u)\n",
+        cpu+7, ram, oam, pal, nt, unsigned(blob[11]) | (unsigned(blob[12]) << 8));
+    uint8_t img[0xA00] = {};
+    memcpy(img, &blob[oam], 256);
+    memcpy(img+0x100, &blob[pal], 32);
+    memcpy(img+0x200, &blob[nt], 2048);
+    static uint8_t prev[0xA00];
+    for (int a=0; a<0xA00; ++a) if (g_frame == 1 || img[a] != prev[a]) {
+        fprintf(g_ppu_log, "{\"f\":%u,\"adr\":\"0x%04x\",\"old\":\"0x%02x\",\"val\":\"0x%02x\"}\n",
+                g_frame, a, prev[a], img[a]);
+        prev[a] = img[a];
+    }
 }
 
 // Cross-engine RNG/seed freeze: force fixed RAM bytes each frame so the oracle
@@ -145,11 +272,20 @@ static void dump_check() {
 static bool cb_environment(unsigned cmd, void* data) {
     switch (cmd) {
         case RETRO_ENVIRONMENT_GET_CAN_DUPE: *(bool*)data = true; return true;
-        case RETRO_ENVIRONMENT_SET_PIXEL_FORMAT: g_fmt = *(const retro_pixel_format*)data; return true;
+        case RETRO_ENVIRONMENT_SET_PIXEL_FORMAT:
+            if (*(const retro_pixel_format*)data > RETRO_PIXEL_FORMAT_RGB565) return false;
+            g_fmt = *(const retro_pixel_format*)data; return true;
         case RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY: *(const char**)data = "."; return true;
         case RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY:   *(const char**)data = "."; return true;
         case RETRO_ENVIRONMENT_SET_PERFORMANCE_LEVEL: return true;
         case RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE: if(data) *(bool*)data=false; return true;
+        case RETRO_ENVIRONMENT_GET_VARIABLE: {
+            retro_variable* var = (retro_variable*)data;
+            var->value = nullptr;
+            if (!strcmp(var->key, "mesen_ramstate")) var->value = "All 0s (Default)";
+            else if (!strcmp(var->key, "mesen_region")) var->value = "Auto";
+            return var->value != nullptr;
+        }
         default: return false;
     }
 }
@@ -160,6 +296,7 @@ static void ensure_texture(unsigned w, unsigned h) {
               : (g_fmt==RETRO_PIXEL_FORMAT_RGB565)   ? SDL_PIXELFORMAT_RGB565
               :                                        SDL_PIXELFORMAT_ARGB1555;
     g_tex = SDL_CreateTexture(g_ren, sf, SDL_TEXTUREACCESS_STREAMING, w, h);
+    if (!g_tex) fail(SDL_GetError());
     g_tex_w=w; g_tex_h=h;
 }
 static void cb_video(const void* data, unsigned w, unsigned h, size_t pitch) {
@@ -181,7 +318,7 @@ static FILE*    g_wav;
 static uint64_t g_wav_frames;
 static uint32_t g_wav_rate = 48000;
 static void wav_open(const char* path, double rate) {
-    g_wav = fopen(path, "wb"); if (!g_wav) { fprintf(stderr, "cannot open %s\n", path); return; }
+    g_wav = open_output(path);
     g_wav_rate = (uint32_t)(rate + 0.5); uint8_t hdr[44] = {0}; fwrite(hdr, 1, 44, g_wav);
 }
 static void wav_close() {
@@ -189,13 +326,15 @@ static void wav_close() {
     uint32_t data_bytes = (uint32_t)(g_wav_frames * 4);
     uint32_t riff = 36 + data_bytes, fmt32 = 16, brate = g_wav_rate * 4;
     uint16_t pcm = 1, ch = 2, balign = 4, bits = 16;
-    fseek(g_wav, 0, SEEK_SET);
+    flush_output(g_wav);
+    if (fseek(g_wav, 0, SEEK_SET) != 0) fail("cannot seek WAV header");
     fwrite("RIFF", 1, 4, g_wav); fwrite(&riff, 4, 1, g_wav); fwrite("WAVEfmt ", 1, 8, g_wav);
     fwrite(&fmt32, 4, 1, g_wav); fwrite(&pcm, 2, 1, g_wav); fwrite(&ch, 2, 1, g_wav);
     fwrite(&g_wav_rate, 4, 1, g_wav); fwrite(&brate, 4, 1, g_wav);
     fwrite(&balign, 2, 1, g_wav); fwrite(&bits, 2, 1, g_wav);
     fwrite("data", 1, 4, g_wav); fwrite(&data_bytes, 4, 1, g_wav);
-    fclose(g_wav); g_wav = nullptr;
+    flush_output(g_wav);
+    close_output(g_wav);
 }
 static void  cb_audio_sample(int16_t l, int16_t r) { if (g_wav) { int16_t s[2] = {l, r}; fwrite(s, 4, 1, g_wav); g_wav_frames++; } }
 static size_t cb_audio_batch(const int16_t* data, size_t frames) { if (g_wav && data && frames) { fwrite(data, 4, frames, g_wav); g_wav_frames += frames; } return frames; }
@@ -230,7 +369,7 @@ static void load_script(){
     const char* path=getenv("NESREF_SCRIPT");
     if(!path||!path[0]) return;
     FILE* f=fopen(path,"r");
-    if(!f){ fprintf(stderr,"[nesref script] cannot open %s\n",path); return; }
+    if(!f) throw std::runtime_error(std::string("cannot open input script ") + path);
     char line[256];
     while(fgets(line,sizeof line,f)){
         char cmd[32]={0}, a1[32]={0}, a2[32]={0}; int nn=sscanf(line,"%31s %31s %31s",cmd,a1,a2);
@@ -243,7 +382,10 @@ static void load_script(){
             c.addr=(uint16_t)strtol(a1,0,16); c.val=(uint8_t)strtol(a2,0,16); g_cmds.push_back(c); }
         /* TURBO/SCREENSHOT/LOG/EXIT/ASSERT_RAM8 ignored */
     }
+    bool read_error = ferror(f) != 0;
     fclose(f);
+    if (read_error) fail("input script read failed");
+    if (g_cmds.empty()) fail("input script contains no supported commands");
     g_have_script=!g_cmds.empty();
     fprintf(stderr,"[nesref script] loaded %s: %zu commands\n",path,g_cmds.size());
 }
@@ -268,7 +410,7 @@ static void script_tick(const uint8_t* ram){
             if((long)g_frame - g_waitram_start > 30*60){     // 30s timeout (match recomp)
                 fprintf(stderr,"[nesref script] WAIT_RAM8 $%04X==%02X TIMEOUT (got %02X) f=%u\n",
                         c.addr, c.val, ram?ram[c.addr&0x7FF]:0, g_frame);
-                g_waitram_start=-1; g_pc++; continue;
+                fail("input script WAIT_RAM8 timed out");
             }
             return;                                          // keep waiting; hold current mask
         }
@@ -291,6 +433,7 @@ static int16_t cb_input_state(unsigned port, unsigned device, unsigned, unsigned
             default: return 0;
         }
     }
+    if (g_headless) return 0;  // Never consult host input in a neutral headless run.
     const Uint8* ks = SDL_GetKeyboardState(nullptr);
     SDL_Scancode sc;
     switch (id) {
@@ -307,13 +450,24 @@ static int16_t cb_input_state(unsigned port, unsigned device, unsigned, unsigned
     return ks[sc] ? 1 : 0;
 }
 
-int main(int argc, char** argv) {
-    if (argc < 3) { fprintf(stderr,"usage: nesref <core.dll> <rom.nes>\n"); return 1; }
+static int run_frontend(int argc, char** argv) {
+    if (argc != 3) { fprintf(stderr,"usage: nesref <core.dylib|core.so|core.dll> <rom.nes>\n"); return 1; }
     const char* corePath = argv[1];
     const char* romPath  = argv[2];
 
-    g_core = LoadLibraryA(corePath);
-    if (!g_core) { fprintf(stderr,"LoadLibrary failed: %s (err %lu)\n", corePath, GetLastError()); return 2; }
+    const char* framesEnv = getenv("NESREF_FRAMES");
+    long run_frames = -1;
+    if (framesEnv) {
+        char* end; errno = 0;
+        run_frames = strtol(framesEnv, &end, 10);
+        if (errno || end == framesEnv || *end || run_frames <= 0 || run_frames > INT_MAX)
+            fail("NESREF_FRAMES must be an integer in 1..2147483647");
+    }
+    const bool headless = g_headless = run_frames > 0;
+    load_script();
+
+    g_core = SDL_LoadObject(corePath);
+    if (!g_core) { fprintf(stderr,"cannot load core %s: %s\n", corePath, SDL_GetError()); return 2; }
     bind(p_retro_init,"retro_init"); bind(p_retro_deinit,"retro_deinit");
     bind(p_retro_api_version,"retro_api_version");
     bind(p_retro_get_system_info,"retro_get_system_info");
@@ -332,19 +486,31 @@ int main(int argc, char** argv) {
     bind(p_retro_get_memory_data,"retro_get_memory_data");
     bind(p_retro_get_memory_size,"retro_get_memory_size");
 
+    if (p_retro_api_version() != RETRO_API_VERSION) fail("unsupported libretro API version");
+
     p_retro_set_environment(cb_environment);
     p_retro_init();
+    g_initialized = true;
 
     retro_system_info si; memset(&si,0,sizeof si); p_retro_get_system_info(&si);
     printf("core: %s %s  need_fullpath=%d\n", si.library_name?si.library_name:"?",
            si.library_version?si.library_version:"?", si.need_fullpath);
 
     retro_game_info gi; memset(&gi,0,sizeof gi); gi.path=romPath;
-    std::vector<uint8_t> rom;
+    static std::vector<uint8_t> rom; // Keep in-memory content alive through core teardown.
+    {
+        FILE* f=fopen(romPath,"rb"); if(!f) throw std::runtime_error(std::string("cannot open ROM ") + romPath);
+        if (fseek(f,0,SEEK_END) != 0) { fclose(f); fail("cannot seek ROM"); }
+        long n=ftell(f);
+        if (n <= 0 || n > 64*1024*1024 || fseek(f,0,SEEK_SET) != 0) { fclose(f); fail("invalid ROM size"); }
+        if (!si.need_fullpath) {
+            rom.resize(size_t(n));
+            size_t got = fread(rom.data(),1,rom.size(),f);
+            if (got != rom.size()) { fclose(f); fail("short ROM read"); }
+        }
+        fclose(f);
+    }
     if (!si.need_fullpath) {
-        FILE* f=fopen(romPath,"rb"); if(!f){ fprintf(stderr,"cannot open rom %s\n",romPath); return 3; }
-        fseek(f,0,SEEK_END); long n=ftell(f); fseek(f,0,SEEK_SET);
-        rom.resize(n); fread(rom.data(),1,n,f); fclose(f);
         gi.data=rom.data(); gi.size=rom.size();
     }
     p_retro_set_video_refresh(cb_video);
@@ -353,14 +519,16 @@ int main(int argc, char** argv) {
     p_retro_set_input_poll(cb_input_poll);
     p_retro_set_input_state(cb_input_state);
     if (!p_retro_load_game(&gi)) { fprintf(stderr,"retro_load_game failed\n"); return 4; }
+    g_loaded = true;
     p_retro_set_controller_port_device(0, RETRO_DEVICE_JOYPAD);
+    g_log = open_output(trace_path());
+    g_cycle_log = optional_output("NESREF_CYCLE_FILE");
+    g_ppu_log = optional_output("NESREF_PPU_FILE");
+    g_status = optional_output("NESREF_STATUS_FILE");
 
-    // Probe which memory regions this core exposes (NESREF_MEMPROBE=1). Finding
-    // (2026-07-01): Mesen, FCEUmm, and Nestopia libretro cores ALL expose only
-    // SYSTEM_RAM (2KB) for NES — VIDEO_RAM/SAVE_RAM/RTC are null/0. So the
-    // libretro path cannot supply PPU-internal memory or a cycle counter; the
-    // co-sim PPU-mem and cycle cross-checks require the external MesenCE Lua
-    // (emu.read(nesNametableRam/nesSpriteRam/nesPaletteRam) + cpu.cycleCount).
+    // Probe which memory regions this core exposes (NESREF_MEMPROBE=1).
+    // Mesen exposes SYSTEM_RAM but no PPU memory/counter via this API. The
+    // optional cycle/PPU streams below decode the pinned core's savestate.
     if (getenv("NESREF_MEMPROBE")) {
         struct { int id; const char* n; } mem[] = {
             {RETRO_MEMORY_SAVE_RAM,"SAVE_RAM"}, {RETRO_MEMORY_RTC,"RTC"},
@@ -383,26 +551,40 @@ int main(int argc, char** argv) {
           printf("WAV capture -> %s @ %.1f Hz\n", wp, sr); fflush(stdout);
       } }
 
-    // Headless when NESREF_FRAMES is set: no SDL window (deterministic capture).
-    const char* framesEnv = getenv("NESREF_FRAMES");
-    long run_frames = (framesEnv && framesEnv[0]) ? atol(framesEnv) : -1;
-    bool headless = (run_frames > 0);
-
     if (!headless) {
         SDL_SetMainReady();
         if (SDL_Init(SDL_INIT_VIDEO) != 0) { fprintf(stderr,"SDL_Init: %s\n",SDL_GetError()); return 5; }
         g_win = SDL_CreateWindow("nesref (libretro oracle) — Esc quit",
             SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, vw*2, vh*2, SDL_WINDOW_RESIZABLE);
+        if (!g_win) fail(SDL_GetError());
         g_ren = SDL_CreateRenderer(g_win, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-        SDL_RenderSetLogicalSize(g_ren, vw, vh);
+        if (!g_ren) fail(SDL_GetError());
+        if (SDL_RenderSetLogicalSize(g_ren, vw, vh) != 0) fail(SDL_GetError());
         printf("RUN. KB: arrows=DPad Z=B X=A Enter=Start RShift=Select Esc=quit\n"); fflush(stdout);
     } else {
         printf("RUN headless: %ld frames\n", run_frames); fflush(stdout);
     }
 
-    load_script();   // NESREF_SCRIPT: per-frame input for co-sim drive-through
-
+    long dump_frame = -1;
+    const char* dump_path = nullptr;
+    if (const char* value = getenv("NESREF_STATEDUMP")) {
+        char* end; errno = 0;
+        dump_frame = strtol(value, &end, 10);
+        if (errno || end == value || dump_frame <= 0 || *end != ':' || !end[1])
+            fail("NESREF_STATEDUMP must be frame:path");
+        dump_path = end+1;
+    }
+    long shot_frame = -1;
+    const char* shot_path = getenv("NESREF_SHOT_FILE");
+    if (!shot_path || !shot_path[0]) shot_path = "nesref_shot.png";
+    if (const char* value = getenv("NESREF_SHOT")) {
+        char* end; errno = 0;
+        shot_frame = strtol(value, &end, 10);
+        if (errno || end == value || *end || shot_frame <= 0)
+            fail("NESREF_SHOT must be a positive frame number");
+    }
     bool running=true;
+    const char* reason = "quit";
     Uint64 freq = headless?0:SDL_GetPerformanceFrequency();
     Uint64 prev = headless?0:SDL_GetPerformanceCounter();
     const double target = headless?0:(double)freq / 60.098;
@@ -414,6 +596,7 @@ int main(int argc, char** argv) {
                 else if (e.type==SDL_KEYDOWN && e.key.repeat==0 && e.key.keysym.scancode==SDL_SCANCODE_ESCAPE) running=false;
             }
         }
+        if (!running) break;
         // State-anchored input: advance the script (reading live WRAM for
         // WAIT_RAM8) to set this frame's held buttons before the core polls.
         script_tick((const uint8_t*)p_retro_get_memory_data(RETRO_MEMORY_SYSTEM_RAM));
@@ -422,104 +605,34 @@ int main(int argc, char** argv) {
         apply_freeze();   // force shared RNG/seed before snapshotting (matches recomp order)
         trace_tick();
         dump_check();
-        { static long sf=-2; static const char* sfile=nullptr;
-          if (sf==-2){ const char* v=getenv("NESREF_SHOT"); sf=(v&&v[0])?atol(v):-1;
-                       sfile=getenv("NESREF_SHOT_FILE"); if(!sfile||!sfile[0]) sfile="nesref_shot.png"; }
-          if (sf>0 && (long)g_frame==sf) write_shot(sfile); }
-        // Gated savestate dump (NESREF_STATEDUMP=<frame>:<path>): probe whether
-        // Mesen's serialize blob is parseable for PPU/APU/cycle state in-process.
-        { static long df=-2; static const char* dpath=nullptr;
-          if (df==-2){ const char* v=getenv("NESREF_STATEDUMP");
-                       if(v&&v[0]){ static char pb[512]; long f; char p[480];
-                                    if(sscanf(v,"%ld:%479s",&f,p)==2){df=f;strcpy(pb,p);dpath=pb;} else df=-1; }
-                       else df=-1; }
-          if (df>0 && (long)g_frame==df) {
-              size_t sz=p_retro_serialize_size();
-              std::vector<uint8_t> blob(sz);
-              if (p_retro_serialize(blob.data(), sz)) {
-                  FILE* bf=fopen(dpath,"wb"); if(bf){ fwrite(blob.data(),1,sz,bf); fclose(bf);
-                      printf("[nesref statedump] frame %ld -> %s (%zu bytes)\n", df, dpath, sz); fflush(stdout); }
-              } else printf("[nesref statedump] retro_serialize failed (sz=%zu)\n", sz);
-          } }
-
-        // In-process CYCLE oracle (NESREF_CYCLE_FILE=<path>): Mesen exposes no
-        // cycle counter over libretro's memory API, but its full state -- incl.
-        // the monotonic CPU cycle count -- is in the retro_serialize blob. We
-        // pull it in-process (no external Mesen.exe). The offset is discovered
-        // self-calibrating: at a calibration frame, scan the blob for the unique
-        // 8-byte LE value ~= frame * 29780.5 and lock it (robust across ROM/core
-        // version -- no magic constant). Then emit {f,cyc} per frame.
-        { static int st=-1; static FILE* cf=nullptr; static long coff=-1;
-          if (st<0){ const char* v=getenv("NESREF_CYCLE_FILE"); cf=(v&&v[0])?fopen(v,"w"):nullptr; st=cf?1:0; }
-          if (st==1) {
-              size_t sz=p_retro_serialize_size();
-              static std::vector<uint8_t> blob; blob.resize(sz);
-              if (p_retro_serialize(blob.data(), sz)) {
-                  if (coff<0 && g_frame>=30) {
-                      // Lock the cycle-counter offset: unique 8-byte LE within 1% of frame*29780.5.
-                      double expect=(double)g_frame*29780.5; long lo=(long)(expect*0.99), hi=(long)(expect*1.01);
-                      long found=-1; int n=0;
-                      for (size_t o=0;o+8<=sz;o++){ uint64_t val; memcpy(&val,&blob[o],8);
-                          if ((long long)val>=lo && (long long)val<=hi){ found=(long)o; n++; } }
-                      if (n==1){ coff=found; printf("[nesref cycle] locked offset 0x%lx (f=%u cyc=%llu)\n",
-                                    coff, g_frame, (unsigned long long)*(uint64_t*)&blob[coff]); fflush(stdout); }
-                      else printf("[nesref cycle] calib f=%u: %d candidates (need 1), retrying\n", g_frame, n);
-                  }
-                  if (coff>=0){ uint64_t cyc; memcpy(&cyc,&blob[coff],8);
-                      fprintf(cf, "{\"f\":%u,\"cyc\":%llu}\n", g_frame, (unsigned long long)cyc);
-                      if ((g_frame%30)==0) fflush(cf); }
-              }
-          } }
-
-        // In-process PPU-mem oracle (NESREF_PPU_FILE=<path>): OAM + palette + the
-        // 2KB nametable RAM from the serialize blob. libretro exposes no PPU memory
-        // (VIDEO_RAM is null on Mesen/FCEUmm/Nestopia), but the savestate has it.
-        // Anchor on the 2KB WRAM found by CONTENT match (memmem of the live
-        // SYSTEM_RAM -- robust, ROM-independent); the PPU regions sit at fixed deltas
-        // relative to it in the Mesen-core layout (OAM = wram-0x16c, palette =
-        // wram-0x190, nametables = wram+0xab4; NROM/SMB-measured, override via
-        // NESREF_PPU_OAM_D / _PAL_D / _NT_D for other mappers). Emits a per-frame
-        // delta-JSONL image matching the recomp's NESRECOMP_PPUMEM_TRACE:
-        // [0x000-0x0FF]=OAM, [0x100-0x11F]=palette, [0x200-0x9FF]=nametable 2KB.
-        { static int st=-1; static FILE* pf=nullptr; static uint8_t prev[0xA00]; static bool primed=false;
-          static long oamd=0x16c, pald=0x190, ntd=-0xab4;  /* wram-relative (ntd negative => after wram) */
-          if (st<0){ const char* v=getenv("NESREF_PPU_FILE"); pf=(v&&v[0])?fopen(v,"w"):nullptr; st=pf?1:0;
-                     const char* a=getenv("NESREF_PPU_OAM_D"); if(a)oamd=strtol(a,0,0);
-                     const char* p=getenv("NESREF_PPU_PAL_D"); if(p)pald=strtol(p,0,0);
-                     const char* n=getenv("NESREF_PPU_NT_D");  if(n)ntd=strtol(n,0,0); }
-          if (st==1) {
-              size_t sz=p_retro_serialize_size();
-              static std::vector<uint8_t> blob; blob.resize(sz);
-              uint8_t* wram=(uint8_t*)p_retro_get_memory_data(RETRO_MEMORY_SYSTEM_RAM);
-              if (wram && p_retro_serialize(blob.data(), sz)) {
-                  // Locate the 2KB WRAM in the blob (first exact 2048-byte match).
-                  long wo=-1;
-                  for (size_t o=0;o+2048<=sz;o++){ if(!memcmp(&blob[o],wram,2048)){wo=(long)o;break;} }
-                  if (wo>=0) {
-                      uint8_t img[0xA00]; memset(img,0,sizeof img);
-                      long oo=wo-oamd, po=wo-pald, no=wo-ntd;
-                      if (oo>=0 && po>=0 && no>=0 &&
-                          oo+256<=(long)sz && po+32<=(long)sz && no+0x800<=(long)sz) {
-                          memcpy(img,       &blob[oo], 256);    // OAM        -> [0x000-0x0FF]
-                          memcpy(img+0x100, &blob[po], 32);     // palette    -> [0x100-0x11F]
-                          memcpy(img+0x200, &blob[no], 0x800);  // nametables -> [0x200-0x9FF]
-                          if (!primed){ for(int a=0;a<0xA00;a++){ prev[a]=img[a];
-                                fprintf(pf,"{\"f\":%u,\"adr\":\"0x%04x\",\"old\":\"0x00\",\"val\":\"0x%02x\"}\n",g_frame,a,img[a]); }
-                                primed=true; }
-                          else { for(int a=0;a<0xA00;a++) if(img[a]!=prev[a]){
-                                fprintf(pf,"{\"f\":%u,\"adr\":\"0x%04x\",\"old\":\"0x%02x\",\"val\":\"0x%02x\"}\n",g_frame,a,prev[a],img[a]);
-                                prev[a]=img[a]; } }
-                          if ((g_frame%30)==0) fflush(pf);
-                      }
-                  }
-              }
-          } }
-
-        if (run_frames>0 && (long)g_frame>=run_frames) { if(g_log){fflush(g_log);} running=false; }
+        if ((long)g_frame == shot_frame) write_shot(shot_path);
+        if (g_cycle_log || g_ppu_log || (long)g_frame == dump_frame) {
+            size_t sz = p_retro_serialize_size();
+            if (!sz || sz > 64*1024*1024) fail("invalid core serialization size");
+            static std::vector<uint8_t> blob;
+            blob.assign(sz, 0); // Mesen pads its maximum-size buffer; avoid stale tail bytes.
+            if (!p_retro_serialize(blob.data(), sz)) fail("retro_serialize failed");
+            if ((long)g_frame == dump_frame) {
+                FILE* f = open_output(dump_path);
+                bool ok = fwrite(blob.data(), 1, sz, f) == sz;
+                int closed = fclose(f);
+                if (!ok || closed != 0) fail("savestate dump write failed");
+                printf("[nesref statedump] frame %ld -> %s (%zu bytes)\n", dump_frame, dump_path, sz);
+            }
+            if (g_cycle_log || g_ppu_log) trace_state(blob);
+        }
+        // Flush all requested data before publishing the heartbeat. RAM/PPU
+        // delta streams deliberately omit unchanged frames; status does not.
+        flush_output(g_log); flush_output(g_cycle_log); flush_output(g_ppu_log); flush_output(g_wav);
+        if (g_status) {
+            fprintf(g_status, "{\"type\":\"frame\",\"f\":%u}\n", g_frame);
+            flush_output(g_status);
+        }
+        if (run_frames>0 && (long)g_frame>=run_frames) { reason="frame_limit"; running=false; }
         // Script finished (all commands incl. the post-anchor settle consumed) =
         // the recomp's EXIT: stop here so both engines' FINAL state is the same
         // script point, not NESREF_FRAMES (which would overshoot past the anchor).
-        if (g_have_script && g_script_done) { if(g_log){fflush(g_log);} running=false; }
+        if (g_have_script && g_script_done) { reason="script_done"; running=false; }
         if (!headless) {
             for (;;) {
                 Uint64 now=SDL_GetPerformanceCounter();
@@ -530,10 +643,32 @@ int main(int argc, char** argv) {
             }
         }
     }
-    if (g_log) fflush(g_log);
+    if (dump_frame > (long)g_frame || shot_frame > (long)g_frame)
+        fail("run ended before the requested screenshot/savestate frame");
     wav_close();
-    p_retro_unload_game(); p_retro_deinit();
-    if (!headless) SDL_Quit();
-    FreeLibrary(g_core);
+    close_output(g_log); close_output(g_cycle_log); close_output(g_ppu_log);
+    if (g_status) {
+        fprintf(g_status, "{\"type\":\"complete\",\"f\":%u,\"requested_frames\":%ld,\"reason\":\"%s\"}\n",
+                g_frame, run_frames, reason);
+        flush_output(g_status);
+        close_output(g_status);
+    }
     return 0;
+}
+
+int main(int argc, char** argv) {
+    int result = 2;
+    try { result = run_frontend(argc, argv); }
+    catch (const std::exception& error) { fprintf(stderr, "nesref: %s\n", error.what()); }
+    // Also clean up partial initialization and failed output runs. Such runs
+    // have no completion record and a nonzero exit status, even if traces exist.
+    if (g_loaded) p_retro_unload_game();
+    if (g_initialized) p_retro_deinit();
+    if (g_tex) SDL_DestroyTexture(g_tex);
+    if (g_ren) SDL_DestroyRenderer(g_ren);
+    if (g_win) SDL_DestroyWindow(g_win);
+    SDL_Quit();
+    if (g_core) SDL_UnloadObject(g_core);
+    for (FILE* f : {g_log, g_cycle_log, g_ppu_log, g_status, g_wav}) if (f) fclose(f);
+    return result;
 }
