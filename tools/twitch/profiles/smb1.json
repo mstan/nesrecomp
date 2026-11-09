@@ -1,0 +1,239 @@
+{
+  "name": "Super Mario Bros.",
+  "prefix": "!",
+  "chat": { "side": "left", "valign": "top", "offset": 18, "lines": 6, "ms": 20000 },
+  "vote": {
+    "mode": "both",
+    "options": 3,
+    "duration_ms": 20000,
+    "gap_ms": 15000,
+    "y": 22,
+    "title": "CHAT VOTE",
+    "pool": ["star", "powerup", "shrink", "oneup", "time", "hurry", "moon", "hop", "run", "invert", "nojump", "freeze"]
+  },
+  "cooldown_ms": 1500,
+  "user_cooldown_ms": 8000,
+  "command_cooldown_ms": 10000,
+  "conditions": {
+    "playing": [
+      { "addr": "0x0770", "eq": 1, "_": "OperMode: in a level" },
+      { "addr": "0x000E", "eq": 8, "_": "GameEngineSubroutine: normal player control" }
+    ]
+  },
+  "aliases": {
+    "mushroom": "powerup",
+    "flower": "powerup",
+    "1up": "oneup",
+    "moonjump": "moon",
+    "reverse": "invert"
+  },
+  "rewards": {},
+  "commands": {
+    "star": {
+      "title": "STAR POWER",
+      "help": "star power (as the Starman does: StarInvincibleTimer, star music)",
+      "cooldown_ms": 60000,
+      "when": "playing",
+      "banner": "{user} GAVE MARIO A STAR!",
+      "steps": [
+        { "ram": { "addr": "0x079F", "set": "0x23", "if_addr": "0x000E", "if_eq": 8 } },
+        { "ram": { "addr": "0x00FB", "set": "0x40", "if_addr": "0x000E", "if_eq": 8 } }
+      ]
+    },
+    "powerup": {
+      "title": "POWER-UP",
+      "help": "small -> super, super -> fire (the game's own change-size / fire-flower routines)",
+      "cooldown_ms": 30000,
+      "variants": [
+        {
+          "when": [
+            { "addr": "0x0770", "eq": 1 },
+            { "addr": "0x000E", "eq": 8 },
+            { "addr": "0x0756", "eq": 0 }
+          ],
+          "banner": "{user}: SUPER MARIO!",
+          "steps": [
+            { "ram": { "addr": "0x0756", "set": 1, "if_addr": "0x000E", "if_eq": 8 } },
+            { "ram": { "addr": "0x00FE", "set": "0x20", "if_addr": "0x000E", "if_eq": 8 } },
+            { "ram": { "addr": "0x001D", "set": 0, "if_addr": "0x000E", "if_eq": 8 } },
+            { "ram": { "addr": "0x0747", "set": "0xFF", "if_addr": "0x000E", "if_eq": 8 } },
+            { "ram": { "addr": "0x0775", "set": 0, "if_addr": "0x000E", "if_eq": 8 } },
+            { "ram": { "addr": "0x000E", "set": "0x09", "if_addr": "0x000E", "if_eq": 8 } }
+          ]
+        },
+        {
+          "when": [
+            { "addr": "0x0770", "eq": 1 },
+            { "addr": "0x000E", "eq": 8 },
+            { "addr": "0x0756", "eq": 1 }
+          ],
+          "banner": "{user}: FIRE MARIO!",
+          "steps": [
+            { "ram": { "addr": "0x0756", "set": 2, "if_addr": "0x000E", "if_eq": 8 } },
+            { "call": { "addr": "0x85F1" } },
+            { "ram": { "addr": "0x00FE", "set": "0x20", "if_addr": "0x000E", "if_eq": 8 } },
+            { "ram": { "addr": "0x001D", "set": 0, "if_addr": "0x000E", "if_eq": 8 } },
+            { "ram": { "addr": "0x0747", "set": "0xFF", "if_addr": "0x000E", "if_eq": 8 } },
+            { "ram": { "addr": "0x0775", "set": 0, "if_addr": "0x000E", "if_eq": 8 } },
+            { "ram": { "addr": "0x000E", "set": "0x0C", "if_addr": "0x000E", "if_eq": 8 } }
+          ]
+        }
+      ]
+    },
+    "shrink": {
+      "title": "SHRINK MARIO",
+      "help": "hurt Mario one size (the game's injury: shrink, blink, never a death)",
+      "cooldown_ms": 45000,
+      "when": [
+        { "addr": "0x0770", "eq": 1 },
+        { "addr": "0x000E", "eq": 8 },
+        { "addr": "0x0756", "min": 1 },
+        { "addr": "0x079E", "eq": 0 },
+        { "addr": "0x079F", "eq": 0 }
+      ],
+      "banner": "{user} SHRANK MARIO!",
+      "steps": [
+        { "ram": { "addr": "0x0756", "set": 0, "if_addr": "0x000E", "if_eq": 8 } },
+        { "ram": { "addr": "0x079E", "set": "0x08", "if_addr": "0x000E", "if_eq": 8 } },
+        { "ram": { "addr": "0x00FF", "set": "0x10", "if_addr": "0x000E", "if_eq": 8 } },
+        { "call": { "addr": "0x85F1" } },
+        { "ram": { "addr": "0x001D", "set": 1, "if_addr": "0x000E", "if_eq": 8 } },
+        { "ram": { "addr": "0x0747", "set": "0xFF", "if_addr": "0x000E", "if_eq": 8 } },
+        { "ram": { "addr": "0x0775", "set": 0, "if_addr": "0x000E", "if_eq": 8 } },
+        { "ram": { "addr": "0x000E", "set": "0x0A", "if_addr": "0x000E", "if_eq": 8 } }
+      ]
+    },
+    "oneup": {
+      "title": "1-UP",
+      "help": "an extra life (up to 9 shown)",
+      "cooldown_ms": 120000,
+      "when": "playing",
+      "banner": "{user}: 1-UP!",
+      "steps": [
+        { "ram": { "addr": "0x075A", "add": 1, "max": 8, "if_addr": "0x000E", "if_eq": 8 } },
+        { "ram": { "addr": "0x00FE", "set": "0x40", "if_addr": "0x000E", "if_eq": 8 } }
+      ]
+    },
+    "time": {
+      "title": "+100 TIME",
+      "help": "+100 on the clock (hundreds digit, up to 9)",
+      "cooldown_ms": 60000,
+      "when": "playing",
+      "banner": "{user}: +100 TIME",
+      "steps": [
+        { "ram": { "addr": "0x07F8", "add": 1, "max": 9 } }
+      ]
+    },
+    "hurry": {
+      "title": "-100 TIME",
+      "help": "-100 on the clock (never below 100)",
+      "cooldown_ms": 90000,
+      "when": "playing",
+      "banner": "{user}: HURRY UP!",
+      "steps": [
+        { "ram": { "addr": "0x07F8", "add": -1, "min": 1 } }
+      ]
+    },
+    "moon": {
+      "title": "MOON GRAVITY",
+      "help": "10 s of low gravity (VerticalForce / VerticalForceDown held low)",
+      "cooldown_ms": 45000,
+      "when": "playing",
+      "steps": [
+        { "ram": { "addr": "0x0709", "set": "0x10", "frames": 600, "if_addr": "0x0770", "if_eq": 1, "label": "MOON GRAVITY" } },
+        { "ram": { "addr": "0x070A", "set": "0x20", "frames": 600, "if_addr": "0x0770", "if_eq": 1 } }
+      ]
+    },
+    "jump": {
+      "help": "Mario jumps",
+      "cooldown_ms": 3000,
+      "when": "playing",
+      "steps": [
+        { "pad": { "buttons": "a", "mode": "press", "frames": 24 } }
+      ]
+    },
+    "hop": {
+      "title": "BUNNY HOP",
+      "help": "5 s of bunny hops",
+      "cooldown_ms": 30000,
+      "when": "playing",
+      "steps": [
+        { "pad": { "buttons": "a", "mode": "tap", "frames": 300, "label": "BUNNY HOP" } }
+      ]
+    },
+    "left": {
+      "help": "a push to the left",
+      "cooldown_ms": 3000,
+      "when": "playing",
+      "steps": [
+        { "pad": { "buttons": "left", "mode": "press", "frames": 40 } }
+      ]
+    },
+    "right": {
+      "help": "a push to the right",
+      "cooldown_ms": 3000,
+      "when": "playing",
+      "steps": [
+        { "pad": { "buttons": "right", "mode": "press", "frames": 40 } }
+      ]
+    },
+    "run": {
+      "title": "TURBO RUN",
+      "help": "5 s of B held (run / fireballs)",
+      "cooldown_ms": 20000,
+      "when": "playing",
+      "steps": [
+        { "pad": { "buttons": "b", "mode": "press", "frames": 300, "label": "TURBO RUN" } }
+      ]
+    },
+    "fireball": {
+      "help": "2 s of fireballs (fire Mario)",
+      "cooldown_ms": 10000,
+      "when": [
+        { "addr": "0x0770", "eq": 1 },
+        { "addr": "0x000E", "eq": 8 },
+        { "addr": "0x0756", "eq": 2 }
+      ],
+      "steps": [
+        { "pad": { "buttons": "b", "mode": "tap", "frames": 120, "label": "FIREBALLS" } }
+      ]
+    },
+    "invert": {
+      "title": "REVERSED",
+      "help": "10 s of left and right swapped",
+      "cooldown_ms": 60000,
+      "when": "playing",
+      "steps": [
+        { "pad": { "buttons": "left+right", "mode": "invert", "frames": 600, "label": "REVERSED" } }
+      ]
+    },
+    "nojump": {
+      "title": "NO JUMPING",
+      "help": "5 s without jumping",
+      "cooldown_ms": 60000,
+      "when": "playing",
+      "steps": [
+        { "pad": { "buttons": "a", "mode": "block", "frames": 300, "label": "NO JUMPING" } }
+      ]
+    },
+    "freeze": {
+      "title": "FREEZE",
+      "help": "1.5 s with no input at all",
+      "cooldown_ms": 45000,
+      "when": "playing",
+      "steps": [
+        { "pad": { "buttons": "a+b+left+right+up+down", "mode": "block", "frames": 90, "label": "FROZEN" } }
+      ]
+    },
+    "pit": {
+      "help": "moderators: drop Mario out of the level",
+      "who": "mod",
+      "cooldown_ms": 120000,
+      "when": "playing",
+      "banner": "{user} OPENED A TRAPDOOR!",
+      "steps": [
+        { "ram": { "addr": "0x00B5", "set": 2, "if_addr": "0x000E", "if_eq": 8 } }
+      ]
+    }
+  }
+}
