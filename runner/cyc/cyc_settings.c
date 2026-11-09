@@ -21,6 +21,7 @@ void cyc_settings_default(CycSettings *s)
     s->linear_filter = 0;
     s->vsync = 0;
     s->audio_enabled = 1;
+    s->audio_synthesis = 0;
     s->volume = 100;
     s->skip_launcher = 0;
     s->rewind_enabled = 1;
@@ -165,6 +166,11 @@ bool cyc_settings_load(CycSettings *s, const char *path, FILE *log, const CycSet
         case SEC_AUDIO:
             if (eq_ci(key, "Volume")) bad = !parse_int(val, &v) || (s->volume = clampi(v, 0, 100), 0);
             else if (eq_ci(key, "Enabled")) bad = !parse_int(val, &v) || (s->audio_enabled = v != 0, 0);
+            else if (eq_ci(key, "Synthesis")) {
+                if (eq_ci(val, "legacy")) s->audio_synthesis = 0;
+                else if (eq_ci(val, "band-limited")) s->audio_synthesis = 1;
+                else bad = true;
+            }
             break;
         case SEC_LAUNCHER:
             if (eq_ci(key, "SkipLauncher")) bad = !parse_int(val, &v) || (s->skip_launcher = v != 0, 0);
@@ -255,7 +261,8 @@ bool cyc_settings_save(const CycSettings *s, const char *path, const CycSettings
 #ifdef NESRECOMP_CYCLE_HDPACK
     fprintf(f, "HDResolution = %d\n", s->hd_resolution);
 #endif
-    fprintf(f, "[Audio]\nEnabled = %d\nVolume = %d\n", s->audio_enabled, s->volume);
+    fprintf(f, "[Audio]\nEnabled = %d\nVolume = %d\nSynthesis = %s\n", s->audio_enabled, s->volume,
+            s->audio_synthesis == 1 ? "band-limited" : "legacy");
     fprintf(f, "[Input]\n");
     if (s->input_profile[0]) fprintf(f, "GameProfile = %s\n", s->input_profile);
     for (int p = 0; p < CYC_INPUT_PLAYERS; ++p)

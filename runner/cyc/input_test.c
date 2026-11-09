@@ -309,9 +309,11 @@ static void persistence(const char *dir)
     cyc_settings_default(&s);
     CHECK(!cyc_settings_load(&s, path, NULL, NULL));               /* no file: defaults stay */
     CHECK(s.hd_resolution == 0);
+    CHECK(s.audio_synthesis == 0);
     /* change every field */
     s.window_scale = 5; s.fullscreen = 2; s.integer_scale = 0; s.linear_filter = 1;
     s.audio_enabled = 0; s.volume = 35; s.skip_launcher = 1;
+    s.audio_synthesis = 1;
     s.rewind_enabled = 0; s.rewind_depth = 150; s.rewind_interval = 15;
     s.hdpack_enabled = 0;
     s.hd_resolution = 16;
@@ -338,6 +340,7 @@ static void persistence(const char *dir)
     CHECK(cyc_settings_load(&back, path, stderr, NULL));
     CHECK(back.window_scale == 5 && back.fullscreen == 2 && back.integer_scale == 0 && back.linear_filter == 1);
     CHECK(back.audio_enabled == 0 && back.volume == 35 && back.skip_launcher == 1);
+    CHECK(back.audio_synthesis == 1);
     CHECK(back.rewind_enabled == 0 && back.rewind_depth == 150 && back.rewind_interval == 15);
     CHECK(!back.hdpack_enabled && !strcmp(back.hdpack_dir,s.hdpack_dir));
     CHECK(back.hd_resolution == 16);

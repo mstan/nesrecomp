@@ -276,6 +276,7 @@ static long          s_frames_done;
 static bool          s_running = true;
 static bool          s_have_menu;
 static SDL_AudioDeviceID s_audio_dev;
+static int s_audio_rate;
 #ifdef NESRECOMP_CYCLE_HDPACK
 static CycHdGpu *s_hd_gpu;
 static bool s_hd_gpu_tried,s_gpu_picture;
@@ -493,6 +494,15 @@ static void apply_picture_scale(void)
 
 static void apply_settings(void)
 {
+    CycAudioSynthesis synthesis = s_set.audio_synthesis == 1
+        ? CYC_AUDIO_SYNTH_BAND_LIMITED : CYC_AUDIO_SYNTH_LEGACY;
+    if (cyc_audio_synthesis() != synthesis) {
+        cyc_set_audio_synthesis(synthesis);
+        if (s_audio_dev && s_audio_rate) {
+            cyc_audio_enable(s_audio_rate);
+            SDL_ClearQueuedAudio(s_audio_dev);
+        }
+    }
     if (!s_win) return;
     Uint32 fs = s_set.fullscreen == 1 ? SDL_WINDOW_FULLSCREEN_DESKTOP : s_set.fullscreen == 2 ? SDL_WINDOW_FULLSCREEN : 0;
     if ((SDL_GetWindowFlags(s_win) & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_FULLSCREEN_DESKTOP)) != fs)
@@ -758,7 +768,7 @@ static void tcp_state(int id, const char *line)
              "\"frame\":%ld,\"menu_open\":%s,\"fds\":%s,\"side\":%d,\"sides\":%u,\"motor\":%s,\"writing\":%s,"
              "\"toast\":{\"visible\":%s,\"title\":%s,\"body\":%s},\"hle\":%s,\"disk_save\":%s,\"disk_binding\":%s,"
              "\"picture\":[%d,%d],\"dev_ui\":%s,\"recomp_ui\":%s,\"native\":%s,"
-             "\"vsync_requested\":%s,\"vsync_active\":%s",
+               "\"vsync_requested\":%s,\"vsync_active\":%s,\"audio_synthesis\":\"%s\"",
              s_frames_done, menu_open() ? "true" : "false", s_fds ? "true" : "false", s_fds ? cyc_fds_side() : -1,
              s_fds ? cyc_fds_side_count() : 0, s_fds && cyc_fds_motor_on() ? "true" : "false",
              s_fds && cyc_fds_writing() ? "true" : "false", s_toast_up ? "true" : "false", t, b, h, save, hq, w, hh,
@@ -773,7 +783,8 @@ static void tcp_state(int id, const char *line)
              "false",
 #endif
              cyc_run_native ? "true" : "false", s_set.vsync ? "true" : "false",
-             renderer_synced() ? "true" : "false");
+               renderer_synced() ? "true" : "false",
+               cyc_audio_synthesis() == CYC_AUDIO_SYNTH_BAND_LIMITED ? "band-limited" : "legacy");
     /* the controllers the window reads, and the buttons it sees held */
     size_t at = strlen(f);
     at += (size_t)snprintf(f + at, sizeof(f) - at, ",\"pads\":[");
@@ -1566,6 +1577,7 @@ int cyc_sdl_main(const char *title_in, int scale)
     want.samples = 1024;
     SDL_AudioDeviceID dev = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
     s_audio_dev = dev;
+    s_audio_rate = dev ? have.freq : 0;
     if (dev && cyc_audio_enable(have.freq)) SDL_PauseAudioDevice(dev, 0);
     else if (!dev) cyc_diagnostics_error("SDL audio: %s (continuing without sound)\n", SDL_GetError());
     cyc_diagnostics_note("audio device=%u driver=%s rate=%d game_controllers=%d", dev,
@@ -1901,6 +1913,8 @@ int cyc_sdl_main(const char *title_in, int scale)
     if (s_have_menu) cyc_ui_shutdown();
 #endif
     if (dev) SDL_CloseAudioDevice(dev);
+    s_audio_dev = 0;
+    s_audio_rate = 0;
     s_audio_dev = 0;
     for (int i = 0; i < s_pad_count; ++i) SDL_GameControllerClose(s_pads[i]);
     if (s_vpad_joy) SDL_JoystickClose(s_vpad_joy);
