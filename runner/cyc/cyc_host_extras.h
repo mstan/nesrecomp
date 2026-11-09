@@ -107,6 +107,13 @@ typedef struct CycHostExtras {
     void (*audio_mix)(void *ctx, int16_t *samples, size_t count);
     void (*state_loaded)(void *ctx);
     const struct CycInputProfile *input_profile; /* optional title-specific binding defaults */
+    /* Optional ImGui overlay. If ui_is_open returns true, the host treats the
+     * overlay as open: the game is paused, keyboard/controller navigation is
+     * routed to the overlay, and cyc_ui_render calls ui_render inside the
+     * ImGui frame (after NewFrame, before Render). A game that needs a dynamic
+     * in-game browser but not a built-in engine slot uses this. */
+    bool (*ui_is_open)(void *ctx);
+    void (*ui_render)(void *ctx);
 } CycHostExtras;
 
 const CycHostExtras *cyc_host_extras(void);

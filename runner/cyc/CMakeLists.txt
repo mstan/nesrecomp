@@ -666,3 +666,18 @@ if(TARGET SDL2::SDL2)
     endif()
     add_test(NAME cyc_voxel_profile_test COMMAND cyc_voxel_profile_test)
 endif()
+
+if(TARGET recomp_net AND TARGET SDL2::SDL2)
+        set(overlay_sources ${NESRECOMP_CYC_SOURCES})
+        list(FILTER overlay_sources EXCLUDE REGEX "cyc_host_extras_none\\.c$")
+        add_executable(cyc_window_overlay ${overlay_sources} cyc_native_none.c tests/ui_overlay_extras.cpp)
+        target_include_directories(cyc_window_overlay PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})
+        target_link_libraries(cyc_window_overlay PRIVATE ${NESRECOMP_CYC_LIBRARIES})
+        target_compile_features(cyc_window_overlay PRIVATE cxx_std_17)
+        nesrecomp_cyc_enable_sdl(cyc_window_overlay NO_DEV_UI)
+        nesrecomp_cyc_enable_recomp_ui(cyc_window_overlay)
+        add_test(NAME cyc_window_overlay COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_cyc_overlay.py
+            --window $<TARGET_FILE:cyc_window_overlay> --out ${CMAKE_CURRENT_BINARY_DIR}/overlay_run)
+        set_tests_properties(cyc_window_overlay PROPERTIES TIMEOUT 120)
+endif()
