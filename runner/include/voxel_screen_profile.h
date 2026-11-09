@@ -85,6 +85,14 @@ typedef struct NesVoxelScreenProfile {
     /* Optional per-piece grouping and completed-component visibility. */
     NesVoxelSpriteConnectFn sprite_connect;
     NesVoxelSpriteMembersVisibleFn sprite_members_visible;
+    /* Append optional fields so existing positional profiles retain their
+     * terrain/grouping assignments and leave these choices zero. */
+    /* Zero preserves per-piece sprite contact shadows; nonzero suppresses them. */
+    int suppress_sprite_shadows;
+    /* Zero substitutes masked sprite pixels with the cell's dominant colour.
+     * A profile supplying a clean background beneath sprites may retain its
+     * original pixels instead, avoiding holes in fully masked floor cells. */
+    int keep_sprite_pixels;
 } NesVoxelScreenProfile;
 
 typedef struct NesVoxelScreenState {
