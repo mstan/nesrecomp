@@ -27,8 +27,9 @@ typedef struct {
     uint8_t width, height;
     int8_t origin_x, top_y;
     /* Row stride 32. Zero is transparent; 1..6 index atlas.colors[].
-     * For a left-facing body anchored at (x,y), draw at x-origin_x,y+top_y.
-     * Mirror around the body anchor for a right-facing pose. */
+     * top_y is an OAM-coordinate offset: physical NES OAM Y displays at Y+1.
+     * For an OAM-anchored body (x,y), draw at x-origin_x,y+1+top_y.
+     * A title defines its native body anchor and mirrors around it. */
     uint8_t pixels[32 * 32];
 } CycProtoPose;
 
