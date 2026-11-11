@@ -23,6 +23,18 @@ static void returned(void)
 {
     check(!hw_native_interval.pending && cyc_cycle_count()==host_clock,"return observer boundary");
 }
+static void register_snapshot(void)
+{
+    CycModRegs a,b,expected;
+    unsigned char before[sizeof cpu];memcpy(before,&cpu,sizeof cpu);
+    memset(&a,0xa5,sizeof a);memset(&b,0x5a,sizeof b);memset(&expected,0,sizeof expected);
+    expected.a=cpu.a;expected.x=cpu.x;expected.y=cpu.y;expected.s=cpu.s;
+    expected.p=cpu_get_p(0);expected.pc=cpu.pc;
+    cyc_mod_regs(&a);cyc_mod_regs(&b);
+    check(!memcmp(&a,&b,sizeof a),"register snapshot ignores caller padding");
+    check(!memcmp(&a,&expected,sizeof a),"register fields and canonical zero padding");
+    check(!memcmp(before,&cpu,sizeof cpu),"register observation leaves CPU unchanged");
+}
 static uint64_t state_hash(void)
 {
     uint8_t *bytes=NULL;size_t size=0;char error[256];
@@ -145,6 +157,7 @@ int main(int argc,char **argv)
         check(cyc_load_ines(image,16+image[4]*16384u+image[5]*8192u),"load synthetic board");
         check(cyc_set_region(pal?CYC_REGION_PAL:CYC_REGION_NTSC),"select region");
         cyc_power_on((uint8_t)align);cpu.do_reset=cpu.power_on=0;
+        register_snapshot();
         check(cyc_region()==(pal?CYC_REGION_PAL:CYC_REGION_NTSC),"effective region");
         check(cyc_audio_enable(44100),"audio enable");
         /* Normal snapshots retain their universal full-storage contract. */
