@@ -576,6 +576,8 @@ add_test(NAME cyc_isolated_native COMMAND ${Python3_EXECUTABLE}
     --probe $<TARGET_FILE:cyc_isolated_native_probe>
     --out ${CMAKE_CURRENT_BINARY_DIR}/isolated_native_results)
 set_tests_properties(cyc_isolated_native PROPERTIES TIMEOUT 600)
+add_test(NAME cyc_apu_output_states COMMAND cyc_isolated_native_probe --audio-state)
+set_tests_properties(cyc_apu_output_states PROPERTIES TIMEOUT 60)
 
 get_target_property(ISOLATION_PROBE_SOURCES cyc_isolated_native_probe SOURCES)
 add_executable(cyc_isolation_storage_reference_probe ${ISOLATION_PROBE_SOURCES})

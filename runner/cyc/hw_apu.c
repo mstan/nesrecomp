@@ -140,6 +140,66 @@ static struct {
     uint8_t  level_dirty, level_dmc;
 } audio;
 
+/* Current-build presentation state. Configuration and derived mixer/filter
+ * coefficients stay with the running host; only its continuation is restored. */
+typedef struct {
+    uint32_t schema, enabled, console, count, head, tail;
+    double cycles_per_sample, phase, acc;
+    double hp90_prev_in, hp90_prev_out, hp440_prev_in, hp440_prev_out, lp_out;
+    double hp37_prev_in, hp37_prev_out;
+    int16_t ring[AUDIO_RING];
+} ApuOutputState;
+
+size_t apu_output_save(void *out, size_t capacity)
+{
+    if (!out || capacity < sizeof(ApuOutputState)) return sizeof(ApuOutputState);
+    ApuOutputState s = {0};
+    s.schema = 1;
+    s.enabled = audio.on;
+    s.console = (uint32_t)audio.console;
+    s.cycles_per_sample = audio.cycles_per_sample;
+    s.phase = audio.phase; s.acc = audio.acc; s.count = audio.count;
+    s.head = audio.head; s.tail = audio.tail;
+    s.hp90_prev_in = audio.hp90_prev_in; s.hp90_prev_out = audio.hp90_prev_out;
+    s.hp440_prev_in = audio.hp440_prev_in; s.hp440_prev_out = audio.hp440_prev_out;
+    s.lp_out = audio.lp_out;
+    s.hp37_prev_in = audio.hp37_prev_in; s.hp37_prev_out = audio.hp37_prev_out;
+    memcpy(s.ring, audio.ring, sizeof(s.ring));
+    memcpy(out, &s, sizeof(s));
+    return sizeof(s);
+}
+
+bool apu_output_load(const void *data, size_t size, bool apply)
+{
+    if (!data || size != sizeof(ApuOutputState)) return false;
+    ApuOutputState s;
+    memcpy(&s, data, sizeof(s));
+    if (s.schema != 1 || s.enabled != (uint32_t)audio.on ||
+        (s.console != CYC_CONSOLE_NES && s.console != CYC_CONSOLE_FAMICOM && (s.enabled || s.console)) ||
+        s.cycles_per_sample != audio.cycles_per_sample || !isfinite(s.cycles_per_sample) ||
+        s.cycles_per_sample < 0 || (s.enabled && s.cycles_per_sample < 1) ||
+        !isfinite(s.phase) || s.phase < 0 ||
+        (s.cycles_per_sample ? s.phase >= s.cycles_per_sample : s.phase != 0) ||
+        !isfinite(s.acc) || fabs(s.acc) > (s.count + 1.0) * 1e6 || s.count > ceil(s.cycles_per_sample) ||
+        s.head >= AUDIO_RING || s.tail >= AUDIO_RING ||
+        !isfinite(s.hp90_prev_in) || !isfinite(s.hp90_prev_out) ||
+        !isfinite(s.hp440_prev_in) || !isfinite(s.hp440_prev_out) || !isfinite(s.lp_out) ||
+        !isfinite(s.hp37_prev_in) || !isfinite(s.hp37_prev_out) ||
+        fabs(s.hp90_prev_in) > 1e6 || fabs(s.hp90_prev_out) > 1e6 ||
+        fabs(s.hp440_prev_in) > 1e6 || fabs(s.hp440_prev_out) > 1e6 || fabs(s.lp_out) > 1e6 ||
+        fabs(s.hp37_prev_in) > 1e6 || fabs(s.hp37_prev_out) > 1e6) return false;
+    if (!apply) return true;
+    audio.phase = s.phase; audio.acc = s.acc; audio.count = s.count;
+    audio.head = s.head; audio.tail = s.tail;
+    audio.hp90_prev_in = s.hp90_prev_in; audio.hp90_prev_out = s.hp90_prev_out;
+    audio.hp440_prev_in = s.hp440_prev_in; audio.hp440_prev_out = s.hp440_prev_out;
+    audio.lp_out = s.lp_out;
+    audio.hp37_prev_in = s.hp37_prev_in; audio.hp37_prev_out = s.hp37_prev_out;
+    memcpy(audio.ring, s.ring, sizeof(s.ring));
+    audio.level_dirty = 1;
+    return true;
+}
+
 static int console_request = CYC_CONSOLE_DEFAULT;
 
 int apu_console(void)

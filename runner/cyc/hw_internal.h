@@ -481,6 +481,10 @@ void    hw_set_controller(int port, uint8_t buttons);
 /* Audio (hw_apu.c). */
 void    apu_audio_enable(bool on, int sample_rate);
 size_t  apu_audio_read(int16_t *out, size_t max);
+/* Host sampler continuation, separate from the CPU-visible APU record.
+ * Loading validates the current output configuration before applying anything. */
+size_t  apu_output_save(void *out, size_t capacity);
+bool    apu_output_load(const void *data, size_t size, bool apply);
 /* The console output stage (cyc_set_console): 0 = by board, 1 = NES,
  * 2 = Famicom (CycConsole). apu_console() is the model in effect. */
 void    apu_set_console(int console);

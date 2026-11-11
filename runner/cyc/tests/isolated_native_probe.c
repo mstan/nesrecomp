@@ -5,6 +5,7 @@
 #include "cyc_state.h"
 #include "hw_internal.h"
 #include <inttypes.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,8 +31,95 @@ static uint64_t state_hash(void)
     for(size_t i=0;i<size;i++)h=(h^bytes[i])*UINT64_C(1099511628211);
     free(bytes);return h;
 }
+static void audio_bus(unsigned cycles)
+{
+    for(unsigned i=0;i<cycles;i++) {
+        hw_cycle_start(0,HW_READ);(void)hw_read(0);hw_cycle_finish(false);
+    }
+}
+static void audio_write(uint16_t address,uint8_t value)
+{
+    hw_cycle_start(address,HW_WRITE);hw_write(address,value);hw_cycle_finish(false);
+}
+static void audio_states(void)
+{
+    static uint8_t image[16+32768+8192];
+    memcpy(image,"NES\032",4);image[4]=2;image[5]=1;
+    memset(image+16,0xea,32768);
+    for(unsigned i=0x7ffa;i<0x8000;i+=2){image[16+i]=0;image[17+i]=0x80;}
+    for(unsigned pal=0;pal<2;pal++)for(unsigned console=0;console<2;console++)for(unsigned rate=0;rate<2;rate++) {
+        unsigned hz=rate?48000:44100;
+        check(cyc_load_ines(image,sizeof image),"audio synthetic cartridge");
+        check(cyc_set_region(pal?CYC_REGION_PAL:CYC_REGION_NTSC),"audio region");
+        cyc_power_on(0);cpu.do_reset=cpu.power_on=0;cpu.pc=0x8000;
+        cyc_set_console(console?CYC_CONSOLE_FAMICOM:CYC_CONSOLE_NES);
+        check(cyc_audio_enable((int)hz),"audio rate");
+        audio_write(0x4015,4);audio_write(0x4008,0xff);audio_write(0x400a,0x40);audio_write(0x400b,0xf8);
+        audio_bus(12345);
+        /* Wrap a nonempty ring and retain a nonzero analog filter history. */
+        for(unsigned i=0;i<33000;i++)apu_debug_emit((i&127)/128.0);
+        int16_t drain[17];check(cyc_audio_read(drain,17)==17,"partial ring drain");
+        size_t output_len=apu_output_save(NULL,0);
+        uint8_t *before=malloc(output_len),*after=malloc(output_len),*bad=malloc(output_len);
+        check(before && after && bad,"audio record allocation");
+        apu_output_save(before,output_len);
+        uint8_t *state=NULL;size_t state_len=0;char error[256];
+        check(cyc_state_save(&state,&state_len,error,sizeof error),"audio state save");
+        CycSnapshot *snapshot=cyc_snapshot_new();check(snapshot!=NULL,"audio snapshot");
+        cyc_snapshot_take(snapshot);
+        check(cyc_mod_isolate_begin(),"audio isolation begin");audio_bus(9999);apu_debug_emit(0.75);
+        cyc_mod_isolate_end();apu_output_save(after,output_len);
+        check(!memcmp(before,after,output_len),"isolation restores phase, filters and pending ring");
+        static int16_t expected[40000],actual[40000];
+        /* Test the next sample count too, without a full ring masking it. */
+        while(cyc_audio_read(expected,40000)) {}
+        free(state);state=NULL;
+        check(cyc_state_save(&state,&state_len,error,sizeof error),"empty ring state save");
+        cyc_snapshot_take(snapshot);
+        audio_bus(19001);size_t expected_len=cyc_audio_read(expected,40000);
+        check(expected_len>0 && expected_len<1024,"phase-dependent sample count");
+        cyc_snapshot_restore(snapshot);audio_bus(19001);size_t actual_len=cyc_audio_read(actual,40000);
+        check(actual_len==expected_len && !memcmp(expected,actual,actual_len*sizeof *actual),"snapshot PCM continuation");
+        /* Reset host sampling just as a cold process would, then load. */
+        check(cyc_audio_enable((int)hz),"reset sampler");
+        check(cyc_state_load(state,state_len,error,sizeof error),"audio state load");
+        audio_bus(19001);actual_len=cyc_audio_read(actual,40000);
+        check(actual_len==expected_len && !memcmp(expected,actual,actual_len*sizeof *actual),"state PCM sample count and values");
+        apu_output_save(before,output_len);
+        check(!apu_output_load(before,output_len-1,true),"short audio record refused");
+        check(!apu_output_load(NULL,output_len,true),"missing audio record refused");
+        memcpy(bad,before,output_len);uint32_t invalid=32768;memcpy(bad+16,&invalid,4);
+        check(!apu_output_load(bad,output_len,true),"out of range ring refused");
+        memcpy(bad,before,output_len);double invalid_phase=NAN;memcpy(bad+32,&invalid_phase,8);
+        check(!apu_output_load(bad,output_len,true),"nonfinite phase refused");
+        apu_output_save(after,output_len);check(!memcmp(before,after,output_len),"refusals preserve output");
+        check(cyc_audio_enable(32000),"different current rate");
+        check(!apu_output_load(before,output_len,true),"different output configuration refused");
+        check(cyc_audio_enable((int)hz),"restore current rate");
+        check(apu_output_load(before,output_len,true),"same configuration restored");
+        CycConsole other=console?CYC_CONSOLE_NES:CYC_CONSOLE_FAMICOM;
+        cyc_set_console(other);
+        check(apu_output_load(before,output_len,true),"console choice is presentation policy");
+        check(cyc_console()==other,"load preserves current console choice");
+        /* A malformed output section must refuse before restoring core RAM. */
+        size_t at=32;bool found=false;
+        while(at+8<=state_len) {
+            uint32_t length;memcpy(&length,state+at+4,4);
+            check(length<=state_len-at-8,"valid test state chunks");
+            if(!memcmp(state+at,"AOUT",4)) {memcpy(state+at+8+16,&invalid,4);found=true;break;}
+            at+=8+length;
+        }
+        check(found,"sampler section present");
+        hw.ram[7]^=0x39;uint64_t identity=state_hash();
+        check(!cyc_state_load(state,state_len,error,sizeof error),"malformed sampler state refused");
+        check(state_hash()==identity,"state refusal atomic for core and output");
+        cyc_snapshot_free(snapshot);free(before);free(after);free(bad);free(state);
+        printf("audio-state pal=%u console=%u rate=%u samples=%zu PASS\n",pal,console,hz,actual_len);
+    }
+}
 int main(int argc,char **argv)
 {
+    if(argc>1 && !strcmp(argv[1],"--audio-state")){audio_states();return 0;}
     bool reference=argc>1 && !strcmp(argv[1],"--reference");
     static uint8_t image[16+65536+16384];
     static const unsigned boards[]={0,1,4,66,2};
