@@ -343,12 +343,15 @@ void cyc_mm4_audio_configure(bool enabled, bool own_native_channels) {
 uint8_t cyc_mm4_audio_owned_channels(void) { return s_owned; }
 void cyc_mm4_audio_reset(void) {
     s_npending = s_nincoming = s_nstaged = 0;
+    memset(s_pending, 0, sizeof s_pending);
+    memset(s_incoming, 0, sizeof s_incoming);
+    memset(s_staged, 0, sizeof s_staged);
     s_active = 0; s_quiet_ticks = 0; s_owned = 0;
     cyc_mod_set_apu_audio_mute(0);
-    if (!cyc_mm4_donor.prg) { s_ready = 0; return; }
     memset(&D, 0, sizeof D);
-    D.r7 = 0x1F;
     synth_reset();
+    if (!s_enabled || !cyc_mm4_donor.prg) { s_ready = 0; return; }
+    D.r7 = 0x1F;
     s_ready = call(0x8003, 0xF0, 0) && call(0x8000, 0, 0);       /* the driver's own init request, one tick */
     D.writes = 0;
 }

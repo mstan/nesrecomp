@@ -2,6 +2,9 @@
 #pragma once
 #include <stdbool.h>
 #include <stdint.h>
+#ifdef __cplusplus
+extern "C" {
+#endif
 typedef struct { uint8_t count, tile[8], attr[8]; int8_t x[2][8], y[2][8]; } CycMm4ChargeSprite;
 typedef struct { uint8_t last, duration, sprite[8]; } CycMm4ChargeAnimation;
 typedef struct {
@@ -12,3 +15,6 @@ typedef struct {
 extern const uint8_t cyc_mm4_charge_tile_ids[6];
 /* Requires a verified resident cyc_mm4_donor. Publishes only a complete result. */
 bool cyc_mm4_charge_data_load(CycMm4ChargeData *out);
+#ifdef __cplusplus
+}
+#endif

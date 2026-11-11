@@ -66,7 +66,7 @@ static int continuation(void) {
 int main(int argc, char **argv) {
     char why[200] = {0};
     if (argc < 3) { fputs("usage: test_mm4_audio ROM state|reject|trace|wav ...\n", stderr); return 2; }
-    int expected = !strcmp(argv[2], "state") ? 3 : !strcmp(argv[2], "reject") ? 4 :
+    int expected = (!strcmp(argv[2], "state") || !strcmp(argv[2], "inactive")) ? 3 : !strcmp(argv[2], "reject") ? 4 :
         !strcmp(argv[2], "trace") ? 5 : !strcmp(argv[2], "wav") ? 6 : 0;
     if (!expected || argc != expected) { fputs("invalid mode or argument count\n", stderr); return 2; }
     if (!cyc_mm4_donor_load(argv[1], why, sizeof why)) {
@@ -75,6 +75,19 @@ int main(int argc, char **argv) {
     const uint8_t *resident = cyc_mm4_donor.prg;
     CHECK(cyc_mm4_donor_load(argv[1], why, sizeof why) && cyc_mm4_donor.prg == resident);
     CHECK(!cyc_mm4_donor_load("", why, sizeof why) && cyc_mm4_donor.prg == resident);
+    if (!strcmp(argv[2], "inactive")) {
+        uint8_t snapshot[8192], after[8192]; int16_t samples[800] = {0};
+        cyc_mm4_audio_configure(1, 1); cyc_mm4_audio_reset(); cyc_mm4_audio_play(0x22);
+        for (int i = 0; i < 3; i++) { cyc_mm4_audio_frame_end(); cyc_mm4_audio_mix(samples, 800); }
+        cyc_mm4_audio_configure(0, 1); cyc_mm4_audio_reset();
+        int size = cyc_mm4_audio_state_get(snapshot, sizeof snapshot);
+        cyc_mm4_donor_unload();
+        CHECK(size > 0 && cyc_mm4_audio_state_valid(snapshot, size) && cyc_mm4_audio_state_set(snapshot, size));
+        cyc_mm4_audio_frame_end();
+        CHECK(muted == 0 && !cyc_mm4_audio_owned_channels());
+        CHECK(cyc_mm4_audio_state_get(after, sizeof after) == size && !memcmp(snapshot, after, size));
+        puts("Disabled current-build audio snapshot needs no donor and stays silent"); return 0;
+    }
     if (!strcmp(argv[2], "reject")) {
         CHECK(argc == 4 && !cyc_mm4_donor_load(argv[3], why, sizeof why));
         CHECK(cyc_mm4_donor.prg == resident && why[0]);
