@@ -64,9 +64,13 @@ static int continuation(void) {
 }
 
 int main(int argc, char **argv) {
-    char why[200];
-    if (argc < 3 || !cyc_mm4_donor_load(argv[1], why, sizeof why)) {
-        fprintf(stderr, "usage / %s\n", argc >= 2 ? why : ""); return 2;
+    char why[200] = {0};
+    if (argc < 3) { fputs("usage: test_mm4_audio ROM state|reject|trace|wav ...\n", stderr); return 2; }
+    int expected = !strcmp(argv[2], "state") ? 3 : !strcmp(argv[2], "reject") ? 4 :
+        !strcmp(argv[2], "trace") ? 5 : !strcmp(argv[2], "wav") ? 6 : 0;
+    if (!expected || argc != expected) { fputs("invalid mode or argument count\n", stderr); return 2; }
+    if (!cyc_mm4_donor_load(argv[1], why, sizeof why)) {
+        fprintf(stderr, "%s\n", why); return 2;
     }
     const uint8_t *resident = cyc_mm4_donor.prg;
     CHECK(cyc_mm4_donor_load(argv[1], why, sizeof why) && cyc_mm4_donor.prg == resident);
