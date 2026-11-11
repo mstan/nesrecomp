@@ -113,6 +113,19 @@ static void audio_states(void)
         hw.ram[7]^=0x39;uint64_t identity=state_hash();
         check(!cyc_state_load(state,state_len,error,sizeof error),"malformed sampler state refused");
         check(state_hash()==identity,"state refusal atomic for core and output");
+        /* Current-build QA snapshots also cross the headless/audible boundary.
+         * This retains host policy and starts a clean sampler, rather than
+         * refusing the game state or enabling/disabling the owner's audio. */
+        apu_audio_enable(false,0);
+        check(apu_output_load(before,output_len,true),"audible state into disabled output");
+        check(cyc_audio_read(actual,40000)==0,"disabled transition discards pending PCM");
+        apu_output_save(bad,output_len);
+        uint32_t enabled;memcpy(&enabled,bad+4,4);check(enabled==0,"load leaves output disabled");
+        check(cyc_audio_enable((int)hz),"audible handoff setup");
+        check(apu_output_load(bad,output_len,true),"headless state into audible output");
+        apu_output_save(after,output_len);memcpy(&enabled,after+4,4);
+        check(enabled==1 && cyc_console()==other,"load retains audible host rate/model policy");
+        check(cyc_audio_read(actual,40000)==0,"audible transition starts with empty PCM");
         cyc_snapshot_free(snapshot);free(before);free(after);free(bad);free(state);
         printf("audio-state pal=%u console=%u rate=%u samples=%zu PASS\n",pal,console,hz,actual_len);
     }

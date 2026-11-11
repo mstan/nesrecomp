@@ -174,9 +174,9 @@ bool apu_output_load(const void *data, size_t size, bool apply)
     if (!data || size != sizeof(ApuOutputState)) return false;
     ApuOutputState s;
     memcpy(&s, data, sizeof(s));
-    if (s.schema != 1 || s.enabled != (uint32_t)audio.on ||
+    if (s.schema != 1 || s.enabled > 1 ||
         (s.console != CYC_CONSOLE_NES && s.console != CYC_CONSOLE_FAMICOM && (s.enabled || s.console)) ||
-        s.cycles_per_sample != audio.cycles_per_sample || !isfinite(s.cycles_per_sample) ||
+        !isfinite(s.cycles_per_sample) ||
         s.cycles_per_sample < 0 || (s.enabled && s.cycles_per_sample < 1) ||
         !isfinite(s.phase) || s.phase < 0 ||
         (s.cycles_per_sample ? s.phase >= s.cycles_per_sample : s.phase != 0) ||
@@ -188,7 +188,21 @@ bool apu_output_load(const void *data, size_t size, bool apply)
         fabs(s.hp90_prev_in) > 1e6 || fabs(s.hp90_prev_out) > 1e6 ||
         fabs(s.hp440_prev_in) > 1e6 || fabs(s.hp440_prev_out) > 1e6 || fabs(s.lp_out) > 1e6 ||
         fabs(s.hp37_prev_in) > 1e6 || fabs(s.hp37_prev_out) > 1e6) return false;
+    if (audio.on && s.enabled && s.cycles_per_sample != audio.cycles_per_sample) return false;
     if (!apply) return true;
+    /* A headless QA state can be handed to an audible host, and an audible
+     * state can be loaded with output disabled. Keep the host configuration;
+     * an unclocked/differently configured sampler has no PCM to continue. */
+    if (s.enabled != (uint32_t)audio.on || s.cycles_per_sample != audio.cycles_per_sample) {
+        audio.phase = audio.acc = 0; audio.count = 0;
+        audio.head = audio.tail = 0;
+        audio.hp90_prev_in = audio.hp90_prev_out = 0;
+        audio.hp440_prev_in = audio.hp440_prev_out = audio.lp_out = 0;
+        audio.hp37_prev_in = audio.hp37_prev_out = 0;
+        memset(audio.ring, 0, sizeof(audio.ring));
+        audio.level_dirty = 1;
+        return true;
+    }
     audio.phase = s.phase; audio.acc = s.acc; audio.count = s.count;
     audio.head = s.head; audio.tail = s.tail;
     audio.hp90_prev_in = s.hp90_prev_in; audio.hp90_prev_out = s.hp90_prev_out;
