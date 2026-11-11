@@ -15,8 +15,8 @@ int main(int argc, char **argv)
     uint32_t hash = 2166136261u;
     for (size_t i = 0; i < sizeof data; i++) hash = (hash ^ ((const uint8_t *)&data)[i]) * 16777619u;
     printf("decoded bytes=%u FNV1a=%08X\n", (unsigned)sizeof data, (unsigned)hash);
-    /* Golden from the actual final MM2 load_data, including both facings. */
-    if (sizeof data != 523 || hash != 0x92A1E6E8u) return 1;
+    /* Actual final MM2 load_data, both facings, plus native MM4 palette init. */
+    if (sizeof data != 531 || hash != 0xB147E05Au) return 1;
     cyc_mm4_donor_unload(); before = data;
     return cyc_mm4_charge_data_load(&data) || memcmp(&data, &before, sizeof data);
 }

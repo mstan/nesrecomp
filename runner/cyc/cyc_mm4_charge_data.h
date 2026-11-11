@@ -10,7 +10,7 @@ typedef struct { uint8_t last, duration, sprite[8]; } CycMm4ChargeAnimation;
 typedef struct {
     CycMm4ChargeSprite sprites[7];
     CycMm4ChargeAnimation animations[3]; /* forming, flying, half */
-    uint8_t speed[6], tiles[6][16], flash[3][16];
+    uint8_t speed[6], tiles[6][16], flash[3][16], palette[2][4];
 } CycMm4ChargeData;
 extern const uint8_t cyc_mm4_charge_tile_ids[6];
 /* Requires a verified resident cyc_mm4_donor. Publishes only a complete result. */

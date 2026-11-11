@@ -34,6 +34,8 @@ bool cyc_mm4_charge_data_load(CycMm4ChargeData *out)
         next.speed[i] = cyc_mm4_byte(0x3A, 0x88C3 + i);
         for (int j = 0; j < 16; j++) next.tiles[i][j] = cyc_mm4_byte(0, 0x8000 + cyc_mm4_charge_tile_ids[i] * 16 + j);
     }
+    /* Native Buster/face-shot sprite palettes, initialization 3E:C853. */
+    for (int i = 0; i < 8; i++) next.palette[i / 4][i % 4] = cyc_mm4_byte(0x3E, 0xC853 + i);
     if (!(next.flash[0][0] == 0x0F && next.flash[1][0] == 0x2C && next.flash[2][0] == 0x11 &&
         next.animations[0].last == 5 && next.animations[0].duration == 1 && next.animations[0].sprite[0] == 0x31 &&
         next.animations[1].last == 2 && next.animations[2].sprite[0] == 0x32 && next.speed[3] == 12 && next.speed[5] == 5 &&
