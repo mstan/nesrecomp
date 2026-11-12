@@ -515,6 +515,8 @@ static void window_size(int display, int *w, int *h)
     }
 }
 
+static int s_window_w, s_window_h;              /* the windowed size last asked for */
+
 static void apply_settings(void)
 {
     CycAudioSynthesis synthesis = s_set.audio_synthesis == 1
@@ -528,12 +530,22 @@ static void apply_settings(void)
     }
     if (!s_win) return;
     Uint32 fs = s_set.fullscreen == 1 ? SDL_WINDOW_FULLSCREEN_DESKTOP : s_set.fullscreen == 2 ? SDL_WINDOW_FULLSCREEN : 0;
-    if ((SDL_GetWindowFlags(s_win) & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_FULLSCREEN_DESKTOP)) != fs)
+    bool fs_changed = (SDL_GetWindowFlags(s_win) & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_FULLSCREEN_DESKTOP)) != fs;
+    if (fs_changed)
         SDL_SetWindowFullscreen(s_win, fs);
     if (!fs) {
+        /* Resize only when the wanted size changes (window scale, picture
+         * size) or the window leaves fullscreen. Every menu change applies
+         * the settings; resizing then would fight a window the player or
+         * the compositor maximized or tiled (on Wayland the game would
+         * then draw into a corner of the larger window). */
         int ww, wh;
         window_size(SDL_GetWindowDisplayIndex(s_win), &ww, &wh);
-        SDL_SetWindowSize(s_win, ww, wh);
+        if (fs_changed || ww != s_window_w || wh != s_window_h) {
+            SDL_SetWindowSize(s_win, ww, wh);
+            s_window_w = ww;
+            s_window_h = wh;
+        }
     }
     SDL_RenderSetLogicalSize(s_ren, s_tex_w, logical_h());
     apply_picture_scale();
@@ -1559,6 +1571,8 @@ int cyc_sdl_main(const char *title_in, int scale)
     s_tex_h = h;
     int win_w, win_h;
     window_size(0, &win_w, &win_h);             /* centred windows open on the first display */
+    s_window_w = win_w;
+    s_window_h = win_h;
     s_win = SDL_CreateWindow(title, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, win_w, win_h,
                              SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI | (s_hidden ? SDL_WINDOW_HIDDEN : 0));
     s_ren = NULL;
