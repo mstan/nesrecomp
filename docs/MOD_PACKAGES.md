@@ -16,6 +16,42 @@ Add `HD_PACKS` to that call to provide the framework's shared HD pack plugin.
 
 ## Mesen HD pack features
 
+Content-free support packages should use the shared native import recipe:
+
+```toml
+[[hd_pack]]
+feature = "hd-pack"
+source = "mesen"
+resource_id = "source-pack"
+label = "Mesen HD pack download"
+description = "Select your original downloaded ZIP."
+# Optional: require the pack to supply its own <patch> IPS declaration.
+# require_patch = true
+# Optional expected final PRG+CHR identity for a specific compatibility profile:
+# patched_rom_crc32 = "01234567"
+```
+
+The owning feature gets a normal Mods **Select file** control. The player
+selects the original outer ZIP, a direct pack ZIP, or an extracted `hires.txt`.
+The native runtime discovers one pack by `hires.txt`, expands nested ZIPs,
+preserves creator notices, and imports only the chosen pack into a private
+`mods/imports` cache. The `.nesmod` contains the recipe alone, without creator
+textures, audio, IPS or ROM bytes. `tools/package_recipe.py` packages such a
+manifest without adding any files. No Python is needed by players.
+
+At Play the runtime reads the imported Mesen `<patch>` declaration, verifies
+the original ROM SHA-1, validates geometry-preserving IPS records, applies them
+to an in-memory copy and checks the recipe's expected CRC when supplied.
+Unpatched packs may declare `<supportedRom>`. The complete asset/patch identity
+is included in save-state checks; changes during gameplay are refused.
+The local cache reference persists independently of the download path, so the
+original ZIP can be removed after import. Input expansion is bounded across
+three ZIP levels (256 MiB, 4096 entries) and staging is removed on failure.
+
+Other titles use this same recipe with their own target/feature metadata;
+there are no title-specific archive filenames in the importer. Existing
+self-contained local HD packages remain supported as described below.
+
 HD packs use the same installation, feature selection and persisted state as
 other Mods. They are disabled by default in archives made by the importer.
 The common cycle host loads their assets and presents the real PPU's recorded
