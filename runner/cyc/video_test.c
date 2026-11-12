@@ -170,6 +170,51 @@ int main(void)
     CHECK(cyc_video_mode()==NES_VIDEO_FIT && cyc_video_width()==426);
     cyc_video_window_resized(3440,1440);
     CHECK(cyc_video_apply_pending() && cyc_video_width()==574);
+
+    /* Personal/split grids keep logical pixels through aspect-option order
+     * and real resizes, then return to the player's selected Fit geometry. */
+    cyc_video_override_width(256);
+    CHECK(cyc_video_mode()==NES_VIDEO_FIT && cyc_video_width()==574);
+    CHECK(cyc_video_apply_pending() && cyc_video_width()==256);
+    cyc_video_window_resized(1920,1080);
+    CHECK(!cyc_video_apply_pending() && cyc_video_width()==256);
+    cyc_video_set_mode(NES_VIDEO_32_9);
+    CHECK(!cyc_video_apply_pending() && cyc_video_mode()==NES_VIDEO_32_9 && cyc_video_width()==256);
+    cyc_video_override_width(512);
+    CHECK(cyc_video_apply_pending() && cyc_video_width()==512);
+    cyc_video_set_mode(NES_VIDEO_FIT);
+    cyc_video_window_resized(3440,1440);
+    CHECK(!cyc_video_apply_pending() && cyc_video_mode()==NES_VIDEO_FIT && cyc_video_width()==512);
+    cyc_video_override_width(0);
+    CHECK(cyc_video_apply_pending() && cyc_video_width()==574);
+
+    /* Multiple layout/aspect requests before the presentation boundary apply
+     * only the final requested geometry. Explicit legacy widths still work. */
+    cyc_video_override_width(256);
+    cyc_video_window_resized(1920,1080);
+    cyc_video_set_mode(NES_VIDEO_16_9);
+    cyc_video_override_width(0);
+    CHECK(cyc_video_apply_pending() && cyc_video_width()==426);
+    cyc_video_override_width(512);
+    CHECK(cyc_video_apply_pending() && cyc_video_width()==512);
+    cyc_video_request_width(301);
+    CHECK(cyc_video_apply_pending() && cyc_video_mode()==NES_VIDEO_STOCK && cyc_video_width()==300);
+    cyc_video_window_resized(1920,1080);
+    CHECK(!cyc_video_apply_pending() && cyc_video_width()==300);
+    cyc_video_set_mode(NES_VIDEO_FIT);
+    CHECK(cyc_video_apply_pending() && cyc_video_width()==426);
+
+    /* Replay's exact geometry wins at restore. The title's local layout is
+     * retained for subsequent resize/settings, including failed restores. */
+    cyc_video_override_width(512);
+    CHECK(cyc_video_apply_pending() && cyc_video_width()==512);
+    CHECK(cyc_video_restore(NES_VIDEO_FIT,426,1920,1080));
+    CHECK(!cyc_video_apply_pending() && cyc_video_width()==426);
+    CHECK(!cyc_video_restore(NES_VIDEO_FIT,425,1920,1080));
+    cyc_video_window_resized(3440,1440);
+    CHECK(cyc_video_apply_pending() && cyc_video_width()==512 && cyc_video_mode()==NES_VIDEO_FIT);
+    cyc_video_override_width(0);
+    CHECK(cyc_video_apply_pending() && cyc_video_width()==574);
     printf("%s (%d failures)\n", failures ? "FAILED" : "cyc_video_test passed", failures);
     return failures != 0;
 }
