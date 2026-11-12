@@ -788,10 +788,11 @@ double cyc_frame_seconds(void) { return hw_pal() ? (341.0 * 312.0 * 5.0) / 26601
  * by what the PPU does on those lines and stays supported for its own sake.
  * MMC1 (1) has no IRQ counter. Its serial register responds to CPU writes
  * (bit 7 resets that register), so it needs no PPU-clocked IRQ adjustment.
+ * UxROM (2) also has no IRQ counter; bank selection responds to CPU writes.
  *
  * Only consulted when extra_scanlines is non-zero: at stock timing (0) this
  * changes nothing for any game. */
-bool cyc_extra_scanlines_supported(void) { return hw_cart.mapper == 1 || hw_cart.mapper == 4; }
+bool cyc_extra_scanlines_supported(void) { return hw_cart.mapper == 1 || hw_cart.mapper == 2 || hw_cart.mapper == 4; }
 unsigned cyc_extra_scanlines(void) { return hw_extra_timing.extra_scanlines; }
 
 bool cyc_zapper_attach(unsigned port)

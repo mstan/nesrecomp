@@ -1330,7 +1330,7 @@ session_restart:
                         "            [--fds-hle auto-swap,fast-load|all|off] [--realtime]\n"
                         "       [--save-state F:FILE] [--load-state FILE] [--mods-root DIR]\n"
                         "       [--region ntsc|pal] (game default, or NES 2.0 header)\n"
-                        "       [--extra-scanlines N] MMC1/MMC3 CPU budget enhancement, 0..262 (0: stock)\n"
+                        "       [--extra-scanlines N] MMC1/UxROM/MMC3 CPU budget enhancement, 0..262 (0: stock)\n"
                         "       [--zapper-port N] [--zapper-input FILE] FRAME X Y TRIGGER schedule\n"
                         "       window: [--pause-unfocused] [--tcp PORT] [--config FILE]\n"
                         "       [--present-out FILE [--present-every N] [--present-size WxH]]\n",
@@ -1574,7 +1574,7 @@ session_restart:
     if (present_w > 0) cyc_video_window_resized(present_w, present_h);
     if (!cyc_session_start()) return 2;
     if (extra_scanlines >= 0 && !cyc_set_extra_scanlines((unsigned)extra_scanlines)) {
-        fprintf(stderr, "--extra-scanlines requires an MMC1 or MMC3 cartridge\n"); return 2;
+        fprintf(stderr, "--extra-scanlines requires an MMC1, UxROM or MMC3 cartridge\n"); return 2;
     }
 #ifdef NESRECOMP_NET
     if(cyc_net_start(&netcfg,rom_path)!=0) {
@@ -1722,7 +1722,7 @@ session_restart:
         && !nes_netplay_active()
 #endif
         && !cyc_set_extra_scanlines((unsigned)extra_scanlines)) {
-        fprintf(stderr, "--extra-scanlines requires an MMC1 or MMC3 cartridge\n"); return 2;
+        fprintf(stderr, "--extra-scanlines requires an MMC1, UxROM or MMC3 cartridge\n"); return 2;
     }
 #endif
 #ifndef CYC_ORACLE
