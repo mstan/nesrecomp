@@ -499,8 +499,28 @@ static void fullscreen_chord(void)
     memset(keys, 0, sizeof keys);
 }
 
+static void settings_location(void)
+{
+#ifndef _WIN32
+    const char *image = getenv("APPIMAGE");
+    char *saved = image ? strdup(image) : NULL;
+    char ordinary[1024];
+    unsetenv("APPIMAGE");
+    snprintf(ordinary, sizeof(ordinary), "%s", cyc_settings_default_path());
+    setenv("APPIMAGE", "/tmp/NES game/My Game.AppImage", 1);
+    CHECK(!strcmp(cyc_settings_default_path(), "/tmp/NES game/config.ini"));
+    setenv("APPIMAGE", "relative.AppImage", 1);
+    CHECK(!strcmp(cyc_settings_default_path(), ordinary));
+    setenv("APPIMAGE", "", 1);
+    CHECK(!strcmp(cyc_settings_default_path(), ordinary));
+    if (saved) { setenv("APPIMAGE", saved, 1); free(saved); }
+    else unsetenv("APPIMAGE");
+#endif
+}
+
 int main(int argc, char **argv)
 {
+    settings_location();
     text_forms();
     defaults();
     evaluation();
