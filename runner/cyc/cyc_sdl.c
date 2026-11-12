@@ -1884,6 +1884,31 @@ int cyc_sdl_main(const char *title_in, int scale)
             continue;
         }
         next += frame_ticks;
+        /* In-between pictures (cyc_host_extras.h present_rate). They are
+         * presentation only and give way to the next machine frame. */
+        if (s_extras && s_extras->present_phase && s_extras->present_rate && !open && !inactive && !loading &&
+            !s_uncapped && next > tnow) {
+            const Uint64 start = next - frame_ticks;
+            const Uint64 step = freq / s_extras->present_rate;
+            for (Uint64 at = start + step; step && at + step / 2 < next; at += step) {
+                Uint64 t = SDL_GetPerformanceCounter();
+                if (t >= next) break;
+                if (t < at) {
+                    Uint32 wait_ms = (Uint32)((at - t) * 1000 / freq);
+                    if (wait_ms > 1) SDL_Delay(wait_ms - 1);
+                    while ((t = SDL_GetPerformanceCounter()) < at) {}
+                }
+                double phase = (double)(t - start) / (double)frame_ticks;
+                if (phase >= 1.0) break;
+                s_extras->present_phase(s_extras->ctx, phase);
+                show(false, toast_title, toast_body);
+#ifdef NESRECOMP_CYCLE_HDPACK
+                if(s_gpu_picture)cyc_hd_gpu_present_end(s_hd_gpu);
+#endif
+                SDL_RenderPresent(s_ren);
+            }
+            tnow = SDL_GetPerformanceCounter();
+        }
         if (next > tnow) {
             Uint32 ms = (Uint32)((next - tnow) * 1000 / freq);
             if (ms > 1) SDL_Delay(ms - 1);
