@@ -1796,9 +1796,6 @@ int cyc_sdl_main(const char *title_in, int scale)
             cyc_run_frame();
             cyc_session_frame_end();
             cyc_replay_frame_end();
-#ifdef NESRECOMP_NET
-            if(online)cyc_net_finish();
-#endif
             frames++;
             cyc_host_frame_done(++s_frames_done);
 #ifdef CYC_WITH_RECOMP_UI
@@ -1826,6 +1823,11 @@ int cyc_sdl_main(const char *title_in, int scale)
             SDL_QueueAudio(dev, pcm, (Uint32)(n * sizeof(int16_t)));
             audio_samples_queued += n;
         }
+#ifdef NESRECOMP_NET
+        /* Keep audio extras inside the completed simulation tick, matching
+         * the headless host and any freshly captured live-tip baseline. */
+        if(online)cyc_net_finish();
+#endif
         if(replay){next=SDL_GetPerformanceCounter();continue;}
 
         /* Keep guest deadlines independent of the display. A late picture is

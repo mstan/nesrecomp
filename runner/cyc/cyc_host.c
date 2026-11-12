@@ -1760,9 +1760,6 @@ session_restart:
         cyc_session_frame_begin();
         cyc_run_frame();
         cyc_session_frame_end();
-#ifdef NESRECOMP_NET
-        if(online)cyc_net_finish();
-#endif
         fds_save_frame(frame + 1);
         if (cyc_is_fds() && cyc_fds_hle_loading()) {
             load_frames++;
@@ -1792,6 +1789,12 @@ session_restart:
                 if(wav_f&&!replay){fwrite(pcm, sizeof(int16_t), n, wav_f);wav_samples += (uint32_t)n;}
             }
         }
+#ifdef NESRECOMP_NET
+        /* Audio extras may retain synthesizer state (for example donor
+         * effects). Finish it before publishing this tick's snapshot, so
+         * historical and fresh live-tip baselines share one boundary. */
+        if(online)cyc_net_finish();
+#endif
 #ifndef CYC_ORACLE
         if(replay){frame=(long)cyc_ring_frame;next_frame=wall_seconds();continue;}
 #endif

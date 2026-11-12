@@ -61,6 +61,13 @@ timing, logical inputs, CPU/PPU and mod state remain covered. Local save/load an
 rollback retain the full audio continuation. Exact executable admission still
 rejects different builds; this does not establish cross-build compatibility.
 
+Both cycle hosts finish audio consumption and the audio-extra mixer before
+publishing the completed network tick. An audio extra can retain synthesizer
+state in its mod snapshot, as Mega Man's donor charge effects do. Taking the
+historical snapshot before mixing but a fresh live-tip baseline after mixing
+would compare different phases of the same tick. This ordering keeps those mod
+records covered by the digest and preserves complete local audio continuation.
+
 **Replay model: INCREMENTAL, with the continuation restarted every tick.**
 The driver hands out one replayed tick per outer callback. A baseline load
 happens at the top of a callback; the rest of that callback replays the load
