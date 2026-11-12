@@ -244,6 +244,20 @@ static void evaluation(void)
     cyc_input_eval(&b, &f, &st);
     CHECK(st.buttons[0] == 0x80);
     memset(keys, 0, sizeof(keys));
+
+    /* shortcut_off allows rebinding the DISK shortcut key */
+    b.button[0][0].key = SDL_SCANCODE_D; /* remap A button to D key */
+    b.shortcut_off = 1u << CYC_SC_DISK;  /* not FDS */
+    keys[SDL_SCANCODE_D] = 1;
+    f = frame(0);
+    cyc_input_eval(&b, &f, &st);
+    CHECK(st.buttons[0] & 0x80);         /* A button */
+    CHECK(!st.shortcut[CYC_SC_DISK]);    /* not DISK shortcut */
+    b.shortcut_off = 0;                  /* now it's FDS again */
+    cyc_input_eval(&b, &f, &st);
+    CHECK(st.buttons[0] == 0);           /* not A button */
+    CHECK(st.shortcut[CYC_SC_DISK]);     /* DISK shortcut */
+    memset(keys, 0, sizeof(keys));
 }
 
 typedef struct { int loads; char value[32]; } GameKeys;
