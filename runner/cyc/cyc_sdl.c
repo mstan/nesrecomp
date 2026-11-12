@@ -1035,11 +1035,19 @@ static void tcp_mod_stats(int id, const char *line)
 }
 
 #ifdef CYC_WITH_RECOMP_UI
-/* QA: one Mods feature on/off exactly as the runtime menu's row does it: the
+/* Offline QA: one Mods feature on/off as the runtime menu's row does it: the
  * provider's feature_enable, a commit for the running image (which persists
  * it), then the plugins activate again (state_mods_changed). */
 static void tcp_mod_feature(int id, const char *line)
 {
+#ifdef NESRECOMP_NET
+    /* Reject before feature_enable/commit can change persisted preferences.
+     * A title callback may refuse activation after that write is already done. */
+    if (nes_netplay_active()) {
+        cyc_tcp_err(id, "Mods cannot be changed during online play");
+        return;
+    }
+#endif
     const RecompLauncherCModProvider *p = (const RecompLauncherCModProvider *)cyc_session_mods_provider();
     char package[RECOMP_LAUNCHER_MOD_ID_MAX], feature[RECOMP_LAUNCHER_MOD_ID_MAX];
     bool enabled = false;
@@ -1804,9 +1812,6 @@ int cyc_sdl_main(const char *title_in, int scale)
             cyc_run_frame();
             cyc_session_frame_end();
             cyc_replay_frame_end();
-#ifdef NESRECOMP_NET
-            if(online)cyc_net_finish();
-#endif
             frames++;
             cyc_host_frame_done(++s_frames_done);
 #ifdef CYC_WITH_RECOMP_UI
@@ -1834,6 +1839,11 @@ int cyc_sdl_main(const char *title_in, int scale)
             SDL_QueueAudio(dev, pcm, (Uint32)(n * sizeof(int16_t)));
             audio_samples_queued += n;
         }
+#ifdef NESRECOMP_NET
+        /* Keep audio extras inside the completed simulation tick, matching
+         * the headless host and any freshly captured live-tip baseline. */
+        if(online)cyc_net_finish();
+#endif
         if(replay){next=SDL_GetPerformanceCounter();continue;}
 
         /* Keep guest deadlines independent of the display. A late picture is

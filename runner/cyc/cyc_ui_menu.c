@@ -332,10 +332,25 @@ static int get_value(void *ctx, const RecompRuntimeUiItem *it, int *out)
     return 1;
 }
 
+#ifdef NESRECOMP_NET
+static bool netplay_value_allowed(const RecompRuntimeUiItem *it, int value)
+{
+    const CycHostExtras *x = s_host.extras;
+    if (!x || !x->menu_netplay_value_allowed ||
+        !(game_row(it) || is_key(it, RECOMP_RUNTIME_UI_KEY_VIEW_MODE)) ||
+        (it->type != RECOMP_RUNTIME_UI_BOOL && it->type != RECOMP_RUNTIME_UI_INT &&
+         it->type != RECOMP_RUNTIME_UI_CHOICE)) return false;
+    return x->menu_netplay_value_allowed(x->ctx, it, value);
+}
+#endif
+
 static int set_value(void *ctx, const RecompRuntimeUiItem *it, int v)
 {
 #ifdef NESRECOMP_NET
-    if(nes_netplay_active()&&(mod_row(it)||game_row(it)||axis_of(it)>=0||is_key(it,"cyc.disk.side")||is_key(it,RECOMP_RUNTIME_UI_KEY_VIEW_MODE)))return 0;
+    if (nes_netplay_active()) {
+        if (mod_row(it) || axis_of(it) >= 0 || is_key(it, "cyc.disk.side")) return 0;
+        if ((game_row(it) || is_key(it, RECOMP_RUNTIME_UI_KEY_VIEW_MODE)) && !netplay_value_allowed(it, v)) return 0;
+    }
 #endif
     (void)ctx;
     CycSettings *s = s_host.settings;
@@ -453,7 +468,14 @@ static int is_enabled(void *ctx, const RecompRuntimeUiItem *it)
         (!s_host.state_serialize || !s_host.state_restore ||
          (s_host.states_available && !s_host.states_available()))) return 0;
 #ifdef NESRECOMP_NET
-    if(nes_netplay_active()&&(mod_row(it)||game_row(it)||axis_of(it)>=0||is_key(it,"cyc.disk.side")||is_key(it,RECOMP_RUNTIME_UI_KEY_VIEW_MODE)||is_key(it,RECOMP_RUNTIME_UI_KEY_LOAD_STATE)||is_key(it,RECOMP_RUNTIME_UI_KEY_SAVE_STATE)))return 0;
+    if (nes_netplay_active()) {
+        if (mod_row(it) || axis_of(it) >= 0 || is_key(it, "cyc.disk.side") ||
+            is_key(it, RECOMP_RUNTIME_UI_KEY_LOAD_STATE) || is_key(it, RECOMP_RUNTIME_UI_KEY_SAVE_STATE)) return 0;
+        if (game_row(it) || is_key(it, RECOMP_RUNTIME_UI_KEY_VIEW_MODE)) {
+            int value;
+            if (!get_value(ctx, it, &value) || !netplay_value_allowed(it, value)) return 0;
+        }
+    }
 #endif
     (void)ctx;
     const CycHostExtras *x = s_host.extras;

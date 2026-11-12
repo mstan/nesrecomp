@@ -63,6 +63,7 @@
 /* Includes high-resolution texture packs. These are presentation dimensions;
  * the hardware picture remains 256 x 240. */
 #define CYC_PRESENT_MAX_DIMENSION 8192
+#define CYC_HOST_EXTRAS_HAS_NETPLAY_VALUE_POLICY 1
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -114,6 +115,12 @@ typedef struct CycHostExtras {
      * in-game browser but not a built-in engine slot uses this. */
     bool (*ui_is_open)(void *ctx);
     void (*ui_render)(void *ctx);
+    /* Explicit permission for a title-owned value row (or standard ViewMode)
+     * during an active match. NULL retains the netplay lock. Approve only
+     * presentation choices that preserve the sealed simulation profile; the
+     * ordinary setter still validates/applies the value. Actions, mod rows,
+     * disk/FDS settings and state operations cannot use this exception. */
+    bool (*menu_netplay_value_allowed)(void *ctx, const struct RecompRuntimeUiItem *item, int value);
 } CycHostExtras;
 
 const CycHostExtras *cyc_host_extras(void);

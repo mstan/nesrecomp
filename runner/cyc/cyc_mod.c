@@ -282,6 +282,8 @@ bool cyc_mod_poke(uint16_t addr, uint8_t value)
 
 void cyc_mod_regs(CycModRegs *out)
 {
+    /* Callers may persist the complete record in deterministic mod state. */
+    memset(out, 0, sizeof *out);
     out->a = cpu.a;
     out->x = cpu.x;
     out->y = cpu.y;

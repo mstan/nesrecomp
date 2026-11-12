@@ -1,5 +1,6 @@
-/* Rollback uses the complete cycle save domain plus the four logical seats.
- * Digests and snapshots share one cached image. No native stack is saved:
+/* Rollback keeps the complete cycle save domain plus the four logical seats.
+ * Digests exclude local audio output continuation from that cached image.
+ * No native stack is saved:
  * cyc_run_frame returns, so loading at the next admit is the continuation. */
 #include "nes_rb_state.h"
 #include "logical_input.h"
@@ -51,6 +52,11 @@ void nes_rb_digest_image(const uint8_t *img,size_t len,NesRbDigest *out) {
     while(end-at>=8) {
         uint32_t n;memcpy(&n,img+at+4,4);
         if(n>end-at-8)break;
+        /* AOUT is local sampler/filter/queued-PCM continuation. In particular
+         * its read cursor follows the host audio consumer, not emulated time.
+         * Keep it in local rollback/save images, outside simulation digests.
+         * The actual APU/DMC/controller state remains hashed below. */
+        if(!memcmp(img+at,"AOUT",4)){at+=8+n;continue;}
         int part=!memcmp(img+at,"PPU ",4)||!memcmp(img+at,"PIC",3)||!memcmp(img+at,"CHRR",4)?1:
                  !memcmp(img+at,"CPU ",4)||!memcmp(img+at,"HW  ",4)||!memcmp(img+at,"CART",4)||!memcmp(img+at,"TIME",4)||!memcmp(img+at,"REGN",4)?0:2;
         hash_pair(img+at,8+n,&out->master,&out->part[part]);at+=8+n;

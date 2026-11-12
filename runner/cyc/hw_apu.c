@@ -158,6 +158,97 @@ static struct {
 static double audio_band_kernel[(AUDIO_BAND_PHASES + 1) * AUDIO_BAND_TAPS];
 static bool audio_band_kernel_ready;
 static CycAudioSynthesis synthesis_request = CYC_AUDIO_SYNTH_LEGACY;
+
+/* Current-build presentation state. Configuration and derived mixer/filter
+ * coefficients stay with the running host; only its continuation is restored. */
+typedef struct {
+    uint32_t schema, enabled, console, count, head, tail;
+    double cycles_per_sample, phase, acc;
+    double hp90_prev_in, hp90_prev_out, hp440_prev_in, hp440_prev_out, lp_out;
+    double hp37_prev_in, hp37_prev_out;
+    int16_t ring[AUDIO_RING];
+    uint32_t synthesis;
+    uint64_t band_cycles, band_next_sample;
+    double band_previous_level, band_value, band_delta[AUDIO_BAND_RING];
+} ApuOutputState;
+
+size_t apu_output_save(void *out, size_t capacity)
+{
+    if (!out || capacity < sizeof(ApuOutputState)) return sizeof(ApuOutputState);
+    ApuOutputState s = {0};
+    s.schema = 2;
+    s.enabled = audio.on;
+    s.console = (uint32_t)audio.console;
+    s.cycles_per_sample = audio.cycles_per_sample;
+    s.phase = audio.phase; s.acc = audio.acc; s.count = audio.count;
+    s.head = audio.head; s.tail = audio.tail;
+    s.hp90_prev_in = audio.hp90_prev_in; s.hp90_prev_out = audio.hp90_prev_out;
+    s.hp440_prev_in = audio.hp440_prev_in; s.hp440_prev_out = audio.hp440_prev_out;
+    s.lp_out = audio.lp_out;
+    s.hp37_prev_in = audio.hp37_prev_in; s.hp37_prev_out = audio.hp37_prev_out;
+    memcpy(s.ring, audio.ring, sizeof(s.ring));
+    s.synthesis = (uint32_t)audio.synthesis;
+    s.band_cycles = audio.band.cycles; s.band_next_sample = audio.band.next_sample;
+    s.band_previous_level = audio.band.previous_level; s.band_value = audio.band.value;
+    memcpy(s.band_delta, audio.band.delta, sizeof(s.band_delta));
+    memcpy(out, &s, sizeof(s));
+    return sizeof(s);
+}
+
+bool apu_output_load(const void *data, size_t size, bool apply)
+{
+    if (!data || size != sizeof(ApuOutputState)) return false;
+    ApuOutputState s;
+    memcpy(&s, data, sizeof(s));
+    if (s.schema != 2 || s.enabled > 1 || s.synthesis > CYC_AUDIO_SYNTH_BAND_LIMITED ||
+        (s.console != CYC_CONSOLE_NES && s.console != CYC_CONSOLE_FAMICOM && (s.enabled || s.console)) ||
+        !isfinite(s.cycles_per_sample) ||
+        s.cycles_per_sample < 0 || (s.enabled && s.cycles_per_sample < 1) ||
+        !isfinite(s.phase) || s.phase < 0 ||
+        (s.cycles_per_sample ? s.phase >= s.cycles_per_sample : s.phase != 0) ||
+        !isfinite(s.acc) || fabs(s.acc) > (s.count + 1.0) * 1e6 || s.count > ceil(s.cycles_per_sample) ||
+        s.head >= AUDIO_RING || s.tail >= AUDIO_RING ||
+        !isfinite(s.hp90_prev_in) || !isfinite(s.hp90_prev_out) ||
+        !isfinite(s.hp440_prev_in) || !isfinite(s.hp440_prev_out) || !isfinite(s.lp_out) ||
+        !isfinite(s.hp37_prev_in) || !isfinite(s.hp37_prev_out) ||
+        fabs(s.hp90_prev_in) > 1e6 || fabs(s.hp90_prev_out) > 1e6 ||
+        fabs(s.hp440_prev_in) > 1e6 || fabs(s.hp440_prev_out) > 1e6 || fabs(s.lp_out) > 1e6 ||
+        fabs(s.hp37_prev_in) > 1e6 || fabs(s.hp37_prev_out) > 1e6 ||
+        !isfinite(s.band_previous_level) || !isfinite(s.band_value) ||
+        fabs(s.band_previous_level) > 1e6 || fabs(s.band_value) > 1e6) return false;
+    for (unsigned i = 0; i < AUDIO_BAND_RING; ++i)
+        if (!isfinite(s.band_delta[i]) || fabs(s.band_delta[i]) > 1e6) return false;
+    if (audio.on && s.enabled && s.cycles_per_sample != audio.cycles_per_sample) return false;
+    if (!apply) return true;
+    /* A headless QA state can be handed to an audible host, and an audible
+     * state can be loaded with output disabled. Keep the host configuration;
+     * an unclocked/differently configured sampler has no PCM to continue. */
+    if (s.enabled != (uint32_t)audio.on || s.cycles_per_sample != audio.cycles_per_sample ||
+        s.synthesis != (uint32_t)audio.synthesis) {
+        audio.phase = audio.acc = 0; audio.count = 0;
+        audio.head = audio.tail = 0;
+        audio.hp90_prev_in = audio.hp90_prev_out = 0;
+        audio.hp440_prev_in = audio.hp440_prev_out = audio.lp_out = 0;
+        audio.hp37_prev_in = audio.hp37_prev_out = 0;
+        memset(audio.ring, 0, sizeof(audio.ring));
+        memset(&audio.band, 0, sizeof(audio.band));
+        audio.level_dirty = 1;
+        return true;
+    }
+    audio.phase = s.phase; audio.acc = s.acc; audio.count = s.count;
+    audio.head = s.head; audio.tail = s.tail;
+    audio.hp90_prev_in = s.hp90_prev_in; audio.hp90_prev_out = s.hp90_prev_out;
+    audio.hp440_prev_in = s.hp440_prev_in; audio.hp440_prev_out = s.hp440_prev_out;
+    audio.lp_out = s.lp_out;
+    audio.hp37_prev_in = s.hp37_prev_in; audio.hp37_prev_out = s.hp37_prev_out;
+    memcpy(audio.ring, s.ring, sizeof(s.ring));
+    audio.band.cycles = s.band_cycles; audio.band.next_sample = s.band_next_sample;
+    audio.band.previous_level = s.band_previous_level; audio.band.value = s.band_value;
+    memcpy(audio.band.delta, s.band_delta, sizeof(s.band_delta));
+    audio.level_dirty = 1;
+    return true;
+}
+
 static int console_request = CYC_CONSOLE_DEFAULT;
 
 int apu_console(void)

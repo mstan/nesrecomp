@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Synthetic MMC3: CPU headroom, NMI/audio rate, state continuation and rejection."""
+"""CPU headroom, NMI/audio rate, state continuation and rejection on supported boards."""
 import argparse
 from pathlib import Path
 import re
@@ -44,11 +44,12 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument('--host', type=Path, required=True)
     p.add_argument('--out', type=Path, required=True)
+    p.add_argument('--mapper', type=int, choices=(1, 2, 4), default=4)
     args = p.parse_args()
     out = args.out.resolve()
     out.mkdir(parents=True, exist_ok=True)
-    rom = out / 'budget-mmc3.nes'
-    rom.write_bytes(fixture(4))
+    rom = out / f'budget-mapper{args.mapper}.nes'
+    rom.write_bytes(fixture(args.mapper))
     si = None
     if hasattr(subprocess, 'STARTUPINFO'):
         si = subprocess.STARTUPINFO()
@@ -118,7 +119,7 @@ def main():
         run('invalid-' + value, ['--extra-scanlines', value], expected=2)
 
     dma_rom = out / 'budget-dma.nes'
-    dma_rom.write_bytes(fixture(4, dma=True))
+    dma_rom.write_bytes(fixture(args.mapper, dma=True))
     for alignment in range(4):
         trace = out / f'dma-align{alignment}.trace'
         run(f'dma-align{alignment}', ['--align', alignment, '--extra-scanlines', 256,

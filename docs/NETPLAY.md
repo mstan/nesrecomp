@@ -53,6 +53,21 @@ The digest is a 64-bit hash over the SAME serialized bytes, partitioned
 `cpu_wram` / `ppu` / `apu_io_mods`; the image is cached until guest code runs,
 so the snapshot and the digest of a tick cannot disagree.
 
+The cycle backend keeps its complete local save image, including the `AOUT`
+sampler, filters and queued PCM. Its simulation digest excludes that presentation
+chunk: the PCM read cursor advances with the host audio consumer and may differ
+between peers at the same emulated tick. Hardware `APU ` state, DMC and controller
+timing, logical inputs, CPU/PPU and mod state remain covered. Local save/load and
+rollback retain the full audio continuation. Exact executable admission still
+rejects different builds; this does not establish cross-build compatibility.
+
+Both cycle hosts finish audio consumption and the audio-extra mixer before
+publishing the completed network tick. An audio extra can retain synthesizer
+state in its mod snapshot, as Mega Man's donor charge effects do. Taking the
+historical snapshot before mixing but a fresh live-tip baseline after mixing
+would compare different phases of the same tick. This ordering keeps those mod
+records covered by the digest and preserves complete local audio continuation.
+
 **Replay model: INCREMENTAL, with the continuation restarted every tick.**
 The driver hands out one replayed tick per outer callback. A baseline load
 happens at the top of a callback; the rest of that callback replays the load

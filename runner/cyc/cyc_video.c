@@ -9,6 +9,7 @@ static bool s_window;
 static bool s_pending;
 static int  s_pending_width = 256;
 static int  s_draw_w, s_draw_h;
+static int  s_override;
 
 static void commit(int width)
 {
@@ -34,15 +35,23 @@ void cyc_video_set_mode(int mode)
 {
     if (mode < 0 || mode >= NES_VIDEO_MODE_COUNT) return;
     s_mode = mode;
-    request(nes_video_geometry_width_for(mode, s_draw_w, s_draw_h));
+    request(s_override ? s_override : nes_video_geometry_width_for(mode, s_draw_w, s_draw_h));
 }
 
 int  cyc_video_mode(void) { return s_mode; }
 
 void cyc_video_request_width(int width)
 {
+    s_override = 0;
     s_mode = NES_VIDEO_STOCK;
     request(width);
+}
+
+void cyc_video_override_width(int width)
+{
+    if (width < 0) return;
+    s_override = width ? nes_video_geometry_clamp_width(width) : 0;
+    request(s_override ? s_override : nes_video_geometry_width_for(s_mode, s_draw_w, s_draw_h));
 }
 
 int cyc_video_width(void) { return s_width; }
@@ -54,7 +63,8 @@ void cyc_video_window_resized(int drawable_w, int drawable_h)
 {
     s_draw_w = drawable_w;
     s_draw_h = drawable_h;
-    if (s_mode == NES_VIDEO_FIT) request(nes_video_geometry_width_for(s_mode, drawable_w, drawable_h));
+    if (s_override) request(s_override);
+    else if (s_mode == NES_VIDEO_FIT) request(nes_video_geometry_width_for(s_mode, drawable_w, drawable_h));
 }
 
 void cyc_video_drawable_size(int *drawable_w, int *drawable_h)

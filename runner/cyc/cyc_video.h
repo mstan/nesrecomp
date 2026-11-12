@@ -36,6 +36,13 @@ int  cyc_video_mode(void);
 /* A fixed width (symmetric margins, even, 256..864), leaving the mode stock. */
 void cyc_video_request_width(int width);
 
+/* A presentation layout's logical width, independent of the selected aspect.
+ * Positive widths stay fixed through set_mode/resize; zero clears the override
+ * and follows the selected mode again. Uses the normal queued apply point.
+ * Legacy request_width explicitly clears this override and selects Stock.
+ * Exact diagnostic restore still restores its supplied committed geometry. */
+void cyc_video_override_width(int width);
+
 /* The committed width, and where native column 0 sits in it. */
 int  cyc_video_width(void);
 int  cyc_video_native_x0(void);

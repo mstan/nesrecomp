@@ -176,7 +176,7 @@ uint64_t cyc_cycle_count(void);
 /* Enhancement: 0 restores stock hardware timing; 1..262 adds blank lines
  * before NMI, increasing the game's CPU budget at the host's usual frame
  * rate. Audio clocks pause during those lines. Currently supported only on
- * MMC3 boards. This changes console timing and is separate from stock parity.
+ * MMC1, UxROM and MMC3 boards. This changes console timing and is separate from stock parity.
  * Set between frames. The selection and progress are saved in cycle states. */
 bool cyc_extra_scanlines_supported(void);
 unsigned cyc_extra_scanlines(void);

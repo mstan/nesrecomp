@@ -41,7 +41,7 @@ static uint32_t layout_signature(void)
     apu_state_ptr(&apu_size);
     fds_hle_state_ptr(&hle_size);
     const uint64_t sizes[] = { sizeof(Cpu6502), sizeof(HwMachine), sizeof(HwCart), sizeof(HwPpu), apu_size,
-                               hle_size, sizeof(CycLine), cyc_native_ram_view_count
+                               hle_size, sizeof(CycLine), cyc_native_ram_view_count, apu_output_save(NULL, 0)
 #if NESRECOMP_PPU_HLE
                                , 0x505055484c450001ull /* packed PPU schema, HLE only */
 #endif
@@ -137,6 +137,12 @@ bool cyc_state_save(uint8_t **out, size_t *len, char *err, size_t err_len)
     size_t apu_size;
     void *apu = apu_state_ptr(&apu_size);
     chunk(&b, TAG('A', 'P', 'U', ' '), apu, apu_size);
+    size_t output_size = apu_output_save(NULL, 0);
+    void *output = malloc(output_size);
+    if (!output) { free(b.p); set_err(err, err_len, "out of memory"); return false; }
+    apu_output_save(output, output_size);
+    chunk(&b, TAG('A', 'O', 'U', 'T'), output, output_size);
+    free(output);
     /* The comparison trace's running hash and cycle number (cyc_trace.h), so
      * a loaded run's --hash-out continues the saved run's lines exactly. */
     uint8_t trace[12];
@@ -246,7 +252,7 @@ bool cyc_state_load(const uint8_t *data, size_t len, char *err, size_t err_len)
     void *apu = apu_state_ptr(&apu_size);
     void *hle = fds_hle_state_ptr(&hle_size);
     const Chunk *ccpu = NULL, *chw = NULL, *ccart = NULL, *cchr = NULL, *cppu = NULL, *cpi = NULL, *cpl = NULL,
-                *cpb = NULL, *capu = NULL, *cmed = NULL, *chle = NULL, *chost = NULL, *ctrace = NULL, *ctime = NULL, *czapper = NULL, *cregion = NULL;
+                *cpb = NULL, *capu = NULL, *caudio = NULL, *cmed = NULL, *chle = NULL, *chost = NULL, *ctrace = NULL, *ctime = NULL, *czapper = NULL, *cregion = NULL;
     HwExtraTiming timing = {0};
     HwRegionTiming region = {0};
     HwZapper zapper = {0};
@@ -261,6 +267,7 @@ bool cyc_state_load(const uint8_t *data, size_t len, char *err, size_t err_len)
         cpl = find(c, n, TAG('P', 'I', 'C', 'L'));
         cpb = find(c, n, TAG('P', 'I', 'C', 'B'));
         capu = find(c, n, TAG('A', 'P', 'U', ' '));
+        caudio = find(c, n, TAG('A', 'O', 'U', 'T'));
         cmed = find(c, n, TAG('F', 'D', 'S', 'M'));
         chle = find(c, n, TAG('F', 'D', 'S', 'H'));
         chost = find(c, n, TAG('H', 'O', 'S', 'T'));
@@ -271,6 +278,7 @@ bool cyc_state_load(const uint8_t *data, size_t len, char *err, size_t err_len)
         ok = sized(ccpu, sizeof(cpu)) && sized(chw, sizeof(hw)) && sized(ccart, sizeof(HwCart)) &&
              sized(cppu, sizeof(ppu)) && sized(cpi, sizeof(hw_frame_index)) && sized(cpl, sizeof(hw_frame_lines)) &&
              sized(cpb, sizeof(hw_frame_bg)) && sized(capu, apu_size) && sized(ctrace, 12) &&
+             caudio && apu_output_load(caudio->data, caudio->len, false) &&
              (hw_cart.chr_ram_len ? sized(cchr, hw_cart.chr_ram_len) : !cchr);
         if (!ok) set_err(err, err_len, "save state sections do not match this machine");
         if (ok) {
@@ -368,6 +376,7 @@ bool cyc_state_load(const uint8_t *data, size_t len, char *err, size_t err_len)
     memcpy(hw_frame_lines, cpl->data, sizeof(hw_frame_lines));
     memcpy(hw_frame_bg, cpb->data, sizeof(hw_frame_bg));
     memcpy(apu, capu->data, apu_size);
+    apu_output_load(caudio->data, caudio->len, true);
     memcpy(&cyc_trace_hash, ctrace->data, 8);
     memcpy(&cyc_trace_cycle, ctrace->data + 8, 4);
     if (cyc_is_fds()) {
@@ -457,8 +466,8 @@ struct CycSnapshot {
     HwZapper zapper;
     HwRegionTiming region;
     HwCart   *cart;
-    uint8_t  *chr, *apu, *media, *hle, *sound, *views;
-    size_t    chr_len, apu_len, media_len, hle_len, sound_len, views_len;
+    uint8_t  *chr, *apu, *audio, *media, *hle, *sound, *views;
+    size_t    chr_len, apu_len, audio_len, media_len, hle_len, sound_len, views_len;
     size_t    wram_copy_len;
     HwPpu     ppu;
     CycRamViewStats view_stats;
@@ -479,6 +488,8 @@ CycSnapshot *cyc_snapshot_new(void)
     s->chr = (uint8_t *)malloc(s->chr_len ? s->chr_len : 1);
     s->apu_len = apu_len;
     s->apu = (uint8_t *)malloc(apu_len);
+    s->audio_len = apu_output_save(NULL, 0);
+    s->audio = (uint8_t *)malloc(s->audio_len);
     s->media_len = fds_media_snapshot_size();
     s->media = (uint8_t *)malloc(s->media_len);
     s->hle_len = hle_len;
@@ -487,7 +498,7 @@ CycSnapshot *cyc_snapshot_new(void)
     s->sound = (uint8_t *)malloc(s->sound_len ? s->sound_len : 1);
     s->views_len = cyc_ramview_validity_size();
     s->views = (uint8_t *)malloc(s->views_len ? s->views_len : 1);
-    if (!s->cart || !s->chr || !s->apu || !s->media || !s->hle || !s->sound || !s->views) {
+    if (!s->cart || !s->chr || !s->apu || !s->audio || !s->media || !s->hle || !s->sound || !s->views) {
         cyc_snapshot_free(s);
         return NULL;
     }
@@ -497,7 +508,7 @@ CycSnapshot *cyc_snapshot_new(void)
 void cyc_snapshot_free(CycSnapshot *s)
 {
     if (!s) return;
-    free(s->cart); free(s->chr); free(s->apu); free(s->media); free(s->hle); free(s->sound); free(s->views);
+    free(s->cart); free(s->chr); free(s->apu); free(s->audio); free(s->media); free(s->hle); free(s->sound); free(s->views);
     free(s);
 }
 
@@ -534,6 +545,7 @@ static void snapshot_take(CycSnapshot *s, bool isolated)
     if (s->chr_len) memcpy(s->chr, hw_cart.chr + hw_cart.chr_ram_base, s->chr_len);
     s->ppu = ppu;
     memcpy(s->apu, apu_state_ptr(&n), s->apu_len);
+    apu_output_save(s->audio, s->audio_len);
     fds_media_snapshot(s->media);
     memcpy(s->hle, fds_hle_state_ptr(&n), s->hle_len);
     if (s->sound_len) hw_cart_sound_snapshot(s->sound);
@@ -576,6 +588,7 @@ void cyc_snapshot_restore(const CycSnapshot *s)
     if (s->chr_len) memcpy(hw_cart.chr + hw_cart.chr_ram_base, s->chr, s->chr_len);
     ppu = s->ppu;
     memcpy(apu_state_ptr(&n), s->apu, s->apu_len);
+    apu_output_load(s->audio, s->audio_len, true);
     fds_media_restore(s->media);
     memcpy(fds_hle_state_ptr(&n), s->hle, s->hle_len);
     if (s->sound_len) hw_cart_sound_restore(s->sound);
