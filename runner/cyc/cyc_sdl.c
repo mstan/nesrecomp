@@ -492,6 +492,29 @@ static void apply_picture_scale(void)
         SDL_RenderSetIntegerScale(s_ren, integer);
 }
 
+/* The windowed size: the picture times the window scale, but no larger than
+ * the usable area of the window's display (a game presenting a large
+ * picture, such as one drawn at several times the NES resolution for smooth
+ * motion, would otherwise open a window wider than the monitor). Within that
+ * area the largest whole multiple that fits, else the picture's own size. */
+static void window_size(int display, int *w, int *h)
+{
+    int pw = s_tex_w, ph = logical_h(), scale = s_set.window_scale;
+    *w = pw * scale;
+    *h = ph * scale;
+    SDL_Rect area;
+    if (display < 0 || SDL_GetDisplayUsableBounds(display, &area) != 0 || area.w <= 0 || area.h <= 0) return;
+    area.h -= 48;                               /* the title bar */
+    while (scale > 1 && (pw * scale > area.w || ph * scale > area.h)) --scale;
+    *w = pw * scale;
+    *h = ph * scale;
+    if (*w > area.w || *h > area.h) {           /* even 1x is too large: fit, keeping the shape */
+        double f = (double)area.w / *w < (double)area.h / *h ? (double)area.w / *w : (double)area.h / *h;
+        *w = (int)(*w * f);
+        *h = (int)(*h * f);
+    }
+}
+
 static void apply_settings(void)
 {
     CycAudioSynthesis synthesis = s_set.audio_synthesis == 1
@@ -507,7 +530,11 @@ static void apply_settings(void)
     Uint32 fs = s_set.fullscreen == 1 ? SDL_WINDOW_FULLSCREEN_DESKTOP : s_set.fullscreen == 2 ? SDL_WINDOW_FULLSCREEN : 0;
     if ((SDL_GetWindowFlags(s_win) & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_FULLSCREEN_DESKTOP)) != fs)
         SDL_SetWindowFullscreen(s_win, fs);
-    if (!fs) SDL_SetWindowSize(s_win, s_tex_w * s_set.window_scale, logical_h() * s_set.window_scale);
+    if (!fs) {
+        int ww, wh;
+        window_size(SDL_GetWindowDisplayIndex(s_win), &ww, &wh);
+        SDL_SetWindowSize(s_win, ww, wh);
+    }
     SDL_RenderSetLogicalSize(s_ren, s_tex_w, logical_h());
     apply_picture_scale();
     if (s_tex) SDL_SetTextureScaleMode(s_tex, s_set.linear_filter ? SDL_ScaleModeLinear : SDL_ScaleModeNearest);
@@ -1530,8 +1557,9 @@ int cyc_sdl_main(const char *title_in, int scale)
     picture(&w, &h);
     s_tex_w = w;
     s_tex_h = h;
-    s_win = SDL_CreateWindow(title, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, w * s_set.window_scale,
-                             logical_h() * s_set.window_scale,
+    int win_w, win_h;
+    window_size(0, &win_w, &win_h);             /* centred windows open on the first display */
+    s_win = SDL_CreateWindow(title, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, win_w, win_h,
                              SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI | (s_hidden ? SDL_WINDOW_HIDDEN : 0));
     s_ren = NULL;
     if (!create_renderer() || !ensure_texture(w, h)) {
