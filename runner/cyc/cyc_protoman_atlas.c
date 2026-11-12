@@ -1,4 +1,5 @@
-/* Pose crops and anchors follow the corrected MM2 v0.3.14 implementation.
+/* Pose crops follow MM2 v0.3.14; airborne firing also includes fda40ebb's
+ * helmet/boot baseline correction shared with the accepted open-jump pose.
  * Artwork stays in each game's credited package; this file contains no art.
  * Immutable pixels work with both CHR-RAM and CHR-ROM title compositors. */
 #include "cyc_protoman_atlas.h"
@@ -14,7 +15,7 @@ typedef struct { int x, y, w, h, origin_x, y_adjust; } Rect;
 static const Rect RECTS[CYC_PROTO_POSE_COUNT] = {
     {60,270,24,32,0,1}, {85,270,24,32,0,1}, {110,270,24,32,0,1}, {135,270,24,32,0,1},
     {160,270,32,32}, {51,336,32,32,0,6},
-    {193,270,32,32,0,1}, {226,270,24,32,0,1}, {251,278,32,24,0,1}, {317,270,32,32,20},
+    {193,270,32,32,0,1}, {226,270,24,32,0,1}, {251,278,32,24,0,1}, {317,270,32,32,20,8},
     {350,270,32,32,0,1}, {383,278,32,24,0,1}, {416,270,32,32,0,1},
     {284,270,32,32,21,1}, {284,270,32,32,21,1}, {0,0,26,29,13,6},
     {67,303,24,32}, {67,303,24,32}, {99,303,26,32,19}, {132,303,26,32,19},
