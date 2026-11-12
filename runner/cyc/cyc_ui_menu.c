@@ -311,6 +311,7 @@ static int get_value(void *ctx, const RecompRuntimeUiItem *it, int *out)
     else if (is_key(it, RECOMP_RUNTIME_UI_KEY_WINDOW_SCALE)) *out = s->window_scale;
     else if (is_key(it, RECOMP_RUNTIME_UI_KEY_INTEGER_SCALE)) *out = s->integer_scale;
     else if (is_key(it, RECOMP_RUNTIME_UI_KEY_LINEAR_FILTER)) *out = s->linear_filter;
+    else if (is_key(it, "cyc.vsync")) *out = s->vsync;
 #ifdef NESRECOMP_CYCLE_HDPACK
     else if (is_key(it, "cyc.hd.resolution")) *out = s->hd_resolution;
 #endif
@@ -344,6 +345,7 @@ static int set_value(void *ctx, const RecompRuntimeUiItem *it, int v)
     else if (is_key(it, RECOMP_RUNTIME_UI_KEY_WINDOW_SCALE)) s->window_scale = v < 1 ? 1 : v > 8 ? 8 : v;
     else if (is_key(it, RECOMP_RUNTIME_UI_KEY_INTEGER_SCALE)) s->integer_scale = v != 0;
     else if (is_key(it, RECOMP_RUNTIME_UI_KEY_LINEAR_FILTER)) s->linear_filter = v != 0;
+    else if (is_key(it, "cyc.vsync")) s->vsync = v != 0;   /* the window loop applies it each frame */
 #ifdef NESRECOMP_CYCLE_HDPACK
     else if (is_key(it, "cyc.hd.resolution")) {
         size_t i;
@@ -494,6 +496,10 @@ RecompRuntimeUi *cyc_ui_menu_create(const CycUiHost *host)
     add("audio.synthesis", "Audio", "Audio synthesis",
         "Applies immediately. Legacy keeps the current sound.",
         RECOMP_RUNTIME_UI_CHOICE, 0, 1, 1, s_synthesis_choices, 2, NULL);
+    add("cyc.vsync", "Graphics", "VSync",
+        "Wait for the display before each picture: no tearing. Not needed with FreeSync / G-Sync below the "
+        "monitor's top rate. Never slows the game (fast-forward skips it).",
+        RECOMP_RUNTIME_UI_BOOL, 0, 1, 1, NULL, 0, NULL);
 #ifdef NESRECOMP_CYCLE_HDPACK
     add("cyc.hd.resolution", "Graphics", "HD resolution",
         "Choose the rendering resolution for HD packs. Pack resolution uses the original pack size.",

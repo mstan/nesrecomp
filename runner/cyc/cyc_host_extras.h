@@ -114,6 +114,18 @@ typedef struct CycHostExtras {
      * in-game browser but not a built-in engine slot uses this. */
     bool (*ui_is_open)(void *ctx);
     void (*ui_render)(void *ctx);
+    /* Pictures between machine frames (window only). With present_rate (Hz)
+     * above the machine's frame rate and present_phase set, the window
+     * presents again while it waits for the next machine frame, about
+     * present_rate times a second, first calling present_phase with how far
+     * through the frame period that picture falls (0 < phase < 1). present
+     * then composes the in-between picture (a camera moved on by that
+     * fraction of a frame). The machine frame's own picture is phase 0: the
+     * game resets its phase when the frame ends. Nothing runs between
+     * frames: input, audio and the machine are untouched. A game may change
+     * present_rate at any time (the window reads it each frame); 0 is off. */
+    unsigned present_rate;
+    void (*present_phase)(void *ctx, double phase);
 } CycHostExtras;
 
 const CycHostExtras *cyc_host_extras(void);
