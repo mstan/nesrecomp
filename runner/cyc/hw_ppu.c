@@ -616,7 +616,14 @@ static inline bool sprite_units_idle(void)
 
 static void shift_sprites(void)
 {
-    if (sprite_units_idle()) return;
+    if (sprite_units_idle()) {
+#ifdef NESRECOMP_CYCLE_HDPACK
+        /* Transparent HD art still has a finite eight-pixel footprint after
+         * all native bits become zero. This advances display cursors only. */
+        if(rendering())for(unsigned i=0;i<8;i++)cyc_hdpack_sprite_shift(i);
+#endif
+        return;
+    }
 #if NESRECOMP_PPU_HLE
     unsigned shifted = ppu_hle_sprite_shift(ppu.spr_x, ppu.spr_lo, ppu.spr_hi,
                                             rendering(), ppu.skipped_dot != 0);

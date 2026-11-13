@@ -18,7 +18,7 @@ def main():
     out = args.out.resolve()
     out.mkdir(parents=True, exist_ok=True)
     red, green, blue = bytes((220, 30, 40)), bytes((20, 210, 70)), bytes((31, 63, 95))
-    scenarios = ('transparent', 'overlap', 'behind', 'mirrored-addition', 'background-addition')
+    scenarios = ('transparent', 'overlap', 'behind', 'mirrored-addition', 'background-addition', 'idle-tail')
     for name, chr_ram in ((n, r) for r in (False, True) for n in scenarios):
         folder = out / (('ram-' if chr_ram else 'rom-') + name)
         folder.mkdir(exist_ok=True)
@@ -32,7 +32,16 @@ def main():
             objects[2] = 0x20
         if name == 'mirrored-addition':
             objects[2] = 0xc0
-        image[16 + 0x240:16 + 0x254] = bytes(objects)
+        if name == 'idle-tail':
+            # Fill all eight hardware slots, with native transparent trailing
+            # columns. The hardware's empty-shifter fast path must still finish
+            # the display-only eight-pixel cursor rather than paint to EOL.
+            code=image[16:272]
+            assert code.count(bytes.fromhex('BD4082'))==1 and code.count(bytes.fromhex('E014'))==1
+            image[16:272]=code.replace(bytes.fromhex('BD4082'),bytes.fromhex('BD8082')).replace(bytes.fromhex('E014'),bytes.fromhex('E020'))
+            image[16+0x280:16+0x2a0]=bytes(v for i in range(8) for v in (31,1,0,16+i*16))
+        else:
+            image[16 + 0x240:16 + 0x254] = bytes(objects)
         image[16 + 0x234:16 + 0x238] = bytes((0x0f, 0x21, 0x22, 0x23))
         rom = folder / 'fixture.nes'
         rom.write_bytes(image)
@@ -97,8 +106,10 @@ def main():
             assert pixel(20, 34) == green and pixel(20, 34, 1) == green, name
         elif name == 'mirrored-addition':
             assert pixel(8, 24) == green and pixel(15, 31, 1, 1) == green, name
-        else:
+        elif name == 'background-addition':
             assert pixel(100, 100) == green and pixel(101, 101, 1, 1) == green, name
+        else:
+            assert pixel(200, 34) == blue and pixel(200, 34, 1, 1) == blue, name
         print(folder.name, 'PASS', flush=True)
 
 
