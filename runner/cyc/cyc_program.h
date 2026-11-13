@@ -36,6 +36,9 @@ const CycProgram *cyc_program_initialize(void);
 bool cyc_program_select(uint32_t prg_hash, uint32_t cart_hash);
 /* Match without changing the active program or the current machine. */
 const CycProgram *cyc_program_match_image(const uint8_t *image, size_t size);
+/* A linked plugin may belong to another program in this immutable catalog.
+ * This authorizes its registration, never dispatch in the current program. */
+bool cyc_program_catalog_has_hook(const char *id, uint16_t addr);
 static inline const CycProgram *cyc_program_current(void) {
     return cyc_program_active ? cyc_program_active : cyc_program_initialize();
 }

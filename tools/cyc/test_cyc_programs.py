@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 import subprocess
+import zlib
 import nested_build
 
 
@@ -36,19 +37,26 @@ def main():
     for name, value in [('alpha', 0x11), ('beta', 0x22)]:
         folder = out / name; folder.mkdir(exist_ok=True)
         (folder / 'test.nes').write_bytes(image(value))
-        (folder / 'game.toml').write_text('[game]\ncycle_namespace=' + json.dumps(name) + '\n')
+        config = '[game]\ncycle_namespace=' + json.dumps(name) + '\n'
+        if name == 'alpha':
+            crc = zlib.crc32(bytes([0xa9, value]))
+            config += f'[[mod_function_hook]]\nid="test.alpha"\naddr=0x8000\nlength=2\ncrc32={crc}\n'
+        (folder / 'game.toml').write_text(config)
         run([compiler, 'test.nes', '--game', 'game.toml', '--output-prefix', name], folder, folder / 'generate.log')
     source = Path(__file__).resolve().parents[2] / 'runner/cyc'
     (out / 'probe.c').write_text(r'''
 #include "cyc_program.h"
 #include "cyc_core.h"
 #include "hw_internal.h"
+#include "mod_function_hooks.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 CycProgram alpha_program(void);
 CycProgram beta_program(void);
 static int bad_catalog;
+static unsigned hook_calls;
+static int observe(uint16_t addr) { (void)addr; hook_calls++; return 0; }
 const CycProgram *cyc_program_catalog(size_t *count) {
     static CycProgram programs[2];
     static int initialized;
@@ -84,6 +92,11 @@ int main(int argc,char **argv) {
         bad_catalog=1;CHECK(!cyc_program_select(a.prg_hash,a.cart_hash));
         CHECK(!cyc_native_has(0x8000));return 0;
     }
+    if(argc==2 && (!strcmp(argv[1],"--bad-hook-address") || !strcmp(argv[1],"--unknown-hook"))) {
+        int wrong_addr=!strcmp(argv[1],"--bad-hook-address");
+        CHECK(nes_mod_register_function_entry_plugin(wrong_addr?"test.alpha":"test.unknown",wrong_addr?0x8001:0x8000,observe));
+        CHECK(!cyc_hooks_validate());return 0;
+    }
     CHECK(argc==3);
     CHECK(a.prg_hash!=b.prg_hash);CHECK(a.cart_hash==b.cart_hash);
     CHECK(!strcmp(a.name,"alpha") && !strcmp(b.name,"beta"));
@@ -93,6 +106,13 @@ int main(int argc,char **argv) {
     uint32_t unknown=a.prg_hash+1;while(unknown==b.prg_hash)++unknown;
     CHECK(!cyc_program_select(unknown,a.cart_hash));CHECK(cyc_native_prg_hash==a.prg_hash);
     CHECK(!check(a,argv[1],0x11));CHECK(!check(b,argv[2],0x22));CHECK(!check(a,argv[1],0x11));
+    CHECK(nes_mod_register_function_entry_plugin("test.alpha",0x8000,observe));
+    CHECK(cyc_hooks_validate());CHECK(nes_mod_set_function_hook_enabled("test.alpha",1));
+    cyc_hooks_fire(0x8000);CHECK(hook_calls==1);
+    CHECK(cyc_program_select(b.prg_hash,b.cart_hash));CHECK(cyc_hooks_validate());
+    CHECK(!cyc_hooks_armed);cyc_hooks_fire(0x8000);CHECK(hook_calls==1);
+    CHECK(cyc_program_select(a.prg_hash,a.cart_hash));CHECK(cyc_hooks_validate());
+    cyc_hooks_fire(0x8000);CHECK(hook_calls==2);
     return 0;
 }
 ''', encoding='utf-8')
@@ -117,6 +137,8 @@ target_link_libraries(program_probe PRIVATE ${{NESRECOMP_CYC_LIBRARIES}})
     tc.build(out, out / 'build', out, timeout=900, parallel=1)
     run([tc.executable(out / 'build', 'program_probe'), out / 'alpha/test.nes', out / 'beta/test.nes'], out, out / 'probe.log')
     run([tc.executable(out / 'build', 'program_probe'), '--bad-catalog'], out, out / 'bad-catalog.log')
+    for mode in ['--bad-hook-address', '--unknown-hook']:
+        run([tc.executable(out / 'build', 'program_probe'), mode], out, out / (mode[2:] + '.log'))
     for name in ['9bad', 'has space', 'bad-name', 'x' * 64]:
         folder = out / 'invalid'; folder.mkdir(exist_ok=True)
         config = folder / 'game.toml'; config.write_text('[game]\ncycle_namespace=' + json.dumps(name) + '\n')
@@ -125,7 +147,7 @@ target_link_libraries(program_probe PRIVATE ${{NESRECOMP_CYC_LIBRARIES}})
                                 creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
         if result.returncode == 0:
             raise AssertionError(f'Invalid namespace accepted: {name}')
-    print('Two generated programs linked; native/interpreter state matches for alpha/beta/alpha; invalid namespaces rejected.')
+    print('Two generated programs linked; native/interpreter state matches for alpha/beta/alpha; hooks bind only to their program; unknown/misaddressed hooks and invalid namespaces rejected.')
 
 
 if __name__ == '__main__':

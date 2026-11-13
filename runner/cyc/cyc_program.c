@@ -56,6 +56,19 @@ bool cyc_program_select(uint32_t prg_hash, uint32_t cart_hash) {
     return false;
 }
 
+bool cyc_program_catalog_has_hook(const char *id, uint16_t addr) {
+    (void)cyc_program_current();
+    if (!valid) return false;
+    for (size_t p = 0; p < catalog_count; ++p) {
+        for (uint32_t i = 0; i < catalog[p].hook_site_count; ++i) {
+            const CycHookSite *site = &catalog[p].hook_sites[i];
+            if (site->addr == addr &&
+                (!site->id || (id && !strcmp(site->id, id)))) return true;
+        }
+    }
+    return false;
+}
+
 const CycProgram *cyc_program_match_image(const uint8_t *image, size_t size) {
     NesCartInfo info;
     if (!nes_cart_image(image, size, &info)) return NULL;
