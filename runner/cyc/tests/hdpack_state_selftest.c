@@ -88,7 +88,7 @@ int main(void) {
          * dense worst case retain the complete lossless representation. */
         active=1;memset(data,0,size);
         int full=save_part(part,buf,1024*1024);assert(full<=(int)(sizeof(HdStateHeader)+size));
-        HdStateHeader h;memcpy(&h,buf,sizeof h);assert(h.version==(part<HD_STATE_CHUNKS?6u:7u) && h.active==1);
+        HdStateHeader h;memcpy(&h,buf,sizeof h);assert(h.version==(part<HD_STATE_CHUNKS?6u:8u) && h.active==1);
         assert(load_checked(part,buf,full));
         check_epoch_free_save(part,buf,full,again,1024*1024);
         if(part==HD_STATE_CHUNKS) {

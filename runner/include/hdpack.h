@@ -71,6 +71,13 @@ int hdpack_upscale_direct_from(const uint32_t *native, int native_w, uint32_t *o
  * is_chr_ram_game selects the CHR-RAM (content) vs CHR-ROM (index) match mode.
  * Returns 0 on success (pack active), <0 on error (pack stays inactive). */
 int  hdpack_load(const char *dir, int is_chr_ram_game, int native_w);
+/* Call immediately after loading an explicitly qualified graphics-only pack
+ * for a different cartridge program. Keep unmatched native tiles even when
+ * the original pack hides them. A subsequent load restores pack policy. */
+void hdpack_preserve_unmatched_tiles(unsigned native_hud_rows, unsigned native_hud_columns);
+/* Trusted title-provided rules, retaining the original asset directory. A NULL
+ * text loads hires.txt normally. The loader does not retain the text. */
+int hdpack_load_rules(const char *dir,int is_chr_ram_game,int native_w,const char *text);
 
 /* Convenience: resolve the pack directory from the NESRECOMP_HDPACK env var or
  * g_nes_config (hdpack_enabled + hdpack_dir), then hdpack_load(). No-op if no

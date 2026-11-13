@@ -159,7 +159,8 @@ bool cyc_hd_gpu_cache_prepare(HdGpuPageCache *cache, const HdJobFrame *frame,
         (frame->background_count && !frame->backgrounds) ||
         (frame->sprite_count && !frame->sprites) || frame->has_behind>1 ||
         frame->behind_end > frame->under_end || frame->under_end > frame->mid_end || frame->mid_end > frame->background_count ||
-        frame->hud_rows > frame->height) {
+        frame->hud_rows > frame->height || frame->native_hud_rows>frame->height ||
+        frame->native_hud_columns>frame->width) {
         clear_needed(cache); return false;
     }
     bool rebuild = !cache->image_meta || cache->pack_generation != frame->pack_generation ||

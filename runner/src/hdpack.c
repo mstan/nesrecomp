@@ -128,6 +128,7 @@ static int        s_skipped_cond = 0;  /* conditional tiles not yet supported (P
 static int        s_overscan[4] = {0,0,0,0}; /* top,right,bottom,left (parsed; clip TODO) */
 static int        s_has_overscan = 0;
 static int        s_disable_orig = 0;  /* <options>disableOriginalTiles */
+static unsigned   s_native_hud_rows, s_native_hud_columns;
 static int        s_auto_fallback;
 static int        s_unlimited_sprites;
 
@@ -943,6 +944,10 @@ void hdpack_invalidate_conditions(void) {
     for(int i=0;i<s_cond_count;i++)s_cond_all[i]->cached_frame=UINT64_MAX;
 }
 int hdpack_active(void) { return s_active; }
+void hdpack_preserve_unmatched_tiles(unsigned rows,unsigned columns) {
+    s_disable_orig=0;s_native_hud_rows=rows<=240?rows:0;
+    s_native_hud_columns=columns<=256?columns:0;
+}
 int hdpack_scale(void)  { return s_active ? s_scale : 1; }
 const char *hdpack_directory(void) {return s_active?s_dir:"";}
 HdPixel *hdpack_pixels(void) { return s_active ? s_pixels : NULL; }
@@ -1025,6 +1030,7 @@ void hdpack_unload(void) {
     }
     free(s_bgimgs); s_bgimgs = NULL; s_bgimg_count = s_bgimg_cap = 0;
     s_missing_cond = s_bg_unrenderable = 0; s_disable_orig = s_auto_fallback = s_unlimited_sprites = 0;
+    s_native_hud_rows=s_native_hud_columns=0;
 
     for(int i=0;i<4096;i++){HdAddition *r=s_additions[i];while(r){HdAddition *next=r->next;free(r);r=next;}s_additions[i]=NULL;}
     s_addition_count=0;free(s_resolved_sprites);s_resolved_sprites=NULL;s_resolved_capacity=0;s_sprites_resolved=0;s_current_sprite=NULL;
@@ -1036,6 +1042,9 @@ void hdpack_unload(void) {
 }
 
 int hdpack_load(const char *dir, int is_chr_ram_game, int native_w) {
+    return hdpack_load_rules(dir,is_chr_ram_game,native_w,NULL);
+}
+int hdpack_load_rules(const char *dir,int is_chr_ram_game,int native_w,const char *text) {
     hdpack_unload();
     snprintf(s_dir, sizeof(s_dir), "%s", dir);
     s_is_chr_ram = is_chr_ram_game ? 1 : 0;
@@ -1043,16 +1052,24 @@ int hdpack_load(const char *dir, int is_chr_ram_game, int native_w) {
 
     char path[600];
     snprintf(path, sizeof(path), "%s/hires.txt", dir);
-    FILE *f = fopen(path, "rb");
-    if (!f) {
+    FILE *f = text?NULL:fopen(path, "rb");
+    if (!text && !f) {
         fprintf(stderr, "[HDPack] no hires.txt in %s\n", dir);
         return -1;
     }
 
     register_builtin_conds();   /* hmirror/vmirror, before any [cond] rules resolve */
     char line[2048];
-    while (fgets(line, sizeof(line), f)) parse_line(line);
-    fclose(f);
+    if(text) {
+        while(*text) {
+            const char *end=strchr(text,'\n');size_t n=end?(size_t)(end-text):strlen(text);
+            if(n>=sizeof line){hdpack_unload();return -1;}
+            memcpy(line,text,n);line[n]=0;parse_line(line);text+=n+(end!=NULL);
+        }
+    } else {
+        while (fgets(line, sizeof(line), f)) parse_line(line);
+        fclose(f);
+    }
     for(int i=0;i<s_sheet_count;i++){free(s_sheets[i].px);s_sheets[i].px=NULL;}
     uint64_t bg_raw=0,bg_stored=0;
     for(int i=0;i<s_bgimg_count;i++) {
@@ -1227,6 +1244,12 @@ static void fill_block(uint32_t *dst, int hd_w, uint32_t color, int s) {
 
 /* Match a layer by (is_sprite, index/content, palette) in the loaded dialect.
  * (x,y,cur) locate the pixel for any per-pixel [cond] gates on conditional tiles. */
+static int native_hud_pixel(unsigned x,unsigned y) {
+    return y<s_native_hud_rows && x<s_native_hud_columns;
+}
+static HdTile *native_hud_tile(HdTile *tile,int y) {
+    return y>=0 && (unsigned)y<s_native_hud_rows && tile && tile->fully_transparent?NULL:tile;
+}
 static HdTile *match_layer(int is_sprite, int32_t tile_index, const uint8_t *t16,
                            uint8_t p0, uint8_t p1, uint8_t p2, uint8_t p3,
                            int x, int y, HdPixel *cur) {
@@ -1239,7 +1262,7 @@ static HdTile *match_layer(int is_sprite, int32_t tile_index, const uint8_t *t16
     else
         k.palette = ((uint32_t)p0 << 24) | ((uint32_t)p1 << 16) |
                     ((uint32_t)p2 << 8) | (uint32_t)p3;
-    return find_tile(&k, x, y, cur, is_sprite);
+    return native_hud_tile(find_tile(&k, x, y, cur, is_sprite),y);
 }
 
 static int s_opt_debug = -1;       /* unmatched: BG->magenta, sprite->cyan */
@@ -1389,7 +1412,7 @@ static void eval_backgrounds_for_frame(void) {
      * the overlay's transparent holes (empty item/heart slots). Find the top
      * contiguous span of rows the overlay fully spans, so the compositor can skip
      * the room backgrounds there and let those holes fall back to the backdrop. */
-    s_hud_rows = 0;
+    s_hud_rows = (int)s_native_hud_rows;
     for (int i = s_band_fg; i < s_nact; i++) {
         HdBg *b = s_actbg[i];
         int offy = b->offy;
@@ -1457,6 +1480,11 @@ static int upscale_direct(const uint32_t *native_fb, int native_w, uint32_t *hd_
         for (int sx = 0; sx < native_w; sx++) {
             int idx = sy * native_w + sx;
             uint32_t *dst = hd_buf + (long)(sy * s) * hd_w + (long)sx * s;
+            /* A title-owned native HUD uses the actual PPU result, including
+             * dynamic palettes/sprites, rather than HD side-channel fallback. */
+            if(native_hud_pixel((unsigned)sx,(unsigned)sy)) {
+                fill_block(dst,hd_w,native_fb[idx],s);continue;
+            }
             HdPixel scratch,*p=pixel_at((size_t)idx,&scratch);
             if(p->bg_has && (p->bg_ox>=8 || p->bg_oy>=8))return -1;
 
