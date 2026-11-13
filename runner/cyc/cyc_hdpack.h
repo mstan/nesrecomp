@@ -10,7 +10,8 @@ void cyc_hdpack_bg_fetch(uint16_t address,uint8_t value,bool high);
 void cyc_hdpack_bg_reload(void);
 void cyc_hdpack_bg_shift(void);
 void cyc_hdpack_sprite_fetch(unsigned slot,uint16_t address,uint8_t value,bool high);
-void cyc_hdpack_sprite_shift(unsigned slot);
+/* One PPU dot; bit i advances sprite cursor i with the native shift mask. */
+void cyc_hdpack_sprite_shift_mask(unsigned mask);
 void cyc_hdpack_clock(void);
 void cyc_hdpack_pixel(unsigned bg_color,unsigned bg_palette,int sprite,unsigned sprite_color);
 void cyc_hdpack_blank(uint8_t backdrop);

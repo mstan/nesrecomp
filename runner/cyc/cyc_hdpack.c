@@ -168,8 +168,12 @@ void cyc_hdpack_sprite_fetch(unsigned slot,uint16_t address,uint8_t value,bool h
     if(!high){pipeline.sprite_x[slot]=0;pipeline.sprite[slot].valid=ppu.sprite_row<(ppu.sprite16?16:8);}
     if(high && slot==7)prepare_visual_sprites();
 }
-void cyc_hdpack_sprite_shift(unsigned slot) {
-    if(hdpack_recording() && pipeline.sprite_x[slot]<8)pipeline.sprite_x[slot]++;
+void cyc_hdpack_sprite_shift_mask(unsigned mask) {
+    /* Native-idle dots still advance transparent replacement footprints, but
+     * an inactive pack must not cross this boundary once per sprite unit. */
+    if(!hdpack_recording())return;
+    for(unsigned slot=0;slot<8;slot++)
+        if((mask&(1u<<slot)) && pipeline.sprite_x[slot]<8)pipeline.sprite_x[slot]++;
 }
 void cyc_hdpack_clock(void) {
     if(!hdpack_recording())return;
