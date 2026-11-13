@@ -57,8 +57,15 @@ const char *cyc_settings_default_path(void)
     DWORD n = GetModuleFileNameA(NULL, dir, sizeof(dir));
     if (n == 0 || n >= sizeof(dir)) strcpy(dir, ".");
 #else
-    ssize_t n = readlink("/proc/self/exe", dir, sizeof(dir) - 1);
-    if (n > 0) dir[n] = 0; else strcpy(dir, ".");
+    /* The executable lives inside a read-only mount when launched through
+     * AppImage. Keep settings and related user files beside the outer image. */
+    const char *image = getenv("APPIMAGE");
+    if (image && image[0] == '/' && strlen(image) < sizeof(dir)) {
+        snprintf(dir, sizeof(dir), "%s", image);
+    } else {
+        ssize_t n = readlink("/proc/self/exe", dir, sizeof(dir) - 1);
+        if (n > 0) dir[n] = 0; else strcpy(dir, ".");
+    }
 #endif
     char *cut = strrchr(dir, '/'), *bcut = strrchr(dir, '\\');
     if (bcut > cut) cut = bcut;
