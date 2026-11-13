@@ -170,11 +170,17 @@ void cyc_hdpack_sprite_shift(unsigned slot) {
 }
 void cyc_hdpack_clock(void) {
     if(!hdpack_recording())return;
-    pipeline.color[3]=pipeline.color[2];pipeline.color[2]=pipeline.color[1];pipeline.color[1]=pipeline.color[0];
+    /* Advancing display delay does not copy four sprite keys per dot. Each
+     * new pixel takes the next free slot; repeated colors can share a slot. */
+    pipeline.color_slot[3]=pipeline.color_slot[2];
+    pipeline.color_slot[2]=pipeline.color_slot[1];
+    pipeline.color_slot[1]=pipeline.color_slot[0];
 }
 void cyc_hdpack_pixel(unsigned bg_color,unsigned bg_palette,int sprite,unsigned sprite_color) {
     if(!hdpack_recording())return;
-    HdRecordedPixel *p=&pipeline.color[0];memset(p,0,sizeof(*p));
+    pipeline.color_next=(uint8_t)((pipeline.color_next+1)&3);
+    pipeline.color_slot[0]=pipeline.color_next;
+    HdRecordedPixel *p=&pipeline.color[pipeline.color_next];memset(p,0,sizeof(*p));
     p->bg_index=-1;p->bg_pal[0]=ppu.palette[0];
     const HdFetchedTile *bg=&pipeline.bg[15-ppu.fine_x];
     if(ppu.show_bg && (ppu.dot>8 || ppu.show_bg8) && bg->valid) {
@@ -215,11 +221,12 @@ void cyc_hdpack_pixel(unsigned bg_color,unsigned bg_palette,int sprite,unsigned 
 }
 void cyc_hdpack_blank(uint8_t backdrop) {
     if(!hdpack_recording())return;
-    memset(&pipeline.color[0],0,sizeof pipeline.color[0]);pipeline.color[0].bg_pal[0]=backdrop;
+    HdRecordedPixel *p=&pipeline.color[pipeline.color_slot[0]];
+    memset(p,0,sizeof(*p));p->bg_pal[0]=backdrop;
 }
 void cyc_hdpack_output(int x,int y) {
     if(!hdpack_recording())return;
-    HdRecordedPixel *p=&recorded[y*256+x];*p=pipeline.color[3];
+    HdRecordedPixel *p=&recorded[y*256+x];*p=pipeline.color[pipeline.color_slot[3]];
     unsigned emphasis=ppu.emphasis;
     if(hw_pal())emphasis=(emphasis&4)|((emphasis&1)<<1)|((emphasis&2)>>1);
     p->mask=(uint8_t)(ppu.greyscale|(emphasis<<5));
@@ -231,14 +238,15 @@ static void prepare_pixels(const uint32_t *native) {
     hdpack_invalidate_conditions();
     HdPixel *pixels=hdpack_pixels();
     for(unsigned i=0;i<256*240;i++) {
-        const HdRecordedPixel *r=&recorded[i];HdPixel *p=&pixels[i];memset(p,0,sizeof(*p));
+        const HdRecordedPixel *r=&recorded[i];HdPixel *p=&pixels[i];
         p->bg_index=r->bg_index;p->bg_t16=r->bg_tile;p->bg_has=r->flags&1;
         p->bg_transparent=r->bg_color==0;
         p->bg_p0=r->bg_pal[0];p->bg_p1=r->bg_pal[1];p->bg_p2=r->bg_pal[2];p->bg_p3=r->bg_pal[3];
         p->bg_ox=r->bg_x;p->bg_oy=r->bg_y;
         p->backdrop=color(r->bg_pal[0],r->mask);
         p->bg_argb=color(r->bg_pal[r->bg_color],r->mask);
-        for(unsigned j=0;j<HD_MAX_SPRITES;j++) {
+        for(unsigned j=0;j<HD_MAX_SPRITES;j++)p->sp[j].has=0;
+        for(unsigned j=0;j<HD_MAX_SPRITES && (r->sp[j].flags&1);j++) {
             const HdRecordedSprite *rs=&r->sp[j];HdSprite *sp=&p->sp[j];
             sp->index=rs->index;sp->t16=rs->tile;sp->has=rs->flags&1;
             sp->p0=0xff;sp->p1=rs->pal[0];sp->p2=rs->pal[1];sp->p3=rs->pal[2];

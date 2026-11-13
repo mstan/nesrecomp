@@ -84,12 +84,28 @@ int main(void) {
             if(!trial)check_epoch_free_save(part,buf,full,again,1024*1024);
             assert(save_part(part,again,full-1)==-1);
         }
-        /* Active records retain the original complete format, even if zero. */
+        /* Active pixel records omit exactly zero sprites. The pipeline and
+         * dense worst case retain the complete lossless representation. */
         active=1;memset(data,0,size);
-        int full=save_part(part,buf,1024*1024);assert(full==(int)(sizeof(HdStateHeader)+size));
-        HdStateHeader h;memcpy(&h,buf,sizeof h);assert(h.version==4 && h.active==1);
+        int full=save_part(part,buf,1024*1024);assert(full<=(int)(sizeof(HdStateHeader)+size));
+        HdStateHeader h;memcpy(&h,buf,sizeof h);assert(h.version==(part<HD_STATE_CHUNKS?6u:4u) && h.active==1);
         assert(load_checked(part,buf,full));
         check_epoch_free_save(part,buf,full,again,1024*1024);
+        if(part<HD_STATE_CHUNKS) {
+            HdRecordedPixel *pixels=(HdRecordedPixel *)data;
+            for(unsigned k=0;k<4;k++){pixels[k*37].sp[k].flags=1;pixels[k*37].sp[k].tile[15]=(uint8_t)(k+1);}
+            memcpy(expected,data,size);int sparse=save_part(part,buf,1024*1024);
+            assert(sparse<(int)(sizeof(HdStateHeader)+size));
+            memset(data,0x7f,size);assert(load_checked(part,buf,sparse));assert(!memcmp(data,expected,size));
+            memcpy(again,buf,sparse);again[sizeof(HdStateHeader)+HD_PIXEL_PREFIX]=16;
+            assert(!load_checked(part,again,sparse));assert(!memcmp(data,expected,size));
+            assert(!load_checked(part,buf,sparse-1));assert(!memcmp(data,expected,size));
+            assert(!load_checked(part,buf,sparse+1));assert(!memcmp(data,expected,size));
+            for(unsigned k=0;k<256*HD_STATE_ROWS;k++)for(unsigned j=0;j<4;j++)pixels[k].sp[j].flags=1;
+            memcpy(expected,data,size);full=save_part(part,buf,1024*1024);
+            memcpy(&h,buf,sizeof h);assert(h.version==4 && full==(int)(sizeof(HdStateHeader)+size));
+            memset(data,0,size);assert(load_checked(part,buf,full));assert(!memcmp(data,expected,size));
+        }
         active=0;assert(!load_checked(part,buf,full));
     }
     printf("HD state exact_payload_roundtrips=210 full_bytes=%zu compact_bytes=%zu saved_bytes=%zu\n",full_total,compact_total,full_total-compact_total);

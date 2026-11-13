@@ -448,7 +448,8 @@ uint8_t hw_bus_read(uint16_t addr)
 {
     hw.data_driven = 0;
 #ifdef NESRECOMP_CYCLE_HDPACK
-    if(cyc_hd_audio_read(addr,hw.cycles,&hw.data_bus))hw.data_driven=1;
+    if(((addr>=0x4100 && addr<=0x4106) || addr==0x4018 || addr==0x4019) &&
+       cyc_hd_audio_read(addr,hw.cycles,&hw.data_bus))hw.data_driven=1;
     else
 #endif
     if (addr >= 0x8000) {
@@ -507,7 +508,9 @@ void hw_bus_write(uint16_t addr, uint8_t value)
     if (cyc_trace_enabled) cyc_trace_access(addr, value, true);
     if (hw_cart.mapper==5 && addr<0x4020) hw_cart_cpu_write(addr,value);
 #ifdef NESRECOMP_CYCLE_HDPACK
-    if(cyc_hd_audio_write(addr,value,hw.cycles)){}
+    if(((addr>=0x4100 && addr<=0x4106) ||
+        (addr>=0x3002 && addr<=0x3062 && (addr&15)==2)) &&
+       cyc_hd_audio_write(addr,value,hw.cycles)){}
     else
 #endif
     if (addr < 0x2000) hw_code_store(&hw.ram[addr & 0x7FF], addr & 0x7FF, value);

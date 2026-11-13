@@ -1,3 +1,4 @@
+#include <stddef.h>
 /* Internal HD snapshot representation shared with its contract test.
  * Included once by cyc_hdpack.c after standard headers and hdpack.h.
  * Presentation storage is exact: active/nonzero payloads keep every byte. */
@@ -26,6 +27,7 @@ typedef struct {
     HdFetchedTile bg_fetch,bg[16],sprite[8];
     uint8_t sprite_x[8];
     HdRecordedPixel color[4];
+    uint8_t color_slot[4],color_next;
     HdVisualSprite visual[64];
     uint8_t visual_pixels[256][4],visual_line,visual_valid;
 } HdPipeline;
@@ -37,8 +39,9 @@ static bool presentation_valid;
 /* Display-only invalidation, deliberately absent from every serialized part. */
 static uint64_t presentation_epoch;
 
-/* Version 5 represents an exactly zero inactive payload. Version 4 active
- * records keep all four sprite keys; neither format stores invalidation keys. */
+/* Version 5 represents an exactly zero inactive payload. Version 6 pixel
+ * chunks omit exactly zero sprite records, including all their padding.
+ * Version 4 remains the lossless dense fallback. No invalidation keys persist. */
 static bool zero_payload(const void *data,size_t n) {
     const uint8_t *p=data;
     while(n>=sizeof(uint64_t)) {
@@ -50,15 +53,40 @@ static bool zero_payload(const void *data,size_t n) {
     return true;
 }
 
+#define HD_PIXEL_PREFIX offsetof(HdRecordedPixel,sp)
+_Static_assert(HD_PIXEL_PREFIX+sizeof(((HdRecordedPixel *)0)->sp)==sizeof(HdRecordedPixel),"HD pixel tail");
+static size_t sparse_pixel_size(const HdRecordedPixel *pixels) {
+    size_t size=(HD_PIXEL_PREFIX+1)*256*HD_STATE_ROWS;
+    for(unsigned i=0;i<256*HD_STATE_ROWS;i++)for(unsigned j=0;j<4;j++)
+        if(!zero_payload(&pixels[i].sp[j],sizeof pixels[i].sp[j]))size+=sizeof pixels[i].sp[j];
+    return size;
+}
+static void write_sparse_pixels(const HdRecordedPixel *pixels,uint8_t *out) {
+    for(unsigned i=0;i<256*HD_STATE_ROWS;i++) {
+        const HdRecordedPixel *p=&pixels[i];
+        memcpy(out,p,HD_PIXEL_PREFIX);out+=HD_PIXEL_PREFIX;
+        uint8_t *mask=out++;*mask=0;
+        for(unsigned j=0;j<4;j++)if(!zero_payload(&p->sp[j],sizeof p->sp[j])) {
+            *mask|=(uint8_t)(1u<<j);memcpy(out,&p->sp[j],sizeof p->sp[j]);out+=sizeof p->sp[j];
+        }
+    }
+}
+
 static int save_part(unsigned part,uint8_t *buf,int cap) {
     size_t size=part==HD_STATE_CHUNKS?sizeof pipeline:sizeof(recorded)/HD_STATE_CHUNKS;
     const void *payload=part==HD_STATE_CHUNKS?(const void *)&pipeline:(const void *)&recorded[part*256*HD_STATE_ROWS];
     bool compact=!hdpack_active() && zero_payload(payload,size);
+    bool sparse=false;
+    if(hdpack_active() && part<HD_STATE_CHUNKS) {
+        size_t small=sparse_pixel_size(payload);
+        if(small<size){size=small;sparse=true;}
+    }
     if(compact)size=0;
     if(cap<(int)(sizeof(HdStateHeader)+size))return -1;
-    HdStateHeader h={compact?5u:4u,hdpack_active()!=0,(uint32_t)hdpack_scale(),part,{0}};
+    HdStateHeader h={compact?5u:sparse?6u:4u,hdpack_active()!=0,(uint32_t)hdpack_scale(),part,{0}};
     memcpy(h.fingerprint,fingerprint,sizeof fingerprint);memcpy(buf,&h,sizeof h);
-    if(size)memcpy(buf+sizeof h,payload,size);
+    if(sparse)write_sparse_pixels(payload,buf+sizeof h);
+    else if(size)memcpy(buf+sizeof h,payload,size);
     return (int)(sizeof h+size);
 }
 _Static_assert(sizeof(recorded)/HD_STATE_CHUNKS+sizeof(HdStateHeader)<=1024*1024,"HD pixel state chunk");
@@ -72,20 +100,38 @@ static bool valid_pixel(const HdRecordedPixel *p) {
     }
     return true;
 }
+static bool read_sparse_pixels(const uint8_t *data,size_t len,HdRecordedPixel *out) {
+    for(unsigned i=0;i<256*HD_STATE_ROWS;i++) {
+        if(len<HD_PIXEL_PREFIX+1)return false;
+        HdRecordedPixel p;memset(&p,0,sizeof p);memcpy(&p,data,HD_PIXEL_PREFIX);
+        data+=HD_PIXEL_PREFIX;len-=HD_PIXEL_PREFIX+1;unsigned mask=*data++;
+        if(mask>15)return false;
+        for(unsigned j=0;j<4;j++)if(mask&(1u<<j)) {
+            if(len<sizeof p.sp[j])return false;
+            memcpy(&p.sp[j],data,sizeof p.sp[j]);data+=sizeof p.sp[j];len-=sizeof p.sp[j];
+        }
+        if(!valid_pixel(&p))return false;
+        if(out)out[i]=p;
+    }
+    return len==0;
+}
 static int validate_part(unsigned part,const uint8_t *buf,int len) {
     size_t size=part==HD_STATE_CHUNKS?sizeof pipeline:sizeof(recorded)/HD_STATE_CHUNKS;
     if(part>HD_STATE_CHUNKS || !buf || len<(int)sizeof(HdStateHeader))return 0;
     HdStateHeader h;memcpy(&h,buf,sizeof h);
     bool compact=h.version==5;
-    if((h.version!=4 && !compact) || h.part!=part || h.active!=(unsigned)(hdpack_active()!=0) || h.scale!=(unsigned)hdpack_scale() || memcmp(h.fingerprint,fingerprint,sizeof fingerprint))return 0;
+    bool sparse=h.version==6;
+    if((h.version!=4 && !compact && !sparse) || h.part!=part || h.active!=(unsigned)(hdpack_active()!=0) || h.scale!=(unsigned)hdpack_scale() || memcmp(h.fingerprint,fingerprint,sizeof fingerprint))return 0;
     if(compact)return !h.active && len==(int)sizeof h;
+    if(sparse)return h.active && part<HD_STATE_CHUNKS && read_sparse_pixels(buf+sizeof h,(size_t)len-sizeof h,NULL);
     if(len!=(int)(sizeof h+size))return 0;
     if(part==HD_STATE_CHUNKS) {
         HdPipeline v;memcpy(&v,buf+sizeof h,sizeof v);
         if(v.bg_fetch.row>7 || v.bg_fetch.x>7 || v.bg_fetch.valid>1)return 0;
         for(unsigned i=0;i<16;i++)if(v.bg[i].row>7 || v.bg[i].x>7 || v.bg[i].valid>1)return 0;
         for(unsigned i=0;i<8;i++)if(v.sprite[i].row>7 || v.sprite[i].valid>1 || v.sprite_x[i]>8)return 0;
-        for(unsigned i=0;i<4;i++)if(!valid_pixel(&v.color[i]))return 0;
+        for(unsigned i=0;i<4;i++)if(!valid_pixel(&v.color[i]) || v.color_slot[i]>3)return 0;
+        if(v.color_next>3)return 0;
         if(v.visual_valid>1 || v.visual_line>=240)return 0;
         for(unsigned i=0;i<64;i++) {
             const HdVisualSprite *sp=&v.visual[i];
@@ -102,6 +148,8 @@ static int load_part(unsigned part,const uint8_t *buf,int len) {
     size_t size=part==HD_STATE_CHUNKS?sizeof pipeline:sizeof(recorded)/HD_STATE_CHUNKS;
     void *payload=part==HD_STATE_CHUNKS?(void *)&pipeline:(void *)&recorded[part*256*HD_STATE_ROWS];
     HdStateHeader h;memcpy(&h,buf,sizeof h);
-    if(h.version==5)memset(payload,0,size);else memcpy(payload,buf+sizeof h,size);
+    if(h.version==5)memset(payload,0,size);
+    else if(h.version==6)read_sparse_pixels(buf+sizeof h,(size_t)len-sizeof h,payload);
+    else memcpy(payload,buf+sizeof h,size);
     presentation_valid=false;++presentation_epoch;return 1;
 }
