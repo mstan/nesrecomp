@@ -346,6 +346,47 @@ static void check_compact_images(void) {
     im.pages=pages;image_pages_free(pages);free(pixels);free(flat);
 }
 
+static void check_cell_draw_coverage(void) {
+    s_active=1;s_is_chr_ram=0;s_version=108;s_scale=2;s_native_w=17;
+    s_pixels=calloc(17*240,sizeof(*s_pixels));assert(s_pixels);
+    s_opt_debug=s_opt_hide_orig=s_disable_orig=0;
+    for(unsigned k=0;k<2;k++) {
+        HdTile *t=calloc(1,sizeof(*t));assert(t);
+        t->key.tile_index=(int32_t)(4+k);t->key.palette=k?0xff111213u:0x0f010203u;
+        t->w=t->h=16;t->brightness=255;t->has_transparent=(int)k;
+        t->data=calloc(16*16,4);assert(t->data);
+        if(!k)for(unsigned i=0;i<16*16;i++)t->data[i]=0xff0000ffu;
+        else for(unsigned y=0;y<2;y++)for(unsigned x=2;x<6;x++)
+            t->data[y*16+x]=x<4?0xff00ff00u:(x==4?0x80800000u:0);
+        register_tile(t,0);
+    }
+    uint32_t native[17*240];for(unsigned i=0;i<17*240;i++)native[i]=0xff123456;
+    for(unsigned x=0;x<5;x++) {
+        HdPixel *p=&s_pixels[x];p->bg_has=1;p->bg_index=4;p->backdrop=0xff123456;
+        p->bg_p0=15;p->bg_p1=1;p->bg_p2=2;p->bg_p3=3;
+        HdSprite *sp=&p->sp[0];sp->has=1;sp->transparent=1;sp->index=5;
+        sp->p0=255;sp->p1=0x11;sp->p2=0x12;sp->p3=0x13;
+        sp->ox=(uint8_t)(x<3?x:10-x);sp->hm=x>=3;
+    }
+    const HdJobFrame *jobs=hdpack_prepare_jobs(native,17);assert(jobs);
+    for(unsigned x=0;x<5;x++) {
+        unsigned sp=(jobs->pixels[x].flags>>HD_JOB_SP_SHIFT)&HD_JOB_MODE_MASK;
+        unsigned bg=(jobs->pixels[x].flags>>HD_JOB_BG_SHIFT)&HD_JOB_MODE_MASK;
+        assert(sp==((x==0 || x==3)?HD_JOB_SKIP:HD_JOB_IMAGE));
+        assert(bg==((x==1 || x==4)?HD_JOB_SKIP:HD_JOB_IMAGE));
+    }
+    for(unsigned scale=1;scale<=4;scale*=2) {
+        size_t count=(size_t)17*240*scale*scale;uint32_t *out=malloc(count*4);assert(out);
+        assert(!hdpack_render_jobs(jobs,scale,out,17*scale));
+        assert(out[0]==0xff0000ffu && out[scale]==0xff00ff00u);
+        assert(out[3*scale]==0xff0000ffu && out[4*scale]==0xff00ff00u);
+        /* A partly covered cell must preserve its opaque background. */
+        if(scale>=2)assert(out[3*scale-1]==0xff0000ffu);
+        free(out);
+    }
+    hdpack_jobs_release(jobs);hdpack_unload();
+}
+
 int main(void) {
 #ifdef NESRECOMP_HDPACK_CACHE_PROBE
     check_page_cache();
@@ -353,6 +394,7 @@ int main(void) {
     for(int k=0;k<3;k++)for(int i=0;i<16;i++)patterns[k][i]=(uint8_t)(k*71+i*29);
     check_addition_resolution();
     check_manifest_priority();
+    check_cell_draw_coverage();
     const int scales[]={1,2,3,10};unsigned count=0;
     const HdJobFrame *retained=NULL;uint32_t *retained_pixels=NULL;
     for(int ram=0;ram<2;ram++)for(int ver=0;ver<2;ver++)for(unsigned si=0;si<4;si++) {

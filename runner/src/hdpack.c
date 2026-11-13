@@ -53,6 +53,7 @@ typedef struct HdTile {
     int            brightness;      /* 0..255 (or >255 for HDR; rare) */
     int            has_transparent; /* any pixel with alpha != 0xFF */
     int            fully_transparent;
+    uint64_t       cell_visible, cell_opaque; /* authored coverage of 8x8 native cells */
     uint32_t       job_image;      /* presentation-owned immutable asset ID */
     struct HdCond **conds; int *neg; int ncond;  /* [cond] gate; 0 = unconditional */
     struct HdTile *next;            /* primary hash chain */
@@ -473,6 +474,23 @@ static void track_tile(HdTile *t) {
 }
 
 static void register_tile(HdTile *t, int default_tile) {
+    /* Compile subpixel coverage once. A native transparent pixel can contain
+     * authored art, while an empty authored cell never needs a draw command. */
+    t->cell_visible=UINT64_MAX;t->cell_opaque=0;
+    if(t->data && t->w>0 && t->h>0 && !(t->w&7) && !(t->h&7)) {
+        t->cell_visible=0;
+        unsigned cw=(unsigned)t->w/8,ch=(unsigned)t->h/8;
+        for(unsigned cy=0;cy<8;cy++)for(unsigned cx=0;cx<8;cx++) {
+            unsigned visible=0,opaque=1;
+            for(unsigned y=0;y<ch;y++)for(unsigned x=0;x<cw;x++) {
+                unsigned a=t->data[(size_t)(cy*ch+y)*t->w+cx*cw+x]>>24;
+                visible|=a;opaque&=a==255;
+            }
+            uint64_t bit=UINT64_C(1)<<(cy*8+cx);
+            if(visible)t->cell_visible|=bit;
+            if(opaque)t->cell_opaque|=bit;
+        }
+    }
     uint32_t h = key_hash(&t->key) & (HD_NBUCKETS - 1);
     HdTile **tail=&s_buckets[h];while(*tail)tail=&(*tail)->next;
     t->next=NULL;*tail=t;

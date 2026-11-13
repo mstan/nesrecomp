@@ -239,9 +239,12 @@ const HdJobFrame *hdpack_prepare_jobs(const uint32_t *native, int native_w)
             HdTile *tile=job_match(sp,p,x,y);
             if(tile) {
                 if(tile->fully_transparent)continue;
+                unsigned cx=sp->hm?7-sp->ox:sp->ox;
+                uint64_t cell=UINT64_C(1)<<(sp->oy*8+cx);
+                if(!(tile->cell_visible&cell))continue;
                 layer.image=tile->job_image;layer.uv=sp->ox|((uint32_t)sp->oy<<8);
                 layer.flags=HD_JOB_IMAGE<<HD_JOB_SP_SHIFT;
-                if(!sp->behind && !tile->has_transparent)hidden=1;
+                if(!sp->behind && (tile->cell_opaque&cell))hidden=1;
             } else if(!sp->transparent && (s_opt_debug || !s_opt_hide_orig)) {
                 layer.color=s_opt_debug?0xff00ffffu:sp->argb;
                 layer.flags=HD_JOB_SOLID<<HD_JOB_SP_SHIFT;
@@ -262,7 +265,8 @@ const HdJobFrame *hdpack_prepare_jobs(const uint32_t *native, int native_w)
         if(p->bg_has && !hidden) {
             HdTile *bg=job_match(NULL,p,x,y);
             if(bg) {
-                if(!bg->fully_transparent) {
+                uint64_t cell=UINT64_C(1)<<(p->bg_oy*8+p->bg_ox);
+                if(!bg->fully_transparent && (bg->cell_visible&cell)) {
                     j->bg_image=bg->job_image;j->bg_uv=p->bg_ox|((uint32_t)p->bg_oy<<8);
                     j->flags|=HD_JOB_IMAGE<<HD_JOB_BG_SHIFT;
                 }
