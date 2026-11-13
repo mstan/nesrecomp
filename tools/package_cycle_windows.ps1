@@ -110,7 +110,7 @@ $Title - cycle-accurate NESRecomp
 
 No ROM is included. Select your matching original ROM at first launch.
 Arrow keys: D-pad. Z: A. X: B. Enter: Start. Backslash: Select.
-Escape: menu. Hold Tab: fast-forward. F8/F9: save/load cycle state.
+Escape: menu. Hold Tab: fast-forward. F7: save-state browser. F8: rewind.
 Gamepads and remapping are supported; use Controls (config.ini).
 Save states are specific to this build.
 $GameNotes
