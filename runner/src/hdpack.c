@@ -902,6 +902,7 @@ void hdpack_invalidate_conditions(void) {
 }
 int hdpack_active(void) { return s_active; }
 int hdpack_scale(void)  { return s_active ? s_scale : 1; }
+const char *hdpack_directory(void) {return s_active?s_dir:"";}
 HdPixel *hdpack_pixels(void) { return s_active ? s_pixels : NULL; }
 int hdpack_recording(void)   { return s_active; }
 

@@ -61,6 +61,9 @@ add_test(NAME cyc_ppu_kernel_test COMMAND cyc_ppu_kernel_test)
 
 add_executable(cyc_hdpack_state_test tests/hdpack_state_selftest.c)
 add_test(NAME cyc_hdpack_state_test COMMAND cyc_hdpack_state_test)
+add_executable(cyc_hd_audio_test tests/hd_audio_selftest.c)
+target_link_libraries(cyc_hd_audio_test PRIVATE ${NESRECOMP_CYC_LIBRARIES})
+add_test(NAME cyc_hd_audio_test COMMAND cyc_hd_audio_test)
 
 foreach(kind candidate reference)
     add_executable(cyc_hdpack_plan_${kind} tests/hdpack_plan_probe.c)

@@ -49,7 +49,8 @@
  *     --screenshot FILE    save the last frame as PNG
  *     --shot-every N       also save every Nth frame, as FILE with the frame
  *                          number before its extension (shot.png -> shot_00120.png)
- *     --wav-out FILE       record the audio output (48 kHz mono)
+ *     --wav-out FILE       record native mono audio output (48 kHz)
+ *     --wav-stereo-out FILE record native + HD replacement stereo audio
  *     --console MODEL      the analog output stage the audio goes through
  *                          (cyc_core.h cyc_set_console): nes (front-loader:
  *                          90 Hz + 440 Hz high-pass, 14 kHz low-pass), famicom
@@ -926,14 +927,14 @@ static void write_hash_line(FILE *f, long frame) {
 }
 
 /* 16-bit mono PCM WAV, header rewritten with the final length on close. */
-static void wav_header(FILE *f, int rate, uint32_t samples) {
-    uint32_t data = samples * 2;
+static void wav_header(FILE *f, int rate, uint32_t samples,unsigned channels) {
+    uint32_t data = samples * 2 * channels;
     uint8_t h[44] = {'R', 'I', 'F', 'F', 0, 0, 0, 0, 'W', 'A', 'V', 'E', 'f', 'm', 't', ' ', 16, 0, 0, 0, 1, 0, 1, 0};
-    uint32_t v[] = {36 + data, (uint32_t)rate, (uint32_t)rate * 2};
+    uint32_t v[] = {36 + data, (uint32_t)rate, (uint32_t)rate * 2 * channels};
     memcpy(h + 4, &v[0], 4);
     memcpy(h + 24, &v[1], 4);
     memcpy(h + 28, &v[2], 4);
-    h[32] = 2, h[34] = 16;
+    h[22]=(uint8_t)channels;h[32]=(uint8_t)(2*channels);h[34]=16;
     memcpy(h + 36, "data", 4);
     memcpy(h + 40, &data, 4);
     fseek(f, 0, SEEK_SET);
@@ -1072,6 +1073,7 @@ static int host_main(int argc, char **argv) {
 #endif
     const char *rom_path = NULL, *hash_out = NULL, *trace_out = NULL, *screenshot = NULL, *state_out = NULL,
                *wav_out = NULL, *mem_out = NULL;
+    bool wav_stereo=false;
     const char *save_file=NULL, *datach_save=NULL, *barcode=NULL;
     long barcode_frame=0; unsigned barcode_speed=1000;
     long mem_frame = -1, shot_every = 0;
@@ -1166,6 +1168,7 @@ static int host_main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--state-frame") && i + 1 < argc) state_frame = atol(argv[++i]), headless = true;
         else if (!strcmp(argv[i], "--state-out") && i + 1 < argc) state_out = argv[++i], headless = true;
         else if (!strcmp(argv[i], "--wav-out") && i + 1 < argc) wav_out = argv[++i], headless = true;
+        else if (!strcmp(argv[i], "--wav-stereo-out") && i + 1 < argc) wav_out=argv[++i],wav_stereo=true,headless=true;
         else if (!strcmp(argv[i], "--console") && i + 1 < argc) {
             const char *v = argv[++i];
             if (!strcmp(v, "nes")) console = CYC_CONSOLE_NES;
@@ -1320,7 +1323,7 @@ session_restart:
                         "       [--spam PAGE ROW] [--spam-seed N] [--spam-no-dpad] [--input FILE]\n"
                         "       [--trace-frame N --trace-out FILE] [--state-frame N --state-out FILE]\n"
                         "       [--miss-log FILE] [--capture-log FILE] [--ram-view-list FILE]\n"
-                        "       [--screenshot FILE [--shot-every N]] [--wav-out FILE]\n"
+                        "       [--screenshot FILE [--shot-every N]] [--wav-out FILE | --wav-stereo-out FILE]\n"
                         "       [--console nes|famicom|default]\n"
                         "       [--frame-log FILE [--frame-log-frames A:B]] [--ring-out FILE [--ring-frames A:B]]\n"
                         "       FDS: [--fds-bios FILE] [--fds-boot-disk none|SIDE] [--fds-event F:ACTION]\n"
@@ -1685,7 +1688,7 @@ session_restart:
         if (!cyc_audio_enable(WAV_RATE)) {
             fprintf(stderr, "%s has no audio output\n", cyc_hw_name());
         } else if ((wav_f = fopen(wav_out, "wb")) != NULL) {
-            wav_header(wav_f, WAV_RATE, 0);
+            wav_header(wav_f, WAV_RATE, 0,wav_stereo?2:1);
             printf("audio: %d Hz, %s output stage%s\n", WAV_RATE, cyc_console_name(cyc_console()),
                    console == CYC_CONSOLE_DEFAULT ? " (the board's default)" : "");
         }
@@ -1787,13 +1790,27 @@ session_restart:
 #endif
         if (hash_f && !replay) write_hash_line(hash_f, frame);
         if (wav_f || online) {
-            int16_t pcm[4096];
+            int16_t pcm[4096],stereo[8192];
             size_t n;
-            while ((n = cyc_audio_read(pcm, 4096)) > 0) {
+#ifdef CYC_ORACLE
+            while ((n = cyc_audio_read(pcm,4096)) > 0) {
+                memset(stereo,0,n*2*sizeof(int16_t));
+#else
+            while ((n = cyc_audio_read_split(pcm,stereo,4096)) > 0) {
+#endif
 #ifndef CYC_ORACLE
                 cyc_session_audio_mix(pcm,n);
 #endif
-                if(wav_f&&!replay){fwrite(pcm, sizeof(int16_t), n, wav_f);wav_samples += (uint32_t)n;}
+                if(wav_f && !replay) {
+                    if(wav_stereo) {
+                        for(size_t k=0;k<n;k++)for(unsigned c=0;c<2;c++) {
+                            int value=pcm[k]+stereo[k*2+c];
+                            stereo[k*2+c]=(int16_t)(value>32767?32767:value<-32768?-32768:value);
+                        }
+                        fwrite(stereo,sizeof(int16_t),n*2,wav_f);
+                    } else fwrite(pcm,sizeof(int16_t),n,wav_f);
+                    wav_samples+=(uint32_t)n;
+                }
             }
         }
 #ifdef NESRECOMP_NET
@@ -1957,7 +1974,7 @@ session_restart:
 #endif
 
     if (wav_f) {
-        wav_header(wav_f, WAV_RATE, wav_samples);
+        wav_header(wav_f, WAV_RATE, wav_samples,wav_stereo?2:1);
         fclose(wav_f);
     }
     if (hash_f) fclose(hash_f);

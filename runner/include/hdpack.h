@@ -65,6 +65,7 @@ int  hdpack_resize(int native_w);
 
 int  hdpack_active(void);    /* 1 if a pack is loaded */
 int  hdpack_scale(void);     /* upscale factor (1 when inactive) */
+const char *hdpack_directory(void); /* current asset root, or empty when inactive */
 
 /* Side channel the renderer writes into (NULL when inactive). Indexed
  * [y*native_w + x]. */

@@ -21,6 +21,9 @@
 #include "cyc_core.h"
 #include "cyc_trace.h"
 #include "hw.h"
+#ifdef NESRECOMP_CYCLE_HDPACK
+#include "cyc_hd_audio.h"
+#endif
 
 #include <math.h>
 #include <stdio.h>
@@ -147,6 +150,10 @@ static struct {
     double   hp90_a, hp440_a, lp_a;
     double   hp37_prev_in, hp37_prev_out, hp37_a;
     int16_t  ring[AUDIO_RING];
+#ifdef NESRECOMP_CYCLE_HDPACK
+    int16_t hd_left[AUDIO_RING],hd_right[AUDIO_RING];
+    uint64_t hd_cycle,hd_fraction,hd_num,hd_den;
+#endif
     uint32_t head, tail;
     float    pulse_mix[31], tnd_mix[203];
     /* Derived host work, not machine state. State pointer access invalidates
@@ -167,6 +174,10 @@ typedef struct {
     double hp90_prev_in, hp90_prev_out, hp440_prev_in, hp440_prev_out, lp_out;
     double hp37_prev_in, hp37_prev_out;
     int16_t ring[AUDIO_RING];
+#ifdef NESRECOMP_CYCLE_HDPACK
+    int16_t hd_left[AUDIO_RING],hd_right[AUDIO_RING];
+    uint64_t hd_cycle,hd_fraction,hd_num,hd_den;
+#endif
     uint32_t synthesis;
     uint64_t band_cycles, band_next_sample;
     double band_previous_level, band_value, band_delta[AUDIO_BAND_RING];
@@ -187,6 +198,10 @@ size_t apu_output_save(void *out, size_t capacity)
     s.lp_out = audio.lp_out;
     s.hp37_prev_in = audio.hp37_prev_in; s.hp37_prev_out = audio.hp37_prev_out;
     memcpy(s.ring, audio.ring, sizeof(s.ring));
+#ifdef NESRECOMP_CYCLE_HDPACK
+    memcpy(s.hd_left,audio.hd_left,sizeof s.hd_left);memcpy(s.hd_right,audio.hd_right,sizeof s.hd_right);
+    s.hd_cycle=audio.hd_cycle;s.hd_fraction=audio.hd_fraction;s.hd_num=audio.hd_num;s.hd_den=audio.hd_den;
+#endif
     s.synthesis = (uint32_t)audio.synthesis;
     s.band_cycles = audio.band.cycles; s.band_next_sample = audio.band.next_sample;
     s.band_previous_level = audio.band.previous_level; s.band_value = audio.band.value;
@@ -216,6 +231,11 @@ bool apu_output_load(const void *data, size_t size, bool apply)
         fabs(s.hp37_prev_in) > 1e6 || fabs(s.hp37_prev_out) > 1e6 ||
         !isfinite(s.band_previous_level) || !isfinite(s.band_value) ||
         fabs(s.band_previous_level) > 1e6 || fabs(s.band_value) > 1e6) return false;
+#ifdef NESRECOMP_CYCLE_HDPACK
+    if((s.hd_num && s.hd_num!=21477272 && s.hd_num!=53203425) ||
+       s.hd_den>UINT64_C(32)*384000 || (s.hd_den?s.hd_fraction>=s.hd_den:s.hd_fraction!=0) ||
+       (s.enabled && (!s.hd_num || !s.hd_den)))return false;
+#endif
     for (unsigned i = 0; i < AUDIO_BAND_RING; ++i)
         if (!isfinite(s.band_delta[i]) || fabs(s.band_delta[i]) > 1e6) return false;
     if (audio.on && s.enabled && s.cycles_per_sample != audio.cycles_per_sample) return false;
@@ -226,6 +246,10 @@ bool apu_output_load(const void *data, size_t size, bool apply)
     if (s.enabled != (uint32_t)audio.on || s.cycles_per_sample != audio.cycles_per_sample ||
         s.synthesis != (uint32_t)audio.synthesis) {
         audio.phase = audio.acc = 0; audio.count = 0;
+#ifdef NESRECOMP_CYCLE_HDPACK
+        audio.hd_cycle=hw.cycles;audio.hd_fraction=0;
+        memset(audio.hd_left,0,sizeof audio.hd_left);memset(audio.hd_right,0,sizeof audio.hd_right);
+#endif
         audio.head = audio.tail = 0;
         audio.hp90_prev_in = audio.hp90_prev_out = 0;
         audio.hp440_prev_in = audio.hp440_prev_out = audio.lp_out = 0;
@@ -242,6 +266,10 @@ bool apu_output_load(const void *data, size_t size, bool apply)
     audio.lp_out = s.lp_out;
     audio.hp37_prev_in = s.hp37_prev_in; audio.hp37_prev_out = s.hp37_prev_out;
     memcpy(audio.ring, s.ring, sizeof(s.ring));
+#ifdef NESRECOMP_CYCLE_HDPACK
+    memcpy(audio.hd_left,s.hd_left,sizeof audio.hd_left);memcpy(audio.hd_right,s.hd_right,sizeof audio.hd_right);
+    audio.hd_cycle=s.hd_cycle;audio.hd_fraction=s.hd_fraction;audio.hd_num=s.hd_num;audio.hd_den=s.hd_den;
+#endif
     audio.band.cycles = s.band_cycles; audio.band.next_sample = s.band_next_sample;
     audio.band.previous_level = s.band_previous_level; audio.band.value = s.band_value;
     memcpy(audio.band.delta, s.band_delta, sizeof(s.band_delta));
@@ -357,6 +385,11 @@ void apu_audio_enable(bool on, int sample_rate)
     audio.on = on && sample_rate > 0;
     if (!audio.on) return;
     const double cpu_rate = cyc_cpu_hz();
+#ifdef NESRECOMP_CYCLE_HDPACK
+    audio.hd_cycle=hw.cycles;audio.hd_fraction=0;
+    audio.hd_num=hw_pal()?UINT64_C(53203425):UINT64_C(21477272);
+    audio.hd_den=(uint64_t)(hw_pal()?32:12)*(unsigned)sample_rate;
+#endif
     audio.cycles_per_sample = cpu_rate / sample_rate;
     audio.phase = audio.acc = 0;
     audio.count = 0;
@@ -374,6 +407,21 @@ size_t apu_audio_read(int16_t *out, size_t max)
     while (n < max && audio.tail != audio.head) {
         out[n++] = audio.ring[audio.tail];
         audio.tail = (audio.tail + 1) % AUDIO_RING;
+    }
+    return n;
+}
+
+size_t apu_audio_read_split(int16_t *native,int16_t *enhanced,size_t max)
+{
+    size_t n=0;
+    while(n<max && audio.tail!=audio.head) {
+        native[n]=audio.ring[audio.tail];
+#ifdef NESRECOMP_CYCLE_HDPACK
+        enhanced[n*2]=audio.hd_left[audio.tail];enhanced[n*2+1]=audio.hd_right[audio.tail];
+#else
+        enhanced[n*2]=enhanced[n*2+1]=0;
+#endif
+        n++;audio.tail=(audio.tail+1)%AUDIO_RING;
     }
     return n;
 }
@@ -398,6 +446,13 @@ static void audio_emit(double level)
     uint32_t next = (audio.head + 1) % AUDIO_RING;
     if (next == audio.tail) audio.tail = (audio.tail + 1) % AUDIO_RING; /* overrun: drop the oldest */
     audio.ring[audio.head] = (int16_t)s;
+#ifdef NESRECOMP_CYCLE_HDPACK
+    if(audio.hd_den) {
+        audio.hd_fraction+=audio.hd_num;
+        audio.hd_cycle+=audio.hd_fraction/audio.hd_den;audio.hd_fraction%=audio.hd_den;
+    }
+    cyc_hd_audio_sample(audio.hd_cycle,&audio.hd_left[audio.head],&audio.hd_right[audio.head]);
+#endif
     audio.head = next;
 }
 
@@ -1242,6 +1297,10 @@ void *apu_state_ptr(size_t *size)
 
 void apu_power_on(void)
 {
+#ifdef NESRECOMP_CYCLE_HDPACK
+    audio.hd_cycle=audio.hd_fraction=0;
+    memset(audio.hd_left,0,sizeof audio.hd_left);memset(audio.hd_right,0,sizeof audio.hd_right);
+#endif
     apu_native_event_spans = apu_native_event_cycles = 0;
     audio.level_dirty = 1;
     memset(&apu, 0, sizeof(apu));

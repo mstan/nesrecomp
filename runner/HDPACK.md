@@ -159,7 +159,33 @@ also exercises multiple sprite layers. Common pixel jobs remain 32 bytes;
 optional 16-byte descriptors hold up to three more layers.
 
 **NOT supported yet:**
-- `<bgm>` / `<sfx>` HD-pack audio and the `disableSpriteLimit` option.
+- The `disableSpriteLimit` option.
+
+### Replacement audio in cycle titles
+
+Modern `<bgm>` and `<sfx>` tags use the NEA registers, including album selection,
+loop points, pause/resume, independent volumes and overlapping sound effects.
+Both normal and alternate register ranges are recognized. Every declared Ogg
+asset must decode before the host exposes the NEA signature; a failed asset
+leaves the ordinary cartridge/APU path available. Decoding uses
+[stb_vorbis](https://github.com/nothings/stb), with its original MIT/public-domain
+license retained in `runner/external/stb_vorbis.c`.
+
+Immutable mono/stereo PCM is decoded once at pack activation, with a512MiB
+decoded-PCM admission bound. The player admits up to4096 simultaneous effects.
+Logical playback follows the emulated clock even when output is disabled.
+Integer interpolation samples stereo enhancements on the APU output timeline;
+the frontend first applies ordinary title audio hooks to native mono, then
+adds the stereo enhancement and applies output volume. The original mono read
+API and `--wav-out` retain native APU samples. `--wav-stereo-out` captures the
+combined stereo output without opening a sound device.
+
+Current-build states retain track selections, playback positions, fractional
+phases, loop/pause flags, active effects and queued stereo output. The18th HD
+save record holds logical NEA state. `cyc_hd_audio_test` covers completion,
+repeated status polling, stereo, loop/pause, volume, overlapping effects, invalid
+selections and exact restoration. Optional `NESRECOMP_HD_AUDIO_TRACE=1` logs
+at most256 playback commands for diagnostics.
 
 Mods packages apply verified IPS patches in memory. An optional compiled
 program catalog also supports changed cartridge geometry; see

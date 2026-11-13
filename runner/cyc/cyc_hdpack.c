@@ -7,6 +7,7 @@
 #include "cyc_mod.h"
 #include "hw_internal.h"
 #include "hdpack.h"
+#include "cyc_hd_audio.h"
 #include "mod_runtime.h"
 #include "mod_savestate.h"
 #if CYC_NATIVE_PROGRAMS
@@ -39,6 +40,8 @@ void cyc_hdpack_power_on(void) {
     memset(&pipeline,0,sizeof pipeline);memset(recorded,0,sizeof recorded);
     if(!configured)cyc_hdpack_config(1,"");
     hdpack_load_from_config(hw_cart.chr_ram!=0,256);
+    if(hdpack_active())cyc_hd_audio_load(hdpack_directory(),hw_pal());
+    else cyc_hd_audio_unload();
 }
 #else
 static void activate_hd_pack(void) { nes_mod_set_local_only("HD pack",1); }
@@ -71,7 +74,7 @@ bool cyc_hdpack_mod_prepare(void) {
     presentation_valid=false;++presentation_epoch;release_jobs();
     const NESModHdPack *pack=nes_mod_hd_pack();
     memset(&pipeline,0,sizeof pipeline);memset(recorded,0,sizeof recorded);
-    memset(fingerprint,0,sizeof fingerprint);hdpack_unload();
+    memset(fingerprint,0,sizeof fingerprint);hdpack_unload();cyc_hd_audio_unload();
     if(pack) {
         if(pack->patched_payload) {
             if(!cyc_mod_apply_cart_payload(pack->patched_payload,pack->payload_size)) {
@@ -81,6 +84,7 @@ bool cyc_hdpack_mod_prepare(void) {
         if(hdpack_load(pack->directory,hw_cart.chr_ram!=0,256)) {
             fprintf(stderr,"[Mods] Selected HD pack could not be loaded\n");return false;
         }
+        cyc_hd_audio_load(pack->directory,hw_pal());
         memcpy(fingerprint,pack->fingerprint,sizeof fingerprint);
     }
     nes_mod_lock_hd_pack();
@@ -228,7 +232,13 @@ static int get##n(uint8_t *b,int c){return save_part(n,b,c);} \
 static int set##n(const uint8_t *b,int l){return load_part(n,b,l);} \
 static int check##n(const uint8_t *b,int l){return validate_part(n,b,l);}
 HD_STATE_PART(0) HD_STATE_PART(1) HD_STATE_PART(2) HD_STATE_PART(3) HD_STATE_PART(4) HD_STATE_PART(5) HD_STATE_PART(6) HD_STATE_PART(7) HD_STATE_PART(8) HD_STATE_PART(9) HD_STATE_PART(10) HD_STATE_PART(11) HD_STATE_PART(12) HD_STATE_PART(13) HD_STATE_PART(14) HD_STATE_PART(15) HD_STATE_PART(16)
+static int get_audio(uint8_t *b,int c){size_t n=cyc_hd_audio_save(NULL,0);if(n>(size_t)c)return -1;return (int)cyc_hd_audio_save(b,(size_t)c);}
+static int set_audio(const uint8_t *b,int n){return n>=0 && cyc_hd_audio_load_state(b,(size_t)n,true);}
+static int check_audio(const uint8_t *b,int n){return n>=0 && cyc_hd_audio_load_state(b,(size_t)n,false);}
 NES_MOD_CONSTRUCTOR(register_cycle_hd_state) {
+    if(!nes_mod_register_savestate_hook("cyc.hd.audio",get_audio,set_audio) ||
+       !nes_mod_register_savestate_validator("cyc.hd.audio",check_audio))
+        fprintf(stderr,"[HD audio] Cannot register playback state\n");
     NESModSavestateGet gets[]={get0,get1,get2,get3,get4,get5,get6,get7,get8,get9,get10,get11,get12,get13,get14,get15,get16};
     NESModSavestateSet sets[]={set0,set1,set2,set3,set4,set5,set6,set7,set8,set9,set10,set11,set12,set13,set14,set15,set16};
     NESModSavestateValidate checks[]={check0,check1,check2,check3,check4,check5,check6,check7,check8,check9,check10,check11,check12,check13,check14,check15,check16};

@@ -481,6 +481,8 @@ void    hw_set_controller(int port, uint8_t buttons);
 /* Audio (hw_apu.c). */
 void    apu_audio_enable(bool on, int sample_rate);
 size_t  apu_audio_read(int16_t *out, size_t max);
+/* Native mono and interleaved stereo enhancement, sharing one sample timeline. */
+size_t apu_audio_read_split(int16_t *native,int16_t *enhanced,size_t max);
 void    apu_set_audio_synthesis(CycAudioSynthesis synthesis);
 CycAudioSynthesis apu_audio_synthesis(void);
 /* Host sampler continuation, separate from the CPU-visible APU record.
