@@ -16,6 +16,9 @@
 #include "hw.h"
 #include "hw_fds.h"
 #include "../../common/nes_fds.h"
+#if CYC_NATIVE_PROGRAMS
+#include "cyc_program.h"
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -564,6 +567,10 @@ bool cyc_load_ines(const uint8_t *image, size_t size)
     /* An iNES header cannot describe a disk; the RAM Adapter comes from
      * cyc_load_fds(). */
     if (info.mapper == NES_FDS_MAPPER) return false;
+#if CYC_NATIVE_PROGRAMS
+    const CycProgram *program = cyc_program_match_image(image, size);
+    if (!program) return false;
+#endif
     uint32_t prg_alloc, chr_alloc;
     uint32_t chr_len = info.chr_size ? info.chr_size : info.chr_ram + info.chr_nvram;
     /* A board with both CHR ROM and CHR RAM (TQROM) keeps the RAM chip after
@@ -604,6 +611,9 @@ bool cyc_load_ines(const uint8_t *image, size_t size)
     hw_cart.wram_len = info.prg_ram + info.prg_nvram;
     hw_cart.mirroring = info.vertical ? HW_MIRROR_VERTICAL : HW_MIRROR_HORIZONTAL;
     hw_cart_power_on();
+#if CYC_NATIVE_PROGRAMS
+    cyc_program_active = program;
+#endif
     return true;
 }
 

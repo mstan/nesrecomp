@@ -94,6 +94,7 @@ def main():
         ap.add_argument('--' + flag, type=Path, required=True)
     for flag in ('game', 'seeds', 'captures', 'fds_bios'):
         ap.add_argument('--' + flag.replace('_', '-'), dest=flag, type=Path)
+    ap.add_argument('--namespace', default='', help='Optional native program C namespace')
     args = ap.parse_args()
     rom, compiler, out = (p.resolve() for p in (args.rom, args.recompiler, args.out))
     dependencies = [rom, compiler]
@@ -130,12 +131,15 @@ def main():
         dependencies += check_fds_bios(bios)
     identity = {p.as_posix(): digest(p) for p in dependencies}
     identity['bridge'] = digest(Path(__file__))
+    if args.namespace:
+        identity['namespace'] = args.namespace
     key = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()[:20]
     folder = out / key
     folder.mkdir(parents=True, exist_ok=True)
     stamp = folder / 'complete.json'
     sources = sorted((folder / 'generated').glob('game_cyc*.c'))
-    if not stamp.exists() or not sources or json.loads(stamp.read_text()) != {p.name: digest(p) for p in sources}:
+    support = sorted((folder / 'generated').glob('game_cyc*.h'))
+    if not stamp.exists() or not sources or json.loads(stamp.read_text()) != {p.name: digest(p) for p in [*sources, *support]}:
         # Always pass a configuration to suppress unrelated ./game.toml lookup.
         config_path = game or folder / 'game.toml'
         if not game:
@@ -144,6 +148,8 @@ def main():
                    '--cycle-accurate', '--output-prefix', 'game']
         if seeds:
             command += ['--cycle-seed-file', str(seeds)]
+        if args.namespace:
+            command += ['--cycle-namespace', args.namespace]
         if captures:
             command += ['--cycle-capture-file', str(captures)]
         if fds:
@@ -157,11 +163,13 @@ def main():
         sources = sorted((folder / 'generated').glob('game_cyc*.c'))
         if not sources:
             raise RuntimeError(f'NESRecomp produced no cycle sources; see {log}')
-        stamp.write_text(json.dumps({p.name: digest(p) for p in sources}), encoding='utf-8', newline='\n')
+        support = sorted((folder / 'generated').glob('game_cyc*.h'))
+        stamp.write_text(json.dumps({p.name: digest(p) for p in [*sources, *support]}), encoding='utf-8', newline='\n')
     manifest = ''
     for name, values in [('CYC_PROJECT_SOURCES', sources), ('CYC_PROJECT_DEPENDS', dependencies),
                          ('CYC_PROJECT_ROM', [rom]), ('CYC_PROJECT_ROM_SHA256', [digest(rom)]),
                          ('CYC_PROJECT_LAUNCHER_SHA256', [launcher_digest(rom)]),
+                         ('CYC_PROJECT_FDS', ['1' if fds else '0']),
                          ('CYC_PROJECT_NATIVE_INTERVALS', [native_interval_board(rom, fds)]),
                          ('CYC_PROJECT_MOD_CRC32', [mod_identity(rom)])]:
         manifest += 'set(' + name + '\n' + ''.join('  ' + cmake_quote(p.as_posix() if isinstance(p, Path) else p) + '\n' for p in values) + ')\n'

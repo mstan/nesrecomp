@@ -9,6 +9,9 @@
 #include "hdpack.h"
 #include "mod_runtime.h"
 #include "mod_savestate.h"
+#if CYC_NATIVE_PROGRAMS
+#include "cyc_program.h"
+#endif
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -39,8 +42,30 @@ void cyc_hdpack_power_on(void) {
 }
 #else
 static void activate_hd_pack(void) { nes_mod_set_local_only("HD pack",1); }
+#if CYC_NATIVE_PROGRAMS
+static int compiled_hd_image(const uint8_t *image,uint32_t size) {
+    return cyc_program_match_image(image,size)!=NULL;
+}
+#endif
 NES_MOD_CONSTRUCTOR(register_hd_pack_plugin) {
     nes_mod_register_activation_plugin("nesrecomp.hd-pack",activate_hd_pack);
+#if CYC_NATIVE_PROGRAMS
+    nes_mod_register_hd_image_validator(compiled_hd_image);
+#endif
+}
+bool cyc_hdpack_mod_image(uint8_t **image,size_t *size) {
+    const NESModHdPack *pack=nes_mod_hd_pack();
+    if(!pack || !pack->patched_image)return true;
+#if CYC_NATIVE_PROGRAMS
+    if(!*image || !compiled_hd_image(pack->patched_image,pack->image_size))return false;
+    uint8_t *copy=malloc(pack->image_size);
+    if(!copy)return false;
+    memcpy(copy,pack->patched_image,pack->image_size);
+    free(*image);*image=copy;*size=pack->image_size;
+    return true;
+#else
+    return false;
+#endif
 }
 bool cyc_hdpack_mod_prepare(void) {
     presentation_valid=false;++presentation_epoch;release_jobs();

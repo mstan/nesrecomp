@@ -28,6 +28,8 @@ namespace {
 
 constexpr uint64_t kMaxArchiveBytes = 256ull * 1024ull * 1024ull;
 constexpr uint32_t kMaxArchiveFiles = 4096;
+constexpr size_t kMaxHdImageBytes = 32u * 1024u * 1024u;
+NESModHdImageValidator hd_image_validator;
 
 enum class OptionType {
     Boolean,
@@ -203,6 +205,7 @@ struct Runtime {
     std::map<std::string, std::string> netplay_source_paths;
     std::string committed_hd_directory;
     std::vector<uint8_t> committed_hd_payload;
+    std::vector<uint8_t> committed_hd_image;
     NESModHdPack committed_hd{};
     std::string committed_hd_key;
     bool hd_locked = false;
@@ -1478,9 +1481,9 @@ bool hd_asset_path(const Package& package, const std::string& relative,
     return true;
 }
 
-/* IPS offsets address the complete iNES file. Size, header and trainer must
- * remain unchanged: a mod cannot turn this compiled cartridge into a different
- * board. Apply into a copy and verify its declared payload CRC before exposure. */
+/* IPS offsets address the complete iNES file. A legacy host retains its fixed
+ * geometry. A native-program host additionally verifies the complete patched
+ * image against its compiled catalog before exposing any changed geometry. */
 bool hd_apply_ips(const std::vector<uint8_t>& patch, std::vector<uint8_t>& image,
                   size_t payload_start, std::string* error) {
     auto fail = [&]() { set_error(error, "Invalid or incompatible HD pack IPS patch"); return false; };
@@ -1492,7 +1495,10 @@ bool hd_apply_ips(const std::vector<uint8_t>& patch, std::vector<uint8_t>& image
             if (p == patch.size()) return true;
             if (patch.size() - p != 3) return fail();
             const size_t size = ((size_t)patch[p] << 16) | ((size_t)patch[p+1] << 8) | patch[p+2];
-            return size == image.size() ? true : fail();
+            if (!hd_image_validator) return size == image.size() ? true : fail();
+            if (size < 16 || size > kMaxHdImageBytes) return fail();
+            image.resize(size);
+            return true;
         }
         const size_t at = ((size_t)patch[p] << 16) | ((size_t)patch[p+1] << 8) | patch[p+2];
         p += 3;
@@ -1503,8 +1509,11 @@ bool hd_apply_ips(const std::vector<uint8_t>& patch, std::vector<uint8_t>& image
             if (patch.size() - p < 3) return fail();
             size = ((size_t)patch[p] << 8) | patch[p+1]; p += 2;
         }
-        if (!size || at < payload_start || at > image.size() ||
-            size > image.size() - at || patch.size() - p < (rle ? 1 : size)) return fail();
+        if (!size || patch.size() - p < (rle ? 1 : size)) return fail();
+        if (hd_image_validator) {
+            if (at > kMaxHdImageBytes || size > kMaxHdImageBytes - at) return fail();
+            if (at + size > image.size()) image.resize(at + size);
+        } else if (at < payload_start || at > image.size() || size > image.size() - at) return fail();
         if (rle) { std::memset(image.data() + at, patch[p++], size); }
         else { std::memcpy(image.data() + at, patch.data() + p, size); p += size; }
     }
@@ -1554,6 +1563,7 @@ bool snapshot_hd_pack(Runtime& runtime, const Validation& plan,
             add(file.lexically_relative(directory).generic_string()); add(sha1_hex(content));
         }
         std::vector<uint8_t> payload;
+        std::vector<uint8_t> patched_image;
         if (!descriptor->patch.empty()) {
             fs::path patch_path;
             std::vector<uint8_t> image;
@@ -1570,7 +1580,12 @@ bool snapshot_hd_pack(Runtime& runtime, const Validation& plan,
             if (descriptor->patched_rom_crc32 != crc) {
                 set_error(error, "HD pack patched ROM does not match its declared CRC32"); return false;
             }
-            payload.assign(image.begin() + start, image.end());
+            if (hd_image_validator) {
+                if (!hd_image_validator(image.data(), (uint32_t)image.size())) {
+                    set_error(error, "HD pack patch has no matching compiled native program"); return false;
+                }
+                patched_image = std::move(image);
+            } else payload.assign(image.begin() + start, image.end());
         }
         const std::string hash = sha1_hex(identity);
         runtime.committed_hd_directory = directory.string();
@@ -1579,9 +1594,12 @@ bool snapshot_hd_pack(Runtime& runtime, const Validation& plan,
         }
         runtime.committed_hd_key = package->id + ":" + package->version + ":" + plugin.feature_id;
         runtime.committed_hd_payload = std::move(payload);
+        runtime.committed_hd_image = std::move(patched_image);
         runtime.committed_hd.directory = runtime.committed_hd_directory.c_str();
         runtime.committed_hd.patched_payload = runtime.committed_hd_payload.empty() ? nullptr : runtime.committed_hd_payload.data();
         runtime.committed_hd.payload_size = (uint32_t)runtime.committed_hd_payload.size();
+        runtime.committed_hd.patched_image = runtime.committed_hd_image.empty() ? nullptr : runtime.committed_hd_image.data();
+        runtime.committed_hd.image_size = (uint32_t)runtime.committed_hd_image.size();
         for (unsigned i = 0; i < 20; ++i)
             runtime.committed_hd.fingerprint[i] = (uint8_t)std::strtoul(hash.substr(i*2, 2).c_str(), nullptr, 16);
         return true;
@@ -2524,6 +2542,7 @@ int provider_commit_netplay(void*, const char* image_path) {
     runtime.committed_hd_key.clear();
     runtime.committed_hd_directory.clear();
     runtime.committed_hd_payload.clear();
+    runtime.committed_hd_image.clear();
     runtime.commit_succeeded = false;
     runtime.error.clear();
     return 1;
@@ -2977,6 +2996,7 @@ bool mod_runtime_commit(const fs::path& rom_path, std::string* error) {
         runtime.committed_hd_key.clear();
         runtime.committed_hd_directory.clear();
         runtime.committed_hd_payload.clear();
+        runtime.committed_hd_image.clear();
     }
     runtime.commit_succeeded = false;
     if (!rom_path.empty()) {
@@ -3116,6 +3136,12 @@ extern "C" int nes_mod_register_reset_callback(
     if (std::find(callbacks.begin(), callbacks.end(), callback) ==
         callbacks.end())
         callbacks.push_back(callback);
+    return 1;
+}
+
+extern "C" int nes_mod_register_hd_image_validator(NESModHdImageValidator callback) {
+    if (!callback || (NESRecomp::hd_image_validator && NESRecomp::hd_image_validator != callback)) return 0;
+    NESRecomp::hd_image_validator = callback;
     return 1;
 }
 

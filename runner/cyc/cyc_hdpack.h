@@ -22,6 +22,8 @@ const HdJobFrame *cyc_hdpack_jobs(const uint32_t *native);
 /* Fixed native-size enhanced preview for state thumbnails, at any GPU scale. */
 const uint32_t *cyc_hdpack_thumbnail(const uint32_t *native);
 #ifdef NESRECOMP_CYCLE_HDPACK_MODS
+/* Replace only the host's disposable input buffer, before cartridge loading. */
+bool cyc_hdpack_mod_image(uint8_t **image,size_t *size);
 bool cyc_hdpack_mod_prepare(void);
 const uint32_t *cyc_hdpack_mod_present(int *width,int *height);
 #endif

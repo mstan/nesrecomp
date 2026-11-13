@@ -409,6 +409,12 @@ endif()
 file(WRITE ${NESRECOMP_NESTED_BUILD} "{\n${nested_fields}}\n")
 set(NESRECOMP_NESTED_BUILD_ARGS --toolchain ${NESRECOMP_NESTED_BUILD} --config "$<CONFIG>")
 
+add_test(NAME cyc_program_namespaces
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_cyc_programs.py
+        --recompiler $<TARGET_FILE:NESRecomp> --out ${CMAKE_CURRENT_BINARY_DIR}/native-programs
+        ${NESRECOMP_NESTED_BUILD_ARGS})
+set_tests_properties(cyc_program_namespaces PROPERTIES TIMEOUT 300)
+
 add_test(NAME cyc_rom_read_override
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_cyc_rom_read_override.py
         --recompiler $<TARGET_FILE:NESRecomp> --out ${CMAKE_CURRENT_BINARY_DIR}/rom-read-override

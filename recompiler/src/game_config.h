@@ -382,6 +382,9 @@ typedef struct {
     bool             disable_secondary; /* skip secondary entry classification */
     bool             deduplicate_functions; /* exact generated-body sharing, opt-in */
     bool             cycle_accurate; /* emit <prefix>_cyc.c for runner/cyc instead (cyc_codegen.c) */
+    /* Optional C symbol namespace for separately compiled program variants.
+     * Empty retains the ordinary single-program ABI and emitted output. */
+    char             cycle_namespace[64];
     /* [game] cycle_seed_file: instruction addresses observed running on the
      * interpreter (written by the cycle-accurate host's --miss-log), used as
      * extra discovery entry points. Resolved relative to game.toml. */

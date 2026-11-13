@@ -1340,11 +1340,28 @@ session_restart:
 #endif
         return 2;
     }
+    /* Match the window's prelaunch order: commit the verified source and its
+     * boot-time patch before allocating a cartridge or loading native saves. */
+#ifndef CYC_ORACLE
+    if (headless) {
+        char err[512];
+        if (!cyc_session_mods_start(rom_path, err, sizeof(err))) {
+            cyc_diagnostics_error("%s\n", err);
+            return 2;
+        }
+    }
+#endif
     size_t size;
 #ifndef CYC_ORACLE
     cyc_diagnostics_note("reading selected ROM");
 #endif
     uint8_t *image = read_file(rom_path, &size);
+#ifdef NESRECOMP_CYCLE_HDPACK_MODS
+    if (!cyc_hdpack_mod_image(&image, &size)) {
+        cyc_diagnostics_error("HD pack has no compatible compiled cartridge image\n");
+        free(image); return 2;
+    }
+#endif
     NesCartInfo cart_info;
     NesFdsImage fds_image;
     const char *ext = strrchr(rom_path, '.');
@@ -1528,16 +1545,6 @@ session_restart:
         fprintf(stderr,"barcode requires Datach, 8/12/13 digits with valid checksum, and a positive module duration\n"); return 2;
     }
 #ifndef CYC_ORACLE
-    /* Mods: the window committed its catalog's selection when the launcher
-     * started the game (cyc_sdl_prelaunch); a headless run only with
-     * --mods-root. */
-    if (headless) {
-        char err[512];
-        if (!cyc_session_mods_start(rom_path, err, sizeof(err))) {
-            cyc_diagnostics_error("%s\n", err);
-            return 2;
-        }
-    }
     if (!console_given) console = (CycConsole)cyc_native_console;   /* game.toml [game] console */
 #else
     (void)console_given;

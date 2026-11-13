@@ -138,9 +138,16 @@ const char* nes_mod_external_rom_path(const char* package_id,
                                       const char* feature_id,
                                       const char* resource_id);
 
+/* A trusted host can authorize a patched cartridge only when it has a matching
+ * compiled native program. The callback inspects an immutable complete iNES
+ * image without changing the current machine. Register before committing a
+ * plan. Without this callback, IPS retains its geometry-preserving contract. */
+typedef int (*NESModHdImageValidator)(const uint8_t *image, uint32_t size);
+int nes_mod_register_hd_image_validator(NESModHdImageValidator callback);
+
 /* One framework HD pack selected by the successfully committed Mods plan.
  * Assets live inside the installed package. An optional IPS produces a
- * geometry-preserving cartridge payload, without changing the owner's file.
+ * private cartridge copy, without changing the owner's file.
  * Storage remains valid until initialize/commit. NULL means stock graphics.
  * The fingerprint identifies the package, assets and patch for save states. */
 typedef struct NESModHdPack {
@@ -148,6 +155,10 @@ typedef struct NESModHdPack {
     const uint8_t *patched_payload;
     uint32_t payload_size;
     uint8_t fingerprint[20];
+    /* Complete image, present only after the trusted compiled-program check.
+     * The host selects this before loading cartridge storage and power-on. */
+    const uint8_t *patched_image;
+    uint32_t image_size;
 } NESModHdPack;
 const NESModHdPack *nes_mod_hd_pack(void);
 /* A running cartridge keeps its pack/patch until the next launch. */

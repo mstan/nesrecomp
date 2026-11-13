@@ -13,7 +13,7 @@ import tomllib
 import zipfile
 import zlib
 
-def apply_ips(image: bytes, patch: bytes) -> bytes:
+def apply_ips(image: bytes, patch: bytes, allow_resize: bool = False) -> bytes:
     if not patch.startswith(b'PATCH'):
         raise ValueError('IPS is missing PATCH magic')
     result = bytearray(image)
@@ -22,8 +22,16 @@ def apply_ips(image: bytes, patch: bytes) -> bytes:
     while p + 3 <= len(patch):
         if patch[p:p+3] == b'EOF':
             tail = patch[p+3:]
-            if tail and (len(tail) != 3 or int.from_bytes(tail, 'big') != len(image)):
-                raise ValueError('IPS cannot resize the cartridge')
+            if tail:
+                if len(tail) != 3:
+                    raise ValueError('Invalid IPS size trailer')
+                size = int.from_bytes(tail, 'big')
+                if not allow_resize and size != len(image):
+                    raise ValueError('IPS cannot resize the cartridge')
+                if size < 16 or size > 32 * 1024 * 1024:
+                    raise ValueError('Invalid patched cartridge size')
+                result[size:] = b''
+                result.extend(bytes(max(0, size - len(result))))
             return bytes(result)
         offset = int.from_bytes(patch[p:p+3], 'big'); p += 3
         if len(patch) - p < 2:
@@ -36,8 +44,12 @@ def apply_ips(image: bytes, patch: bytes) -> bytes:
                 break
             count = int.from_bytes(patch[p:p+2], 'big'); p += 2
             data = patch[p:p+1] * count; p += 1
-        if not count or len(data) != count or offset < start or offset + count > len(image):
+        if not count or len(data) != count or offset + count > 32 * 1024 * 1024:
+            raise ValueError('IPS record is truncated or exceeds cartridge limits')
+        if not allow_resize and (offset < start or offset + count > len(image)):
             raise ValueError('IPS record is truncated or changes cartridge geometry')
+        if offset + count > len(result):
+            result.extend(bytes(offset + count - len(result)))
         result[offset:offset+count] = data
     raise ValueError('IPS is truncated or missing EOF')
 
@@ -64,6 +76,7 @@ def main() -> None:
     parser.add_argument('--license', required=True)
     parser.add_argument('--notice', action='append', type=Path, default=[],
                         help='Additional original license/credits file to preserve in the archive')
+    parser.add_argument('--patched-sha1', help='Expected complete patched image SHA-1 for a separately compiled native program')
     parser.add_argument('--out', required=True, type=Path)
     args = parser.parse_args()
     if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]*', args.id):
@@ -74,15 +87,22 @@ def main() -> None:
     folder = args.pack.resolve(strict=True)
     text = (folder / 'hires.txt').read_text(encoding='utf-8-sig')
     patches = re.findall(r'^\s*<patch>([^\r\n]+)', text, re.MULTILINE)
-    if len(patches) > 1:
-        parser.error('Only one IPS patch per feature is supported')
+    if args.patched_sha1 and not re.fullmatch(r'[0-9a-fA-F]{40}', args.patched_sha1):
+        parser.error('--patched-sha1 must be a complete SHA-1 digest')
+    if args.patched_sha1 and not patches:
+        parser.error('--patched-sha1 requires a pack with an IPS patch')
     patch_line = ''
     if patches:
-        fields = [v.strip() for v in patches[0].split(',')]
-        if len(fields) != 2 or fields[1].lower() != hashlib.sha1(image).hexdigest():
+        candidates = [[v.strip() for v in line.split(',')] for line in patches]
+        candidates = {fields[0] for fields in candidates if len(fields) == 2 and fields[1].lower() == hashlib.sha1(image).hexdigest()}
+        if not candidates:
             parser.error('The pack patch requires a different stock ROM SHA-1')
-        patch_path = relative(fields[0])
-        patched = apply_ips(image, (folder / patch_path).read_bytes())
+        if len(candidates) != 1:
+            parser.error('The pack specifies ambiguous patches for this stock ROM')
+        patch_path = relative(next(iter(candidates)))
+        patched = apply_ips(image, (folder / patch_path).read_bytes(), bool(args.patched_sha1))
+        if args.patched_sha1 and hashlib.sha1(patched).hexdigest() != args.patched_sha1.lower():
+            parser.error('Patched image differs from the declared native program SHA-1')
         patch_line = f'patch = {quoted("pack/" + patch_path.as_posix())}\npatched_rom_crc32 = "{zlib.crc32(patched[16:]):08x}"\n'
     manifest = f'''format_version = 1
 id = {quoted(args.id)}
