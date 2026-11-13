@@ -83,7 +83,7 @@ def main():
                    '<condition>palette-mirror,ppuMemoryCheckConstant,3F10,==,0F\n'
                    '<condition>chr-ready,ppuMemoryCheckConstant,0000,==,FF\n'
                    '<condition>rom-byte,memoryCheckConstant,8000,==,78\n')
-        manifest+='<options>automaticFallbackTiles\n'
+        manifest+='<options>automaticFallbackTiles,disableSpriteLimit\n'
         key=PATTERNS[0].hex().upper() if ram else '0'
         manifest+=f'<condition>canonical-key,tileAtPosition,100,100,{key},0F010203\n'
         gate='[palette-ready&palette-mirror&chr-ready&rom-byte&canonical-key]'

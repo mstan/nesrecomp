@@ -158,8 +158,13 @@ GPU job consumers share these resolved decisions; the 192-picture comparison
 also exercises multiple sprite layers. Common pixel jobs remain 32 bytes;
 optional 16-byte descriptors hold up to three more layers.
 
-**NOT supported yet:**
-- The `disableSpriteLimit` option.
+The cycle adapter also honors `disableSpriteLimit`: it snapshots additional
+OAM/CHR display metadata once per scanline and considers all64 OAM entries,
+retaining up to four sprite layers at a pixel. Actual fetched keys are reused
+for hardware sprites. The guest retains its ordinary eight-sprite evaluation,
+overflow, DMA and bus timing. `cyc_hdpack_sprite_limit` checks a ninth sprite
+with CHR RAM/ROM,8/16px shapes and flips, exact unchanged guest output and
+current-build continuation. The ordinary fetch suite also exercises this option.
 
 ### Replacement audio in cycle titles
 

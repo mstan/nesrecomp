@@ -119,10 +119,51 @@ void cyc_hdpack_bg_shift(void) {
     for(unsigned i=15;i;i--)pipeline.bg[i]=pipeline.bg[i-1];
     memset(&pipeline.bg[0],0,sizeof pipeline.bg[0]);
 }
+/* Build only display metadata for sprites beyond the hardware's eight units.
+ * Snapshot once at the end of sprite fetch, stamp at most four OAM-ordered
+ * entries per screen pixel, and never issue bus accesses or change overflow. */
+static void prepare_visual_sprites(void) {
+    pipeline.visual_valid=0;
+    if(!hdpack_unlimited_sprites())return;
+    unsigned next=ppu.scanline>=240?0:ppu.scanline+1;
+    if(next>=240)return;
+    memset(pipeline.visual_pixels,255,sizeof pipeline.visual_pixels);
+    memset(pipeline.visual,0,sizeof pipeline.visual);
+    unsigned height=ppu.sprite16?16:8,used=0;
+    for(unsigned i=0;i<64;i++) {
+        HdVisualSprite *sp=&pipeline.visual[i];const uint8_t *oam=ppu.oam+i*4;
+        sp->x=oam[3];sp->attr=oam[2];sp->slot=255;
+        int row=(int)next-(int)oam[0]-1;
+        if(row<0 || (unsigned)row>=height)continue;
+        /* Reuse actually fetched keys for the hardware sprites, including
+         * any bank change between their low/high pattern fetches. */
+        for(unsigned slot=0;slot<8;slot++) {
+            if(!(used&(1u<<slot)) && pipeline.sprite[slot].valid && !memcmp(ppu.oam2+slot*4,oam,4)) {
+                sp->tile=pipeline.sprite[slot];sp->slot=(uint8_t)slot;used|=1u<<slot;break;
+            }
+        }
+        if(sp->slot==255) {
+            unsigned source_row=(sp->attr&0x80)?height-1-(unsigned)row:(unsigned)row;
+            unsigned tile=oam[1],base=ppu.sprite_table?0x1000:0;
+            if(height==16){base=(tile&1)?0x1000:0;tile=(tile&0xfe)+(source_row>>3);}
+            uint16_t address=(uint16_t)(base+tile*16);
+            sp->tile.valid=1;sp->tile.row=(uint8_t)(source_row&7);
+            sp->tile.index=hw_cart.chr_ram?-1:(int32_t)(hw_cart_chr_index(address)/16);
+            for(unsigned b=0;b<16;b++)sp->tile.bytes[b]=cyc_render_chr((uint16_t)(address+b));
+        }
+        for(unsigned ox=0;ox<8 && (unsigned)sp->x+ox<256;ox++) {
+            uint8_t *at=pipeline.visual_pixels[(unsigned)sp->x+ox];
+            unsigned k=0;while(k<4 && at[k]!=255)k++;
+            if(k<4)at[k]=(uint8_t)i;
+        }
+    }
+    pipeline.visual_line=(uint8_t)next;pipeline.visual_valid=1;
+}
 void cyc_hdpack_sprite_fetch(unsigned slot,uint16_t address,uint8_t value,bool high) {
     if(!hdpack_recording())return;
     fetch_tile(&pipeline.sprite[slot],address,value,high);
     if(!high){pipeline.sprite_x[slot]=0;pipeline.sprite[slot].valid=ppu.sprite_row<(ppu.sprite16?16:8);}
+    if(high && slot==7)prepare_visual_sprites();
 }
 void cyc_hdpack_sprite_shift(unsigned slot) {
     if(hdpack_recording() && pipeline.sprite_x[slot]<8)pipeline.sprite_x[slot]++;
@@ -143,6 +184,22 @@ void cyc_hdpack_pixel(unsigned bg_color,unsigned bg_palette,int sprite,unsigned 
     }
     (void)sprite;(void)sprite_color;
     if(ppu.show_spr && (ppu.dot>8 || ppu.show_spr8)) {
+        if(hdpack_unlimited_sprites() && pipeline.visual_valid && pipeline.visual_line==ppu.scanline && ppu.dot>=1 && ppu.dot<=256) {
+            const uint8_t *at=pipeline.visual_pixels[ppu.dot-1];
+            for(unsigned k=0;k<4 && at[k]!=255;k++) {
+                const HdVisualSprite *visual=&pipeline.visual[at[k]];
+                const HdFetchedTile *tile=&visual->tile;unsigned attr=visual->attr;
+                if(!tile->valid)continue;
+                HdRecordedSprite *sp=&p->sp[k];
+                sp->index=tile->index;memcpy(sp->tile,tile->bytes,16);
+                sp->x=(uint8_t)(ppu.dot-1-visual->x);sp->y=tile->row;
+                unsigned bit=(attr&0x40)?sp->x:7-sp->x;
+                sp->color=(uint8_t)(((tile->bytes[sp->y]>>bit)&1)|(((tile->bytes[sp->y+8]>>bit)&1)<<1));
+                sp->flags=(uint8_t)(1|((attr&0x40)?2:0)|((attr&0x80)?4:0)|((attr&0x20)?8:0));
+                for(unsigned j=0;j<3;j++)sp->pal[j]=ppu.palette[16+(attr&3)*4+j+1];
+            }
+            return;
+        }
         unsigned count=0;
         for(unsigned i=0;i<8 && count<HD_MAX_SPRITES;i++) {
             const HdFetchedTile *tile=&pipeline.sprite[i];

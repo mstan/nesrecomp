@@ -19,9 +19,15 @@ typedef struct {
 #define HD_STATE_CHUNKS 16
 #define HD_STATE_ROWS (240/HD_STATE_CHUNKS)
 typedef struct {
+    HdFetchedTile tile;
+    uint8_t x,attr,slot;
+} HdVisualSprite;
+typedef struct {
     HdFetchedTile bg_fetch,bg[16],sprite[8];
     uint8_t sprite_x[8];
     HdRecordedPixel color[4];
+    HdVisualSprite visual[64];
+    uint8_t visual_pixels[256][4],visual_line,visual_valid;
 } HdPipeline;
 typedef struct {uint32_t version,active,scale,part;uint8_t fingerprint[20];} HdStateHeader;
 static uint8_t fingerprint[20];
@@ -80,6 +86,12 @@ static int validate_part(unsigned part,const uint8_t *buf,int len) {
         for(unsigned i=0;i<16;i++)if(v.bg[i].row>7 || v.bg[i].x>7 || v.bg[i].valid>1)return 0;
         for(unsigned i=0;i<8;i++)if(v.sprite[i].row>7 || v.sprite[i].valid>1 || v.sprite_x[i]>8)return 0;
         for(unsigned i=0;i<4;i++)if(!valid_pixel(&v.color[i]))return 0;
+        if(v.visual_valid>1 || v.visual_line>=240)return 0;
+        for(unsigned i=0;i<64;i++) {
+            const HdVisualSprite *sp=&v.visual[i];
+            if(sp->tile.valid>1 || sp->tile.row>7 || sp->tile.x>7 || (sp->slot>7 && sp->slot!=255))return 0;
+        }
+        for(unsigned x=0;x<256;x++)for(unsigned i=0;i<4;i++)if(v.visual_pixels[x][i]>63 && v.visual_pixels[x][i]!=255)return 0;
     } else {
         for(unsigned i=0;i<256*HD_STATE_ROWS;i++){HdRecordedPixel p;memcpy(&p,buf+sizeof h+i*sizeof p,sizeof p);if(!valid_pixel(&p))return 0;}
     }

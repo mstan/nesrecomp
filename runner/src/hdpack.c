@@ -122,6 +122,7 @@ static int        s_overscan[4] = {0,0,0,0}; /* top,right,bottom,left (parsed; c
 static int        s_has_overscan = 0;
 static int        s_disable_orig = 0;  /* <options>disableOriginalTiles */
 static int        s_auto_fallback;
+static int        s_unlimited_sprites;
 
 /* ── <condition> engine (mirrors Mesen HdPackConditions.h) ─────────────────── */
 
@@ -888,6 +889,7 @@ static void parse_line(char *line) {
     else if (!strncmp(L, "<options>", 9))    {
         if (strstr(L + 9, "disableOriginalTiles")) s_disable_orig = 1;
         if (strstr(L + 9, "automaticFallbackTiles")) s_auto_fallback = 1;
+        if (strstr(L + 9, "disableSpriteLimit")) s_unlimited_sprites = 1;
     }
     else if (!strncmp(L, "<overscan>", 10)) {
         char buf[64]; char *tok[4];
@@ -910,6 +912,7 @@ int hdpack_scale(void)  { return s_active ? s_scale : 1; }
 const char *hdpack_directory(void) {return s_active?s_dir:"";}
 HdPixel *hdpack_pixels(void) { return s_active ? s_pixels : NULL; }
 int hdpack_recording(void)   { return s_active; }
+int hdpack_unlimited_sprites(void) {return s_active && s_unlimited_sprites;}
 
 void hdpack_frame_begin(void) {
     if (s_active && s_pixels)
@@ -975,7 +978,7 @@ void hdpack_unload(void) {
         free(s_bgimgs[i]);
     }
     free(s_bgimgs); s_bgimgs = NULL; s_bgimg_count = s_bgimg_cap = 0;
-    s_missing_cond = s_bg_unrenderable = 0; s_disable_orig = s_auto_fallback = 0;
+    s_missing_cond = s_bg_unrenderable = 0; s_disable_orig = s_auto_fallback = s_unlimited_sprites = 0;
 
     for(int i=0;i<4096;i++){HdAddition *r=s_additions[i];while(r){HdAddition *next=r->next;free(r);r=next;}s_additions[i]=NULL;}
     s_addition_count=0;free(s_resolved_sprites);s_resolved_sprites=NULL;s_resolved_capacity=0;s_sprites_resolved=0;s_current_sprite=NULL;

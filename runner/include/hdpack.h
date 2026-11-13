@@ -71,6 +71,7 @@ const char *hdpack_directory(void); /* current asset root, or empty when inactiv
  * [y*native_w + x]. */
 HdPixel *hdpack_pixels(void);
 int      hdpack_recording(void);   /* 1 == renderer should fill hdpack_pixels() */
+int      hdpack_unlimited_sprites(void); /* pack-authored visual expansion only */
 
 /* Clear the side channel's per-pixel `has` flags for a new frame. Called by the
  * renderer at the start of an actually-rendered frame. */
