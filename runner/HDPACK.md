@@ -16,10 +16,11 @@ available. The cycle adapter
 pixel selection and color-output pipeline. Its content keys own their bytes,
 so later CHR RAM writes cannot change a previously recorded tile. It preserves
 mapped CHR ROM indices, fine scrolling, 8x16 sprite halves, flips, grayscale,
-emphasis and the native sprite/background priority decision. It does not
+emphasis and up to four OAM-ordered sprites at each pixel, including native
+transparent pixels and behind-background priority. It does not
 read the PPU bus or advance CPU, PPU or APU clocks. It feeds the same
-`hdpack_upscale` sampler used by the legacy renderer. Five pointer-free save
-records preserve its picture and fetch pipeline; validated loads require the
+`hdpack_upscale` sampler used by the legacy renderer. Seventeen pointer-free
+save records preserve its picture and fetch pipeline; validated loads require the
 same HD enablement, scale and package asset/patch fingerprint. Rendering is
 cached while paused and invalidated on state load; background scroll offsets
 are computed once per frame. `tools/cyc/test_cyc_hdpack.py` checks CHR RAM
@@ -32,10 +33,9 @@ The remaining renderer description below refers to the legacy backend.
 
 The cycle Zelda target defines `NESRECOMP_HDPACK_LAYER_PLANS=1` after its
 enabled Remastered gameplay qualification. This includes `hdpack_layered.inc`:
-immutable tile-key groups, render-local frame-condition plans and clipped
-layer-row composition. Pixel-dependent conditions and per-pixel layer order
-remain exact; derived plans are rebuilt rather than serialized. Packs without
-background layers keep the direct compositor.
+immutable tile-key groups and render-local frame-condition plans. Pixel-dependent
+conditions and per-pixel layer order remain exact; derived plans are rebuilt
+rather than serialized. Allocation failures use the direct compositor.
 
 Other targets keep the original `hdpack.c` implementation by default. Broad
 versions slowed the simple SMB1 LyonHrt pack, so their aggregate gains were
@@ -93,6 +93,14 @@ Key = `HdTileKey { PaletteColors (u32), TileData[16], TileIndex, IsChrRamTile }`
 is transparent. `defaultTile=Y` registers the tile under a wildcard palette key
 `0xFFFFFFFF`; lookup tries the exact palette first, then the wildcard.
 
+Definitions keep their authored order, including conditional and
+palette-independent definitions. CHR-ROM `<fallback>` aliases are consulted
+when an exact key is absent; cycle packs may also request
+`<options>automaticFallbackTiles` to alias identical nonblank CHR patterns to
+an authored tile. Tile-presence conditions use the same aliases. A matching
+transparent replacement reveals the layers below, and unmatched native
+background color zero remains transparent to authored background layers.
+
 ## hires.txt grammar (subset implemented)
 
 `<ver>`, `<scale>`, `<img>` (implicit 0,1,2… index), `<tile>`, `<overscan>`
@@ -122,8 +130,15 @@ render path is **byte-identical to stock**. Safe to ship on by default off.
   (20-byte key memcmp), selected from the ROM's CHR type.
 - `defaultTile` wildcard-palette keys, per-tile `brightness`, sprite H/V mirror,
   per-pixel transparency, premultiplied-alpha PNG sheets.
-- **Two-layer compositing** (HD background, then HD sprites over it) so original
-  art never bleeds through transparent HD pixels.
+- Background priority bands 0–9, 10–19, 20–29 and 30–39, with behind-background
+  sprites, the native BG tile and front sprites between the appropriate bands.
+  Each exact priority selects its first matching definition in manifest order;
+  later matches are alternatives, not additional blended layers. Scrolling
+  backgrounds retain the recorded horizontal and vertical nametable pages.
+- Modern `<addition>` layers, matching exact or ignored palettes and canonical
+  fallback keys. Source mirrors reverse displacement; copied tile offsets and
+  full palette keys are preserved. Additions use a render-local four-sprite
+  array, leaving the recorded frame unchanged across repeat presentations.
 - Arbitrary `<scale>`, HD SDL texture sizing, HD-aware screenshots.
 - Toggles (env): `NESRECOMP_HDPACK_DEBUG` (unmatched BG→magenta, sprite→cyan),
   `NESRECOMP_HDPACK_HIDE_ORIGINALS` (`disableOriginalTiles`-style),
@@ -135,10 +150,67 @@ presence checks and condition groups. Unsupported condition kinds are logged
 and skipped rather than treated as unconditional matches. A missing image is
 reported and leaves native pixels available.
 
-**NOT supported yet:**
-- `<bgm>` / `<sfx>` HD-pack audio; `<patch>` ROM patches; `<options>`
-  (e.g. `disableOriginalTiles` — available only via the env toggle); HDR
-  brightness > 1.0.
+The cycle adapter reads CPU RAM/ROM and PPU pattern, nametable and palette
+conditions through observation APIs without advancing the machine. The
+whole-machine tests cover these reads, palette mirroring and canonical CHR
+keys; `cyc_hdpack_alpha` covers authored transparent backgrounds/sprites and
+native transparent background pixels. `cyc_hdpack_sprites` additionally checks
+native transparent sprite coverage, overlapping HD alpha, OAM priority and
+mirrored/background additions with fresh-process save/load. The portable and
+GPU job consumers share these resolved decisions; the 192-picture comparison
+also exercises multiple sprite layers. Common pixel jobs remain 32 bytes;
+optional 16-byte descriptors hold up to three more layers.
+
+The cycle adapter also honors `disableSpriteLimit`: it snapshots additional
+OAM/CHR display metadata once per scanline and considers all64 OAM entries,
+retaining up to four sprite layers at a pixel. Actual fetched keys are reused
+for hardware sprites. The guest retains its ordinary eight-sprite evaluation,
+overflow, DMA and bus timing. `cyc_hdpack_sprite_limit` checks a ninth sprite
+with CHR RAM/ROM,8/16px shapes and flips, exact unchanged guest output and
+current-build continuation. The ordinary fetch suite also exercises this option.
+
+### Replacement audio in cycle titles
+
+Modern `<bgm>` and `<sfx>` tags use the NEA registers, including album selection,
+loop points, pause/resume, independent volumes and overlapping sound effects.
+Both normal and alternate register ranges are recognized. Every declared Ogg
+asset must decode before the host exposes the NEA signature; a failed asset
+leaves the ordinary cartridge/APU path available. Decoding uses
+[stb_vorbis](https://github.com/nothings/stb), with its original MIT/public-domain
+license retained in `runner/external/stb_vorbis.c`.
+
+Immutable mono/stereo PCM is decoded once at pack activation, with a512MiB
+decoded-PCM admission bound. The player admits up to4096 simultaneous effects.
+Logical playback follows the emulated clock even when output is disabled.
+Integer interpolation samples stereo enhancements on the APU output timeline;
+the frontend first applies ordinary title audio hooks to native mono, then
+adds the stereo enhancement and applies output volume. The original mono read
+API and `--wav-out` retain native APU samples. `--wav-stereo-out` captures the
+combined stereo output without opening a sound device.
+
+Current-build states retain track selections, playback positions, fractional
+phases, loop/pause flags, active effects and queued stereo output. The18th HD
+save record holds logical NEA state. `cyc_hd_audio_test` covers completion,
+repeated status polling, stereo, loop/pause, volume, overlapping effects, invalid
+selections and exact restoration. Optional `NESRECOMP_HD_AUDIO_TRACE=1` logs
+at most256 playback commands for diagnostics.
+
+### Source image storage
+
+Large background images can contain many identical regions. The loader stores
+lossless128×128 source pages when their combined allocations and map are smaller
+than a flat ARGB image; otherwise it retains the flat representation. Partial
+edge pages are padded and clipped to the original dimensions. Both portable
+composition and the resident GPU uploader read these same immutable pages.
+Retained presentation jobs own the unique allocations through pack unload.
+
+PNG decoding still needs a temporary full-image buffer. Cropped tile art owns
+its pixels, so source sheet buffers are released after manifest parsing. There
+is no generated disk cache or change to authored image files.
+
+Mods packages apply verified IPS patches in memory. An optional compiled
+program catalog also supports changed cartridge geometry; see
+[PROJECTS.md](cyc/PROJECTS.md). The folder-only adapter does not apply patches.
 
 Zelda Remastered's cycle preview uses its locally IPS-patched ROM and the
 existing texture/background sampler. The tested pack contains one missing

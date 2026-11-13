@@ -10,7 +10,8 @@ void cyc_hdpack_bg_fetch(uint16_t address,uint8_t value,bool high);
 void cyc_hdpack_bg_reload(void);
 void cyc_hdpack_bg_shift(void);
 void cyc_hdpack_sprite_fetch(unsigned slot,uint16_t address,uint8_t value,bool high);
-void cyc_hdpack_sprite_shift(unsigned slot);
+/* One PPU dot; bit i advances sprite cursor i with the native shift mask. */
+void cyc_hdpack_sprite_shift_mask(unsigned mask);
 void cyc_hdpack_clock(void);
 void cyc_hdpack_pixel(unsigned bg_color,unsigned bg_palette,int sprite,unsigned sprite_color);
 void cyc_hdpack_blank(uint8_t backdrop);
@@ -22,6 +23,8 @@ const HdJobFrame *cyc_hdpack_jobs(const uint32_t *native);
 /* Fixed native-size enhanced preview for state thumbnails, at any GPU scale. */
 const uint32_t *cyc_hdpack_thumbnail(const uint32_t *native);
 #ifdef NESRECOMP_CYCLE_HDPACK_MODS
+/* Replace only the host's disposable input buffer, before cartridge loading. */
+bool cyc_hdpack_mod_image(uint8_t **image,size_t *size);
 bool cyc_hdpack_mod_prepare(void);
 const uint32_t *cyc_hdpack_mod_present(int *width,int *height);
 #endif

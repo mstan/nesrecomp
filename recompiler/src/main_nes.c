@@ -370,6 +370,7 @@ static void print_usage(void) {
         "  --legacy               Explicitly select the older function/frame backend;\n"
         "                         overrides game.toml. cycle_accurate = false also selects it.\n"
         "  --cycle-seed-file <path> Override the cycle seed file from game.toml.\n"
+        "  --cycle-namespace <id>  Namespace native exports for a compiled program variant.\n"
         "  --cycle-capture-file <path> Override the cycle RAM capture file from game.toml\n"
         "                         (the cycle host's --capture-log).\n"
         "  --emit-cycle-interpreter <path>\n"
@@ -668,6 +669,7 @@ int main(int argc, char *argv[]) {
     const char *proposal_out = NULL;
     const char *prefix_override = NULL;
     const char *cycle_seed_override = NULL, *cycle_capture_override = NULL;
+    const char *cycle_namespace_override = NULL;
     bool cycle_accurate = true, backend_selected = false;
     const char *fds_info_path = NULL;
     const char *fds_stream_args[3] = { NULL, NULL, NULL };
@@ -711,6 +713,8 @@ int main(int argc, char *argv[]) {
             prefix_override = argv[++i];
         } else if (strcmp(argv[i], "--cycle-seed-file") == 0 && i+1 < argc) {
             cycle_seed_override = argv[++i];
+        } else if (strcmp(argv[i], "--cycle-namespace") == 0 && i+1 < argc) {
+            cycle_namespace_override = argv[++i];
         } else if (strcmp(argv[i], "--cycle-capture-file") == 0 && i+1 < argc) {
             cycle_capture_override = argv[++i];
         } else if (strcmp(argv[i], "--proposal-out") == 0 && i+1 < argc) {
@@ -814,6 +818,13 @@ int main(int argc, char *argv[]) {
         for (char *p = output_prefix; *p; p++) if (*p == ' ') *p = '_';
     }
 
+    if (cycle_namespace_override) {
+        if (strlen(cycle_namespace_override) >= sizeof(cfg.cycle_namespace)) {
+            fprintf(stderr, "Error: cycle namespace is too long\n");
+            return 1;
+        }
+        strcpy(cfg.cycle_namespace, cycle_namespace_override);
+    }
     if (cycle_seed_override) {
         if (strlen(cycle_seed_override) >= sizeof(cfg.cycle_seed_file)) {
             fprintf(stderr, "Error: cycle seed path is too long\n");

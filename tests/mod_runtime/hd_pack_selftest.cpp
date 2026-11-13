@@ -1,5 +1,6 @@
 #include "mod_runtime.h"
 #include "crc32.h"
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -10,6 +11,11 @@
 namespace fs=std::filesystem;
 static void check(bool v,const char *message) { if(!v)throw std::runtime_error(message); }
 static void activate() {}
+static std::vector<uint8_t> compiled_image;
+static int compiled(const uint8_t *image,uint32_t size) {
+    return size==compiled_image.size() && !std::memcmp(image,compiled_image.data(),size);
+}
+static int other_compiled(const uint8_t *,uint32_t) { return 0; }
 static void write(const fs::path& p,const std::vector<uint8_t>& bytes) {
     std::ofstream f(p,std::ios::binary);f.write((const char*)bytes.data(),bytes.size());
 }
@@ -19,12 +25,17 @@ static std::string crc(const std::vector<uint8_t>& image) {
 int main(int argc,char **argv) {
     /* Integration driver for an owner-supplied pack produced by the shared
      * importer. Install through the actual launcher provider, then enable it. */
-    if(argc==6) {
+    if(argc==6 || argc==7) {
         try {
             std::ifstream input(argv[4],std::ios::binary);
             std::vector<uint8_t> image((std::istreambuf_iterator<char>(input)),{});
             check(image.size()>=16,"integration ROM");
             check(nes_mod_register_activation_plugin("nesrecomp.hd-pack",activate),"registration");
+            if(argc==7) {
+                std::ifstream patched(argv[6],std::ios::binary);
+                compiled_image.assign(std::istreambuf_iterator<char>(patched),{});
+                check(compiled_image.size()>=16 && nes_mod_register_hd_image_validator(compiled),"integration native image");
+            }
             std::string error;
             check(NESRecomp::mod_runtime_initialize(argv[2],argv[3],crc(image),&error),error.c_str());
             const auto *p=NESRecomp::mod_runtime_launcher_provider();
@@ -101,6 +112,27 @@ int main(int argc,char **argv) {
         changed[17]=0xa9;write(dir/"sound.ips",ips);manifest("pack",crc(changed));check(init(),"RLE catalog");
         check(NESRecomp::mod_runtime_commit(root/"stock.nes",&error),error.c_str());
         check(nes_mod_hd_pack()->patched_payload[1]==0xa9,"RLE result");
+        // A host with a separately compiled program can authorize an expanded
+        // image, including its changed iNES header. The manifest CRC alone is
+        // insufficient: an unknown program must still fail before exposure.
+        compiled_image=image;compiled_image[4]=2;compiled_image.resize(32784,0x55);
+        ips={'P','A','T','C','H',0,0,4,0,1,2,0,0x40,0x10,0,0,0x40,0,0x55,'E','O','F'};
+        write(dir/"sound.ips",ips);manifest("pack",crc(compiled_image));check(init(),"expanded catalog");
+        check(!NESRecomp::mod_runtime_commit(root/"stock.nes",&error),"legacy host accepted expanded program");
+        check(nes_mod_register_hd_image_validator(compiled),"compiled image validator");
+        check(nes_mod_register_hd_image_validator(compiled),"validator idempotence");
+        check(!nes_mod_register_hd_image_validator(other_compiled),"validator replaced by another host");
+        check(NESRecomp::mod_runtime_commit(root/"stock.nes",&error),error.c_str());
+        pack=nes_mod_hd_pack();
+        check(pack && !pack->patched_payload && pack->image_size==compiled_image.size() &&
+              !std::memcmp(pack->patched_image,compiled_image.data(),compiled_image.size()),"compiled expanded image");
+        std::vector<uint8_t> unknown=compiled_image;std::fill(unknown.begin()+16400,unknown.end(),0x54);
+        ips[18]=0x54;write(dir/"sound.ips",ips);manifest("pack",crc(unknown));
+        check(init(),"unknown expanded program catalog");
+        check(!NESRecomp::mod_runtime_commit(root/"stock.nes",&error) && !nes_mod_hd_pack(),"unknown compiled program accepted valid CRC");
+        std::ifstream unchanged(root/"stock.nes",std::ios::binary);
+        reread.assign(std::istreambuf_iterator<char>(unchanged),{});unchanged.close();
+        check(reread==image,"expanded patch changed owner ROM");
         manifest("../outside");check(!init(),"parent path accepted");
         manifest("C:/outside");check(!init(),"drive path accepted");
         manifest();check(init(),"restored catalog");

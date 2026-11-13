@@ -25,7 +25,7 @@ static bool catalog(HdGpuPageCache *next, const HdJobFrame *frame,
         (uint64_t)frame->image_count * 4 > max_buffer_texels) return false;
     for (uint32_t i = 0; i < frame->image_count; ++i) {
         const HdJobImage *im = &frame->images[i];
-        if (!im->pixels || !im->width || !im->height || im->brightness > 65025 ||
+        if (!hd_image_storage_valid(im) || im->brightness > 65025 ||
             (uint64_t)im->width * im->height > SIZE_MAX / sizeof(uint32_t)) return false;
         uint64_t across = ((uint64_t)im->width + HD_GPU_PAGE_SIZE - 1) / HD_GPU_PAGE_SIZE;
         uint64_t down = ((uint64_t)im->height + HD_GPU_PAGE_SIZE - 1) / HD_GPU_PAGE_SIZE;
@@ -135,7 +135,12 @@ static bool mark_frame(HdGpuPageCache *cache, const HdJobFrame *frame)
     size_t pixels = (size_t)frame->width * frame->height;
     for (size_t i = 0; i < pixels; ++i) {
         const HdJobPixel *p = &frame->pixels[i];
-        if (p->flags & ~(uint32_t)63) return false;
+        uint32_t count=hd_job_extra_count(p->flags),start=hd_job_extra_start(p->flags);
+        if((!count && start) || start>frame->sprite_count || count>frame->sprite_count-start)return false;
+        for(uint32_t k=0;k<count;k++) {
+            const HdJobSprite *sp=&frame->sprites[start+k];
+            if((sp->flags&~124u) || !need_tile(cache,frame,sp->flags,sp->image,sp->uv,true))return false;
+        }
         if (!need_tile(cache, frame, p->flags, p->bg_image, p->bg_uv, false) ||
             !need_tile(cache, frame, p->flags, p->sp_image, p->sp_uv, true)) return false;
     }
@@ -152,7 +157,8 @@ bool cyc_hd_gpu_cache_prepare(HdGpuPageCache *cache, const HdJobFrame *frame,
         (uint64_t)frame->width * frame->height > SIZE_MAX / sizeof(HdJobPixel) ||
         (frame->image_count && !frame->images) ||
         (frame->background_count && !frame->backgrounds) ||
-        frame->under_end > frame->mid_end || frame->mid_end > frame->background_count ||
+        (frame->sprite_count && !frame->sprites) || frame->has_behind>1 ||
+        frame->behind_end > frame->under_end || frame->under_end > frame->mid_end || frame->mid_end > frame->background_count ||
         frame->hud_rows > frame->height) {
         clear_needed(cache); return false;
     }

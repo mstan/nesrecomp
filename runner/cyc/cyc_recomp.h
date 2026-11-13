@@ -88,3 +88,28 @@ typedef struct {
 /* Provided by the generated umbrella file (the count may be 0). */
 extern const CycHookSite cyc_native_hook_sites[];
 extern const uint32_t    cyc_native_hook_site_count;
+
+/* Multi-program titles opt in; ordinary generated programs keep the exact
+ * existing ABI and direct calls. Namespace units name their own exports. */
+#if CYC_NATIVE_PROGRAMS && !defined(CYC_PROGRAM_UNIT)
+#include "cyc_program.h"
+#define cyc_native_program_name       (cyc_program_current()->name)
+#define cyc_native_display_name       (cyc_program_current()->display_name)
+#define cyc_native_prg_hash           (cyc_program_current()->prg_hash)
+#define cyc_native_cart_hash          (cyc_program_current()->cart_hash)
+#define cyc_native_fds_bios_crc32      (cyc_program_current()->fds_bios_crc32)
+#define cyc_native_fds_bios_path       (cyc_program_current()->fds_bios_path)
+#define cyc_native_fds_image_path      (cyc_program_current()->fds_image_path)
+#define cyc_native_fds_hle             (cyc_program_current()->fds_hle)
+#define cyc_native_console            (cyc_program_current()->console)
+#define cyc_native_has                (cyc_program_current()->has)
+#define cyc_native_run                (cyc_program_current()->run)
+#define cyc_native_prg_code_byte       (cyc_program_current()->prg_code_byte)
+#if NESRECOMP_NATIVE_PRG_GUARDS
+#define cyc_native_prg_guard_available (cyc_program_current()->prg_guard_available)
+#endif
+#define cyc_native_ram_views          (cyc_program_current()->ram_views)
+#define cyc_native_ram_view_count     (cyc_program_current()->ram_view_count)
+#define cyc_native_hook_sites         (cyc_program_current()->hook_sites)
+#define cyc_native_hook_site_count    (cyc_program_current()->hook_site_count)
+#endif

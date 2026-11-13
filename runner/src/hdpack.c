@@ -27,8 +27,6 @@
 #define g_ram hw.ram
 #define g_ppuctrl (cyc_frame_lines()[239].ctrl)
 #define g_frame_count cyc_ring_frame
-#define g_ppuscroll_x (cyc_render_line_scroll_x(239)&255)
-#define g_ppuscroll_y (cyc_render_line_scroll_y(0)%240)
 #else
 extern uint8_t  g_ram[0x0800];
 extern uint64_t g_frame_count;
@@ -53,10 +51,24 @@ typedef struct HdTile {
     int            brightness;      /* 0..255 (or >255 for HDR; rare) */
     int            has_transparent; /* any pixel with alpha != 0xFF */
     int            fully_transparent;
+    uint64_t       cell_visible, cell_opaque; /* authored coverage of 8x8 native cells */
     uint32_t       job_image;      /* presentation-owned immutable asset ID */
     struct HdCond **conds; int *neg; int ncond;  /* [cond] gate; 0 = unconditional */
     struct HdTile *next;            /* primary hash chain */
 } HdTile;
+
+typedef struct HdAddition {
+    HdKey source,extra;
+    int dx,dy;
+    uint32_t order;
+    struct HdAddition *next;
+} HdAddition;
+static HdAddition *s_additions[4096];
+static uint32_t s_addition_count;
+static HdSprite *s_resolved_sprites;
+static size_t s_resolved_capacity;
+static HdSprite *s_current_sprite;
+static int s_sprites_resolved;
 
 /* Resolve a '&'-separated [cond] prefix into HdCond* + negation arrays (defined
  * with the condition engine below). Returns 1 if all names resolve (0 conds for
@@ -71,6 +83,11 @@ typedef struct HdAlias {
     HdTile          *tile;
     struct HdAlias  *next;
 } HdAlias;
+
+typedef struct HdFallback {
+    int32_t from, to;
+    struct HdFallback *next;
+} HdFallback;
 
 /* ── PNG sheet ────────────────────────────────────────────────────────────── */
 
@@ -91,17 +108,28 @@ static int        s_sheet_count = 0, s_sheet_cap = 0;
 
 static HdTile    *s_buckets[HD_NBUCKETS];
 static HdAlias   *s_alias_buckets[HD_NBUCKETS];
+static HdFallback *s_fallbacks[HD_NBUCKETS];
 
 static HdTile   **s_all = NULL;        /* every tile (for cleanup) */
 static int        s_all_count = 0, s_all_cap = 0;
 
 static HdPixel   *s_pixels = NULL;     /* side channel, native_w*240 */
 static int        s_native_w = 0;
+static HdPixelReader s_pixel_reader;
+static const void *s_pixel_context;
+static int s_source_reuse=-1;
+static HdPixel *pixel_at(size_t offset,HdPixel *scratch) {
+    if(!s_pixel_reader)return &s_pixels[offset];
+    s_pixel_reader(s_pixel_context,offset,scratch);
+    return scratch;
+}
 
 static int        s_skipped_cond = 0;  /* conditional tiles not yet supported (Phase 2) */
 static int        s_overscan[4] = {0,0,0,0}; /* top,right,bottom,left (parsed; clip TODO) */
 static int        s_has_overscan = 0;
 static int        s_disable_orig = 0;  /* <options>disableOriginalTiles */
+static int        s_auto_fallback;
+static int        s_unlimited_sprites;
 
 /* ── <condition> engine (mirrors Mesen HdPackConditions.h) ─────────────────── */
 
@@ -150,6 +178,7 @@ typedef struct {
     uint32_t *px;            /* premultiplied ARGB, w*h */
     int       w, h;
     uint32_t  job_image;
+    HdImagePages *pages;
 } HdBgImg;
 
 typedef struct HdBg {
@@ -169,7 +198,7 @@ static HdBgImg **s_bgimgs = NULL; static int s_bgimg_count = 0, s_bgimg_cap = 0;
 static HdBg    **s_bg_sorted = NULL;  /* by ascending priority */
 static int       s_bg_unrenderable = 0; /* parsed but PNG missing */
 static HdBg    **s_actbg = NULL;        /* active this frame (ascending priority) */
-static int       s_nact = 0, s_band_mid = 0, s_band_fg = 0;
+static int       s_nact = 0, s_band_behind = 0, s_band_mid = 0, s_band_fg = 0;
 static int       s_hud_rows = 0;        /* top native rows masked by an opaque HUD overlay */
 
 static int hd_jobs_owns_assets(void);
@@ -180,7 +209,7 @@ static void hd_jobs_unload(void);
 #if defined(NESRECOMP_HDPACK_LAYER_PLANS) && NESRECOMP_HDPACK_LAYER_PLANS
 static void hd_layer_prepare(void);
 static void hd_layer_unload(void);
-static int hd_layer_upscale(const uint32_t *, int, uint32_t *, int, int, int);
+
 #endif
 
 static int clampi(int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi : v; }
@@ -256,25 +285,198 @@ static int tile_conds_pass(const HdTile *t, int x, int y, HdPixel *cur, int is_s
     return 1;
 }
 
-/* Lookup for key `k` at pixel (x,y): a conditional tile whose [cond] gate passes
- * wins; otherwise the unconditional match; otherwise the wildcard-default
- * (palette 0xFFFFFFFF) fallback. */
-static HdTile *find_tile(const HdKey *k, int x, int y, HdPixel *cur, int is_sprite) {
+static int32_t fallback_index(int32_t index) {
+    if (s_is_chr_ram || index < 0) return -1;
+    for (HdFallback *p=s_fallbacks[(uint32_t)index & (HD_NBUCKETS-1)];p;p=p->next)
+        if (p->from==index) return p->to;
+    return -1;
+}
+static void set_fallback(int32_t from,int32_t to) {
+    if (from<0 || to<0) return;
+    unsigned bucket=(uint32_t)from & (HD_NBUCKETS-1);
+    for (HdFallback *p=s_fallbacks[bucket];p;p=p->next)
+        if (p->from==from) { p->to=to;return; }
+    HdFallback *p=malloc(sizeof(*p));if(!p)return;
+    p->from=from;p->to=to;p->next=s_fallbacks[bucket];s_fallbacks[bucket]=p;
+}
+static void process_fallback(char *rest) {
+    char *tokens[3];
+    if (split_commas(rest,tokens,3)!=2) return;
+    set_fallback((int32_t)hex_u32(tokens[0]),(int32_t)hex_u32(tokens[1]));
+}
+static void addition_key(HdKey *key,const char *tile,const char *palette) {
+    memset(key,0,sizeof(*key));key->palette=hex_u32(palette);
+    key->is_chr_ram=strlen(tile)>=32;
+    if(key->is_chr_ram) {
+        key->tile_index=-1;
+        for(int i=0;i<16;i++)key->tile16[i]=hex_byte(tile+2*i);
+    } else key->tile_index=(int32_t)hex_u32(tile);
+}
+static void process_addition(char *rest) {
+    char *tokens[8];int n=split_commas(rest,tokens,8);
+    if(s_version<107 || n<6)return;
+    HdAddition *rule=calloc(1,sizeof(*rule));if(!rule)return;
+    for(int i=0;i<n;i++)tokens[i]=rstrip(tokens[i]);
+    addition_key(&rule->source,tokens[0],tokens[1]);
+    addition_key(&rule->extra,tokens[4],tokens[5]);
+    if(rule->source.is_chr_ram!=s_is_chr_ram || rule->extra.is_chr_ram!=s_is_chr_ram){free(rule);return;}
+    rule->dx=atoi(tokens[2]);rule->dy=atoi(tokens[3]);
+    if(s_version>=108 && n>=7 && (tokens[6][0]=='Y' || tokens[6][0]=='y'))rule->source.palette=0xffffffffu;
+    rule->order=s_addition_count++;
+    HdAddition **tail=&s_additions[key_hash(&rule->source)&4095];
+    while(*tail)tail=&(*tail)->next;
+    *tail=rule;
+}
+static HdSprite *sprites_at(size_t offset,HdPixel *pixel) {
+    return s_sprites_resolved?s_resolved_sprites+offset*HD_MAX_SPRITES:pixel->sp;
+}
+static unsigned sprite_limit(const HdPixel *pixel) {
+    return !s_sprites_resolved && pixel->sp_count_hint && pixel->sp_count_hint<=HD_MAX_SPRITES+1
+        ?pixel->sp_count_hint-1:HD_MAX_SPRITES;
+}
+static uint32_t sprite_palette(const HdSprite *sp) {
+    uint32_t pal=((uint32_t)sp->p0<<24)|((uint32_t)sp->p1<<16)|((uint32_t)sp->p2<<8)|sp->p3;
+    return s_version<100?pal&0xffffffu:pal;
+}
+static HdAddition *next_addition(HdAddition *rule,const HdKey *key) {
+    while(rule && !key_eq(&rule->source,key))rule=rule->next;
+    return rule;
+}
+static void add_from_sprite(const HdSprite *source,int x,int y) {
+    if(!source->has)return;
+    HdKey keys[4];memset(keys,0,sizeof keys);
+    keys[0].is_chr_ram=s_is_chr_ram;keys[0].palette=sprite_palette(source);
+    keys[0].tile_index=source->index;
+    if(s_is_chr_ram && source->t16)memcpy(keys[0].tile16,source->t16,16);
+    keys[1]=keys[0];keys[1].palette=0xffffffffu;
+    int count=2;int32_t fallback=fallback_index(source->index);
+    if(fallback>=0 && fallback!=source->index){keys[2]=keys[0];keys[2].tile_index=fallback;keys[3]=keys[2];keys[3].palette=0xffffffffu;count=4;}
+    int unique=0;
+    for(int i=0;i<count;i++) {
+        int duplicate=0;for(int j=0;j<unique;j++)if(key_eq(&keys[i],&keys[j])){duplicate=1;break;}
+        if(!duplicate)keys[unique++]=keys[i];
+    }
+    count=unique;
+    HdAddition *rules[4]={0};
+    for(int i=0;i<count;i++)rules[i]=next_addition(s_additions[key_hash(&keys[i])&4095],&keys[i]);
+    for(;;) {
+        int chosen=-1;
+        for(int i=0;i<count;i++)if(rules[i] && (chosen<0 || rules[i]->order<rules[chosen]->order))chosen=i;
+        if(chosen<0)break;
+        HdAddition *r=rules[chosen];rules[chosen]=next_addition(r->next,&keys[chosen]);
+        int64_t nx=(int64_t)x+(source->hm?-(int64_t)r->dx:r->dx);
+        int64_t ny=(int64_t)y+(source->vm?-(int64_t)r->dy:r->dy);
+        if(nx<0 || nx>=s_native_w || ny<0 || ny>=240)continue;
+        HdSprite *out=s_resolved_sprites+((size_t)ny*s_native_w+(size_t)nx)*HD_MAX_SPRITES;
+        int k=0;while(k<HD_MAX_SPRITES && out[k].has)k++;
+        if(k==HD_MAX_SPRITES)continue;
+        out[k]=*source;out[k].index=r->extra.tile_index;out[k].t16=r->extra.tile16;
+        uint32_t palette=r->extra.palette;
+        out[k].p0=(uint8_t)(palette>>24);out[k].p1=(uint8_t)(palette>>16);out[k].p2=(uint8_t)(palette>>8);out[k].p3=(uint8_t)palette;
+        out[k].transparent=1;
+    }
+}
+/* Work on a render-local copy: a second presentation must not inject layers
+ * into the guest recording or reapply additions from a previous presentation. */
+static int resolve_sprites(void) {
+    s_sprites_resolved=0;s_current_sprite=NULL;
+    if(!s_addition_count)return 1;
+    size_t count=(size_t)s_native_w*240;
+    if(count>SIZE_MAX/HD_MAX_SPRITES/sizeof(HdSprite))return 0;
+    if(count>s_resolved_capacity) {
+        HdSprite *next=realloc(s_resolved_sprites,count*HD_MAX_SPRITES*sizeof(*next));
+        if(!next)return 0;
+        s_resolved_sprites=next;s_resolved_capacity=count;
+    }
+    for(size_t i=0;i<count;i++) {
+        HdPixel scratch,*p=pixel_at(i,&scratch);
+        unsigned n=sprite_limit(p);HdSprite *out=s_resolved_sprites+i*HD_MAX_SPRITES;
+        memcpy(out,p->sp,n*sizeof(*out));memset(out+n,0,(HD_MAX_SPRITES-n)*sizeof(*out));
+    }
+    s_sprites_resolved=1;
+    for(int y=0;y<240;y++)for(int x=0;x<s_native_w;x++) {
+        size_t i=(size_t)y*s_native_w+x;
+        HdPixel scratch,*p=pixel_at(i,&scratch);HdSprite *sprites=sprites_at(i,p);
+        for(int k=0;k<HD_MAX_SPRITES && sprites[k].has;k++) {
+            HdSprite source=sprites[k];add_from_sprite(&source,x,y);
+        }
+        if(p->bg_has) {
+            HdSprite source={0};source.has=1;source.index=p->bg_index;source.t16=p->bg_t16;
+            source.p0=p->bg_p0;source.p1=p->bg_p1;source.p2=p->bg_p2;source.p3=p->bg_p3;
+            source.ox=p->bg_ox;source.oy=p->bg_oy;source.transparent=p->bg_transparent;
+            add_from_sprite(&source,x,y);
+        }
+    }
+    return 1;
+}
+static void initialize_automatic_fallbacks(void) {
+#ifdef NESRECOMP_CYCLE_HDPACK
+    if(!s_auto_fallback || s_is_chr_ram || !hw_cart.chr)return;
+    typedef struct AutoTile {uint8_t bytes[16];int32_t index;struct AutoTile *next;} AutoTile;
+    AutoTile *buckets[HD_NBUCKETS]={0};
+    unsigned added=0;
+    for(int pass=0;pass<2;pass++) {
+        uint32_t count=pass?hw_cart.info.chr_size/16:(uint32_t)s_all_count;
+        for(uint32_t i=0;i<count;i++) {
+            int32_t index=pass?(int32_t)i:s_all[i]->key.tile_index;
+            if(index<0 || (uint32_t)index>=hw_cart.info.chr_size/16)continue;
+            const uint8_t *bytes=hw_cart.chr+(uint32_t)index*16;
+            uint32_t hash=2166136261u;unsigned nonzero=0;
+            for(unsigned b=0;b<16;b++){hash=(hash^bytes[b])*16777619u;nonzero|=bytes[b];}
+            unsigned bucket=hash&(HD_NBUCKETS-1);AutoTile *found=buckets[bucket];
+            while(found && memcmp(found->bytes,bytes,16))found=found->next;
+            if(!pass) {
+                if(found)continue;
+                AutoTile *entry=malloc(sizeof(*entry));if(!entry)continue;
+                memcpy(entry->bytes,bytes,16);entry->index=index;
+                entry->next=buckets[bucket];buckets[bucket]=entry;
+            } else if(nonzero && found && found->index!=index && fallback_index(index)<0) {
+                set_fallback(index,found->index);added++;
+            }
+        }
+    }
+    for(unsigned i=0;i<HD_NBUCKETS;i++) {
+        AutoTile *p=buckets[i];while(p){AutoTile *next=p->next;free(p);p=next;}
+    }
+    printf("[HDPack] automatic CHR-ROM fallback aliases=%u\n",added);
+#endif
+}
+static HdTile *find_exact(const HdKey *k, int x, int y, HdPixel *cur, int sprite,int *exists) {
     uint32_t h = key_hash(k) & (HD_NBUCKETS - 1);
-    HdTile *fallback = NULL;
+    *exists=0;
     for (HdTile *t = s_buckets[h]; t; t = t->next) {
         if (!key_eq(&t->key, k)) continue;
-        if (t->ncond == 0) { if (!fallback) fallback = t; continue; }
-        if (tile_conds_pass(t, x, y, cur, is_sprite)) return t;
+        *exists=1;
+        if (tile_conds_pass(t, x, y, cur, sprite)) return t;
     }
-    if (fallback) return fallback;
-
+    return NULL;
+}
+static HdTile *find_alias(const HdKey *k, int x, int y,HdPixel *cur,int sprite,int *exists) {
     HdKey wk = *k;
     wk.palette = 0xFFFFFFFFu;
     uint32_t wh = key_hash(&wk) & (HD_NBUCKETS - 1);
-    for (HdAlias *a = s_alias_buckets[wh]; a; a = a->next)
-        if (key_eq(&a->key, &wk)) return a->tile;
+    *exists=0;
+    for (HdAlias *a = s_alias_buckets[wh]; a; a = a->next) {
+        if (!key_eq(&a->key,&wk)) continue;
+        *exists=1;
+        if (tile_conds_pass(a->tile,x,y,cur,sprite))return a->tile;
+    }
     return NULL;
+}
+/* Mesen defines priority by manifest order. A present exact-key list owns the
+ * decision even when all its conditions fail. Only a missing list consults a
+ * single explicit CHR-ROM fallback, then palette-independent defaults. */
+static HdTile *find_tile(const HdKey *k, int x, int y, HdPixel *cur, int sprite) {
+    int exists;
+    HdTile *tile=find_exact(k,x,y,cur,sprite,&exists);
+    if(exists)return tile;
+    int32_t fallback=fallback_index(k->tile_index);
+    if(fallback>=0) {
+        HdKey fk=*k;fk.tile_index=fallback;
+        tile=find_exact(&fk,x,y,cur,sprite,&exists);if(exists)return tile;
+        tile=find_alias(&fk,x,y,cur,sprite,&exists);if(exists)return tile;
+    }
+    return find_alias(k,x,y,cur,sprite,&exists);
 }
 
 static void track_tile(HdTile *t) {
@@ -286,9 +488,26 @@ static void track_tile(HdTile *t) {
 }
 
 static void register_tile(HdTile *t, int default_tile) {
+    /* Compile subpixel coverage once. A native transparent pixel can contain
+     * authored art, while an empty authored cell never needs a draw command. */
+    t->cell_visible=UINT64_MAX;t->cell_opaque=0;
+    if(t->data && t->w>0 && t->h>0 && !(t->w&7) && !(t->h&7)) {
+        t->cell_visible=0;
+        unsigned cw=(unsigned)t->w/8,ch=(unsigned)t->h/8;
+        for(unsigned cy=0;cy<8;cy++)for(unsigned cx=0;cx<8;cx++) {
+            unsigned visible=0,opaque=1;
+            for(unsigned y=0;y<ch;y++)for(unsigned x=0;x<cw;x++) {
+                unsigned a=t->data[(size_t)(cy*ch+y)*t->w+cx*cw+x]>>24;
+                visible|=a;opaque&=a==255;
+            }
+            uint64_t bit=UINT64_C(1)<<(cy*8+cx);
+            if(visible)t->cell_visible|=bit;
+            if(opaque)t->cell_opaque|=bit;
+        }
+    }
     uint32_t h = key_hash(&t->key) & (HD_NBUCKETS - 1);
-    t->next = s_buckets[h];
-    s_buckets[h] = t;
+    HdTile **tail=&s_buckets[h];while(*tail)tail=&(*tail)->next;
+    t->next=NULL;*tail=t;
     track_tile(t);
 
     if (default_tile) {
@@ -297,8 +516,8 @@ static void register_tile(HdTile *t, int default_tile) {
         HdAlias *a = (HdAlias *)calloc(1, sizeof(HdAlias));
         a->key = wk; a->tile = t;
         uint32_t wh = key_hash(&wk) & (HD_NBUCKETS - 1);
-        a->next = s_alias_buckets[wh];
-        s_alias_buckets[wh] = a;
+        HdAlias **at=&s_alias_buckets[wh];while(*at)at=&(*at)->next;
+        *at=a;
     }
 }
 
@@ -587,6 +806,8 @@ static void process_condition(char *rest) {
 
 /* ── <background> parsing ─────────────────────────────────────────────────── */
 
+#include "hdpack_pages.inc"
+
 static HdBgImg *load_bg_img(const char *name) {
     if(!safe_image_name(name)){fprintf(stderr,"[HDPack] Unsafe background path rejected\n");return NULL;}
     for (int i = 0; i < s_bgimg_count; i++)
@@ -603,12 +824,14 @@ static HdBgImg *load_bg_img(const char *name) {
     HdBgImg *im = (HdBgImg *)calloc(1, sizeof(HdBgImg));
     snprintf(im->name, sizeof(im->name), "%s", name);
     im->w = w; im->h = h;
-    im->px = (uint32_t *)malloc((size_t)w * h * sizeof(uint32_t));
-    for (int i = 0; i < w * h; i++) {
-        unsigned char *p = rgba + i * 4;
-        uint32_t argb = ((uint32_t)p[3] << 24) | ((uint32_t)p[0] << 16) |
-                        ((uint32_t)p[1] << 8) | (uint32_t)p[2];
-        im->px[i] = premul(argb);
+    im->pages=compact_image_pages(rgba,NULL,(unsigned)w,(unsigned)h);
+    if(!im->pages) {
+        im->px=malloc((size_t)w*h*sizeof(*im->px));
+        if(!im->px){free(im);stbi_image_free(rgba);return NULL;}
+        for(size_t i=0;i<(size_t)w*h;i++) {
+            const uint8_t *p=rgba+i*4;
+            im->px[i]=premul(((uint32_t)p[3]<<24)|((uint32_t)p[0]<<16)|((uint32_t)p[1]<<8)|p[2]);
+        }
     }
     stbi_image_free(rgba);
 
@@ -663,7 +886,10 @@ static void process_background(const char *cond_str, char *rest) {
 }
 
 static int bg_priority_cmp(const void *a, const void *b) {
-    return (*(HdBg * const *)a)->priority - (*(HdBg * const *)b)->priority;
+    const HdBg *aa=*(HdBg * const *)a, *bb=*(HdBg * const *)b;
+    if(aa->priority != bb->priority)return aa->priority-bb->priority;
+    /* Entries share s_bgs: preserve manifest order within each priority. */
+    return (aa>bb)-(aa<bb);
 }
 static void finalize_backgrounds(void) {
     if (s_bg_count == 0) return;
@@ -692,8 +918,14 @@ static void parse_line(char *line) {
     else if (!strncmp(L, "<img>", 5))        { char *nm = rstrip(L + 5); load_sheet(nm); }
     else if (!strncmp(L, "<condition>", 11)) process_condition(L + 11);
     else if (!strncmp(L, "<tile>", 6))       process_tile(cond_str, L + 6);
+    else if (!strncmp(L, "<fallback>", 10)) process_fallback(L + 10);
+    else if (!strncmp(L, "<addition>", 10)) process_addition(L + 10);
     else if (!strncmp(L, "<background>", 12)) process_background(cond_str, L + 12);
-    else if (!strncmp(L, "<options>", 9))    { if (strstr(L + 9, "disableOriginalTiles")) s_disable_orig = 1; }
+    else if (!strncmp(L, "<options>", 9))    {
+        if (strstr(L + 9, "disableOriginalTiles")) s_disable_orig = 1;
+        if (strstr(L + 9, "automaticFallbackTiles")) s_auto_fallback = 1;
+        if (strstr(L + 9, "disableSpriteLimit")) s_unlimited_sprites = 1;
+    }
     else if (!strncmp(L, "<overscan>", 10)) {
         char buf[64]; char *tok[4];
         snprintf(buf, sizeof(buf), "%s", L + 10);
@@ -702,7 +934,7 @@ static void parse_line(char *line) {
             s_has_overscan = 1;
         }
     }
-    /* <bgm>/<sfx>/<patch>/<options>/<addition>/<fallback>/#comments: ignored for now */
+    /* <bgm>/<sfx>/<patch>/<addition>/#comments: handled by their host or pending. */
 }
 
 /* ── Public API ───────────────────────────────────────────────────────────── */
@@ -712,8 +944,20 @@ void hdpack_invalidate_conditions(void) {
 }
 int hdpack_active(void) { return s_active; }
 int hdpack_scale(void)  { return s_active ? s_scale : 1; }
+const char *hdpack_directory(void) {return s_active?s_dir:"";}
 HdPixel *hdpack_pixels(void) { return s_active ? s_pixels : NULL; }
 int hdpack_recording(void)   { return s_active; }
+int hdpack_unlimited_sprites(void) {return s_active && s_unlimited_sprites;}
+int hdpack_reuses_pixel_source(void) {
+    if(s_source_reuse<0) {
+        s_source_reuse=s_addition_count!=0;
+        for(int i=0;i<s_cond_count && !s_source_reuse;i++) {
+            HdCond *c=s_cond_all[i];
+            if(!c->use_cache && (c->type==CT_TILE_NEARBY || c->type==CT_SPRITE_NEARBY))s_source_reuse=1;
+        }
+    }
+    return s_source_reuse;
+}
 
 void hdpack_frame_begin(void) {
     if (s_active && s_pixels)
@@ -738,6 +982,7 @@ int hdpack_resize(int native_w) {
 }
 
 void hdpack_unload(void) {
+    s_source_reuse=-1;
     int jobs_own_pixels = hd_jobs_owns_assets();
 #if defined(NESRECOMP_HDPACK_LAYER_PLANS) && NESRECOMP_HDPACK_LAYER_PLANS
     hd_layer_unload();
@@ -747,6 +992,9 @@ void hdpack_unload(void) {
         while (a) { HdAlias *nx = a->next; free(a); a = nx; }
         s_alias_buckets[i] = NULL;
         s_buckets[i] = NULL;
+        HdFallback *p=s_fallbacks[i];
+        while(p){HdFallback *next=p->next;free(p);p=next;}
+        s_fallbacks[i]=NULL;
     }
     for (int i = 0; i < s_all_count; i++) {
         if (s_all[i]) {
@@ -770,13 +1018,16 @@ void hdpack_unload(void) {
     free(s_actbg); s_actbg = NULL; s_nact = 0;
     for (int i = 0; i < s_bgimg_count; i++) {
         if (!s_bgimgs[i]) continue;
-        if (!jobs_own_pixels || s_bgimgs[i]->job_image == HD_JOB_NO_IMAGE)
-            free(s_bgimgs[i]->px);
+        if (!jobs_own_pixels || s_bgimgs[i]->job_image == HD_JOB_NO_IMAGE) {
+            free(s_bgimgs[i]->px);image_pages_free(s_bgimgs[i]->pages);
+        }
         free(s_bgimgs[i]);
     }
     free(s_bgimgs); s_bgimgs = NULL; s_bgimg_count = s_bgimg_cap = 0;
-    s_missing_cond = s_bg_unrenderable = 0; s_disable_orig = 0;
+    s_missing_cond = s_bg_unrenderable = 0; s_disable_orig = s_auto_fallback = s_unlimited_sprites = 0;
 
+    for(int i=0;i<4096;i++){HdAddition *r=s_additions[i];while(r){HdAddition *next=r->next;free(r);r=next;}s_additions[i]=NULL;}
+    s_addition_count=0;free(s_resolved_sprites);s_resolved_sprites=NULL;s_resolved_capacity=0;s_sprites_resolved=0;s_current_sprite=NULL;
     free(s_pixels); s_pixels = NULL;
     s_active = 0; s_scale = 1; s_version = 0;
     s_skipped_cond = 0; s_has_overscan = 0; s_native_w = 0;
@@ -802,6 +1053,17 @@ int hdpack_load(const char *dir, int is_chr_ram_game, int native_w) {
     char line[2048];
     while (fgets(line, sizeof(line), f)) parse_line(line);
     fclose(f);
+    for(int i=0;i<s_sheet_count;i++){free(s_sheets[i].px);s_sheets[i].px=NULL;}
+    uint64_t bg_raw=0,bg_stored=0;
+    for(int i=0;i<s_bgimg_count;i++) {
+        HdBgImg *im=s_bgimgs[i];bg_raw+=(uint64_t)im->w*im->h*4;
+        if(im->pages)bg_stored+=(uint64_t)im->pages->unique_count*128*128*4+
+            (uint64_t)im->pages->columns*im->pages->rows*sizeof(uint32_t *)*2+sizeof(*im->pages);
+        else bg_stored+=(uint64_t)im->w*im->h*4;
+    }
+    printf("[HDPack] background source bytes=%llu retained bytes=%llu\n",(unsigned long long)bg_raw,(unsigned long long)bg_stored);
+
+    initialize_automatic_fallbacks();
     finalize_backgrounds();
 #if defined(NESRECOMP_HDPACK_LAYER_PLANS) && NESRECOMP_HDPACK_LAYER_PLANS
     hd_layer_prepare();
@@ -974,8 +1236,6 @@ static HdTile *match_layer(int is_sprite, int32_t tile_index, const uint8_t *t16
     else              k.tile_index = tile_index;
     if (s_version < 100)
         k.palette = ((uint32_t)p1 << 16) | ((uint32_t)p2 << 8) | (uint32_t)p3;
-    else if (is_sprite)
-        k.palette = 0xFF000000u | ((uint32_t)p1 << 16) | ((uint32_t)p2 << 8) | (uint32_t)p3;
     else
         k.palette = ((uint32_t)p0 << 24) | ((uint32_t)p1 << 16) |
                     ((uint32_t)p2 << 8) | (uint32_t)p3;
@@ -990,7 +1250,24 @@ static int s_opt_hide_orig = -1;   /* unmatched tiles show backdrop, not the ori
 static uint8_t read_cpu_mem(uint32_t addr) {
     addr &= 0xFFFF;
     if (addr < 0x2000) return g_ram[addr & 0x07FF];
+#ifdef NESRECOMP_CYCLE_HDPACK
+    uint8_t value=0;
+    return cyc_debug_peek((uint16_t)addr,&value)?value:0;
+#else
     return 0;   /* outside internal RAM (PPU regs / ROM): not tracked */
+#endif
+}
+static uint8_t read_condition_mem(uint32_t addr,int is_ppu) {
+    if(!is_ppu)return read_cpu_mem(addr);
+#ifdef NESRECOMP_CYCLE_HDPACK
+    addr&=0x3fff;
+    if(addr<0x2000)return cyc_render_chr((uint16_t)addr);
+    if(addr<0x3f00)return cyc_render_nametable((uint16_t)(0x2000|(addr&0xfff)));
+    if(!(addr&3))addr&=0xf;
+    return cyc_render_palette((int)(addr&31));
+#else
+    return 0;
+#endif
 }
 static int cond_cmp(int a, HdCondOp op, int b) {
     switch (op) {
@@ -1002,23 +1279,23 @@ static int cond_cmp(int a, HdCondOp op, int b) {
 }
 /* Compare the tile/sprite recorded at side-channel index `off` to a condition. */
 static int tile_matches(const HdCond *c, int off, int sprite) {
-    HdPixel *p = &s_pixels[off];
-    const uint8_t *t16; int32_t index; int has; uint32_t pal;
-    if (sprite) {
-        has = p->sp_has; t16 = p->sp_t16; index = p->sp_index;
-        pal = (s_version < 100) ? (((uint32_t)p->sp_p1 << 16) | ((uint32_t)p->sp_p2 << 8) | p->sp_p3)
-                                : (0xFF000000u | ((uint32_t)p->sp_p1 << 16) |
-                                   ((uint32_t)p->sp_p2 << 8) | p->sp_p3);
-    } else {
-        has = p->bg_has; t16 = p->bg_t16; index = p->bg_index;
-        pal = (s_version < 100) ? (((uint32_t)p->bg_p1 << 16) | ((uint32_t)p->bg_p2 << 8) | p->bg_p3)
-                                : (((uint32_t)p->bg_p0 << 24) | ((uint32_t)p->bg_p1 << 16) |
-                                   ((uint32_t)p->bg_p2 << 8) | p->bg_p3);
+    HdPixel scratch,*p=pixel_at((size_t)off,&scratch);
+    if(sprite) {
+        HdSprite *sp=sprites_at((size_t)off,p);
+        for(unsigned i=0;i<sprite_limit(p);i++) {
+            if(!sp[i].has)continue;
+            if(!c->ignore_palette && sprite_palette(&sp[i])!=c->palette)continue;
+            if(c->tile_index<0) {if(sp[i].t16 && !memcmp(sp[i].t16,c->tile16,16))return 1;}
+            else if(sp[i].index==c->tile_index || fallback_index(sp[i].index)==c->tile_index)return 1;
+        }
+        return 0;
     }
-    if (!has) return 0;
-    if (!c->ignore_palette && pal != c->palette) return 0;
-    if (c->tile_index < 0) return t16 && memcmp(t16, c->tile16, 16) == 0;  /* CHR-RAM */
-    return index == c->tile_index;                                          /* CHR-ROM */
+    if(!p->bg_has)return 0;
+    uint32_t pal=((uint32_t)p->bg_p0<<24)|((uint32_t)p->bg_p1<<16)|((uint32_t)p->bg_p2<<8)|p->bg_p3;
+    if(s_version<100)pal&=0xffffffu;
+    if(!c->ignore_palette && pal!=c->palette)return 0;
+    if(c->tile_index<0)return p->bg_t16 && !memcmp(p->bg_t16,c->tile16,16);
+    return p->bg_index==c->tile_index || fallback_index(p->bg_index)==c->tile_index;
 }
 /* x,y / cur are the current pixel (used by per-pixel conditions only). */
 static int cond_eval(HdCond *c, int x, int y, HdPixel *cur, int is_sprite) {
@@ -1026,11 +1303,17 @@ static int cond_eval(HdCond *c, int x, int y, HdPixel *cur, int is_sprite) {
     int r = 0;
     switch (c->type) {
         case CT_MEM_CHECK_CONST:
-            if (!c->is_ppu) r = cond_cmp(read_cpu_mem(c->operandA) & c->mask, c->op, (int)c->operandB);
+#ifndef NESRECOMP_CYCLE_HDPACK
+            if(c->is_ppu)break;
+#endif
+            r = cond_cmp(read_condition_mem(c->operandA,c->is_ppu) & c->mask,c->op,(int)c->operandB);
             break;
         case CT_MEM_CHECK:
-            if (!c->is_ppu) r = cond_cmp(read_cpu_mem(c->operandA) & c->mask, c->op,
-                                         read_cpu_mem(c->operandB) & c->mask);
+#ifndef NESRECOMP_CYCLE_HDPACK
+            if(c->is_ppu)break;
+#endif
+            r = cond_cmp(read_condition_mem(c->operandA,c->is_ppu) & c->mask,c->op,
+                         read_condition_mem(c->operandB,c->is_ppu) & c->mask);
             break;
         case CT_FRAME_RANGE:
             r = c->operandA ? ((uint32_t)(g_frame_count % c->operandA) >= c->operandB) : 0;
@@ -1043,8 +1326,8 @@ static int cond_eval(HdCond *c, int x, int y, HdPixel *cur, int is_sprite) {
         case CT_TILE_NEARBY:
         case CT_SPRITE_NEARBY: {
             int sprite = (c->type == CT_SPRITE_NEARBY);
-            int xs = (cur && sprite && cur->sp_hm) ? -1 : 1;
-            int ys = (cur && sprite && cur->sp_vm) ? -1 : 1;
+            int xs = (is_sprite && s_current_sprite && s_current_sprite->hm) ? -1 : 1;
+            int ys = (is_sprite && s_current_sprite && s_current_sprite->vm) ? -1 : 1;
             int px = x + c->x * xs, py = y + c->y * ys;
             if (px >= 0 && px < s_native_w && py >= 0 && py < 240)
                 r = tile_matches(c, py * s_native_w + px, sprite);
@@ -1052,10 +1335,10 @@ static int cond_eval(HdCond *c, int x, int y, HdPixel *cur, int is_sprite) {
         }
         case CT_POS_X: r = cond_cmp(x, c->op, (int)c->operandA); break;
         case CT_POS_Y: r = cond_cmp(y, c->op, (int)c->operandA); break;
-        case CT_ORIGIN_X: if (cur) r = cond_cmp(x - cur->bg_ox, c->op, (int)c->operandA); break;
-        case CT_ORIGIN_Y: if (cur) r = cond_cmp(y - cur->bg_oy, c->op, (int)c->operandA); break;
-        case CT_HMIRROR:  r = is_sprite && cur && cur->sp_hm; break;  /* NES BG tiles never flip */
-        case CT_VMIRROR:  r = is_sprite && cur && cur->sp_vm; break;
+        case CT_ORIGIN_X: if (cur) r = cond_cmp(x - (is_sprite && s_current_sprite?s_current_sprite->ox:cur->bg_ox), c->op, (int)c->operandA); break;
+        case CT_ORIGIN_Y: if (cur) r = cond_cmp(y - (is_sprite && s_current_sprite?s_current_sprite->oy:cur->bg_oy), c->op, (int)c->operandA); break;
+        case CT_HMIRROR:  r = is_sprite && s_current_sprite && s_current_sprite->hm; break;  /* NES BG tiles never flip */
+        case CT_VMIRROR:  r = is_sprite && s_current_sprite && s_current_sprite->vm; break;
         default: break;
     }
     if (c->use_cache) { c->cached_frame = g_frame_count + 1; c->cached_val = r; }
@@ -1067,10 +1350,20 @@ static int cond_eval(HdCond *c, int x, int y, HdPixel *cur, int is_sprite) {
 static void eval_backgrounds_for_frame(void) {
     s_nact = 0;
     if (!s_actbg) return;
+#ifdef NESRECOMP_CYCLE_HDPACK
+    /* The recorded scroll already includes its nametable page. CycLine.ctrl
+     * contains pattern-table/sprite-size bits, not the original $2000 page. */
+    const int scrollx = cyc_render_line_scroll_x(239);
+    const int scrolly = cyc_render_line_scroll_y(0);
+#else
     const int scrollx = g_ppuscroll_x + ((g_ppuctrl & 0x01) ? 256 : 0);
     const int scrolly = g_ppuscroll_y + ((g_ppuctrl & 0x02) ? 240 : 0);
+#endif
+    int selected_priority=-1;
     for (int i = 0; i < s_bg_count; i++) {
         HdBg *b = s_bg_sorted[i];
+        /* A priority is an ordered list of alternatives, not stacked images. */
+        if(b->priority==selected_priority)continue;
         int act = 1;
         for (int k = 0; k < b->ncond; k++) {
             int v = cond_eval(b->conds[k], 0, 0, NULL, 0);
@@ -1081,10 +1374,12 @@ static void eval_backgrounds_for_frame(void) {
             b->offx = (int)(scrollx * b->hscroll);
             b->offy = (int)(scrolly * b->vscroll);
             s_actbg[s_nact++] = b;   /* preserves priority order */
+            selected_priority=b->priority;
         }
     }
-    s_band_mid = s_band_fg = s_nact;
+    s_band_behind = s_band_mid = s_band_fg = s_nact;
     for (int i = 0; i < s_nact; i++) {
+        if (s_actbg[i]->priority >= 10 && s_band_behind == s_nact) s_band_behind = i;
         if (s_actbg[i]->priority >= 20 && s_band_mid == s_nact) s_band_mid = i;
         if (s_actbg[i]->priority >= 30 && s_band_fg  == s_nact) { s_band_fg = i; break; }
     }
@@ -1102,11 +1397,11 @@ static void eval_backgrounds_for_frame(void) {
         for (int sy = 0; sy < 240; sy++) {
             int py = (b->top + sy + offy) * s_scale;
             if (py < 0 || py >= b->img->h) break;
-            const uint32_t *row = b->img->px + (long)py * b->img->w;
+
             int opaque = 0;
             for (int sx = 0; sx < s_native_w; sx++) {
                 int px = (b->left + sx) * s_scale;
-                if (px >= 0 && px < b->img->w && (row[px] >> 24) == 0xFF) { opaque = 1; break; }
+                if (px >= 0 && px < b->img->w && (hd_image_pixel(b->img->px,b->img->pages,(unsigned)b->img->w,(unsigned)px,(unsigned)py) >> 24) == 0xFF) { opaque = 1; break; }
             }
             if (!opaque) break;
             rows = sy + 1;
@@ -1132,12 +1427,12 @@ static void blend_bg_block(uint32_t *dst, int hd_w, const HdBg *b, int sx, int s
     for (int dy = 0; dy < s; dy++) {
         int py = (b->top + sy + offy) * s + dy;
         if (py < 0 || py >= im->h) continue;
-        const uint32_t *row = im->px + (long)py * im->w;
+
         uint32_t *out = dst + (long)dy * hd_w;
         for (int dx = 0; dx < s; dx++) {
             int px = (b->left + sx + offx) * s + dx;
             if (px < 0 || px >= im->w) continue;
-            uint32_t v = row[px];
+            uint32_t v = hd_image_pixel(im->px,im->pages,(unsigned)im->w,(unsigned)px,(unsigned)py);
             if (b->brightness != 255) v = adjust_brightness(v, b->brightness);
             uint32_t a = v >> 24;
             if (!a) continue;
@@ -1147,6 +1442,89 @@ static void blend_bg_block(uint32_t *dst, int hd_w, const HdBg *b, int sx, int s
             else                    out[dx] = blend_over(out[dx], v);
         }
     }
+}
+
+static int upscale_direct(const uint32_t *native_fb, int native_w, uint32_t *hd_buf) {
+    if (s_opt_debug < 0)     s_opt_debug = getenv("NESRECOMP_HDPACK_DEBUG") ? 1 : 0;
+    if (s_opt_hide_orig < 0) s_opt_hide_orig = getenv("NESRECOMP_HDPACK_HIDE_ORIGINALS") ? 1 : 0;
+    int s = s_scale, hd_w = native_w * s;
+    int hide_orig = s_disable_orig || s_opt_hide_orig;
+
+    if(!resolve_sprites())return -1;
+    eval_backgrounds_for_frame();
+
+    for (int sy = 0; sy < 240; sy++) {
+        for (int sx = 0; sx < native_w; sx++) {
+            int idx = sy * native_w + sx;
+            uint32_t *dst = hd_buf + (long)(sy * s) * hd_w + (long)sx * s;
+            HdPixel scratch,*p=pixel_at((size_t)idx,&scratch);
+            if(p->bg_has && (p->bg_ox>=8 || p->bg_oy>=8))return -1;
+
+            /* base: backdrop where BG is enabled, else the universal native pixel */
+            fill_block(dst, hd_w, p->bg_has ? p->backdrop : native_fb[idx], s);
+
+            if (sy >= s_hud_rows)
+                for (int i=0;i<s_band_behind;i++)blend_bg_block(dst,hd_w,s_actbg[i],sx,sy,s);
+            HdSprite *sprites=sprites_at((size_t)idx,p);
+            int limit=(int)sprite_limit(p),lowest_behind=limit;
+            for(int k=0;k<limit;k++)
+                if(sprites[k].has && (sprites[k].ox>=8 || sprites[k].oy>=8))return -1;
+            for(int k=0;k<limit;k++)if(sprites[k].has && sprites[k].behind && !sprites[k].transparent){lowest_behind=k;break;}
+            for(int k=limit-1;k>=0;k--)if(sprites[k].has && sprites[k].behind) {
+                HdSprite *sp=&sprites[k];s_current_sprite=sp;
+                HdTile *t=match_layer(1,sp->index,sp->t16,sp->p0,sp->p1,sp->p2,sp->p3,sx,sy,p);
+                if(t){if(!t->fully_transparent)blit_over(dst,hd_w,t,sp->ox,sp->oy,sp->hm,sp->vm,s);}
+                else if(!sp->transparent && (s_opt_debug || !s_opt_hide_orig))fill_block(dst,hd_w,s_opt_debug?0xff00ffffu:sp->argb,s);
+            }
+            s_current_sprite=NULL;
+            if(sy>=s_hud_rows)
+                for(int i=s_band_behind;i<s_band_mid;i++)blend_bg_block(dst,hd_w,s_actbg[i],sx,sy,s);
+
+            /* NES background HD tile (composites over whatever is beneath) */
+            HdTile *bt = p->bg_has ? match_layer(0, p->bg_index, p->bg_t16,
+                                                 p->bg_p0, p->bg_p1, p->bg_p2, p->bg_p3,
+                                                 sx, sy, p)
+                                   : NULL;
+            if (bt) {
+                if (!bt->fully_transparent)blit_over(dst, hd_w, bt, p->bg_ox, p->bg_oy, 0, 0, s);
+            } else if (p->bg_has) {
+                if (s_opt_debug)      fill_block(dst, hd_w, 0xFFFF00FFu, s);  /* magenta */
+                else if (hide_orig)   { /* leave background/backdrop showing */ }
+                else if(!p->bg_transparent)fill_block(dst, hd_w, p->bg_argb, s); /* original opaque pixel */
+            }
+
+            /* mid-backgrounds (priority 20..29, over the BG tile, under sprites) */
+            for (int i = s_band_mid; i < s_band_fg; i++) blend_bg_block(dst, hd_w, s_actbg[i], sx, sy, s);
+
+            for(int k=lowest_behind-1;k>=0;k--)if(sprites[k].has && !sprites[k].behind) {
+                HdSprite *sp=&sprites[k];s_current_sprite=sp;
+                HdTile *t=match_layer(1,sp->index,sp->t16,sp->p0,sp->p1,sp->p2,sp->p3,sx,sy,p);
+                if(t){if(!t->fully_transparent)blit_over(dst,hd_w,t,sp->ox,sp->oy,sp->hm,sp->vm,s);}
+                else if(!sp->transparent && (s_opt_debug || !s_opt_hide_orig))fill_block(dst,hd_w,s_opt_debug?0xff00ffffu:sp->argb,s);
+            }
+            s_current_sprite=NULL;
+
+            /* foreground backgrounds (priority 30..39, over everything) */
+            for (int i = s_band_fg; i < s_nact; i++) blend_bg_block(dst, hd_w, s_actbg[i], sx, sy, s);
+        }
+    }
+    return 0;
+}
+
+int hdpack_upscale_direct_from(const uint32_t *native,int native_w,uint32_t *out,
+                               HdPixelReader reader,const void *context) {
+    /* Background layers benefit from whole-row jobs, and additions need a
+     * resolved frame. Simple software packs can match and draw immediately
+     * instead of publishing a frame that is consumed only once. */
+    if(!s_active || s_bg_count || s_addition_count || !native || !out || !reader ||
+       s_pixel_reader || native_w<=0 || native_w!=s_native_w || s_scale<=0 ||
+       s_scale>64 || native_w>INT32_MAX/s_scale ||
+       (size_t)native_w>SIZE_MAX/240/(unsigned)s_scale/(unsigned)s_scale/sizeof(*out))return -1;
+    hdpack_invalidate_conditions();
+    s_pixel_reader=reader;s_pixel_context=context;
+    int result=upscale_direct(native,native_w,out);
+    s_pixel_reader=NULL;s_pixel_context=NULL;s_current_sprite=NULL;
+    return result;
 }
 
 void hdpack_upscale(const uint32_t *native_fb, int native_w, uint32_t *hd_buf) {
@@ -1161,65 +1539,7 @@ void hdpack_upscale(const uint32_t *native_fb, int native_w, uint32_t *hd_buf) {
         if (!result) return;
     }
 #endif
-    if (s_opt_debug < 0)     s_opt_debug = getenv("NESRECOMP_HDPACK_DEBUG") ? 1 : 0;
-    if (s_opt_hide_orig < 0) s_opt_hide_orig = getenv("NESRECOMP_HDPACK_HIDE_ORIGINALS") ? 1 : 0;
-    int s = s_scale, hd_w = native_w * s;
-    int hide_orig = s_disable_orig || s_opt_hide_orig;
-
-    eval_backgrounds_for_frame();
-#if defined(NESRECOMP_HDPACK_LAYER_PLANS) && NESRECOMP_HDPACK_LAYER_PLANS
-    if (hd_layer_upscale(native_fb, native_w, hd_buf, s, hd_w, hide_orig)) return;
-#endif
-
-    for (int sy = 0; sy < 240; sy++) {
-        for (int sx = 0; sx < native_w; sx++) {
-            int idx = sy * native_w + sx;
-            uint32_t *dst = hd_buf + (long)(sy * s) * hd_w + (long)sx * s;
-            HdPixel *p = &s_pixels[idx];
-
-            /* base: backdrop where BG is enabled, else the universal native pixel */
-            fill_block(dst, hd_w, p->bg_has ? p->backdrop : native_fb[idx], s);
-
-            /* under-backgrounds (priority 0..19). Suppressed inside an opaque HUD
-             * overlay's top strip so its transparent holes (empty item/heart slots)
-             * fall back to the backdrop instead of bleeding the scrolling room art. */
-            if (sy >= s_hud_rows)
-                for (int i = 0; i < s_band_mid; i++) blend_bg_block(dst, hd_w, s_actbg[i], sx, sy, s);
-
-            /* NES background HD tile (composites over whatever is beneath) */
-            HdTile *bt = p->bg_has ? match_layer(0, p->bg_index, p->bg_t16,
-                                                 p->bg_p0, p->bg_p1, p->bg_p2, p->bg_p3,
-                                                 sx, sy, p)
-                                   : NULL;
-            if (bt && !bt->fully_transparent) {
-                blit_over(dst, hd_w, bt, p->bg_ox, p->bg_oy, 0, 0, s);
-            } else if (p->bg_has) {
-                if (s_opt_debug)      fill_block(dst, hd_w, 0xFFFF00FFu, s);  /* magenta */
-                else if (hide_orig)   { /* leave background/backdrop showing */ }
-                else                  fill_block(dst, hd_w, p->bg_argb, s);   /* original */
-            }
-
-            /* mid-backgrounds (priority 20..29, over the BG tile, under sprites) */
-            for (int i = s_band_mid; i < s_band_fg; i++) blend_bg_block(dst, hd_w, s_actbg[i], sx, sy, s);
-
-            /* sprite HD tile (over the HD background) */
-            if (p->sp_has) {
-                HdTile *st = match_layer(1, p->sp_index, p->sp_t16,
-                                         0, p->sp_p1, p->sp_p2, p->sp_p3,
-                                         sx, sy, p);
-                if (st && !st->fully_transparent) {
-                    blit_over(dst, hd_w, st, p->sp_ox, p->sp_oy, p->sp_hm, p->sp_vm, s);
-                } else if (s_opt_debug) {
-                    fill_block(dst, hd_w, 0xFF00FFFFu, s);   /* cyan: unmatched sprite */
-                } else if (!s_opt_hide_orig) {
-                    fill_block(dst, hd_w, p->sp_argb, s);    /* original sprite */
-                }
-            }
-
-            /* foreground backgrounds (priority 30..39, over everything) */
-            for (int i = s_band_fg; i < s_nact; i++) blend_bg_block(dst, hd_w, s_actbg[i], sx, sy, s);
-        }
-    }
+    (void)upscale_direct(native_fb,native_w,hd_buf);
 }
 
 #if defined(NESRECOMP_HDPACK_LAYER_PLANS) && NESRECOMP_HDPACK_LAYER_PLANS

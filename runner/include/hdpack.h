@@ -21,27 +21,50 @@
 #include <stdint.h>
 #include "hdpack_jobs.h"
 
-/* Per-pixel record of the visible BG + topmost sprite tile, filled by the native
- * render pass. Two layers so the upscaler can composite HD sprites over the HD
- * background (Mesen's model) instead of over the original art. */
+/* A screen pixel may carry four OAM-ordered sprite layers. Native color zero
+ * remains recorded because authored replacement art can extend into it. */
+#define HD_MAX_SPRITES 4
+typedef struct {
+    int32_t index;
+    const uint8_t *t16;
+    uint32_t argb;
+    uint8_t p0,p1,p2,p3,ox,oy,hm,vm,has,transparent,behind;
+} HdSprite;
+
 typedef struct {
     /* Background layer (recorded for every rendered BG pixel). */
     int32_t        bg_index;        /* CHR-ROM absolute tile index; <0 none */
+    uint8_t        sp_count_hint;   /* 0=unknown/holey; 1..5=packed count+1 */
     const uint8_t *bg_t16;          /* -> 16 CHR bytes (CHR-RAM matching) */
     uint8_t        bg_p0, bg_p1, bg_p2, bg_p3;  /* backdrop + colors 1..3 (6-bit) */
     uint8_t        bg_ox, bg_oy;    /* within-tile pixel offset */
     uint8_t        bg_has;
+    uint8_t        bg_transparent; /* native pattern color zero; reveal authored layers */
     uint32_t       bg_argb;         /* original BG color (fallback when unmatched) */
     uint32_t       backdrop;        /* universal bg color (transparent HD BG -> this) */
 
-    /* Topmost sprite layer (recorded where a sprite pixel was drawn). */
-    int32_t        sp_index;
-    const uint8_t *sp_t16;
-    uint8_t        sp_p1, sp_p2, sp_p3;
-    uint8_t        sp_ox, sp_oy, sp_hm, sp_vm;
-    uint8_t        sp_has;
-    uint32_t       sp_argb;         /* original sprite color (fallback when unmatched) */
+    HdSprite sp[HD_MAX_SPRITES];
 } HdPixel;
+
+/* A synchronous source avoids materializing another full HdPixel frame when
+ * the host already records the same data in its native representation. Fill
+ * the background and present sprites; a packed count permits unused sprite
+ * slots to remain uninitialized. Referenced keys stay valid through preparation.
+ * Lookups may request another position while matching the current pixel.
+ * The reader must not mutate the pack or re-enter job preparation. No source
+ * callback, context or pixel pointers are retained by the published jobs. */
+typedef void (*HdPixelReader)(const void *context, size_t offset, HdPixel *out);
+const HdJobFrame *hdpack_prepare_jobs_from(const uint32_t *native, int native_w,
+                                          HdPixelReader reader, const void *context);
+/* Additions and uncached neighboring-pixel conditions reuse the source. A
+ * host with a costly reader can materialize its array once for these packs. */
+int hdpack_reuses_pixel_source(void);
+/* Pack-scale software composition without publishing intermediate jobs.
+ * Only packs without authored backgrounds/additions are eligible; otherwise
+ * returns -1 for the caller's normal job route. Uses the same synchronous
+ * reader contract, including nested condition lookups. No reader is retained. */
+int hdpack_upscale_direct_from(const uint32_t *native, int native_w, uint32_t *out,
+                               HdPixelReader reader, const void *context);
 
 /* Load the pack in `dir` (expects dir/hires.txt). native_w is the runner's
  * framebuffer width (g_render_width), used to size the per-pixel side channel.
@@ -63,11 +86,13 @@ int  hdpack_resize(int native_w);
 
 int  hdpack_active(void);    /* 1 if a pack is loaded */
 int  hdpack_scale(void);     /* upscale factor (1 when inactive) */
+const char *hdpack_directory(void); /* current asset root, or empty when inactive */
 
 /* Side channel the renderer writes into (NULL when inactive). Indexed
  * [y*native_w + x]. */
 HdPixel *hdpack_pixels(void);
 int      hdpack_recording(void);   /* 1 == renderer should fill hdpack_pixels() */
+int      hdpack_unlimited_sprites(void); /* pack-authored visual expansion only */
 
 /* Clear the side channel's per-pixel `has` flags for a new frame. Called by the
  * renderer at the start of an actually-rendered frame. */

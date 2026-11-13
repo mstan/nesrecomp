@@ -61,6 +61,9 @@ add_test(NAME cyc_ppu_kernel_test COMMAND cyc_ppu_kernel_test)
 
 add_executable(cyc_hdpack_state_test tests/hdpack_state_selftest.c)
 add_test(NAME cyc_hdpack_state_test COMMAND cyc_hdpack_state_test)
+add_executable(cyc_hd_audio_test tests/hd_audio_selftest.c)
+target_link_libraries(cyc_hd_audio_test PRIVATE ${NESRECOMP_CYC_LIBRARIES})
+add_test(NAME cyc_hd_audio_test COMMAND cyc_hd_audio_test)
 
 foreach(kind candidate reference)
     add_executable(cyc_hdpack_plan_${kind} tests/hdpack_plan_probe.c)
@@ -143,6 +146,15 @@ if(SDL2_FOUND)
     add_test(NAME cyc_hdpack COMMAND "${Python3_EXECUTABLE}"
         "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_cyc_hdpack.py"
         --host $<TARGET_FILE:cyc_hdpack_probe> --out "${CMAKE_CURRENT_BINARY_DIR}/hdpack-test")
+    add_test(NAME cyc_hdpack_alpha COMMAND "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_hdpack_alpha.py"
+        --host $<TARGET_FILE:cyc_hdpack_probe> --out "${CMAKE_CURRENT_BINARY_DIR}/hdpack-alpha-test")
+    add_test(NAME cyc_hdpack_sprites COMMAND "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_hdpack_sprites.py"
+        --host $<TARGET_FILE:cyc_hdpack_probe> --out "${CMAKE_CURRENT_BINARY_DIR}/hdpack-sprite-test")
+    add_test(NAME cyc_hdpack_sprite_limit COMMAND "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_hdpack_sprite_limit.py"
+        --host $<TARGET_FILE:cyc_hdpack_probe> --out "${CMAKE_CURRENT_BINARY_DIR}/hdpack-limit-test")
     add_test(NAME cyc_hdpack_window COMMAND "${Python3_EXECUTABLE}"
         "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_cyc_hdpack_window.py"
         --host $<TARGET_FILE:cyc_hdpack_probe> --out "${CMAKE_CURRENT_BINARY_DIR}/hdpack-window-test")
@@ -408,6 +420,12 @@ else()
 endif()
 file(WRITE ${NESRECOMP_NESTED_BUILD} "{\n${nested_fields}}\n")
 set(NESRECOMP_NESTED_BUILD_ARGS --toolchain ${NESRECOMP_NESTED_BUILD} --config "$<CONFIG>")
+
+add_test(NAME cyc_program_namespaces
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_cyc_programs.py
+        --recompiler $<TARGET_FILE:NESRecomp> --out ${CMAKE_CURRENT_BINARY_DIR}/native-programs
+        ${NESRECOMP_NESTED_BUILD_ARGS})
+set_tests_properties(cyc_program_namespaces PROPERTIES TIMEOUT 300)
 
 add_test(NAME cyc_rom_read_override
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_cyc_rom_read_override.py

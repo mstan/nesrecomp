@@ -44,9 +44,9 @@ int main(void) {
     uint8_t *buf=malloc(1024*1024),*again=malloc(1024*1024),*expected=malloc(1024*1024);
     assert(buf && again && expected);
     size_t full_total=0,compact_total=0;
-    for(unsigned part=0;part<5;part++) {
-        uint8_t *data=part==4?(void *)&pipeline:(void *)&recorded[part*256*60];
-        size_t size=part==4?sizeof pipeline:sizeof recorded/4;
+    for(unsigned part=0;part<=HD_STATE_CHUNKS;part++) {
+        uint8_t *data=part==HD_STATE_CHUNKS?(void *)&pipeline:(void *)&recorded[part*256*HD_STATE_ROWS];
+        size_t size=part==HD_STATE_CHUNKS?sizeof pipeline:sizeof recorded/HD_STATE_CHUNKS;
         memset(data,0,size);active=0;
         int n=save_part(part,buf,1024*1024);assert(n==(int)sizeof(HdStateHeader));
         full_total+=size+sizeof(HdStateHeader);compact_total+=n;
@@ -84,12 +84,45 @@ int main(void) {
             if(!trial)check_epoch_free_save(part,buf,full,again,1024*1024);
             assert(save_part(part,again,full-1)==-1);
         }
-        /* Active records retain the original complete format, even if zero. */
+        /* Active pixel records omit exactly zero sprites. The pipeline and
+         * dense worst case retain the complete lossless representation. */
         active=1;memset(data,0,size);
-        int full=save_part(part,buf,1024*1024);assert(full==(int)(sizeof(HdStateHeader)+size));
-        HdStateHeader h;memcpy(&h,buf,sizeof h);assert(h.version==2 && h.active==1);
+        int full=save_part(part,buf,1024*1024);assert(full<=(int)(sizeof(HdStateHeader)+size));
+        HdStateHeader h;memcpy(&h,buf,sizeof h);assert(h.version==(part<HD_STATE_CHUNKS?6u:7u) && h.active==1);
         assert(load_checked(part,buf,full));
         check_epoch_free_save(part,buf,full,again,1024*1024);
+        if(part==HD_STATE_CHUNKS) {
+            /* A frame-end phase alone can hide a missing cursor restore.
+             * Preserve a partially shifted queue with distinct fetched keys. */
+            pipeline.bg_head=5;
+            for(unsigned k=0;k<16;k++) {
+                pipeline.bg[k].valid=1;pipeline.bg[k].row=(uint8_t)(k&7);
+                pipeline.bg[k].x=(uint8_t)((k+3)&7);pipeline.bg[k].index=(int32_t)(100+k);
+                pipeline.bg[k].bytes[7]=(uint8_t)(k*7);
+            }
+            memcpy(expected,data,size);full=save_part(part,buf,1024*1024);
+            memset(data,0,size);assert(load_checked(part,buf,full));assert(!memcmp(data,expected,size));
+            assert(pipeline.bg_head==5);
+            for(unsigned fine=0;fine<8;fine++)assert(pipeline.bg[(pipeline.bg_head+15-fine)&15].index==100+(int)((20-fine)&15));
+            memcpy(again,buf,full);again[sizeof(HdStateHeader)+offsetof(HdPipeline,bg_head)]=16;
+            assert(!load_checked(part,again,full));assert(!memcmp(data,expected,size));
+            memcpy(again,buf,full);HdStateHeader old;memcpy(&old,again,sizeof old);old.version=4;memcpy(again,&old,sizeof old);
+            assert(!load_checked(part,again,full));assert(!memcmp(data,expected,size));
+        } else {
+            HdRecordedPixel *pixels=(HdRecordedPixel *)data;
+            for(unsigned k=0;k<4;k++){pixels[k*37].sp[k].flags=1;pixels[k*37].sp[k].tile[15]=(uint8_t)(k+1);}
+            memcpy(expected,data,size);int sparse=save_part(part,buf,1024*1024);
+            assert(sparse<(int)(sizeof(HdStateHeader)+size));
+            memset(data,0x7f,size);assert(load_checked(part,buf,sparse));assert(!memcmp(data,expected,size));
+            memcpy(again,buf,sparse);again[sizeof(HdStateHeader)+HD_PIXEL_PREFIX]=16;
+            assert(!load_checked(part,again,sparse));assert(!memcmp(data,expected,size));
+            assert(!load_checked(part,buf,sparse-1));assert(!memcmp(data,expected,size));
+            assert(!load_checked(part,buf,sparse+1));assert(!memcmp(data,expected,size));
+            for(unsigned k=0;k<256*HD_STATE_ROWS;k++)for(unsigned j=0;j<4;j++)pixels[k].sp[j].flags=1;
+            memcpy(expected,data,size);full=save_part(part,buf,1024*1024);
+            memcpy(&h,buf,sizeof h);assert(h.version==4 && full==(int)(sizeof(HdStateHeader)+size));
+            memset(data,0,size);assert(load_checked(part,buf,full));assert(!memcmp(data,expected,size));
+        }
         active=0;assert(!load_checked(part,buf,full));
     }
     printf("HD state exact_payload_roundtrips=210 full_bytes=%zu compact_bytes=%zu saved_bytes=%zu\n",full_total,compact_total,full_total-compact_total);

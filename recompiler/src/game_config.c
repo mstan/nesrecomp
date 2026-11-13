@@ -90,6 +90,15 @@ static bool game_config_load_toml(GameConfig *cfg, const char *path) {
         if (df.ok) cfg->deduplicate_functions = df.u.b;
         toml_datum_t ca = toml_bool_in(game, "cycle_accurate");
         if (ca.ok) cfg->cycle_accurate = ca.u.b;
+        toml_datum_t cns = toml_string_in(game, "cycle_namespace");
+        if (cns.ok) {
+            if (strlen(cns.u.s) >= sizeof(cfg->cycle_namespace)) {
+                fprintf(stderr, "[GameConfig] cycle_namespace is too long\n");
+                free(cns.u.s); toml_free(root); return false;
+            }
+            strcpy(cfg->cycle_namespace, cns.u.s);
+            free(cns.u.s);
+        }
         toml_datum_t csf = toml_string_in(game, "cycle_seed_file");
         if (csf.ok) {
             const char *slash = NULL;

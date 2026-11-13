@@ -15,7 +15,13 @@
 #include "cyc_trace.h"
 #include "hw.h"
 #include "hw_fds.h"
+#ifdef NESRECOMP_CYCLE_HDPACK
+#include "cyc_hd_audio.h"
+#endif
 #include "../../common/nes_fds.h"
+#if CYC_NATIVE_PROGRAMS
+#include "cyc_program.h"
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -441,6 +447,11 @@ unsigned hw_prg_bank4(uint16_t addr) { return hw_cart.prg_off[(addr >> 12) & 7] 
 uint8_t hw_bus_read(uint16_t addr)
 {
     hw.data_driven = 0;
+#ifdef NESRECOMP_CYCLE_HDPACK
+    if(((addr>=0x4100 && addr<=0x4106) || addr==0x4018 || addr==0x4019) &&
+       cyc_hd_audio_read(addr,hw.cycles,&hw.data_bus))hw.data_driven=1;
+    else
+#endif
     if (addr >= 0x8000) {
         hw.data_bus = hw_cart_prg_read(addr);
         hw.data_driven = !(hw_cart.prg_off[addr>>12&7]&MMC5_PRG_OPEN);
@@ -496,6 +507,12 @@ void hw_bus_write(uint16_t addr, uint8_t value)
 {
     if (cyc_trace_enabled) cyc_trace_access(addr, value, true);
     if (hw_cart.mapper==5 && addr<0x4020) hw_cart_cpu_write(addr,value);
+#ifdef NESRECOMP_CYCLE_HDPACK
+    if(((addr>=0x4100 && addr<=0x4106) ||
+        (addr>=0x3002 && addr<=0x3062 && (addr&15)==2)) &&
+       cyc_hd_audio_write(addr,value,hw.cycles)){}
+    else
+#endif
     if (addr < 0x2000) hw_code_store(&hw.ram[addr & 0x7FF], addr & 0x7FF, value);
     else if (addr < 0x4000) ppu_write(addr, value);
     else if (addr <= 0x4017) apu_write(addr, value);
@@ -564,6 +581,10 @@ bool cyc_load_ines(const uint8_t *image, size_t size)
     /* An iNES header cannot describe a disk; the RAM Adapter comes from
      * cyc_load_fds(). */
     if (info.mapper == NES_FDS_MAPPER) return false;
+#if CYC_NATIVE_PROGRAMS
+    const CycProgram *program = cyc_program_match_image(image, size);
+    if (!program) return false;
+#endif
     uint32_t prg_alloc, chr_alloc;
     uint32_t chr_len = info.chr_size ? info.chr_size : info.chr_ram + info.chr_nvram;
     /* A board with both CHR ROM and CHR RAM (TQROM) keeps the RAM chip after
@@ -604,6 +625,9 @@ bool cyc_load_ines(const uint8_t *image, size_t size)
     hw_cart.wram_len = info.prg_ram + info.prg_nvram;
     hw_cart.mirroring = info.vertical ? HW_MIRROR_VERTICAL : HW_MIRROR_HORIZONTAL;
     hw_cart_power_on();
+#if CYC_NATIVE_PROGRAMS
+    cyc_program_active = program;
+#endif
     return true;
 }
 
@@ -669,6 +693,9 @@ void cyc_power_on(uint8_t ppu_alignment)
     memset(&hw_region_timing, 0, sizeof(hw_region_timing));
     hw_region_timing.region = (uint8_t)region_request;
     hw_region_timing.phase = hw_pal() ? ppu_alignment % 5 : 0;
+#ifdef NESRECOMP_CYCLE_HDPACK
+    cyc_hd_audio_reset(hw_pal());
+#endif
     memset(&hw_zapper, 0, sizeof(hw_zapper));
     hw_zapper.x = hw_zapper.y = -1;
     hw.align = ppu_alignment & 3;
@@ -852,6 +879,7 @@ bool cyc_audio_enable(int sample_rate)
 }
 
 size_t cyc_audio_read(int16_t *out, size_t max) { return apu_audio_read(out, max); }
+size_t cyc_audio_read_split(int16_t *native,int16_t *enhanced,size_t max) {return apu_audio_read_split(native,enhanced,max);}
 
 void cyc_set_audio_synthesis(CycAudioSynthesis synthesis) { apu_set_audio_synthesis(synthesis); }
 

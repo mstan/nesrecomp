@@ -32,7 +32,7 @@ exclusive_group = "display-mode"
 [[hd_pack]]
 feature = "hd-pack"
 directory = "pack"
-# Optional, geometry-preserving IPS against the target's stock iNES image:
+# Optional IPS against the target's stock iNES image:
 # patch = "pack/sound.ips"
 # patched_rom_crc32 = "01234567"
 ```
@@ -40,11 +40,20 @@ directory = "pack"
 `directory` and `patch` are relative to the installed package root. The
 directory contains `hires.txt` and the creator's assets. The runtime refuses
 parent/absolute paths, links, missing files, multiple selected HD packs and
-unsupported executables. A patch requires both fields above, preserves the
-header, trainer and cartridge size, and must produce the declared payload
-CRC32. It changes an in-memory copy; the original ROM remains untouched.
-Patched PRG uses the cycle interpreter so compiled stock opcodes cannot run
-against changed code. Native execution remains available with the Mod off.
+unsupported executables. A patch requires both fields above and must produce
+the declared payload CRC32. It changes an in-memory copy; the original ROM
+remains untouched. By default, patches preserve the header, trainer and
+cartridge size, and changed PRG runs through the cycle interpreter.
+
+A title can also compile a separately verified cartridge with
+`nesrecomp_add_cycle_program` and `nesrecomp_enable_native_programs`. Its
+generated catalog matches the complete cartridge identity and PRG bytes before
+selecting a program; compiled stock opcodes never run against changed code.
+Only an exact catalog match authorizes a patch that changes cartridge geometry.
+Build the first game with a `NAMESPACE`, give each additional program its own
+namespace/configuration/seeds, and pass the expected complete patched image
+SHA-1 to the importer with `--patched-sha1`. These programs are linked into the
+host by its developer; an archive cannot supply executable code.
 
 Pack identity includes package/version, target, all pack files and the patch.
 Cycle saves refuse a different pack or patch before changing the machine.
@@ -64,10 +73,28 @@ The importer verifies a Mesen `<patch>` declaration's original ROM SHA-1,
 checks its IPS and records the patched CRC. It bundles local assets and
 preserved notices, with no ROM. Install the archive through **Mods**, then
 enable its feature. This is the adoption path for cycle titles; the older
-folder/config adapter remains for explicit legacy integrations. Replacement
-pack music/sounds and some Mesen conditions remain unsupported. An installed
-pack should be tested against its original and unmatched-pixel presentation,
-state continuation and the game's other display features.
+folder/config adapter remains for explicit legacy integrations.
+
+The cycle renderer records transparent sprite pixels and up to four sprite
+layers per pixel. It supports authored rule ordering, memory conditions,
+fallback tiles, added tiles, background layers and the pack's
+`disableSpriteLimit` presentation option. That option expands the display
+recording without changing guest sprite evaluation or overflow behavior.
+Large background images may use lossless deduplicated pages; CPU and GPU
+presentation read the same pixels.
+
+NEA replacement BGM/SFX decode from the pack's Ogg Vorbis files and mix in
+stereo with the native APU. The device becomes available only after its
+declared tracks decode successfully. Playback follows emulated CPU time, so
+muting or disabling host output preserves logical playback and current-build
+save/load positions. Native mono audio captures remain available with
+`--wav-out`; `--wav-stereo-out` captures the combined stereo output.
+
+Pack compatibility still requires testing the actual assets and patch. Compare
+unmatched native pixels, authored layers and audio, current-build state
+continuation, native in-game saves and the game's other display features.
+Undefined conditions or missing assets in a pack are not repaired by the
+importer.
 
 ## Product and trust model
 
@@ -119,8 +146,10 @@ mods/
         manifest.toml
 ```
 
-Built-in features should default to disabled. The one deliberate exception is
-the framework's own **Replay capture** (below), which is on by default.
+Built-in elective features normally default to disabled. Titles may select a
+qualified presentation default, such as adaptive widescreen, while preserving
+explicit saved choices. The framework's own **Replay capture** (below) is also
+on by default.
 
 ### Replay capture (framework package, default on)
 
@@ -452,6 +481,6 @@ then activates the resolved plugins. Netplay launches clear the in-session plan
 without overwriting the user's offline selections.
 
 Format 1 limits executable behavior to trusted activation plugins. HD assets
-and their optional geometry-preserving IPS use the shared, pre-boot validated
+and their optional IPS use the shared, pre-boot validated
 HD adapter described above. Further guest writes and interpreter hooks must
 retain that validation and the no-arbitrary-code archive boundary.

@@ -616,29 +616,41 @@ static inline bool sprite_units_idle(void)
 
 static void shift_sprites(void)
 {
-    if (sprite_units_idle()) return;
+    if (sprite_units_idle()) {
+#ifdef NESRECOMP_CYCLE_HDPACK
+        /* Transparent HD art still has a finite eight-pixel footprint after
+         * all native bits become zero. This advances display cursors only. */
+        if(rendering())cyc_hdpack_sprite_shift_mask(0xffu);
+#endif
+        return;
+    }
 #if NESRECOMP_PPU_HLE
     unsigned shifted = ppu_hle_sprite_shift(ppu.spr_x, ppu.spr_lo, ppu.spr_hi,
                                             rendering(), ppu.skipped_dot != 0);
 #ifdef NESRECOMP_CYCLE_HDPACK
-    for (unsigned i = 0; i < 8; ++i)
-        if (shifted & (1u << i)) cyc_hdpack_sprite_shift(i);
+    if(shifted)cyc_hdpack_sprite_shift_mask(shifted);
 #else
     (void)shifted;
 #endif
 #else
 #if defined(NESRECOMP_CYCLE_HDPACK) || NESRECOMP_PPU_LLE_REFERENCE
+#ifdef NESRECOMP_CYCLE_HDPACK
+    unsigned shifted=0;
+#endif
     for (int i = 0; i < 8; i++) {
         if (ppu.spr_x[i] > 0 && !ppu.skipped_dot) {
             ppu.spr_x[i]--;
         } else if (rendering()) {
 #ifdef NESRECOMP_CYCLE_HDPACK
-            cyc_hdpack_sprite_shift((unsigned)i);
+            shifted|=1u<<(unsigned)i;
 #endif
             ppu.spr_lo[i] <<= 1;
             ppu.spr_hi[i] <<= 1;
         }
     }
+#ifdef NESRECOMP_CYCLE_HDPACK
+    if(shifted)cyc_hdpack_sprite_shift_mask(shifted);
+#endif
 #else
     const uint64_t low = UINT64_C(0x7f7f7f7f7f7f7f7f);
     const uint64_t high = UINT64_C(0x8080808080808080);

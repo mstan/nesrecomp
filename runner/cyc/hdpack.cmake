@@ -5,6 +5,7 @@ function(nesrecomp_cyc_enable_hdpack target)
     set(cyc_dir "${CMAKE_CURRENT_FUNCTION_LIST_DIR}")
     target_sources(${target} PRIVATE
         "${cyc_dir}/cyc_hdpack.c"
+        "${cyc_dir}/cyc_hd_audio.c"
         "${cyc_dir}/cyc_hd_gpu.c"
         "${cyc_dir}/cyc_hd_gpu_cache.c"
         "${cyc_dir}/../src/hdpack.c"

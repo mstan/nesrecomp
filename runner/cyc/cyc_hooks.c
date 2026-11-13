@@ -3,6 +3,9 @@
 
 #include "cyc_core.h"
 #include "cyc_recomp.h"
+#if CYC_NATIVE_PROGRAMS
+#include "cyc_program.h"
+#endif
 #include "cyc_ring.h"
 #include "hw_internal.h"
 #include "../include/mod_function_hooks.h"
@@ -73,6 +76,11 @@ bool cyc_hooks_validate(void)
             bound++;
         }
         if (!bound) {
+#if CYC_NATIVE_PROGRAMS
+            /* Only the selected program's sites above receive callbacks.
+             * Other catalog programs can own linked, inactive registrations. */
+            if (cyc_program_catalog_has_hook(id, addr)) continue;
+#endif
             fprintf(stderr, "[cyc hooks] plugin %s registered at $%04X: this program declares no such "
                             "[[mod_function_hook]] site (game.toml)\n", id ? id : "?", addr);
             ok = false;

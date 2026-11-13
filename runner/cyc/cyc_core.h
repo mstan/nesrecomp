@@ -205,6 +205,8 @@ const uint8_t *cyc_frame_bg_opaque(void);
  * if the machine has no audio output. */
 bool   cyc_audio_enable(int sample_rate);
 size_t cyc_audio_read(int16_t *out, size_t max);
+/* Native mono and interleaved stereo enhancement, sharing one sample timeline. */
+size_t cyc_audio_read_split(int16_t *native,int16_t *enhanced,size_t max);
 /* Synthesis before the console's analog output stage. LEGACY is the existing
  * per-sample box average and remains the default. BAND_LIMITED replaces that
  * average with band-limited step synthesis of the post-mixer waveform. The

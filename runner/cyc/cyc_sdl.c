@@ -1581,7 +1581,11 @@ int cyc_sdl_main(const char *title_in, int scale)
     SDL_AudioSpec want = { 0 }, have;
     want.freq = (int)cyc_session_audio_rate(AUDIO_RATE);
     want.format = AUDIO_S16SYS;
+#ifdef NESRECOMP_CYCLE_HDPACK
+    want.channels = 2;
+#else
     want.channels = 1;
+#endif
     want.samples = 1024;
     SDL_AudioDeviceID dev = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
     s_audio_dev = dev;
@@ -1826,19 +1830,22 @@ int cyc_sdl_main(const char *title_in, int scale)
             loading = s_fds && cyc_host_frame_unpaced();
             fast = !online&&(st.shortcut[CYC_SC_FAST_FORWARD] || loading);
         }
-        int16_t pcm[4096];
+        int16_t pcm[4096],stereo[8192];
         size_t n;
-        while ((n = cyc_audio_read(pcm, 4096)) > 0) {
+        while ((n = cyc_audio_read_split(pcm,stereo,4096)) > 0) {
             cyc_session_audio_mix(pcm,n);
             audio_samples_produced += n;
-            /* Keep latency bounded: skip a frame's audio if ~100 ms are queued. */
-            if (replay || !dev || fast || open || inactive || !s_set.audio_enabled || SDL_GetQueuedAudioSize(dev) >= (Uint32)(have.freq / 10) * 2)
+            if (replay || !dev || fast || open || inactive || !s_set.audio_enabled || SDL_GetQueuedAudioSize(dev) >= (Uint32)(have.freq / 10) * have.channels * 2)
                 continue;
-            if (s_set.volume < 100)
-                for (size_t i = 0; i < n; ++i) pcm[i] = (int16_t)(pcm[i] * s_set.volume / 100);
-            SDL_QueueAudio(dev, pcm, (Uint32)(n * sizeof(int16_t)));
+            for(size_t i=0;i<n;i++)for(unsigned c=0;c<have.channels;c++) {
+                int value=pcm[i]+stereo[i*2+c];
+                if(value>32767)value=32767;if(value<-32768)value=-32768;
+                stereo[i*have.channels+c]=(int16_t)(value*s_set.volume/100);
+            }
+            SDL_QueueAudio(dev,stereo,(Uint32)(n*have.channels*sizeof(int16_t)));
             audio_samples_queued += n;
         }
+
 #ifdef NESRECOMP_NET
         /* Keep audio extras inside the completed simulation tick, matching
          * the headless host and any freshly captured live-tip baseline. */

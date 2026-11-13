@@ -102,6 +102,28 @@ paths are relative to the calling CMake source directory; a seed path inside
 `game.toml` is relative to that configuration file. `GAME_CONFIG` is optional.
 Existing legacy-generated C and `extras.c` are not cycle-backend inputs.
 
+A title that supports an authored patch with different executable bytes can
+compile both cartridge programs into its ordinary host. Pass `NAMESPACE stock`
+to `nesrecomp_add_cycle_game`, add each variant with
+`nesrecomp_add_cycle_program(MyGame ROM patched.nes GAME_CONFIG patch.toml
+NAMESPACE patched)`, then call `nesrecomp_enable_native_programs(MyGame)`.
+Each namespace is a unique C identifier starting with a letter. The cartridge
+loader selects an exact compiled program and cartridge identity before power-on;
+an unknown image fails without replacing the current cartridge. Generate each
+variant from its own verified inputs and coverage profile. This interface does
+not apply IPS patches, provide HD assets, adapt title-owned hooks or add disk
+variants. Titles must qualify those contracts separately. Omitting these
+options retains the single-program generated ABI and direct dispatch.
+
+For a catalog host built with `MODS HD_PACKS`, the HD adapter also validates a
+pack's patched image against the compiled catalog. It selects that image before
+cartridge allocation, region setup, and native save loading. The owner's input
+ROM remains unchanged. `tools/package_hdpack.py --patched-sha1 <digest>` permits
+an expanded IPS only when the complete result has that expected SHA-1; multiple
+patch entries are resolved by the supplied stock ROM's SHA-1. A host still
+refuses an unknown native program even when the package's payload CRC is valid.
+Single-program hosts retain the existing geometry-preserving IPS path.
+
 `PLAYERS 1` through `PLAYERS 4` sets the launcher's controller count for the title;
 omitting it retains two controllers. Seats three and four are independent
 host inputs for trusted Mods; the physical NES still has two controller ports.
