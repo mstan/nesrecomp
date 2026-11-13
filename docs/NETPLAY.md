@@ -13,6 +13,19 @@
 
 ## 1. The pieces
 
+The cycle runtime seals `cycle-lle-c2` or `cycle-hle-c2` before admission.
+These profiles disable the per-bus diagnostic trace and clear its history at
+boot. The trace previously prevented native clock intervals; desync checks
+still hash the complete frame-boundary machine image. The profile stays fixed
+for the match, and exact-build compatibility remains required.
+
+A Windows two-peer SMB3 gameplay check with latency, jitter, packet loss and
+forced mispredictions completed nine rollback episodes without a desync.
+Both peers produced identical confirmed-tick pictures and serialized states,
+and each executed over eight million native interval cycles. On that host,
+live-frame median CPU cost was about 4.14 ms and replay-frame median cost was
+4.18–4.20 ms. These are session costs, not a measured before/after speedup.
+
 | where | what |
 |---|---|
 | `lib/recomp-net` 588059c | the driver, LAN transport + hub, lobby client, link simulator (RetroPortingToolKit `feat/genesis-spectator-ready` = bdc58b6 + the gallery no longer re-arms ready on every lobby_update; bdc58b6 is `feat/nes-spectator` = `feat/rb-sparse-seats-and-ws-backlog` 03ee1b1 [main a9d20e2 + sparse-seat seal fix + WS backlog] + the observer fix, §5) |

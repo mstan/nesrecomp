@@ -45,8 +45,8 @@ static uint32_t random32(void) { rng ^= rng<<13; rng ^= rng>>17; rng ^= rng<<5; 
 static void capability_contract(void) {
     assert(nes_netplay_cycle_profile("LLE")==1);assert(nes_netplay_cycle_profile("HLE")==4);
     assert(!nes_netplay_cycle_profile(NULL));assert(!nes_netplay_cycle_profile("unknown"));
-    assert(!strcmp(nes_netplay_cycle_contract("LLE"),"cycle-lle-c1"));
-    assert(!strcmp(nes_netplay_cycle_contract("HLE"),"cycle-hle-c1"));
+    assert(!strcmp(nes_netplay_cycle_contract("LLE"),"cycle-lle-c2"));
+    assert(!strcmp(nes_netplay_cycle_contract("HLE"),"cycle-hle-c2"));
     assert(!strcmp(nes_netplay_cycle_contract("unknown"),"cycle-unsupported"));
     assert(nes_netplay_profile_compatible(1,1,1));assert(nes_netplay_profile_compatible(4,4,4));
     assert(nes_netplay_profile_compatible(2,2,2));

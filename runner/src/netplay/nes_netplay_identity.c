@@ -203,8 +203,8 @@ uint32_t nes_netplay_cycle_profile(const char *implementation) {
 }
 const char *nes_netplay_cycle_contract(const char *implementation) {
     switch(nes_netplay_cycle_profile(implementation)) {
-        case NES_NET_PROFILE_CYCLE_LLE:return "cycle-lle-c1";
-        case NES_NET_PROFILE_CYCLE_HLE:return "cycle-hle-c1";
+        case NES_NET_PROFILE_CYCLE_LLE:return "cycle-lle-c2";
+        case NES_NET_PROFILE_CYCLE_HLE:return "cycle-hle-c2";
         default:return "cycle-unsupported";
     }
 }
