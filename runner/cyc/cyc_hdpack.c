@@ -24,6 +24,10 @@ static uint64_t presented_generation;
 static const HdJobFrame *prepared_jobs;
 static uint64_t jobs_generation,jobs_epoch,thumbnail_serial;
 static uint32_t thumbnail[256*240];
+static int skip_empty_sprites;
+static void prepare_capture_coverage(void) {
+    skip_empty_sprites=hdpack_prepare_sprite_coverage(hw_cart.chr_ram?0:hw_cart.info.chr_size/16);
+}
 static void release_jobs(void) {
     hdpack_jobs_release(prepared_jobs);prepared_jobs=NULL;
     thumbnail_serial=UINT64_MAX;
@@ -40,6 +44,7 @@ void cyc_hdpack_power_on(void) {
     memset(&pipeline,0,sizeof pipeline);memset(recorded,0,sizeof recorded);
     if(!configured)cyc_hdpack_config(1,"");
     hdpack_load_from_config(hw_cart.chr_ram!=0,256);
+    prepare_capture_coverage();
     if(hdpack_active())cyc_hd_audio_load(hdpack_directory(),hw_pal());
     else cyc_hd_audio_unload();
 }
@@ -71,6 +76,7 @@ bool cyc_hdpack_mod_image(uint8_t **image,size_t *size) {
 #endif
 }
 bool cyc_hdpack_mod_prepare(void) {
+    skip_empty_sprites=0;
     presentation_valid=false;++presentation_epoch;release_jobs();
     const NESModHdPack *pack=nes_mod_hd_pack();
     memset(&pipeline,0,sizeof pipeline);memset(recorded,0,sizeof recorded);
@@ -84,6 +90,7 @@ bool cyc_hdpack_mod_prepare(void) {
         if(hdpack_load(pack->directory,hw_cart.chr_ram!=0,256)) {
             fprintf(stderr,"[Mods] Selected HD pack could not be loaded\n");return false;
         }
+        prepare_capture_coverage();
         cyc_hd_audio_load(pack->directory,hw_pal());
         memcpy(fingerprint,pack->fingerprint,sizeof fingerprint);
     }
@@ -209,15 +216,22 @@ void cyc_hdpack_pixel(unsigned bg_color,unsigned bg_palette,int sprite,unsigned 
             }
             return;
         }
-        unsigned count=0;
-        for(unsigned i=0;i<8 && count<HD_MAX_SPRITES;i++) {
+        /* Budget the original OAM candidates, compact only retained metadata. */
+        unsigned count=0,considered=0;
+        for(unsigned i=0;i<8 && considered<HD_MAX_SPRITES;i++) {
             const HdFetchedTile *tile=&pipeline.sprite[i];
             if(!tile->valid || pipeline.sprite_x[i]>=8 || (ppu.spr_x[i] && !ppu.skipped_dot))continue;
-            HdRecordedSprite *sp=&p->sp[count++];unsigned attr=ppu.spr_attr[i];
+            considered++;
+            unsigned attr=ppu.spr_attr[i],color=((ppu.spr_lo[i]>>7)&1)|((ppu.spr_hi[i]>>6)&2);
+            if(skip_empty_sprites && !color) {
+                unsigned x=pipeline.sprite_x[i];if(attr&0x40)x=7-x;
+                if(tile->row<8 && !(hdpack_sprite_coverage(tile->index)&(UINT64_C(1)<<(tile->row*8+x))))continue;
+            }
+            HdRecordedSprite *sp=&p->sp[count++];
             sp->flags=(uint8_t)(1|((attr&0x40)?2:0)|((attr&0x80)?4:0)|((attr&0x20)?8:0));
             sp->index=tile->index;memcpy(sp->tile,tile->bytes,16);
             sp->x=pipeline.sprite_x[i];sp->y=tile->row;
-            sp->color=(uint8_t)(((ppu.spr_lo[i]>>7)&1)|((ppu.spr_hi[i]>>6)&2));
+            sp->color=(uint8_t)color;
             for(unsigned j=0;j<3;j++)sp->pal[j]=ppu.palette[16+(attr&3)*4+j+1];
         }
     }

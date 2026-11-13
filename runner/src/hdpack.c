@@ -120,6 +120,8 @@ static int        s_native_w = 0;
 static HdPixelReader s_pixel_reader;
 static const void *s_pixel_context;
 static int s_source_reuse=-1;
+static uint64_t *s_capture_coverage;
+static uint32_t s_capture_count;
 static HdPixel *pixel_at(size_t offset,HdPixel *scratch) {
     if(!s_pixel_reader)return &s_pixels[offset];
     s_pixel_reader(s_pixel_context,offset,scratch);
@@ -952,6 +954,38 @@ int hdpack_reuses_pixel_source(void) {
     }
     return s_source_reuse;
 }
+int hdpack_prepare_sprite_coverage(uint32_t chr_tiles) {
+    free(s_capture_coverage);s_capture_coverage=NULL;s_capture_count=0;
+    /* Bound this optional index to eight bytes per already loaded definition.
+     * Sparse/unknown geometries keep the complete capture path. */
+    if(!s_active || s_is_chr_ram || !chr_tiles || chr_tiles>(uint32_t)s_all_count ||
+       s_addition_count || s_unlimited_sprites || s_skipped_cond || s_missing_cond)return 0;
+    for(unsigned i=0;i<HD_NBUCKETS;i++) {
+        if(s_fallbacks[i])return 0;
+        for(HdAlias *a=s_alias_buckets[i];a;a=a->next)
+            if(!a->tile || a->key.is_chr_ram!=a->tile->key.is_chr_ram ||
+               a->key.tile_index!=a->tile->key.tile_index)return 0;
+    }
+    for(int i=0;i<s_cond_count;i++) {
+        switch(s_cond_all[i]->type) {
+            case CT_SPRITE_AT_POS:case CT_SPRITE_NEARBY:case CT_TILE_NEARBY:
+            case CT_ORIGIN_X:case CT_ORIGIN_Y:return 0;
+            default:break;
+        }
+    }
+    uint64_t *coverage=calloc(chr_tiles,sizeof(*coverage));if(!coverage)return 0;
+    for(int i=0;i<s_all_count;i++) {
+        HdTile *tile=s_all[i];
+        if(tile->key.tile_index>=0 && (uint32_t)tile->key.tile_index<chr_tiles)
+            coverage[tile->key.tile_index]|=tile->cell_visible;
+    }
+    s_capture_coverage=coverage;s_capture_count=chr_tiles;
+    fprintf(stderr,"[HDPack] transparent sprite capture coverage: %u CHR-ROM tiles\n",chr_tiles);
+    return 1;
+}
+uint64_t hdpack_sprite_coverage(int32_t index) {
+    return index>=0 && (uint32_t)index<s_capture_count?s_capture_coverage[index]:UINT64_MAX;
+}
 
 void hdpack_frame_begin(void) {
     if (s_active && s_pixels)
@@ -977,6 +1011,7 @@ int hdpack_resize(int native_w) {
 
 void hdpack_unload(void) {
     s_source_reuse=-1;
+    free(s_capture_coverage);s_capture_coverage=NULL;s_capture_count=0;
     int jobs_own_pixels = hd_jobs_owns_assets();
 #if defined(NESRECOMP_HDPACK_LAYER_PLANS) && NESRECOMP_HDPACK_LAYER_PLANS
     hd_layer_unload();
