@@ -306,6 +306,7 @@ static void check_addition_resolution(void) {
     HdPixel *bg=&s_pixels[5*17+5];bg->bg_has=1;bg->bg_index=6;
     bg->bg_p0=15;bg->bg_p1=1;bg->bg_p2=2;bg->bg_p3=3;bg->bg_ox=2;bg->bg_oy=7;
     char bg_rule[]="6,0F010203,1,1,C,FF212223";process_addition(bg_rule);
+    assert(hdpack_reuses_pixel_source());
     assert(resolve_sprites());
     HdSprite expected[HD_MAX_SPRITES];memcpy(expected,sprites_at(8*17+8,&s_pixels[8*17+8]),sizeof expected);
     for(int i=0;i<HD_MAX_SPRITES;i++) {
@@ -362,6 +363,7 @@ static void check_cell_draw_coverage(void) {
     s_active=1;s_is_chr_ram=0;s_version=108;s_scale=2;s_native_w=17;
     s_pixels=calloc(17*240,sizeof(*s_pixels));assert(s_pixels);
     s_opt_debug=s_opt_hide_orig=s_disable_orig=0;
+    assert(!hdpack_reuses_pixel_source());
     for(unsigned k=0;k<2;k++) {
         HdTile *t=calloc(1,sizeof(*t));assert(t);
         t->key.tile_index=(int32_t)(4+k);t->key.palette=k?0xff111213u:0x0f010203u;
@@ -426,6 +428,7 @@ int main(void) {
     const HdJobFrame *retained=NULL;uint32_t *retained_pixels=NULL;
     for(int ram=0;ram<2;ram++)for(int ver=0;ver<2;ver++)for(unsigned si=0;si<4;si++) {
         setup(ram,ver?106:99,scales[si]);
+        assert(hdpack_reuses_pixel_source());
         uint32_t native[17*240];size_t n=(size_t)17*240*s_scale*s_scale;
         uint32_t *out=malloc(n*4);assert(out);
         for(int q=0;q<12;q++) {
@@ -454,6 +457,7 @@ int main(void) {
             s_groups_ready=q%7!=0; /* allocation-failure reference fallback */
             s_use_render_plan=q%4!=0; /* simple-pack compositor selection */
             if(q==10)s_plan_epoch=UINT64_MAX;
+            int saved_backgrounds=s_bg_count;if(q==11)s_bg_count=0;
             hdpack_upscale(native,17,out);
             check_reader_jobs(native,out);
 #if !(defined(NESRECOMP_HDPACK_PLAN_REFERENCE) && NESRECOMP_HDPACK_PLAN_REFERENCE)
@@ -487,6 +491,7 @@ int main(void) {
             uint64_t hash=UINT64_C(1469598103934665603);
             for(size_t i=0;i<n;i++)for(int j=0;j<4;j++)hash=(hash^(uint8_t)(out[i]>>(j*8)))*UINT64_C(1099511628211);
             printf("case %u %016llx\n",count++,(unsigned long long)hash);
+            s_bg_count=saved_backgrounds;
         }
         free(out);hdpack_unload();
         if(retained) check_retained_jobs(retained,retained_pixels);

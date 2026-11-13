@@ -305,6 +305,17 @@ static uint32_t job_color_over(uint32_t under, uint32_t source, uint32_t brightn
     return alpha == 255 ? source : blend_over(under, source);
 }
 
+/* A native-density source row is contiguous until a logical page boundary.
+ * Resolve that boundary once per span rather than per output texel. */
+static const uint32_t *job_image_span(const HdJobImage *im,unsigned x,unsigned y,unsigned *count)
+{
+    *count=im->width-x;
+    if(!im->pages)return im->pixels+(size_t)y*im->width+x;
+    unsigned n=HD_IMAGE_PAGE_SIZE-(x&(HD_IMAGE_PAGE_SIZE-1));
+    if(*count>n)*count=n;
+    return im->pages->map[(size_t)(y/128)*im->pages->columns+x/128]+(y%128)*128+x%128;
+}
+
 static int job_background_rows(const HdJobFrame *f, const HdJobBackground *b,
                                unsigned first_y, unsigned scale,
                                uint32_t *out, size_t pitch)
@@ -323,6 +334,19 @@ static int job_background_rows(const HdJobFrame *f, const HdJobBackground *b,
     if (right > width) right = width;
     if (bottom > height) bottom = height;
     if (left >= right || top >= bottom) return 0;
+    if(scale==f->source_scale) {
+        for(int64_t y=top;y<bottom;y++) {
+            unsigned sx=(unsigned)(left+ox),sy=(unsigned)(y+oy),remaining=(unsigned)(right-left);
+            uint32_t *dst=out+(size_t)y*pitch+(size_t)left;
+            while(remaining) {
+                unsigned n;const uint32_t *src=job_image_span(im,sx,sy,&n);
+                if(n>remaining)n=remaining;
+                for(unsigned i=0;i<n;i++)dst[i]=job_color_over(dst[i],src[i],b->brightness,b->blend);
+                sx+=n;dst+=n;remaining-=n;
+            }
+        }
+        return 0;
+    }
     for (int64_t y = top; y < bottom; ++y) {
         size_t sy = (size_t)((y + oy) * f->source_scale / scale);
         uint32_t *dst = out + (size_t)y * pitch + (size_t)left;
@@ -352,6 +376,17 @@ static int job_tile_block(const HdJobFrame *f, unsigned scale, uint32_t *dst,
     if (ox >= 8 || oy >= 8 || !hd_image_storage_valid(im) || im->width < 8 * f->source_scale ||
         im->height < 8 * f->source_scale || im->brightness > 65025) return -1;
     int hm = (mirrors & HD_JOB_HMIRROR) != 0, vm = (mirrors & HD_JOB_VMIRROR) != 0;
+    if(scale==f->source_scale && !im->pages) {
+        unsigned cell=(hm?7-ox:ox)*scale;
+        for(unsigned y=0;y<scale;y++) {
+            unsigned sy=oy*scale+(vm?scale-1-y:y);
+            const uint32_t *src=im->pixels+(size_t)sy*im->width+cell;
+            uint32_t *row=dst+(size_t)y*pitch;
+            if(hm)for(unsigned x=0;x<scale;x++)row[x]=job_color_over(row[x],src[scale-1-x],im->brightness,0);
+            else for(unsigned x=0;x<scale;x++)row[x]=job_color_over(row[x],src[x],im->brightness,0);
+        }
+        return 0;
+    }
     for (unsigned y = 0; y < scale; ++y) {
         unsigned sy = y * f->source_scale / scale;
         if (vm) sy = f->source_scale - 1 - sy;
@@ -385,6 +420,35 @@ static int job_sprite_pass(const HdJobFrame *f,unsigned scale,uint32_t *out,size
     return 0;
 }
 
+/* Without authored interleaving backgrounds, each native cell is independent.
+ * Compose its complete band order while its output block is already hot. */
+static int job_cells(const HdJobFrame *f,unsigned scale,uint32_t *out,size_t pitch)
+{
+    for(uint32_t y=0;y<f->height;y++)for(uint32_t x=0;x<f->width;x++) {
+        const HdJobPixel *j=&f->pixels[(size_t)y*f->width+x];
+        uint32_t count=hd_job_extra_count(j->flags),start=hd_job_extra_start(j->flags);
+        if((!count && start) || start>f->sprite_count || count>f->sprite_count-start)return -1;
+        HdJobSprite layers[HD_MAX_SPRITES];
+        layers[0]=(HdJobSprite){j->sp_image,j->sp_uv,j->sp_color,j->flags&127u};
+        for(unsigned k=0;k<count;k++) {
+            layers[k+1]=f->sprites[start+k];
+            if(layers[k+1].flags&~124u)return -1;
+        }
+        uint32_t *dst=out+(size_t)y*scale*pitch+(size_t)x*scale;
+        for(unsigned dy=0;dy<scale;dy++)for(unsigned dx=0;dx<scale;dx++)dst[(size_t)dy*pitch+dx]=j->base;
+        for(int behind=1;behind>=0;behind--) {
+            if(!behind && job_tile_block(f,scale,dst,pitch,(j->flags>>HD_JOB_BG_SHIFT)&HD_JOB_MODE_MASK,j->bg_image,j->bg_uv,j->bg_color,0))return -1;
+            if(behind && !f->has_behind)continue;
+            for(unsigned k=0;k<=count;k++) {
+                const HdJobSprite *sp=&layers[k];
+                if(!!(sp->flags&HD_JOB_BEHIND)!=behind)continue;
+                if(job_tile_block(f,scale,dst,pitch,(sp->flags>>HD_JOB_SP_SHIFT)&HD_JOB_MODE_MASK,sp->image,sp->uv,sp->color,sp->flags))return -1;
+            }
+        }
+    }
+    return 0;
+}
+
 int hdpack_render_jobs(const HdJobFrame *f, unsigned scale, uint32_t *out, size_t pitch)
 {
     if (!f || !out || !f->pixels || !f->width || !f->height || !f->source_scale ||
@@ -395,6 +459,7 @@ int hdpack_render_jobs(const HdJobFrame *f, unsigned scale, uint32_t *out, size_
         (f->sprite_count && !f->sprites) || f->has_behind>1 ||
         f->behind_end > f->under_end || f->under_end > f->mid_end || f->mid_end > f->background_count ||
         f->hud_rows > f->height) return -1;
+    if(!f->background_count)return job_cells(f,scale,out,pitch);
     for (uint32_t y = 0; y < f->height; ++y) for (uint32_t x = 0; x < f->width; ++x) {
         uint32_t *dst = out + (size_t)y * scale * pitch + (size_t)x * scale;
         uint32_t color = f->pixels[(size_t)y * f->width + x].base;

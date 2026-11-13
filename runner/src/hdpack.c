@@ -119,6 +119,7 @@ static HdPixel   *s_pixels = NULL;     /* side channel, native_w*240 */
 static int        s_native_w = 0;
 static HdPixelReader s_pixel_reader;
 static const void *s_pixel_context;
+static int s_source_reuse=-1;
 static HdPixel *pixel_at(size_t offset,HdPixel *scratch) {
     if(!s_pixel_reader)return &s_pixels[offset];
     s_pixel_reader(s_pixel_context,offset,scratch);
@@ -941,6 +942,16 @@ const char *hdpack_directory(void) {return s_active?s_dir:"";}
 HdPixel *hdpack_pixels(void) { return s_active ? s_pixels : NULL; }
 int hdpack_recording(void)   { return s_active; }
 int hdpack_unlimited_sprites(void) {return s_active && s_unlimited_sprites;}
+int hdpack_reuses_pixel_source(void) {
+    if(s_source_reuse<0) {
+        s_source_reuse=s_addition_count!=0;
+        for(int i=0;i<s_cond_count && !s_source_reuse;i++) {
+            HdCond *c=s_cond_all[i];
+            if(!c->use_cache && (c->type==CT_TILE_NEARBY || c->type==CT_SPRITE_NEARBY))s_source_reuse=1;
+        }
+    }
+    return s_source_reuse;
+}
 
 void hdpack_frame_begin(void) {
     if (s_active && s_pixels)
@@ -965,6 +976,7 @@ int hdpack_resize(int native_w) {
 }
 
 void hdpack_unload(void) {
+    s_source_reuse=-1;
     int jobs_own_pixels = hd_jobs_owns_assets();
 #if defined(NESRECOMP_HDPACK_LAYER_PLANS) && NESRECOMP_HDPACK_LAYER_PLANS
     hd_layer_unload();

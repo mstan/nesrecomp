@@ -54,6 +54,9 @@ typedef struct {
 typedef void (*HdPixelReader)(const void *context, size_t offset, HdPixel *out);
 const HdJobFrame *hdpack_prepare_jobs_from(const uint32_t *native, int native_w,
                                           HdPixelReader reader, const void *context);
+/* Additions and uncached neighboring-pixel conditions reuse the source. A
+ * host with a costly reader can materialize its array once for these packs. */
+int hdpack_reuses_pixel_source(void);
 
 /* Load the pack in `dir` (expects dir/hires.txt). native_w is the runner's
  * framebuffer width (g_render_width), used to size the per-pixel side channel.

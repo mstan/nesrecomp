@@ -264,7 +264,10 @@ const HdJobFrame *cyc_hdpack_jobs(const uint32_t *native) {
     uint64_t generation=cyc_render_generation();
     if(prepared_jobs && generation==jobs_generation && jobs_epoch==presentation_epoch)return prepared_jobs;
     hdpack_invalidate_conditions();
-    const HdJobFrame *next=hdpack_prepare_jobs_from(native,256,read_pixel,native);
+    const HdJobFrame *next;
+    if(hdpack_reuses_pixel_source()) {
+        prepare_pixels(native);next=hdpack_prepare_jobs(native,256);
+    } else next=hdpack_prepare_jobs_from(native,256,read_pixel,native);
     release_jobs();prepared_jobs=next;jobs_generation=generation;jobs_epoch=presentation_epoch;
     return prepared_jobs;
 }
