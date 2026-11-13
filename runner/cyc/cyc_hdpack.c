@@ -97,7 +97,7 @@ bool cyc_hdpack_mod_prepare(void) {
         if(failed) {
             fprintf(stderr,"[Mods] Selected HD pack could not be loaded\n");return false;
         }
-        if(pack->graphics_only)hdpack_preserve_unmatched_tiles(adapter?adapter->native_hud_rows:0);
+        if(pack->graphics_only)hdpack_preserve_unmatched_tiles(adapter?adapter->native_hud_rows:0,adapter?adapter->native_hud_columns:0);
         else cyc_hd_audio_load(pack->directory,hw_pal());
         memcpy(fingerprint,pack->fingerprint,sizeof fingerprint);
     }

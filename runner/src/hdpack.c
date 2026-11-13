@@ -128,7 +128,7 @@ static int        s_skipped_cond = 0;  /* conditional tiles not yet supported (P
 static int        s_overscan[4] = {0,0,0,0}; /* top,right,bottom,left (parsed; clip TODO) */
 static int        s_has_overscan = 0;
 static int        s_disable_orig = 0;  /* <options>disableOriginalTiles */
-static unsigned   s_native_hud_rows;
+static unsigned   s_native_hud_rows, s_native_hud_columns;
 static int        s_auto_fallback;
 static int        s_unlimited_sprites;
 
@@ -944,8 +944,9 @@ void hdpack_invalidate_conditions(void) {
     for(int i=0;i<s_cond_count;i++)s_cond_all[i]->cached_frame=UINT64_MAX;
 }
 int hdpack_active(void) { return s_active; }
-void hdpack_preserve_unmatched_tiles(unsigned rows) {
+void hdpack_preserve_unmatched_tiles(unsigned rows,unsigned columns) {
     s_disable_orig=0;s_native_hud_rows=rows<=240?rows:0;
+    s_native_hud_columns=columns<=256?columns:0;
 }
 int hdpack_scale(void)  { return s_active ? s_scale : 1; }
 const char *hdpack_directory(void) {return s_active?s_dir:"";}
@@ -1029,7 +1030,7 @@ void hdpack_unload(void) {
     }
     free(s_bgimgs); s_bgimgs = NULL; s_bgimg_count = s_bgimg_cap = 0;
     s_missing_cond = s_bg_unrenderable = 0; s_disable_orig = s_auto_fallback = s_unlimited_sprites = 0;
-    s_native_hud_rows=0;
+    s_native_hud_rows=s_native_hud_columns=0;
 
     for(int i=0;i<4096;i++){HdAddition *r=s_additions[i];while(r){HdAddition *next=r->next;free(r);r=next;}s_additions[i]=NULL;}
     s_addition_count=0;free(s_resolved_sprites);s_resolved_sprites=NULL;s_resolved_capacity=0;s_sprites_resolved=0;s_current_sprite=NULL;
@@ -1243,6 +1244,9 @@ static void fill_block(uint32_t *dst, int hd_w, uint32_t color, int s) {
 
 /* Match a layer by (is_sprite, index/content, palette) in the loaded dialect.
  * (x,y,cur) locate the pixel for any per-pixel [cond] gates on conditional tiles. */
+static int native_hud_pixel(unsigned x,unsigned y) {
+    return y<s_native_hud_rows && x<s_native_hud_columns;
+}
 static HdTile *native_hud_tile(HdTile *tile,int y) {
     return y>=0 && (unsigned)y<s_native_hud_rows && tile && tile->fully_transparent?NULL:tile;
 }
@@ -1476,6 +1480,11 @@ static int upscale_direct(const uint32_t *native_fb, int native_w, uint32_t *hd_
         for (int sx = 0; sx < native_w; sx++) {
             int idx = sy * native_w + sx;
             uint32_t *dst = hd_buf + (long)(sy * s) * hd_w + (long)sx * s;
+            /* A title-owned native HUD uses the actual PPU result, including
+             * dynamic palettes/sprites, rather than HD side-channel fallback. */
+            if(native_hud_pixel((unsigned)sx,(unsigned)sy)) {
+                fill_block(dst,hd_w,native_fb[idx],s);continue;
+            }
             HdPixel scratch,*p=pixel_at((size_t)idx,&scratch);
             if(p->bg_has && (p->bg_ox>=8 || p->bg_oy>=8))return -1;
 

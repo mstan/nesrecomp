@@ -87,6 +87,7 @@ typedef struct CycHdPackAdapter {
     void (*palette)(void *ctx,uint8_t palette[4]);
     bool (*visible)(void *ctx);
     unsigned native_hud_rows;
+    unsigned native_hud_columns; /* left-side native HUD within those rows */
 } CycHdPackAdapter;
 
 typedef struct CycHostExtras {

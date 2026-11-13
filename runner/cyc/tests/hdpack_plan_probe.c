@@ -481,9 +481,9 @@ static void check_unmatched_program_tiles(void) {
     HdPixel *p=&s_pixels[0];p->bg_has=1;p->bg_index=-1;
     p->backdrop=0xff000000;p->bg_argb=0xff123456;
     s_disable_orig=1;s_opt_debug=s_opt_hide_orig=0;
-    hdpack_upscale(native,17,out);assert(out[0]==p->backdrop);
-    hdpack_preserve_unmatched_tiles(0);
-    hdpack_upscale(native,17,out);assert(out[0]==p->bg_argb);
+    assert(!upscale_direct(native,17,out));assert(out[0]==p->backdrop);
+    hdpack_preserve_unmatched_tiles(0,0);
+    assert(!upscale_direct(native,17,out));assert(out[0]==p->bg_argb);
     assert(!upscale_direct(native,17,out) && out[0]==p->bg_argb);
     /* The old pack intentionally blanks tiles beneath its full HUD image.
      * A changed program keeps its HUD and still reveals authored room art
@@ -500,12 +500,33 @@ static void check_unmatched_program_tiles(void) {
     for(unsigned i=0;i<17*240;i++)image->px[i]=0xff654321;
     s_bgimgs[0]=image;s_bgs[0].img=image;s_bgs[0].priority=10;s_bgs[0].brightness=255;
     s_bg_sorted[0]=&s_bgs[0];
-    hdpack_preserve_unmatched_tiles(64);hdpack_upscale(native,17,out);
+    hdpack_preserve_unmatched_tiles(64,0);assert(!upscale_direct(native,17,out));
     assert(out[0]==p->bg_argb && out[1]==p->backdrop && out[65*17]==0xff654321);
     assert(!upscale_direct(native,17,out));
     assert(out[0]==p->bg_argb && out[1]==p->backdrop && out[65*17]==0xff654321);
-    hdpack_preserve_unmatched_tiles(0);hdpack_upscale(native,17,out);
+    hdpack_preserve_unmatched_tiles(0,0);assert(!upscale_direct(native,17,out));
     assert(out[0]==0xff654321); /* normal authored transparency remains */
+    /* An opaque old HUD label must not cover a modified game's relocated
+     * life meter. Keep replacement art beside and below the native region. */
+    tile(1,0x0f010203,2,0,NULL,NULL,0);
+    HdTile *opaque=match_layer(0,5,NULL,15,1,2,3,8,65,p);assert(opaque);
+    for(int i=0;i<64;i++)opaque->data[i]=0xffabcdef;
+    opaque->has_transparent=opaque->fully_transparent=0;
+    p->bg_index=5;s_pixels[8]=*p;s_pixels[65*17]=*p;native[0]=0xff112233;
+    hdpack_preserve_unmatched_tiles(64,8);hdpack_upscale(native,17,out);
+    assert(out[0]==native[0] && out[8]==0xffabcdef && out[65*17]==0xffabcdef);
+    assert(!upscale_direct(native,17,out));
+    assert(out[0]==native[0] && out[8]==0xffabcdef && out[65*17]==0xffabcdef);
+    /* Foreground imagery cannot overwrite owned native pixels either. */
+    s_bgs[0].priority=35;hdpack_upscale(native,17,out);
+    assert(out[0]==native[0] && out[8]!=0xffabcdef && out[65*17]!=0xffabcdef);
+    assert(!upscale_direct(native,17,out) && out[0]==native[0]);
+    const HdJobFrame *hud=hdpack_prepare_jobs(native,17);assert(hud);
+    assert(!hdpack_render_jobs(hud,1,out,17) && out[0]==native[0]);
+#ifdef NESRECOMP_HDPACK_GPU_PROBE
+    hdpack_gpu_probe_check(hud,1,out,17);
+#endif
+    hdpack_jobs_release(hud);
     hdpack_unload();
 }
 

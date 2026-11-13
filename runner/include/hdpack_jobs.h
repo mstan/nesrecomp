@@ -83,6 +83,7 @@ typedef struct HdJobFrame {
     const HdJobBackground *backgrounds;
     uint32_t sprite_count,behind_end,has_behind;
     const HdJobSprite *sprites;
+    uint32_t native_hud_rows,native_hud_columns; /* actual native pixels own this rectangle */
 } HdJobFrame;
 
 /* Resolves the native side channel and all conditions into a new caller-owned
