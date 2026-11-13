@@ -72,7 +72,29 @@ try {
     $licenses = @{
         'NESRecomp-LICENSE.txt' = (Join-Path $EngineRoot 'LICENSE')
         'SDL2-COPYING.txt' = (Join-Path $EngineRoot 'runner/external/SDL2/COPYING.txt')
+        'recomp-ui-LICENSE.txt' = (Join-Path $RecompUi 'LICENSE')
         'ImGui-LICENSE.txt' = (Join-Path $RecompUi 'src/third_party/imgui/LICENSE.txt')
+    }
+    # FetchContent can be overridden independently of the engine checkout.
+    # Use the sources that configured this binary, including non-default RB roots.
+    foreach ($dependency in @(
+        @{ Cache = 'recomp_net_SOURCE_DIR'; Notice = 'recomp-net-LICENSE.txt' },
+        @{ Cache = 'retcomm_rbengine_SOURCE_DIR'; Notice = 'retcomm-rbengine-LICENSE.txt' }
+    )) {
+        $sourceRoot = Cache-Path $dependency.Cache ''
+        if ($sourceRoot) { $licenses[$dependency.Notice] = Join-Path $sourceRoot 'LICENSE' }
+    }
+    # These are the fonts in recomp-ui's runtime manifest. The notices include
+    # their upstream copyright statements and full redistribution licenses.
+    foreach ($font in @(
+        @{ File = 'LatoLatin-Regular.ttf'; Notice = 'LatoLatin-OFL.txt' },
+        @{ File = 'LatoLatin-Bold.ttf'; Notice = 'LatoLatin-OFL.txt' },
+        @{ File = 'NotoSansSymbols2-Regular.ttf'; Notice = 'NotoSansSymbols2-OFL.txt' },
+        @{ File = 'OpenMoji-black-glyf.ttf'; Notice = 'OpenMoji-LICENSE.txt' }
+    )) {
+        if (Test-Path -LiteralPath (Join-Path $stage "assets/fonts/$($font.File)")) {
+            $licenses[$font.Notice] = Join-Path $PSScriptRoot "release-licenses/$($font.Notice)"
+        }
     }
     # Some local game projects do not yet carry a separate license file.
     # Bundle it when declared; the required framework/dependency notices stay.
@@ -90,7 +112,7 @@ No ROM is included. Select your matching original ROM at first launch.
 Arrow keys: D-pad. Z: A. X: B. Enter: Start. Backslash: Select.
 Escape: menu. Hold Tab: fast-forward. F8/F9: save/load cycle state.
 Gamepads and remapping are supported; use Controls (config.ini).
-Legacy binary save states require the retained legacy backend.
+Save states are specific to this build.
 $GameNotes
 "@
     if ($startupDiagnostics) {
