@@ -19,7 +19,7 @@ void cyc_settings_default(CycSettings *s)
     s->fullscreen = 0;
     s->integer_scale = 1;
     s->linear_filter = 0;
-    s->vsync = 0;
+    s->vsync = 1;
     s->audio_enabled = 1;
     s->audio_synthesis = 0;
     s->volume = 100;
