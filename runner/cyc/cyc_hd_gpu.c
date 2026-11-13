@@ -74,7 +74,7 @@ typedef struct {
 struct CycHdGpu {
     HdGl gl; SDL_Renderer *renderer; SDL_GLContext context; SDL_Texture *output;
     GLuint program,vao,textures[5],buffers[2];
-    unsigned width,height,requested_scale,max_texture,max_buffer,plane_w,plane_h,bg_h;
+    unsigned width,height,requested_scale,max_texture,max_buffer,plane_w,plane_h,bg_w,bg_h;
     uint64_t pack_generation,serial,asset_bytes,budget,frames,attempts;
     unsigned cache_slots;
     HdGpuPageCache cache;
@@ -140,7 +140,8 @@ static void image(CycHdGpu *s,unsigned unit,GLint format,unsigned w,unsigned h,G
 static bool frame_valid(CycHdGpu *s,const HdJobFrame *f,uint64_t *asset_bytes) {
     if(!f || !f->pixels || (!f->images && f->image_count) || !f->width || f->width>1280 || f->height!=240 ||
         !f->source_scale || f->source_scale>64 || f->width*2>s->max_texture ||
-        f->under_end>f->mid_end || f->mid_end>f->background_count || f->background_count>s->max_texture ||
+        f->behind_end>f->under_end || f->has_behind>1 || f->under_end>f->mid_end || f->mid_end>f->background_count || (uint64_t)f->background_count*2+f->sprite_count>(uint64_t)s->max_texture*s->max_texture ||
+        (uint64_t)f->sprite_count>(uint64_t)f->width*f->height*3 ||
         (f->background_count && !f->backgrounds))return false;
     for(unsigned i=0;i<f->background_count;++i){const HdJobBackground *bg=&f->backgrounds[i];
         if(bg->offset_x<-(1<<20) || bg->offset_x>(1<<20) || bg->offset_y<-(1<<20) || bg->offset_y>(1<<20))return false;
@@ -262,7 +263,12 @@ SDL_Texture *cyc_hd_gpu_render(CycHdGpu *s,const HdJobFrame *f,unsigned requeste
     if(requested>64)requested=64;
     /* Reserve a second source generation for driver-managed buffer replacement.
      * A target replacement releases its old storage before requesting the new. */
-    uint64_t fixed=2*asset_bytes+(uint64_t)f->width*f->height*sizeof(HdJobPixel)+(uint64_t)(f->background_count?f->background_count:1)*32;
+    uint64_t aux=(uint64_t)f->background_count*2+f->sprite_count;
+    if(aux<2)aux=2;
+    unsigned aux_w=(unsigned)(aux>2048?2048:aux);
+    if(aux_w>s->max_texture)aux_w=s->max_texture;
+    aux=((aux+aux_w-1)/aux_w)*aux_w;
+    uint64_t fixed=2*asset_bytes+(uint64_t)f->width*f->height*sizeof(HdJobPixel)+aux*16;
     unsigned scale=requested;
     while(scale && ((uint64_t)f->width*scale>s->max_texture || (uint64_t)f->height*scale>s->max_texture ||
         fixed+(uint64_t)f->width*f->height*scale*scale*4>s->budget))scale/=2;
@@ -302,15 +308,21 @@ SDL_Texture *cyc_hd_gpu_render(CycHdGpu *s,const HdJobFrame *f,unsigned requeste
         if(s->plane_w!=f->width || s->plane_h!=f->height){
             image(s,0,GL_RGBA32UI,f->width*2,f->height,GL_UNSIGNED_INT,f->pixels);s->plane_w=f->width;s->plane_h=f->height;
         }else{texture(s,0,GL_TEXTURE_2D);g->TexSubImage2D(GL_TEXTURE_2D,0,0,0,(GLsizei)(f->width*2),(GLsizei)f->height,GL_RGBA_INTEGER,GL_UNSIGNED_INT,f->pixels);}
-        unsigned count=f->background_count?f->background_count:1;int32_t *rows=(int32_t *)calloc((size_t)count*8,sizeof(int32_t));
+        uint64_t total=(uint64_t)f->background_count*2+f->sprite_count;
+        if(total<2)total=2;
+        unsigned w=(unsigned)(total>2048?2048:total);
+        if(w>s->max_texture)w=s->max_texture;
+        unsigned h=(unsigned)((total+w-1)/w);
+        int32_t *rows=(int32_t *)calloc((size_t)w*h*4,sizeof(int32_t));
         if(!rows)good=false;
         else{
             for(unsigned i=0;i<f->background_count;++i){const HdJobBackground *b=&f->backgrounds[i];
                 rows[i*8]=(int32_t)b->image;rows[i*8+1]=b->offset_x;rows[i*8+2]=b->offset_y;
                 rows[i*8+3]=(int32_t)b->brightness;rows[i*8+4]=(int32_t)b->blend;}
-            if(s->bg_h!=count){image(s,3,GL_RGBA32I,2,count,GL_INT,rows);s->bg_h=count;}
-            else{texture(s,3,GL_TEXTURE_2D);g->TexSubImage2D(GL_TEXTURE_2D,0,0,0,2,(GLsizei)count,GL_RGBA_INTEGER,GL_INT,rows);}
-            upload_bytes+=(uint64_t)count*32;free(rows);
+            if(f->sprite_count)memcpy(rows+(size_t)f->background_count*8,f->sprites,(size_t)f->sprite_count*sizeof(HdJobSprite));
+            if(s->bg_w!=w || s->bg_h!=h){image(s,3,GL_RGBA32I,w,h,GL_INT,rows);s->bg_w=w;s->bg_h=h;}
+            else{texture(s,3,GL_TEXTURE_2D);g->TexSubImage2D(GL_TEXTURE_2D,0,0,0,(GLsizei)w,(GLsizei)h,GL_RGBA_INTEGER,GL_INT,rows);}
+            upload_bytes+=(uint64_t)w*h*16;free(rows);
         }
         s->serial=f->serial;
     }
@@ -322,7 +334,7 @@ SDL_Texture *cyc_hd_gpu_render(CycHdGpu *s,const HdJobFrame *f,unsigned requeste
         for(unsigned i=0;i<5;++i)g->Uniform1i(g->GetUniformLocation(s->program,names[i]),(GLint)i);
 #define HD_UNIFORM(name,value) g->Uniform1i(g->GetUniformLocation(s->program,name),(GLint)(value))
         HD_UNIFORM("output_scale",scale);HD_UNIFORM("source_scale",f->source_scale);HD_UNIFORM("image_count",f->image_count);
-        HD_UNIFORM("under_end",f->under_end);HD_UNIFORM("mid_end",f->mid_end);HD_UNIFORM("bg_count",f->background_count);HD_UNIFORM("hud_rows",f->hud_rows);
+        HD_UNIFORM("aux_width",s->bg_w);HD_UNIFORM("behind_end",f->behind_end);HD_UNIFORM("has_behind",f->has_behind);HD_UNIFORM("under_end",f->under_end);HD_UNIFORM("mid_end",f->mid_end);HD_UNIFORM("bg_count",f->background_count);HD_UNIFORM("hud_rows",f->hud_rows);
 #undef HD_UNIFORM
         g->Viewport(0,0,(GLsizei)width,(GLsizei)height);
         HdQuery *q=&s->query[s->query_cursor];

@@ -16,10 +16,11 @@ available. The cycle adapter
 pixel selection and color-output pipeline. Its content keys own their bytes,
 so later CHR RAM writes cannot change a previously recorded tile. It preserves
 mapped CHR ROM indices, fine scrolling, 8x16 sprite halves, flips, grayscale,
-emphasis and the native sprite/background priority decision. It does not
+emphasis and up to four OAM-ordered sprites at each pixel, including native
+transparent pixels and behind-background priority. It does not
 read the PPU bus or advance CPU, PPU or APU clocks. It feeds the same
-`hdpack_upscale` sampler used by the legacy renderer. Five pointer-free save
-records preserve its picture and fetch pipeline; validated loads require the
+`hdpack_upscale` sampler used by the legacy renderer. Seventeen pointer-free
+save records preserve its picture and fetch pipeline; validated loads require the
 same HD enablement, scale and package asset/patch fingerprint. Rendering is
 cached while paused and invalidated on state load; background scroll offsets
 are computed once per frame. `tools/cyc/test_cyc_hdpack.py` checks CHR RAM
@@ -32,10 +33,9 @@ The remaining renderer description below refers to the legacy backend.
 
 The cycle Zelda target defines `NESRECOMP_HDPACK_LAYER_PLANS=1` after its
 enabled Remastered gameplay qualification. This includes `hdpack_layered.inc`:
-immutable tile-key groups, render-local frame-condition plans and clipped
-layer-row composition. Pixel-dependent conditions and per-pixel layer order
-remain exact; derived plans are rebuilt rather than serialized. Packs without
-background layers keep the direct compositor.
+immutable tile-key groups and render-local frame-condition plans. Pixel-dependent
+conditions and per-pixel layer order remain exact; derived plans are rebuilt
+rather than serialized. Allocation failures use the direct compositor.
 
 Other targets keep the original `hdpack.c` implementation by default. Broad
 versions slowed the simple SMB1 LyonHrt pack, so their aggregate gains were
@@ -130,8 +130,12 @@ render path is **byte-identical to stock**. Safe to ship on by default off.
   (20-byte key memcmp), selected from the ROM's CHR type.
 - `defaultTile` wildcard-palette keys, per-tile `brightness`, sprite H/V mirror,
   per-pixel transparency, premultiplied-alpha PNG sheets.
-- **Two-layer compositing** (HD background, then HD sprites over it) so original
-  art never bleeds through transparent HD pixels.
+- Background priority bands 0–9, 10–19, 20–29 and 30–39, with behind-background
+  sprites, the native BG tile and front sprites between the appropriate bands.
+- Modern `<addition>` layers, matching exact or ignored palettes and canonical
+  fallback keys. Source mirrors reverse displacement; copied tile offsets and
+  full palette keys are preserved. Additions use a render-local four-sprite
+  array, leaving the recorded frame unchanged across repeat presentations.
 - Arbitrary `<scale>`, HD SDL texture sizing, HD-aware screenshots.
 - Toggles (env): `NESRECOMP_HDPACK_DEBUG` (unmatched BG→magenta, sprite→cyan),
   `NESRECOMP_HDPACK_HIDE_ORIGINALS` (`disableOriginalTiles`-style),
@@ -147,12 +151,15 @@ The cycle adapter reads CPU RAM/ROM and PPU pattern, nametable and palette
 conditions through observation APIs without advancing the machine. The
 whole-machine tests cover these reads, palette mirroring and canonical CHR
 keys; `cyc_hdpack_alpha` covers authored transparent backgrounds/sprites and
-native transparent background pixels. The portable and GPU job consumers
-share these resolved transparency decisions.
+native transparent background pixels. `cyc_hdpack_sprites` additionally checks
+native transparent sprite coverage, overlapping HD alpha, OAM priority and
+mirrored/background additions with fresh-process save/load. The portable and
+GPU job consumers share these resolved decisions; the 192-picture comparison
+also exercises multiple sprite layers. Common pixel jobs remain 32 bytes;
+optional 16-byte descriptors hold up to three more layers.
 
 **NOT supported yet:**
-- `<bgm>` / `<sfx>` HD-pack audio, `<addition>` layers, and the
-  `disableSpriteLimit` option.
+- `<bgm>` / `<sfx>` HD-pack audio and the `disableSpriteLimit` option.
 
 Mods packages apply verified IPS patches in memory. An optional compiled
 program catalog also supports changed cartridge geometry; see

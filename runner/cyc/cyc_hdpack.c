@@ -118,7 +118,7 @@ void cyc_hdpack_bg_shift(void) {
 void cyc_hdpack_sprite_fetch(unsigned slot,uint16_t address,uint8_t value,bool high) {
     if(!hdpack_recording())return;
     fetch_tile(&pipeline.sprite[slot],address,value,high);
-    if(!high)pipeline.sprite_x[slot]=0;
+    if(!high){pipeline.sprite_x[slot]=0;pipeline.sprite[slot].valid=ppu.sprite_row<(ppu.sprite16?16:8);}
 }
 void cyc_hdpack_sprite_shift(unsigned slot) {
     if(hdpack_recording() && pipeline.sprite_x[slot]<8)pipeline.sprite_x[slot]++;
@@ -130,22 +130,26 @@ void cyc_hdpack_clock(void) {
 void cyc_hdpack_pixel(unsigned bg_color,unsigned bg_palette,int sprite,unsigned sprite_color) {
     if(!hdpack_recording())return;
     HdRecordedPixel *p=&pipeline.color[0];memset(p,0,sizeof(*p));
-    p->bg_index=p->sp_index=-1;p->bg_pal[0]=ppu.palette[0];
+    p->bg_index=-1;p->bg_pal[0]=ppu.palette[0];
     const HdFetchedTile *bg=&pipeline.bg[15-ppu.fine_x];
     if(ppu.show_bg && (ppu.dot>8 || ppu.show_bg8) && bg->valid) {
         p->flags=1;p->bg_index=bg->index;memcpy(p->bg_tile,bg->bytes,16);
         p->bg_x=bg->x;p->bg_y=bg->row;p->bg_color=(uint8_t)bg_color;
         for(unsigned j=1;j<4;j++)p->bg_pal[j]=ppu.palette[bg_palette*4+j];
     }
-    if(sprite>=0 && pipeline.sprite[sprite].valid && pipeline.sprite_x[sprite]<8) {
-        const HdFetchedTile *sp=&pipeline.sprite[sprite];unsigned attr=ppu.spr_attr[sprite];
-        p->flags|=(uint8_t)(2|((attr&0x40)?4:0)|((attr&0x80)?8:0));
-        p->sp_index=sp->index;memcpy(p->sp_tile,sp->bytes,16);
-        /* The shared sampler expects the fetched row (already vertically
-         * flipped by the PPU); vm flips only pixels within its HD block. */
-        p->sp_x=pipeline.sprite_x[sprite];p->sp_y=sp->row;
-        p->sp_color=(uint8_t)sprite_color;
-        for(unsigned j=0;j<3;j++)p->sp_pal[j]=ppu.palette[16+(attr&3)*4+j+1];
+    (void)sprite;(void)sprite_color;
+    if(ppu.show_spr && (ppu.dot>8 || ppu.show_spr8)) {
+        unsigned count=0;
+        for(unsigned i=0;i<8 && count<HD_MAX_SPRITES;i++) {
+            const HdFetchedTile *tile=&pipeline.sprite[i];
+            if(!tile->valid || pipeline.sprite_x[i]>=8 || (ppu.spr_x[i] && !ppu.skipped_dot))continue;
+            HdRecordedSprite *sp=&p->sp[count++];unsigned attr=ppu.spr_attr[i];
+            sp->flags=(uint8_t)(1|((attr&0x40)?2:0)|((attr&0x80)?4:0)|((attr&0x20)?8:0));
+            sp->index=tile->index;memcpy(sp->tile,tile->bytes,16);
+            sp->x=pipeline.sprite_x[i];sp->y=tile->row;
+            sp->color=(uint8_t)(((ppu.spr_lo[i]>>7)&1)|((ppu.spr_hi[i]>>6)&2));
+            for(unsigned j=0;j<3;j++)sp->pal[j]=ppu.palette[16+(attr&3)*4+j+1];
+        }
     }
 }
 void cyc_hdpack_blank(uint8_t backdrop) {
@@ -167,17 +171,20 @@ static void prepare_pixels(const uint32_t *native) {
     HdPixel *pixels=hdpack_pixels();
     for(unsigned i=0;i<256*240;i++) {
         const HdRecordedPixel *r=&recorded[i];HdPixel *p=&pixels[i];memset(p,0,sizeof(*p));
-        p->bg_index=r->bg_index;p->sp_index=r->sp_index;
-        p->bg_t16=r->bg_tile;p->sp_t16=r->sp_tile;
-        p->bg_has=r->flags&1;p->sp_has=(r->flags>>1)&1;
+        p->bg_index=r->bg_index;p->bg_t16=r->bg_tile;p->bg_has=r->flags&1;
         p->bg_transparent=r->bg_color==0;
         p->bg_p0=r->bg_pal[0];p->bg_p1=r->bg_pal[1];p->bg_p2=r->bg_pal[2];p->bg_p3=r->bg_pal[3];
-        p->sp_p1=r->sp_pal[0];p->sp_p2=r->sp_pal[1];p->sp_p3=r->sp_pal[2];
-        p->bg_ox=r->bg_x;p->bg_oy=r->bg_y;p->sp_ox=r->sp_x;p->sp_oy=r->sp_y;
-        p->sp_hm=(r->flags>>2)&1;p->sp_vm=(r->flags>>3)&1;
+        p->bg_ox=r->bg_x;p->bg_oy=r->bg_y;
         p->backdrop=color(r->bg_pal[0],r->mask);
         p->bg_argb=color(r->bg_pal[r->bg_color],r->mask);
-        p->sp_argb=r->sp_color?color(r->sp_pal[r->sp_color-1],r->mask):native[i];
+        for(unsigned j=0;j<HD_MAX_SPRITES;j++) {
+            const HdRecordedSprite *rs=&r->sp[j];HdSprite *sp=&p->sp[j];
+            sp->index=rs->index;sp->t16=rs->tile;sp->has=rs->flags&1;
+            sp->p0=0xff;sp->p1=rs->pal[0];sp->p2=rs->pal[1];sp->p3=rs->pal[2];
+            sp->ox=rs->x;sp->oy=rs->y;sp->hm=(rs->flags>>1)&1;sp->vm=(rs->flags>>2)&1;sp->behind=(rs->flags>>3)&1;
+            sp->transparent=rs->color==0;
+            sp->argb=rs->color?color(rs->pal[rs->color-1],r->mask):native[i];
+        }
     }
 }
 const HdJobFrame *cyc_hdpack_jobs(const uint32_t *native) {
@@ -220,12 +227,12 @@ const uint32_t *cyc_hdpack_present(const uint32_t *native,int *width,int *height
 static int get##n(uint8_t *b,int c){return save_part(n,b,c);} \
 static int set##n(const uint8_t *b,int l){return load_part(n,b,l);} \
 static int check##n(const uint8_t *b,int l){return validate_part(n,b,l);}
-HD_STATE_PART(0) HD_STATE_PART(1) HD_STATE_PART(2) HD_STATE_PART(3) HD_STATE_PART(4)
+HD_STATE_PART(0) HD_STATE_PART(1) HD_STATE_PART(2) HD_STATE_PART(3) HD_STATE_PART(4) HD_STATE_PART(5) HD_STATE_PART(6) HD_STATE_PART(7) HD_STATE_PART(8) HD_STATE_PART(9) HD_STATE_PART(10) HD_STATE_PART(11) HD_STATE_PART(12) HD_STATE_PART(13) HD_STATE_PART(14) HD_STATE_PART(15) HD_STATE_PART(16)
 NES_MOD_CONSTRUCTOR(register_cycle_hd_state) {
-    NESModSavestateGet gets[]={get0,get1,get2,get3,get4};
-    NESModSavestateSet sets[]={set0,set1,set2,set3,set4};
-    NESModSavestateValidate checks[]={check0,check1,check2,check3,check4};
-    for(unsigned i=0;i<5;i++) {
+    NESModSavestateGet gets[]={get0,get1,get2,get3,get4,get5,get6,get7,get8,get9,get10,get11,get12,get13,get14,get15,get16};
+    NESModSavestateSet sets[]={set0,set1,set2,set3,set4,set5,set6,set7,set8,set9,set10,set11,set12,set13,set14,set15,set16};
+    NESModSavestateValidate checks[]={check0,check1,check2,check3,check4,check5,check6,check7,check8,check9,check10,check11,check12,check13,check14,check15,check16};
+    for(unsigned i=0;i<=HD_STATE_CHUNKS;i++) {
         char id[40];snprintf(id,sizeof id,"cyc.hdpack.%u",i);
         if(!nes_mod_register_savestate_hook(id,gets[i],sets[i]) || !nes_mod_register_savestate_validator(id,checks[i]))
             fprintf(stderr,"[HD pack] Cannot register cycle save record %u\n",i);

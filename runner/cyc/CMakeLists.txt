@@ -146,6 +146,9 @@ if(SDL2_FOUND)
     add_test(NAME cyc_hdpack_alpha COMMAND "${Python3_EXECUTABLE}"
         "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_hdpack_alpha.py"
         --host $<TARGET_FILE:cyc_hdpack_probe> --out "${CMAKE_CURRENT_BINARY_DIR}/hdpack-alpha-test")
+    add_test(NAME cyc_hdpack_sprites COMMAND "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_hdpack_sprites.py"
+        --host $<TARGET_FILE:cyc_hdpack_probe> --out "${CMAKE_CURRENT_BINARY_DIR}/hdpack-sprite-test")
     add_test(NAME cyc_hdpack_window COMMAND "${Python3_EXECUTABLE}"
         "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_cyc_hdpack_window.py"
         --host $<TARGET_FILE:cyc_hdpack_probe> --out "${CMAKE_CURRENT_BINARY_DIR}/hdpack-window-test")

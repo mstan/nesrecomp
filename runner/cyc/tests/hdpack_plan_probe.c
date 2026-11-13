@@ -27,6 +27,19 @@ static void check_page_cache(void)
     f.image_count=3;f.images=images;f.pixels=pixels;f.backgrounds=&bg;
     pixels[0].flags=HD_JOB_IMAGE|(HD_JOB_IMAGE<<HD_JOB_SP_SHIFT);
     pixels[0].bg_image=0;pixels[0].sp_image=1;
+    HdJobSprite extra={2,0,0,HD_JOB_IMAGE<<HD_JOB_SP_SHIFT};
+    f.sprites=&extra;f.sprite_count=1;pixels[0].flags|=1u<<HD_JOB_EXTRA_SHIFT;
+    HdGpuPageCache layered={0};
+    assert(!cyc_hd_gpu_cache_prepare(&layered,&f,2,1000000));
+    assert(cyc_hd_gpu_cache_prepare(&layered,&f,3,1000000) && layered.needed_count==3);
+    pixels[0].flags|=1u<<HD_JOB_EXTRA_START;
+    assert(!cyc_hd_gpu_cache_prepare(&layered,&f,3,1000000));
+    pixels[0].flags&=~(1u<<HD_JOB_EXTRA_START);f.sprites=NULL;
+    assert(!cyc_hd_gpu_cache_prepare(&layered,&f,3,1000000));f.sprites=&extra;
+    extra.flags|=1;
+    assert(!cyc_hd_gpu_cache_prepare(&layered,&f,3,1000000));extra.flags&=~1u;
+    cyc_hd_gpu_cache_destroy(&layered);
+    f.sprites=NULL;f.sprite_count=0;pixels[0].flags&=~(1u<<HD_JOB_EXTRA_SHIFT);
     HdGpuPageCache c={0};uint32_t slot;bool upload;
     assert(cyc_hd_gpu_cache_prepare(&c,&f,2,1000000));
     assert(c.page_count==3 && c.needed_count==2);
@@ -269,11 +282,41 @@ static void check_manifest_priority(void) {
     hdpack_unload();
 }
 
+static void check_addition_resolution(void) {
+    s_active=1;s_version=108;s_is_chr_ram=0;s_scale=1;s_native_w=17;
+    s_pixels=calloc(17*240,sizeof(*s_pixels));assert(s_pixels);
+    HdSprite original={0};original.has=1;original.index=4;original.p0=0xff;
+    original.p1=0x11;original.p2=0x12;original.p3=0x13;
+    original.hm=original.vm=1;original.ox=3;original.oy=4;
+    s_pixels[9*17+9].sp[0]=original;
+    for(int i=0;i<6;i++) {
+        char text[128];snprintf(text,sizeof text,"4,FF111213,1,1,%X,0F010203",5+i);
+        process_addition(text);
+    }
+    HdPixel *bg=&s_pixels[5*17+5];bg->bg_has=1;bg->bg_index=6;
+    bg->bg_p0=15;bg->bg_p1=1;bg->bg_p2=2;bg->bg_p3=3;bg->bg_ox=2;bg->bg_oy=7;
+    char bg_rule[]="6,0F010203,1,1,C,FF212223";process_addition(bg_rule);
+    assert(resolve_sprites());
+    HdSprite expected[HD_MAX_SPRITES];memcpy(expected,sprites_at(8*17+8),sizeof expected);
+    for(int i=0;i<HD_MAX_SPRITES;i++) {
+        HdSprite *sp=&expected[i];
+        assert(sp->has && sp->index==5+i && sp->transparent && sp->hm && sp->vm);
+        assert(sp->ox==3 && sp->oy==4 && sprite_palette(sp)==0x0f010203);
+    }
+    HdSprite *added=sprites_at(6*17+6);
+    assert(added[0].has && added[0].index==12 && added[0].transparent);
+    assert(added[0].ox==2 && added[0].oy==7 && sprite_palette(added)==0xff212223u);
+    assert(!s_pixels[8*17+8].sp[0].has && !memcmp(&s_pixels[9*17+9].sp[0],&original,sizeof original));
+    assert(resolve_sprites() && !memcmp(expected,sprites_at(8*17+8),sizeof expected));
+    hdpack_unload();
+}
+
 int main(void) {
 #ifdef NESRECOMP_HDPACK_CACHE_PROBE
     check_page_cache();
 #endif
     for(int k=0;k<3;k++)for(int i=0;i<16;i++)patterns[k][i]=(uint8_t)(k*71+i*29);
+    check_addition_resolution();
     check_manifest_priority();
     const int scales[]={1,2,3,10};unsigned count=0;
     const HdJobFrame *retained=NULL;uint32_t *retained_pixels=NULL;
@@ -288,13 +331,20 @@ int main(void) {
             for(int y=0;y<240;y++)for(int x=0;x<17;x++) {
                 int i=y*17+x,k=(x/5+y/7+q)%3;HdPixel *p=&s_pixels[i];
                 memset(p,0,sizeof(*p));native[i]=0xff402010u+(unsigned)i;
-                p->bg_has=(x+y+q)%11!=0;p->sp_has=(x*3+y+q)%5==0;
-                p->bg_index=p->sp_index=k+4;p->bg_t16=p->sp_t16=patterns[k];
+                p->bg_has=(x+y+q)%11!=0;p->sp[0].has=(x*3+y+q)%5==0;
+                p->bg_index=p->sp[0].index=k+4;p->bg_t16=p->sp[0].t16=patterns[k];
                 p->bg_p0=(q%4==2)?0x20:0x0f;p->bg_p1=1;p->bg_p2=2;p->bg_p3=3;
-                p->sp_p1=0x11;p->sp_p2=0x12;p->sp_p3=0x13;
-                p->bg_ox=p->sp_ox=x&7;p->bg_oy=p->sp_oy=y&7;
-                p->sp_hm=(q+x)&1;p->sp_vm=(q+y)&1;
-                p->backdrop=0xff112233;p->bg_argb=0xff678901;p->sp_argb=0xffabcdef;
+                p->sp[0].p0=0xff;p->sp[0].p1=0x11;p->sp[0].p2=0x12;p->sp[0].p3=0x13;
+                p->bg_ox=p->sp[0].ox=x&7;p->bg_oy=p->sp[0].oy=y&7;
+                p->sp[0].hm=(q+x)&1;p->sp[0].vm=(q+y)&1;
+                p->backdrop=0xff112233;p->bg_argb=0xff678901;p->sp[0].argb=0xffabcdef;
+                p->sp[0].transparent=(q+x)%3==0;p->sp[0].behind=(q+y)%7==0;
+                for(unsigned z=1;z<HD_MAX_SPRITES;z++)if(p->sp[0].has && (q+x+y+z)%3) {
+                    p->sp[z]=p->sp[0];unsigned next=(k+z)%3;
+                    p->sp[z].index=next+4;p->sp[z].t16=patterns[next];
+                    p->sp[z].behind=(q+y+z)%3==0;p->sp[z].transparent=z&1;
+                    p->sp[z].hm^=z&1;p->sp[z].vm^=(z>>1)&1;
+                }
             }
             hdpack_invalidate_conditions();
             s_groups_ready=q%7!=0; /* allocation-failure reference fallback */

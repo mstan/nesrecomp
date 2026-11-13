@@ -44,9 +44,9 @@ int main(void) {
     uint8_t *buf=malloc(1024*1024),*again=malloc(1024*1024),*expected=malloc(1024*1024);
     assert(buf && again && expected);
     size_t full_total=0,compact_total=0;
-    for(unsigned part=0;part<5;part++) {
-        uint8_t *data=part==4?(void *)&pipeline:(void *)&recorded[part*256*60];
-        size_t size=part==4?sizeof pipeline:sizeof recorded/4;
+    for(unsigned part=0;part<=HD_STATE_CHUNKS;part++) {
+        uint8_t *data=part==HD_STATE_CHUNKS?(void *)&pipeline:(void *)&recorded[part*256*HD_STATE_ROWS];
+        size_t size=part==HD_STATE_CHUNKS?sizeof pipeline:sizeof recorded/HD_STATE_CHUNKS;
         memset(data,0,size);active=0;
         int n=save_part(part,buf,1024*1024);assert(n==(int)sizeof(HdStateHeader));
         full_total+=size+sizeof(HdStateHeader);compact_total+=n;
@@ -87,7 +87,7 @@ int main(void) {
         /* Active records retain the original complete format, even if zero. */
         active=1;memset(data,0,size);
         int full=save_part(part,buf,1024*1024);assert(full==(int)(sizeof(HdStateHeader)+size));
-        HdStateHeader h;memcpy(&h,buf,sizeof h);assert(h.version==2 && h.active==1);
+        HdStateHeader h;memcpy(&h,buf,sizeof h);assert(h.version==4 && h.active==1);
         assert(load_checked(part,buf,full));
         check_epoch_free_save(part,buf,full,again,1024*1024);
         active=0;assert(!load_checked(part,buf,full));

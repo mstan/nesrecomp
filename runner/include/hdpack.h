@@ -21,9 +21,16 @@
 #include <stdint.h>
 #include "hdpack_jobs.h"
 
-/* Per-pixel record of the visible BG + topmost sprite tile, filled by the native
- * render pass. Two layers so the upscaler can composite HD sprites over the HD
- * background (Mesen's model) instead of over the original art. */
+/* A screen pixel may carry four OAM-ordered sprite layers. Native color zero
+ * remains recorded because authored replacement art can extend into it. */
+#define HD_MAX_SPRITES 4
+typedef struct {
+    int32_t index;
+    const uint8_t *t16;
+    uint32_t argb;
+    uint8_t p0,p1,p2,p3,ox,oy,hm,vm,has,transparent,behind;
+} HdSprite;
+
 typedef struct {
     /* Background layer (recorded for every rendered BG pixel). */
     int32_t        bg_index;        /* CHR-ROM absolute tile index; <0 none */
@@ -35,13 +42,7 @@ typedef struct {
     uint32_t       bg_argb;         /* original BG color (fallback when unmatched) */
     uint32_t       backdrop;        /* universal bg color (transparent HD BG -> this) */
 
-    /* Topmost sprite layer (recorded where a sprite pixel was drawn). */
-    int32_t        sp_index;
-    const uint8_t *sp_t16;
-    uint8_t        sp_p1, sp_p2, sp_p3;
-    uint8_t        sp_ox, sp_oy, sp_hm, sp_vm;
-    uint8_t        sp_has;
-    uint32_t       sp_argb;         /* original sprite color (fallback when unmatched) */
+    HdSprite sp[HD_MAX_SPRITES];
 } HdPixel;
 
 /* Load the pack in `dir` (expects dir/hires.txt). native_w is the runner's

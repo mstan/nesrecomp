@@ -1179,7 +1179,7 @@ render_sprites:
                         framebuf[off] = s_bg_color_snapshot[off];
                     if (g_hp && fb_x >= 0 && fb_x < g_render_width) {
                         HdPixel *hp = &g_hp[off];
-                        hp->sp_has = 0;
+                        hp->sp[0].has = 0;
                     }
                     continue;
                 }
@@ -1188,17 +1188,17 @@ render_sprites:
                 framebuf[py * g_render_width + fb_x] = spc;
                 if (g_hp && fb_x >= 0 && fb_x < g_render_width) {
                     HdPixel *hp = &g_hp[py * g_render_width + fb_x];
-                    hp->sp_has   = 1;
-                    hp->sp_index = (int32_t)((tile_chr_base >> 4) + tile_num);
-                    hp->sp_t16   = &chr_src[tile_chr_base + tile_num * 16];
-                    hp->sp_p1 = g_ppu_pal[(spr_pal * 4 + 1) & 0x1F] & 0x3F;
-                    hp->sp_p2 = g_ppu_pal[(spr_pal * 4 + 2) & 0x1F] & 0x3F;
-                    hp->sp_p3 = g_ppu_pal[(spr_pal * 4 + 3) & 0x1F] & 0x3F;
-                    hp->sp_ox = (uint8_t)(7 - bit);   /* screen column within tile */
-                    hp->sp_oy = (uint8_t)(row & 7);   /* screen row within displayed cell */
-                    hp->sp_hm = (uint8_t)flip_h;
-                    hp->sp_vm = (uint8_t)flip_v;
-                    hp->sp_argb = spc;                /* original sprite color (fallback) */
+                    hp->sp[0].has   = 1; hp->sp[0].p0 = 0xff;
+                    hp->sp[0].index = (int32_t)((tile_chr_base >> 4) + tile_num);
+                    hp->sp[0].t16   = &chr_src[tile_chr_base + tile_num * 16];
+                    hp->sp[0].p1 = g_ppu_pal[(spr_pal * 4 + 1) & 0x1F] & 0x3F;
+                    hp->sp[0].p2 = g_ppu_pal[(spr_pal * 4 + 2) & 0x1F] & 0x3F;
+                    hp->sp[0].p3 = g_ppu_pal[(spr_pal * 4 + 3) & 0x1F] & 0x3F;
+                    hp->sp[0].ox = (uint8_t)(7 - bit);   /* screen column within tile */
+                    hp->sp[0].oy = (uint8_t)(row & 7);   /* screen row within displayed cell */
+                    hp->sp[0].hm = (uint8_t)flip_h;
+                    hp->sp[0].vm = (uint8_t)flip_v;
+                    hp->sp[0].argb = spc;                /* original sprite color (fallback) */
                 }
             }
         }

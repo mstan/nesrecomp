@@ -15,7 +15,8 @@ typedef struct HdOwnedJobFrame {
     HdJobPack *pack;
     HdJobPixel *pixels;
     HdJobBackground *backgrounds;
-    size_t pixel_capacity, background_capacity;
+    HdJobSprite *sprites;
+    size_t pixel_capacity, background_capacity, sprite_capacity;
     struct HdOwnedJobFrame *next;
 } HdOwnedJobFrame;
 
@@ -50,6 +51,7 @@ static void hd_jobs_unload(void)
         HdOwnedJobFrame *next = s_job_free->next;
         free(s_job_free->pixels);
         free(s_job_free->backgrounds);
+        free(s_job_free->sprites);
         free(s_job_free);
         s_job_free = next;
     }
@@ -120,7 +122,7 @@ void hdpack_jobs_release(const HdJobFrame *frame)
     if (s_job_free_count < 2) {
         owned->next = s_job_free; s_job_free = owned; ++s_job_free_count;
     } else {
-        free(owned->pixels); free(owned->backgrounds); free(owned);
+        free(owned->pixels); free(owned->backgrounds); free(owned->sprites); free(owned);
     }
 }
 
@@ -142,32 +144,37 @@ static HdOwnedJobFrame *job_frame_allocate(size_t pixels, size_t backgrounds)
         if (!next) goto fail;
         owned->backgrounds = next; owned->background_capacity = backgrounds;
     }
+    if(pixels>SIZE_MAX/3/sizeof(HdJobSprite))goto fail;
+    if(pixels*3>owned->sprite_capacity) {
+        HdJobSprite *next=realloc(owned->sprites,pixels*3*sizeof(*next));
+        if(!next)goto fail;
+        owned->sprites=next;owned->sprite_capacity=pixels*3;
+    }
     memset(&owned->frame, 0, sizeof(owned->frame));
     return owned;
 fail:
     hdpack_jobs_release(&owned->frame); return NULL;
 }
 
-static HdTile *job_match(int sprite, HdPixel *p, int x, int y)
+static HdTile *job_match(HdSprite *sp,HdPixel *p,int x,int y)
 {
+    s_current_sprite=sp;
 #if defined(NESRECOMP_HDPACK_LAYER_PLANS) && NESRECOMP_HDPACK_LAYER_PLANS
-    if (s_use_render_plan)
-        return sprite ? match_layer_planned(1, p->sp_index, p->sp_t16, 0,
-                         p->sp_p1, p->sp_p2, p->sp_p3, x, y, p)
-                      : match_layer_planned(0, p->bg_index, p->bg_t16, p->bg_p0,
-                         p->bg_p1, p->bg_p2, p->bg_p3, x, y, p);
+    if(s_use_render_plan)
+        return sp?match_layer_planned(1,sp->index,sp->t16,sp->p0,sp->p1,sp->p2,sp->p3,x,y,p)
+                 :match_layer_planned(0,p->bg_index,p->bg_t16,p->bg_p0,p->bg_p1,p->bg_p2,p->bg_p3,x,y,p);
 #endif
-    return sprite ? match_layer(1, p->sp_index, p->sp_t16, 0,
-                     p->sp_p1, p->sp_p2, p->sp_p3, x, y, p)
-                  : match_layer(0, p->bg_index, p->bg_t16, p->bg_p0,
-                     p->bg_p1, p->bg_p2, p->bg_p3, x, y, p);
+    return sp?match_layer(1,sp->index,sp->t16,sp->p0,sp->p1,sp->p2,sp->p3,x,y,p)
+             :match_layer(0,p->bg_index,p->bg_t16,p->bg_p0,p->bg_p1,p->bg_p2,p->bg_p3,x,y,p);
 }
 
 const HdJobFrame *hdpack_prepare_jobs(const uint32_t *native, int native_w)
 {
     if (!s_active || !native || !s_pixels || native_w <= 0 ||
         native_w != s_native_w || s_scale <= 0 || s_scale > 64 ||
-        (size_t)native_w > SIZE_MAX / 240 / sizeof(HdJobPixel)) return NULL;
+        (size_t)native_w > SIZE_MAX / 240 / sizeof(HdJobPixel) ||
+        (uint64_t)native_w*240*3>0x800000u) return NULL;
+    if(!resolve_sprites())return NULL;
     if (s_opt_debug < 0) s_opt_debug = getenv("NESRECOMP_HDPACK_DEBUG") ? 1 : 0;
     if (s_opt_hide_orig < 0)
         s_opt_hide_orig = getenv("NESRECOMP_HDPACK_HIDE_ORIGINALS") ? 1 : 0;
@@ -182,7 +189,7 @@ const HdJobFrame *hdpack_prepare_jobs(const uint32_t *native, int native_w)
     f->width = (uint32_t)native_w; f->height = 240; f->source_scale = (uint32_t)s_scale;
     f->pack_generation = pack->generation; f->images = pack->images;
     f->image_count = pack->count; f->pixels = owned->pixels;
-    f->backgrounds = owned->backgrounds;
+    f->backgrounds = owned->backgrounds;f->sprites=owned->sprites;
     eval_backgrounds_for_frame();
     f->hud_rows = (uint32_t)s_hud_rows;
     for (int i = 0; i < s_nact; ++i) {
@@ -201,6 +208,7 @@ const HdJobFrame *hdpack_prepare_jobs(const uint32_t *native, int native_w)
         out->image = b->img->job_image;
         out->offset_x = (int32_t)ox; out->offset_y = (int32_t)oy;
         out->brightness = job_brightness(b->brightness); out->blend = (uint32_t)b->blend;
+        if (i < s_band_behind) ++f->behind_end;
         if (i < s_band_mid) ++f->under_end;
         if (i < s_band_fg) ++f->mid_end;
     }
@@ -218,38 +226,51 @@ const HdJobFrame *hdpack_prepare_jobs(const uint32_t *native, int native_w)
         j->base = p->bg_has ? p->backdrop : native[at];
         j->bg_image = j->sp_image = HD_JOB_NO_IMAGE;
         j->bg_uv = j->sp_uv = j->bg_color = j->sp_color = j->flags = 0;
-        if ((p->bg_has && (p->bg_ox >= 8 || p->bg_oy >= 8)) ||
-            (p->sp_has && (p->sp_ox >= 8 || p->sp_oy >= 8))) goto fail;
-        /* Resolve the visible sprite first; an opaque replacement/solid
-         * sprite makes background matching unobservable at every subpixel. */
-        HdTile *sp = p->sp_has ? job_match(1, p, x, y) : NULL;
-        if (sp) {
-            if(!sp->fully_transparent) {
-                j->sp_image = sp->job_image;
-                j->sp_uv = p->sp_ox | ((uint32_t)p->sp_oy << 8);
-                j->flags |= HD_JOB_IMAGE << HD_JOB_SP_SHIFT;
-                if (p->sp_hm) j->flags |= HD_JOB_HMIRROR;
-                if (p->sp_vm) j->flags |= HD_JOB_VMIRROR;
+        if(p->bg_has && (p->bg_ox>=8 || p->bg_oy>=8))goto fail;
+        HdSprite *sprites=sprites_at(at);int lowest_behind=HD_MAX_SPRITES;
+        for(int k=0;k<HD_MAX_SPRITES;k++)if(sprites[k].has && sprites[k].behind && !sprites[k].transparent){lowest_behind=k;break;}
+        unsigned drawn=0,hidden=0;
+        for(int k=HD_MAX_SPRITES-1;k>=0;k--) {
+            HdSprite *sp=&sprites[k];
+            if(!sp->has || (!sp->behind && k>=lowest_behind))continue;
+            if(sp->ox>=8 || sp->oy>=8)goto fail;
+            HdJobSprite layer={HD_JOB_NO_IMAGE,0,0,0};
+            HdTile *tile=job_match(sp,p,x,y);
+            if(tile) {
+                if(tile->fully_transparent)continue;
+                layer.image=tile->job_image;layer.uv=sp->ox|((uint32_t)sp->oy<<8);
+                layer.flags=HD_JOB_IMAGE<<HD_JOB_SP_SHIFT;
+                if(!sp->behind && !tile->has_transparent)hidden=1;
+            } else if(!sp->transparent && (s_opt_debug || !s_opt_hide_orig)) {
+                layer.color=s_opt_debug?0xff00ffffu:sp->argb;
+                layer.flags=HD_JOB_SOLID<<HD_JOB_SP_SHIFT;
+                if(!sp->behind)hidden=1;
+            } else continue;
+            if(sp->hm)layer.flags|=HD_JOB_HMIRROR;
+            if(sp->vm)layer.flags|=HD_JOB_VMIRROR;
+            if(sp->behind){layer.flags|=HD_JOB_BEHIND;f->has_behind=1;}
+            if(!drawn) {
+                j->sp_image=layer.image;j->sp_uv=layer.uv;j->sp_color=layer.color;j->flags=layer.flags;
+            } else {
+                if(drawn==1)j->flags|=f->sprite_count<<HD_JOB_EXTRA_START;
+                owned->sprites[f->sprite_count++]=layer;
             }
-        } else if (p->sp_has && (s_opt_debug || !s_opt_hide_orig)) {
-            j->sp_color = s_opt_debug ? 0xff00ffffu : p->sp_argb;
-            j->flags |= HD_JOB_SOLID << HD_JOB_SP_SHIFT;
+            drawn++;
         }
-        int hidden = ((j->flags >> HD_JOB_SP_SHIFT) & HD_JOB_MODE_MASK) == HD_JOB_SOLID ||
-                     (sp && !sp->fully_transparent && !sp->has_transparent);
-        if (p->bg_has && !hidden) {
-            HdTile *bg = job_match(0, p, x, y);
-            if (bg) {
+        if(drawn>1)j->flags|=(drawn-1)<<HD_JOB_EXTRA_SHIFT;
+        if(p->bg_has && !hidden) {
+            HdTile *bg=job_match(NULL,p,x,y);
+            if(bg) {
                 if(!bg->fully_transparent) {
-                    j->bg_image = bg->job_image;
-                    j->bg_uv = p->bg_ox | ((uint32_t)p->bg_oy << 8);
-                    j->flags |= HD_JOB_IMAGE << HD_JOB_BG_SHIFT;
+                    j->bg_image=bg->job_image;j->bg_uv=p->bg_ox|((uint32_t)p->bg_oy<<8);
+                    j->flags|=HD_JOB_IMAGE<<HD_JOB_BG_SHIFT;
                 }
-            } else if (s_opt_debug || (!hide_bg && !p->bg_transparent)) {
-                j->bg_color = s_opt_debug ? 0xffff00ffu : p->bg_argb;
-                j->flags |= HD_JOB_SOLID << HD_JOB_BG_SHIFT;
+            } else if(s_opt_debug || (!hide_bg && !p->bg_transparent)) {
+                j->bg_color=s_opt_debug?0xffff00ffu:p->bg_argb;
+                j->flags|=HD_JOB_SOLID<<HD_JOB_BG_SHIFT;
             }
         }
+        s_current_sprite=NULL;
     }
     if (!++s_job_serial) ++s_job_serial;
     f->serial = s_job_serial;
@@ -332,6 +353,23 @@ static int job_tile_block(const HdJobFrame *f, unsigned scale, uint32_t *dst,
     return 0;
 }
 
+static int job_sprite_pass(const HdJobFrame *f,unsigned scale,uint32_t *out,size_t pitch,int behind)
+{
+    for(uint32_t y=0;y<f->height;y++)for(uint32_t x=0;x<f->width;x++) {
+        const HdJobPixel *j=&f->pixels[(size_t)y*f->width+x];
+        uint32_t count=hd_job_extra_count(j->flags),start=hd_job_extra_start(j->flags);
+        if((!count && start) || start>f->sprite_count || count>f->sprite_count-start)return -1;
+        for(uint32_t k=0;k<=count;k++) {
+            HdJobSprite sp=k?f->sprites[start+k-1]:(HdJobSprite){j->sp_image,j->sp_uv,j->sp_color,j->flags&127u};
+            if(k && (sp.flags&~124u))return -1;
+            if(!!(sp.flags&HD_JOB_BEHIND)!=behind)continue;
+            if(job_tile_block(f,scale,out+(size_t)y*scale*pitch+(size_t)x*scale,pitch,
+                (sp.flags>>HD_JOB_SP_SHIFT)&HD_JOB_MODE_MASK,sp.image,sp.uv,sp.color,sp.flags))return -1;
+        }
+    }
+    return 0;
+}
+
 int hdpack_render_jobs(const HdJobFrame *f, unsigned scale, uint32_t *out, size_t pitch)
 {
     if (!f || !out || !f->pixels || !f->width || !f->height || !f->source_scale ||
@@ -339,7 +377,8 @@ int hdpack_render_jobs(const HdJobFrame *f, unsigned scale, uint32_t *out, size_
         f->width > SIZE_MAX / scale || pitch < (size_t)f->width * scale ||
         (size_t)f->height > SIZE_MAX / sizeof(*out) / scale / pitch ||
         (f->image_count && !f->images) || (f->background_count && !f->backgrounds) ||
-        f->under_end > f->mid_end || f->mid_end > f->background_count ||
+        (f->sprite_count && !f->sprites) || f->has_behind>1 ||
+        f->behind_end > f->under_end || f->under_end > f->mid_end || f->mid_end > f->background_count ||
         f->hud_rows > f->height) return -1;
     for (uint32_t y = 0; y < f->height; ++y) for (uint32_t x = 0; x < f->width; ++x) {
         uint32_t *dst = out + (size_t)y * scale * pitch + (size_t)x * scale;
@@ -347,8 +386,11 @@ int hdpack_render_jobs(const HdJobFrame *f, unsigned scale, uint32_t *out, size_
         for (unsigned dy = 0; dy < scale; ++dy)
             for (unsigned dx = 0; dx < scale; ++dx) dst[(size_t)dy * pitch + dx] = color;
     }
-    for (uint32_t i = 0; i < f->under_end; ++i)
+    for (uint32_t i = 0; i < f->behind_end; ++i)
         if (job_background_rows(f, &f->backgrounds[i], f->hud_rows, scale, out, pitch)) return -1;
+    if(f->has_behind && job_sprite_pass(f,scale,out,pitch,1))return -1;
+    for(uint32_t i=f->behind_end;i<f->under_end;i++)
+        if(job_background_rows(f,&f->backgrounds[i],f->hud_rows,scale,out,pitch))return -1;
     for (uint32_t y = 0; y < f->height; ++y) for (uint32_t x = 0; x < f->width; ++x) {
         const HdJobPixel *j = &f->pixels[(size_t)y * f->width + x];
         if (job_tile_block(f, scale, out + (size_t)y * scale * pitch + (size_t)x * scale,
@@ -357,12 +399,7 @@ int hdpack_render_jobs(const HdJobFrame *f, unsigned scale, uint32_t *out, size_
     }
     for (uint32_t i = f->under_end; i < f->mid_end; ++i)
         if (job_background_rows(f, &f->backgrounds[i], 0, scale, out, pitch)) return -1;
-    for (uint32_t y = 0; y < f->height; ++y) for (uint32_t x = 0; x < f->width; ++x) {
-        const HdJobPixel *j = &f->pixels[(size_t)y * f->width + x];
-        if (job_tile_block(f, scale, out + (size_t)y * scale * pitch + (size_t)x * scale,
-                           pitch, (j->flags >> HD_JOB_SP_SHIFT) & HD_JOB_MODE_MASK,
-                           j->sp_image, j->sp_uv, j->sp_color, j->flags)) return -1;
-    }
+    if(job_sprite_pass(f,scale,out,pitch,0))return -1;
     for (uint32_t i = f->mid_end; i < f->background_count; ++i)
         if (job_background_rows(f, &f->backgrounds[i], 0, scale, out, pitch)) return -1;
     return 0;

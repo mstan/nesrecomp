@@ -118,7 +118,6 @@ def main():
                                 source_x=7-ox if i&1 else ox;source_y=height-1-oy if i&2 else oy
                                 tile=1 if not sprite16 else source_y//8;pattern=PATTERNS[tile];row=source_y&7
                                 value=((pattern[row]>>(7-source_x))&1)|(((pattern[row+8]>>(7-source_x))&1)<<1)
-                                if not value:continue
                                 x=16+i*24+ox;y=32+oy
                                 for dx in range(2):
                                     for dy in range(2):
