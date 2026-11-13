@@ -117,6 +117,13 @@ static int        s_all_count = 0, s_all_cap = 0;
 
 static HdPixel   *s_pixels = NULL;     /* side channel, native_w*240 */
 static int        s_native_w = 0;
+static HdPixelReader s_pixel_reader;
+static const void *s_pixel_context;
+static HdPixel *pixel_at(size_t offset,HdPixel *scratch) {
+    if(!s_pixel_reader)return &s_pixels[offset];
+    s_pixel_reader(s_pixel_context,offset,scratch);
+    return scratch;
+}
 
 static int        s_skipped_cond = 0;  /* conditional tiles not yet supported (Phase 2) */
 static int        s_overscan[4] = {0,0,0,0}; /* top,right,bottom,left (parsed; clip TODO) */
@@ -321,8 +328,8 @@ static void process_addition(char *rest) {
     while(*tail)tail=&(*tail)->next;
     *tail=rule;
 }
-static HdSprite *sprites_at(size_t offset) {
-    return s_sprites_resolved?s_resolved_sprites+offset*HD_MAX_SPRITES:s_pixels[offset].sp;
+static HdSprite *sprites_at(size_t offset,HdPixel *pixel) {
+    return s_sprites_resolved?s_resolved_sprites+offset*HD_MAX_SPRITES:pixel->sp;
 }
 static uint32_t sprite_palette(const HdSprite *sp) {
     uint32_t pal=((uint32_t)sp->p0<<24)|((uint32_t)sp->p1<<16)|((uint32_t)sp->p2<<8)|sp->p3;
@@ -378,14 +385,17 @@ static int resolve_sprites(void) {
         if(!next)return 0;
         s_resolved_sprites=next;s_resolved_capacity=count;
     }
-    for(size_t i=0;i<count;i++)memcpy(s_resolved_sprites+i*HD_MAX_SPRITES,s_pixels[i].sp,sizeof s_pixels[i].sp);
+    for(size_t i=0;i<count;i++) {
+        HdPixel scratch,*p=pixel_at(i,&scratch);
+        memcpy(s_resolved_sprites+i*HD_MAX_SPRITES,p->sp,sizeof p->sp);
+    }
     s_sprites_resolved=1;
     for(int y=0;y<240;y++)for(int x=0;x<s_native_w;x++) {
-        size_t i=(size_t)y*s_native_w+x;HdSprite *sprites=sprites_at(i);
+        size_t i=(size_t)y*s_native_w+x;
+        HdPixel scratch,*p=pixel_at(i,&scratch);HdSprite *sprites=sprites_at(i,p);
         for(int k=0;k<HD_MAX_SPRITES && sprites[k].has;k++) {
             HdSprite source=sprites[k];add_from_sprite(&source,x,y);
         }
-        HdPixel *p=&s_pixels[i];
         if(p->bg_has) {
             HdSprite source={0};source.has=1;source.index=p->bg_index;source.t16=p->bg_t16;
             source.p0=p->bg_p0;source.p1=p->bg_p1;source.p2=p->bg_p2;source.p3=p->bg_p3;
@@ -1251,9 +1261,9 @@ static int cond_cmp(int a, HdCondOp op, int b) {
 }
 /* Compare the tile/sprite recorded at side-channel index `off` to a condition. */
 static int tile_matches(const HdCond *c, int off, int sprite) {
-    HdPixel *p = &s_pixels[off];
+    HdPixel scratch,*p=pixel_at((size_t)off,&scratch);
     if(sprite) {
-        HdSprite *sp=sprites_at((size_t)off);
+        HdSprite *sp=sprites_at((size_t)off,p);
         for(int i=0;i<HD_MAX_SPRITES;i++) {
             if(!sp[i].has)continue;
             if(!c->ignore_palette && sprite_palette(&sp[i])!=c->palette)continue;
@@ -1436,7 +1446,7 @@ void hdpack_upscale(const uint32_t *native_fb, int native_w, uint32_t *hd_buf) {
 
             if (sy >= s_hud_rows)
                 for (int i=0;i<s_band_behind;i++)blend_bg_block(dst,hd_w,s_actbg[i],sx,sy,s);
-            HdSprite *sprites=sprites_at((size_t)idx);
+            HdSprite *sprites=sprites_at((size_t)idx,p);
             int lowest_behind=HD_MAX_SPRITES;
             for(int k=0;k<HD_MAX_SPRITES;k++)if(sprites[k].has && sprites[k].behind && !sprites[k].transparent){lowest_behind=k;break;}
             for(int k=HD_MAX_SPRITES-1;k>=0;k--)if(sprites[k].has && sprites[k].behind) {

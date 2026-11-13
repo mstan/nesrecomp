@@ -237,34 +237,34 @@ void cyc_hdpack_output(int x,int y) {
 static uint32_t color(uint8_t value,uint8_t mask) {
     return hw_palette_argb[((mask>>5)*64)+((mask&1)?(value&0x30):(value&0x3f))];
 }
-static void prepare_pixels(const uint32_t *native) {
-    hdpack_invalidate_conditions();
-    HdPixel *pixels=hdpack_pixels();
-    for(unsigned i=0;i<256*240;i++) {
-        const HdRecordedPixel *r=&recorded[i];HdPixel *p=&pixels[i];
-        p->bg_index=r->bg_index;p->bg_t16=r->bg_tile;p->bg_has=r->flags&1;
-        p->bg_transparent=r->bg_color==0;
-        p->bg_p0=r->bg_pal[0];p->bg_p1=r->bg_pal[1];p->bg_p2=r->bg_pal[2];p->bg_p3=r->bg_pal[3];
-        p->bg_ox=r->bg_x;p->bg_oy=r->bg_y;
-        p->backdrop=color(r->bg_pal[0],r->mask);
-        p->bg_argb=color(r->bg_pal[r->bg_color],r->mask);
-        for(unsigned j=0;j<HD_MAX_SPRITES;j++)p->sp[j].has=0;
-        for(unsigned j=0;j<HD_MAX_SPRITES && (r->sp[j].flags&1);j++) {
-            const HdRecordedSprite *rs=&r->sp[j];HdSprite *sp=&p->sp[j];
-            sp->index=rs->index;sp->t16=rs->tile;sp->has=rs->flags&1;
-            sp->p0=0xff;sp->p1=rs->pal[0];sp->p2=rs->pal[1];sp->p3=rs->pal[2];
-            sp->ox=rs->x;sp->oy=rs->y;sp->hm=(rs->flags>>1)&1;sp->vm=(rs->flags>>2)&1;sp->behind=(rs->flags>>3)&1;
-            sp->transparent=rs->color==0;
-            sp->argb=rs->color?color(rs->pal[rs->color-1],r->mask):native[i];
-        }
+static void read_pixel(const void *context,size_t i,HdPixel *p) {
+    const uint32_t *native=context;
+    const HdRecordedPixel *r=&recorded[i];memset(p,0,sizeof(*p));
+    p->bg_index=r->bg_index;p->bg_t16=r->bg_tile;p->bg_has=r->flags&1;
+    p->bg_transparent=r->bg_color==0;
+    p->bg_p0=r->bg_pal[0];p->bg_p1=r->bg_pal[1];p->bg_p2=r->bg_pal[2];p->bg_p3=r->bg_pal[3];
+    p->bg_ox=r->bg_x;p->bg_oy=r->bg_y;
+    p->backdrop=color(r->bg_pal[0],r->mask);
+    p->bg_argb=color(r->bg_pal[r->bg_color],r->mask);
+    for(unsigned j=0;j<HD_MAX_SPRITES && (r->sp[j].flags&1);j++) {
+        const HdRecordedSprite *rs=&r->sp[j];HdSprite *sp=&p->sp[j];
+        sp->index=rs->index;sp->t16=rs->tile;sp->has=rs->flags&1;
+        sp->p0=0xff;sp->p1=rs->pal[0];sp->p2=rs->pal[1];sp->p3=rs->pal[2];
+        sp->ox=rs->x;sp->oy=rs->y;sp->hm=(rs->flags>>1)&1;sp->vm=(rs->flags>>2)&1;sp->behind=(rs->flags>>3)&1;
+        sp->transparent=rs->color==0;
+        sp->argb=rs->color?color(rs->pal[rs->color-1],r->mask):native[i];
     }
+}
+static void prepare_pixels(const uint32_t *native) {
+    HdPixel *pixels=hdpack_pixels();
+    for(unsigned i=0;i<256*240;i++)read_pixel(native,i,&pixels[i]);
 }
 const HdJobFrame *cyc_hdpack_jobs(const uint32_t *native) {
     if(!hdpack_active()){release_jobs();return NULL;}
     uint64_t generation=cyc_render_generation();
     if(prepared_jobs && generation==jobs_generation && jobs_epoch==presentation_epoch)return prepared_jobs;
-    prepare_pixels(native);
-    const HdJobFrame *next=hdpack_prepare_jobs(native,256);
+    hdpack_invalidate_conditions();
+    const HdJobFrame *next=hdpack_prepare_jobs_from(native,256,read_pixel,native);
     release_jobs();prepared_jobs=next;jobs_generation=generation;jobs_epoch=presentation_epoch;
     return prepared_jobs;
 }
@@ -289,8 +289,10 @@ const uint32_t *cyc_hdpack_present(const uint32_t *native,int *width,int *height
         uint32_t *next=realloc(upscaled,count*sizeof(*next));if(!next)return native;
         upscaled=next;upscaled_capacity=count;
     }
-    if(!frame || hdpack_render_jobs(frame,(unsigned)hdpack_scale(),upscaled,256*hdpack_scale()))
+    if(!frame || hdpack_render_jobs(frame,(unsigned)hdpack_scale(),upscaled,256*hdpack_scale())) {
+        prepare_pixels(native);
         hdpack_upscale(native,256,upscaled);
+    }
     presented_generation=generation;presentation_valid=true;
     *width=256*hdpack_scale();*height=240*hdpack_scale();return upscaled;
 }

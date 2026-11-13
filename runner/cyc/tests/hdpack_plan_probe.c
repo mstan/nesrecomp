@@ -140,6 +140,11 @@ void stbi_image_free(void *p) { free(p); }
 const char *stbi_failure_reason(void) { return "no file I/O in this fixture"; }
 
 static uint8_t patterns[3][16];
+static unsigned reader_calls;
+static void probe_pixel_reader(const void *context,size_t offset,HdPixel *out) {
+    assert(offset<17*240);reader_calls++;
+    *out=((const HdPixel *)context)[offset];
+}
 static HdCond *condition(HdCondType type, int cached) {
     HdCond *c=calloc(1,sizeof(*c));assert(c);
     c->type=type;c->use_cache=cached;c->cached_frame=UINT64_MAX;c->mask=0xff;
@@ -302,17 +307,24 @@ static void check_addition_resolution(void) {
     bg->bg_p0=15;bg->bg_p1=1;bg->bg_p2=2;bg->bg_p3=3;bg->bg_ox=2;bg->bg_oy=7;
     char bg_rule[]="6,0F010203,1,1,C,FF212223";process_addition(bg_rule);
     assert(resolve_sprites());
-    HdSprite expected[HD_MAX_SPRITES];memcpy(expected,sprites_at(8*17+8),sizeof expected);
+    HdSprite expected[HD_MAX_SPRITES];memcpy(expected,sprites_at(8*17+8,&s_pixels[8*17+8]),sizeof expected);
     for(int i=0;i<HD_MAX_SPRITES;i++) {
         HdSprite *sp=&expected[i];
         assert(sp->has && sp->index==5+i && sp->transparent && sp->hm && sp->vm);
         assert(sp->ox==3 && sp->oy==4 && sprite_palette(sp)==0x0f010203);
     }
-    HdSprite *added=sprites_at(6*17+6);
+    HdSprite *added=sprites_at(6*17+6,&s_pixels[6*17+6]);
     assert(added[0].has && added[0].index==12 && added[0].transparent);
     assert(added[0].ox==2 && added[0].oy==7 && sprite_palette(added)==0xff212223u);
     assert(!s_pixels[8*17+8].sp[0].has && !memcmp(&s_pixels[9*17+9].sp[0],&original,sizeof original));
-    assert(resolve_sprites() && !memcmp(expected,sprites_at(8*17+8),sizeof expected));
+    assert(resolve_sprites() && !memcmp(expected,sprites_at(8*17+8,&s_pixels[8*17+8]),sizeof expected));
+    uint32_t native[17*240]={0};HdPixel *source=s_pixels;s_pixels=NULL;
+    const HdJobFrame *jobs=hdpack_prepare_jobs_from(native,17,probe_pixel_reader,source);
+    s_pixels=source;assert(jobs && !s_pixel_reader && !s_pixel_context);
+    assert(!memcmp(expected,s_resolved_sprites+(8*17+8)*HD_MAX_SPRITES,sizeof expected));
+    added=s_resolved_sprites+(6*17+6)*HD_MAX_SPRITES;
+    assert(added[0].has && added[0].index==12 && added[0].ox==2 && added[0].oy==7);
+    hdpack_jobs_release(jobs);
     hdpack_unload();
 }
 
@@ -387,6 +399,21 @@ static void check_cell_draw_coverage(void) {
     hdpack_jobs_release(jobs);hdpack_unload();
 }
 
+static void check_reader_jobs(const uint32_t *native,const uint32_t *expected) {
+    HdPixel *source=s_pixels;s_pixels=NULL;reader_calls=0;
+    hdpack_invalidate_conditions();
+    assert(!hdpack_prepare_jobs_from(native,17,NULL,source));
+    assert(!hdpack_prepare_jobs_from(native,-1,probe_pixel_reader,source));
+    assert(!s_pixel_reader && !s_pixel_context);
+    const HdJobFrame *jobs=hdpack_prepare_jobs_from(native,17,probe_pixel_reader,source);
+    assert(jobs && reader_calls>=17*240 && !s_pixel_reader && !s_pixel_context);
+    unsigned calls=reader_calls;size_t n=(size_t)17*240*s_scale*s_scale;
+    uint32_t *out=malloc(n*4);assert(out);
+    assert(!hdpack_render_jobs(jobs,(unsigned)s_scale,out,17*s_scale));
+    assert(reader_calls==calls && !memcmp(out,expected,n*4));
+    free(out);hdpack_jobs_release(jobs);s_pixels=source;
+}
+
 int main(void) {
 #ifdef NESRECOMP_HDPACK_CACHE_PROBE
     check_page_cache();
@@ -428,6 +455,7 @@ int main(void) {
             s_use_render_plan=q%4!=0; /* simple-pack compositor selection */
             if(q==10)s_plan_epoch=UINT64_MAX;
             hdpack_upscale(native,17,out);
+            check_reader_jobs(native,out);
 #if !(defined(NESRECOMP_HDPACK_PLAN_REFERENCE) && NESRECOMP_HDPACK_PLAN_REFERENCE)
             if(q==0 || (ram==0 && ver==1 && si==2 && q==2)) {
                 const HdJobFrame *jobs=hdpack_prepare_jobs(native,17);assert(jobs);

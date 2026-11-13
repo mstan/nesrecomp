@@ -171,7 +171,7 @@ static HdTile *job_match(HdSprite *sp,HdPixel *p,int x,int y)
 
 const HdJobFrame *hdpack_prepare_jobs(const uint32_t *native, int native_w)
 {
-    if (!s_active || !native || !s_pixels || native_w <= 0 ||
+    if (!s_active || !native || (!s_pixels && !s_pixel_reader) || native_w <= 0 ||
         native_w != s_native_w || s_scale <= 0 || s_scale > 64 ||
         (size_t)native_w > SIZE_MAX / 240 / sizeof(HdJobPixel) ||
         (uint64_t)native_w*240*3>0x800000u) return NULL;
@@ -223,12 +223,12 @@ const HdJobFrame *hdpack_prepare_jobs(const uint32_t *native, int native_w)
     int hide_bg = s_disable_orig || s_opt_hide_orig;
     for (int y = 0; y < 240; ++y) for (int x = 0; x < native_w; ++x) {
         size_t at = (size_t)y * (unsigned)native_w + (unsigned)x;
-        HdPixel *p = &s_pixels[at]; HdJobPixel *j = &owned->pixels[at];
+        HdPixel scratch,*p=pixel_at(at,&scratch); HdJobPixel *j = &owned->pixels[at];
         j->base = p->bg_has ? p->backdrop : native[at];
         j->bg_image = j->sp_image = HD_JOB_NO_IMAGE;
         j->bg_uv = j->sp_uv = j->bg_color = j->sp_color = j->flags = 0;
         if(p->bg_has && (p->bg_ox>=8 || p->bg_oy>=8))goto fail;
-        HdSprite *sprites=sprites_at(at);int lowest_behind=HD_MAX_SPRITES;
+        HdSprite *sprites=sprites_at(at,p);int lowest_behind=HD_MAX_SPRITES;
         for(int k=0;k<HD_MAX_SPRITES;k++)if(sprites[k].has && sprites[k].behind && !sprites[k].transparent){lowest_behind=k;break;}
         unsigned drawn=0,hidden=0;
         for(int k=HD_MAX_SPRITES-1;k>=0;k--) {
@@ -282,6 +282,16 @@ const HdJobFrame *hdpack_prepare_jobs(const uint32_t *native, int native_w)
     return f;
 fail:
     hdpack_jobs_release(f); return NULL;
+}
+
+const HdJobFrame *hdpack_prepare_jobs_from(const uint32_t *native,int native_w,
+                                          HdPixelReader reader,const void *context)
+{
+    if(!reader || s_pixel_reader)return NULL;
+    s_pixel_reader=reader;s_pixel_context=context;
+    const HdJobFrame *frame=hdpack_prepare_jobs(native,native_w);
+    s_pixel_reader=NULL;s_pixel_context=NULL;
+    return frame;
 }
 
 static uint32_t job_color_over(uint32_t under, uint32_t source, uint32_t brightness,

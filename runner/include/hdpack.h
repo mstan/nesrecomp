@@ -45,6 +45,16 @@ typedef struct {
     HdSprite sp[HD_MAX_SPRITES];
 } HdPixel;
 
+/* A synchronous source avoids materializing another full HdPixel frame when
+ * the host already records the same data in its native representation. Fill
+ * all fields of out; referenced tile keys stay valid through preparation.
+ * Lookups may request another position while matching the current pixel.
+ * The reader must not mutate the pack or re-enter job preparation. No source
+ * callback, context or pixel pointers are retained by the published jobs. */
+typedef void (*HdPixelReader)(const void *context, size_t offset, HdPixel *out);
+const HdJobFrame *hdpack_prepare_jobs_from(const uint32_t *native, int native_w,
+                                          HdPixelReader reader, const void *context);
+
 /* Load the pack in `dir` (expects dir/hires.txt). native_w is the runner's
  * framebuffer width (g_render_width), used to size the per-pixel side channel.
  * is_chr_ram_game selects the CHR-RAM (content) vs CHR-ROM (index) match mode.
