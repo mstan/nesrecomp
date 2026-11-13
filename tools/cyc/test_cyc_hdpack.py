@@ -31,7 +31,7 @@ def png_read(path):
 PATTERNS=[bytes([255]*8+[0]*8),bytes([0xf0^(y*3) for y in range(8)]+[0xaa^(y*5) for y in range(8)])]
 
 
-def fixture(chr_ram, sprite16, background_tile=0):
+def fixture(chr_ram, sprite16, background_tile=0, nametable=0):
     prg=bytearray([0xea]*32768);code=bytearray();labels={};fixups=[]
     def emit(*v):code.extend(v)
     def label(name):labels[name]=0x8000+len(code)
@@ -47,7 +47,7 @@ def fixture(chr_ram, sprite16, background_tile=0):
     store(0x2006,0x20);store(0x2006,0);emit(0xa0,4,0xa2,0,0xa9,background_tile);label('nt');emit(0x8d,7,0x20,0xe8);branch(0xd0,'nt');emit(0x88);branch(0xd0,'nt')
     emit(0xa2,0,0xa9,0xff);label('oam');emit(0x9d,0,2,0xe8);branch(0xd0,'oam')
     emit(0xa2,0);label('sprites');emit(0xbd,0x40,0x82,0x9d,0,2,0xe8,0xe0,20);branch(0xd0,'sprites')
-    store(0x4014,2);emit(0x2c,2,0x20);store(0x2005,5);store(0x2005,3);store(0x2000,0xa0 if sprite16 else 0x80);store(0x2001,0x1e)
+    store(0x4014,2);emit(0x2c,2,0x20);store(0x2005,5);store(0x2005,3);store(0x2000,(0xa0 if sprite16 else 0x80)|nametable);store(0x2001,0x1e)
     label('spin');emit(0x4c,labels['spin']&255,labels['spin']>>8)
     for off,name in fixups:delta=labels[name]-(0x8000+off+1);assert -128<=delta<=127;code[off]=delta&255
     assert len(code)<256;prg[:len(code)]=code
