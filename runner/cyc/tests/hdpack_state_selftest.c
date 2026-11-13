@@ -88,10 +88,27 @@ int main(void) {
          * dense worst case retain the complete lossless representation. */
         active=1;memset(data,0,size);
         int full=save_part(part,buf,1024*1024);assert(full<=(int)(sizeof(HdStateHeader)+size));
-        HdStateHeader h;memcpy(&h,buf,sizeof h);assert(h.version==(part<HD_STATE_CHUNKS?6u:4u) && h.active==1);
+        HdStateHeader h;memcpy(&h,buf,sizeof h);assert(h.version==(part<HD_STATE_CHUNKS?6u:7u) && h.active==1);
         assert(load_checked(part,buf,full));
         check_epoch_free_save(part,buf,full,again,1024*1024);
-        if(part<HD_STATE_CHUNKS) {
+        if(part==HD_STATE_CHUNKS) {
+            /* A frame-end phase alone can hide a missing cursor restore.
+             * Preserve a partially shifted queue with distinct fetched keys. */
+            pipeline.bg_head=5;
+            for(unsigned k=0;k<16;k++) {
+                pipeline.bg[k].valid=1;pipeline.bg[k].row=(uint8_t)(k&7);
+                pipeline.bg[k].x=(uint8_t)((k+3)&7);pipeline.bg[k].index=(int32_t)(100+k);
+                pipeline.bg[k].bytes[7]=(uint8_t)(k*7);
+            }
+            memcpy(expected,data,size);full=save_part(part,buf,1024*1024);
+            memset(data,0,size);assert(load_checked(part,buf,full));assert(!memcmp(data,expected,size));
+            assert(pipeline.bg_head==5);
+            for(unsigned fine=0;fine<8;fine++)assert(pipeline.bg[(pipeline.bg_head+15-fine)&15].index==100+(int)((20-fine)&15));
+            memcpy(again,buf,full);again[sizeof(HdStateHeader)+offsetof(HdPipeline,bg_head)]=16;
+            assert(!load_checked(part,again,full));assert(!memcmp(data,expected,size));
+            memcpy(again,buf,full);HdStateHeader old;memcpy(&old,again,sizeof old);old.version=4;memcpy(again,&old,sizeof old);
+            assert(!load_checked(part,again,full));assert(!memcmp(data,expected,size));
+        } else {
             HdRecordedPixel *pixels=(HdRecordedPixel *)data;
             for(unsigned k=0;k<4;k++){pixels[k*37].sp[k].flags=1;pixels[k*37].sp[k].tile[15]=(uint8_t)(k+1);}
             memcpy(expected,data,size);int sparse=save_part(part,buf,1024*1024);

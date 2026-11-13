@@ -27,7 +27,7 @@ typedef struct {
     HdFetchedTile bg_fetch,bg[16],sprite[8];
     uint8_t sprite_x[8];
     HdRecordedPixel color[4];
-    uint8_t color_slot[4],color_next;
+    uint8_t color_slot[4],color_next,bg_head;
     HdVisualSprite visual[64];
     uint8_t visual_pixels[256][4],visual_line,visual_valid;
 } HdPipeline;
@@ -41,7 +41,8 @@ static uint64_t presentation_epoch;
 
 /* Version 5 represents an exactly zero inactive payload. Version 6 pixel
  * chunks omit exactly zero sprite records, including all their padding.
- * Version 4 remains the lossless dense fallback. No invalidation keys persist. */
+ * Version 4 remains the lossless dense pixel fallback. Version 7 stores both
+ * indexed pipeline delays. No invalidation keys persist. */
 static bool zero_payload(const void *data,size_t n) {
     const uint8_t *p=data;
     while(n>=sizeof(uint64_t)) {
@@ -83,7 +84,7 @@ static int save_part(unsigned part,uint8_t *buf,int cap) {
     }
     if(compact)size=0;
     if(cap<(int)(sizeof(HdStateHeader)+size))return -1;
-    HdStateHeader h={compact?5u:sparse?6u:4u,hdpack_active()!=0,(uint32_t)hdpack_scale(),part,{0}};
+    HdStateHeader h={compact?5u:sparse?6u:part==HD_STATE_CHUNKS?7u:4u,hdpack_active()!=0,(uint32_t)hdpack_scale(),part,{0}};
     memcpy(h.fingerprint,fingerprint,sizeof fingerprint);memcpy(buf,&h,sizeof h);
     if(sparse)write_sparse_pixels(payload,buf+sizeof h);
     else if(size)memcpy(buf+sizeof h,payload,size);
@@ -121,9 +122,11 @@ static int validate_part(unsigned part,const uint8_t *buf,int len) {
     HdStateHeader h;memcpy(&h,buf,sizeof h);
     bool compact=h.version==5;
     bool sparse=h.version==6;
-    if((h.version!=4 && !compact && !sparse) || h.part!=part || h.active!=(unsigned)(hdpack_active()!=0) || h.scale!=(unsigned)hdpack_scale() || memcmp(h.fingerprint,fingerprint,sizeof fingerprint))return 0;
+    bool pipe=h.version==7;
+    if((h.version!=4 && !compact && !sparse && !pipe) || h.part!=part || h.active!=(unsigned)(hdpack_active()!=0) || h.scale!=(unsigned)hdpack_scale() || memcmp(h.fingerprint,fingerprint,sizeof fingerprint))return 0;
     if(compact)return !h.active && len==(int)sizeof h;
     if(sparse)return h.active && part<HD_STATE_CHUNKS && read_sparse_pixels(buf+sizeof h,(size_t)len-sizeof h,NULL);
+    if(pipe!=(part==HD_STATE_CHUNKS))return 0;
     if(len!=(int)(sizeof h+size))return 0;
     if(part==HD_STATE_CHUNKS) {
         HdPipeline v;memcpy(&v,buf+sizeof h,sizeof v);
@@ -131,7 +134,7 @@ static int validate_part(unsigned part,const uint8_t *buf,int len) {
         for(unsigned i=0;i<16;i++)if(v.bg[i].row>7 || v.bg[i].x>7 || v.bg[i].valid>1)return 0;
         for(unsigned i=0;i<8;i++)if(v.sprite[i].row>7 || v.sprite[i].valid>1 || v.sprite_x[i]>8)return 0;
         for(unsigned i=0;i<4;i++)if(!valid_pixel(&v.color[i]) || v.color_slot[i]>3)return 0;
-        if(v.color_next>3)return 0;
+        if(v.color_next>3 || v.bg_head>15)return 0;
         if(v.visual_valid>1 || v.visual_line>=240)return 0;
         for(unsigned i=0;i<64;i++) {
             const HdVisualSprite *sp=&v.visual[i];

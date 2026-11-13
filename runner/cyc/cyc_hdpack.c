@@ -112,12 +112,15 @@ void cyc_hdpack_bg_fetch(uint16_t address,uint8_t value,bool high) {
 }
 void cyc_hdpack_bg_reload(void) {
     if(!hdpack_recording())return;
-    for(unsigned i=0;i<8;i++){pipeline.bg[i]=pipeline.bg_fetch;pipeline.bg[i].x=(uint8_t)(7-i);}
+    for(unsigned i=0;i<8;i++) {
+        HdFetchedTile *tile=&pipeline.bg[(pipeline.bg_head+i)&15];
+        *tile=pipeline.bg_fetch;tile->x=(uint8_t)(7-i);
+    }
 }
 void cyc_hdpack_bg_shift(void) {
     if(!hdpack_recording())return;
-    for(unsigned i=15;i;i--)pipeline.bg[i]=pipeline.bg[i-1];
-    memset(&pipeline.bg[0],0,sizeof pipeline.bg[0]);
+    pipeline.bg_head=(uint8_t)((pipeline.bg_head+15)&15);
+    memset(&pipeline.bg[pipeline.bg_head],0,sizeof pipeline.bg[0]);
 }
 /* Build only display metadata for sprites beyond the hardware's eight units.
  * Snapshot once at the end of sprite fetch, stamp at most four OAM-ordered
@@ -182,7 +185,7 @@ void cyc_hdpack_pixel(unsigned bg_color,unsigned bg_palette,int sprite,unsigned 
     pipeline.color_slot[0]=pipeline.color_next;
     HdRecordedPixel *p=&pipeline.color[pipeline.color_next];memset(p,0,sizeof(*p));
     p->bg_index=-1;p->bg_pal[0]=ppu.palette[0];
-    const HdFetchedTile *bg=&pipeline.bg[15-ppu.fine_x];
+    const HdFetchedTile *bg=&pipeline.bg[(pipeline.bg_head+15-ppu.fine_x)&15];
     if(ppu.show_bg && (ppu.dot>8 || ppu.show_bg8) && bg->valid) {
         p->flags=1;p->bg_index=bg->index;memcpy(p->bg_tile,bg->bytes,16);
         p->bg_x=bg->x;p->bg_y=bg->row;p->bg_color=(uint8_t)bg_color;
