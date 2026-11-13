@@ -473,6 +473,42 @@ static void check_reader_direct(const uint32_t *native,const uint32_t *expected)
     free(out);
 }
 
+static void check_unmatched_program_tiles(void) {
+    hdpack_unload();
+    s_active=1;s_version=108;s_scale=1;s_native_w=17;
+    s_pixels=calloc(17*240,sizeof(*s_pixels));assert(s_pixels);
+    uint32_t native[17*240]={0},out[17*240]={0};
+    HdPixel *p=&s_pixels[0];p->bg_has=1;p->bg_index=-1;
+    p->backdrop=0xff000000;p->bg_argb=0xff123456;
+    s_disable_orig=1;s_opt_debug=s_opt_hide_orig=0;
+    hdpack_upscale(native,17,out);assert(out[0]==p->backdrop);
+    hdpack_preserve_unmatched_tiles(0);
+    hdpack_upscale(native,17,out);assert(out[0]==p->bg_argb);
+    assert(!upscale_direct(native,17,out) && out[0]==p->bg_argb);
+    /* The old pack intentionally blanks tiles beneath its full HUD image.
+     * A changed program keeps its HUD and still reveals authored room art
+     * through those same transparent replacements below the HUD. */
+    tile(0,0x0f010203,9,0,NULL,NULL,0);
+    p->bg_index=4;p->bg_p0=15;p->bg_p1=1;p->bg_p2=2;p->bg_p3=3;
+    s_pixels[1]=*p;s_pixels[1].bg_transparent=1;
+    s_pixels[65*17]=*p;
+    s_bg_count=s_bgimg_count=1;s_bgs=calloc(1,sizeof(*s_bgs));
+    s_bgimgs=calloc(1,sizeof(*s_bgimgs));s_bg_sorted=calloc(1,sizeof(*s_bg_sorted));
+    s_actbg=calloc(1,sizeof(*s_actbg));assert(s_bgs&&s_bgimgs&&s_bg_sorted&&s_actbg);
+    HdBgImg *image=calloc(1,sizeof(*image));assert(image);
+    image->w=17;image->h=240;image->px=malloc(17*240*4);assert(image->px);
+    for(unsigned i=0;i<17*240;i++)image->px[i]=0xff654321;
+    s_bgimgs[0]=image;s_bgs[0].img=image;s_bgs[0].priority=10;s_bgs[0].brightness=255;
+    s_bg_sorted[0]=&s_bgs[0];
+    hdpack_preserve_unmatched_tiles(64);hdpack_upscale(native,17,out);
+    assert(out[0]==p->bg_argb && out[1]==p->backdrop && out[65*17]==0xff654321);
+    assert(!upscale_direct(native,17,out));
+    assert(out[0]==p->bg_argb && out[1]==p->backdrop && out[65*17]==0xff654321);
+    hdpack_preserve_unmatched_tiles(0);hdpack_upscale(native,17,out);
+    assert(out[0]==0xff654321); /* normal authored transparency remains */
+    hdpack_unload();
+}
+
 int main(void) {
 #ifdef NESRECOMP_HDPACK_CACHE_PROBE
     check_page_cache();
@@ -482,6 +518,7 @@ int main(void) {
     check_manifest_priority();
     check_background_priority();
     check_cell_draw_coverage();
+    check_unmatched_program_tiles();
     const int scales[]={1,2,3,10};unsigned count=0;
     const HdJobFrame *retained=NULL;uint32_t *retained_pixels=NULL;
     for(int ram=0;ram<2;ram++)for(int ver=0;ver<2;ver++)for(unsigned si=0;si<4;si++) {

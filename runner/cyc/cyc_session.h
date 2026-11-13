@@ -47,6 +47,10 @@ const void *cyc_session_mods_provider(void);
 /* Commit the selection for this image and activate its plugins (reset
  * callbacks first). */
 bool cyc_session_mods_start(const char *image_path, char *err, size_t err_len);
+/* Copy a committed, catalog-verified cartridge program before allocating the
+ * machine. Works independently of graphics packs. Original image stays owned
+ * by the caller; a successful replacement frees that allocation. */
+bool cyc_session_mods_image(uint8_t **image, size_t *size);
 /* Activate the committed plugins again after the selection changed in the
  * running game (the runtime menu's Mods rows). */
 void cyc_session_mods_reapply(void);

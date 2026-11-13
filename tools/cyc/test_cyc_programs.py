@@ -25,6 +25,65 @@ def image(value):
     return b'NES\x1a' + bytes([1, 0]) + bytes(10) + prg
 
 
+def package_boot(out, source, compiler, tc):
+    """A real Mods host must switch before boot without enabling HD packs."""
+    folder=out/'package-boot';folder.mkdir(exist_ok=True)
+    package=folder/'mods/packages/test.program/1.0.0';package.mkdir(parents=True,exist_ok=True)
+    original=out/'alpha/test.nes';patched=out/'beta/test.nes'
+    (package/'swap.ips').write_bytes(b'PATCH'+bytes([0,0,17,0,1,0x22])+b'EOF')
+    (package/'manifest.toml').write_text(f'''format_version=1
+id="test.program"
+version="1.0.0"
+name="Program"
+[[target]]
+game_id="test-program"
+rom_crc32="{zlib.crc32(original.read_bytes()[16:]):08x}"
+[[feature]]
+id="program"
+name="Program"
+default_enabled=true
+[[plugin]]
+feature="program"
+id="test.swap"
+[[cartridge_patch]]
+feature="program"
+path="swap.ips"
+order=0
+''')
+    (folder/'plugin.c').write_text('''#include "mod_runtime.h"
+static void active(void) {}
+NES_MOD_CONSTRUCTOR(register_swap) {
+    nes_mod_register_activation_plugin("test.swap",active);
+}
+''')
+    (folder/'CMakeLists.txt').write_text(f'''cmake_minimum_required(VERSION 3.20)
+project(package_program C CXX)
+include("{source.as_posix()}/project.cmake")
+nesrecomp_add_cycle_game(program_mod HEADLESS NO_RECOMP_UI MODS GAME_ID test-program
+    ROM "{original.as_posix()}" RECOMPILER "{compiler.as_posix()}" NAMESPACE alpha
+    GAME_CONFIG "{(out/'alpha/game.toml').as_posix()}")
+nesrecomp_add_cycle_program(program_mod ROM "{patched.as_posix()}" NAMESPACE beta
+    GAME_CONFIG "{(out/'beta/game.toml').as_posix()}")
+nesrecomp_enable_native_programs(program_mod)
+target_sources(program_mod PRIVATE plugin.c)
+''')
+    tc.build(folder,folder/'build',folder,timeout=900,parallel=1)
+    exe=tc.executable(folder/'build','program_mod')
+    args=[exe,original,'--no-save','--frames','1','--frame-log-frames','0:0']
+    for name,expected,extra in [('stock',0x11,[]),('selected',0x22,['--mods-root',folder/'mods'])]:
+        dump=folder/(name+'.bin')
+        tc.run([*args,'--frame-log',dump,*extra],folder,folder/(name+'.log'),timeout=180)
+        assert dump.read_bytes()[336]==expected,(name,'wrong native program booted')
+    before=original.read_bytes()
+    (package/'swap.ips').write_bytes(b'PATCH'+bytes([0,0,17,0,1,0x33])+b'EOF')
+    result=subprocess.run([str(x) for x in [*args,'--mods-root',folder/'mods']],cwd=folder,
+                          env=tc.environment(),capture_output=True,text=True,
+                          creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
+    (folder/'unknown.log').write_text(result.stdout+result.stderr)
+    assert result.returncode and 'no compiled native program' in result.stderr
+    assert original.read_bytes()==before,'source ROM changed'
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--recompiler', required=True, type=Path)
@@ -147,7 +206,8 @@ target_link_libraries(program_probe PRIVATE ${{NESRECOMP_CYC_LIBRARIES}})
                                 creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
         if result.returncode == 0:
             raise AssertionError(f'Invalid namespace accepted: {name}')
-    print('Two generated programs linked; native/interpreter state matches for alpha/beta/alpha; hooks bind only to their program; unknown/misaddressed hooks and invalid namespaces rejected.')
+    package_boot(out,source,compiler,tc)
+    print('Two generated programs linked; native/interpreter state matches for alpha/beta/alpha; hooks bind only to their program; unknown/misaddressed hooks and invalid namespaces rejected; optional package switches the native program before boot without HD packs.')
 
 
 if __name__ == '__main__':

@@ -124,7 +124,7 @@ static HdTile *match_layer_planned(int is_sprite, int32_t tile_index, const uint
         k.palette = ((uint32_t)p1 << 16) | ((uint32_t)p2 << 8) | p3;
     else
         k.palette = ((uint32_t)p0 << 24) | ((uint32_t)p1 << 16) | ((uint32_t)p2 << 8) | p3;
-    return find_tile_planned(&k, x, y, cur, is_sprite);
+    return native_hud_tile(find_tile_planned(&k, x, y, cur, is_sprite),y);
 }
 
 static void hd_layer_prepare(void) {

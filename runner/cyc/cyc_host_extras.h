@@ -78,6 +78,17 @@ typedef struct {
     const char *help;         /* one line for the usage */
 } CycHostOption;
 
+/* A trusted title may adapt a specifically qualified graphics pack to its
+ * separately compiled cartridge program. Text is malloc-owned by the caller;
+ * key transformations change display metadata only, never guest reads. */
+typedef struct CycHdPackAdapter {
+    bool (*rules)(void *ctx,const char *directory,char **text);
+    void (*pattern)(void *ctx,const uint8_t source[16],uint8_t key[16]);
+    void (*palette)(void *ctx,uint8_t palette[4]);
+    bool (*visible)(void *ctx);
+    unsigned native_hud_rows;
+} CycHdPackAdapter;
+
 typedef struct CycHostExtras {
     void *ctx;
     const uint32_t *(*present)(void *ctx, int *width, int *height);
@@ -121,6 +132,7 @@ typedef struct CycHostExtras {
      * ordinary setter still validates/applies the value. Actions, mod rows,
      * disk/FDS settings and state operations cannot use this exception. */
     bool (*menu_netplay_value_allowed)(void *ctx, const struct RecompRuntimeUiItem *item, int value);
+    const CycHdPackAdapter *(*hdpack_adapter)(void *ctx);
 } CycHostExtras;
 
 const CycHostExtras *cyc_host_extras(void);
