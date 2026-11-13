@@ -318,6 +318,9 @@ static void check_addition_resolution(void) {
     bg->bg_p0=15;bg->bg_p1=1;bg->bg_p2=2;bg->bg_p3=3;bg->bg_ox=2;bg->bg_oy=7;
     char bg_rule[]="6,0F010203,1,1,C,FF212223";process_addition(bg_rule);
     assert(hdpack_reuses_pixel_source());
+    uint32_t untouched=0x12345678;
+    assert(hdpack_upscale_direct_from(&untouched,17,&untouched,probe_pixel_reader,s_pixels)<0);
+    assert(untouched==0x12345678 && !s_pixel_reader && !s_pixel_context);
     assert(resolve_sprites());
     HdSprite expected[HD_MAX_SPRITES];memcpy(expected,sprites_at(8*17+8,&s_pixels[8*17+8]),sizeof expected);
     for(int i=0;i<HD_MAX_SPRITES;i++) {
@@ -431,6 +434,25 @@ static void check_reader_jobs(const uint32_t *native,const uint32_t *expected) {
     free(out);hdpack_jobs_release(jobs);s_pixels=source;
 }
 
+static void check_reader_direct(const uint32_t *native,const uint32_t *expected) {
+    size_t n=(size_t)17*240*s_scale*s_scale;
+    uint32_t *out=malloc(n*sizeof(*out));assert(out);
+    out[0]=out[n-1]=0x12345678;
+    HdPixel *source=s_pixels;s_pixels=NULL;reader_calls=0;reader_packed=1;
+    uint64_t serial=s_job_serial;
+    int result=hdpack_upscale_direct_from(native,17,out,probe_pixel_reader,source);
+    reader_packed=0;s_pixels=source;
+    assert(!s_pixel_reader && !s_pixel_context && !s_current_sprite);
+    assert(s_job_serial==serial); /* no intermediate job publication */
+    if(s_bg_count || s_addition_count) {
+        assert(result<0 && !reader_calls && out[0]==0x12345678 && out[n-1]==0x12345678);
+    } else {
+        assert(!result && reader_calls>=17*240 && !memcmp(out,expected,n*sizeof(*out)));
+        assert(hdpack_upscale_direct_from(native,16,out,probe_pixel_reader,source)<0);
+    }
+    free(out);
+}
+
 int main(void) {
 #ifdef NESRECOMP_HDPACK_CACHE_PROBE
     check_page_cache();
@@ -475,6 +497,7 @@ int main(void) {
             int saved_backgrounds=s_bg_count;if(q==11)s_bg_count=0;
             hdpack_upscale(native,17,out);
             check_reader_jobs(native,out);
+            check_reader_direct(native,out);
 #if !(defined(NESRECOMP_HDPACK_PLAN_REFERENCE) && NESRECOMP_HDPACK_PLAN_REFERENCE)
             if(q==0 || (ram==0 && ver==1 && si==2 && q==2)) {
                 const HdJobFrame *jobs=hdpack_prepare_jobs(native,17);assert(jobs);

@@ -1432,31 +1432,21 @@ static void blend_bg_block(uint32_t *dst, int hd_w, const HdBg *b, int sx, int s
     }
 }
 
-void hdpack_upscale(const uint32_t *native_fb, int native_w, uint32_t *hd_buf) {
-    if (!s_active) return;
-#if !(defined(NESRECOMP_HDPACK_PLAN_REFERENCE) && NESRECOMP_HDPACK_PLAN_REFERENCE) && \
-    !(defined(NESRECOMP_HDPACK_JOBS_REFERENCE) && NESRECOMP_HDPACK_JOBS_REFERENCE)
-    const HdJobFrame *jobs = hdpack_prepare_jobs(native_fb, native_w);
-    if (jobs) {
-        int result = hdpack_render_jobs(jobs, (unsigned)s_scale, hd_buf,
-                                       (size_t)native_w * (unsigned)s_scale);
-        hdpack_jobs_release(jobs);
-        if (!result) return;
-    }
-#endif
+static int upscale_direct(const uint32_t *native_fb, int native_w, uint32_t *hd_buf) {
     if (s_opt_debug < 0)     s_opt_debug = getenv("NESRECOMP_HDPACK_DEBUG") ? 1 : 0;
     if (s_opt_hide_orig < 0) s_opt_hide_orig = getenv("NESRECOMP_HDPACK_HIDE_ORIGINALS") ? 1 : 0;
     int s = s_scale, hd_w = native_w * s;
     int hide_orig = s_disable_orig || s_opt_hide_orig;
 
-    if(!resolve_sprites())return;
+    if(!resolve_sprites())return -1;
     eval_backgrounds_for_frame();
 
     for (int sy = 0; sy < 240; sy++) {
         for (int sx = 0; sx < native_w; sx++) {
             int idx = sy * native_w + sx;
             uint32_t *dst = hd_buf + (long)(sy * s) * hd_w + (long)sx * s;
-            HdPixel *p = &s_pixels[idx];
+            HdPixel scratch,*p=pixel_at((size_t)idx,&scratch);
+            if(p->bg_has && (p->bg_ox>=8 || p->bg_oy>=8))return -1;
 
             /* base: backdrop where BG is enabled, else the universal native pixel */
             fill_block(dst, hd_w, p->bg_has ? p->backdrop : native_fb[idx], s);
@@ -1465,6 +1455,8 @@ void hdpack_upscale(const uint32_t *native_fb, int native_w, uint32_t *hd_buf) {
                 for (int i=0;i<s_band_behind;i++)blend_bg_block(dst,hd_w,s_actbg[i],sx,sy,s);
             HdSprite *sprites=sprites_at((size_t)idx,p);
             int limit=(int)sprite_limit(p),lowest_behind=limit;
+            for(int k=0;k<limit;k++)
+                if(sprites[k].has && (sprites[k].ox>=8 || sprites[k].oy>=8))return -1;
             for(int k=0;k<limit;k++)if(sprites[k].has && sprites[k].behind && !sprites[k].transparent){lowest_behind=k;break;}
             for(int k=limit-1;k>=0;k--)if(sprites[k].has && sprites[k].behind) {
                 HdSprite *sp=&sprites[k];s_current_sprite=sp;
@@ -1504,6 +1496,38 @@ void hdpack_upscale(const uint32_t *native_fb, int native_w, uint32_t *hd_buf) {
             for (int i = s_band_fg; i < s_nact; i++) blend_bg_block(dst, hd_w, s_actbg[i], sx, sy, s);
         }
     }
+    return 0;
+}
+
+int hdpack_upscale_direct_from(const uint32_t *native,int native_w,uint32_t *out,
+                               HdPixelReader reader,const void *context) {
+    /* Background layers benefit from whole-row jobs, and additions need a
+     * resolved frame. Simple software packs can match and draw immediately
+     * instead of publishing a frame that is consumed only once. */
+    if(!s_active || s_bg_count || s_addition_count || !native || !out || !reader ||
+       s_pixel_reader || native_w<=0 || native_w!=s_native_w || s_scale<=0 ||
+       s_scale>64 || native_w>INT32_MAX/s_scale ||
+       (size_t)native_w>SIZE_MAX/240/(unsigned)s_scale/(unsigned)s_scale/sizeof(*out))return -1;
+    hdpack_invalidate_conditions();
+    s_pixel_reader=reader;s_pixel_context=context;
+    int result=upscale_direct(native,native_w,out);
+    s_pixel_reader=NULL;s_pixel_context=NULL;s_current_sprite=NULL;
+    return result;
+}
+
+void hdpack_upscale(const uint32_t *native_fb, int native_w, uint32_t *hd_buf) {
+    if (!s_active) return;
+#if !(defined(NESRECOMP_HDPACK_PLAN_REFERENCE) && NESRECOMP_HDPACK_PLAN_REFERENCE) && \
+    !(defined(NESRECOMP_HDPACK_JOBS_REFERENCE) && NESRECOMP_HDPACK_JOBS_REFERENCE)
+    const HdJobFrame *jobs = hdpack_prepare_jobs(native_fb, native_w);
+    if (jobs) {
+        int result = hdpack_render_jobs(jobs, (unsigned)s_scale, hd_buf,
+                                       (size_t)native_w * (unsigned)s_scale);
+        hdpack_jobs_release(jobs);
+        if (!result) return;
+    }
+#endif
+    (void)upscale_direct(native_fb,native_w,hd_buf);
 }
 
 #if defined(NESRECOMP_HDPACK_LAYER_PLANS) && NESRECOMP_HDPACK_LAYER_PLANS

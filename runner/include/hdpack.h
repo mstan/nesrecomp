@@ -59,6 +59,12 @@ const HdJobFrame *hdpack_prepare_jobs_from(const uint32_t *native, int native_w,
 /* Additions and uncached neighboring-pixel conditions reuse the source. A
  * host with a costly reader can materialize its array once for these packs. */
 int hdpack_reuses_pixel_source(void);
+/* Pack-scale software composition without publishing intermediate jobs.
+ * Only packs without authored backgrounds/additions are eligible; otherwise
+ * returns -1 for the caller's normal job route. Uses the same synchronous
+ * reader contract, including nested condition lookups. No reader is retained. */
+int hdpack_upscale_direct_from(const uint32_t *native, int native_w, uint32_t *out,
+                               HdPixelReader reader, const void *context);
 
 /* Load the pack in `dir` (expects dir/hires.txt). native_w is the runner's
  * framebuffer width (g_render_width), used to size the per-pixel side channel.

@@ -290,15 +290,20 @@ const uint32_t *cyc_hdpack_present(const uint32_t *native,int *width,int *height
     if(presentation_valid && generation==presented_generation) {
         *width=256*hdpack_scale();*height=240*hdpack_scale();return upscaled;
     }
-    const HdJobFrame *frame=cyc_hdpack_jobs(native);
     size_t count=(size_t)256*240*hdpack_scale()*hdpack_scale();
     if(count>upscaled_capacity) {
         uint32_t *next=realloc(upscaled,count*sizeof(*next));if(!next)return native;
         upscaled=next;upscaled_capacity=count;
     }
-    if(!frame || hdpack_render_jobs(frame,(unsigned)hdpack_scale(),upscaled,256*hdpack_scale())) {
-        prepare_pixels(native);
-        hdpack_upscale(native,256,upscaled);
+    /* Reuse an already published GPU/preview frame. Otherwise a simple
+     * software pack can compose directly from the native recording. */
+    bool jobs_ready=prepared_jobs && generation==jobs_generation && jobs_epoch==presentation_epoch;
+    if(jobs_ready || hdpack_upscale_direct_from(native,256,upscaled,read_pixel,native)) {
+        const HdJobFrame *frame=cyc_hdpack_jobs(native);
+        if(!frame || hdpack_render_jobs(frame,(unsigned)hdpack_scale(),upscaled,256*hdpack_scale())) {
+            prepare_pixels(native);
+            hdpack_upscale(native,256,upscaled);
+        }
     }
     presented_generation=generation;presentation_valid=true;
     *width=256*hdpack_scale();*height=240*hdpack_scale();return upscaled;
