@@ -206,7 +206,7 @@ unsigned hw_native_interval_limit(void)
      * boards need a bank-selection deadline before admitting CPU ROM reads. */
     if (hw_cart.mapper == 1 && (hw_cart.m.ctrl & 0x10) &&
         ((hw_cart.m.chr0 ^ hw_cart.m.chr1) & 0x1c)) return 0;
-    return ppu_native_interval_limit();
+    return apu_native_interval_limit(ppu_native_interval_limit());
 }
 
 void hw_native_begin(void)

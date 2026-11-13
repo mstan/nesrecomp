@@ -31,6 +31,9 @@
 #ifndef NESRECOMP_APU_LEVEL_REFERENCE
 #define NESRECOMP_APU_LEVEL_REFERENCE 0
 #endif
+#ifndef NESRECOMP_APU_DMC_REFERENCE
+#define NESRECOMP_APU_DMC_REFERENCE 0
+#endif
 
 enum { CH_PULSE1, CH_PULSE2, CH_TRIANGLE, CH_NOISE };
 
@@ -994,11 +997,32 @@ bool apu_native_interval_ready(void)
     /* No memory transfer may be requested during an independent run. The
      * DMC output unit can keep shifting its already-owned bytes normally.
      * The frame sequencer may clock envelopes/lengths, but cannot raise IRQ. */
-    return !(apu.oam_dma | apu.dmc_dma | apu.dmc_bytes |
+    return !(apu.oam_dma | apu.dmc_dma |
+#if NESRECOMP_APU_DMC_REFERENCE
+             apu.dmc_bytes |
+#endif
              apu.dmc_enable_delay | apu.dmc_start_delay |
              apu.implicit_abort | apu.implicit_abort_armed |
              apu.frame_irq_out | apu.dmc_irq) &&
            (apu.irq_inhibit || (apu.five_step && !apu.frame_irq));
+}
+
+/* The output shifter can run independently until it consumes its byte and
+ * asks the memory reader for another. Leave the request cycle itself, all
+ * DMA steals, delayed enables/aborts and IRQ publication on the coupled clock.
+ * put is the phase of the next APU clock; only get clocks subtract two. */
+unsigned apu_native_interval_limit(unsigned limit)
+{
+#if !NESRECOMP_APU_DMC_REFERENCE
+    if (apu.dmc_bytes && !(apu.dmc_timer & 1)) {
+        if (!apu.dmc_bits) return 0;
+        unsigned timer = apu.dmc_timer ? apu.dmc_timer : 65536u;
+        unsigned before_request = timer - 2u + apu.put +
+            (unsigned)(apu.dmc_bits - 1u) * apu.dmc_rate;
+        if (before_request < limit) limit = before_request;
+    }
+#endif
+    return limit;
 }
 
 #if !NESRECOMP_APU_LEVEL_REFERENCE

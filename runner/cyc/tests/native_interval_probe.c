@@ -107,6 +107,53 @@ static void apu_five_step_cases(bool reference)
            (unsigned long long)cyc_mem_state_hash());
 }
 
+/* Sweep all DMC rates and request phases. Every allowed interval crosses
+ * ordinary output-bit events but must stop before a memory-reader request.
+ * Alternating $4015 reads/writes, sprite DMA and controller accesses around
+ * the sweep also retain the original DMA side effects and cancellation. */
+static void dmc_deadline_cases(bool reference)
+{
+    unsigned spans = 0, admitted = 0;
+    access_bus(0x4017, 0x40, true);
+    access_bus(0x2000, 0, true);
+    access_bus(0x2001, 0x1e, true);
+    for (unsigned rate = 0; rate < 16; ++rate) {
+        access_bus(0x4015, 0, true);
+        access_bus(0x4010, (uint8_t)(0x40 | rate), true);
+        access_bus(0x4012, (uint8_t)(rate * 7), true);
+        access_bus(0x4013, 1, true);
+        access_bus(0x4015, 0x10, true);
+        for (unsigned i = 0; i < 10000;) {
+            unsigned n = hw_native_interval_limit();
+            if (n > 10000 - i) n = 10000 - i;
+            unsigned checkpoint = 257 - i % 257;
+            if (n > checkpoint) n = checkpoint;
+            if (!n || reference) { access_bus(0, 0, false); ++i; }
+            else {
+                hw.cpu_addr = 0; hw.cpu_reading = 1;
+                hw.data_driven = 1; hw.data_bus = hw.internal_bus = hw.ram[0];
+                hw_native_interval_run(n); i += n;
+                ++spans; admitted += n;
+            }
+            if (i % 257 == 0)
+                printf("dmc %u %u %016llx %016llx\n", rate, i,
+                       (unsigned long long)cyc_hw_state_hash(),
+                       (unsigned long long)cyc_mem_state_hash());
+        }
+        access_bus(0x4016, 1, true);
+        access_bus(0x4016, 0, true);
+        for (unsigned j = 0; j < 8; ++j) access_bus(0x4016, 0, false);
+        access_bus(0x4014, 2, true);
+        access_bus(0x4015, 0, false);
+        printf("dmc-end %u %016llx %016llx\n", rate,
+               (unsigned long long)cyc_hw_state_hash(),
+               (unsigned long long)cyc_mem_state_hash());
+    }
+    if (!reference) check(spans > 100 && admitted > 10000,
+                          "DMC playback admits independent intervals");
+    access_bus(0x4015, 0, true);
+}
+
 static void sprite_output_cases(bool reference)
 {
     static const uint8_t positions[] = { 0, 1, 2, 7, 8, 9, 15, 16, 239, 240, 255 };
@@ -256,6 +303,7 @@ int main(int argc, char **argv)
             cyc_mod_set_return_hook(cursor ? return_observer : NULL);
             unsigned spans = 0, cycles = 0;
             printf("case mapper=%u align=%u\n", mapper, align);
+            dmc_deadline_cases(reference);
             sprite_output_cases(reference);
             apu_five_step_cases(reference);
             if (cursor && !reference) hw_native_begin();

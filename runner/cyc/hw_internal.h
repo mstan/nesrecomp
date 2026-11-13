@@ -459,6 +459,7 @@ void    apu_power_on(void);
 /* The APU's once-per-CPU-cycle clock (tick 0). */
 void    apu_cycle(void);
 bool    apu_native_interval_ready(void);
+unsigned apu_native_interval_limit(unsigned cycles);
 void    apu_native_interval_run(unsigned cycles);
 /* Tick 7: the IRQ input the CPU will poll, and the frame IRQ re-assertion. */
 void    apu_sample_irq(void);
