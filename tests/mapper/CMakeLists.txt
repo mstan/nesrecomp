@@ -10,3 +10,6 @@ add_executable(mapper_selftest
 )
 target_include_directories(mapper_selftest PRIVATE ../../runner/include)
 add_test(NAME mapper_selftest COMMAND mapper_selftest)
+
+add_executable(cart_header_selftest cart_header_selftest.c)
+add_test(NAME cart_header_selftest COMMAND cart_header_selftest)
