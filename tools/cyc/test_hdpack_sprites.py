@@ -10,61 +10,6 @@ import subprocess
 from test_cyc_hdpack import PATTERNS, fixture, png_read, png_write
 
 
-def check_capture_pruning(host, out):
-    red, green, blue, yellow = bytes((220,30,40)), bytes((20,210,70)), bytes((31,63,95)), bytes((240,190,20))
-    folder=out/'capture-pruning';folder.mkdir(exist_ok=True)
-    pack=folder/'pack';pack.mkdir(exist_ok=True)
-    png_write(pack/'under.png',512,480,lambda x,y:(*blue,255))
-    def art(x,y):
-        if 16<=x<32:return (*red,255) if not x%2 else (0,0,0,0)
-        if 32<=x<48:return (*green,255) if x%2 and not y%2 else (0,0,0,0)
-        return (*yellow,255) if 48<=x<64 else (0,0,0,0)
-    png_write(pack/'art.png',64,16,art)
-    manifest=('<ver>108\n<scale>2\n<img>art.png\n<background>under.png,1,0,0,0\n'
-              '<condition>visible,memoryCheckConstant,8700,==,1\n'
-              '<tile>0,0,0F010203,0,0,1,N\n<tile>0,1,FFFFFFFF,0,0,1,Y\n'
-              '<tile>0,2,FF111213,16,0,1,N\n[visible]<tile>0,3,FF111213,32,0,1,N\n'
-              '<tile>0,3,FF111213,0,0,1,N\n<tile>0,4,FF111213,0,0,1,N\n'
-              '<tile>0,5,FF111213,48,0,1,N\n')
-    # Dense coverage metadata stays bounded by the loaded definition count.
-    manifest+=''.join(f'<tile>0,{i:X},FFFFFFFF,0,0,1,Y\n'for i in range(6,512))
-    (pack/'hires.txt').write_text(manifest)
-    reference=folder/'complete-capture';reference.mkdir(exist_ok=True)
-    (reference/'hires.txt').write_text(manifest+'<addition>7FFFFFFF,FFFFFFFF,0,0,7FFFFFFF,FFFFFFFF\n')
-    for name in ['under.png','art.png']:(reference/name).write_bytes((pack/name).read_bytes())
-    def run(tag,rom,assets,extra=()):
-        argv=[str(host.resolve()),str(rom),'--frames','24','--no-save','--hdpack',str(assets),
-              '--present-out',str(folder/(tag+'.png')),'--screenshot',str(folder/(tag+'-native.png')),
-              '--hash-out',str(folder/(tag+'.hash')),*map(str,extra)]
-        r=subprocess.run(argv,capture_output=True,text=True,timeout=90,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
-        (folder/(tag+'.log')).write_text(r.stdout+r.stderr);assert not r.returncode,r.stdout+r.stderr
-        return png_read(folder/(tag+'.png'))[2]
-    for promoted in [False,True]:
-        image=bytearray(fixture(False,False));image[5]=1;image[6]=0;image=image[:-8192]
-        image[16+0x700]=1
-        chr_start=16+32768
-        for tile in [1,2,3,4,5]:image[chr_start+tile*16:chr_start+(tile+1)*16]=bytes([255]*8+[0]*8)if tile in [2,5]else bytes(16)
-        # The first and fourth entries are empty. Pruning them must retain
-        # entries2/3 contiguously without promoting the fifth yellow entry.
-        tiles=[1,2,3,5 if promoted else 4,5]
-        image[16+0x240:16+0x254]=bytes(v for tile in tiles for v in [31,tile,0,16])
-        rom=folder/('fourth-yellow.nes'if promoted else'budget.nes');rom.write_bytes(image)
-        tag='fourth'if promoted else'budget';state=folder/'match.state'
-        rows=run(tag,rom,pack,()if promoted else['--save-state',f'18:{state}'])
-        assert 'transparent sprite capture coverage: 512'in(folder/(tag+'.log')).read_text()
-        def pixel(dx,dy):return rows[34*2+dy][(20*2+dx)*3:(20*2+dx+1)*3]
-        assert pixel(0,0)==red and pixel(1,0)==green
-        assert pixel(1,1)==(yellow if promoted else blue),(tag,'first-four OAM budget')
-        if not promoted:
-            assert rows==run('complete',rom,reference)
-            assert 'transparent sprite capture coverage:'not in(folder/'complete.log').read_text()
-            assert (folder/'budget.hash').read_bytes()==(folder/'complete.hash').read_bytes()
-            assert (folder/'budget-native.png').read_bytes()==(folder/'complete-native.png').read_bytes()
-            assert rows==run('resumed',rom,pack,['--load-state',state])
-            assert (folder/'budget.hash').read_text().splitlines()[19:]==(folder/'resumed.hash').read_text().splitlines()
-    print('capture-pruning: contiguous retention, first-four negative, authored transparent art, complete-capture and state controls PASS',flush=True)
-
-
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--host', type=Path, required=True)
@@ -72,7 +17,6 @@ def main():
     args = ap.parse_args()
     out = args.out.resolve()
     out.mkdir(parents=True, exist_ok=True)
-    check_capture_pruning(args.host,out)
     red, green, blue = bytes((220, 30, 40)), bytes((20, 210, 70)), bytes((31, 63, 95))
     scenarios = ('transparent', 'overlap', 'behind', 'mirrored-addition', 'background-addition', 'idle-tail')
     for name, chr_ram in ((n, r) for r in (False, True) for n in scenarios):

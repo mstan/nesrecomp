@@ -416,27 +416,6 @@ static void check_reader_jobs(const uint32_t *native,const uint32_t *expected) {
     free(out);hdpack_jobs_release(jobs);s_pixels=source;
 }
 
-static void check_capture_coverage(void) {
-    s_active=1;s_is_chr_ram=0;s_scale=2;s_version=108;
-    HdCond *gate=condition(CT_MEM_CHECK_CONST,1);gate->operandA=0x30;gate->operandB=1;
-    for(unsigned k=0;k<4;k++) {
-        HdTile *t=calloc(1,sizeof(*t));assert(t);
-        t->key.tile_index=k==3?2:k?1:0;t->key.palette=0xff111213u;
-        t->w=t->h=16;t->brightness=255;t->data=calloc(16*16,4);assert(t->data);
-        if(k<3)t->data[k*2]=0xff123456u;
-        if(k==1) {t->conds=malloc(sizeof(*t->conds));t->neg=calloc(1,sizeof(*t->neg));assert(t->conds&&t->neg);t->conds[0]=gate;t->ncond=1;}
-        register_tile(t,k==2); /* palette-independent alternative contributes */
-    }
-    assert(hdpack_prepare_sprite_coverage(3));
-    assert(hdpack_sprite_coverage(0)==1 && hdpack_sprite_coverage(1)==6 && !hdpack_sprite_coverage(2));
-    assert(hdpack_sprite_coverage(-1)==UINT64_MAX && hdpack_sprite_coverage(3)==UINT64_MAX);
-    s_is_chr_ram=1;assert(!hdpack_prepare_sprite_coverage(3));assert(hdpack_sprite_coverage(1)==UINT64_MAX);
-    s_is_chr_ram=0;assert(hdpack_prepare_sprite_coverage(3) && hdpack_sprite_coverage(1)==6);
-    char fallback[]="0,1";process_fallback(fallback);
-    assert(!hdpack_prepare_sprite_coverage(3) && hdpack_sprite_coverage(1)==UINT64_MAX);
-    hdpack_unload();assert(hdpack_sprite_coverage(1)==UINT64_MAX);
-}
-
 int main(void) {
 #ifdef NESRECOMP_HDPACK_CACHE_PROBE
     check_page_cache();
@@ -445,7 +424,6 @@ int main(void) {
     check_addition_resolution();
     check_manifest_priority();
     check_cell_draw_coverage();
-    check_capture_coverage();
     const int scales[]={1,2,3,10};unsigned count=0;
     const HdJobFrame *retained=NULL;uint32_t *retained_pixels=NULL;
     for(int ram=0;ram<2;ram++)for(int ver=0;ver<2;ver++)for(unsigned si=0;si<4;si++) {

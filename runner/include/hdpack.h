@@ -21,8 +21,8 @@
 #include <stdint.h>
 #include "hdpack_jobs.h"
 
-/* A screen pixel may carry four OAM-ordered sprite layers. Retain native color
- * zero whenever authored replacement art or pack observations can use it. */
+/* A screen pixel may carry four OAM-ordered sprite layers. Native color zero
+ * remains recorded because authored replacement art can extend into it. */
 #define HD_MAX_SPRITES 4
 typedef struct {
     int32_t index;
@@ -57,12 +57,6 @@ const HdJobFrame *hdpack_prepare_jobs_from(const uint32_t *native, int native_w,
 /* Additions and uncached neighboring-pixel conditions reuse the source. A
  * host with a costly reader can materialize its array once for these packs. */
 int hdpack_reuses_pixel_source(void);
-/* Conservative capture mask for CHR-ROM native-color-zero sprites. Returns
- * false when pack observations require complete metadata, or storage is not
- * worthwhile/available. The mask unions every authored alternative and is
- * rebuilt for each pack/profile; an unknown index always retains capture. */
-int hdpack_prepare_sprite_coverage(uint32_t chr_tiles);
-uint64_t hdpack_sprite_coverage(int32_t index);
 
 /* Load the pack in `dir` (expects dir/hires.txt). native_w is the runner's
  * framebuffer width (g_render_width), used to size the per-pixel side channel.
