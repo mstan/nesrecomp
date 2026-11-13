@@ -1480,6 +1480,7 @@ static struct {
     Uint64 origin, step, frame_ticks, i, draw;
 } s_ib;
 static FILE *cyc_pacing_log_file;
+static Uint64 s_pace_frame_start, s_pace_emu_done, s_pace_extras_done;   /* CYC_PACING_LOG */
 
 static void ib_present(Uint64 deadline, const char *toast_title, const char *toast_body)
 {
@@ -1931,6 +1932,7 @@ int cyc_sdl_main(const char *title_in, int scale)
                 cyc_replay_frame_begin(phys, logical, buttons);
             }
             }
+            s_pace_frame_start = SDL_GetPerformanceCounter();
             cyc_session_frame_begin();
             /* The last picture's remaining in-between pictures while this
              * frame runs on the emulation thread (see ib_present). */
@@ -1942,7 +1944,9 @@ int cyc_sdl_main(const char *title_in, int scale)
                 cyc_run_frame();
             }
             s_ib.on = false;
+            s_pace_emu_done = SDL_GetPerformanceCounter();
             cyc_session_frame_end();
+            s_pace_extras_done = SDL_GetPerformanceCounter();
             cyc_replay_frame_end();
 #ifdef NESRECOMP_NET
             if(online)cyc_net_finish();
@@ -1997,11 +2001,14 @@ int cyc_sdl_main(const char *title_in, int scale)
              * the next frame (present_from_snapshot), hold this frame's own
              * picture until one frame period after the last one, so the
              * varying time a frame takes to emulate does not move it. The
-             * hold creeps 0.05 ms a frame earlier, so a slow frame's delay
+             * hold creeps 0.2 ms a frame earlier, so a slow frame's delay
              * does not stay; it never waits more than half a frame. */
             static Uint64 s_pic_due;
             const bool steady = s_extras && s_extras->present_from_snapshot && s_extras->present_rate &&
                                 !s_vsync_active && !unpaced && !loading && !open && !inactive;
+            /* Never hold a picture past 80% of its frame: one slow frame (a
+             * goal) must not keep every later picture late. */
+            if (s_pic_due > next + frame_ticks * 4 / 5) s_pic_due = next + frame_ticks * 4 / 5;
             if (steady && s_pic_due && s_pic_due < next + frame_ticks) {   /* never when running behind */
                 Uint64 t = SDL_GetPerformanceCounter();
                 if (t < s_pic_due && s_pic_due - t < frame_ticks / 2) {
@@ -2014,7 +2021,7 @@ int cyc_sdl_main(const char *title_in, int scale)
             SDL_RenderPresent(s_ren);
             shown = SDL_GetPerformanceCounter();
             /* from when this picture was handed over, so the hold itself adds nothing */
-            s_pic_due = steady ? pace_before + frame_ticks - freq / 20000 : 0;
+            s_pic_due = steady ? pace_before + frame_ticks - freq / 5000 : 0;   /* creeps 0.2 ms a frame earlier */
             {
                 /* CYC_PACING_LOG=FILE: when each picture is drawn and shown
                  * (ms from the frame's scheduled start), for pacing checks. */
@@ -2022,9 +2029,13 @@ int cyc_sdl_main(const char *title_in, int scale)
                 if (!pl_tried) { const char *e = getenv("CYC_PACING_LOG"); pl_tried = true; if (e && *e) pl = fopen(e, "w"); }
                 if (pl) {
                     double ms = 1000.0 / (double)freq;
-                    fprintf(pl, "\n%ld frame: work %.2f present %.2f vsync %d |",
+                    fprintf(pl, "\n%ld frame: work %.2f present %.2f vsync %d (late %.2f emu+ib %.2f extras %.2f draw+hold %.2f) |",
                             (long)s_frames_done, (double)(pace_before - next) * ms, (double)(shown - pace_before) * ms,
-                            (int)s_vsync_active);
+                            (int)s_vsync_active,
+                            (double)((long long)(s_pace_frame_start - next)) * ms,
+                            (double)(s_pace_emu_done - s_pace_frame_start) * ms,
+                            (double)(s_pace_extras_done - s_pace_emu_done) * ms,
+                            (double)(pace_before - s_pace_extras_done) * ms);
                     fflush(pl);
                 }
                 cyc_pacing_log_file = pl;
