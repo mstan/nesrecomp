@@ -27,8 +27,6 @@
 #define g_ram hw.ram
 #define g_ppuctrl (cyc_frame_lines()[239].ctrl)
 #define g_frame_count cyc_ring_frame
-#define g_ppuscroll_x (cyc_render_line_scroll_x(239)&255)
-#define g_ppuscroll_y (cyc_render_line_scroll_y(0)%240)
 #else
 extern uint8_t  g_ram[0x0800];
 extern uint64_t g_frame_count;
@@ -888,7 +886,10 @@ static void process_background(const char *cond_str, char *rest) {
 }
 
 static int bg_priority_cmp(const void *a, const void *b) {
-    return (*(HdBg * const *)a)->priority - (*(HdBg * const *)b)->priority;
+    const HdBg *aa=*(HdBg * const *)a, *bb=*(HdBg * const *)b;
+    if(aa->priority != bb->priority)return aa->priority-bb->priority;
+    /* Entries share s_bgs: preserve manifest order within each priority. */
+    return (aa>bb)-(aa<bb);
 }
 static void finalize_backgrounds(void) {
     if (s_bg_count == 0) return;
@@ -1349,10 +1350,20 @@ static int cond_eval(HdCond *c, int x, int y, HdPixel *cur, int is_sprite) {
 static void eval_backgrounds_for_frame(void) {
     s_nact = 0;
     if (!s_actbg) return;
+#ifdef NESRECOMP_CYCLE_HDPACK
+    /* The recorded scroll already includes its nametable page. CycLine.ctrl
+     * contains pattern-table/sprite-size bits, not the original $2000 page. */
+    const int scrollx = cyc_render_line_scroll_x(239);
+    const int scrolly = cyc_render_line_scroll_y(0);
+#else
     const int scrollx = g_ppuscroll_x + ((g_ppuctrl & 0x01) ? 256 : 0);
     const int scrolly = g_ppuscroll_y + ((g_ppuctrl & 0x02) ? 240 : 0);
+#endif
+    int selected_priority=-1;
     for (int i = 0; i < s_bg_count; i++) {
         HdBg *b = s_bg_sorted[i];
+        /* A priority is an ordered list of alternatives, not stacked images. */
+        if(b->priority==selected_priority)continue;
         int act = 1;
         for (int k = 0; k < b->ncond; k++) {
             int v = cond_eval(b->conds[k], 0, 0, NULL, 0);
@@ -1363,6 +1374,7 @@ static void eval_backgrounds_for_frame(void) {
             b->offx = (int)(scrollx * b->hscroll);
             b->offy = (int)(scrolly * b->vscroll);
             s_actbg[s_nact++] = b;   /* preserves priority order */
+            selected_priority=b->priority;
         }
     }
     s_band_behind = s_band_mid = s_band_fg = s_nact;

@@ -417,6 +417,26 @@ static void check_cell_draw_coverage(void) {
     hdpack_jobs_release(jobs);hdpack_unload();
 }
 
+static void check_background_priority(void) {
+    HdBg entries[4]={0};HdBg *sorted[4],*active[4];
+    HdCond gate={0};HdCond *gates[]={&gate};int neg[]={0};
+    gate.type=CT_MEM_CHECK_CONST;gate.operandA=0x20;gate.operandB=1;gate.op=OP_EQ;gate.mask=0xff;
+    entries[0].priority=7;entries[0].conds=gates;entries[0].neg=neg;entries[0].ncond=1;
+    entries[1].priority=entries[2].priority=7;entries[3].priority=20;
+    for(unsigned i=0;i<4;i++){sorted[3-i]=&entries[i];entries[i].hscroll=entries[i].vscroll=1;}
+    qsort(sorted,4,sizeof(*sorted),bg_priority_cmp);
+    for(unsigned i=0;i<4;i++)assert(sorted[i]==&entries[i]);
+    s_bg_sorted=sorted;s_actbg=active;s_bg_count=4;
+    g_ppuscroll_x=3;g_ppuscroll_y=5;g_ppuctrl=3;
+    for(unsigned match=0;match<2;match++) {
+        g_ram[0x20]=(uint8_t)match;hdpack_invalidate_conditions();eval_backgrounds_for_frame();
+        assert(s_nact==2 && active[0]==&entries[match?0:1] && active[1]==&entries[3]);
+        assert(active[0]->offx==259 && active[0]->offy==245);
+        assert(s_band_behind==1 && s_band_mid==1 && s_band_fg==2);
+    }
+    s_bg_sorted=NULL;s_actbg=NULL;s_bg_count=0;s_nact=0;
+}
+
 static void check_reader_jobs(const uint32_t *native,const uint32_t *expected) {
     HdPixel *source=s_pixels;s_pixels=NULL;reader_calls=0;
     hdpack_invalidate_conditions();
@@ -460,6 +480,7 @@ int main(void) {
     for(int k=0;k<3;k++)for(int i=0;i<16;i++)patterns[k][i]=(uint8_t)(k*71+i*29);
     check_addition_resolution();
     check_manifest_priority();
+    check_background_priority();
     check_cell_draw_coverage();
     const int scales[]={1,2,3,10};unsigned count=0;
     const HdJobFrame *retained=NULL;uint32_t *retained_pixels=NULL;

@@ -132,6 +132,9 @@ render path is **byte-identical to stock**. Safe to ship on by default off.
   per-pixel transparency, premultiplied-alpha PNG sheets.
 - Background priority bands 0–9, 10–19, 20–29 and 30–39, with behind-background
   sprites, the native BG tile and front sprites between the appropriate bands.
+  Each exact priority selects its first matching definition in manifest order;
+  later matches are alternatives, not additional blended layers. Scrolling
+  backgrounds retain the recorded horizontal and vertical nametable pages.
 - Modern `<addition>` layers, matching exact or ignored palettes and canonical
   fallback keys. Source mirrors reverse displacement; copied tile offsets and
   full palette keys are preserved. Additions use a render-local four-sprite
