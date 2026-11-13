@@ -199,9 +199,14 @@ static void setup(int ram,int version,int scale) {
         im->w=(17+9)*scale;im->h=(32+i*109)*scale;
         im->px=malloc((size_t)im->w*im->h*4);assert(im->px);
         for(int y=0;y<im->h;y++)for(int x=0;x<im->w;x++) {
-            unsigned a=(x+y+i)%7==0?0:((x^y)&1)?64:255;
-            im->px[y*im->w+x]=premul((a<<24)|((unsigned)(x*9+i*51)&255)<<16|
-                ((unsigned)(y*7+i*31)&255)<<8|((unsigned)(x+y*3)&255));
+            int xx=scale==10 && i==0?x%128:x,yy=scale==10 && i==0?y%128:y;
+            unsigned a=(xx+yy+i)%7==0?0:((xx^yy)&1)?64:255;
+            im->px[y*im->w+x]=premul((a<<24)|((unsigned)(xx*9+i*51)&255)<<16|
+                ((unsigned)(yy*7+i*31)&255)<<8|((unsigned)(xx+yy*3)&255));
+        }
+        if(scale==10 && i==0) {
+            im->pages=compact_image_pages(NULL,im->px,(unsigned)im->w,(unsigned)im->h);assert(im->pages);
+            free(im->px);im->px=NULL;
         }
     }
     /* Failed source loads remain cached, but referencing backgrounds are
@@ -311,6 +316,36 @@ static void check_addition_resolution(void) {
     hdpack_unload();
 }
 
+static void check_compact_images(void) {
+    unsigned w=257,h=259;uint32_t *flat=malloc((size_t)w*h*4);assert(flat);
+    for(unsigned y=0;y<h;y++)for(unsigned x=0;x<w;x++) {
+        unsigned xx=x%128,yy=y%128,a=(xx+yy)%3?255:128;
+        flat[(size_t)y*w+x]=premul((a<<24)|(xx<<16)|(yy<<8)|((xx^yy)&255));
+    }
+    HdImagePages *pages=compact_image_pages(NULL,flat,w,h);assert(pages && pages->unique_count==4);
+    HdJobImage im={flat,w,h,255,NULL};HdJobBackground bg={0,120,26,255,0};
+    HdJobPixel *pixels=calloc(17*240,sizeof(*pixels));assert(pixels);
+    for(unsigned i=0;i<17*240;i++)pixels[i].base=0xff123456;
+    HdJobFrame frame={0};frame.width=17;frame.height=240;frame.source_scale=1;
+    frame.images=&im;frame.image_count=1;frame.backgrounds=&bg;
+    frame.background_count=frame.under_end=frame.mid_end=1;frame.pixels=pixels;
+    frame.pack_generation=UINT64_C(0x7f00000000000000);frame.serial=frame.pack_generation;
+    for(unsigned scale=1;scale<=4;scale*=2) {
+        size_t count=(size_t)17*240*scale*scale;
+        uint32_t *expected=malloc(count*4),*actual=malloc(count*4);assert(expected && actual);
+        im.pixels=flat;im.pages=NULL;assert(!hdpack_render_jobs(&frame,scale,expected,17*scale));
+        im.pixels=NULL;im.pages=pages;assert(hd_image_storage_valid(&im));
+        assert(!hdpack_render_jobs(&frame,scale,actual,17*scale) && !memcmp(expected,actual,count*4));
+#ifdef NESRECOMP_HDPACK_GPU_PROBE
+        hdpack_gpu_probe_check(&frame,scale,expected,17*scale);
+#endif
+        free(expected);free(actual);frame.serial++;
+    }
+    for(unsigned y=0;y<h;y++)for(unsigned x=0;x<w;x++)assert(hd_image_pixel(NULL,pages,w,x,y)==flat[(size_t)y*w+x]);
+    HdImagePages invalid=*pages;invalid.columns++;im.pages=&invalid;assert(!hd_image_storage_valid(&im));
+    im.pages=pages;image_pages_free(pages);free(pixels);free(flat);
+}
+
 int main(void) {
 #ifdef NESRECOMP_HDPACK_CACHE_PROBE
     check_page_cache();
@@ -387,5 +422,5 @@ int main(void) {
         if(retained) check_retained_jobs(retained,retained_pixels);
     }
     assert(!retained && !retained_pixels);
-    assert(count==192);return 0;
+    assert(count==192);check_compact_images();return 0;
 }

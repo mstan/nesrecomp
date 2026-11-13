@@ -34,8 +34,9 @@ static uint32_t job_brightness(int value)
 static void job_pack_release(HdJobPack *pack)
 {
     if (!pack || --pack->refs) return;
-    for (uint32_t i = 0; i < pack->count; ++i)
-        free((void *)pack->images[i].pixels);
+    for (uint32_t i = 0; i < pack->count; ++i) {
+        free((void *)pack->images[i].pixels);image_pages_free(pack->images[i].pages);
+    }
     free(pack->images);
     free(pack);
 }
@@ -82,9 +83,9 @@ static HdJobPack *job_pack_get(void)
         /* A failed PNG lookup remains in the loader cache, although every
          * background referencing it was dropped. It owns no usable image
          * and must not disable jobs for the rest of a valid pack. */
-        if (!b || !b->px || b->w <= 0 || b->h <= 0) continue;
+        if (!b || (!b->px && !b->pages) || b->w <= 0 || b->h <= 0) continue;
         HdJobImage *im = &pack->images[at++];
-        im->pixels = b->px; im->width = (uint32_t)b->w; im->height = (uint32_t)b->h;
+        im->pixels = b->px; im->pages=b->pages; im->width = (uint32_t)b->w; im->height = (uint32_t)b->h;
         im->brightness = 255;
     }
     for (int i = 0; i < s_all_count; ++i) s_all[i]->job_image = (uint32_t)i;
@@ -93,7 +94,7 @@ static HdJobPack *job_pack_get(void)
         HdBgImg *b = s_bgimgs[i];
         if (!b) continue;
         b->job_image = HD_JOB_NO_IMAGE;
-        if (b->px && b->w > 0 && b->h > 0) b->job_image = bg_image++;
+        if ((b->px || b->pages) && b->w > 0 && b->h > 0) b->job_image = bg_image++;
     }
     pack->refs = 1;
     if (!++s_job_generation) ++s_job_generation;
@@ -296,7 +297,7 @@ static int job_background_rows(const HdJobFrame *f, const HdJobBackground *b,
 {
     if (b->image >= f->image_count) return -1;
     const HdJobImage *im = &f->images[b->image];
-    if (!im->pixels || !im->width || !im->height || b->brightness > 65025 || b->blend > 2)
+    if (!hd_image_storage_valid(im) || b->brightness > 65025 || b->blend > 2)
         return -1;
     int64_t ox = (int64_t)b->offset_x * scale, oy = (int64_t)b->offset_y * scale;
     int64_t left = ox < 0 ? -ox : 0;
@@ -313,7 +314,7 @@ static int job_background_rows(const HdJobFrame *f, const HdJobBackground *b,
         uint32_t *dst = out + (size_t)y * pitch + (size_t)left;
         for (int64_t x = left; x < right; ++x) {
             size_t sx = (size_t)((x + ox) * f->source_scale / scale);
-            *dst = job_color_over(*dst, im->pixels[sy * im->width + sx],
+            *dst = job_color_over(*dst, hd_image_pixel(im->pixels,im->pages,im->width,(unsigned)sx,(unsigned)sy),
                                   b->brightness, b->blend);
             ++dst;
         }
@@ -334,7 +335,7 @@ static int job_tile_block(const HdJobFrame *f, unsigned scale, uint32_t *dst,
     if (mode != HD_JOB_IMAGE || id >= f->image_count) return -1;
     const HdJobImage *im = &f->images[id];
     unsigned ox = uv & 255, oy = uv >> 8;
-    if (ox >= 8 || oy >= 8 || !im->pixels || im->width < 8 * f->source_scale ||
+    if (ox >= 8 || oy >= 8 || !hd_image_storage_valid(im) || im->width < 8 * f->source_scale ||
         im->height < 8 * f->source_scale || im->brightness > 65025) return -1;
     int hm = (mirrors & HD_JOB_HMIRROR) != 0, vm = (mirrors & HD_JOB_VMIRROR) != 0;
     for (unsigned y = 0; y < scale; ++y) {
@@ -346,7 +347,7 @@ static int job_tile_block(const HdJobFrame *f, unsigned scale, uint32_t *dst,
             if (hm) sx = f->source_scale - 1 - sx;
             sx += (hm ? 7 - ox : ox) * f->source_scale;
             uint32_t *pixel = dst + (size_t)y * pitch + x;
-            *pixel = job_color_over(*pixel, im->pixels[(size_t)sy * im->width + sx],
+            *pixel = job_color_over(*pixel, hd_image_pixel(im->pixels,im->pages,im->width,sx,sy),
                                     im->brightness, 0);
         }
     }

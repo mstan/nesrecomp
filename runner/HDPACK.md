@@ -187,6 +187,19 @@ repeated status polling, stereo, loop/pause, volume, overlapping effects, invali
 selections and exact restoration. Optional `NESRECOMP_HD_AUDIO_TRACE=1` logs
 at most256 playback commands for diagnostics.
 
+### Source image storage
+
+Large background images can contain many identical regions. The loader stores
+lossless128×128 source pages when their combined allocations and map are smaller
+than a flat ARGB image; otherwise it retains the flat representation. Partial
+edge pages are padded and clipped to the original dimensions. Both portable
+composition and the resident GPU uploader read these same immutable pages.
+Retained presentation jobs own the unique allocations through pack unload.
+
+PNG decoding still needs a temporary full-image buffer. Cropped tile art owns
+its pixels, so source sheet buffers are released after manifest parsing. There
+is no generated disk cache or change to authored image files.
+
 Mods packages apply verified IPS patches in memory. An optional compiled
 program catalog also supports changed cartridge geometry; see
 [PROJECTS.md](cyc/PROJECTS.md). The folder-only adapter does not apply patches.

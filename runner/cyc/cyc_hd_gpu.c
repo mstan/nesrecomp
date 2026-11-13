@@ -174,9 +174,10 @@ static bool upload_assets(CycHdGpu *s,const HdJobFrame *f,uint64_t bytes,uint64_
         uint32_t w=im->width-x,h=im->height-y;
         if(w>HD_GPU_PAGE_SIZE)w=HD_GPU_PAGE_SIZE;
         if(h>HD_GPU_PAGE_SIZE)h=HD_GPU_PAGE_SIZE;
-        texture(s,1,GL_TEXTURE_2D_ARRAY);g->PixelStorei(GL_UNPACK_ROW_LENGTH,(GLint)im->width);
+        const uint32_t *source=im->pages?im->pages->map[local]:im->pixels+(size_t)y*im->width+x;
+        texture(s,1,GL_TEXTURE_2D_ARRAY);g->PixelStorei(GL_UNPACK_ROW_LENGTH,im->pages?128:(GLint)im->width);
         g->TexSubImage3D(GL_TEXTURE_2D_ARRAY,0,0,0,(GLint)slot,(GLsizei)w,(GLsizei)h,1,
-            GL_RED_INTEGER,GL_UNSIGNED_INT,im->pixels+(size_t)y*im->width+x);
+            GL_RED_INTEGER,GL_UNSIGNED_INT,source);
         *uploaded+=(uint64_t)w*h*4;dirty=true;
     }
     g->PixelStorei(GL_UNPACK_ROW_LENGTH,0);

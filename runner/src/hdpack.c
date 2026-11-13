@@ -170,6 +170,7 @@ typedef struct {
     uint32_t *px;            /* premultiplied ARGB, w*h */
     int       w, h;
     uint32_t  job_image;
+    HdImagePages *pages;
 } HdBgImg;
 
 typedef struct HdBg {
@@ -772,6 +773,8 @@ static void process_condition(char *rest) {
 
 /* ── <background> parsing ─────────────────────────────────────────────────── */
 
+#include "hdpack_pages.inc"
+
 static HdBgImg *load_bg_img(const char *name) {
     if(!safe_image_name(name)){fprintf(stderr,"[HDPack] Unsafe background path rejected\n");return NULL;}
     for (int i = 0; i < s_bgimg_count; i++)
@@ -788,12 +791,14 @@ static HdBgImg *load_bg_img(const char *name) {
     HdBgImg *im = (HdBgImg *)calloc(1, sizeof(HdBgImg));
     snprintf(im->name, sizeof(im->name), "%s", name);
     im->w = w; im->h = h;
-    im->px = (uint32_t *)malloc((size_t)w * h * sizeof(uint32_t));
-    for (int i = 0; i < w * h; i++) {
-        unsigned char *p = rgba + i * 4;
-        uint32_t argb = ((uint32_t)p[3] << 24) | ((uint32_t)p[0] << 16) |
-                        ((uint32_t)p[1] << 8) | (uint32_t)p[2];
-        im->px[i] = premul(argb);
+    im->pages=compact_image_pages(rgba,NULL,(unsigned)w,(unsigned)h);
+    if(!im->pages) {
+        im->px=malloc((size_t)w*h*sizeof(*im->px));
+        if(!im->px){free(im);stbi_image_free(rgba);return NULL;}
+        for(size_t i=0;i<(size_t)w*h;i++) {
+            const uint8_t *p=rgba+i*4;
+            im->px[i]=premul(((uint32_t)p[3]<<24)|((uint32_t)p[0]<<16)|((uint32_t)p[1]<<8)|p[2]);
+        }
     }
     stbi_image_free(rgba);
 
@@ -964,8 +969,9 @@ void hdpack_unload(void) {
     free(s_actbg); s_actbg = NULL; s_nact = 0;
     for (int i = 0; i < s_bgimg_count; i++) {
         if (!s_bgimgs[i]) continue;
-        if (!jobs_own_pixels || s_bgimgs[i]->job_image == HD_JOB_NO_IMAGE)
-            free(s_bgimgs[i]->px);
+        if (!jobs_own_pixels || s_bgimgs[i]->job_image == HD_JOB_NO_IMAGE) {
+            free(s_bgimgs[i]->px);image_pages_free(s_bgimgs[i]->pages);
+        }
         free(s_bgimgs[i]);
     }
     free(s_bgimgs); s_bgimgs = NULL; s_bgimg_count = s_bgimg_cap = 0;
@@ -998,6 +1004,16 @@ int hdpack_load(const char *dir, int is_chr_ram_game, int native_w) {
     char line[2048];
     while (fgets(line, sizeof(line), f)) parse_line(line);
     fclose(f);
+    for(int i=0;i<s_sheet_count;i++){free(s_sheets[i].px);s_sheets[i].px=NULL;}
+    uint64_t bg_raw=0,bg_stored=0;
+    for(int i=0;i<s_bgimg_count;i++) {
+        HdBgImg *im=s_bgimgs[i];bg_raw+=(uint64_t)im->w*im->h*4;
+        if(im->pages)bg_stored+=(uint64_t)im->pages->unique_count*128*128*4+
+            (uint64_t)im->pages->columns*im->pages->rows*sizeof(uint32_t *)*2+sizeof(*im->pages);
+        else bg_stored+=(uint64_t)im->w*im->h*4;
+    }
+    printf("[HDPack] background source bytes=%llu retained bytes=%llu\n",(unsigned long long)bg_raw,(unsigned long long)bg_stored);
+
     initialize_automatic_fallbacks();
     finalize_backgrounds();
 #if defined(NESRECOMP_HDPACK_LAYER_PLANS) && NESRECOMP_HDPACK_LAYER_PLANS
@@ -1321,11 +1337,11 @@ static void eval_backgrounds_for_frame(void) {
         for (int sy = 0; sy < 240; sy++) {
             int py = (b->top + sy + offy) * s_scale;
             if (py < 0 || py >= b->img->h) break;
-            const uint32_t *row = b->img->px + (long)py * b->img->w;
+
             int opaque = 0;
             for (int sx = 0; sx < s_native_w; sx++) {
                 int px = (b->left + sx) * s_scale;
-                if (px >= 0 && px < b->img->w && (row[px] >> 24) == 0xFF) { opaque = 1; break; }
+                if (px >= 0 && px < b->img->w && (hd_image_pixel(b->img->px,b->img->pages,(unsigned)b->img->w,(unsigned)px,(unsigned)py) >> 24) == 0xFF) { opaque = 1; break; }
             }
             if (!opaque) break;
             rows = sy + 1;
@@ -1351,12 +1367,12 @@ static void blend_bg_block(uint32_t *dst, int hd_w, const HdBg *b, int sx, int s
     for (int dy = 0; dy < s; dy++) {
         int py = (b->top + sy + offy) * s + dy;
         if (py < 0 || py >= im->h) continue;
-        const uint32_t *row = im->px + (long)py * im->w;
+
         uint32_t *out = dst + (long)dy * hd_w;
         for (int dx = 0; dx < s; dx++) {
             int px = (b->left + sx + offx) * s + dx;
             if (px < 0 || px >= im->w) continue;
-            uint32_t v = row[px];
+            uint32_t v = hd_image_pixel(im->px,im->pages,(unsigned)im->w,(unsigned)px,(unsigned)py);
             if (b->brightness != 255) v = adjust_brightness(v, b->brightness);
             uint32_t a = v >> 24;
             if (!a) continue;

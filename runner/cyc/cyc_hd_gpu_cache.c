@@ -25,7 +25,7 @@ static bool catalog(HdGpuPageCache *next, const HdJobFrame *frame,
         (uint64_t)frame->image_count * 4 > max_buffer_texels) return false;
     for (uint32_t i = 0; i < frame->image_count; ++i) {
         const HdJobImage *im = &frame->images[i];
-        if (!im->pixels || !im->width || !im->height || im->brightness > 65025 ||
+        if (!hd_image_storage_valid(im) || im->brightness > 65025 ||
             (uint64_t)im->width * im->height > SIZE_MAX / sizeof(uint32_t)) return false;
         uint64_t across = ((uint64_t)im->width + HD_GPU_PAGE_SIZE - 1) / HD_GPU_PAGE_SIZE;
         uint64_t down = ((uint64_t)im->height + HD_GPU_PAGE_SIZE - 1) / HD_GPU_PAGE_SIZE;
