@@ -34,6 +34,7 @@ typedef struct {
 typedef struct {
     /* Background layer (recorded for every rendered BG pixel). */
     int32_t        bg_index;        /* CHR-ROM absolute tile index; <0 none */
+    uint8_t        sp_count_hint;   /* 0=unknown/holey; 1..5=packed count+1 */
     const uint8_t *bg_t16;          /* -> 16 CHR bytes (CHR-RAM matching) */
     uint8_t        bg_p0, bg_p1, bg_p2, bg_p3;  /* backdrop + colors 1..3 (6-bit) */
     uint8_t        bg_ox, bg_oy;    /* within-tile pixel offset */
@@ -47,7 +48,8 @@ typedef struct {
 
 /* A synchronous source avoids materializing another full HdPixel frame when
  * the host already records the same data in its native representation. Fill
- * all fields of out; referenced tile keys stay valid through preparation.
+ * the background and present sprites; a packed count permits unused sprite
+ * slots to remain uninitialized. Referenced keys stay valid through preparation.
  * Lookups may request another position while matching the current pixel.
  * The reader must not mutate the pack or re-enter job preparation. No source
  * callback, context or pixel pointers are retained by the published jobs. */

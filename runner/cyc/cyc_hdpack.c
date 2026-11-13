@@ -239,21 +239,25 @@ static uint32_t color(uint8_t value,uint8_t mask) {
 }
 static void read_pixel(const void *context,size_t i,HdPixel *p) {
     const uint32_t *native=context;
-    const HdRecordedPixel *r=&recorded[i];memset(p,0,sizeof(*p));
+    const HdRecordedPixel *r=&recorded[i];
     p->bg_index=r->bg_index;p->bg_t16=r->bg_tile;p->bg_has=r->flags&1;
     p->bg_transparent=r->bg_color==0;
     p->bg_p0=r->bg_pal[0];p->bg_p1=r->bg_pal[1];p->bg_p2=r->bg_pal[2];p->bg_p3=r->bg_pal[3];
     p->bg_ox=r->bg_x;p->bg_oy=r->bg_y;
     p->backdrop=color(r->bg_pal[0],r->mask);
     p->bg_argb=color(r->bg_pal[r->bg_color],r->mask);
-    for(unsigned j=0;j<HD_MAX_SPRITES && (r->sp[j].flags&1);j++) {
+    unsigned count=0;
+    for(;count<HD_MAX_SPRITES && (r->sp[count].flags&1);count++) {
+        unsigned j=count;
         const HdRecordedSprite *rs=&r->sp[j];HdSprite *sp=&p->sp[j];
+        memset(sp,0,sizeof(*sp));
         sp->index=rs->index;sp->t16=rs->tile;sp->has=rs->flags&1;
         sp->p0=0xff;sp->p1=rs->pal[0];sp->p2=rs->pal[1];sp->p3=rs->pal[2];
         sp->ox=rs->x;sp->oy=rs->y;sp->hm=(rs->flags>>1)&1;sp->vm=(rs->flags>>2)&1;sp->behind=(rs->flags>>3)&1;
         sp->transparent=rs->color==0;
         sp->argb=rs->color?color(rs->pal[rs->color-1],r->mask):native[i];
     }
+    p->sp_count_hint=(uint8_t)(count+1);
 }
 static void prepare_pixels(const uint32_t *native) {
     HdPixel *pixels=hdpack_pixels();

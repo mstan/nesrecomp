@@ -228,10 +228,10 @@ const HdJobFrame *hdpack_prepare_jobs(const uint32_t *native, int native_w)
         j->bg_image = j->sp_image = HD_JOB_NO_IMAGE;
         j->bg_uv = j->sp_uv = j->bg_color = j->sp_color = j->flags = 0;
         if(p->bg_has && (p->bg_ox>=8 || p->bg_oy>=8))goto fail;
-        HdSprite *sprites=sprites_at(at,p);int lowest_behind=HD_MAX_SPRITES;
-        for(int k=0;k<HD_MAX_SPRITES;k++)if(sprites[k].has && sprites[k].behind && !sprites[k].transparent){lowest_behind=k;break;}
+        HdSprite *sprites=sprites_at(at,p);int limit=(int)sprite_limit(p),lowest_behind=limit;
+        for(int k=0;k<limit;k++)if(sprites[k].has && sprites[k].behind && !sprites[k].transparent){lowest_behind=k;break;}
         unsigned drawn=0,hidden=0;
-        for(int k=HD_MAX_SPRITES-1;k>=0;k--) {
+        for(int k=limit-1;k>=0;k--) {
             HdSprite *sp=&sprites[k];
             if(!sp->has || (!sp->behind && k>=lowest_behind))continue;
             if(sp->ox>=8 || sp->oy>=8)goto fail;

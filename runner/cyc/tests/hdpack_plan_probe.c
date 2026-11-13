@@ -141,9 +141,17 @@ const char *stbi_failure_reason(void) { return "no file I/O in this fixture"; }
 
 static uint8_t patterns[3][16];
 static unsigned reader_calls;
+static int reader_packed;
 static void probe_pixel_reader(const void *context,size_t offset,HdPixel *out) {
     assert(offset<17*240);reader_calls++;
     *out=((const HdPixel *)context)[offset];
+    if(reader_packed) {
+        unsigned n=0;
+        for(unsigned k=0;k<HD_MAX_SPRITES;k++)if(out->sp[k].has)out->sp[n++]=out->sp[k];
+        out->sp_count_hint=(uint8_t)(n+1);
+        /* Inactive slots must never be inspected under a valid count. */
+        memset(out->sp+n,0xa5,(HD_MAX_SPRITES-n)*sizeof(*out->sp));
+    }
 }
 static HdCond *condition(HdCondType type, int cached) {
     HdCond *c=calloc(1,sizeof(*c));assert(c);
@@ -184,8 +192,11 @@ static void setup(int ram,int version,int scale) {
     HdCond *flip=condition(CT_HMIRROR,0);
     HdCond *at=condition(CT_TILE_AT_POS,1);at->x=5;at->y=10;
     at->ignore_palette=1;at->tile_index=ram?-1:5;memcpy(at->tile16,patterns[1],16);
+    HdCond *sp_at=condition(CT_SPRITE_AT_POS,1);sp_at->x=5;sp_at->y=10;
+    sp_at->ignore_palette=1;sp_at->tile_index=ram?-1:5;memcpy(sp_at->tile16,patterns[1],16);
     for(int k=0;k<2;k++) {
         int pal=version<100?0x010203:0x0f010203;
+        tile(k,pal,12,0,sp_at,pos,0);
         tile(k,pal,6,0,pos,mem,1);tile(k,pal,5,0,near,at,0);
         tile(k,pal,4,0,origin,mem,0);tile(k,pal,3,0,mem,NULL,0);
         tile(k,pal,2,0,pos,NULL,0);tile(k,pal,1,0,NULL,NULL,0);
@@ -320,7 +331,9 @@ static void check_addition_resolution(void) {
     assert(!s_pixels[8*17+8].sp[0].has && !memcmp(&s_pixels[9*17+9].sp[0],&original,sizeof original));
     assert(resolve_sprites() && !memcmp(expected,sprites_at(8*17+8,&s_pixels[8*17+8]),sizeof expected));
     uint32_t native[17*240]={0};HdPixel *source=s_pixels;s_pixels=NULL;
+    reader_packed=1;
     const HdJobFrame *jobs=hdpack_prepare_jobs_from(native,17,probe_pixel_reader,source);
+    reader_packed=0;
     s_pixels=source;assert(jobs && !s_pixel_reader && !s_pixel_context);
     assert(!memcmp(expected,s_resolved_sprites+(8*17+8)*HD_MAX_SPRITES,sizeof expected));
     added=s_resolved_sprites+(6*17+6)*HD_MAX_SPRITES;
@@ -407,7 +420,9 @@ static void check_reader_jobs(const uint32_t *native,const uint32_t *expected) {
     assert(!hdpack_prepare_jobs_from(native,17,NULL,source));
     assert(!hdpack_prepare_jobs_from(native,-1,probe_pixel_reader,source));
     assert(!s_pixel_reader && !s_pixel_context);
+    reader_packed=1;
     const HdJobFrame *jobs=hdpack_prepare_jobs_from(native,17,probe_pixel_reader,source);
+    reader_packed=0;
     assert(jobs && reader_calls>=17*240 && !s_pixel_reader && !s_pixel_context);
     unsigned calls=reader_calls;size_t n=(size_t)17*240*s_scale*s_scale;
     uint32_t *out=malloc(n*4);assert(out);
