@@ -126,6 +126,13 @@ typedef struct CycHostExtras {
      * present_rate at any time (the window reads it each frame); 0 is off. */
     unsigned present_rate;
     void (*present_phase)(void *ctx, double phase);
+    /* The game promises that present, for an in-between picture (after a
+     * present_phase), reads nothing of the machine (no cyc_render_* or
+     * cyc_frame_* call): only what it copied when composing the machine
+     * frame's own picture. The window then runs the next machine frame on
+     * a second thread while it presents those pictures, so they stay evenly
+     * spaced even when a frame takes most of its time to emulate. */
+    bool present_from_snapshot;
 } CycHostExtras;
 
 const CycHostExtras *cyc_host_extras(void);
