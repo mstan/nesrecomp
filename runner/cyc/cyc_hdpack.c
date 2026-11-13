@@ -170,6 +170,7 @@ static void prepare_pixels(const uint32_t *native) {
         p->bg_index=r->bg_index;p->sp_index=r->sp_index;
         p->bg_t16=r->bg_tile;p->sp_t16=r->sp_tile;
         p->bg_has=r->flags&1;p->sp_has=(r->flags>>1)&1;
+        p->bg_transparent=r->bg_color==0;
         p->bg_p0=r->bg_pal[0];p->bg_p1=r->bg_pal[1];p->bg_p2=r->bg_pal[2];p->bg_p3=r->bg_pal[3];
         p->sp_p1=r->sp_pal[0];p->sp_p2=r->sp_pal[1];p->sp_p3=r->sp_pal[2];
         p->bg_ox=r->bg_x;p->bg_oy=r->bg_y;p->sp_ox=r->sp_x;p->sp_oy=r->sp_y;

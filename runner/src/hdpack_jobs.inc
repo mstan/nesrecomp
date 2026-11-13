@@ -223,12 +223,14 @@ const HdJobFrame *hdpack_prepare_jobs(const uint32_t *native, int native_w)
         /* Resolve the visible sprite first; an opaque replacement/solid
          * sprite makes background matching unobservable at every subpixel. */
         HdTile *sp = p->sp_has ? job_match(1, p, x, y) : NULL;
-        if (sp && !sp->fully_transparent) {
-            j->sp_image = sp->job_image;
-            j->sp_uv = p->sp_ox | ((uint32_t)p->sp_oy << 8);
-            j->flags |= HD_JOB_IMAGE << HD_JOB_SP_SHIFT;
-            if (p->sp_hm) j->flags |= HD_JOB_HMIRROR;
-            if (p->sp_vm) j->flags |= HD_JOB_VMIRROR;
+        if (sp) {
+            if(!sp->fully_transparent) {
+                j->sp_image = sp->job_image;
+                j->sp_uv = p->sp_ox | ((uint32_t)p->sp_oy << 8);
+                j->flags |= HD_JOB_IMAGE << HD_JOB_SP_SHIFT;
+                if (p->sp_hm) j->flags |= HD_JOB_HMIRROR;
+                if (p->sp_vm) j->flags |= HD_JOB_VMIRROR;
+            }
         } else if (p->sp_has && (s_opt_debug || !s_opt_hide_orig)) {
             j->sp_color = s_opt_debug ? 0xff00ffffu : p->sp_argb;
             j->flags |= HD_JOB_SOLID << HD_JOB_SP_SHIFT;
@@ -237,11 +239,13 @@ const HdJobFrame *hdpack_prepare_jobs(const uint32_t *native, int native_w)
                      (sp && !sp->fully_transparent && !sp->has_transparent);
         if (p->bg_has && !hidden) {
             HdTile *bg = job_match(0, p, x, y);
-            if (bg && !bg->fully_transparent) {
-                j->bg_image = bg->job_image;
-                j->bg_uv = p->bg_ox | ((uint32_t)p->bg_oy << 8);
-                j->flags |= HD_JOB_IMAGE << HD_JOB_BG_SHIFT;
-            } else if (s_opt_debug || !hide_bg) {
+            if (bg) {
+                if(!bg->fully_transparent) {
+                    j->bg_image = bg->job_image;
+                    j->bg_uv = p->bg_ox | ((uint32_t)p->bg_oy << 8);
+                    j->flags |= HD_JOB_IMAGE << HD_JOB_BG_SHIFT;
+                }
+            } else if (s_opt_debug || (!hide_bg && !p->bg_transparent)) {
                 j->bg_color = s_opt_debug ? 0xffff00ffu : p->bg_argb;
                 j->flags |= HD_JOB_SOLID << HD_JOB_BG_SHIFT;
             }

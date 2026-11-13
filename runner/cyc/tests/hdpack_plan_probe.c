@@ -168,15 +168,14 @@ static void setup(int ram,int version,int scale) {
     at->ignore_palette=1;at->tile_index=ram?-1:5;memcpy(at->tile16,patterns[1],16);
     for(int k=0;k<2;k++) {
         int pal=version<100?0x010203:0x0f010203;
-        tile(k,pal,1,0,NULL,NULL,0);tile(k,pal,2,0,pos,NULL,0);
-        tile(k,pal,3,0,mem,NULL,0);tile(k,pal,4,0,origin,mem,0);
-        tile(k,pal,5,0,near,at,0);tile(k,pal,6,0,pos,mem,1);
+        tile(k,pal,6,0,pos,mem,1);tile(k,pal,5,0,near,at,0);
+        tile(k,pal,4,0,origin,mem,0);tile(k,pal,3,0,mem,NULL,0);
+        tile(k,pal,2,0,pos,NULL,0);tile(k,pal,1,0,NULL,NULL,0);
         int sp=version<100?0x111213:(int)0xff111213u;
-        tile(k,sp,7,0,flip,NULL,0);tile(k,sp,8,0,NULL,NULL,0);
-        tile(k,sp,9,0,pos,mem,0);
+        tile(k,sp,9,0,pos,mem,0);tile(k,sp,7,0,flip,NULL,0);
+        tile(k,sp,8,0,NULL,NULL,0);
     }
-    /* Wildcard fallback intentionally keeps the reference's alias rule even
-     * when its defining tile's conditional gate fails. */
+    /* Palette-independent definitions retain their own conditional gate. */
     tile(0,0x12345678,10,1,mem,NULL,1);
     s_bg_count=6;s_bgs=calloc(6,sizeof(*s_bgs));
     s_bg_sorted=calloc(6,sizeof(*s_bg_sorted));s_actbg=calloc(6,sizeof(*s_actbg));
@@ -241,11 +240,41 @@ static void check_job_scales(const HdJobFrame *frame,const uint32_t *expected)
     assert(hdpack_render_jobs(frame,1,&untouched,0)<0 && untouched==0x12345678);
 }
 
+static void check_manifest_priority(void) {
+    HdPixel current={0};HdKey key={0};key.tile_index=4;key.palette=0x0f010203;
+    s_is_chr_ram=0;s_version=108;s_scale=1;
+    HdCond *mem=condition(CT_MEM_CHECK_CONST,1);mem->operandA=0x20;mem->operandB=1;
+    g_ram[0x20]=1;
+    tile(0,key.palette,1,0,NULL,NULL,0);tile(0,key.palette,2,0,mem,NULL,0);
+    assert(find_tile(&key,0,0,&current,0)==s_all[0]); // first manifest definition wins
+    build_key_groups();s_plan_epoch=1;
+    assert(find_tile_planned(&key,0,0,&current,0)==s_all[0]);
+    hdpack_unload();s_is_chr_ram=0;s_version=108;s_scale=1;
+    mem=condition(CT_MEM_CHECK_CONST,1);mem->operandA=0x20;mem->operandB=1;g_ram[0x20]=0;
+    tile(0,key.palette,1,0,mem,NULL,0);tile(0,0x12345678,2,1,NULL,NULL,0);
+    tile(1,0x12345678,3,1,NULL,NULL,0);tile(2,key.palette,4,0,NULL,NULL,0);
+    tile(2,0x87654321,5,1,mem,NULL,0);
+    char map[]="5,6";process_fallback(map);
+    build_key_groups();s_plan_epoch=1;
+    assert(!find_tile(&key,0,0,&current,0)); // exact list's failed gate is not a missing key
+    assert(!find_tile_planned(&key,0,0,&current,0));
+    key.tile_index=5;
+    assert(find_tile(&key,0,0,&current,0)==s_all[3]); // fallback precedes source's wildcard
+    assert(find_tile_planned(&key,0,0,&current,0)==s_all[3]);
+    key.palette=0x11111111;
+    assert(!find_tile(&key,0,0,&current,0)); // fallback wildcard still checks its gate
+    assert(!find_tile_planned(&key,0,0,&current,0));
+    char replacement[]="5,4";process_fallback(replacement);key.palette=0x0f010203;
+    assert(!find_tile(&key,0,0,&current,0)); // last fallback definition wins; no recursive lookup
+    hdpack_unload();
+}
+
 int main(void) {
 #ifdef NESRECOMP_HDPACK_CACHE_PROBE
     check_page_cache();
 #endif
     for(int k=0;k<3;k++)for(int i=0;i<16;i++)patterns[k][i]=(uint8_t)(k*71+i*29);
+    check_manifest_priority();
     const int scales[]={1,2,3,10};unsigned count=0;
     const HdJobFrame *retained=NULL;uint32_t *retained_pixels=NULL;
     for(int ram=0;ram<2;ram++)for(int ver=0;ver<2;ver++)for(unsigned si=0;si<4;si++) {

@@ -93,6 +93,14 @@ Key = `HdTileKey { PaletteColors (u32), TileData[16], TileIndex, IsChrRamTile }`
 is transparent. `defaultTile=Y` registers the tile under a wildcard palette key
 `0xFFFFFFFF`; lookup tries the exact palette first, then the wildcard.
 
+Definitions keep their authored order, including conditional and
+palette-independent definitions. CHR-ROM `<fallback>` aliases are consulted
+when an exact key is absent; cycle packs may also request
+`<options>automaticFallbackTiles` to alias identical nonblank CHR patterns to
+an authored tile. Tile-presence conditions use the same aliases. A matching
+transparent replacement reveals the layers below, and unmatched native
+background color zero remains transparent to authored background layers.
+
 ## hires.txt grammar (subset implemented)
 
 `<ver>`, `<scale>`, `<img>` (implicit 0,1,2… index), `<tile>`, `<overscan>`
@@ -135,10 +143,20 @@ presence checks and condition groups. Unsupported condition kinds are logged
 and skipped rather than treated as unconditional matches. A missing image is
 reported and leaves native pixels available.
 
+The cycle adapter reads CPU RAM/ROM and PPU pattern, nametable and palette
+conditions through observation APIs without advancing the machine. The
+whole-machine tests cover these reads, palette mirroring and canonical CHR
+keys; `cyc_hdpack_alpha` covers authored transparent backgrounds/sprites and
+native transparent background pixels. The portable and GPU job consumers
+share these resolved transparency decisions.
+
 **NOT supported yet:**
-- `<bgm>` / `<sfx>` HD-pack audio; `<patch>` ROM patches; `<options>`
-  (e.g. `disableOriginalTiles` — available only via the env toggle); HDR
-  brightness > 1.0.
+- `<bgm>` / `<sfx>` HD-pack audio, `<addition>` layers, and the
+  `disableSpriteLimit` option.
+
+Mods packages apply verified IPS patches in memory. An optional compiled
+program catalog also supports changed cartridge geometry; see
+[PROJECTS.md](cyc/PROJECTS.md). The folder-only adapter does not apply patches.
 
 Zelda Remastered's cycle preview uses its locally IPS-patched ROM and the
 existing texture/background sampler. The tested pack contains one missing

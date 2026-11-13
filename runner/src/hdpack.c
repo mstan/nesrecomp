@@ -72,6 +72,11 @@ typedef struct HdAlias {
     struct HdAlias  *next;
 } HdAlias;
 
+typedef struct HdFallback {
+    int32_t from, to;
+    struct HdFallback *next;
+} HdFallback;
+
 /* ── PNG sheet ────────────────────────────────────────────────────────────── */
 
 typedef struct { uint32_t *px; int w, h; } HdSheet;
@@ -91,6 +96,7 @@ static int        s_sheet_count = 0, s_sheet_cap = 0;
 
 static HdTile    *s_buckets[HD_NBUCKETS];
 static HdAlias   *s_alias_buckets[HD_NBUCKETS];
+static HdFallback *s_fallbacks[HD_NBUCKETS];
 
 static HdTile   **s_all = NULL;        /* every tile (for cleanup) */
 static int        s_all_count = 0, s_all_cap = 0;
@@ -102,6 +108,7 @@ static int        s_skipped_cond = 0;  /* conditional tiles not yet supported (P
 static int        s_overscan[4] = {0,0,0,0}; /* top,right,bottom,left (parsed; clip TODO) */
 static int        s_has_overscan = 0;
 static int        s_disable_orig = 0;  /* <options>disableOriginalTiles */
+static int        s_auto_fallback;
 
 /* ── <condition> engine (mirrors Mesen HdPackConditions.h) ─────────────────── */
 
@@ -256,25 +263,93 @@ static int tile_conds_pass(const HdTile *t, int x, int y, HdPixel *cur, int is_s
     return 1;
 }
 
-/* Lookup for key `k` at pixel (x,y): a conditional tile whose [cond] gate passes
- * wins; otherwise the unconditional match; otherwise the wildcard-default
- * (palette 0xFFFFFFFF) fallback. */
-static HdTile *find_tile(const HdKey *k, int x, int y, HdPixel *cur, int is_sprite) {
+static int32_t fallback_index(int32_t index) {
+    if (s_is_chr_ram || index < 0) return -1;
+    for (HdFallback *p=s_fallbacks[(uint32_t)index & (HD_NBUCKETS-1)];p;p=p->next)
+        if (p->from==index) return p->to;
+    return -1;
+}
+static void set_fallback(int32_t from,int32_t to) {
+    if (from<0 || to<0) return;
+    unsigned bucket=(uint32_t)from & (HD_NBUCKETS-1);
+    for (HdFallback *p=s_fallbacks[bucket];p;p=p->next)
+        if (p->from==from) { p->to=to;return; }
+    HdFallback *p=malloc(sizeof(*p));if(!p)return;
+    p->from=from;p->to=to;p->next=s_fallbacks[bucket];s_fallbacks[bucket]=p;
+}
+static void process_fallback(char *rest) {
+    char *tokens[3];
+    if (split_commas(rest,tokens,3)!=2) return;
+    set_fallback((int32_t)hex_u32(tokens[0]),(int32_t)hex_u32(tokens[1]));
+}
+static void initialize_automatic_fallbacks(void) {
+#ifdef NESRECOMP_CYCLE_HDPACK
+    if(!s_auto_fallback || s_is_chr_ram || !hw_cart.chr)return;
+    typedef struct AutoTile {uint8_t bytes[16];int32_t index;struct AutoTile *next;} AutoTile;
+    AutoTile *buckets[HD_NBUCKETS]={0};
+    unsigned added=0;
+    for(int pass=0;pass<2;pass++) {
+        uint32_t count=pass?hw_cart.info.chr_size/16:(uint32_t)s_all_count;
+        for(uint32_t i=0;i<count;i++) {
+            int32_t index=pass?(int32_t)i:s_all[i]->key.tile_index;
+            if(index<0 || (uint32_t)index>=hw_cart.info.chr_size/16)continue;
+            const uint8_t *bytes=hw_cart.chr+(uint32_t)index*16;
+            uint32_t hash=2166136261u;unsigned nonzero=0;
+            for(unsigned b=0;b<16;b++){hash=(hash^bytes[b])*16777619u;nonzero|=bytes[b];}
+            unsigned bucket=hash&(HD_NBUCKETS-1);AutoTile *found=buckets[bucket];
+            while(found && memcmp(found->bytes,bytes,16))found=found->next;
+            if(!pass) {
+                if(found)continue;
+                AutoTile *entry=malloc(sizeof(*entry));if(!entry)continue;
+                memcpy(entry->bytes,bytes,16);entry->index=index;
+                entry->next=buckets[bucket];buckets[bucket]=entry;
+            } else if(nonzero && found && found->index!=index && fallback_index(index)<0) {
+                set_fallback(index,found->index);added++;
+            }
+        }
+    }
+    for(unsigned i=0;i<HD_NBUCKETS;i++) {
+        AutoTile *p=buckets[i];while(p){AutoTile *next=p->next;free(p);p=next;}
+    }
+    printf("[HDPack] automatic CHR-ROM fallback aliases=%u\n",added);
+#endif
+}
+static HdTile *find_exact(const HdKey *k, int x, int y, HdPixel *cur, int sprite,int *exists) {
     uint32_t h = key_hash(k) & (HD_NBUCKETS - 1);
-    HdTile *fallback = NULL;
+    *exists=0;
     for (HdTile *t = s_buckets[h]; t; t = t->next) {
         if (!key_eq(&t->key, k)) continue;
-        if (t->ncond == 0) { if (!fallback) fallback = t; continue; }
-        if (tile_conds_pass(t, x, y, cur, is_sprite)) return t;
+        *exists=1;
+        if (tile_conds_pass(t, x, y, cur, sprite)) return t;
     }
-    if (fallback) return fallback;
-
+    return NULL;
+}
+static HdTile *find_alias(const HdKey *k, int x, int y,HdPixel *cur,int sprite,int *exists) {
     HdKey wk = *k;
     wk.palette = 0xFFFFFFFFu;
     uint32_t wh = key_hash(&wk) & (HD_NBUCKETS - 1);
-    for (HdAlias *a = s_alias_buckets[wh]; a; a = a->next)
-        if (key_eq(&a->key, &wk)) return a->tile;
+    *exists=0;
+    for (HdAlias *a = s_alias_buckets[wh]; a; a = a->next) {
+        if (!key_eq(&a->key,&wk)) continue;
+        *exists=1;
+        if (tile_conds_pass(a->tile,x,y,cur,sprite))return a->tile;
+    }
     return NULL;
+}
+/* Mesen defines priority by manifest order. A present exact-key list owns the
+ * decision even when all its conditions fail. Only a missing list consults a
+ * single explicit CHR-ROM fallback, then palette-independent defaults. */
+static HdTile *find_tile(const HdKey *k, int x, int y, HdPixel *cur, int sprite) {
+    int exists;
+    HdTile *tile=find_exact(k,x,y,cur,sprite,&exists);
+    if(exists)return tile;
+    int32_t fallback=fallback_index(k->tile_index);
+    if(fallback>=0) {
+        HdKey fk=*k;fk.tile_index=fallback;
+        tile=find_exact(&fk,x,y,cur,sprite,&exists);if(exists)return tile;
+        tile=find_alias(&fk,x,y,cur,sprite,&exists);if(exists)return tile;
+    }
+    return find_alias(k,x,y,cur,sprite,&exists);
 }
 
 static void track_tile(HdTile *t) {
@@ -287,8 +362,8 @@ static void track_tile(HdTile *t) {
 
 static void register_tile(HdTile *t, int default_tile) {
     uint32_t h = key_hash(&t->key) & (HD_NBUCKETS - 1);
-    t->next = s_buckets[h];
-    s_buckets[h] = t;
+    HdTile **tail=&s_buckets[h];while(*tail)tail=&(*tail)->next;
+    t->next=NULL;*tail=t;
     track_tile(t);
 
     if (default_tile) {
@@ -297,8 +372,8 @@ static void register_tile(HdTile *t, int default_tile) {
         HdAlias *a = (HdAlias *)calloc(1, sizeof(HdAlias));
         a->key = wk; a->tile = t;
         uint32_t wh = key_hash(&wk) & (HD_NBUCKETS - 1);
-        a->next = s_alias_buckets[wh];
-        s_alias_buckets[wh] = a;
+        HdAlias **at=&s_alias_buckets[wh];while(*at)at=&(*at)->next;
+        *at=a;
     }
 }
 
@@ -692,8 +767,12 @@ static void parse_line(char *line) {
     else if (!strncmp(L, "<img>", 5))        { char *nm = rstrip(L + 5); load_sheet(nm); }
     else if (!strncmp(L, "<condition>", 11)) process_condition(L + 11);
     else if (!strncmp(L, "<tile>", 6))       process_tile(cond_str, L + 6);
+    else if (!strncmp(L, "<fallback>", 10)) process_fallback(L + 10);
     else if (!strncmp(L, "<background>", 12)) process_background(cond_str, L + 12);
-    else if (!strncmp(L, "<options>", 9))    { if (strstr(L + 9, "disableOriginalTiles")) s_disable_orig = 1; }
+    else if (!strncmp(L, "<options>", 9))    {
+        if (strstr(L + 9, "disableOriginalTiles")) s_disable_orig = 1;
+        if (strstr(L + 9, "automaticFallbackTiles")) s_auto_fallback = 1;
+    }
     else if (!strncmp(L, "<overscan>", 10)) {
         char buf[64]; char *tok[4];
         snprintf(buf, sizeof(buf), "%s", L + 10);
@@ -702,7 +781,7 @@ static void parse_line(char *line) {
             s_has_overscan = 1;
         }
     }
-    /* <bgm>/<sfx>/<patch>/<options>/<addition>/<fallback>/#comments: ignored for now */
+    /* <bgm>/<sfx>/<patch>/<addition>/#comments: handled by their host or pending. */
 }
 
 /* ── Public API ───────────────────────────────────────────────────────────── */
@@ -747,6 +826,9 @@ void hdpack_unload(void) {
         while (a) { HdAlias *nx = a->next; free(a); a = nx; }
         s_alias_buckets[i] = NULL;
         s_buckets[i] = NULL;
+        HdFallback *p=s_fallbacks[i];
+        while(p){HdFallback *next=p->next;free(p);p=next;}
+        s_fallbacks[i]=NULL;
     }
     for (int i = 0; i < s_all_count; i++) {
         if (s_all[i]) {
@@ -775,7 +857,7 @@ void hdpack_unload(void) {
         free(s_bgimgs[i]);
     }
     free(s_bgimgs); s_bgimgs = NULL; s_bgimg_count = s_bgimg_cap = 0;
-    s_missing_cond = s_bg_unrenderable = 0; s_disable_orig = 0;
+    s_missing_cond = s_bg_unrenderable = 0; s_disable_orig = s_auto_fallback = 0;
 
     free(s_pixels); s_pixels = NULL;
     s_active = 0; s_scale = 1; s_version = 0;
@@ -802,6 +884,7 @@ int hdpack_load(const char *dir, int is_chr_ram_game, int native_w) {
     char line[2048];
     while (fgets(line, sizeof(line), f)) parse_line(line);
     fclose(f);
+    initialize_automatic_fallbacks();
     finalize_backgrounds();
 #if defined(NESRECOMP_HDPACK_LAYER_PLANS) && NESRECOMP_HDPACK_LAYER_PLANS
     hd_layer_prepare();
@@ -990,7 +1073,24 @@ static int s_opt_hide_orig = -1;   /* unmatched tiles show backdrop, not the ori
 static uint8_t read_cpu_mem(uint32_t addr) {
     addr &= 0xFFFF;
     if (addr < 0x2000) return g_ram[addr & 0x07FF];
+#ifdef NESRECOMP_CYCLE_HDPACK
+    uint8_t value=0;
+    return cyc_debug_peek((uint16_t)addr,&value)?value:0;
+#else
     return 0;   /* outside internal RAM (PPU regs / ROM): not tracked */
+#endif
+}
+static uint8_t read_condition_mem(uint32_t addr,int is_ppu) {
+    if(!is_ppu)return read_cpu_mem(addr);
+#ifdef NESRECOMP_CYCLE_HDPACK
+    addr&=0x3fff;
+    if(addr<0x2000)return cyc_render_chr((uint16_t)addr);
+    if(addr<0x3f00)return cyc_render_nametable((uint16_t)(0x2000|(addr&0xfff)));
+    if(!(addr&3))addr&=0xf;
+    return cyc_render_palette((int)(addr&31));
+#else
+    return 0;
+#endif
 }
 static int cond_cmp(int a, HdCondOp op, int b) {
     switch (op) {
@@ -1018,7 +1118,7 @@ static int tile_matches(const HdCond *c, int off, int sprite) {
     if (!has) return 0;
     if (!c->ignore_palette && pal != c->palette) return 0;
     if (c->tile_index < 0) return t16 && memcmp(t16, c->tile16, 16) == 0;  /* CHR-RAM */
-    return index == c->tile_index;                                          /* CHR-ROM */
+    return index == c->tile_index || fallback_index(index) == c->tile_index; /* CHR-ROM */
 }
 /* x,y / cur are the current pixel (used by per-pixel conditions only). */
 static int cond_eval(HdCond *c, int x, int y, HdPixel *cur, int is_sprite) {
@@ -1026,11 +1126,17 @@ static int cond_eval(HdCond *c, int x, int y, HdPixel *cur, int is_sprite) {
     int r = 0;
     switch (c->type) {
         case CT_MEM_CHECK_CONST:
-            if (!c->is_ppu) r = cond_cmp(read_cpu_mem(c->operandA) & c->mask, c->op, (int)c->operandB);
+#ifndef NESRECOMP_CYCLE_HDPACK
+            if(c->is_ppu)break;
+#endif
+            r = cond_cmp(read_condition_mem(c->operandA,c->is_ppu) & c->mask,c->op,(int)c->operandB);
             break;
         case CT_MEM_CHECK:
-            if (!c->is_ppu) r = cond_cmp(read_cpu_mem(c->operandA) & c->mask, c->op,
-                                         read_cpu_mem(c->operandB) & c->mask);
+#ifndef NESRECOMP_CYCLE_HDPACK
+            if(c->is_ppu)break;
+#endif
+            r = cond_cmp(read_condition_mem(c->operandA,c->is_ppu) & c->mask,c->op,
+                         read_condition_mem(c->operandB,c->is_ppu) & c->mask);
             break;
         case CT_FRAME_RANGE:
             r = c->operandA ? ((uint32_t)(g_frame_count % c->operandA) >= c->operandB) : 0;
@@ -1191,12 +1297,12 @@ void hdpack_upscale(const uint32_t *native_fb, int native_w, uint32_t *hd_buf) {
                                                  p->bg_p0, p->bg_p1, p->bg_p2, p->bg_p3,
                                                  sx, sy, p)
                                    : NULL;
-            if (bt && !bt->fully_transparent) {
-                blit_over(dst, hd_w, bt, p->bg_ox, p->bg_oy, 0, 0, s);
+            if (bt) {
+                if (!bt->fully_transparent)blit_over(dst, hd_w, bt, p->bg_ox, p->bg_oy, 0, 0, s);
             } else if (p->bg_has) {
                 if (s_opt_debug)      fill_block(dst, hd_w, 0xFFFF00FFu, s);  /* magenta */
                 else if (hide_orig)   { /* leave background/backdrop showing */ }
-                else                  fill_block(dst, hd_w, p->bg_argb, s);   /* original */
+                else if(!p->bg_transparent)fill_block(dst, hd_w, p->bg_argb, s); /* original opaque pixel */
             }
 
             /* mid-backgrounds (priority 20..29, over the BG tile, under sprites) */
@@ -1207,8 +1313,8 @@ void hdpack_upscale(const uint32_t *native_fb, int native_w, uint32_t *hd_buf) {
                 HdTile *st = match_layer(1, p->sp_index, p->sp_t16,
                                          0, p->sp_p1, p->sp_p2, p->sp_p3,
                                          sx, sy, p);
-                if (st && !st->fully_transparent) {
-                    blit_over(dst, hd_w, st, p->sp_ox, p->sp_oy, p->sp_hm, p->sp_vm, s);
+                if (st) {
+                    if (!st->fully_transparent)blit_over(dst, hd_w, st, p->sp_ox, p->sp_oy, p->sp_hm, p->sp_vm, s);
                 } else if (s_opt_debug) {
                     fill_block(dst, hd_w, 0xFF00FFFFu, s);   /* cyan: unmatched sprite */
                 } else if (!s_opt_hide_orig) {

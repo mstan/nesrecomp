@@ -902,6 +902,7 @@ static void render_frame_native(uint32_t *framebuf) {
                             HdPixel *hp =
                                 &g_hp[(size_t)sy * g_render_width + fb_x];
                             hp->bg_has   = 1;
+                            hp->bg_transparent = color_idx == 0;
                             hp->bg_index =
                                 (int32_t)((chr_base >> 4) + tile_id);
                             hp->bg_t16 =

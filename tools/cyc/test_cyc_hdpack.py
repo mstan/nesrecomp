@@ -31,7 +31,7 @@ def png_read(path):
 PATTERNS=[bytes([255]*8+[0]*8),bytes([0xf0^(y*3) for y in range(8)]+[0xaa^(y*5) for y in range(8)])]
 
 
-def fixture(chr_ram, sprite16):
+def fixture(chr_ram, sprite16, background_tile=0):
     prg=bytearray([0xea]*32768);code=bytearray();labels={};fixups=[]
     def emit(*v):code.extend(v)
     def label(name):labels[name]=0x8000+len(code)
@@ -44,7 +44,7 @@ def fixture(chr_ram, sprite16):
     for n in range(2):label('vblank'+str(n));emit(0x2c,2,0x20);branch(0x10,'vblank'+str(n))
     if chr_ram:upload(0,0x8200,32);upload(0x1000,0x8200,32)
     upload(0x3f00,0x8220,32)
-    store(0x2006,0x20);store(0x2006,0);emit(0xa0,4,0xa2,0,0xa9,0);label('nt');emit(0x8d,7,0x20,0xe8);branch(0xd0,'nt');emit(0x88);branch(0xd0,'nt')
+    store(0x2006,0x20);store(0x2006,0);emit(0xa0,4,0xa2,0,0xa9,background_tile);label('nt');emit(0x8d,7,0x20,0xe8);branch(0xd0,'nt');emit(0x88);branch(0xd0,'nt')
     emit(0xa2,0,0xa9,0xff);label('oam');emit(0x9d,0,2,0xe8);branch(0xd0,'oam')
     emit(0xa2,0);label('sprites');emit(0xbd,0x40,0x82,0x9d,0,2,0xe8,0xe0,20);branch(0xd0,'sprites')
     store(0x4014,2);emit(0x2c,2,0x20);store(0x2005,5);store(0x2005,3);store(0x2000,0xa0 if sprite16 else 0x80);store(0x2001,0x1e)
@@ -79,14 +79,22 @@ def main():
     (fallback/'hires.txt').write_text('<ver>106\n<scale>2\n<img>none.png\n<tile>0,0123456789ABCDEF0123456789ABCDEF,0F010203,0,0,1,N\n')
     for ram in (True,False):
         pack=out/('ram-pack' if ram else 'rom-pack');pack.mkdir(exist_ok=True);manifest='<ver>106\n<scale>2\n'
+        manifest+=('<condition>palette-ready,ppuMemoryCheckConstant,3F00,==,0F\n'
+                   '<condition>palette-mirror,ppuMemoryCheckConstant,3F10,==,0F\n'
+                   '<condition>chr-ready,ppuMemoryCheckConstant,0000,==,FF\n'
+                   '<condition>rom-byte,memoryCheckConstant,8000,==,78\n')
+        manifest+='<options>automaticFallbackTiles\n'
+        key=PATTERNS[0].hex().upper() if ram else '0'
+        manifest+=f'<condition>canonical-key,tileAtPosition,100,100,{key},0F010203\n'
+        gate='[palette-ready&palette-mirror&chr-ready&rom-byte&canonical-key]'
         for bank in range(1 if ram else 2):
             png_write(pack/f'art{bank}.png',32,16,lambda x,y,b=bank:(80+b*80,x*9,y*9,255) if x<16 else (10,(x-16)*9,80+y*9,255))
             manifest+=f'<img>art{bank}.png\n'
         for bank in range(1 if ram else 2):
             for tile in (0,1,256,257):
                 key=PATTERNS[tile&1].hex().upper() if ram else f'{bank*512+tile:X}'
-                if tile in (0,):manifest+=f'<tile>{bank},{key},0F010203,0,0,1,N\n'
-                manifest+=f'<tile>{bank},{key},FF111213,16,0,1,N\n'
+                if tile in (0,):manifest+=f'{gate}<tile>{bank},{key},0F010203,0,0,1,N\n'
+                manifest+=f'{gate}<tile>{bank},{key},FF111213,16,0,1,N\n'
         (pack/'hires.txt').write_text(manifest)
         for sprite16 in (False,True):
             rom=out/f'{"ram" if ram else "rom"}-{16 if sprite16 else 8}.nes';rom.write_bytes(fixture(ram,sprite16));tag=rom.stem

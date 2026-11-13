@@ -47,7 +47,6 @@ static void prepare_tile_plan(HdKeyGroup *g) {
     HdTilePlan **tail = &g->plan;
     for (HdTilePlan *p = g->first; p; p = p->key_next) {
         HdTile *t = p->tile;
-        if (!t->ncond) { if (!g->fallback) g->fallback = t; continue; }
         int pass = 1;
         for (int i = 0; i < t->ncond; ++i) {
             if (!t->conds[i]->use_cache) continue;
@@ -79,7 +78,7 @@ static HdTile *find_tile_planned(const HdKey *k, int x, int y, HdPixel *cur, int
         entry->alias = alias ? alias->alias : NULL;
     }
     HdKeyGroup *g = entry->group;
-    if (!g) return entry->alias;
+    if (!g) return find_tile(k,x,y,cur,is_sprite);
     if (g->epoch != s_plan_epoch) prepare_tile_plan(g);
     for (HdTilePlan *p = g->plan; p; p = p->plan_next) {
         HdTile *t = p->tile;
@@ -92,12 +91,12 @@ static HdTile *find_tile_planned(const HdKey *k, int x, int y, HdPixel *cur, int
         }
         if (pass) return t;
     }
-    return g->fallback ? g->fallback : entry->alias;
+    return NULL;
 #endif
 }
 
 static void build_key_groups(void) {
-    for (int i = 0; i < s_all_count && s_groups_ready; ++i) {
+    for (int i = s_all_count-1; i >= 0 && s_groups_ready; --i) {
         HdTile *t = s_all[i];
         HdKeyGroup *g = key_group(&t->key, key_hash(&t->key), 1);
         if (!g) break;
@@ -175,10 +174,11 @@ static void upscale_planned(const uint32_t *native_fb, int native_w, uint32_t *h
             uint32_t *dst = hd_buf + (long)(y * s) * hd_w + (long)x * s;
             HdTile *t = match_layer_planned(0, p->bg_index, p->bg_t16,
                                     p->bg_p0, p->bg_p1, p->bg_p2, p->bg_p3, x, y, p);
-            if (t && !t->fully_transparent)
-                blit_over(dst, hd_w, t, p->bg_ox, p->bg_oy, 0, 0, s);
+            if (t) {
+                if(!t->fully_transparent)blit_over(dst, hd_w, t, p->bg_ox, p->bg_oy, 0, 0, s);
+            }
             else if (s_opt_debug) fill_block(dst, hd_w, 0xffff00ffu, s);
-            else if (!hide_orig) fill_block(dst, hd_w, p->bg_argb, s);
+            else if (!hide_orig && !p->bg_transparent) fill_block(dst, hd_w, p->bg_argb, s);
         }
     for (int i = s_band_mid; i < s_band_fg; ++i)
         blend_bg_rows(hd_buf, hd_w, s_actbg[i], 0, s);
@@ -189,8 +189,9 @@ static void upscale_planned(const uint32_t *native_fb, int native_w, uint32_t *h
             uint32_t *dst = hd_buf + (long)(y * s) * hd_w + (long)x * s;
             HdTile *t = match_layer_planned(1, p->sp_index, p->sp_t16,
                                     0, p->sp_p1, p->sp_p2, p->sp_p3, x, y, p);
-            if (t && !t->fully_transparent)
-                blit_over(dst, hd_w, t, p->sp_ox, p->sp_oy, p->sp_hm, p->sp_vm, s);
+            if (t) {
+                if(!t->fully_transparent)blit_over(dst, hd_w, t, p->sp_ox, p->sp_oy, p->sp_hm, p->sp_vm, s);
+            }
             else if (s_opt_debug) fill_block(dst, hd_w, 0xff00ffffu, s);
             else if (!s_opt_hide_orig) fill_block(dst, hd_w, p->sp_argb, s);
         }

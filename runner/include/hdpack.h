@@ -31,6 +31,7 @@ typedef struct {
     uint8_t        bg_p0, bg_p1, bg_p2, bg_p3;  /* backdrop + colors 1..3 (6-bit) */
     uint8_t        bg_ox, bg_oy;    /* within-tile pixel offset */
     uint8_t        bg_has;
+    uint8_t        bg_transparent; /* native pattern color zero; reveal authored layers */
     uint32_t       bg_argb;         /* original BG color (fallback when unmatched) */
     uint32_t       backdrop;        /* universal bg color (transparent HD BG -> this) */
 
