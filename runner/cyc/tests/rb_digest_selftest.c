@@ -61,16 +61,22 @@ static void capability_contract(void) {
      * simulation choices. Missing native support must leave a shared portable
      * profile; neither an opposite PPU nor a combined selection is compatible. */
     assert(nes_netplay_apu_profile(1)==16);assert(nes_netplay_apu_profile(4)==32);
-    assert(!nes_netplay_apu_profile(2));assert(!nes_netplay_apu_profile(8));
+    assert(!nes_netplay_apu_profile(2));assert(nes_netplay_apu_profile(8)==64);
     assert(!strcmp(nes_netplay_profile_contract(16),"cycle-lle-apu1-c2"));
     assert(!strcmp(nes_netplay_profile_contract(32),"cycle-hle-apu1-c2"));
+    assert(!strcmp(nes_netplay_profile_contract(64),"cycle-frame-apu1-c1"));
     assert(nes_netplay_profile_compatible(16,17,17));
     assert(nes_netplay_profile_compatible(32,36,36));
     assert(!nes_netplay_profile_compatible(32,36,4));
     assert(nes_netplay_profile_compatible(4,36,4));
     assert(!nes_netplay_profile_compatible(16,17,36));
     assert(!nes_netplay_profile_compatible(36,36,36));
-    assert(!nes_netplay_profile_compatible(64,64,64));
+    assert(nes_netplay_profile_compatible(64,72,72));
+    assert(!nes_netplay_profile_compatible(64,72,8));
+    assert(nes_netplay_profile_compatible(8,72,8));
+    assert(!nes_netplay_profile_compatible(64,72,36));
+    assert(!nes_netplay_profile_compatible(72,72,72));
+    assert(!nes_netplay_profile_compatible(128,128,128));
     assert(!nes_netplay_profile_compatible(9,9,9));
     assert(!nes_netplay_profile_compatible(24,24,24));
     assert(!nes_netplay_profile_compatible(40,40,40));
