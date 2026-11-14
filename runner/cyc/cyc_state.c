@@ -42,6 +42,9 @@ static uint32_t layout_signature(void)
     fds_hle_state_ptr(&hle_size);
     const uint64_t sizes[] = { sizeof(Cpu6502), sizeof(HwMachine), sizeof(HwCart), sizeof(HwPpu), apu_size,
                                hle_size, sizeof(CycLine), cyc_native_ram_view_count, apu_output_save(NULL, 0)
+#if NESRECOMP_PPU_FRAME
+                               , 0x4652414d45000007ull /* native picture schema */
+#endif
 #if NESRECOMP_PPU_HLE
                                , 0x505055484c450001ull /* packed PPU schema, HLE only */
 #endif
@@ -359,6 +362,7 @@ bool cyc_state_load(const uint8_t *data, size_t len, char *err, size_t err_len)
 
     /* Apply: the machine, then the host, then the mods (which see the loaded
      * machine). */
+    hr_clock_cut();
     hw_native_interval.pending = hw_native_interval.credit = 0;
     hw_native_interval.enabled = false;
     memcpy(&cpu, ccpu->data, sizeof(cpu));
@@ -387,6 +391,7 @@ bool cyc_state_load(const uint8_t *data, size_t len, char *err, size_t err_len)
         memcpy(hle, &cfg, sizeof(cfg));
     }
     ppu_state_reloaded();
+    hr_clock_resume();
     hw_cart_sound_reloaded();
     cyc_ramview_revalidate();
     hw_frame_done = hw_observe_hit = hw_frame_end_hit = false;
@@ -574,6 +579,7 @@ const uint8_t *cyc_snapshot_cart_ram(const CycSnapshot *s, size_t *len)
 
 void cyc_snapshot_restore(const CycSnapshot *s)
 {
+    hr_clock_cut();
     /* Restoring discards the current execution, including any uncommitted
      * device work. Do not publish pixels/audio from the discarded future. */
     hw_native_interval.pending = hw_native_interval.credit = 0;
@@ -600,4 +606,5 @@ void cyc_snapshot_restore(const CycSnapshot *s)
     hw_frame_end_hit = s->frame_end_hit;
     hw_dma_stalls = s->dma_stalls;
     ppu_state_reloaded();
+    hr_clock_resume();
 }

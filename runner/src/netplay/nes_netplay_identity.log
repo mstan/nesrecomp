@@ -1,0 +1,8 @@
+Fixed simulation profile settlement
+
+The qualified native-wait capability is orthogonal to one known PPU/APU
+profile. Common selection intersects occupied-seat capabilities once, prefers
+the common native APU variant, then enables wait ownership only if common.
+Unknown selections, multiple PPU/APU profiles and legacy-plus-wait are refused.
+The sealed bootstrap identity binds the canonical session and selected profile.
+Executable/content SHA checks remain independent and mandatory.

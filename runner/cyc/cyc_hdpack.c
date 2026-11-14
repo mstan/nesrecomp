@@ -95,6 +95,12 @@ void cyc_hdpack_sprite_fetch(unsigned slot,uint16_t address,uint8_t value,bool h
     fetch_tile(&pipeline.sprite[slot],address,value,high);
     if(!high)pipeline.sprite_x[slot]=0;
 }
+void cyc_hdpack_sprite_row(unsigned slot,uint16_t address,uint8_t lo,uint8_t hi,unsigned attr,unsigned x) {
+    if(!hdpack_recording())return;
+    HdFetchedTile *tile=&pipeline.sprite[slot];
+    fetch_tile(tile,address,lo,false);fetch_tile(tile,address+8,hi,true);
+    tile->attr=(uint8_t)attr;tile->x=(uint8_t)x;
+}
 void cyc_hdpack_sprite_shift(unsigned slot) {
     if(hdpack_recording() && pipeline.sprite_x[slot]<8)pipeline.sprite_x[slot]++;
 }
@@ -102,7 +108,7 @@ void cyc_hdpack_clock(void) {
     if(!hdpack_recording())return;
     pipeline.color[3]=pipeline.color[2];pipeline.color[2]=pipeline.color[1];pipeline.color[1]=pipeline.color[0];
 }
-void cyc_hdpack_pixel(unsigned bg_color,unsigned bg_palette,int sprite,unsigned sprite_color) {
+static void pixel(unsigned bg_color,unsigned bg_palette,int sprite,unsigned sprite_color,unsigned sx,unsigned attr) {
     if(!hdpack_recording())return;
     HdRecordedPixel *p=&pipeline.color[0];memset(p,0,sizeof(*p));
     p->bg_index=p->sp_index=-1;p->bg_pal[0]=ppu.palette[0];
@@ -112,16 +118,25 @@ void cyc_hdpack_pixel(unsigned bg_color,unsigned bg_palette,int sprite,unsigned 
         p->bg_x=bg->x;p->bg_y=bg->row;p->bg_color=(uint8_t)bg_color;
         for(unsigned j=1;j<4;j++)p->bg_pal[j]=ppu.palette[bg_palette*4+j];
     }
-    if(sprite>=0 && pipeline.sprite[sprite].valid && pipeline.sprite_x[sprite]<8) {
-        const HdFetchedTile *sp=&pipeline.sprite[sprite];unsigned attr=ppu.spr_attr[sprite];
+    if(sprite>=0 && pipeline.sprite[sprite].valid && sx<8) {
+        const HdFetchedTile *sp=&pipeline.sprite[sprite];
         p->flags|=(uint8_t)(2|((attr&0x40)?4:0)|((attr&0x80)?8:0));
         p->sp_index=sp->index;memcpy(p->sp_tile,sp->bytes,16);
         /* The shared sampler expects the fetched row (already vertically
          * flipped by the PPU); vm flips only pixels within its HD block. */
-        p->sp_x=pipeline.sprite_x[sprite];p->sp_y=sp->row;
+        p->sp_x=(uint8_t)sx;p->sp_y=sp->row;
         p->sp_color=(uint8_t)sprite_color;
         for(unsigned j=0;j<3;j++)p->sp_pal[j]=ppu.palette[16+(attr&3)*4+j+1];
     }
+}
+void cyc_hdpack_pixel(unsigned bg_color,unsigned bg_palette,int sprite,unsigned sprite_color) {
+    if(!hdpack_recording())return;
+    pixel(bg_color,bg_palette,sprite,sprite_color,sprite>=0?pipeline.sprite_x[sprite]:0,sprite>=0?ppu.spr_attr[sprite]:0);
+}
+void cyc_hdpack_row_pixel(unsigned bg_color,unsigned bg_palette,int sprite,unsigned sprite_color) {
+    if(!hdpack_recording())return;
+    const HdFetchedTile *sp=sprite>=0?&pipeline.sprite[sprite]:NULL;
+    pixel(bg_color,bg_palette,sprite,sprite_color,sp?ppu.dot-1-sp->x:0,sp?sp->attr:0);
 }
 void cyc_hdpack_blank(uint8_t backdrop) {
     if(!hdpack_recording())return;
@@ -133,6 +148,62 @@ void cyc_hdpack_output(int x,int y) {
     unsigned emphasis=ppu.emphasis;
     if(hw_pal())emphasis=(emphasis&4)|((emphasis&1)<<1)|((emphasis&2)>>1);
     p->mask=(uint8_t)(ppu.greyscale|(emphasis<<5));
+}
+
+/* Derived row storage is rebuilt after every PPU restore. Owned tile bytes
+ * in recorded[] and the retained bg[] prefix already participate in ordinary
+ * current-build HD snapshots; no pointer into mutable CHR survives a write. */
+static HdRecordedPixel native_row[256];
+void cyc_hdpack_native_begin(void) {
+    memset(native_row,0,sizeof native_row);
+}
+void cyc_hdpack_native_tile(uint16_t address,uint8_t lo,uint8_t hi,bool sprite) {
+    HdFetchedTile *tile=sprite?&pipeline.sprite[0]:&pipeline.bg_fetch;
+    fetch_tile(tile,address,lo,false);fetch_tile(tile,address+8,hi,true);
+}
+static void native_background(HdRecordedPixel *p,const HdFetchedTile *tile,
+                              unsigned x,unsigned palette,unsigned color) {
+    p->bg_index=p->sp_index=-1;p->bg_pal[0]=ppu.palette[0];
+    if(tile->valid) {
+        p->flags=1;p->bg_index=tile->index;memcpy(p->bg_tile,tile->bytes,16);
+        p->bg_x=(uint8_t)x;p->bg_y=tile->row;p->bg_color=(uint8_t)color;
+        for(unsigned j=1;j<4;++j)p->bg_pal[j]=ppu.palette[palette*4+j];
+    }
+}
+void cyc_hdpack_native_background(unsigned x,unsigned tile_x,unsigned palette,unsigned color,uint8_t backdrop) {
+    HdRecordedPixel *p=&native_row[x];
+    if(ppu.show_bg && (x>=8 || ppu.show_bg8))
+        native_background(p,&pipeline.bg_fetch,tile_x,palette,color);
+    else {p->bg_index=p->sp_index=-1;p->bg_pal[0]=backdrop;}
+}
+void cyc_hdpack_native_sprite(unsigned x,unsigned tile_x,unsigned attr,unsigned color) {
+    HdRecordedPixel *p=&native_row[x];const HdFetchedTile *tile=&pipeline.sprite[0];
+    p->flags|=(uint8_t)(2|((attr&0x40)?4:0)|((attr&0x80)?8:0));
+    p->sp_index=tile->index;memcpy(p->sp_tile,tile->bytes,16);
+    p->sp_x=(uint8_t)tile_x;p->sp_y=tile->row;p->sp_color=(uint8_t)color;
+    for(unsigned j=0;j<3;++j)p->sp_pal[j]=ppu.palette[16+(attr&3)*4+j+1];
+}
+void cyc_hdpack_native_hold(unsigned slot,unsigned tile_x) {
+    pipeline.bg[slot]=pipeline.bg_fetch;pipeline.bg[slot].x=(uint8_t)tile_x;
+}
+void cyc_hdpack_native_shift(unsigned count) {
+    if(count>=16)memset(pipeline.bg,0,sizeof pipeline.bg);
+    else {
+        memmove(pipeline.bg,pipeline.bg+count,(16-count)*sizeof pipeline.bg[0]);
+        memset(pipeline.bg+16-count,0,count*sizeof pipeline.bg[0]);
+    }
+}
+void cyc_hdpack_native_prefix(unsigned x,unsigned slot,unsigned palette,unsigned color) {
+    HdRecordedPixel *p=&native_row[x];memset(p,0,sizeof *p);
+    if(ppu.show_bg && (x>=8 || ppu.show_bg8))
+        native_background(p,&pipeline.bg[slot],pipeline.bg[slot].x,palette,color);
+    else {p->bg_index=p->sp_index=-1;p->bg_pal[0]=ppu.palette[0];}
+}
+void cyc_hdpack_native_output(unsigned first,unsigned end,unsigned line) {
+    uint8_t mask=(uint8_t)(ppu.greyscale|(ppu.emphasis<<5));
+    for(unsigned x=first;x<end;++x) {
+        recorded[line*256+x]=native_row[x];recorded[line*256+x].mask=mask;
+    }
 }
 static uint32_t color(uint8_t value,uint8_t mask) {
     return hw_palette_argb[((mask>>5)*64)+((mask&1)?(value&0x30):(value&0x3f))];

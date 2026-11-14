@@ -4,6 +4,11 @@ project(CycStress C CXX)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
 
+# Deliberate mid-cycle PPU latch corruption remains a reference-provider test.
+if(NESRECOMP_PPU_IMPL STREQUAL "FRAME")
+    set(NESRECOMP_PPU_IMPL "LLE" CACHE STRING "Hardware suite reference PPU" FORCE)
+    message(STATUS "CycStress: routing experimental FRAME request to LLE")
+endif()
 include(${CMAKE_CURRENT_SOURCE_DIR}/../../cyc.cmake)
 
 # generated/cyc_stress_cyc.c (dispatch) plus one cyc_stress_cyc_bNN.c per 8KB

@@ -220,8 +220,15 @@ static int open_log(void)
 #ifdef __APPLE__
     uint32_t size = sizeof(root); if (_NSGetExecutablePath(root, &size)) return -1;
 #else
-    ssize_t n = readlink("/proc/self/exe", root, sizeof(root) - 1);
-    if (n <= 0 || n >= (ssize_t)sizeof(root) - 1) return -1; root[n] = 0;
+    /* The embedded executable may be read-only or extracted into a temporary
+     * directory. Keep startup/crash logs beside the outer AppImage. */
+    const char *image = getenv("APPIMAGE");
+    if (image && image[0] == '/' && strlen(image) < sizeof(root)) {
+        snprintf(root, sizeof(root), "%s", image);
+    } else {
+        ssize_t n = readlink("/proc/self/exe", root, sizeof(root) - 1);
+        if (n <= 0 || n >= (ssize_t)sizeof(root) - 1) return -1; root[n] = 0;
+    }
 #endif
     char *slash = strrchr(root, '/'); if (!slash) return -1; *slash = 0;
     const char *override = getenv("NESRECOMP_DIAGNOSTICS_DIR");

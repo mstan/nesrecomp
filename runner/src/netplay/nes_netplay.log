@@ -1,0 +1,7 @@
+Native wait bootstrap policy
+
+Occupied seats exchange actual CPU features, backend availability and qualified
+profile bits. Wait ownership is selected from their common set before frame
+zero and stays fixed for the match. Missing support selects ordinary execution
+on every peer. The bootstrap hash includes the chosen profile; existing exact
+executable, ROM, canonical configuration and occupied-seat checks remain.

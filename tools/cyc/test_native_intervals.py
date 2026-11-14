@@ -28,7 +28,9 @@ def main():
     parser.add_argument('--probe', required=True)
     args = parser.parse_args()
     check_build_time_boards()
-    for modes in (('--reference', ''), ('--cpu-reference', '--cpu')):
+    modes_to_check = (('--reference', ''), ('--cpu-reference', '--cpu'),
+                      ('--reference-band', '--band'), ('--cpu-reference-band', '--cpu-band'))
+    for modes in modes_to_check:
         outputs = []
         for mode in modes:
             result = subprocess.run([args.probe, *([mode] if mode else [])], capture_output=True,
@@ -44,7 +46,8 @@ def main():
     print('PASS: active NROM/MMC1/MMC3/GxROM intervals, four NTSC alignments, device/bus/memory/'
           'picture checkpoints and PCM match; DMA, IRQ, delayed-register edges, '
           'trace and PAL refusal, CPU RAM/folded-ROM cursor and snapshot replay, '
-          'settled VBlank, held-high NMI and idle bus-decay deadlines exercised')
+          'settled VBlank, held-high NMI and idle bus-decay deadlines exercised; '
+          'legacy and band-limited audio both match')
 
 
 if __name__ == '__main__':

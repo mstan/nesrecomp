@@ -31,10 +31,20 @@ const uint8_t *nes_netplay_identity_build_sha256(void);
 void nes_netplay_session_reference(const char *text,char out[64]);
 
 /* Distinct fixed simulation contracts; these never select/switch a backend. */
-enum {NES_NET_PROFILE_CYCLE_LLE=1, NES_NET_PROFILE_LEGACY_C=2, NES_NET_PROFILE_CYCLE_HLE=4};
+enum {NES_NET_PROFILE_CYCLE_LLE=1, NES_NET_PROFILE_LEGACY_C=2, NES_NET_PROFILE_CYCLE_HLE=4,
+      NES_NET_PROFILE_CYCLE_FRAME=8,
+      NES_NET_PROFILE_CYCLE_LLE_APU1=16, NES_NET_PROFILE_CYCLE_HLE_APU1=32,
+      NES_NET_PROFILE_CYCLE_FRAME_APU1=64};
+/* Orthogonal qualified operation capability; a selected profile includes it
+ * only when every occupied seat supports the operation. */
+enum {NES_NET_CAP_NATIVE_WAIT=128};
 uint32_t nes_netplay_cycle_profile(const char *implementation);
+uint32_t nes_netplay_apu_profile(uint32_t base);
+const char *nes_netplay_profile_contract(uint32_t profile);
 const char *nes_netplay_cycle_contract(const char *implementation);
 int nes_netplay_profile_compatible(uint32_t selected,uint32_t local,uint32_t remote);
+uint32_t nes_netplay_profile_choose(uint32_t base,uint32_t common);
+void nes_netplay_profile_identity(const char *text,uint32_t selected,uint8_t out[32]);
 
 /* SHA-256 (FIPS 180-4). out: 32 bytes. */
 void nes_sha256(const uint8_t *data, size_t len, uint8_t out[32]);

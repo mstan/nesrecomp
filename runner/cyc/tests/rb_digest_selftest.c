@@ -44,15 +44,72 @@ static uint32_t rng = 0x70925f2bu;
 static uint32_t random32(void) { rng ^= rng<<13; rng ^= rng>>17; rng ^= rng<<5; return rng; }
 static void capability_contract(void) {
     assert(nes_netplay_cycle_profile("LLE")==1);assert(nes_netplay_cycle_profile("HLE")==4);
+    assert(nes_netplay_cycle_profile("FRAME")==8);
     assert(!nes_netplay_cycle_profile(NULL));assert(!nes_netplay_cycle_profile("unknown"));
-    assert(!strcmp(nes_netplay_cycle_contract("LLE"),"cycle-lle-c1"));
-    assert(!strcmp(nes_netplay_cycle_contract("HLE"),"cycle-hle-c1"));
+    assert(!strcmp(nes_netplay_cycle_contract("LLE"),"cycle-lle-c2"));
+    assert(!strcmp(nes_netplay_cycle_contract("HLE"),"cycle-hle-c2"));
+    assert(!strcmp(nes_netplay_cycle_contract("FRAME"),"cycle-frame-c1"));
     assert(!strcmp(nes_netplay_cycle_contract("unknown"),"cycle-unsupported"));
     assert(nes_netplay_profile_compatible(1,1,1));assert(nes_netplay_profile_compatible(4,4,4));
     assert(nes_netplay_profile_compatible(2,2,2));
+    assert(nes_netplay_profile_compatible(8,8,8));
     assert(!nes_netplay_profile_compatible(1,1,4));assert(!nes_netplay_profile_compatible(4,4,1));
-    assert(!nes_netplay_profile_compatible(0,0,0));assert(!nes_netplay_profile_compatible(8,8,8));
+    assert(!nes_netplay_profile_compatible(8,8,4));assert(!nes_netplay_profile_compatible(4,4,8));
+    assert(!nes_netplay_profile_compatible(0,0,0));
     assert(!nes_netplay_profile_compatible(5,5,5));
+    /* The base PPU profile and its native-APU variant are distinct fixed
+     * simulation choices. Missing native support must leave a shared portable
+     * profile; neither an opposite PPU nor a combined selection is compatible. */
+    assert(nes_netplay_apu_profile(1)==16);assert(nes_netplay_apu_profile(4)==32);
+    assert(!nes_netplay_apu_profile(2));assert(nes_netplay_apu_profile(8)==64);
+    assert(!strcmp(nes_netplay_profile_contract(16),"cycle-lle-apu1-c2"));
+    assert(!strcmp(nes_netplay_profile_contract(32),"cycle-hle-apu1-c2"));
+    assert(!strcmp(nes_netplay_profile_contract(64),"cycle-frame-apu1-c1"));
+    assert(nes_netplay_profile_compatible(16,17,17));
+    assert(nes_netplay_profile_compatible(32,36,36));
+    assert(!nes_netplay_profile_compatible(32,36,4));
+    assert(nes_netplay_profile_compatible(4,36,4));
+    assert(!nes_netplay_profile_compatible(16,17,36));
+    assert(!nes_netplay_profile_compatible(36,36,36));
+    assert(nes_netplay_profile_compatible(64,72,72));
+    assert(!nes_netplay_profile_compatible(64,72,8));
+    assert(nes_netplay_profile_compatible(8,72,8));
+    assert(!nes_netplay_profile_compatible(64,72,36));
+    assert(!nes_netplay_profile_compatible(72,72,72));
+    assert(!nes_netplay_profile_compatible(128,128,128));
+    assert(!nes_netplay_profile_compatible(9,9,9));
+    assert(!nes_netplay_profile_compatible(24,24,24));
+    assert(!nes_netplay_profile_compatible(40,40,40));
+    assert(!nes_netplay_profile_compatible(8,8,16));
+    assert(!nes_netplay_profile_compatible(8,8,32));
+    /* Wait ownership is orthogonal to the fixed PPU/APU choice. Mixed hosts
+     * must choose one common fallback, never an unsupported operation bit. */
+    const uint32_t w=NES_NET_CAP_NATIVE_WAIT;
+    assert(nes_netplay_profile_choose(8,8|64|w)==(64|w));
+    assert(nes_netplay_profile_choose(8,(8|64|w)&(8|64))==64);
+    assert(nes_netplay_profile_choose(8,(8|64|w)&(8|w))==(8|w));
+    assert(nes_netplay_profile_choose(8,(8|64|w)&8)==8);
+    assert(nes_netplay_profile_choose(1,1|w)==(1|w));
+    assert(nes_netplay_profile_choose(4,4|32|w)==(32|w));
+    assert(nes_netplay_profile_choose(2,2|w)==2);
+    assert(!nes_netplay_profile_choose(0,8|w));
+    assert(!nes_netplay_profile_choose(64,8|64|w));
+    assert(!nes_netplay_profile_choose(8,w));
+    assert(nes_netplay_profile_choose(8,8|0x80000000u)==8);
+    assert(nes_netplay_profile_compatible(64|w,8|64|w,8|64|w));
+    assert(!nes_netplay_profile_compatible(64|w,8|64|w,8|64));
+    assert(!nes_netplay_profile_compatible(8|w,8|w,4|w));
+    assert(!nes_netplay_profile_compatible(2|w,2|w,2|w));
+    assert(!nes_netplay_profile_compatible(8|64|w,8|64|w,8|64|w));
+    assert(!nes_netplay_profile_compatible(0x80000008u,0x80000008u,0x80000008u));
+    assert(!strcmp(nes_netplay_profile_contract(64|w),"cycle-frame-apu1-wait1-c1"));
+    assert(!strcmp(nes_netplay_profile_contract(8|w),"cycle-frame-wait1-c1"));
+    assert(!strcmp(nes_netplay_profile_contract(1|w),"cycle-lle-wait1-c2"));
+    uint8_t a[32],b[32],again[32];
+    nes_netplay_profile_identity("session",64,a);
+    nes_netplay_profile_identity("session",64|w,b);assert(memcmp(a,b,32));
+    nes_netplay_profile_identity("session",64|w,again);assert(!memcmp(b,again,32));
+    nes_netplay_profile_identity("changed",64|w,again);assert(memcmp(b,again,32));
 }
 static void config_reference(void) {
     char guarded[80];memset(guarded,0x5a,sizeof guarded);

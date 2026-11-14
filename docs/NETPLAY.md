@@ -13,6 +13,19 @@
 
 ## 1. The pieces
 
+The cycle runtime seals `cycle-lle-c2` or `cycle-hle-c2` before admission.
+These profiles disable the per-bus diagnostic trace and clear its history at
+boot. The trace previously prevented native clock intervals; desync checks
+still hash the complete frame-boundary machine image. The profile stays fixed
+for the match, and exact-build compatibility remains required.
+
+A Windows two-peer SMB3 world-map check with latency, jitter, packet loss and
+forced mispredictions completed nine rollback episodes without a desync.
+Both peers produced identical confirmed-tick pictures and serialized states,
+and each executed over eight million native interval cycles. On that host,
+live-frame median CPU cost was about 4.14 ms and replay-frame median cost was
+4.18–4.20 ms. These are session costs, not a measured before/after speedup.
+
 | where | what |
 |---|---|
 | `lib/recomp-net` 588059c | the driver, LAN transport + hub, lobby client, link simulator (RetroPortingToolKit `feat/genesis-spectator-ready` = bdc58b6 + the gallery no longer re-arms ready on every lobby_update; bdc58b6 is `feat/nes-spectator` = `feat/rb-sparse-seats-and-ws-backlog` 03ee1b1 [main a9d20e2 + sparse-seat seal fix + WS backlog] + the observer fix, §5) |
@@ -227,3 +240,44 @@ dirs, sram-sync/; executables pruned).
   a rejection / reseed on every load -- noise per episode; pre-existing.
 - Not done: two machines, internet, Windows/macOS builds, a human playing.
   Gameplay verdict belongs to Alex.
+
+## Cycle APU operation profile
+
+`NESRECOMP_APU_OPERATION` remains experimental and OFF by default. Its NTSC
+mapper0/1/4/66 producer is eligible only with binary32/binary64, direct double
+evaluation and round-to-nearest at power-on. Other boards, regions, floating
+point environments and builds retain the portable cycle executor.
+
+The bootstrap offers the build's base PPU profile plus its eligible APU variant.
+Bits16 and32 identify `cycle-lle-apu1-c2` and `cycle-hle-apu1-c2`. Bit8 is the
+separate `cycle-frame-c1` picture profile; bit64 identifies its combined
+`cycle-frame-apu1-c1` variant. The host selects an eligible APU
+variant only when every occupied seat offers it, otherwise every peer uses
+the common portable profile. The selected NESBOOT2 profile is checked against
+every capability record before frame0. Exact executable and ROM checks remain
+mandatory; this does not establish cross-build or cross-OS compatibility.
+
+Deferred APU clocks materialize through the existing snapshot accessors;
+pending work, eligibility and executor ownership are host policy, not extra
+serialized machine state. Loading invalidates derived deadlines and mixer
+cache. Executor selection stays fixed through a match, returning to the
+build's offline policy only after shutdown.
+
+`NESRECOMP_NATIVE_WAIT_LOOPS` is a separate per-title build opt-in, OFF by
+default. Capability bit128 adds `wait1` to one fixed PPU/APU profile only when
+every occupied seat offers it. Missing support retains ordinary instruction
+execution for the whole match. The common selection is made once before
+frame0; it is not a backend control or a continuously negotiated setting.
+The bootstrap identity hashes both the canonical session and selected profile,
+while exact executable/content checks and CPU-feature exchange remain mandatory.
+Shutdown restores the build's offline wait policy. This adds no save-state
+schema or cross-build compatibility promise.
+
+A Windows SMB3 HLE/APU1 two-process test with a fresh in-level checkpoint,
+48kHz synthesis, simulated latency/jitter/loss and nine rollback episodes
+preserved the confirmed picture and full canonical state with zero desyncs.
+A separate same-build Windows SMB3 FRAME/APU1 two-process test also preserved
+the confirmed picture and complete state through nine rollback episodes and
+state-changing corrections, with zero desyncs. These bounded qualifications
+do not promote the build option or qualify another title, a physical LAN,
+cross-build compatibility or another OS.

@@ -95,6 +95,8 @@ int main(void) {
     prg_override_removal();
     boot(false);
     CHECK(!hw_prg_modified);
+    const uint32_t original_prg_hash=cyc_prg_hash();
+    CHECK(cyc_prg_hash()==original_prg_hash);
     size_t n = 99;
     CHECK(cyc_mod_isolate_begin());
     CHECK(!cyc_mod_prg_data_rw(&n) && n == 0 && !hw_prg_modified);
@@ -103,6 +105,8 @@ int main(void) {
     uint8_t *prg = cyc_mod_prg_data_rw(&n);
     CHECK(prg && n == 16384 && hw_prg_modified);
     if (prg) prg[0] = 0xEA;
+    CHECK(cyc_prg_hash()!=original_prg_hash);
+    if(prg){uint32_t first_edit=cyc_prg_hash();prg[1]=0x42;CHECK(cyc_prg_hash()!=first_edit);}
     uint8_t value = 0;
     CHECK(cyc_mod_peek_ok(0x8000, &value) && value == 0xEA);
     CHECK(cyc_mod_chr_poke(0x0412, 0xA5));
@@ -123,6 +127,7 @@ int main(void) {
     CHECK(calls == 2);
     cyc_mod_set_ppu_write_hook(NULL);
     boot(true);
+    CHECK(cyc_prg_hash()==original_prg_hash); /* fresh allocation cannot reuse a stale hash */
     CHECK(!hw_prg_modified && !cyc_mod_chr_poke(0x0412, 0xA5));
     /* Geometry includes ROM bytes, never a mixed board's CHR RAM chip. */
     size_t image_size=16+131072+65536;

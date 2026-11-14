@@ -20,6 +20,18 @@ set(NESRECOMP_CYC_DIR ${CMAKE_CURRENT_LIST_DIR})
 include("${NESRECOMP_CYC_DIR}/../recomp_net.cmake")
 include(${NESRECOMP_CYC_DIR}/ppu_implementation.cmake)
 
+option(NESRECOMP_APU_OPERATION "Experimental timestamped native APU operation" OFF)
+option(NESRECOMP_NATIVE_WAIT_LOOPS "Enable qualified native CPU wait operations for this title" OFF)
+if(NESRECOMP_NATIVE_WAIT_LOOPS)
+    add_compile_definitions(NESRECOMP_NATIVE_WAIT_LOOPS=1)
+endif()
+if(NESRECOMP_APU_OPERATION)
+    # Only these two translation units own the producer and its clock cursor.
+    # Keep unrelated generated code/UI/libraries identical in matched builds.
+    set_property(SOURCE "${NESRECOMP_CYC_DIR}/hw_apu.c" "${NESRECOMP_CYC_DIR}/hw_machine.c"
+        APPEND PROPERTY COMPILE_DEFINITIONS NESRECOMP_APU_OPERATION=1)
+endif()
+
 set(NESRECOMP_CYC_SOURCES
     ${NESRECOMP_CYC_DIR}/cpu6502.c
     ${NESRECOMP_CYC_DIR}/cpu6502_interp.c

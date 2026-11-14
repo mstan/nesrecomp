@@ -644,6 +644,7 @@ void cpu_interp_step(void) {
         uint8_t hi = cpu_read((uint16_t)(0x100 | (uint8_t)(cpu.s + 3)), CYC_POLL | CYC_DONE);
         cpu.s = (uint8_t)(cpu.s + 3);
         cpu.pc = (uint16_t)(lo | hi << 8);
+        hr_int_leave();
         return;
     }
     case 0x41: { /* EOR (zp,X) */

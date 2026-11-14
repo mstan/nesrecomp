@@ -422,6 +422,9 @@ typedef struct {
     uint8_t  oam[256];
     uint8_t  palette[32];
     uint8_t  ciram[0x1000] /* upper 2 KiB belongs to four-screen cartridges */;
+#if NESRECOMP_PPU_FRAME
+    uint16_t frame_sprites[256],frame_sprite_line;
+#endif
 } HwPpu;
 
 extern HwPpu ppu;
@@ -444,6 +447,10 @@ bool    ppu_clock_cpu_tail(unsigned align);
  * independent device runs before calling the executor. */
 unsigned ppu_native_interval_limit(void);
 void    ppu_native_interval_run(unsigned cycles, unsigned align);
+#if NESRECOMP_PPU_FRAME
+void    frame_ppu_ticks(unsigned first, unsigned end);
+void    frame_ppu_mapper_changed(void);
+#endif
 unsigned hw_native_interval_limit(void);
 void    hw_native_interval_run(unsigned cycles);
 uint8_t ppu_read(uint16_t addr);
@@ -458,7 +465,24 @@ HW_INLINE bool ppu_nmi_output(void) { return ppu.nmi_enable && ppu.vblank; }
 void    apu_power_on(void);
 /* The APU's once-per-CPU-cycle clock (tick 0). */
 void    apu_cycle(void);
+/* Clock debt is host scheduling work. Observations and snapshots drain it. */
+#ifndef NESRECOMP_APU_OPERATION
+#define NESRECOMP_APU_OPERATION 0
+#endif
+#if NESRECOMP_APU_OPERATION
+extern unsigned apu_operation_pending, apu_operation_deadline;
+extern bool apu_operation_active;
+void apu_operation_sync(void);
+HW_ALWAYS_INLINE void apu_clock(void)
+{
+    if (apu_operation_active) ++apu_operation_pending;
+    else apu_cycle();
+}
+#else
+HW_ALWAYS_INLINE void apu_clock(void) { apu_cycle(); }
+#endif
 bool    apu_native_interval_ready(void);
+unsigned apu_native_interval_limit(unsigned cycles);
 void    apu_native_interval_run(unsigned cycles);
 /* Tick 7: the IRQ input the CPU will poll, and the frame IRQ re-assertion. */
 void    apu_sample_irq(void);

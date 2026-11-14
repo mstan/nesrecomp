@@ -17,6 +17,20 @@
  * OAM and palette corruption, the OAM address stepping during evaluation)
  * follow measurements published with AccuracyCoin and TriCNES.
  */
+
+#include "ppu_implementation.h"
+#if NESRECOMP_PPU_FRAME
+#define ppu_dot reference_ppu_dot
+#define ppu_half_dot reference_ppu_half_dot
+#define ppu_clock_cpu_tail reference_ppu_clock_cpu_tail
+#define ppu_native_interval_limit reference_ppu_native_interval_limit
+#define ppu_native_interval_run reference_ppu_native_interval_run
+#define ppu_read reference_ppu_read
+#define ppu_write reference_ppu_write
+#define ppu_state_reloaded reference_ppu_state_reloaded
+#define ppu_power_on reference_ppu_power_on
+#define cyc_ppu_implementation reference_cyc_ppu_implementation
+#endif
 #include "hw_internal.h"
 
 #include "hw.h"
@@ -1033,6 +1047,8 @@ HW_ALWAYS_INLINE void half_dot_status(void)
 
 enum { DOT_UNKNOWN, DOT_BLANK, DOT_GENERAL, DOT_RENDER, DOT_IDLE };
 static uint8_t dot_kind;
+static uint64_t hr_frame_calls, hr_frame_dots, hr_frame_rows;
+static uint64_t hr_dot_kind[6], hr_tail_calls, hr_tail_dots, hr_idle_bulk_dots, hr_raster_span_dots, hr_sprite_span_dots, hr_short_iv_dots, hr_iv_ppu_calls;
 
 /* Nonvisible, settled dots have neither pixels nor VRAM/OAM fetches. Keep
  * scanline/frame/status edges and register latch settling on the coupled
@@ -1406,6 +1422,7 @@ void ppu_dot(void)
      * blank-dot classification cached earlier in VBlank. */
     if (hw_pal() && ppu.scanline >= 264) dot_kind = DOT_UNKNOWN;
     if (dot_kind == DOT_UNKNOWN) dot_kind = is_blank() ? DOT_BLANK : DOT_GENERAL;
+    HR_COUNT(++hr_dot_kind[dot_kind == DOT_RENDER && ppu.dot >= 253 ? 5 : dot_kind]);
     if (dot_kind == DOT_BLANK) {
         blank_dot();
 #if NESRECOMP_PPU_HLE || !NESRECOMP_PPU_LLE_REFERENCE
@@ -1764,6 +1781,11 @@ static void run_sprite_output_span(unsigned cycles, unsigned align)
 void ppu_native_interval_run(unsigned cycles, unsigned align)
 {
 #if NESRECOMP_PPU_HLE || !NESRECOMP_PPU_LLE_REFERENCE
+    HR_COUNT(++hr_iv_ppu_calls;
+        if (dot_kind == DOT_IDLE) hr_idle_bulk_dots += cycles * 3u;
+        else if (cycles < 8) hr_short_iv_dots += cycles * 3u;
+        else if ((hw_cart.mapper == 0 || hw_cart.mapper == 1 || hw_cart.mapper == 4 || hw_cart.mapper == 66) && !hw_cart.m.pattern_pending && !hw_cart.chr_ciram) hr_raster_span_dots += cycles * 3u;
+        else hr_sprite_span_dots += cycles * 3u);
     if (dot_kind == DOT_IDLE) {
         unsigned dots = cycles * 3u;
         ppu.dot += dots;
@@ -1857,6 +1879,7 @@ bool ppu_clock_cpu_tail(unsigned align)
 {
 #if NESRECOMP_PPU_HLE || !NESRECOMP_PPU_LLE_REFERENCE
     if (dot_kind != DOT_RENDER || ppu.dot >= 250) return false;
+    HR_COUNT(++hr_tail_calls; hr_tail_dots += align == 0 ? 2u : 3u);
     switch (align) {
     case 0:
         render_span_half_dot(); /* tick 2 */
@@ -2130,6 +2153,9 @@ static const struct {
     PPU_FIELD(load_attr), PPU_FIELD(next_has_s0), PPU_FIELD(cur_has_s0), PPU_FIELD(oamc_disabled),
     PPU_FIELD(oamc_disabled_now), PPU_FIELD(oamc_pending), PPU_FIELD(oamc_index), PPU_FIELD(oamc_reenabled),
     PPU_FIELD(palc_disabled), PPU_FIELD(palc_v_left), PPU_FIELD(color),
+#if NESRECOMP_PPU_FRAME
+    PPU_FIELD(frame_sprites), PPU_FIELD(frame_sprite_line),
+#endif
 };
 
 uint64_t ppu_state_hash(uint64_t h)
@@ -2174,3 +2200,52 @@ void ppu_state_dump(void *file)
         fputc('\n', f);
     }
 }
+
+#if NESRECOMP_PPU_FRAME
+#undef ppu_dot
+#undef ppu_half_dot
+#undef ppu_clock_cpu_tail
+#undef ppu_native_interval_limit
+#undef ppu_native_interval_run
+#undef ppu_read
+#undef ppu_write
+#undef ppu_state_reloaded
+#undef ppu_power_on
+#undef cyc_ppu_implementation
+#include "hw_ppu_frame.inc"
+#endif
+
+#if NESRECOMP_HEADROOM_COUNTERS
+unsigned hr_ppu_reason(bool known_zero)
+{
+    (void)known_zero;
+#if NESRECOMP_PPU_FRAME
+    if (fp.enabled) {
+        if (!known_zero && fp_interval_ready()) return 6;
+        /* The frame provider has event deadlines, not legacy dot kinds. */
+        return 2;
+    }
+#endif
+#if NESRECOMP_PPU_HLE || !NESRECOMP_PPU_LLE_REFERENCE
+    if (dot_kind == DOT_IDLE) return ppu.dot < 334 ? 6u : 3u;
+    if (hw_cart.mapper == 4 && ppu.bg_table && !hw_cart.m.a12) return 4;
+    if (dot_kind == DOT_RENDER) return (ppu.dot < 249 && (249u - ppu.dot) / 3u) ? 6u : 5u;
+#endif
+    if (dot_kind == DOT_BLANK) return 0;
+    if (dot_kind == DOT_GENERAL) return 1;
+    return 2;
+}
+
+void hr_ppu_print(void)
+{
+    hr_print("HR_ppu_frame calls=%llu dots=%llu rows=%llu\n", (unsigned long long)hr_frame_calls, (unsigned long long)hr_frame_dots, (unsigned long long)hr_frame_rows);
+    hr_print("HR_ppu_fullclock_dots unknown=%llu blank=%llu general=%llu render=%llu idle=%llu render_ge253=%llu tail_calls=%llu tail_dots=%llu\n",
+           (unsigned long long)hr_dot_kind[0], (unsigned long long)hr_dot_kind[1], (unsigned long long)hr_dot_kind[2],
+           (unsigned long long)hr_dot_kind[3], (unsigned long long)hr_dot_kind[4], (unsigned long long)hr_dot_kind[5],
+           (unsigned long long)hr_tail_calls, (unsigned long long)hr_tail_dots);
+    hr_print("HR_ppu_interval_dots calls=%llu idle_bulk=%llu raster_span=%llu raster_tiles=%llu sprite_span=%llu short=%llu sprite_dots_ctr=%llu\n",
+           (unsigned long long)hr_iv_ppu_calls, (unsigned long long)hr_idle_bulk_dots, (unsigned long long)hr_raster_span_dots,
+           (unsigned long long)ppu_native_raster_tiles, (unsigned long long)hr_sprite_span_dots,
+           (unsigned long long)hr_short_iv_dots, (unsigned long long)ppu_native_sprite_dots);
+}
+#endif

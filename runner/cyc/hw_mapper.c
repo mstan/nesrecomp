@@ -446,20 +446,29 @@ static void mmc3_clock_irq(void)
  * is in the first half of a dot; hw_ppu.c offers it once per dot, there. */
 enum { MMC3_A12_FILTER_CYCLES = 3 };
 
-static void mmc3_ppu_addr(uint16_t vbus)
+static void mmc3_ppu_addr_at(uint16_t vbus,uint64_t cycle)
 {
     if (!(vbus & 0x1000)) {
         if (hw_cart.m.a12) {
             hw_cart.m.a12 = 0;
-            hw_cart.m.a12_low_cycle = hw.cycles;
+            hw_cart.m.a12_low_cycle = cycle;
         }
         return;
     }
     if (!hw_cart.m.a12) {
         hw_cart.m.a12 = 1;
-        if (hw.cycles - hw_cart.m.a12_low_cycle >= MMC3_A12_FILTER_CYCLES) mmc3_clock_irq();
+        if (cycle - hw_cart.m.a12_low_cycle >= MMC3_A12_FILTER_CYCLES) mmc3_clock_irq();
     }
 }
+
+static void mmc3_ppu_addr(uint16_t vbus) { mmc3_ppu_addr_at(vbus,hw.cycles); }
+#if NESRECOMP_PPU_FRAME
+void hw_cart_picture_addr(uint16_t address,uint64_t cycle)
+{
+    if(hw_cart.mapper==4) mmc3_ppu_addr_at(address,cycle);
+    else hw_cart_ppu_addr(address);
+}
+#endif
 
 /* ------------------------------------------------------------------------- */
 /* Mapper 32: Irem G-101                                                    */

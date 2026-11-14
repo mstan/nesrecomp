@@ -16,6 +16,23 @@ static void check(bool ok, const char *what)
     if (!ok) { fprintf(stderr, "FAIL: %s\n", what); exit(1); }
 }
 
+/* Exercise the maximum isolated credit without advancing physical devices.
+ * The final legal reservation fills both halves; the next needs a publish. */
+static void cursor_count_boundary(void)
+{
+#if NESRECOMP_HEADROOM_COUNTERS
+    HwNativeInterval saved=hw_native_interval;int stalls=hw_dma_stalls;
+    hw_native_interval.enabled=true;hw_native_interval.credit=UINT16_MAX;
+    hw_native_interval.pending=0;
+    for(unsigned i=0;i<UINT16_MAX;++i)
+        check(hw_native_reserve_fetch(),"maximum counted reservation");
+    check(!hw_native_interval.credit && hw_native_pending_cycles()==UINT16_MAX &&
+          hw_native_pending_fetches()==UINT16_MAX && hw_native_interval.pending==UINT32_MAX,
+          "both cursor halves retain65535 without overflow");
+    hw_native_interval=saved;hw_dma_stalls=stalls;
+#endif
+}
+
 static void access_bus(uint16_t addr, uint8_t value, bool write)
 {
     hw_cycle_start(addr, write ? HW_WRITE : HW_READ);
@@ -107,6 +124,57 @@ static void apu_five_step_cases(bool reference)
            (unsigned long long)cyc_mem_state_hash());
 }
 
+/* Sweep all DMC rates and request phases. Every allowed interval crosses
+ * ordinary output-bit events but must stop before a memory-reader request.
+ * Alternating $4015 reads/writes, sprite DMA and controller accesses around
+ * the sweep also retain the original DMA side effects and cancellation. */
+static void dmc_deadline_cases(bool reference)
+{
+    unsigned spans = 0, admitted = 0;
+    access_bus(0x4017, 0x40, true);
+    access_bus(0x2000, 0, true);
+    access_bus(0x2001, 0x1e, true);
+    for (unsigned rate = 0; rate < 16; ++rate) {
+        access_bus(0x4015, 0, true);
+        access_bus(0x4010, (uint8_t)(0x40 | rate), true);
+        access_bus(0x4012, (uint8_t)(rate * 7), true);
+        access_bus(0x4013, 1, true);
+        access_bus(0x4015, 0x10, true);
+        for (unsigned i = 0; i < 10000;) {
+            unsigned n = hw_native_interval_limit();
+            if (n > 10000 - i) n = 10000 - i;
+            unsigned checkpoint = 257 - i % 257;
+            if (n > checkpoint) n = checkpoint;
+            if (!n || reference) { access_bus(0, 0, false); ++i; }
+            else {
+                hw.cpu_addr = 0; hw.cpu_reading = 1;
+                hw.data_driven = 1; hw.data_bus = hw.internal_bus = hw.ram[0];
+                hw_native_interval_run(n); i += n;
+                ++spans; admitted += n;
+            }
+            if (i % 257 == 0)
+                printf("dmc %u %u %016llx %016llx\n", rate, i,
+                       (unsigned long long)cyc_hw_state_hash(),
+                       (unsigned long long)cyc_mem_state_hash());
+        }
+        ApuDmcView dmc;
+        apu_debug_dmc(&dmc);
+        check(dmc.playing && dmc.enable && dmc.bytes,
+              "looping DMC reader commits delayed enable and sample fetches");
+        access_bus(0x4016, 1, true);
+        access_bus(0x4016, 0, true);
+        for (unsigned j = 0; j < 8; ++j) access_bus(0x4016, 0, false);
+        access_bus(0x4014, 2, true);
+        access_bus(0x4015, 0, false);
+        printf("dmc-end %u %016llx %016llx\n", rate,
+               (unsigned long long)cyc_hw_state_hash(),
+               (unsigned long long)cyc_mem_state_hash());
+    }
+    if (!reference) check(spans > 100 && admitted > 10000,
+                          "DMC playback admits independent intervals");
+    access_bus(0x4015, 0, true);
+}
+
 static void sprite_output_cases(bool reference)
 {
     static const uint8_t positions[] = { 0, 1, 2, 7, 8, 9, 15, 16, 239, 240, 255 };
@@ -157,7 +225,9 @@ static void sprite_output_cases(bool reference)
                (unsigned long long)cyc_mem_state_hash());
     }
     if (!reference) {
+#if !NESRECOMP_PPU_FRAME
         check(ppu_native_sprite_spans > 10, "prepared sprite output exercised");
+#endif
         check(apu_native_event_spans > 10, "APU event spans exercised");
     }
 }
@@ -221,8 +291,11 @@ static void idle_output_cases(bool reference)
 
 int main(int argc, char **argv)
 {
+    cursor_count_boundary();
     bool reference = argc > 1 && strstr(argv[1], "reference") != NULL;
     bool cursor = argc > 1 && strstr(argv[1], "cpu") != NULL;
+    cyc_set_audio_synthesis(argc > 1 && strstr(argv[1], "band") != NULL
+        ? CYC_AUDIO_SYNTH_BAND_LIMITED : CYC_AUDIO_SYNTH_LEGACY);
     static uint8_t image[16 + 65536 + 16384];
     static const unsigned mappers[] = { 0, 1, 4, 66 };
     memcpy(image, "NES\032", 4);
@@ -256,6 +329,7 @@ int main(int argc, char **argv)
             cyc_mod_set_return_hook(cursor ? return_observer : NULL);
             unsigned spans = 0, cycles = 0;
             printf("case mapper=%u align=%u\n", mapper, align);
+            dmc_deadline_cases(reference);
             sprite_output_cases(reference);
             apu_five_step_cases(reference);
             if (cursor && !reference) hw_native_begin();
@@ -277,7 +351,14 @@ int main(int argc, char **argv)
                 stimulus(i);
                 unsigned n = hw_native_interval_limit();
                 if (n) {
+#if NESRECOMP_PPU_FRAME
+                    /* A native row has no fetch/shifter phase boundary. Its
+                     * credit still stops before the next scanline. The exact
+                     * hardware/PCM comparison below verifies IRQ/NMI events. */
+                    check(n <= (340u - ppu.dot) / 3u, "bounded native row span");
+#else
                     check(n <= (ppu.scanline < 240 ? 80u : 109u), "bounded native span");
+#endif
                     uint8_t saved_tick = hw.tick;
                     hw.tick = 0;
                     check(!hw_native_interval_limit(), "partial cycle refusal");
@@ -300,11 +381,13 @@ int main(int argc, char **argv)
                         hw_cart.m.irq_out = 1;
                         check(!hw_native_interval_limit(), "unsampled mapper IRQ refusal");
                         hw_cart.m.irq_out = saved_out;
+#if !NESRECOMP_PPU_FRAME
                         uint8_t saved_table = ppu.bg_table, saved_a12 = hw_cart.m.a12;
                         ppu.bg_table = 1; hw_cart.m.a12 = 0;
                         if (ppu.scanline < 240)
                             check(!hw_native_interval_limit(), "possible first A12 rise refusal");
                         ppu.bg_table = saved_table; hw_cart.m.a12 = saved_a12;
+#endif
                     }
                     hw_extra_timing.extra_scanlines = 1;
                     check(!hw_native_interval_limit(), "extra timing refusal");

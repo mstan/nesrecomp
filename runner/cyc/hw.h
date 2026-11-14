@@ -25,6 +25,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stddef.h>
+#include "cyc_headroom.h"
 
 /* Generated title projects qualify their immutable board once at build time.
  * Standalone multi-board hosts keep runtime qualification. */
@@ -47,7 +48,15 @@ typedef enum {
     HW_READ,   /* R/W high; a pending DMA takes the CPU's cycles first */
     HW_WRITE,  /* R/W low; DMAs wait for the next read */
     HW_FETCH,  /* opcode read; PAL DMA waits for this instruction boundary */
+    /* Upper bits may carry host-only access-site metadata to the owner. */
+    HW_ANNOTATED_MAX = 255,
 } HwCycleKind;
+
+#if NESRECOMP_HEADROOM_COUNTERS
+#define HW_WITH_SITE(kind, site) ((HwCycleKind)((unsigned)(kind) | ((unsigned)(site) << 2)))
+#else
+#define HW_WITH_SITE(kind, site) (kind)
+#endif
 
 void    hw_cycle_start(uint16_t addr, HwCycleKind kind);
 uint8_t hw_read(uint16_t addr);
@@ -71,7 +80,12 @@ extern int hw_dma_stalls;
  * This cursor is never serialized; dispatch closes it before host callbacks. */
 typedef struct {
     uint8_t *ram;
-    unsigned credit, pending;
+    unsigned credit;
+    /* Every admitted span is <=UINT16_MAX cycles (including isolation),
+     * and fetches cannot outnumber cycles. Keep both quantities in the
+     * original word: low16 cycles, high16 real fetches when counters are on.
+     * Integer masks are endian-independent; this cursor is not serialized. */
+    uint32_t pending;
     uint16_t addr;
     uint8_t value, kind, driven;
     bool enabled;
@@ -103,19 +117,42 @@ void hw_native_end(void);
 void hw_native_flush(void);
 bool hw_native_prepare(void);
 
-static inline bool hw_native_reserve(void)
+static inline unsigned hw_native_pending_cycles(void)
+{
+#if NESRECOMP_HEADROOM_COUNTERS
+    return (uint16_t)hw_native_interval.pending;
+#else
+    return hw_native_interval.pending;
+#endif
+}
+#if NESRECOMP_HEADROOM_COUNTERS
+static inline unsigned hw_native_pending_fetches(void)
+{
+    return (uint16_t)(hw_native_interval.pending >> 16);
+}
+#endif
+
+static inline bool hw_native_reserve_kind(bool opcode_fetch)
 {
 #if NESRECOMP_NATIVE_INTERVALS
     if (!hw_native_interval.enabled) return false;
     if (!hw_native_interval.credit && !hw_native_prepare()) return false;
     --hw_native_interval.credit;
+#if NESRECOMP_HEADROOM_COUNTERS
+    hw_native_interval.pending += UINT32_C(1) + (opcode_fetch ? (UINT32_C(1) << 16) : 0);
+#else
+    (void)opcode_fetch;
     ++hw_native_interval.pending;
+#endif
     hw_dma_stalls = 0;
     return true;
 #else
     return false;
 #endif
 }
+
+#define hw_native_reserve() hw_native_reserve_kind(false)
+#define hw_native_reserve_fetch() hw_native_reserve_kind(true)
 
 static inline void hw_native_bus(uint16_t addr, uint8_t value, HwCycleKind kind)
 {

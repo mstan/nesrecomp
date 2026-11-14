@@ -4,6 +4,12 @@ project(AccuracyCoinRecomp C CXX)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
 
+# This suite observes internal PPU bus/latch behavior beyond the experimental
+# whole-picture contract. Keep its independent hardware reference explicit.
+if(NESRECOMP_PPU_IMPL STREQUAL "FRAME")
+    set(NESRECOMP_PPU_IMPL "LLE" CACHE STRING "Hardware suite reference PPU" FORCE)
+    message(STATUS "AccuracyCoin: routing experimental FRAME request to LLE")
+endif()
 include(${CMAKE_CURRENT_SOURCE_DIR}/../../cyc.cmake)
 
 # generated/accuracycoin_cyc.c (dispatch) plus one accuracycoin_cyc_bNN.c per

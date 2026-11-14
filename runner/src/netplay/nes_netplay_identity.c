@@ -199,17 +199,55 @@ void nes_netplay_session_reference(const char *text,char out[64]) {
 uint32_t nes_netplay_cycle_profile(const char *implementation) {
     if(implementation&&!strcmp(implementation,"LLE"))return NES_NET_PROFILE_CYCLE_LLE;
     if(implementation&&!strcmp(implementation,"HLE"))return NES_NET_PROFILE_CYCLE_HLE;
+    if(implementation&&!strcmp(implementation,"FRAME"))return NES_NET_PROFILE_CYCLE_FRAME;
     return 0;
 }
 const char *nes_netplay_cycle_contract(const char *implementation) {
-    switch(nes_netplay_cycle_profile(implementation)) {
-        case NES_NET_PROFILE_CYCLE_LLE:return "cycle-lle-c1";
-        case NES_NET_PROFILE_CYCLE_HLE:return "cycle-hle-c1";
+    return nes_netplay_profile_contract(nes_netplay_cycle_profile(implementation));
+}
+uint32_t nes_netplay_apu_profile(uint32_t base) {
+    return base==NES_NET_PROFILE_CYCLE_LLE?NES_NET_PROFILE_CYCLE_LLE_APU1:
+           base==NES_NET_PROFILE_CYCLE_HLE?NES_NET_PROFILE_CYCLE_HLE_APU1:
+           base==NES_NET_PROFILE_CYCLE_FRAME?NES_NET_PROFILE_CYCLE_FRAME_APU1:0;
+}
+const char *nes_netplay_profile_contract(uint32_t profile) {
+    switch(profile) {
+        case NES_NET_PROFILE_CYCLE_LLE:return "cycle-lle-c2";
+        case NES_NET_PROFILE_CYCLE_HLE:return "cycle-hle-c2";
+        case NES_NET_PROFILE_CYCLE_FRAME:return "cycle-frame-c1";
+        case NES_NET_PROFILE_LEGACY_C:return "legacy-c1";
+        case NES_NET_PROFILE_CYCLE_LLE_APU1:return "cycle-lle-apu1-c2";
+        case NES_NET_PROFILE_CYCLE_HLE_APU1:return "cycle-hle-apu1-c2";
+        case NES_NET_PROFILE_CYCLE_FRAME_APU1:return "cycle-frame-apu1-c1";
+        case NES_NET_PROFILE_CYCLE_LLE|NES_NET_CAP_NATIVE_WAIT:return "cycle-lle-wait1-c2";
+        case NES_NET_PROFILE_CYCLE_HLE|NES_NET_CAP_NATIVE_WAIT:return "cycle-hle-wait1-c2";
+        case NES_NET_PROFILE_CYCLE_FRAME|NES_NET_CAP_NATIVE_WAIT:return "cycle-frame-wait1-c1";
+        case NES_NET_PROFILE_CYCLE_LLE_APU1|NES_NET_CAP_NATIVE_WAIT:return "cycle-lle-apu1-wait1-c2";
+        case NES_NET_PROFILE_CYCLE_HLE_APU1|NES_NET_CAP_NATIVE_WAIT:return "cycle-hle-apu1-wait1-c2";
+        case NES_NET_PROFILE_CYCLE_FRAME_APU1|NES_NET_CAP_NATIVE_WAIT:return "cycle-frame-apu1-wait1-c1";
         default:return "cycle-unsupported";
     }
 }
 int nes_netplay_profile_compatible(uint32_t selected,uint32_t local,uint32_t remote) {
-    const uint32_t known=NES_NET_PROFILE_CYCLE_LLE|NES_NET_PROFILE_LEGACY_C|NES_NET_PROFILE_CYCLE_HLE;
-    return selected && !(selected&(selected-1u)) && !(selected&~known) &&
-           (local&selected) && (remote&selected);
+    const uint32_t known=NES_NET_PROFILE_CYCLE_LLE|NES_NET_PROFILE_LEGACY_C|NES_NET_PROFILE_CYCLE_HLE|
+        NES_NET_PROFILE_CYCLE_FRAME|NES_NET_PROFILE_CYCLE_LLE_APU1|NES_NET_PROFILE_CYCLE_HLE_APU1|
+        NES_NET_PROFILE_CYCLE_FRAME_APU1;
+    uint32_t base=selected&~NES_NET_CAP_NATIVE_WAIT;
+    return base && !(base&(base-1u)) && !(base&~known) &&
+           (!(selected&NES_NET_CAP_NATIVE_WAIT)||base!=NES_NET_PROFILE_LEGACY_C) &&
+           (local&selected)==selected && (remote&selected)==selected;
+}
+uint32_t nes_netplay_profile_choose(uint32_t base,uint32_t common) {
+    if(base!=NES_NET_PROFILE_CYCLE_LLE && base!=NES_NET_PROFILE_CYCLE_HLE &&
+       base!=NES_NET_PROFILE_CYCLE_FRAME && base!=NES_NET_PROFILE_LEGACY_C)return 0;
+    if(!(common&base))return 0;
+    uint32_t apu=nes_netplay_apu_profile(base),selected=(apu&&(common&apu))?apu:base;
+    if(base!=NES_NET_PROFILE_LEGACY_C && (common&NES_NET_CAP_NATIVE_WAIT))selected|=NES_NET_CAP_NATIVE_WAIT;
+    return selected;
+}
+void nes_netplay_profile_identity(const char *text,uint32_t selected,uint8_t out[32]) {
+    uint8_t material[44]={'N','E','S','P','R','O','F','1'};
+    for(unsigned i=0;i<4;i++)material[8+i]=(uint8_t)(selected>>(8*i));
+    nes_sha256((const uint8_t *)text,strlen(text),material+12);
+    nes_sha256(material,sizeof material,out);
 }

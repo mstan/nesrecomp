@@ -22,6 +22,8 @@
 #include "cyc_trace.h"
 #include "hw.h"
 
+#include <float.h>
+#include <fenv.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -30,6 +32,9 @@
 /* Build-only oracle for the native channel-output service. */
 #ifndef NESRECOMP_APU_LEVEL_REFERENCE
 #define NESRECOMP_APU_LEVEL_REFERENCE 0
+#endif
+#ifndef NESRECOMP_APU_DMC_REFERENCE
+#define NESRECOMP_APU_DMC_REFERENCE 0
 #endif
 
 enum { CH_PULSE1, CH_PULSE2, CH_TRIANGLE, CH_NOISE };
@@ -99,6 +104,16 @@ typedef struct {
 
 static HwApu apu;
 uint64_t apu_native_event_spans, apu_native_event_cycles;
+
+#if NESRECOMP_APU_OPERATION
+unsigned apu_operation_pending, apu_operation_deadline = 1;
+bool apu_operation_active;
+static bool operation_running;
+static bool operation_eligible;
+#define APU_SYNC() apu_operation_sync()
+#else
+#define APU_SYNC() ((void)0)
+#endif
 
 static const uint8_t length_table[32] = {
     10, 254, 20, 2, 40, 4, 80, 6, 160, 8, 60, 10, 14, 12, 26, 14,
@@ -175,6 +190,7 @@ typedef struct {
 size_t apu_output_save(void *out, size_t capacity)
 {
     if (!out || capacity < sizeof(ApuOutputState)) return sizeof(ApuOutputState);
+    APU_SYNC();
     ApuOutputState s = {0};
     s.schema = 2;
     s.enabled = audio.on;
@@ -220,6 +236,7 @@ bool apu_output_load(const void *data, size_t size, bool apply)
         if (!isfinite(s.band_delta[i]) || fabs(s.band_delta[i]) > 1e6) return false;
     if (audio.on && s.enabled && s.cycles_per_sample != audio.cycles_per_sample) return false;
     if (!apply) return true;
+    APU_SYNC();
     /* A headless QA state can be handed to an audible host, and an audible
      * state can be loaded with output disabled. Keep the host configuration;
      * an unclocked/differently configured sampler has no PCM to continue. */
@@ -259,6 +276,7 @@ int apu_console(void)
 
 void apu_set_console(int console)
 {
+    APU_SYNC();
     console_request = console;
     if (audio.on) audio.console = apu_console();
 }
@@ -353,6 +371,7 @@ static void audio_band_reset(void)
 
 void apu_audio_enable(bool on, int sample_rate)
 {
+    APU_SYNC();
     audio.level_dirty = 1;
     audio.on = on && sample_rate > 0;
     if (!audio.on) return;
@@ -370,6 +389,7 @@ void apu_audio_enable(bool on, int sample_rate)
 
 size_t apu_audio_read(int16_t *out, size_t max)
 {
+    APU_SYNC();
     size_t n = 0;
     while (n < max && audio.tail != audio.head) {
         out[n++] = audio.ring[audio.tail];
@@ -401,7 +421,7 @@ static void audio_emit(double level)
     audio.head = next;
 }
 
-void apu_debug_emit(double level) { audio_emit(level); }
+void apu_debug_emit(double level) { APU_SYNC(); audio_emit(level); }
 
 static void audio_band_flush(double position)
 {
@@ -551,6 +571,7 @@ static void audio_half_frame(void)
 static uint8_t audio_mute_mask;
 void apu_set_audio_mute(uint8_t mask)
 {
+    APU_SYNC();
     mask &= 0x1F;
     if (mask != audio_mute_mask) audio.level_dirty = 1;
     audio_mute_mask = mask;
@@ -558,6 +579,7 @@ void apu_set_audio_mute(uint8_t mask)
 
 void apu_channel_levels(uint8_t out[5])
 {
+    APU_SYNC();
     /* The duty waveforms in output order from the step a $4003/$4007 write
      * resets to; bit 7 - step set = high (nesdev wiki, APU Pulse). */
     static const uint8_t duty[4] = {0x40, 0x60, 0x78, 0x9F};
@@ -575,14 +597,21 @@ void apu_channel_levels(uint8_t out[5])
         if (audio_mute_mask >> i & 1) out[i] = 0;
 }
 
-bool apu_irq_output(void) { return (apu.frame_irq_out | apu.dmc_irq) != 0; }
+bool apu_irq_output(void) { APU_SYNC(); return (apu.frame_irq_out | apu.dmc_irq) != 0; }
 
-uint16_t apu_noise_lfsr(void) { return apu.noise_lfsr; }
+uint16_t apu_noise_lfsr(void) { APU_SYNC(); return apu.noise_lfsr; }
 
-void apu_debug_set_dmc_timer(uint16_t cycles) { apu.dmc_timer = cycles; }
+void apu_debug_set_dmc_timer(uint16_t cycles)
+{
+    APU_SYNC(); apu.dmc_timer = cycles;
+#if NESRECOMP_APU_OPERATION
+    apu_operation_deadline = 1;
+#endif
+}
 
 void apu_debug_set_noise(uint16_t lfsr, uint16_t timer)
 {
+    APU_SYNC();
     audio.level_dirty = 1;
     apu.noise_lfsr = lfsr;
     apu.noise_timer = timer;
@@ -590,6 +619,7 @@ void apu_debug_set_noise(uint16_t lfsr, uint16_t timer)
 
 void apu_debug_dmc(ApuDmcView *v)
 {
+    APU_SYNC();
     v->addr = apu.dmc_addr;
     v->bytes = apu.dmc_bytes;
     v->timer = apu.dmc_timer;
@@ -690,6 +720,12 @@ static void length_write(int ch, uint8_t value)
 
 void apu_write(uint16_t addr, uint8_t value)
 {
+    /* A write is a timestamped segment boundary. Commit the preceding signal
+     * before changing any register; the next clock sees this exact write. */
+    APU_SYNC();
+#if NESRECOMP_APU_OPERATION
+    apu_operation_deadline = 1;
+#endif
     audio.level_dirty = 1;
     if (addr <= 0x400F) apu.reg[addr & 15] = value;
     switch (addr) {
@@ -792,6 +828,10 @@ void apu_write(uint16_t addr, uint8_t value)
 
 uint8_t apu_read_status(void)
 {
+    APU_SYNC();
+#if NESRECOMP_APU_OPERATION
+    apu_operation_deadline = 1;
+#endif
     uint8_t v = hw.internal_bus & 0x20;
     v |= apu.dmc_irq ? 0x80 : 0;
     v |= apu.frame_irq ? 0x40 : 0;
@@ -805,6 +845,7 @@ uint8_t apu_read_status(void)
 
 uint8_t apu_read_controller(int port)
 {
+    APU_SYNC();
     uint8_t bit = (apu.shift[port] & 0x80) ? 1 : 0;
     /* The shift happens on the next APU cycles; a second consecutive read
      * postpones it. */
@@ -817,6 +858,7 @@ bool hw_oam_dma_active(void) { return apu.oam_dma != 0; }
 
 void hw_set_controller(int port, uint8_t buttons)
 {
+    APU_SYNC();
     apu.buttons[port & 1] = buttons;
 }
 
@@ -846,7 +888,8 @@ static void clock_length_counters(void)
     }
 }
 
-void apu_cycle(void)
+static uint64_t hr_apu_calls, hr_apu_iv_cycles, hr_audio_cycles;
+static void apu_cycle_run(void)
 {
     if (apu.strobe | apu.shift_delay[0] | apu.shift_delay[1]) {
         for (int port = 0; port < 2; port++) {
@@ -989,19 +1032,71 @@ void apu_cycle(void)
  * /IRQ is one open-drain line shared with the cartridge, so a mapper's
  * interrupt (MMC3's scanline counter) is wired in parallel: a handler that
  * acknowledges the APU still sees the line held by the cartridge. */
+/* Direct clocks retain the public single-step contract. Whole-run executors
+ * below account their known duration less the existing constant-span total,
+ * instead of repeating host instrumentation in every internal step. */
+void apu_cycle(void)
+{
+    HR_COUNT(++hr_apu_calls; if (audio.on) ++hr_audio_cycles);
+    apu_cycle_run();
+}
+
 bool apu_native_interval_ready(void)
 {
+#if NESRECOMP_APU_OPERATION
+    if (apu_operation_active && apu_operation_pending >= apu_operation_deadline)
+        apu_operation_sync();
+#endif
     /* No memory transfer may be requested during an independent run. The
      * DMC output unit can keep shifting its already-owned bytes normally.
      * The frame sequencer may clock envelopes/lengths, but cannot raise IRQ. */
-    return !(apu.oam_dma | apu.dmc_dma | apu.dmc_bytes |
+    return !(apu.oam_dma | apu.dmc_dma |
+#if NESRECOMP_APU_DMC_REFERENCE
+             apu.dmc_bytes |
+#endif
              apu.dmc_enable_delay | apu.dmc_start_delay |
              apu.implicit_abort | apu.implicit_abort_armed |
              apu.frame_irq_out | apu.dmc_irq) &&
            (apu.irq_inhibit || (apu.five_step && !apu.frame_irq));
 }
 
-#if !NESRECOMP_APU_LEVEL_REFERENCE
+/* The output shifter can run independently until it consumes its byte and
+ * asks the memory reader for another. Leave the request cycle itself, all
+ * DMA steals, delayed enables/aborts and IRQ publication on the coupled clock.
+ * put is the phase of the next APU clock; only get clocks subtract two. */
+unsigned apu_native_interval_limit(unsigned limit)
+{
+#if NESRECOMP_APU_OPERATION
+    if (apu_operation_active) {
+        /* Preserve the existing independent CPU cursor's boundaries. Local
+         * service events (e.g. a reset delay or a cleared status flag) can be
+         * consumed inside that interval; only a real DMA request bounds it.
+         * The byte deadline decreases linearly across deferred bit events. */
+        if (apu.dmc_bytes && !(apu.dmc_timer & 1)) {
+            if (!apu.dmc_bits) return 0;
+            unsigned timer = apu.dmc_timer ? apu.dmc_timer : 65536u;
+            unsigned before = timer - 2u + apu.put +
+                (unsigned)(apu.dmc_bits - 1u) * apu.dmc_rate;
+            if (before <= apu_operation_pending) return 0;
+            before -= apu_operation_pending;
+            if (before < limit) limit = before;
+        }
+        return limit;
+    }
+#endif
+#if !NESRECOMP_APU_DMC_REFERENCE
+    if (apu.dmc_bytes && !(apu.dmc_timer & 1)) {
+        if (!apu.dmc_bits) return 0;
+        unsigned timer = apu.dmc_timer ? apu.dmc_timer : 65536u;
+        unsigned before_request = timer - 2u + apu.put +
+            (unsigned)(apu.dmc_bits - 1u) * apu.dmc_rate;
+        if (before_request < limit) limit = before_request;
+    }
+#endif
+    return limit;
+}
+
+#if !NESRECOMP_APU_LEVEL_REFERENCE || NESRECOMP_APU_OPERATION
 /* Advance a periodic countdown without walking its non-event clocks. A zero
  * countdown expires on the next clock and reloads period, exactly as above. */
 static unsigned advance_timer(uint16_t *timer, unsigned period, unsigned clocks)
@@ -1014,6 +1109,12 @@ static unsigned advance_timer(uint16_t *timer, unsigned period, unsigned clocks)
 
 static unsigned constant_output_limit(unsigned limit)
 {
+#if NESRECOMP_APU_OPERATION
+    /* The older interval caller already excluded these coupled side effects.
+     * A timestamped operation must explicitly retain their event clocks. */
+    if (operation_running && (apu.strobe || apu.dmc_enable_delay || apu.dmc_start_delay ||
+        apu.implicit_abort || apu.implicit_abort_armed)) return 0;
+#endif
     if (audio.level_dirty || audio.level_dmc != apu.dmc_level ||
         apu.strobed || apu.shift_delay[0] || apu.shift_delay[1] ||
         apu.frame_irq_clear || !(apu.reset_delay & 0x80) ||
@@ -1053,6 +1154,11 @@ static unsigned constant_output_limit(unsigned limit)
     if (apu.len[CH_NOISE].count && apu.noise_timer < limit) limit = apu.noise_timer;
     /* Stop conservatively before sampling. The remaining loop keeps each
      * acc+=level and phase+=1.0 operation in the original scalar order. */
+    /* A whole operation emits its samples itself. The original native-span
+     * service continues to leave sample boundaries to its scalar executor. */
+#if NESRECOMP_APU_OPERATION
+    if (operation_running) return limit;
+#endif
     double room = audio.cycles_per_sample - audio.phase;
     if (!(room >= 2.0) || room > 2147483647.0) return 0;
     n = (unsigned)room - 1;
@@ -1085,11 +1191,56 @@ static void constant_output_run(unsigned cycles)
     if (audio.synthesis == CYC_AUDIO_SYNTH_BAND_LIMITED) {
         audio_band_advance(cycles);
     } else {
-        for (unsigned i = 0; i < cycles; ++i) {
-            audio.acc += audio.base_level;
-            audio.phase += 1.0;
+#if NESRECOMP_APU_OPERATION && FLT_RADIX == 2 && FLT_MANT_DIG == 24 && DBL_MANT_DIG == 53
+    /* On these non-expansion boards mixer values are binary32 (or exact sums
+     * of two binary32 values), multiples of 2^-31 and below 2. At most 2^21
+     * clocks fit in a sample, so their binary64 sum/product remains exact.
+     * Phase advances only as far as the next sample; integer clock additions
+     * have the same rounding as the original sequence of +1 operations. */
+    if (operation_running && audio.cycles_per_sample >= 1.0 &&
+        audio.cycles_per_sample <= 2097152.0) {
+        unsigned left = cycles;
+        while (left) {
+            unsigned n = left;
+            double room = audio.cycles_per_sample - audio.phase;
+            if (room < n) {
+                if (room <= 1.0) n = 1;
+                else { n = (unsigned)room; if ((double)n < room) ++n; }
+            }
+            audio.acc += audio.base_level * n;
+            audio.count += n;
+            audio.phase += n;
+            if (audio.phase >= audio.cycles_per_sample) {
+                audio.phase -= audio.cycles_per_sample;
+                audio_emit(audio.acc / audio.count);
+                audio.acc = 0;
+                audio.count = 0;
+            }
+            left -= n;
         }
-        audio.count += cycles;
+    } else
+#endif
+    {
+    for (unsigned i = 0; i < cycles; ++i) {
+        audio.acc += audio.base_level;
+        audio.phase += 1.0;
+#if NESRECOMP_APU_OPERATION
+        if (operation_running) {
+            ++audio.count;
+            if (audio.phase >= audio.cycles_per_sample) {
+                audio.phase -= audio.cycles_per_sample;
+                audio_emit(audio.acc / audio.count);
+                audio.acc = 0;
+                audio.count = 0;
+            }
+        }
+#endif
+    }
+#if NESRECOMP_APU_OPERATION
+    if (!operation_running)
+#endif
+    audio.count += cycles;
+    }
     }
     apu.put ^= cycles & 1;
     ++apu_native_event_spans;
@@ -1097,8 +1248,69 @@ static void constant_output_run(unsigned cycles)
 }
 #endif
 
+#if NESRECOMP_APU_OPERATION
+/* Only CPU-visible events bound clock debt. Tone and envelope events are
+ * consumed inside the producer and do not dispatch through the machine. */
+static unsigned operation_observation_deadline(void)
+{
+    if (apu.oam_dma || apu.dmc_dma || apu.dmc_enable_delay || apu.dmc_start_delay ||
+        apu.implicit_abort || apu.implicit_abort_armed || apu.frame_irq_clear ||
+        !(apu.reset_delay & 0x80) || apu.dmc_dma_cooldown)
+        return 1;
+    unsigned deadline = 32768;
+    if (!apu.five_step && !apu.irq_inhibit) {
+        unsigned next = apu.counter < 29828 ? 29828 :
+            apu.counter < 29829 ? 29829 : 29830;
+        deadline = next > apu.counter ? next - apu.counter : 1;
+    }
+    if (apu.dmc_bytes && !(apu.dmc_timer & 1)) {
+        unsigned timer = apu.dmc_timer ? apu.dmc_timer : 65536u;
+        unsigned request = apu.dmc_bits ? timer - 2u + apu.put +
+            (unsigned)(apu.dmc_bits - 1u) * apu.dmc_rate + 1u : 1u;
+        if (request < deadline) deadline = request;
+    }
+    return deadline;
+}
+
+void apu_operation_sync(void)
+{
+    if (operation_running || !apu_operation_pending) return;
+    unsigned cycles = apu_operation_pending;
+#if NESRECOMP_HEADROOM_COUNTERS
+    unsigned hr_cycles = cycles;
+    uint64_t hr_skipped = apu_native_event_cycles;
+#endif
+    apu_operation_pending = 0;
+    operation_running = true;
+    while (cycles) {
+        /* Timers/countdowns advance arithmetically between actual events.
+         * Retaining the scalar event clock preserves delayed register writes,
+         * length races, DMC shifter handoff and frame-sequencer ordering. */
+        unsigned n = audio.on ? constant_output_limit(cycles) : 0;
+        if (n) { constant_output_run(n); cycles -= n; }
+        else { apu_cycle_run(); --cycles; }
+    }
+    HR_COUNT(uint64_t steps = hr_cycles - (apu_native_event_cycles - hr_skipped);
+        hr_apu_calls += steps; if (audio.on) hr_audio_cycles += steps);
+    operation_running = false;
+    apu_operation_deadline = operation_observation_deadline();
+}
+#endif
+
 void apu_native_interval_run(unsigned cycles)
 {
+    HR_COUNT(hr_apu_iv_cycles += cycles);
+#if NESRECOMP_APU_OPERATION
+    if (apu_operation_active) {
+        apu_operation_pending += cycles;
+        if (apu_operation_pending >= apu_operation_deadline) apu_operation_sync();
+        return;
+    }
+#endif
+#if NESRECOMP_HEADROOM_COUNTERS
+    unsigned hr_cycles = cycles;
+    uint64_t hr_skipped = apu_native_event_cycles;
+#endif
 #if !NESRECOMP_APU_LEVEL_REFERENCE
     /* The machine proved no DMA/IRQ deadline and no expansion device on these
      * boards. Dense audible timers and short runs keep the simpler executor. */
@@ -1109,15 +1321,21 @@ void apu_native_interval_run(unsigned cycles)
         while (cycles >= 4) {
             unsigned n = constant_output_limit(cycles);
             if (n >= 4) { constant_output_run(n); cycles -= n; }
-            else { apu_cycle(); --cycles; }
+            else { apu_cycle_run(); --cycles; }
         }
     }
 #endif
-    while (cycles--) apu_cycle();
+    while (cycles--) apu_cycle_run();
+    HR_COUNT(uint64_t steps = hr_cycles - (apu_native_event_cycles - hr_skipped);
+        hr_apu_calls += steps; if (audio.on) hr_audio_cycles += steps);
 }
 
 void apu_sample_irq(void)
 {
+#if NESRECOMP_APU_OPERATION
+    if (apu_operation_active && apu_operation_pending >= apu_operation_deadline)
+        apu_operation_sync();
+#endif
     hw.irq_line = apu.frame_irq_out | apu.dmc_irq | (uint8_t)hw_cart_irq();
     if (apu.frame_irq && !apu.irq_inhibit) apu.frame_irq_out = 1;
 }
@@ -1182,6 +1400,7 @@ static void dmc_dma_get(void)
  * and the sample DMA the get cycles; a halted DMA yields to the other. */
 void dma_cycle(void)
 {
+    APU_SYNC();
     if (cyc_trace_enabled) cyc_trace_dma(false);
     /* Extra blank lines freeze the audio clock, including apu.put. The DMA
      * bus still alternates with CPU cycles: a frozen put half otherwise holds
@@ -1235,6 +1454,12 @@ void dma_end_of_cycle(void)
 
 void *apu_state_ptr(size_t *size)
 {
+    APU_SYNC();
+#if NESRECOMP_APU_OPERATION
+    /* The caller may replace the state through this pointer. Recompute its
+     * deadline on the first clock, rather than carrying a pre-load schedule. */
+    apu_operation_deadline = 1;
+#endif
     audio.level_dirty = 1;
     *size = sizeof(apu);
     return &apu;
@@ -1242,6 +1467,18 @@ void *apu_state_ptr(size_t *size)
 
 void apu_power_on(void)
 {
+#if NESRECOMP_APU_OPERATION
+    apu_operation_pending = 0;
+    apu_operation_deadline = 1;
+    operation_running = false;
+    operation_eligible = false;
+#if FLT_RADIX == 2 && FLT_MANT_DIG == 24 && DBL_MANT_DIG == 53 && FLT_EVAL_METHOD == 0
+    operation_eligible = !NESRECOMP_APU_LEVEL_REFERENCE && fegetround() == FE_TONEAREST &&
+        !hw_pal() && (hw_cart.mapper == 0 || hw_cart.mapper == 1 ||
+        hw_cart.mapper == 4 || hw_cart.mapper == 66);
+#endif
+    apu_operation_active = operation_eligible;
+#endif
     apu_native_event_spans = apu_native_event_cycles = 0;
     audio.level_dirty = 1;
     memset(&apu, 0, sizeof(apu));
@@ -1257,6 +1494,29 @@ void apu_power_on(void)
     apu.noise_lfsr = 1;
     apu.noise_period = noise_period_table[0];
     apu.tri_out = 15;
+}
+
+/* Bootstrap policy, not serialized machine state. Both executors materialize
+ * the same APU image; clock debt must be drained before changing ownership.
+ * Eligibility is sampled at power-on and the session fixes this selection
+ * before admitting frame0, never in the middle of a match. */
+bool cyc_apu_operation_available(void)
+{
+#if NESRECOMP_APU_OPERATION
+    return operation_eligible;
+#else
+    return false;
+#endif
+}
+bool cyc_apu_operation_select(bool native)
+{
+    if (native && !cyc_apu_operation_available()) return false;
+    APU_SYNC();
+#if NESRECOMP_APU_OPERATION
+    apu_operation_active = native;
+    apu_operation_deadline = 1;
+#endif
+    return true;
 }
 
 #define APU_FIELD(f) {#f, offsetof(HwApu, f), sizeof(((HwApu *)0)->f)}
@@ -1279,6 +1539,7 @@ static const struct {
 
 uint64_t apu_state_hash(uint64_t h)
 {
+    APU_SYNC();
     uint64_t acc = 0;
     for (size_t k = 0; k < sizeof(apu_fields) / sizeof(apu_fields[0]); k++) {
         const uint8_t *b = (const uint8_t *)&apu + apu_fields[k].offset;
@@ -1289,6 +1550,7 @@ uint64_t apu_state_hash(uint64_t h)
 
 void apu_state_dump(void *file)
 {
+    APU_SYNC();
     FILE *f = (FILE *)file;
     for (size_t k = 0; k < sizeof(apu_fields) / sizeof(apu_fields[0]); k++) {
         const uint8_t *b = (const uint8_t *)&apu + apu_fields[k].offset;
@@ -1297,3 +1559,26 @@ void apu_state_dump(void *file)
         fputc('\n', f);
     }
 }
+
+#if NESRECOMP_HEADROOM_COUNTERS
+unsigned hr_apu_block_reason(void)
+{
+    if (apu.oam_dma) return 1;
+    if (apu.dmc_dma |
+#if NESRECOMP_APU_DMC_REFERENCE
+        apu.dmc_bytes |
+#endif
+        apu.dmc_enable_delay | apu.dmc_start_delay |
+        apu.implicit_abort | apu.implicit_abort_armed | apu.dmc_irq) return 2;
+    if (apu.frame_irq_out || !(apu.irq_inhibit || (apu.five_step && !apu.frame_irq))) return 3;
+    return 4u;
+}
+
+void hr_apu_print(void)
+{
+    hr_print("HR_apu apu_cycle_calls=%llu interval_cycles=%llu constant_skipped_cycles=%llu constant_spans=%llu audio_on_cycles=%llu irq_inhibit=%u five_step=%u dmc_playing=%u\n",
+           (unsigned long long)hr_apu_calls, (unsigned long long)hr_apu_iv_cycles,
+           (unsigned long long)apu_native_event_cycles, (unsigned long long)apu_native_event_spans,
+           (unsigned long long)hr_audio_cycles, (unsigned)apu.irq_inhibit, (unsigned)apu.five_step, (unsigned)apu.dmc_playing);
+}
+#endif

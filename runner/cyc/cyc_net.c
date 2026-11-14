@@ -5,6 +5,7 @@
 #include "cyc_session.h"
 #include "cyc_trace.h"
 #include "cyc_video.h"
+#include "hw.h"
 #include "nes_netplay_identity.h"
 #include "nes_netplay_rb.h"
 #include "nes_rb_state.h"
@@ -13,6 +14,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef NESRECOMP_NET_TEST_BOOT
+#include "cyc_png.h"
+#endif
 
 static NesNetplayInput s_rows[4];
 static bool s_replay,s_guest;
@@ -75,9 +79,11 @@ int cyc_net_start(const NesNetplayConfig *cfg,const char *rom) {
 }
 int cyc_net_boot(void) {
     if(!nes_netplay_active())return 0;
-    /* Trace and APU clocks are simulation settings, independent of whether
-     * this peer writes diagnostics or has a working sound device. */
-    cyc_trace_enabled=true;
+    /* The sealed c2 profile hashes complete frame-boundary machine images.
+     * A per-bus diagnostic trace is redundant and forces the slow clock.
+     * Every peer fixes this choice before the boot/admission barrier. */
+    cyc_trace_enabled=false;
+    cyc_trace_hash=0;cyc_trace_cycle=0;
     cyc_audio_enable(cyc_session_audio_rate(48000));
     cyc_video_apply_pending();
     memset(g_logical_input,0,4);memset(g_game_input,0,sizeof g_game_input);nes_rb_state_invalidate();
@@ -120,6 +126,19 @@ void cyc_net_input(uint8_t buttons[2]) {
 }
 void cyc_net_finish(void) {
     nes_rb_state_invalidate();nes_netplay_rb_note_tick_cost(s_replay,(SDL_GetPerformanceCounter()-s_tick_start)*1000000.0/SDL_GetPerformanceFrequency());
+#ifdef NESRECOMP_NET_TEST_BOOT
+    /* Replays replace this same-tick capture, matching the regression
+     * harness's confirmed-tick image contract. Absent in production builds. */
+    const char *tick=getenv("NES_NET_SHOT_TICK");
+    if(tick&&nes_netplay_sim_tick()==(uint32_t)strtoul(tick,NULL,10)){
+        const char *path=getenv("NES_NET_SHOT_STATE");
+        if(path&&*path){size_t n=0;const uint8_t* image=nes_rb_state_image(&n);FILE* f=fopen(path,"wb");
+            if(!f||!image||fwrite(image,1,n,f)!=n)fprintf(stderr,"[netplay test] tick capture failed\n");
+            if(f)fclose(f);}
+        path=getenv("NES_NET_SHOT_PATH");
+        if(path&&*path&&!cyc_write_png(path,cyc_frame_argb(),256,240))fprintf(stderr,"[netplay test] picture capture failed\n");
+    }
+#endif
     nes_netplay_frame_end();
 }
 bool cyc_net_replaying(void){return s_replay;}
@@ -134,8 +153,13 @@ void cyc_net_shutdown(void) {
             if(f)fclose(f);
         }
         nes_netplay_log_summary();
+        fprintf(stderr,"NET_NATIVE_INTERVALS cycles=%llu spans=%llu\n",
+            (unsigned long long)hw_native_interval_cycles,(unsigned long long)hw_native_interval_spans);
     }
     nes_netplay_shutdown();s_replay=false;
+    /* Return to the build's offline policy only after the match has ended. */
+    cyc_apu_operation_select(cyc_apu_operation_available());
+    cyc_native_wait_select(cyc_native_wait_available());
 }
 const uint8_t *cyc_net_sram(size_t *len) {
     uint32_t sizes[2]={(uint32_t)cyc_nvram_size(0),(uint32_t)cyc_nvram_size(1)};

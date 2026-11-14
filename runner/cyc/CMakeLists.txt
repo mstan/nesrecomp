@@ -140,9 +140,13 @@ if(SDL2_FOUND)
     endif()
     nesrecomp_cyc_enable_sdl(cyc_hdpack_probe NO_DEV_UI)
     nesrecomp_cyc_enable_hdpack(cyc_hdpack_probe)
+    set(NESRECOMP_HDPACK_TEST_ARGS "")
+    if(NESRECOMP_PPU_IMPL STREQUAL "FRAME")
+        set(NESRECOMP_HDPACK_TEST_ARGS --native-picture)
+    endif()
     add_test(NAME cyc_hdpack COMMAND "${Python3_EXECUTABLE}"
         "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_cyc_hdpack.py"
-        --host $<TARGET_FILE:cyc_hdpack_probe> --out "${CMAKE_CURRENT_BINARY_DIR}/hdpack-test")
+        --host $<TARGET_FILE:cyc_hdpack_probe> --out "${CMAKE_CURRENT_BINARY_DIR}/hdpack-test" ${NESRECOMP_HDPACK_TEST_ARGS})
     add_test(NAME cyc_hdpack_window COMMAND "${Python3_EXECUTABLE}"
         "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_cyc_hdpack_window.py"
         --host $<TARGET_FILE:cyc_hdpack_probe> --out "${CMAKE_CURRENT_BINARY_DIR}/hdpack-window-test")
@@ -174,6 +178,9 @@ if(SDL2_FOUND)
     foreach(t cyc_window cyc_window_dev)
         target_include_directories(${t} PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})
         target_link_libraries(${t} PRIVATE ${NESRECOMP_CYC_LIBRARIES})
+        if(WIN32)
+            target_compile_definitions(${t} PRIVATE CYC_HOST_EXTRAS_STRONG=1)
+        endif()
         if(MSVC)
             target_compile_definitions(${t} PRIVATE _CRT_SECURE_NO_WARNINGS)
         endif()
@@ -234,6 +241,9 @@ if(SDL2_FOUND)
             ${CMAKE_CURRENT_SOURCE_DIR}/../include)
         target_link_libraries(cyc_window_mods PRIVATE ${NESRECOMP_CYC_LIBRARIES})
         target_compile_features(cyc_window_mods PRIVATE cxx_std_17)
+        if(WIN32)
+            target_compile_definitions(cyc_window_mods PRIVATE CYC_HOST_EXTRAS_STRONG=1)
+        endif()
         target_compile_definitions(cyc_window_mods PRIVATE NESRECOMP_ENABLE_MODS=1 "CYC_MOD_GAME_ID=\"cyc-replay-test\""
             "CYC_MOD_ROM_CRC32=\"${replay_mod_crc}\"")
         if(MSVC)
@@ -520,6 +530,7 @@ add_library(cyc_ppu_span_runtime OBJECT cpu6502.c cpu6502_interp.c hw_machine.c
     ${CYC_TEST_BOARD_SOURCES} hw_palette.c cyc_trace.c cyc_ring.c
     ${NESRECOMP_CYC_SCHEDULER_SOURCES} cyc_native_none.c)
 target_include_directories(cyc_ppu_span_runtime PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})
+if(NOT NESRECOMP_PPU_IMPL STREQUAL "FRAME")
 foreach(kind candidate reference)
     add_executable(cyc_ppu_span_${kind} tests/ppu_span_probe.c hw_ppu.c hw_apu.c
         $<TARGET_OBJECTS:cyc_ppu_span_runtime>)
@@ -537,6 +548,8 @@ add_test(NAME cyc_ppu_spans COMMAND ${Python3_EXECUTABLE}
     --candidate $<TARGET_FILE:cyc_ppu_span_candidate>)
 set_tests_properties(cyc_ppu_spans PROPERTIES TIMEOUT 180)
 
+endif()
+
 add_executable(cyc_native_interval_probe tests/native_interval_probe.c hw_ppu.c hw_apu.c
     $<TARGET_OBJECTS:cyc_ppu_span_runtime>)
 target_include_directories(cyc_native_interval_probe PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})
@@ -549,6 +562,13 @@ add_test(NAME cyc_native_intervals COMMAND ${Python3_EXECUTABLE}
     --probe $<TARGET_FILE:cyc_native_interval_probe>)
 set_tests_properties(cyc_native_intervals PROPERTIES TIMEOUT 180)
 
+if(NESRECOMP_PPU_IMPL STREQUAL "FRAME")
+    add_executable(cyc_frame_ppu_state_test tests/frame_ppu_state_test.c hw_ppu.c hw_apu.c
+        $<TARGET_OBJECTS:cyc_ppu_span_runtime>)
+    target_include_directories(cyc_frame_ppu_state_test PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})
+    target_link_libraries(cyc_frame_ppu_state_test PRIVATE ${NESRECOMP_CYC_LIBRARIES})
+    add_test(NAME cyc_frame_ppu_state COMMAND cyc_frame_ppu_state_test)
+else()
 add_executable(cyc_raster_interval_probe tests/raster_interval_probe.c hw_ppu.c hw_apu.c
     $<TARGET_OBJECTS:cyc_ppu_span_runtime>)
 target_include_directories(cyc_raster_interval_probe PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})
@@ -561,6 +581,8 @@ add_test(NAME cyc_raster_intervals COMMAND ${Python3_EXECUTABLE}
     --probe $<TARGET_FILE:cyc_raster_interval_probe>
     --out ${CMAKE_CURRENT_BINARY_DIR}/raster_interval_results)
 set_tests_properties(cyc_raster_intervals PROPERTIES TIMEOUT 600)
+
+endif()
 
 add_executable(cyc_isolated_native_probe tests/isolated_native_probe.c cpu6502.c cpu6502_interp.c
     hw_machine.c ${CYC_TEST_BOARD_SOURCES} hw_ppu.c hw_apu.c hw_palette.c cyc_trace.c cyc_ring.c
@@ -619,13 +641,19 @@ if(MSVC)
 endif()
 add_test(NAME cyc_ram_policy_test COMMAND cyc_ram_policy_test)
 
+# Low-level generated-ROM probes retain the independent reference provider.
+set(NESRECOMP_PPU_REFERENCE_TEST_IMPL "${NESRECOMP_PPU_IMPL}")
+if(NESRECOMP_PPU_IMPL STREQUAL "FRAME")
+    set(NESRECOMP_PPU_REFERENCE_TEST_IMPL "LLE")
+endif()
+
 # Declared SNROM copies: byte-validated native SRAM, stable read gates, every
 # alignment, public code writes/commits and current-build snapshot replay.
 add_test(NAME cyc_cart_ramviews_test
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_cyc_cart_ramviews.py
             --recompiler $<TARGET_FILE:NESRecomp>
             --out ${CMAKE_CURRENT_BINARY_DIR}/cart_ramviews_test
-            --ppu ${NESRECOMP_PPU_IMPL} ${NESRECOMP_NESTED_BUILD_ARGS})
+            --ppu ${NESRECOMP_PPU_REFERENCE_TEST_IMPL} ${NESRECOMP_NESTED_BUILD_ARGS})
 set_tests_properties(cyc_cart_ramviews_test PROPERTIES TIMEOUT 900)
 
 # Optional atomic-PRG admission: fresh metadata, changed instructions, folded
@@ -634,7 +662,7 @@ add_test(NAME cyc_prg_guards_test
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_cyc_prg_guards.py
             --recompiler $<TARGET_FILE:NESRecomp>
             --out ${CMAKE_CURRENT_BINARY_DIR}/prg_guards_test
-            --ppu ${NESRECOMP_PPU_IMPL} ${NESRECOMP_NESTED_BUILD_ARGS})
+            --ppu ${NESRECOMP_PPU_REFERENCE_TEST_IMPL} ${NESRECOMP_NESTED_BUILD_ARGS})
 set_tests_properties(cyc_prg_guards_test PROPERTIES TIMEOUT 900)
 
 if(TARGET SDL2::SDL2)

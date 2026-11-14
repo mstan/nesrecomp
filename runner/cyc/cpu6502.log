@@ -1,0 +1,22 @@
+Immutable polling wait operation
+
+An immutable zero-page LDA followed by a same-page BPL/BEQ branch back to
+that load owns complete six-cycle quiet iterations. BPL admits a clear sign
+bit; BEQ admits a zero operand. Both use the same device deadline and ordinary
+instruction boundary executor, including the real branch opcode and final
+dummy read. No second interrupt, DMA or partial-instruction scheduler is added.
+The existing BPL entry remains available to previously generated callers.
+
+RAM observers, armed hooks at either instruction, modified program bytes,
+isolated calls, tracing, pending interrupts and the existing mapper guard all
+retain ordinary execution. Host counters count only actual fetch attempts;
+collapsed service iterations are separate from instruction observations.
+
+Service reporting starts on the first attempted operation, including operations
+that execute only ordinary boundaries because device intervals admit no quiet
+span. Attempts, entered operations and collapsed cycles are distinct measures.
+
+The build opt-in defaults off. A netplay bootstrap may select the common
+ordinary executor before frame zero; all wait entry points honor that fixed
+policy. Shutdown restores the build's offline policy. Selection flushes clock
+debt and adds no serialized machine state.

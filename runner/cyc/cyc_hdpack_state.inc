@@ -3,7 +3,7 @@
  * Presentation storage is exact: active/nonzero payloads keep every byte. */
 typedef struct {
     int32_t index;
-    uint8_t bytes[16], row, x, valid;
+    uint8_t bytes[16], row, x, valid, attr;
 } HdFetchedTile;
 /* All tile keys are owned bytes, rather than pointers into mutable CHR RAM.
  * Four records keep each saved block below the mod registry's 1 MiB limit. */

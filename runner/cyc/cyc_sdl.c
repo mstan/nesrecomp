@@ -53,6 +53,7 @@
 #include "cyc_disk_action.h"
 #include "cyc_fds_bios.h"
 #include "cyc_frame_pacing.h"
+#include "cyc_frame_wait.h"
 #include "cyc_host.h"
 #include "cyc_diagnostics.h"
 #include "cyc_host_extras.h"
@@ -80,6 +81,7 @@
 #endif
 #include "cyc_tcp.h"
 #include "cyc_video.h"
+#include "cyc_window_geometry.h"
 #include "../../common/nes_cart.h"
 #include "../../common/nes_fds.h"
 #ifdef CYC_WITH_RECOMP_UI
@@ -751,6 +753,26 @@ static void tcp_action(int id, const char *line)
     cyc_tcp_err(id, "action: a shortcut, NES button (a ... right), or game button (l, r)");
 }
 
+static void tcp_headroom(int id, const char *line)
+{
+    (void)line;
+#if NESRECOMP_HEADROOM_COUNTERS
+    char *report = (char *)malloc(16384), *fields = (char *)malloc(32768);
+    if (!report || !fields) {
+        free(report); free(fields);
+        cyc_tcp_err(id, "measurement report allocation failed");
+        return;
+    }
+    hr_report(report, 16384);
+    memcpy(fields, "\"report\":", 9);
+    cyc_tcp_quote(report, fields + 9, 32768 - 9);
+    cyc_tcp_ok(id, fields);
+    free(report); free(fields);
+#else
+    cyc_tcp_err(id, "measurement counters disabled in this build");
+#endif
+}
+
 static void tcp_state(int id, const char *line)
 {
     (void)line;
@@ -1172,6 +1194,7 @@ static void tcp_setup(void)
     cyc_tcp_register("ping", "liveness; the frame counter", tcp_ping);
     cyc_tcp_register("zapper", "aim x/y, trigger, mouse true; optional window_x/window_y", tcp_zapper);
     cyc_tcp_register("state", "frame, menu, drive, toast, HLE, disk save, bindings, build", tcp_state);
+    cyc_tcp_register("headroom", "cumulative device and guest cost counters", tcp_headroom);
     cyc_tcp_register("key", "hold an SDL key through the bindings: name, frames", tcp_key);
     cyc_tcp_register("pad", "hold virtual game controller buttons: buttons (a+start), frames", tcp_pad);
     cyc_tcp_register("action", "hold an action: name (a..right, disk, menu, ...), player, frames", tcp_action);
@@ -1553,6 +1576,14 @@ int cyc_sdl_main(const char *title_in, int scale)
         fprintf(stderr, "vsync %s\n", s_vsync_supported ? "available: disabled while fast-forwarding or uncapped"
                                                       : "unavailable: presenting without synchronization");
     apply_settings();
+    /* Fit needs a useful initial drawable rather than feeding its native
+     * boot picture back into itself forever. Only titles opting in change;
+     * saved stock/fixed-aspect and fullscreen choices keep the usual path. */
+    if (!s_set.fullscreen && cyc_video_mode() == NES_VIDEO_FIT &&
+        s_extras && s_extras->initial_fit_width > 0) {
+        int initial_w = cyc_window_initial_fit_width(cyc_video_mode(), s_extras->initial_fit_width, w, h);
+        SDL_SetWindowSize(s_win, initial_w * s_set.window_scale, logical_h() * s_set.window_scale);
+    }
     SDL_RendererInfo renderer = {0}; SDL_GetRendererInfo(s_ren, &renderer);
     cyc_diagnostics_note("game window ready driver=%s renderer=%s flags=%u texture=%dx%d displays=%d",
         SDL_GetCurrentVideoDriver(), renderer.name ? renderer.name : "unknown", renderer.flags, w, h, SDL_GetNumVideoDisplays());
@@ -1603,6 +1634,12 @@ int cyc_sdl_main(const char *title_in, int scale)
     char disk_hint[64];
     const double frame_seconds = cyc_host_frame_seconds();
     const Uint64 freq = SDL_GetPerformanceFrequency();
+    CycFrameWait frame_wait=cyc_frame_wait_create();
+    /* Optional bounded QA capture of actual frame completions; no per-frame
+     * work beyond the null check in ordinary play. */
+    const char *pacing_path=getenv("NESRECOMP_PACING_LOG");
+    FILE *pacing_log=pacing_path&&*pacing_path?fopen(pacing_path,"wb"):NULL;
+    if(pacing_log){setvbuf(pacing_log,NULL,_IOFBF,65536);fprintf(pacing_log,"frequency,%llu,seconds,%.12f\n",(unsigned long long)freq,frame_seconds);}
     const Uint64 frame_ticks = (Uint64)(frame_seconds * (double)freq);
     Uint64 next = SDL_GetPerformanceCounter();
     Uint64 fps_mark = next, shown = 0;
@@ -1888,6 +1925,7 @@ int cyc_sdl_main(const char *title_in, int scale)
         (void)fps_mark; (void)native_mark; (void)cycles_mark; (void)frames;
 #endif
         if (s_exit_after >= 0 && s_frames_done >= s_exit_after) s_running = false;
+        if(pacing_log)fprintf(pacing_log,"%ld,%llu,%llu\n",s_frames_done,(unsigned long long)SDL_GetPerformanceCounter(),(unsigned long long)shown);
 
         if (fast || s_uncapped) {
             next = tnow;
@@ -1895,17 +1933,34 @@ int cyc_sdl_main(const char *title_in, int scale)
         }
         next += frame_ticks;
         if (next > tnow) {
-            Uint32 ms = (Uint32)((next - tnow) * 1000 / freq);
-            if (ms > 1) SDL_Delay(ms - 1);
-            while (SDL_GetPerformanceCounter() < next) {}
+#ifdef NESRECOMP_PACING_REFERENCE
+            Uint32 ms=(Uint32)((next-tnow)*1000/freq);
+            if(ms>1)SDL_Delay(ms-1);
+            while(SDL_GetPerformanceCounter()<next){}
+#else
+            cyc_frame_wait_until(&frame_wait,next,freq);
+#endif
         } else if (tnow - next > freq / 4) {
             next = tnow; /* fell behind: don't try to catch up */
         }
     }
 
+    cyc_frame_wait_destroy(&frame_wait);
+    if(pacing_log)fclose(pacing_log);
     if (s_uncapped) {
         const double seconds = (double)(SDL_GetPerformanceCounter() - measurement_start) / (double)freq;
         const long completed = s_frames_done - measurement_first_frame;
+        SDL_RendererInfo measured_renderer = {0};
+        int window_w = 0, window_h = 0, drawable_w = 0, drawable_h = 0;
+        SDL_GetRendererInfo(s_ren, &measured_renderer);
+        SDL_GetWindowSize(s_win, &window_w, &window_h);
+        SDL_GetRendererOutputSize(s_ren, &drawable_w, &drawable_h);
+        const char *video_driver = SDL_GetCurrentVideoDriver();
+        const char *audio_driver = SDL_GetCurrentAudioDriver();
+        printf("window_backend: video_driver=%s renderer=%s flags=%u window_w=%d window_h=%d drawable_w=%d drawable_h=%d audio_driver=%s\n",
+               video_driver ? video_driver : "none", measured_renderer.name ? measured_renderer.name : "unknown",
+               measured_renderer.flags, window_w, window_h, drawable_w, drawable_h,
+               audio_driver ? audio_driver : "none");
         printf("window benchmark: ppu=%s frames=%ld seconds=%.6f fps=%.3f cycles=%llu native_cycles=%llu audio_device=%u audio_enabled=%u produced_samples=%llu queued_samples=%llu\n",
                cyc_ppu_implementation(), completed, seconds, seconds > 0 ? completed / seconds : 0,
                (unsigned long long)cyc_cycle_count(), (unsigned long long)cyc_run_native_cycles,

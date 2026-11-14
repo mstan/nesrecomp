@@ -115,7 +115,7 @@ def build_programs(args, out, tc, cases):
              f'include("{source.as_posix()}/cyc.cmake")',
              'add_library(console_runtime OBJECT ${NESRECOMP_CYC_SOURCES})',
              'target_include_directories(console_runtime PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})',
-             'target_compile_definitions(console_runtime PRIVATE _CRT_SECURE_NO_WARNINGS)']
+             'target_compile_definitions(console_runtime PRIVATE _CRT_SECURE_NO_WARNINGS CYC_HOST_EXTRAS_STRONG=1)']
     for name, image, toml in cases:
         case = out / name
         case.mkdir(parents=True, exist_ok=True)
