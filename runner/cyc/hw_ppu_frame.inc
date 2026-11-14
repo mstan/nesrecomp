@@ -543,6 +543,7 @@ bool ppu_clock_cpu_tail(unsigned align)
 #if NESRECOMP_HEADROOM_COUNTERS
 static bool fp_interval_ready(void)
 {
+    if(!sm_rest)return false;
     if ((ppu.scanline == 241 || ppu.scanline == 261) && ppu.dot < 2) return false;
     if (ppu.dot >= 338) return false;
     if (hw_cart.mapper == 4) {
