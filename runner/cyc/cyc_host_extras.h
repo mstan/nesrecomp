@@ -105,6 +105,11 @@ typedef struct CycHostExtras {
     unsigned audio_rate;
     void (*audio_mix)(void *ctx, int16_t *samples, size_t count);
     void (*state_loaded)(void *ctx);
+    /* Optional initial normal-window width (in 240-row picture pixels) when
+     * the active video mode is Fit. Zero preserves the picture-sized default.
+     * Does not select Fit, override a saved mod/aspect choice, change the
+     * saved window scale/fullscreen mode, or affect headless presentation. */
+    int initial_fit_width;
 } CycHostExtras;
 
 const CycHostExtras *cyc_host_extras(void);

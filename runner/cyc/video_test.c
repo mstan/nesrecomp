@@ -3,6 +3,7 @@
  * the window exists and the one apply point, and where a compositor placed the
  * native picture (cyc_render.h) (CTest cyc_video_test). */
 #include "cyc_video.h"
+#include "cyc_window_geometry.h"
 #include "cyc_render.h"
 #include "cyc_ring.h"
 
@@ -37,6 +38,12 @@ int main(void)
     CHECK(nes_video_geometry_width_for(NES_VIDEO_FIT, 5120, 1440) == 854);    /* 32:9 */
     CHECK(nes_video_geometry_width_for(NES_VIDEO_FIT, 8000, 1000) == 854);    /* clamped at 32:9 */
     CHECK(nes_video_geometry_width_for(NES_VIDEO_FIT, 500, 1000) == 256);     /* clamped at 16:15 */
+    CHECK(cyc_window_initial_fit_width(NES_VIDEO_FIT, 426, 256, 240) == 426);
+    CHECK(cyc_window_initial_fit_width(NES_VIDEO_FIT, 426, 512, 480) == 852);
+    CHECK(cyc_window_initial_fit_width(NES_VIDEO_FIT, 426, 1024, 960) == 1704);
+    CHECK(cyc_window_initial_fit_width(NES_VIDEO_FIT, 0, 1024, 960) == 1024);
+    CHECK(cyc_window_initial_fit_width(NES_VIDEO_STOCK, 426, 1024, 960) == 1024);
+    CHECK(cyc_window_initial_fit_width(NES_VIDEO_21_9, 426, 2240, 960) == 2240);
     for (int w = 100; w < 3000; w += 7)
         for (int h = 100; h < 2000; h += 13) {
             int x = nes_video_geometry_width_for(NES_VIDEO_FIT, w, h);

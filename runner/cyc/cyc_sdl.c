@@ -77,6 +77,7 @@
 #endif
 #include "cyc_tcp.h"
 #include "cyc_video.h"
+#include "cyc_window_geometry.h"
 #include "../../common/nes_cart.h"
 #include "../../common/nes_fds.h"
 #ifdef CYC_WITH_RECOMP_UI
@@ -1426,6 +1427,14 @@ int cyc_sdl_main(const char *title_in, int scale)
         fprintf(stderr, "vsync %s\n", s_vsync_supported ? "available: disabled while fast-forwarding or uncapped"
                                                       : "unavailable: presenting without synchronization");
     apply_settings();
+    /* Fit needs a useful initial drawable rather than feeding its native
+     * boot picture back into itself forever. Only titles opting in change;
+     * saved stock/fixed-aspect and fullscreen choices keep the usual path. */
+    if (!s_set.fullscreen && cyc_video_mode() == NES_VIDEO_FIT &&
+        s_extras && s_extras->initial_fit_width > 0) {
+        int initial_w = cyc_window_initial_fit_width(cyc_video_mode(), s_extras->initial_fit_width, w, h);
+        SDL_SetWindowSize(s_win, initial_w * s_set.window_scale, logical_h() * s_set.window_scale);
+    }
     SDL_RendererInfo renderer = {0}; SDL_GetRendererInfo(s_ren, &renderer);
     cyc_diagnostics_note("game window ready driver=%s renderer=%s flags=%u texture=%dx%d displays=%d",
         SDL_GetCurrentVideoDriver(), renderer.name ? renderer.name : "unknown", renderer.flags, w, h, SDL_GetNumVideoDisplays());
