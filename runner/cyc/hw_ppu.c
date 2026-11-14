@@ -2216,11 +2216,12 @@ void ppu_state_dump(void *file)
 #endif
 
 #if NESRECOMP_HEADROOM_COUNTERS
-unsigned hr_ppu_reason(void)
+unsigned hr_ppu_reason(bool known_zero)
 {
+    (void)known_zero;
 #if NESRECOMP_PPU_FRAME
     if (fp.enabled) {
-        if (ppu_native_interval_limit()) return 6;
+        if (!known_zero && fp_interval_ready()) return 6;
         /* The frame provider has event deadlines, not legacy dot kinds. */
         return 2;
     }

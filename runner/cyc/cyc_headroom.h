@@ -13,7 +13,6 @@ enum { HR_S_NONE, HR_S_RAM_R, HR_S_RAM_W, HR_S_ROM_FOLD, HR_S_FETCH_ROM, HR_S_CO
 #define HR_PATH_LOCAL uint32_t hr_origin = 0
 #define HR_PATH_START(n) HR_COUNT(hr_origin = (n))
 #define HR_PATH_ADD(n) HR_COUNT(hr_ins += (n) - hr_origin; hr_origin = (n))
-extern uint8_t hr_site;
 extern uint64_t hr_ins;
 extern uint64_t hr_frames;
 extern int hr_pc_active;

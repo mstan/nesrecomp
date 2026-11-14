@@ -190,12 +190,11 @@ static inline void run_tick_0(void)
 /* ------------------------------------------------------------------------- */
 
 #if NESRECOMP_HEADROOM_COUNTERS
-static void hr_interval_end(unsigned n, unsigned credit);
-static inline void hr_classify(uint16_t addr, HwCycleKind kind);
+static void hr_interval_end(unsigned n, unsigned credit, unsigned site);
+static inline void hr_classify(uint16_t addr, unsigned site);
 static uint64_t hr_dma_cycles, hr_dma_oam_cycles;
-uint8_t hr_site;
 static unsigned hr_refusal;
-unsigned hr_ppu_reason(void);
+unsigned hr_ppu_reason(bool known_zero);
 unsigned hr_apu_block_reason(void);
 enum { HR_R_DISABLED, HR_R_INT_PENDING, HR_R_OBSERVER, HR_R_TICK, HR_R_BOARD, HR_R_IRQ_LINE, HR_R_MMC3_IRQ_OUT,
        HR_R_NMI_EDGE, HR_R_NMI_INPUT, HR_R_APU_OAMDMA, HR_R_APU_DMC, HR_R_APU_FRAMEIRQ, HR_R_APU_OTHER,
@@ -237,7 +236,7 @@ unsigned hw_native_interval_limit(void)
         ((hw_cart.m.chr0 ^ hw_cart.m.chr1) & 0x1c)) HR_REFUSE(HR_R_BOARD);
     unsigned ppu_limit = ppu_native_interval_limit();
     unsigned limit = apu_native_interval_limit(ppu_limit);
-    if (!limit) HR_COUNT(hr_refusal = ppu_limit ? HR_R_APU_DMC : HR_R_PPU_BLANK + hr_ppu_reason());
+    if (!limit) HR_COUNT(hr_refusal = ppu_limit ? HR_R_APU_DMC : HR_R_PPU_BLANK + hr_ppu_reason(true));
     return limit;
 #undef HR_REFUSE
 }
@@ -300,11 +299,12 @@ void hw_native_begin_checked_rom(void)
 }
 #endif
 
-void hw_native_flush(void)
+static void hw_native_flush_site(unsigned site)
 {
+    (void)site;
     unsigned n = hw_native_interval.pending;
     if (n) {
-        HR_COUNT(if (!hw_isolated) hr_interval_end(n, hw_native_interval.credit));
+        HR_COUNT(if (!hw_isolated) hr_interval_end(n, hw_native_interval.credit, site));
         hw_native_interval_run(n);
         hw.cpu_addr = hw_native_interval.addr;
         hw.cpu_reading = hw_native_interval.kind != HW_WRITE;
@@ -325,6 +325,8 @@ void hw_native_flush(void)
     }
     hw_native_interval.pending = hw_native_interval.credit = 0;
 }
+
+void hw_native_flush(void) { hw_native_flush_site(HR_S_NONE); }
 
 void hw_native_end(void)
 {
@@ -369,10 +371,17 @@ void hw_native_interval_run(unsigned cycles)
 
 void hw_cycle_start(uint16_t addr, HwCycleKind kind)
 {
-#if NESRECOMP_NATIVE_INTERVALS
-    hw_native_flush();
+    unsigned site = HR_S_NONE;
+#if NESRECOMP_HEADROOM_COUNTERS
+    /* The caller chooses its site before pending time is published. Sample
+     * PPU allowance after that flush, before starting the physical cycle. */
+    site = (unsigned)kind >> 2;
+    kind = (HwCycleKind)((unsigned)kind & 3u);
 #endif
-    HR_COUNT(if (!hw_isolated) hr_classify(addr, kind));
+#if NESRECOMP_NATIVE_INTERVALS
+    hw_native_flush_site(site);
+#endif
+    HR_COUNT(if (!hw_isolated) hr_classify(addr, site));
     hw.cpu_addr = addr;
     hw.cpu_reading = kind == HW_READ || kind == HW_FETCH;
     cpu_opcode_fetch = kind == HW_FETCH;
@@ -1015,7 +1024,6 @@ static uint32_t *hr_pc_ins;
 int hr_pc_active;
 static uint64_t hr_ctx_time, hr_ctx_ins;
 static uint64_t hr_ctx_interval, hr_ctx_dma, hr_dma_ctx[3];
-unsigned hr_ppu_reason(void);
 unsigned hr_apu_block_reason(void);
 void hr_ppu_print(void);
 void hr_apu_print(void);
@@ -1032,14 +1040,12 @@ static void hr_context_sync(void)
     hr_ctx_time = now; hr_ctx_ins = hr_ins;
     hr_ctx_interval = interval; hr_ctx_dma = hr_dma_cycles;
 }
-static inline void hr_classify(uint16_t addr, HwCycleKind kind)
+static inline void hr_classify(uint16_t addr, unsigned s)
 {
-    (void)kind;
-    unsigned s = hr_site; hr_site = HR_S_NONE;
     switch (s) {
     case HR_S_RAM_R: case HR_S_RAM_W: case HR_S_ROM_FOLD: case HR_S_FETCH_ROM: case HR_S_CODE_RAM:
         { unsigned r = hw_native_interval.enabled ? hr_refusal : HR_R_DISABLED;
-          ++hr_full_joint[s][r][hr_ppu_reason()]; }
+          ++hr_full_joint[s][r][hr_ppu_reason(false)]; }
         break;
     case HR_S_IO_R: {
         unsigned c;
@@ -1068,11 +1074,11 @@ static inline void hr_classify(uint16_t addr, HwCycleKind kind)
     }
 }
 
-static void hr_interval_end(unsigned n, unsigned credit)
+static void hr_interval_end(unsigned n, unsigned credit, unsigned site)
 {
     unsigned b = 0;
     while (b < 16 && (1u << (b + 1)) <= n) ++b;
-    unsigned end = hr_site ? (hr_site == HR_S_IO_R ? 1 : hr_site == HR_S_IO_W ? 2 : 3) :
+    unsigned end = site ? (site == HR_S_IO_R ? 1 : site == HR_S_IO_W ? 2 : 3) :
         (credit == 0 ? 0 : 4);
     ++hr_iv_joint[b][end];
 }

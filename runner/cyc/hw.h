@@ -48,7 +48,15 @@ typedef enum {
     HW_READ,   /* R/W high; a pending DMA takes the CPU's cycles first */
     HW_WRITE,  /* R/W low; DMAs wait for the next read */
     HW_FETCH,  /* opcode read; PAL DMA waits for this instruction boundary */
+    /* Upper bits may carry host-only access-site metadata to the owner. */
+    HW_ANNOTATED_MAX = 255,
 } HwCycleKind;
+
+#if NESRECOMP_HEADROOM_COUNTERS
+#define HW_WITH_SITE(kind, site) ((HwCycleKind)((unsigned)(kind) | ((unsigned)(site) << 2)))
+#else
+#define HW_WITH_SITE(kind, site) (kind)
+#endif
 
 void    hw_cycle_start(uint16_t addr, HwCycleKind kind);
 uint8_t hw_read(uint16_t addr);

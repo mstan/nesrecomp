@@ -538,6 +538,28 @@ bool ppu_clock_cpu_tail(unsigned align)
     frame_ppu_ticks(1,4);cpu_nmi_input(ppu_nmi_output());
     frame_ppu_ticks(4,7);apu_sample_irq();frame_ppu_ticks(7,12);return true;
 }
+/* Exact zero/nonzero admission proof without calculating a future duration.
+ * MMC3 uses the same invalidated IRQ-deadline cache as the actual executor. */
+#if NESRECOMP_HEADROOM_COUNTERS
+static bool fp_interval_ready(void)
+{
+    if ((ppu.scanline == 241 || ppu.scanline == 261) && ppu.dot < 2) return false;
+    if (ppu.dot >= 338) return false;
+    if (hw_cart.mapper == 4) {
+        if (ppu.w2006_delay && ppu.w2006_delay < 4) return false;
+        if ((!rendering() || (ppu.scanline >= 240 && ppu.scanline != 261)) &&
+            ((ppu.v ^ (hw_cart.m.a12 << 12)) & 0x1000)) return false;
+        if (rendering() && (ppu.scanline < 240 || ppu.scanline == 261)) {
+            unsigned edge = fp_irq_deadline();
+            /* The original first-dot phase is 1..4 master clocks. Its
+             * before-edge CPU duration is nonzero exactly four dots away. */
+            if (edge < 341 && edge < ppu.dot + 4u) return false;
+        }
+    }
+    return true;
+}
+#endif
+
 unsigned ppu_native_interval_limit(void)
 {
     if(!fp.enabled) return reference_ppu_native_interval_limit();
