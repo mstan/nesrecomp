@@ -1,6 +1,7 @@
 /* cpu6502.c - the CPU sequences that are not instruction templates. See
  * cpu6502.h. */
 #include "cpu6502.h"
+#include "cyc_core.h"
 
 #include <string.h>
 
@@ -94,6 +95,7 @@ void cpu_jam_cycle(void) {
 #include "cyc_hooks.h"
 #include <stdio.h>
 #include <stdlib.h>
+static bool native_wait_active = true;
 static uint64_t wait_cycles, wait_iterations, wait_spans;
 static uint64_t wait_attempts[3], wait_entries[3];
 static void wait_report(void) {
@@ -116,7 +118,7 @@ static void wait_attempt(unsigned kind) {
 void cpu_native_wait_jump(uint16_t pc, uint8_t high)
 {
     wait_attempt(0);
-    if ((pc & 0xffu) > 0xfdu || pc < 0x8000 || !hw_native_interval.enabled ||
+    if (!native_wait_active || (pc & 0xffu) > 0xfdu || pc < 0x8000 || !hw_native_interval.enabled ||
         hw_isolated || cyc_trace_enabled ||
         hw_prg_modified || hw_prg_data_modified ||
         (cpu.do_nmi | cpu.do_irq | cpu.do_reset)) return;
@@ -149,7 +151,7 @@ void cpu_native_wait_jump(uint16_t pc, uint8_t high)
 static bool native_wait_poll(uint16_t pc, uint8_t zp, uint8_t tail, uint8_t branch)
 {
     wait_attempt(1);
-    if ((pc & 0xffu) > 0xfbu || pc < 0x8000 || !hw_native_interval.enabled ||
+    if (!native_wait_active || (pc & 0xffu) > 0xfbu || pc < 0x8000 || !hw_native_interval.enabled ||
         hw_isolated || cyc_trace_enabled || cyc_cpu_ram_read_policy ||
         hw_prg_modified || hw_prg_data_modified ||
         (cpu.do_nmi | cpu.do_irq | cpu.do_reset) ||
@@ -205,7 +207,7 @@ bool cpu_native_wait_zero_poll(uint16_t pc, uint8_t zp, uint8_t tail)
 bool cpu_native_wait_copy_poll(uint16_t pc, uint8_t zp)
 {
     wait_attempt(2);
-    if ((pc&0xffu)>0xf7u || pc<0x8000 || !hw_native_interval.enabled ||
+    if (!native_wait_active || (pc&0xffu)>0xf7u || pc<0x8000 || !hw_native_interval.enabled ||
         hw_isolated || cyc_trace_enabled || cyc_cpu_ram_read_policy ||
         hw_prg_modified || hw_prg_data_modified ||
         (cpu.do_nmi|cpu.do_irq|cpu.do_reset) || hw.ram[zp]) return false;
@@ -253,3 +255,19 @@ bool cpu_native_wait_copy_poll(uint16_t pc, uint8_t zp)
     }
 }
 #endif
+
+bool cyc_native_wait_available(void)
+{
+    return NESRECOMP_NATIVE_WAIT_LOOPS != 0;
+}
+
+bool cyc_native_wait_select(bool native)
+{
+#if NESRECOMP_NATIVE_WAIT_LOOPS
+    hw_native_flush();
+    native_wait_active = native;
+    return true;
+#else
+    return !native;
+#endif
+}

@@ -263,6 +263,16 @@ serialized machine state. Loading invalidates derived deadlines and mixer
 cache. Executor selection stays fixed through a match, returning to the
 build's offline policy only after shutdown.
 
+`NESRECOMP_NATIVE_WAIT_LOOPS` is a separate per-title build opt-in, OFF by
+default. Capability bit128 adds `wait1` to one fixed PPU/APU profile only when
+every occupied seat offers it. Missing support retains ordinary instruction
+execution for the whole match. The common selection is made once before
+frame0; it is not a backend control or a continuously negotiated setting.
+The bootstrap identity hashes both the canonical session and selected profile,
+while exact executable/content checks and CPU-feature exchange remain mandatory.
+Shutdown restores the build's offline wait policy. This adds no save-state
+schema or cross-build compatibility promise.
+
 A Windows SMB3 HLE/APU1 two-process test with a fresh in-level checkpoint,
 48kHz synthesis, simulated latency/jitter/loss and nine rollback episodes
 preserved the confirmed picture and full canonical state with zero desyncs.

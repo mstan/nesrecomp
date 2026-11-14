@@ -15,3 +15,8 @@ collapsed service iterations are separate from instruction observations.
 Service reporting starts on the first attempted operation, including operations
 that execute only ordinary boundaries because device intervals admit no quiet
 span. Attempts, entered operations and collapsed cycles are distinct measures.
+
+The build opt-in defaults off. A netplay bootstrap may select the common
+ordinary executor before frame zero; all wait entry points honor that fixed
+policy. Shutdown restores the build's offline policy. Selection flushes clock
+debt and adds no serialized machine state.

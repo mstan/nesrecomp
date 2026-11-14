@@ -207,6 +207,9 @@ bool   cyc_audio_enable(int sample_rate);
 /* Fixed bootstrap policy. Unsupported hosts/boards retain the cycle executor. */
 bool   cyc_apu_operation_available(void);
 bool   cyc_apu_operation_select(bool native);
+/* Build opt-in; fixed before the first netplay frame, restored after shutdown. */
+bool   cyc_native_wait_available(void);
+bool   cyc_native_wait_select(bool native);
 size_t cyc_audio_read(int16_t *out, size_t max);
 /* Synthesis before the console's analog output stage. LEGACY is the existing
  * per-sample box average and remains the default. BAND_LIMITED replaces that

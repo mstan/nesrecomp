@@ -456,6 +456,7 @@ static unsigned available_profiles(void) {
     unsigned base=portable_profile();
 #ifdef NESRECOMP_CYCLE_NET
     if(cyc_apu_operation_available())base|=nes_netplay_apu_profile(base);
+    if(cyc_native_wait_available())base|=NES_NET_CAP_NATIVE_WAIT;
 #endif
     return base;
 }
@@ -476,6 +477,7 @@ static void make_caps(uint8_t out[96]) {
 #ifdef NESRECOMP_CYCLE_NET
     backend=1u|(cyc_native_prg_hash?2u:0u);
     if(nes_netplay_apu_profile(portable_profile())&&cyc_apu_operation_available())backend|=8u;
+    if(cyc_native_wait_available())backend|=16u;
 #else
     backend=4u;
 #endif
@@ -504,7 +506,7 @@ static int bootstrap_apply(const uint8_t *p,size_t n) {
     uint32_t config_len=get32(p+24),storage_len=get32(p+28);
     if(config_len<2||config_len>sizeof g_np.session_text||n!=448u+config_len+storage_len||p[448+config_len-1]||
        memchr(p+448,0,config_len-1))return 0;
-    uint8_t hash[32];nes_sha256(p+448,config_len-1,hash);if(memcmp(hash,p+32,32))return 0;
+    uint8_t hash[32];nes_netplay_profile_identity((const char *)p+448,selected,hash);if(memcmp(hash,p+32,32))return 0;
     for(int seat=0;seat<g_np.slot_count;seat++)if(mask&(1u<<seat)) {
         if(!accept_caps(p+64+96*seat,96)||
            !nes_netplay_profile_compatible(selected,available_profiles(),get32(p+64+96*seat+20)))return 0;
@@ -525,9 +527,11 @@ static int bootstrap_apply(const uint8_t *p,size_t n) {
 #endif
     if(storage_len&&!np_sram_load(p+448+config_len,storage_len))return 0;
 #ifdef NESRECOMP_CYCLE_NET
-    if(!cyc_apu_operation_select(selected==nes_netplay_apu_profile(portable_profile())))return 0;
+    if(!cyc_apu_operation_select((selected&~NES_NET_CAP_NATIVE_WAIT)==nes_netplay_apu_profile(portable_profile()))||
+       !cyc_native_wait_select((selected&NES_NET_CAP_NATIVE_WAIT)!=0))return 0;
 #endif
-    fprintf(stderr,"NET_PROFILE_SEALED profile=%s revision=1 input=2 reference=%s exact_build=1\n",nes_netplay_profile_contract(selected),ref);
+    char identity[65];for(unsigned i=0;i<32;i++)snprintf(identity+2*i,3,"%02x",hash[i]);
+    fprintf(stderr,"NET_PROFILE_SEALED profile=%s revision=1 input=2 reference=%s exact_build=1 identity=%s\n",nes_netplay_profile_contract(selected),ref,identity);
     return 1;
 }
 static int np_sram_barrier_step(void) {
@@ -557,20 +561,17 @@ static int np_sram_barrier_step(void) {
         } else {np_set_error("unexpected_bootstrap_blob");return -1;}
     }
     if(g_np.local_slot==0 && (g_np.caps_seen&mask)==mask && !g_np.boot_sent) {
-        unsigned selected=portable_profile(),native=nes_netplay_apu_profile(selected);
-        if(native) {
-            int common=1;
-            for(int seat=0;seat<g_np.slot_count;seat++)if(mask&(1u<<seat))
-                if(!(get32(g_np.caps[seat]+20)&native))common=0;
-            if(common)selected=native;
-        }
+        unsigned common=available_profiles();
+        for(int seat=0;seat<g_np.slot_count;seat++)if(mask&(1u<<seat))common&=get32(g_np.caps[seat]+20);
+        unsigned selected=nes_netplay_profile_choose(portable_profile(),common);
+        if(!selected){np_set_error("common_profile_unavailable");return -1;}
         size_t storage_len=0;const uint8_t *storage=g_np.sram_needed?np_sram(&storage_len):NULL;
         size_t config_len=strlen(g_np.session_text)+1,total=448+config_len+storage_len;
         if((g_np.sram_needed&&!storage)||config_len>512){np_set_error("bootstrap_storage");return -1;}
         free(g_np.boot_blob);g_np.boot_blob=(uint8_t *)calloc(1,total);if(!g_np.boot_blob)return -1;
         uint8_t *p=g_np.boot_blob;memcpy(p,"NESBOOT2",8);put32(p+8,NES_NETPLAY_INPUT_VERSION);put32(p+12,g_np.slot_count);
         put32(p+16,mask);put32(p+20,selected);put32(p+24,(uint32_t)config_len);put32(p+28,(uint32_t)storage_len);
-        nes_sha256((const uint8_t *)g_np.session_text,config_len-1,p+32);memcpy(p+64,g_np.caps,sizeof g_np.caps);
+        nes_netplay_profile_identity(g_np.session_text,selected,p+32);memcpy(p+64,g_np.caps,sizeof g_np.caps);
         memcpy(p+448,g_np.session_text,config_len);if(storage_len)memcpy(p+448+config_len,storage,storage_len);
         if(!bootstrap_apply(p,total)){np_set_error("host_profile_refused");return -1;}
         if(rnet_session_state_begin(g_np.session,RNET_STATE_OP_SRAM,0,p,total)!=0)return 0;

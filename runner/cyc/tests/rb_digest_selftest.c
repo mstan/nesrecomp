@@ -82,6 +82,34 @@ static void capability_contract(void) {
     assert(!nes_netplay_profile_compatible(40,40,40));
     assert(!nes_netplay_profile_compatible(8,8,16));
     assert(!nes_netplay_profile_compatible(8,8,32));
+    /* Wait ownership is orthogonal to the fixed PPU/APU choice. Mixed hosts
+     * must choose one common fallback, never an unsupported operation bit. */
+    const uint32_t w=NES_NET_CAP_NATIVE_WAIT;
+    assert(nes_netplay_profile_choose(8,8|64|w)==(64|w));
+    assert(nes_netplay_profile_choose(8,(8|64|w)&(8|64))==64);
+    assert(nes_netplay_profile_choose(8,(8|64|w)&(8|w))==(8|w));
+    assert(nes_netplay_profile_choose(8,(8|64|w)&8)==8);
+    assert(nes_netplay_profile_choose(1,1|w)==(1|w));
+    assert(nes_netplay_profile_choose(4,4|32|w)==(32|w));
+    assert(nes_netplay_profile_choose(2,2|w)==2);
+    assert(!nes_netplay_profile_choose(0,8|w));
+    assert(!nes_netplay_profile_choose(64,8|64|w));
+    assert(!nes_netplay_profile_choose(8,w));
+    assert(nes_netplay_profile_choose(8,8|0x80000000u)==8);
+    assert(nes_netplay_profile_compatible(64|w,8|64|w,8|64|w));
+    assert(!nes_netplay_profile_compatible(64|w,8|64|w,8|64));
+    assert(!nes_netplay_profile_compatible(8|w,8|w,4|w));
+    assert(!nes_netplay_profile_compatible(2|w,2|w,2|w));
+    assert(!nes_netplay_profile_compatible(8|64|w,8|64|w,8|64|w));
+    assert(!nes_netplay_profile_compatible(0x80000008u,0x80000008u,0x80000008u));
+    assert(!strcmp(nes_netplay_profile_contract(64|w),"cycle-frame-apu1-wait1-c1"));
+    assert(!strcmp(nes_netplay_profile_contract(8|w),"cycle-frame-wait1-c1"));
+    assert(!strcmp(nes_netplay_profile_contract(1|w),"cycle-lle-wait1-c2"));
+    uint8_t a[32],b[32],again[32];
+    nes_netplay_profile_identity("session",64,a);
+    nes_netplay_profile_identity("session",64|w,b);assert(memcmp(a,b,32));
+    nes_netplay_profile_identity("session",64|w,again);assert(!memcmp(b,again,32));
+    nes_netplay_profile_identity("changed",64|w,again);assert(memcmp(b,again,32));
 }
 static void config_reference(void) {
     char guarded[80];memset(guarded,0x5a,sizeof guarded);

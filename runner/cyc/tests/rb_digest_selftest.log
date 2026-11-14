@@ -1,0 +1,3 @@
+The existing capability contract covers matching and mixed native-wait support,
+portable fallback, invalid mixed profiles, legacy exclusion, unknown bits and
+profile-bound canonical identity. Rollback hash fixtures remain unchanged.

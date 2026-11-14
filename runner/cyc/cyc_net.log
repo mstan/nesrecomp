@@ -1,0 +1,3 @@
+The cycle host restores the build's native-wait policy only after netplay
+shutdown, alongside APU ownership. Bootstrap selection and rollback preserve
+one fixed policy for the complete match.

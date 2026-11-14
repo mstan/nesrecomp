@@ -159,6 +159,7 @@ void cyc_net_shutdown(void) {
     nes_netplay_shutdown();s_replay=false;
     /* Return to the build's offline policy only after the match has ended. */
     cyc_apu_operation_select(cyc_apu_operation_available());
+    cyc_native_wait_select(cyc_native_wait_available());
 }
 const uint8_t *cyc_net_sram(size_t *len) {
     uint32_t sizes[2]={(uint32_t)cyc_nvram_size(0),(uint32_t)cyc_nvram_size(1)};
