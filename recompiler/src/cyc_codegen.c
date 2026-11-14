@@ -828,6 +828,8 @@ typedef struct {
     const RamProgram *ram;
     bool              live;
     bool              checked_prg;
+    bool              profile_pc;
+    const uint16_t   *hr_ord; /* instruction ranks within this ROM chunk */
 } Emit;
 
 #define INTERP(e) ((e)->p == NULL)
@@ -988,10 +990,30 @@ static bool is_label(Emit *e, uint16_t addr) {
     return !crosses_slot(to.k, op_length(prg_byte(e->p, to.bank, to.k)));
 }
 
+/* Straight-line instructions share an entry rank. No host counter write is
+ * emitted at their fetches. Every non-linear edge and scheduler/context exit
+ * settles the exact executed prefix; interrupted fetches include that fetch,
+ * matching the standalone interpreter's instruction accounting. */
+static bool path_counted(const Emit *e) { return e->hr_ord && !e->view; }
+static unsigned path_rank(const Emit *e, uint16_t pc) {
+    return e->hr_ord[pc & ((1u << CHUNK_SHIFT) - 1)];
+}
+static const char *path_finish(Emit *e) {
+    return path_counted(e) ? str("HR_PATH_ADD(%u); ", path_rank(e, e->P) + 1) : "";
+}
+
 /* Continue at a constant address (compiled mode). */
 static const char *jump_const(Emit *e, uint16_t target) {
-    if (is_label(e, target)) return str("goto L_%04X;", target);
-    return str("{ cpu.pc = 0x%04X; return; }", target);
+    if (is_label(e, target)) {
+        if (!path_counted(e)) return str("goto L_%04X;", target);
+        Kind kind = OPS[e->opcode].kind;
+        bool linear = target == (uint16_t)(e->P + op_length(e->opcode)) &&
+            path_rank(e, target) == path_rank(e, e->P) + 1 &&
+            kind != K_BRANCH && kind != K_JMP && kind != K_JSR;
+        if (linear) return str("goto L_%04X;", target);
+        return str("{ %sHR_PATH_START(%u); goto L_%04X; }", path_finish(e), path_rank(e, target), target);
+    }
+    return str("{ %scpu.pc = 0x%04X; return; }", path_finish(e), target);
 }
 
 /* Continue at the next instruction. */
@@ -1005,6 +1027,7 @@ static void go_next(Emit *e) {
 
 /* Continue at the address in the C expression pc_expr. */
 static void go_expr(Emit *e, const char *pc_expr) {
+    if (path_counted(e)) ln(e, "%s", path_finish(e));
     ln(e, "cpu.pc = %s;", pc_expr);
     if (!INTERP(e)) ln(e, "return;");
 }
@@ -1069,11 +1092,11 @@ static bool bank_exit(Emit *e, WriteReach reach) {
     if (reach == WR_NEVER) return false;
     uint16_t next = (uint16_t)(e->P + op_length(e->opcode));
     if (reach == WR_ALWAYS) {
-        ln(e, "cpu.pc = 0x%04X; return;   /* wrote the mapper: re-dispatch */", next);
+        ln(e, "%scpu.pc = 0x%04X; return;   /* wrote the mapper: re-dispatch */", path_finish(e), next);
         return true;
     }
-    ln(e, "if (ea >= 0x%04X) { cpu.pc = 0x%04X; return; }   /* wrote the mapper */",
-       mapper_write_floor(e->p->mapper), next);
+    ln(e, "if (ea >= 0x%04X) { %scpu.pc = 0x%04X; return; }   /* wrote the mapper */",
+       mapper_write_floor(e->p->mapper), path_finish(e), next);
     return false;
 }
 
@@ -1325,6 +1348,7 @@ static void emit_rts(Emit *e) {
     ln(e, "cpu_read((uint16_t)(lo | hi << 8), CYC_POLL | CYC_DONE);");
     ln(e, "cpu.s = (uint8_t)(cpu.s + 2);");
     ln(e, "cpu.pc = (uint16_t)((lo | hi << 8) + 1);");
+    if (path_counted(e)) ln(e, "%s", path_finish(e));
     ln(e, "if (cyc_cpu_rts_observer) cyc_cpu_rts_observer();");
     ln(e, "return;");
 }
@@ -1336,6 +1360,7 @@ static void emit_rti(Emit *e) {
     ln(e, "uint8_t lo = cpu_read((uint16_t)(0x100 | (uint8_t)(cpu.s + 2)), 0);");
     ln(e, "uint8_t hi = cpu_read((uint16_t)(0x100 | (uint8_t)(cpu.s + 3)), CYC_POLL | CYC_DONE);");
     ln(e, "cpu.s = (uint8_t)(cpu.s + 3);");
+    if (path_counted(e)) ln(e, "%s", path_finish(e));
     ln(e, "hr_int_leave();");
     go_expr(e, "(uint16_t)(lo | hi << 8)");
 }
@@ -1387,11 +1412,13 @@ static void emit_body(Emit *e) {
     case K_PHA: case K_PHP: case K_PLA: case K_PLP: emit_stack(e, d); break;
     case K_BRK:
         if (!INTERP(e)) ln(e, "cpu.pc = 0x%04X;", e->P);
+        if (path_counted(e)) ln(e, "%s", path_finish(e));
         ln(e, "cpu_interrupt(true);");
         if (!INTERP(e)) ln(e, "return;");
         break;
     case K_HLT:
         if (!INTERP(e)) ln(e, "cpu.pc = 0x%04X;", e->P);
+        if (path_counted(e)) ln(e, "%s", path_finish(e));
         ln(e, "cpu_jam();");
         if (!INTERP(e)) ln(e, "return;");
         break;
@@ -1474,11 +1501,16 @@ static void emit_instruction(Emit *e) {
     if (cart_ram_view(e))
         out(e, "    if (hw_frame_done | cyc_ram_code_dirty) { cpu.pc = 0x%04X; return; }\n", e->P);
     else
-        out(e, "    if (hw_frame_done) { cpu.pc = 0x%04X; return; }\n", e->P);
-    if (hook_site_here(e))
+        out(e, "    if (hw_frame_done) { %scpu.pc = 0x%04X; return; }\n",
+            path_counted(e) ? str("HR_PATH_ADD(%u); ", path_rank(e, e->P)) : "", e->P);
+    if (hook_site_here(e)) {
+        if (path_counted(e)) out(e, "    HR_PATH_ADD(%u);\n", path_rank(e, e->P));
         out(e, "    if (cyc_hook_stop(0x%04X)) { cpu.pc = 0x%04X; return; }   /* mod hook site */\n", e->P, e->P);
-    out(e, "    if (%s(0x%04X, 0x%02X)) { cpu.pc = 0x%04X; cpu_interrupt(false); return; }\n",
-        cart_ram_view(e) ? "cpu_fetch_code_ram" : "cpu_fetch_rom", e->P, e->opcode, e->P);
+    }
+    if (path_counted(e) && e->profile_pc) out(e, "    hr_fetch_pc(0x%04X);\n", e->P);
+    out(e, "    if (%s(0x%04X, 0x%02X)) { %scpu.pc = 0x%04X; cpu_interrupt(false); return; }\n",
+        cart_ram_view(e) ? "cpu_fetch_code_ram" : path_counted(e) ? "cpu_fetch_rom_path" : "cpu_fetch_rom",
+        e->P, e->opcode, path_finish(e), e->P);
     out(e, "    {\n");
     if (e->live) ln(e, "const uint16_t pc = 0x%04X; uint8_t b1 = 0, b2 = 0; (void)pc; (void)b1; (void)b2;   /* operands vary */", e->P);
     emit_body(e);
@@ -1525,8 +1557,11 @@ static void emit_bank_file(const Program *p, const char *path, uint32_t bank) {
 
     /* Keep ordinary ROM chunks free of per-data-read patch policy. A second
      * optional family reads the current image and is selected per dispatch. */
-    for (unsigned checked = 0; checked < 2; ++checked) {
-        const char *suffix = checked ? "_checked" : "";
+    for (unsigned family = 0; family < 4; ++family) {
+        unsigned checked = family & 1, profile = family >> 1;
+        const char *suffix = profile ? (checked ? "_checked_profile" : "_profile") : (checked ? "_checked" : "");
+        e.profile_pc = profile != 0;
+        if (profile) fprintf(f, "#if NESRECOMP_HEADROOM_COUNTERS\n");
         e.checked_prg = checked != 0;
         if (checked) fprintf(f, "#if NESRECOMP_NATIVE_PRG_GUARDS\n");
         for (uint32_t slot = 0; slot < SLOT_COUNT; slot++) {
@@ -1543,7 +1578,7 @@ static void emit_bank_file(const Program *p, const char *path, uint32_t bank) {
                     fprintf(f, "static void chunk%s_s%u_%04X(void);\n", suffix, slot,
                             (unsigned)(base_addr + (c << CHUNK_SHIFT)));
 
-            if (!checked) {
+            if (!checked && !profile) {
                 fprintf(f, "\nconst uint8_t cyc_bits_b%02X_s%u[%u] = {", bank, slot, SLOT_SIZE / 8);
                 for (uint32_t i = 0; i < SLOT_SIZE / 8; i++) {
                     uint8_t bits = 0;
@@ -1567,12 +1602,17 @@ static void emit_bank_file(const Program *p, const char *path, uint32_t bank) {
                 if (!used[c]) continue;
                 e.chunk = c;
                 uint32_t k0 = c << CHUNK_SHIFT;
-                fprintf(f, "static void chunk%s_s%u_%04X(void) {\n    switch (cpu.pc) {\n", suffix, slot,
+                uint16_t ranks[1u << CHUNK_SHIFT] = {0};
+                unsigned rank = 0;
+                for (uint32_t k = k0; k < k0 + (1u << CHUNK_SHIFT); ++k)
+                    if (insn[k]) ranks[k - k0] = (uint16_t)rank++;
+                e.hr_ord = ranks;
+                fprintf(f, "static void chunk%s_s%u_%04X(void) {\n    HR_PATH_LOCAL;\n    switch (cpu.pc) {\n", suffix, slot,
                         (unsigned)(base_addr + k0));
                 for (uint32_t k = k0; k < k0 + (1u << CHUNK_SHIFT); k++)
                     if (insn[k])
-                        fprintf(f, "    case 0x%04X: goto L_%04X;\n", (unsigned)(base_addr + k),
-                                (unsigned)(base_addr + k));
+                        fprintf(f, "    case 0x%04X: HR_PATH_START(%u); goto L_%04X;\n", (unsigned)(base_addr + k),
+                                ranks[k-k0], (unsigned)(base_addr + k));
                 fprintf(f, "    default: return;\n    }\n");
                 for (uint32_t k = k0; k < k0 + (1u << CHUNK_SHIFT); k++) {
                     if (!insn[k]) continue;
@@ -1585,6 +1625,7 @@ static void emit_bank_file(const Program *p, const char *path, uint32_t bank) {
             }
         }
         if (checked) fprintf(f, "#endif\n");
+        if (profile) fprintf(f, "#endif\n");
     }
     fclose(f);
 }
@@ -1784,6 +1825,31 @@ static void emit_umbrella(const Program *p, const char *path, const char *prefix
                SLOT_SIZE, (1u << CHUNK_SHIFT) - 1, CHUNK_SHIFT,
                (1u << CHUNK_SHIFT) + 2, SLOT_SIZE);
 
+    fprintf(f, "#if NESRECOMP_HEADROOM_COUNTERS\n");
+    for (unsigned checked = 0; checked < 2; ++checked) {
+        const char *suffix = checked ? "_checked_profile" : "_profile";
+        if (checked) fprintf(f, "#if NESRECOMP_NATIVE_PRG_GUARDS\n");
+        for (uint32_t bank = 0; bank < p->banks; ++bank)
+            for (uint32_t slot = 0; slot < SLOT_COUNT; ++slot)
+                if (slot_used(p, bank, slot)) fprintf(f,
+                    "extern void (*const cyc_chunks%s_b%02X_s%u[%u])(void);\n",
+                    suffix, bank, slot, CHUNKS_PER_SLOT);
+        fprintf(f, "static const CycNativeView %s[CYC_BANKS][%u] = {\n",
+                checked ? "CHECKED_PROFILE_VIEWS" : "PROFILE_VIEWS", SLOT_COUNT);
+        for (uint32_t bank = 0; bank < p->banks; ++bank) {
+            fprintf(f, "    {");
+            for (uint32_t slot = 0; slot < SLOT_COUNT; ++slot) {
+                if (slot_used(p, bank, slot)) fprintf(f,
+                    " { cyc_bits_b%02X_s%u, cyc_chunks%s_b%02X_s%u },", bank, slot, suffix, bank, slot);
+                else fprintf(f, " { 0, 0 },");
+            }
+            fprintf(f, " },\n");
+        }
+        fprintf(f, "};\n");
+        if (checked) fprintf(f, "#endif\n");
+    }
+    fprintf(f, "#endif\n\n");
+
     emit_cross_table(f, p);
 
     uint32_t prg_hash = 2166136261u;
@@ -1811,10 +1877,22 @@ static void emit_umbrella(const Program *p, const char *path, const char *prefix
         "    unsigned slot = (addr >> %d) & %u;\n"
         "    unsigned bank = hw_prg_bank4(addr);\n"
         "    if (bank >= CYC_BANKS) return 0;\n"
+        "#if NESRECOMP_HEADROOM_COUNTERS\n"
+        "    bool profile_pc = hr_pc_active != 0;\n"
+        "#endif\n"
         "#if NESRECOMP_NATIVE_PRG_GUARDS\n"
         "    const CycNativeView *v = (hw_prg_modified || hw_prg_data_modified) ? &CHECKED_VIEWS[bank][slot] : &VIEWS[bank][slot];\n"
         "#else\n"
         "    const CycNativeView *v = &VIEWS[bank][slot];\n"
+        "#endif\n"
+        "#if NESRECOMP_HEADROOM_COUNTERS\n"
+        "    if (profile_pc) {\n"
+        "#if NESRECOMP_NATIVE_PRG_GUARDS\n"
+        "        v = (hw_prg_modified || hw_prg_data_modified) ? &CHECKED_PROFILE_VIEWS[bank][slot] : &PROFILE_VIEWS[bank][slot];\n"
+        "#else\n"
+        "        v = &PROFILE_VIEWS[bank][slot];\n"
+        "#endif\n"
+        "    }\n"
         "#endif\n"
         "    *out_k = addr & %uu;\n"
         "    if (!cross_ok(bank, slot, *out_k, addr)) return 0;\n"

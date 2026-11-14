@@ -169,8 +169,7 @@ static inline void cpu_trace_instruction(uint16_t pc) {
  * IRQ or reset is pending: the opcode is then discarded, and the caller runs
  * cpu_interrupt() with cpu.pc still at this instruction. The trace records
  * the instruction after any DMA cycles that delay the fetch. */
-static inline bool cpu_fetch_rom(uint16_t pc, uint8_t opcode) {
-    hr_fetch(pc);
+static inline bool cpu_fetch_rom_path(uint16_t pc, uint8_t opcode) {
     if (hw_native_reserve()) {
         hw_native_bus(pc, opcode, HW_FETCH);
         return false;
@@ -181,6 +180,13 @@ static inline bool cpu_fetch_rom(uint16_t pc, uint8_t opcode) {
     hw_read_rom(pc, opcode);
     hw_cycle_finish(false);
     return (cpu.do_nmi | cpu.do_irq | cpu.do_reset) != 0;
+}
+
+/* Non-generated callers retain standalone fetch accounting. Generated ROM
+ * paths settle their known instruction prefix at control-flow exits. */
+static inline bool cpu_fetch_rom(uint16_t pc, uint8_t opcode) {
+    hr_fetch(pc);
+    return cpu_fetch_rom_path(pc, opcode);
 }
 
 static inline bool cpu_fetch(uint16_t pc, uint8_t *opcode) {

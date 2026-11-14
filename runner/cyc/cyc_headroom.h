@@ -10,6 +10,9 @@ enum { HR_S_NONE, HR_S_RAM_R, HR_S_RAM_W, HR_S_ROM_FOLD, HR_S_FETCH_ROM, HR_S_CO
        HR_S_IO_R, HR_S_IO_W, HR_S_WATCH_W, HR_S_FETCH_INTERP, HR_S_N };
 #if NESRECOMP_HEADROOM_COUNTERS
 #define HR_COUNT(...) do { __VA_ARGS__; } while (0)
+#define HR_PATH_LOCAL uint32_t hr_origin = 0
+#define HR_PATH_START(n) HR_COUNT(hr_origin = (n))
+#define HR_PATH_ADD(n) HR_COUNT(hr_ins += (n) - hr_origin; hr_origin = (n))
 extern uint8_t hr_site;
 extern uint64_t hr_ins;
 extern uint64_t hr_frames;
@@ -29,6 +32,9 @@ static inline void hr_fetch(uint16_t pc) {
 }
 #else
 #define HR_COUNT(...) ((void)0)
+#define HR_PATH_LOCAL
+#define HR_PATH_START(n) ((void)0)
+#define HR_PATH_ADD(n) ((void)0)
 #define hr_fetch(pc) ((void)0)
 #define hr_int_enter(vector) ((void)0)
 #define hr_int_leave() ((void)0)
