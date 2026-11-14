@@ -889,9 +889,8 @@ static void clock_length_counters(void)
 }
 
 static uint64_t hr_apu_calls, hr_apu_iv_cycles, hr_audio_cycles;
-void apu_cycle(void)
+static void apu_cycle_run(void)
 {
-    HR_COUNT(++hr_apu_calls; if (audio.on) ++hr_audio_cycles);
     if (apu.strobe | apu.shift_delay[0] | apu.shift_delay[1]) {
         for (int port = 0; port < 2; port++) {
             if (apu.strobe) apu.shift_delay[port] = 0;
@@ -1033,6 +1032,15 @@ void apu_cycle(void)
  * /IRQ is one open-drain line shared with the cartridge, so a mapper's
  * interrupt (MMC3's scanline counter) is wired in parallel: a handler that
  * acknowledges the APU still sees the line held by the cartridge. */
+/* Direct clocks retain the public single-step contract. Whole-run executors
+ * below account their known duration less the existing constant-span total,
+ * instead of repeating host instrumentation in every internal step. */
+void apu_cycle(void)
+{
+    HR_COUNT(++hr_apu_calls; if (audio.on) ++hr_audio_cycles);
+    apu_cycle_run();
+}
+
 bool apu_native_interval_ready(void)
 {
 #if NESRECOMP_APU_OPERATION
@@ -1268,6 +1276,10 @@ void apu_operation_sync(void)
 {
     if (operation_running || !apu_operation_pending) return;
     unsigned cycles = apu_operation_pending;
+#if NESRECOMP_HEADROOM_COUNTERS
+    unsigned hr_cycles = cycles;
+    uint64_t hr_skipped = apu_native_event_cycles;
+#endif
     apu_operation_pending = 0;
     operation_running = true;
     while (cycles) {
@@ -1276,8 +1288,10 @@ void apu_operation_sync(void)
          * length races, DMC shifter handoff and frame-sequencer ordering. */
         unsigned n = audio.on ? constant_output_limit(cycles) : 0;
         if (n) { constant_output_run(n); cycles -= n; }
-        else { apu_cycle(); --cycles; }
+        else { apu_cycle_run(); --cycles; }
     }
+    HR_COUNT(uint64_t steps = hr_cycles - (apu_native_event_cycles - hr_skipped);
+        hr_apu_calls += steps; if (audio.on) hr_audio_cycles += steps);
     operation_running = false;
     apu_operation_deadline = operation_observation_deadline();
 }
@@ -1293,6 +1307,10 @@ void apu_native_interval_run(unsigned cycles)
         return;
     }
 #endif
+#if NESRECOMP_HEADROOM_COUNTERS
+    unsigned hr_cycles = cycles;
+    uint64_t hr_skipped = apu_native_event_cycles;
+#endif
 #if !NESRECOMP_APU_LEVEL_REFERENCE
     /* The machine proved no DMA/IRQ deadline and no expansion device on these
      * boards. Dense audible timers and short runs keep the simpler executor. */
@@ -1303,11 +1321,13 @@ void apu_native_interval_run(unsigned cycles)
         while (cycles >= 4) {
             unsigned n = constant_output_limit(cycles);
             if (n >= 4) { constant_output_run(n); cycles -= n; }
-            else { apu_cycle(); --cycles; }
+            else { apu_cycle_run(); --cycles; }
         }
     }
 #endif
-    while (cycles--) apu_cycle();
+    while (cycles--) apu_cycle_run();
+    HR_COUNT(uint64_t steps = hr_cycles - (apu_native_event_cycles - hr_skipped);
+        hr_apu_calls += steps; if (audio.on) hr_audio_cycles += steps);
 }
 
 void apu_sample_irq(void)

@@ -1000,6 +1000,9 @@ static const char *const hr_iow_names[21] = { "2000", "2001", "2002", "2003", "2
 static uint64_t hr_full_cycles, hr_full_site[HR_S_N], hr_full_reason[HR_R_N], hr_io_r[10], hr_io_w[21], hr_full_ctx[3];
 static uint64_t hr_ppu_x[HR_R_N][7];
 static uint64_t hr_iv_hist[17], hr_iv_end[5], hr_iv_ctx[3], hr_iv_cycles;
+/* Record each classified event once. The report derives the original
+ * overlapping site/refusal/PPU and length/end-reason marginal tables. */
+static uint64_t hr_full_joint[HR_S_N][HR_R_N][7], hr_iv_joint[17][5];
 uint64_t hr_ins, hr_frames;
 static uint64_t hr_ins_ctx[3], hr_cyc_ctx[3], hr_nmi_count, hr_irq_count;
 static int hr_ctx, hr_last_ctx, hr_sp, hr_pending_pop, hr_last_valid, hr_inited;
@@ -1033,11 +1036,10 @@ static inline void hr_classify(uint16_t addr, HwCycleKind kind)
 {
     (void)kind;
     unsigned s = hr_site; hr_site = HR_S_NONE;
-    ++hr_full_site[s];
     switch (s) {
     case HR_S_RAM_R: case HR_S_RAM_W: case HR_S_ROM_FOLD: case HR_S_FETCH_ROM: case HR_S_CODE_RAM:
         { unsigned r = hw_native_interval.enabled ? hr_refusal : HR_R_DISABLED;
-          ++hr_ppu_x[r][hr_ppu_reason()]; }
+          ++hr_full_joint[s][r][hr_ppu_reason()]; }
         break;
     case HR_S_IO_R: {
         unsigned c;
@@ -1062,7 +1064,7 @@ static inline void hr_classify(uint16_t addr, HwCycleKind kind)
         else c = 13 + (((addr >> 13) & 3) * 2 + (addr & 1));
         ++hr_io_w[c];
         break; }
-    default: break;
+    default: ++hr_full_site[s]; break;
     }
 }
 
@@ -1070,9 +1072,9 @@ static void hr_interval_end(unsigned n, unsigned credit)
 {
     unsigned b = 0;
     while (b < 16 && (1u << (b + 1)) <= n) ++b;
-    ++hr_iv_hist[b];
-    if (hr_site) ++hr_iv_end[hr_site == HR_S_IO_R ? 1 : hr_site == HR_S_IO_W ? 2 : 3];
-    else ++hr_iv_end[credit == 0 ? 0 : 4];
+    unsigned end = hr_site ? (hr_site == HR_S_IO_R ? 1 : hr_site == HR_S_IO_W ? 2 : 3) :
+        (credit == 0 ? 0 : 4);
+    ++hr_iv_joint[b][end];
 }
 
 static char *hr_output;
@@ -1101,6 +1103,28 @@ void hr_dump(void)
     hr_context_sync();
     /* Derive overlapping totals at observation time, rather than updating
      * the same event through several counters in the hot paths. */
+    memset(hr_ppu_x, 0, sizeof(hr_ppu_x));
+    static const unsigned sites[] = { HR_S_RAM_R, HR_S_RAM_W, HR_S_ROM_FOLD, HR_S_FETCH_ROM, HR_S_CODE_RAM };
+    for (unsigned k = 0; k < sizeof(sites) / sizeof(sites[0]); ++k) {
+        unsigned site = sites[k];
+        hr_full_site[site] = 0;
+        for (unsigned reason = 0; reason < HR_R_N; ++reason)
+            for (unsigned ppu = 0; ppu < 7; ++ppu) {
+                uint64_t n = hr_full_joint[site][reason][ppu];
+                hr_full_site[site] += n;
+                hr_ppu_x[reason][ppu] += n;
+            }
+    }
+    hr_full_site[HR_S_IO_R] = hr_full_site[HR_S_IO_W] = 0;
+    for (unsigned k = 0; k < 10; ++k) hr_full_site[HR_S_IO_R] += hr_io_r[k];
+    for (unsigned k = 0; k < 21; ++k) hr_full_site[HR_S_IO_W] += hr_io_w[k];
+    memset(hr_iv_hist, 0, sizeof(hr_iv_hist));
+    memset(hr_iv_end, 0, sizeof(hr_iv_end));
+    for (unsigned length = 0; length < 17; ++length)
+        for (unsigned end = 0; end < 5; ++end) {
+            hr_iv_hist[length] += hr_iv_joint[length][end];
+            hr_iv_end[end] += hr_iv_joint[length][end];
+        }
     hr_full_cycles = 0;
     for (unsigned i = 0; i < HR_S_N; ++i) hr_full_cycles += hr_full_site[i];
     for (unsigned i = 0; i < HR_R_N; ++i) {
