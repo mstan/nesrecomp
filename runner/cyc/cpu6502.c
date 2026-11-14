@@ -106,10 +106,16 @@ static void wait_report(void) {
                 (unsigned long long)wait_attempts[2], (unsigned long long)wait_entries[0],
                 (unsigned long long)wait_entries[1], (unsigned long long)wait_entries[2]);
 }
+static void wait_attempt(unsigned kind) {
+    /* An operation may own only ordinary boundaries when no device span is
+     * admitted. Report those real attempts and entries as well. */
+    if (!(wait_attempts[0] | wait_attempts[1] | wait_attempts[2])) atexit(wait_report);
+    ++wait_attempts[kind];
+}
 
 void cpu_native_wait_jump(uint16_t pc, uint8_t high)
 {
-    ++wait_attempts[0];
+    wait_attempt(0);
     if ((pc & 0xffu) > 0xfdu || pc < 0x8000 || !hw_native_interval.enabled ||
         hw_isolated || cyc_trace_enabled ||
         hw_prg_modified || hw_prg_data_modified ||
@@ -122,7 +128,6 @@ void cpu_native_wait_jump(uint16_t pc, uint8_t high)
         unsigned cycles = hw_native_interval_limit();
         cycles -= cycles % 3;
         if (!cycles) break;
-        if (!wait_spans) atexit(wait_report);
         /* One iteration ends with the last ROM operand read.
          * The shared device interval proves that no observer can distinguish
          * its internal bus phases; publish the final phase exactly once. */
@@ -143,7 +148,7 @@ void cpu_native_wait_jump(uint16_t pc, uint8_t high)
  * There is no second DMA, interrupt or partial-instruction sequencer. */
 static bool native_wait_poll(uint16_t pc, uint8_t zp, uint8_t tail, uint8_t branch)
 {
-    ++wait_attempts[1];
+    wait_attempt(1);
     if ((pc & 0xffu) > 0xfbu || pc < 0x8000 || !hw_native_interval.enabled ||
         hw_isolated || cyc_trace_enabled || cyc_cpu_ram_read_policy ||
         hw_prg_modified || hw_prg_data_modified ||
@@ -162,7 +167,6 @@ static bool native_wait_poll(uint16_t pc, uint8_t zp, uint8_t tail, uint8_t bran
         if (hw_frame_done || (cpu.do_nmi | cpu.do_irq | cpu.do_reset)) return true;
         unsigned cycles=hw_native_interval_limit();cycles-=cycles%6;
         if (cycles) {
-            if (!wait_spans) atexit(wait_report);
             cpu.a=hw.ram[zp];cpu_nz(cpu.a);
             hw_native_interval.pending=cycles;
             hw_native_interval.addr=(uint16_t)(pc+4);
@@ -200,7 +204,7 @@ bool cpu_native_wait_zero_poll(uint16_t pc, uint8_t zp, uint8_t tail)
  * retain zero. Every interrupt/frame exit remains an instruction boundary. */
 bool cpu_native_wait_copy_poll(uint16_t pc, uint8_t zp)
 {
-    ++wait_attempts[2];
+    wait_attempt(2);
     if ((pc&0xffu)>0xf7u || pc<0x8000 || !hw_native_interval.enabled ||
         hw_isolated || cyc_trace_enabled || cyc_cpu_ram_read_policy ||
         hw_prg_modified || hw_prg_data_modified ||
@@ -219,7 +223,6 @@ bool cpu_native_wait_copy_poll(uint16_t pc, uint8_t zp)
         if (hw_frame_done || (cpu.do_nmi|cpu.do_irq|cpu.do_reset)) return true;
         unsigned cycles=hw_native_interval_limit();cycles-=cycles%10;
         if (cycles) {
-            if (!wait_spans) atexit(wait_report);
             cpu.y=cycles>=20?0:cpu.a;cpu.a=0;cpu_nz(0);
             hw_native_interval.pending=cycles;
             hw_native_interval.addr=(uint16_t)(pc+7);

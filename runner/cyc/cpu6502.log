@@ -11,3 +11,7 @@ RAM observers, armed hooks at either instruction, modified program bytes,
 isolated calls, tracing, pending interrupts and the existing mapper guard all
 retain ordinary execution. Host counters count only actual fetch attempts;
 collapsed service iterations are separate from instruction observations.
+
+Service reporting starts on the first attempted operation, including operations
+that execute only ordinary boundaries because device intervals admit no quiet
+span. Attempts, entered operations and collapsed cycles are distinct measures.
