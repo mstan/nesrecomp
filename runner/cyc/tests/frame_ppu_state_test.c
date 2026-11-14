@@ -41,28 +41,30 @@ int main(void)
         cyc_snapshot_free(snapshot);
         printf("PASS align=%u dot=%u native picture snapshot replay\n",align,dot);
     }
-    /* A nonempty retained input must survive restore while its first pixels
-     * are still pending, independently of the global derived row cache. */
-    check(cyc_load_ines(rom,sizeof(rom)),"load retained-prefix NROM");cyc_power_on(0);
-    for(unsigned i=0;i<sizeof(ppu.ciram);++i)ppu.ciram[i]=(uint8_t)(i*7u+(i>>5));
-    for(unsigned i=0;i<32;++i)ppu.palette[i]=(uint8_t)i;
-    memset(ppu.oam,0xff,sizeof(ppu.oam));
-    ppu.scanline=193;ppu.dot=10;ppu.frame_line_v=0;ppu.fine_x=5;
-    ppu.show_bg=ppu.show_spr=1;ppu_state_reloaded();
-    ppu_write(0x2001,0);check(ppu.frame_hold_status==1,"retained pattern captured");
-    ppu.dot=334;ppu_write(0x2001,0x18);
-    check(ppu.frame_hold_status==2 && ppu.frame_prefix_line==194,"late-resume prefix pending");
-    ppu.scanline=194;ppu.dot=4;ppu_state_reloaded();
-    CycSnapshot *snapshot=cyc_snapshot_new();check(snapshot!=NULL,"prefix snapshot allocation");
-    cyc_snapshot_take(snapshot);
-    for(unsigned i=0;i<1000;++i)read_cycle();
-    uint64_t hardware=cyc_hw_state_hash(),memory=cyc_mem_state_hash();
-    memcpy(expected,hw_frame_index,sizeof(expected));
-    cyc_snapshot_restore(snapshot);
-    for(unsigned i=0;i<1000;++i)read_cycle();
-    check(hardware==cyc_hw_state_hash(),"retained-prefix hardware replay");
-    check(memory==cyc_mem_state_hash(),"retained-prefix memory replay");
-    check(!memcmp(expected,hw_frame_index,sizeof(expected)),"retained-prefix picture replay");
-    cyc_snapshot_free(snapshot);puts("PASS retained-pattern prefix current-build replay");
+    /* A real address copy can land between a tile's nametable and plane
+     * reads. Restore the pending input operation through every CPU/PPU
+     * alignment; no derived picture prefix is reconstructed from memory. */
+    for(unsigned align=0;align<4;++align) {
+        check(cyc_load_ines(rom,sizeof(rom)),"load pending-input NROM");cyc_power_on((uint8_t)align);
+        for(unsigned i=0;i<sizeof(ppu.ciram);++i)ppu.ciram[i]=(uint8_t)(i*7u+(i>>5));
+        for(unsigned i=0;i<32;++i)ppu.palette[i]=(uint8_t)i;
+        memset(ppu.oam,0xff,sizeof(ppu.oam));
+        write_cycle(0x4017,0x40);write_cycle(0x2000,0);write_cycle(0x2001,0x1e);
+        while(ppu.scanline!=80 || ppu.dot<323)read_cycle();
+        write_cycle(0x2006,0);write_cycle(0x2006,0);
+        check(ppu.w2006_delay!=0,"address copy still pending");
+        CycSnapshot *snapshot=cyc_snapshot_new();check(snapshot!=NULL,"pending-input snapshot allocation");
+        cyc_snapshot_take(snapshot);
+        for(unsigned i=0;i<1000;++i)read_cycle();
+        uint64_t hardware=cyc_hw_state_hash(),memory=cyc_mem_state_hash();
+        memcpy(expected,hw_frame_index,sizeof(expected));
+        cyc_snapshot_restore(snapshot);
+        for(unsigned i=0;i<1000;++i)read_cycle();
+        check(hardware==cyc_hw_state_hash(),"pending-input hardware replay");
+        check(memory==cyc_mem_state_hash(),"pending-input memory replay");
+        check(!memcmp(expected,hw_frame_index,sizeof(expected)),"pending-input picture replay");
+        cyc_snapshot_free(snapshot);
+        printf("PASS align=%u pending input/current-build replay\n",align);
+    }
     return 0;
 }

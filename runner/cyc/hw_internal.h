@@ -423,11 +423,7 @@ typedef struct {
     uint8_t  palette[32];
     uint8_t  ciram[0x1000] /* upper 2 KiB belongs to four-screen cartridges */;
 #if NESRECOMP_PPU_FRAME
-    uint16_t frame_line_v;
-    uint8_t frame_fine_x_delay, frame_fine_x_value;
-    uint32_t frame_bg_hold, frame_at_hold;
-    uint16_t frame_prefix_line;
-    uint8_t frame_hold_status;
+    uint16_t frame_sprites[256],frame_sprite_line;
 #endif
 } HwPpu;
 

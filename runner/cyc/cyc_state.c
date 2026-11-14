@@ -43,7 +43,7 @@ static uint32_t layout_signature(void)
     const uint64_t sizes[] = { sizeof(Cpu6502), sizeof(HwMachine), sizeof(HwCart), sizeof(HwPpu), apu_size,
                                hle_size, sizeof(CycLine), cyc_native_ram_view_count, apu_output_save(NULL, 0)
 #if NESRECOMP_PPU_FRAME
-                               , 0x4652414d45000003ull /* native picture schema */
+                               , 0x4652414d45000007ull /* native picture schema */
 #endif
 #if NESRECOMP_PPU_HLE
                                , 0x505055484c450001ull /* packed PPU schema, HLE only */

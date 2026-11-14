@@ -1,0 +1,23 @@
+hw_ppu_frame.inc: timestamped native background input service
+Reference: hw_ppu.c bg_fetch/bg_commit, general_dot/general_half_dot,
+compute_pixel/output_pixel and the reference register/data-port adapters.
+
+The FRAME provider owns admitted background-input packets, retains actual
+nametable/attribute/plane reads and commits, and publishes the existing
+three-dot color pipeline. A later bank/register write cannot reconstruct or
+replace an input already fetched. Ordinary object selection and sprite-row
+composition remain scanline operations; the sprite presentation uses primary
+OAM and the selected native row. Unsupported boards/regions retain the
+build's reference provider.
+
+Current-build states retain the actual bounded background pipeline and the
+native sprite row. FRAME schema 7 deliberately replaces the prior disposable
+prefix representation. Other PPU providers retain their layout and adapter.
+The implementation is portable C and adds no live backend/profile switch.
+
+Validation completed for this source: the FRAME/APU-off SMB3 cold route
+matches HLE for all 2,400 recorded frame products, PCM, memory, screenshots
+and periodic presentation products. Current-build continuation is exact.
+The FRAME/APU-operation state test passes 16 ordinary and four pending-input
+snapshot cases across every CPU/PPU alignment. Further game, performance,
+platform and netplay qualification remains separate from these checks.

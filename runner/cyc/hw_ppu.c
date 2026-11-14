@@ -2145,8 +2145,7 @@ static const struct {
     PPU_FIELD(oamc_disabled_now), PPU_FIELD(oamc_pending), PPU_FIELD(oamc_index), PPU_FIELD(oamc_reenabled),
     PPU_FIELD(palc_disabled), PPU_FIELD(palc_v_left), PPU_FIELD(color),
 #if NESRECOMP_PPU_FRAME
-    PPU_FIELD(frame_line_v), PPU_FIELD(frame_fine_x_delay), PPU_FIELD(frame_fine_x_value),
-    PPU_FIELD(frame_bg_hold), PPU_FIELD(frame_at_hold), PPU_FIELD(frame_prefix_line), PPU_FIELD(frame_hold_status),
+    PPU_FIELD(frame_sprites), PPU_FIELD(frame_sprite_line),
 #endif
 };
 
