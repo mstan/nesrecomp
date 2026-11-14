@@ -52,7 +52,7 @@ CycRamInit cyc_ram_init = CYC_RAM_PATTERN;
 static uint32_t frame_argb[256 * 240];
 static void clock_cpu_devices(void)
 {
-    if (!hw_extra_timing.active) apu_cycle();
+    if (!hw_extra_timing.active) apu_clock();
 }
 
 /* ------------------------------------------------------------------------- */

@@ -458,6 +458,25 @@ HW_INLINE bool ppu_nmi_output(void) { return ppu.nmi_enable && ppu.vblank; }
 void    apu_power_on(void);
 /* The APU's once-per-CPU-cycle clock (tick 0). */
 void    apu_cycle(void);
+/* Clock debt is host scheduling work. Observations and snapshots drain it. */
+#ifndef NESRECOMP_APU_OPERATION
+#define NESRECOMP_APU_OPERATION 0
+#endif
+#if NESRECOMP_APU_OPERATION && defined(NESRECOMP_CYCLE_NET)
+#error The experimental APU operation has no qualified netplay profile
+#endif
+#if NESRECOMP_APU_OPERATION
+extern unsigned apu_operation_pending, apu_operation_deadline;
+extern bool apu_operation_active;
+void apu_operation_sync(void);
+HW_ALWAYS_INLINE void apu_clock(void)
+{
+    if (apu_operation_active) ++apu_operation_pending;
+    else apu_cycle();
+}
+#else
+HW_ALWAYS_INLINE void apu_clock(void) { apu_cycle(); }
+#endif
 bool    apu_native_interval_ready(void);
 unsigned apu_native_interval_limit(unsigned cycles);
 void    apu_native_interval_run(unsigned cycles);

@@ -140,6 +140,10 @@ static void dmc_deadline_cases(bool reference)
                        (unsigned long long)cyc_hw_state_hash(),
                        (unsigned long long)cyc_mem_state_hash());
         }
+        ApuDmcView dmc;
+        apu_debug_dmc(&dmc);
+        check(dmc.playing && dmc.enable && dmc.bytes,
+              "looping DMC reader commits delayed enable and sample fetches");
         access_bus(0x4016, 1, true);
         access_bus(0x4016, 0, true);
         for (unsigned j = 0; j < 8; ++j) access_bus(0x4016, 0, false);
