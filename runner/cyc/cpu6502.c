@@ -91,6 +91,7 @@ void cpu_jam_cycle(void) {
 #if NESRECOMP_NATIVE_WAIT_LOOPS
 #include "hw_internal.h"
 #include "cyc_recomp.h"
+#include "cyc_hooks.h"
 #include <stdio.h>
 #include <stdlib.h>
 static uint64_t wait_cycles, wait_iterations, wait_spans;
@@ -128,6 +129,51 @@ void cpu_native_wait_jump(uint16_t pc, uint8_t high)
         wait_cycles += cycles;
         wait_iterations += cycles / 3;
         ++wait_spans;
+    }
+}
+
+/* One immutable LDA-zp/BPL-back operation. Complete quiet iterations use the
+ * shared device deadline; boundary instructions use the ordinary CPU bus API.
+ * There is no second DMA, interrupt or partial-instruction sequencer. */
+bool cpu_native_wait_poll(uint16_t pc, uint8_t zp, uint8_t tail)
+{
+    if ((pc & 0xffu) > 0xfbu || pc < 0x8000 || !hw_native_interval.enabled ||
+        hw_isolated || cyc_trace_enabled || cyc_cpu_ram_read_policy ||
+        hw_prg_modified || hw_prg_data_modified ||
+        (cpu.do_nmi | cpu.do_irq | cpu.do_reset) || (hw.ram[zp] & 0x80)) return false;
+    if (hw_cart.mapper==1 && (hw_cart.m.ctrl&0x10) &&
+        ((hw_cart.m.chr0^hw_cart.m.chr1)&0x1c)) return false;
+    if (cyc_hooks_armed)
+        for (uint32_t i=0;i<cyc_native_hook_site_count;++i)
+            if (cyc_native_hook_sites[i].addr==pc ||
+                cyc_native_hook_sites[i].addr==(uint16_t)(pc+2)) return false;
+    for (;;) {
+        hw_native_flush();
+        cpu.pc=pc;
+        if (hw_frame_done || (cpu.do_nmi | cpu.do_irq | cpu.do_reset)) return true;
+        unsigned cycles=hw_native_interval_limit();cycles-=cycles%6;
+        if (cycles) {
+            if (!wait_spans) atexit(wait_report);
+            cpu.a=hw.ram[zp];cpu_nz(cpu.a);
+            hw_native_interval.pending=cycles;
+            hw_native_interval.addr=(uint16_t)(pc+4);
+            hw_native_interval.kind=HW_READ;
+            hw_native_interval.value=tail;hw_native_interval.driven=1;
+            wait_cycles+=cycles;wait_iterations+=cycles/6;++wait_spans;
+            continue;
+        }
+        if (cpu_fetch_rom(pc,0xa5)) {cpu_interrupt(false);return true;}
+        cpu_read_rom((uint16_t)(pc+1),zp,0);
+        cpu.a=cpu_read(zp,CYC_POLL|CYC_DONE);cpu_nz(cpu.a);
+        cpu.pc=(uint16_t)(pc+2);
+        if (hw_frame_done || (cpu.do_nmi | cpu.do_irq | cpu.do_reset)) return true;
+        if (cpu_fetch_rom(cpu.pc,0x10)) {cpu_interrupt(false);return true;}
+        if (cpu.n) {
+            cpu_read_rom((uint16_t)(pc+3),0xfc,CYC_POLL|CYC_DONE);
+            cpu.pc=(uint16_t)(pc+4);return true;
+        }
+        cpu_read_rom((uint16_t)(pc+3),0xfc,CYC_POLL);
+        cpu_read_rom((uint16_t)(pc+4),tail,CYC_DONE);
     }
 }
 #endif
