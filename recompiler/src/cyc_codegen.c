@@ -1507,6 +1507,38 @@ static void emit_instruction(Emit *e) {
         if (path_counted(e)) out(e, "    HR_PATH_ADD(%u);\n", path_rank(e, e->P));
         out(e, "    if (cyc_hook_stop(0x%04X)) { cpu.pc = 0x%04X; return; }   /* mod hook site */\n", e->P, e->P);
     }
+    /* A service owns its boundary fetches. Publish only preceding generated
+     * work before attempting it; failed admission leaves this label's rank
+     * intact for ordinary fallthrough. No virtual opcode fetch is recorded. */
+    if (e->p && !cart_ram_view(e) && !e->live && e->opcode == 0x4c &&
+        !hook_site_here(e) &&
+        (e->P & 0xffu) <= 0xfdu && e->at.k + 2 < SLOT_SIZE &&
+        e->P == (uint16_t)(insn_byte(e, 1) | insn_byte(e, 2) << 8)) {
+        out(e, "#if NESRECOMP_NATIVE_WAIT_LOOPS\n");
+        if (path_counted(e)) out(e, "    HR_PATH_ADD(%u);\n", path_rank(e, e->P));
+        out(e, "    cpu_native_wait_jump(0x%04X, 0x%02X);\n", e->P, insn_byte(e, 2));
+        out(e, "    if (hw_frame_done) { cpu.pc = 0x%04X; return; }\n", e->P);
+        out(e, "#endif\n");
+    }
+    if (e->p && !cart_ram_view(e) && !e->live && e->opcode == 0xa5 &&
+        (e->P & 0xffu) <= 0xfbu && e->at.k + 4 < SLOT_SIZE &&
+        insn_byte(e, 2) == 0x10 && insn_byte(e, 3) == 0xfc) {
+        out(e, "#if NESRECOMP_NATIVE_WAIT_LOOPS\n");
+        if (path_counted(e)) out(e, "    HR_PATH_ADD(%u);\n", path_rank(e, e->P));
+        out(e, "    if (cpu_native_wait_poll(0x%04X, 0x%02X, 0x%02X)) return;\n",
+            e->P, insn_byte(e, 1), insn_byte(e, 4));
+        out(e, "#endif\n");
+    }
+    if (e->p && !cart_ram_view(e) && !e->live && e->opcode == 0xa8 &&
+        (e->P & 0xffu) <= 0xf7u && e->at.k + 7 < SLOT_SIZE &&
+        insn_byte(e, 1) == 0xa5 && insn_byte(e, 3) == 0xd0 &&
+        insn_byte(e, 4) == 3 && insn_byte(e, 5) == 0x4c &&
+        insn_byte(e, 6) == (uint8_t)e->P && insn_byte(e, 7) == (uint8_t)(e->P >> 8)) {
+        out(e, "#if NESRECOMP_NATIVE_WAIT_LOOPS\n");
+        if (path_counted(e)) out(e, "    HR_PATH_ADD(%u);\n", path_rank(e, e->P));
+        out(e, "    if (cpu_native_wait_copy_poll(0x%04X, 0x%02X)) return;\n", e->P, insn_byte(e, 2));
+        out(e, "#endif\n");
+    }
     if (path_counted(e) && e->profile_pc) out(e, "    hr_fetch_pc(0x%04X);\n", e->P);
     out(e, "    if (%s(0x%04X, 0x%02X)) { %scpu.pc = 0x%04X; cpu_interrupt(false); return; }\n",
         cart_ram_view(e) ? "cpu_fetch_code_ram" : path_counted(e) ? "cpu_fetch_rom_path" : "cpu_fetch_rom",

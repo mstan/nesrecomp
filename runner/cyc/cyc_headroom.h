@@ -1,4 +1,6 @@
 /* Host-only measurement totals. They never enter snapshots or netplay identity. */
+/* Instructions are real fetch attempts; native service work is reported
+ * separately and never invents instruction or PC observations. */
 #pragma once
 #include <stdint.h>
 #include <stddef.h>

@@ -95,22 +95,28 @@ void cpu_jam_cycle(void) {
 #include <stdio.h>
 #include <stdlib.h>
 static uint64_t wait_cycles, wait_iterations, wait_spans;
+static uint64_t wait_attempts[3], wait_entries[3];
 static void wait_report(void) {
     if (getenv("NESRECOMP_WAIT_REPORT"))
-        fprintf(stderr, "native_wait: cycles=%llu iterations=%llu spans=%llu\n",
+        fprintf(stderr, "native_wait: cycles=%llu iterations=%llu spans=%llu jump_attempts=%llu poll_attempts=%llu copy_attempts=%llu jump_entries=%llu poll_entries=%llu copy_entries=%llu\n",
                 (unsigned long long)wait_cycles,
                 (unsigned long long)wait_iterations,
-                (unsigned long long)wait_spans);
+                (unsigned long long)wait_spans,
+                (unsigned long long)wait_attempts[0], (unsigned long long)wait_attempts[1],
+                (unsigned long long)wait_attempts[2], (unsigned long long)wait_entries[0],
+                (unsigned long long)wait_entries[1], (unsigned long long)wait_entries[2]);
 }
 
 void cpu_native_wait_jump(uint16_t pc, uint8_t high)
 {
+    ++wait_attempts[0];
     if ((pc & 0xffu) > 0xfdu || pc < 0x8000 || !hw_native_interval.enabled ||
         hw_isolated || cyc_trace_enabled ||
         hw_prg_modified || hw_prg_data_modified ||
         (cpu.do_nmi | cpu.do_irq | cpu.do_reset)) return;
     /* The compiler excludes immutable declared hook sites. No registers or
      * flags change, and no RAM operand observer is involved in a JMP-self. */
+    ++wait_entries[0];
     hw_native_flush();
     while (!hw_frame_done && !(cpu.do_nmi | cpu.do_irq | cpu.do_reset)) {
         unsigned cycles = hw_native_interval_limit();
@@ -137,6 +143,7 @@ void cpu_native_wait_jump(uint16_t pc, uint8_t high)
  * There is no second DMA, interrupt or partial-instruction sequencer. */
 bool cpu_native_wait_poll(uint16_t pc, uint8_t zp, uint8_t tail)
 {
+    ++wait_attempts[1];
     if ((pc & 0xffu) > 0xfbu || pc < 0x8000 || !hw_native_interval.enabled ||
         hw_isolated || cyc_trace_enabled || cyc_cpu_ram_read_policy ||
         hw_prg_modified || hw_prg_data_modified ||
@@ -147,6 +154,7 @@ bool cpu_native_wait_poll(uint16_t pc, uint8_t zp, uint8_t tail)
         for (uint32_t i=0;i<cyc_native_hook_site_count;++i)
             if (cyc_native_hook_sites[i].addr==pc ||
                 cyc_native_hook_sites[i].addr==(uint16_t)(pc+2)) return false;
+    ++wait_entries[1];
     for (;;) {
         hw_native_flush();
         cpu.pc=pc;
@@ -182,6 +190,7 @@ bool cpu_native_wait_poll(uint16_t pc, uint8_t zp, uint8_t tail)
  * retain zero. Every interrupt/frame exit remains an instruction boundary. */
 bool cpu_native_wait_copy_poll(uint16_t pc, uint8_t zp)
 {
+    ++wait_attempts[2];
     if ((pc&0xffu)>0xf7u || pc<0x8000 || !hw_native_interval.enabled ||
         hw_isolated || cyc_trace_enabled || cyc_cpu_ram_read_policy ||
         hw_prg_modified || hw_prg_data_modified ||
@@ -194,6 +203,7 @@ bool cpu_native_wait_copy_poll(uint16_t pc, uint8_t zp)
             if (at==pc || at==(uint16_t)(pc+1) ||
                 at==(uint16_t)(pc+3) || at==(uint16_t)(pc+5)) return false;
         }
+    ++wait_entries[2];
     for (;;) {
         hw_native_flush();cpu.pc=pc;
         if (hw_frame_done || (cpu.do_nmi|cpu.do_irq|cpu.do_reset)) return true;
