@@ -25,6 +25,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stddef.h>
+#include "cyc_headroom.h"
 
 /* Generated title projects qualify their immutable board once at build time.
  * Standalone multi-board hosts keep runtime qualification. */

@@ -72,6 +72,7 @@ void cyc_run_frame(void) {
         fds_hle_frame_end();
     }
     cyc_ring_frame++;
+    HR_COUNT(++hr_frames);
 }
 
 /* One dispatch at an instruction boundary: recompiled ROM code, a compiled

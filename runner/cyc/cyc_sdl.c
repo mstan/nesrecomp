@@ -752,6 +752,26 @@ static void tcp_action(int id, const char *line)
     cyc_tcp_err(id, "action: a shortcut, NES button (a ... right), or game button (l, r)");
 }
 
+static void tcp_headroom(int id, const char *line)
+{
+    (void)line;
+#if NESRECOMP_HEADROOM_COUNTERS
+    char *report = (char *)malloc(16384), *fields = (char *)malloc(32768);
+    if (!report || !fields) {
+        free(report); free(fields);
+        cyc_tcp_err(id, "measurement report allocation failed");
+        return;
+    }
+    hr_report(report, 16384);
+    memcpy(fields, "\"report\":", 9);
+    cyc_tcp_quote(report, fields + 9, 32768 - 9);
+    cyc_tcp_ok(id, fields);
+    free(report); free(fields);
+#else
+    cyc_tcp_err(id, "measurement counters disabled in this build");
+#endif
+}
+
 static void tcp_state(int id, const char *line)
 {
     (void)line;
@@ -1173,6 +1193,7 @@ static void tcp_setup(void)
     cyc_tcp_register("ping", "liveness; the frame counter", tcp_ping);
     cyc_tcp_register("zapper", "aim x/y, trigger, mouse true; optional window_x/window_y", tcp_zapper);
     cyc_tcp_register("state", "frame, menu, drive, toast, HLE, disk save, bindings, build", tcp_state);
+    cyc_tcp_register("headroom", "cumulative device and guest cost counters", tcp_headroom);
     cyc_tcp_register("key", "hold an SDL key through the bindings: name, frames", tcp_key);
     cyc_tcp_register("pad", "hold virtual game controller buttons: buttons (a+start), frames", tcp_pad);
     cyc_tcp_register("action", "hold an action: name (a..right, disk, menu, ...), player, frames", tcp_action);

@@ -888,8 +888,10 @@ static void clock_length_counters(void)
     }
 }
 
+static uint64_t hr_apu_calls, hr_apu_iv_cycles, hr_audio_cycles;
 void apu_cycle(void)
 {
+    HR_COUNT(++hr_apu_calls; if (audio.on) ++hr_audio_cycles);
     if (apu.strobe | apu.shift_delay[0] | apu.shift_delay[1]) {
         for (int port = 0; port < 2; port++) {
             if (apu.strobe) apu.shift_delay[port] = 0;
@@ -1283,6 +1285,7 @@ void apu_operation_sync(void)
 
 void apu_native_interval_run(unsigned cycles)
 {
+    HR_COUNT(hr_apu_iv_cycles += cycles);
 #if NESRECOMP_APU_OPERATION
     if (apu_operation_active) {
         apu_operation_pending += cycles;
@@ -1536,3 +1539,26 @@ void apu_state_dump(void *file)
         fputc('\n', f);
     }
 }
+
+#if NESRECOMP_HEADROOM_COUNTERS
+unsigned hr_apu_block_reason(void)
+{
+    if (apu.oam_dma) return 1;
+    if (apu.dmc_dma |
+#if NESRECOMP_APU_DMC_REFERENCE
+        apu.dmc_bytes |
+#endif
+        apu.dmc_enable_delay | apu.dmc_start_delay |
+        apu.implicit_abort | apu.implicit_abort_armed | apu.dmc_irq) return 2;
+    if (apu.frame_irq_out || !(apu.irq_inhibit || (apu.five_step && !apu.frame_irq))) return 3;
+    return 4u;
+}
+
+void hr_apu_print(void)
+{
+    hr_print("HR_apu apu_cycle_calls=%llu interval_cycles=%llu constant_skipped_cycles=%llu constant_spans=%llu audio_on_cycles=%llu irq_inhibit=%u five_step=%u dmc_playing=%u\n",
+           (unsigned long long)hr_apu_calls, (unsigned long long)hr_apu_iv_cycles,
+           (unsigned long long)apu_native_event_cycles, (unsigned long long)apu_native_event_spans,
+           (unsigned long long)hr_audio_cycles, (unsigned)apu.irq_inhibit, (unsigned)apu.five_step, (unsigned)apu.dmc_playing);
+}
+#endif

@@ -93,6 +93,7 @@ static inline uint8_t cpu_read(uint16_t addr, unsigned f) {
         hw_native_bus(addr, value, HW_READ);
         return value;
     }
+    HR_COUNT(hr_site = addr < 0x2000 ? HR_S_RAM_R : HR_S_IO_R);
     hw_cycle_start(addr, HW_READ);
     if (f & (CYC_POLL | CYC_POLL_BRANCH)) cpu_poll(f);
     uint8_t value = hw_read(addr);
@@ -106,6 +107,7 @@ static inline uint8_t cpu_read_rom(uint16_t addr, uint8_t value, unsigned f) {
         hw_native_bus(addr, value, HW_READ);
         return value;
     }
+    HR_COUNT(hr_site = HR_S_ROM_FOLD);
     hw_cycle_start(addr, HW_READ);
     if (f & (CYC_POLL | CYC_POLL_BRANCH)) cpu_poll(f);
     value = hw_read_rom(addr, value);
@@ -119,6 +121,7 @@ static inline void cpu_write(uint16_t addr, uint8_t value, unsigned f) {
         hw_native_bus(addr, value, HW_WRITE);
         return;
     }
+    HR_COUNT(hr_site = addr < 0x2000 ? (hw_code_watch[addr & 0x7ff] ? HR_S_WATCH_W : HR_S_RAM_W) : HR_S_IO_W);
     hw_cycle_start(addr, HW_WRITE);
     if (f & CYC_POLL) cpu_poll(f);
     hw_write(addr, value);
@@ -150,6 +153,7 @@ static inline uint8_t cpu_read_code_ram(uint16_t addr, uint8_t value, unsigned f
         hw_native_bus(addr, value, HW_READ);
         return value;
     }
+    HR_COUNT(hr_site = HR_S_CODE_RAM);
     hw_cycle_start(addr, HW_READ);
     if (f & (CYC_POLL | CYC_POLL_BRANCH)) cpu_poll(f);
     value = hw_read_code_ram(addr, value);
@@ -166,10 +170,12 @@ static inline void cpu_trace_instruction(uint16_t pc) {
  * cpu_interrupt() with cpu.pc still at this instruction. The trace records
  * the instruction after any DMA cycles that delay the fetch. */
 static inline bool cpu_fetch_rom(uint16_t pc, uint8_t opcode) {
+    hr_fetch(pc);
     if (hw_native_reserve()) {
         hw_native_bus(pc, opcode, HW_FETCH);
         return false;
     }
+    HR_COUNT(hr_site = HR_S_FETCH_ROM);
     hw_cycle_start(pc, HW_FETCH);
     if (cyc_trace_enabled) cpu_trace_instruction(pc);
     hw_read_rom(pc, opcode);
@@ -178,6 +184,8 @@ static inline bool cpu_fetch_rom(uint16_t pc, uint8_t opcode) {
 }
 
 static inline bool cpu_fetch(uint16_t pc, uint8_t *opcode) {
+    hr_fetch(pc);
+    HR_COUNT(hr_site = HR_S_FETCH_INTERP);
     hw_cycle_start(pc, HW_FETCH);
     if (cyc_trace_enabled) cpu_trace_instruction(pc);
     *opcode = hw_read(pc);
@@ -186,10 +194,12 @@ static inline bool cpu_fetch(uint16_t pc, uint8_t *opcode) {
 }
 
 static inline bool cpu_fetch_code_ram(uint16_t pc, uint8_t opcode) {
+    hr_fetch(pc);
     if (hw_native_reserve()) {
         hw_native_bus(pc, opcode, HW_FETCH);
         return false;
     }
+    HR_COUNT(hr_site = HR_S_CODE_RAM);
     hw_cycle_start(pc, HW_FETCH);
     if (cyc_trace_enabled) cpu_trace_instruction(pc);
     hw_read_code_ram(pc, opcode);

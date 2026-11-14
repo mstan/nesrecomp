@@ -19,6 +19,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <string.h>
 
 HwMachine  hw;
@@ -188,6 +189,20 @@ static inline void run_tick_0(void)
 /* hw.h                                                                      */
 /* ------------------------------------------------------------------------- */
 
+#if NESRECOMP_HEADROOM_COUNTERS
+static void hr_interval_end(unsigned n, unsigned credit);
+static inline void hr_classify(uint16_t addr, HwCycleKind kind);
+static uint64_t hr_dma_cycles, hr_dma_oam_cycles;
+uint8_t hr_site;
+static unsigned hr_refusal;
+unsigned hr_ppu_reason(void);
+unsigned hr_apu_block_reason(void);
+enum { HR_R_DISABLED, HR_R_INT_PENDING, HR_R_OBSERVER, HR_R_TICK, HR_R_BOARD, HR_R_IRQ_LINE, HR_R_MMC3_IRQ_OUT,
+       HR_R_NMI_EDGE, HR_R_NMI_INPUT, HR_R_APU_OAMDMA, HR_R_APU_DMC, HR_R_APU_FRAMEIRQ, HR_R_APU_OTHER,
+       HR_R_PPU_BLANK, HR_R_PPU_GENERAL, HR_R_PPU_UNKNOWN, HR_R_PPU_IDLE_END, HR_R_PPU_MMC3_A12,
+       HR_R_PPU_LINE_249, HR_R_PPU_LIMIT_NONZERO, HR_R_N };
+#endif
+
 unsigned hw_native_interval_limit(void)
 {
 #if NESRECOMP_ISOLATED_NATIVE
@@ -203,18 +218,28 @@ unsigned hw_native_interval_limit(void)
         return remaining > 65535 ? 65535 : (unsigned)remaining;
     }
 #endif
-    if (hw.tick != 1 || hw_pal() || hw_isolated || cyc_trace_enabled ||
+#define HR_REFUSE(reason) do { HR_COUNT(hr_refusal = reason); return 0; } while (0)
+    if (hw.tick != 1) HR_REFUSE(HR_R_TICK);
+    if (hw_pal() || hw_isolated || cyc_trace_enabled ||
         hw_extra_timing.extra_scanlines || hw_cart.watch_cpu || hw_cart.clock_late ||
-        (hw_cart.mapper != 0 && hw_cart.mapper != 1 &&
-         hw_cart.mapper != 4 && hw_cart.mapper != 66) ||
-        hw.irq_line || (hw_cart.mapper == 4 && hw_cart.m.irq_out) ||
-        cpu.nmi_edge || cpu.nmi_input != ppu_nmi_output() ||
-        !apu_native_interval_ready()) return 0;
+        (hw_cart.mapper != 0 && hw_cart.mapper != 1 && hw_cart.mapper != 4 && hw_cart.mapper != 66)) HR_REFUSE(HR_R_BOARD);
+    if (hw.irq_line) HR_REFUSE(HR_R_IRQ_LINE);
+    if (hw_cart.mapper == 4 && hw_cart.m.irq_out) HR_REFUSE(HR_R_MMC3_IRQ_OUT);
+    if (cpu.nmi_edge) HR_REFUSE(HR_R_NMI_EDGE);
+    if (cpu.nmi_input != ppu_nmi_output()) HR_REFUSE(HR_R_NMI_INPUT);
+    if (!apu_native_interval_ready()) {
+        HR_COUNT(hr_refusal = HR_R_APU_OAMDMA + hr_apu_block_reason() - 1);
+        return 0;
+    }
     /* On extended SxROM, PPU A12 can also select CPU PRG/RAM signals. Such
      * boards need a bank-selection deadline before admitting CPU ROM reads. */
     if (hw_cart.mapper == 1 && (hw_cart.m.ctrl & 0x10) &&
-        ((hw_cart.m.chr0 ^ hw_cart.m.chr1) & 0x1c)) return 0;
-    return apu_native_interval_limit(ppu_native_interval_limit());
+        ((hw_cart.m.chr0 ^ hw_cart.m.chr1) & 0x1c)) HR_REFUSE(HR_R_BOARD);
+    unsigned ppu_limit = ppu_native_interval_limit();
+    unsigned limit = apu_native_interval_limit(ppu_limit);
+    if (!limit) HR_COUNT(hr_refusal = ppu_limit ? HR_R_APU_DMC : HR_R_PPU_BLANK + hr_ppu_reason());
+    return limit;
+#undef HR_REFUSE
 }
 
 void hw_native_begin(void)
@@ -279,6 +304,7 @@ void hw_native_flush(void)
 {
     unsigned n = hw_native_interval.pending;
     if (n) {
+        HR_COUNT(if (!hw_isolated) hr_interval_end(n, hw_native_interval.credit));
         hw_native_interval_run(n);
         hw.cpu_addr = hw_native_interval.addr;
         hw.cpu_reading = hw_native_interval.kind != HW_WRITE;
@@ -309,6 +335,8 @@ void hw_native_end(void)
 bool hw_native_prepare(void)
 {
     hw_native_flush();
+    HR_COUNT(hr_refusal = !hw_native_interval.enabled ? HR_R_DISABLED :
+        (cpu.do_nmi | cpu.do_irq | cpu.do_reset) ? HR_R_INT_PENDING : HR_R_OBSERVER);
     if ((cpu.do_nmi | cpu.do_irq | cpu.do_reset) ||
         (cyc_cpu_rts_observer && cyc_cpu_rts_observer != cyc_mod_return_observer) ||
         (hw_prg_data_modified
@@ -344,6 +372,7 @@ void hw_cycle_start(uint16_t addr, HwCycleKind kind)
 #if NESRECOMP_NATIVE_INTERVALS
     hw_native_flush();
 #endif
+    HR_COUNT(if (!hw_isolated) hr_classify(addr, kind));
     hw.cpu_addr = addr;
     hw.cpu_reading = kind == HW_READ || kind == HW_FETCH;
     cpu_opcode_fetch = kind == HW_FETCH;
@@ -362,6 +391,7 @@ void hw_cycle_start(uint16_t addr, HwCycleKind kind)
         hw.tick = 0;
         if ((hw_pal() && !cpu_opcode_fetch) || !dma_wants_cycle()) return;
         /* RDY: a DMA takes this read cycle; the CPU holds its address. */
+        HR_COUNT(++hr_dma_cycles; if (hw_oam_dma_active()) ++hr_dma_oam_cycles);
         dma_cycle();
         dma_end_of_cycle();
         if (cyc_trace_enabled) cyc_trace_cycle_end(false, hw.data_bus);
@@ -955,3 +985,219 @@ void cyc_hw_state_dump(void *file)
     ppu_state_dump(file);
     apu_state_dump(file);
 }
+
+#if NESRECOMP_HEADROOM_COUNTERS
+static const char *const hr_r_names[HR_R_N] = { "disabled", "int_pending", "observer", "tick_not_1", "board",
+    "irq_line", "mmc3_irq_out", "nmi_edge", "nmi_input", "apu_oamdma", "apu_dmc", "apu_frameirq", "apu_other",
+    "ppu_blank", "ppu_general", "ppu_unknown", "ppu_idle_end", "ppu_mmc3_a12", "ppu_line_249", "ppu_limit_nonzero" };
+static const char *const hr_s_names[HR_S_N] = { "none", "ram_r", "ram_w", "rom_fold", "fetch_rom", "code_ram",
+    "io_r", "io_w", "watch_w", "fetch_interp" };
+static const char *const hr_ior_names[10] = { "2002", "2007", "ppu_other", "4015", "4016_7", "apu_io_other",
+    "4020_5fff", "6000_7fff", "rom_8000", "ram" };
+static const char *const hr_iow_names[21] = { "2000", "2001", "2002", "2003", "2004", "2005", "2006", "2007",
+    "4014", "apu_regs", "4016", "4018_5fff", "6000_7fff",
+    "8000", "8001", "a000", "a001", "c000", "c001", "e000", "e001" };
+static uint64_t hr_full_cycles, hr_full_site[HR_S_N], hr_full_reason[HR_R_N], hr_io_r[10], hr_io_w[21], hr_full_ctx[3];
+static uint64_t hr_ppu_x[HR_R_N][7];
+static uint64_t hr_iv_hist[17], hr_iv_end[5], hr_iv_ctx[3], hr_iv_cycles;
+uint64_t hr_ins, hr_frames;
+static uint64_t hr_ins_ctx[3], hr_cyc_ctx[3], hr_nmi_count, hr_irq_count;
+static int hr_ctx, hr_last_ctx, hr_sp, hr_pending_pop, hr_last_valid, hr_inited;
+static int hr_stack[16];
+static uint64_t hr_last_t;
+static uint32_t hr_last_key;
+#define HR_KEYS 0x48000u
+static uint64_t *hr_pc_cyc;
+static uint32_t *hr_pc_ins;
+int hr_pc_active;
+static uint64_t hr_ctx_time, hr_ctx_ins;
+static uint64_t hr_ctx_interval, hr_ctx_dma, hr_dma_ctx[3];
+unsigned hr_ppu_reason(void);
+unsigned hr_apu_block_reason(void);
+void hr_ppu_print(void);
+void hr_apu_print(void);
+
+
+static void hr_context_sync(void)
+{
+    uint64_t now = hw.cycles + hw_native_interval.pending;
+    uint64_t interval = hw_native_interval_cycles + (hw_isolated ? 0 : hw_native_interval.pending);
+    if (now >= hr_ctx_time) hr_cyc_ctx[hr_ctx] += now - hr_ctx_time;
+    if (interval >= hr_ctx_interval) hr_iv_ctx[hr_ctx] += interval - hr_ctx_interval;
+    hr_dma_ctx[hr_ctx] += hr_dma_cycles - hr_ctx_dma;
+    hr_ins_ctx[hr_ctx] += hr_ins - hr_ctx_ins;
+    hr_ctx_time = now; hr_ctx_ins = hr_ins;
+    hr_ctx_interval = interval; hr_ctx_dma = hr_dma_cycles;
+}
+static inline void hr_classify(uint16_t addr, HwCycleKind kind)
+{
+    (void)kind;
+    unsigned s = hr_site; hr_site = HR_S_NONE;
+    ++hr_full_site[s];
+    switch (s) {
+    case HR_S_RAM_R: case HR_S_RAM_W: case HR_S_ROM_FOLD: case HR_S_FETCH_ROM: case HR_S_CODE_RAM:
+        { unsigned r = hw_native_interval.enabled ? hr_refusal : HR_R_DISABLED;
+          ++hr_ppu_x[r][hr_ppu_reason()]; }
+        break;
+    case HR_S_IO_R: {
+        unsigned c;
+        if (addr < 0x2000) c = 9;
+        else if (addr < 0x4000) c = (addr & 7) == 2 ? 0 : (addr & 7) == 7 ? 1 : 2;
+        else if (addr == 0x4015) c = 3;
+        else if (addr == 0x4016 || addr == 0x4017) c = 4;
+        else if (addr < 0x4020) c = 5;
+        else if (addr < 0x6000) c = 6;
+        else if (addr < 0x8000) c = 7;
+        else c = 8;
+        ++hr_io_r[c];
+        break; }
+    case HR_S_IO_W: {
+        unsigned c;
+        if (addr < 0x4000) c = addr & 7;
+        else if (addr == 0x4014) c = 8;
+        else if (addr == 0x4016) c = 10;
+        else if (addr < 0x4018) c = 9;
+        else if (addr < 0x6000) c = 11;
+        else if (addr < 0x8000) c = 12;
+        else c = 13 + (((addr >> 13) & 3) * 2 + (addr & 1));
+        ++hr_io_w[c];
+        break; }
+    default: break;
+    }
+}
+
+static void hr_interval_end(unsigned n, unsigned credit)
+{
+    unsigned b = 0;
+    while (b < 16 && (1u << (b + 1)) <= n) ++b;
+    ++hr_iv_hist[b];
+    if (hr_site) ++hr_iv_end[hr_site == HR_S_IO_R ? 1 : hr_site == HR_S_IO_W ? 2 : 3];
+    else ++hr_iv_end[credit == 0 ? 0 : 4];
+}
+
+static char *hr_output;
+static size_t hr_output_size, hr_output_used;
+void hr_print(const char *format, ...)
+{
+    va_list args;
+    va_start(args, format);
+    if (hr_output) {
+        size_t room = hr_output_size - hr_output_used;
+        int n = vsnprintf(hr_output + hr_output_used, room, format, args);
+        if (n > 0) hr_output_used += (size_t)n < room ? (size_t)n : room - 1;
+    } else vprintf(format, args);
+    va_end(args);
+}
+size_t hr_report(char *out, size_t size)
+{
+    if (!out || !size) return 0;
+    hr_output = out; hr_output_size = size; hr_output_used = 0;
+    hr_dump();
+    hr_output = NULL;
+    return hr_output_used;
+}
+void hr_dump(void)
+{
+    hr_context_sync();
+    /* Derive overlapping totals at observation time, rather than updating
+     * the same event through several counters in the hot paths. */
+    hr_full_cycles = 0;
+    for (unsigned i = 0; i < HR_S_N; ++i) hr_full_cycles += hr_full_site[i];
+    for (unsigned i = 0; i < HR_R_N; ++i) {
+        hr_full_reason[i] = 0;
+        for (unsigned j = 0; j < 7; ++j) hr_full_reason[i] += hr_ppu_x[i][j];
+    }
+    for (unsigned i = 0; i < 3; ++i)
+        hr_full_ctx[i] = hr_cyc_ctx[i] - hr_iv_ctx[i] - hr_dma_ctx[i];
+    hr_iv_cycles = hw_native_interval_cycles + (hw_isolated ? 0 : hw_native_interval.pending);
+    hr_print("HR_frames frames=%llu nmi=%llu irq=%llu\n", (unsigned long long)hr_frames, (unsigned long long)hr_nmi_count, (unsigned long long)hr_irq_count);
+    hr_print("HR_guest instructions=%llu main=%llu nmi=%llu irq=%llu cycles_main=%llu cycles_nmi=%llu cycles_irq=%llu\n",
+           (unsigned long long)hr_ins, (unsigned long long)hr_ins_ctx[0], (unsigned long long)hr_ins_ctx[1],
+           (unsigned long long)hr_ins_ctx[2], (unsigned long long)hr_cyc_ctx[0], (unsigned long long)hr_cyc_ctx[1],
+           (unsigned long long)hr_cyc_ctx[2]);
+    hr_print("HR_full cycles=%llu ctx_main=%llu ctx_nmi=%llu ctx_irq=%llu dma=%llu dma_oam=%llu\n",
+           (unsigned long long)hr_full_cycles, (unsigned long long)hr_full_ctx[0], (unsigned long long)hr_full_ctx[1],
+           (unsigned long long)hr_full_ctx[2], (unsigned long long)hr_dma_cycles, (unsigned long long)hr_dma_oam_cycles);
+    hr_print("HR_full_site");
+    for (unsigned i = 0; i < HR_S_N; ++i) hr_print(" %s=%llu", hr_s_names[i], (unsigned long long)hr_full_site[i]);
+    hr_print("\nHR_full_reason");
+    for (unsigned i = 0; i < HR_R_N; ++i) hr_print(" %s=%llu", hr_r_names[i], (unsigned long long)hr_full_reason[i]);
+    hr_print("\nHR_io_read");
+    for (unsigned i = 0; i < 10; ++i) hr_print(" %s=%llu", hr_ior_names[i], (unsigned long long)hr_io_r[i]);
+    hr_print("\nHR_io_write");
+    for (unsigned i = 0; i < 21; ++i) hr_print(" w%s=%llu", hr_iow_names[i], (unsigned long long)hr_io_w[i]);
+    hr_print("\nHR_interval cycles=%llu ctx_main=%llu ctx_nmi=%llu ctx_irq=%llu end_limit=%llu end_io_read=%llu end_io_write=%llu end_cs_other=%llu end_other=%llu\n",
+           (unsigned long long)hr_iv_cycles, (unsigned long long)hr_iv_ctx[0], (unsigned long long)hr_iv_ctx[1],
+           (unsigned long long)hr_iv_ctx[2], (unsigned long long)hr_iv_end[0], (unsigned long long)hr_iv_end[1],
+           (unsigned long long)hr_iv_end[2], (unsigned long long)hr_iv_end[3], (unsigned long long)hr_iv_end[4]);
+    hr_print("HR_interval_len_log2");
+    for (unsigned i = 0; i < 17; ++i) hr_print(" b%u=%llu", i, (unsigned long long)hr_iv_hist[i]);
+    hr_print("\n");
+    hr_print("HR_reason_x_ppu (rows: primary reason; cols: ppu blank general unknown idle_end mmc3_a12 line_249 limit_nonzero)\n");
+    for (unsigned i = 0; i < HR_R_N; ++i) { if (!hr_full_reason[i]) continue; hr_print("HR_x %s", hr_r_names[i]); for (unsigned j = 0; j < 7; ++j) hr_print(" %llu", (unsigned long long)hr_ppu_x[i][j]); hr_print("\n"); }
+    hr_ppu_print();
+    hr_apu_print();
+    fflush(stdout);
+    const char *path = getenv("HR_PCHIST");
+    if (path && *path && hr_pc_active && !hr_output) {
+        FILE *f = fopen(path, "w");
+        if (f) {
+            for (uint32_t k = 0; k < HR_KEYS; ++k)
+                if (hr_pc_ins[k] || hr_pc_cyc[k])
+                    fprintf(f, "%05X %llu %u\n", k, (unsigned long long)hr_pc_cyc[k], hr_pc_ins[k]);
+            fclose(f);
+        }
+    }
+}
+
+void hr_int_enter(uint16_t vector)
+{
+    hr_context_sync();
+    if (vector == 0xFFFA) ++hr_nmi_count; else if (vector == 0xFFFE) ++hr_irq_count;
+    if (hr_sp < 16) hr_stack[hr_sp++] = hr_ctx;
+    hr_ctx = vector == 0xFFFA ? 1 : vector == 0xFFFE ? 2 : 0;
+}
+
+void hr_fetch_pc(uint16_t pc)
+{
+    uint64_t now = hw.cycles + hw_native_interval.pending;
+    if (hr_last_valid && now >= hr_last_t && now - hr_last_t < 4096)
+        hr_pc_cyc[hr_last_key] += now - hr_last_t;
+    uint32_t key = pc < 0x8000 ? pc : 0x8000u + (((hw_cart.prg_off[(pc >> 12) & 7] >> 12) & 0x3f) << 12 | (pc & 0xfffu));
+    ++hr_pc_ins[key];
+    hr_last_key = key; hr_last_t = now; hr_last_valid = 1;
+}
+void hr_int_leave(void)
+{
+    hr_context_sync();
+    hr_ctx = hr_sp ? hr_stack[--hr_sp] : 0;
+}
+void hr_clock_cut(void) { hr_context_sync(); }
+void hr_clock_resume(void)
+{
+    /* Restored emulated timestamps are not newly executed host work. */
+    hr_ctx_time = hw.cycles + hw_native_interval.pending;
+    hr_ctx_ins = hr_ins;
+    hr_ctx_interval = hw_native_interval_cycles;
+    hr_ctx_dma = hr_dma_cycles;
+    hr_last_valid = 0;
+}
+void hr_start(void)
+{
+    if (!hr_inited) {
+        hr_inited = 1;
+        atexit(hr_dump);
+        const char *path = getenv("HR_PCHIST");
+        if (path && *path) {
+            hr_pc_cyc = calloc(HR_KEYS, sizeof(*hr_pc_cyc));
+            hr_pc_ins = calloc(HR_KEYS, sizeof(*hr_pc_ins));
+            hr_pc_active = hr_pc_cyc && hr_pc_ins;
+        }
+    }
+    hr_ctx = hr_sp = hr_last_valid = 0;
+    hr_ctx_time = hw.cycles + hw_native_interval.pending;
+    hr_ctx_ins = hr_ins;
+    hr_ctx_interval = hw_native_interval_cycles;
+    hr_ctx_dma = hr_dma_cycles;
+}
+#endif

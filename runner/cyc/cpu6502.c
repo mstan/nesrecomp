@@ -9,6 +9,7 @@ void (*cyc_cpu_rts_observer)(void);
 uint8_t (*cyc_cpu_ram_read_policy)(uint16_t pc, uint16_t addr, uint8_t value);
 
 void cpu_power_on(void) {
+    hr_start();
     memset(&cpu, 0, sizeof(cpu));
     cpu.do_reset = 1;
     cpu.power_on = 1;
@@ -66,6 +67,7 @@ void cpu_interrupt(bool brk) {
         cpu.s--;
     }
     uint16_t vector = cpu.do_nmi ? 0xFFFA : cpu.do_reset ? 0xFFFC : 0xFFFE;
+    if (!brk) hr_int_enter(vector);
     if (cpu.do_nmi) cpu.nmi_edge = 0; /* taking the vector acknowledges the edge */
     uint8_t lo = cpu_read(vector, 0);
     uint8_t hi = cpu_read((uint16_t)(vector + 1), CYC_DONE);

@@ -1336,6 +1336,7 @@ static void emit_rti(Emit *e) {
     ln(e, "uint8_t lo = cpu_read((uint16_t)(0x100 | (uint8_t)(cpu.s + 2)), 0);");
     ln(e, "uint8_t hi = cpu_read((uint16_t)(0x100 | (uint8_t)(cpu.s + 3)), CYC_POLL | CYC_DONE);");
     ln(e, "cpu.s = (uint8_t)(cpu.s + 3);");
+    ln(e, "hr_int_leave();");
     go_expr(e, "(uint16_t)(lo | hi << 8)");
 }
 

@@ -45,6 +45,7 @@ static void fp_compose_sprites(void)
 {
     unsigned line=ppu.scanline,height=ppu.sprite16?16:8,count=0,slots[8];
     if(line>=240)return;
+    HR_COUNT(++hr_frame_rows);
     for(unsigned i=0;i<64;++i) {
         int row=(int)line-ppu.oam[i*4]-1;
         if(row>=0 && row<(int)height) { if(count<8)slots[count]=i;++count; }
@@ -510,6 +511,11 @@ void frame_ppu_ticks(unsigned first,unsigned end)
         }
         return;
     }
+    HR_COUNT(
+        unsigned sample=first+((4u-((hw.align+first)&3u))&3u);
+        ++hr_frame_calls;
+        if(sample<end)hr_frame_dots+=(end-1u-sample)/4u+1u;
+    );
     uint64_t cycle=hw.cycles;
     unsigned tick=first+((hw.align+first)&1);
     while(tick<end) {
@@ -524,7 +530,7 @@ void frame_ppu_ticks(unsigned first,unsigned end)
     hw.cycles=cycle;
 }
 const char *cyc_ppu_implementation(void) { return "FRAME"; }
-void ppu_dot(void) { if(!fp.enabled){reference_ppu_dot();return;}fp_input_sample();hw_cart_ppu_addr(ppu.vbus); }
+void ppu_dot(void) { if(!fp.enabled){reference_ppu_dot();return;}HR_COUNT(++hr_frame_calls;++hr_frame_dots);fp_input_sample();hw_cart_ppu_addr(ppu.vbus); }
 void ppu_half_dot(void) { if(!fp.enabled){reference_ppu_half_dot();return;}fp_input_half(); }
 bool ppu_clock_cpu_tail(unsigned align)
 {
