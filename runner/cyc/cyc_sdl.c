@@ -1526,6 +1526,7 @@ int cyc_sdl_main(const char *title_in, int scale)
     memset(s_game_hold, 0, sizeof s_game_hold);
     if (scale > 0) s_set.window_scale = scale;
     s_fds = cyc_is_fds();
+    s_set.bind.shortcut_off = s_fds ? 0u : (1u << CYC_SC_DISK);
 #ifdef CYC_DEV_UI
     s_bar = s_fds;
 #endif
