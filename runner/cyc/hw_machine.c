@@ -326,8 +326,8 @@ static void hw_native_flush_site(unsigned site)
 #if NESRECOMP_ISOLATED_NATIVE
         }
 #endif
+        HR_COUNT(hr_owner_native_fetches += fetched);
     }
-    HR_COUNT(hr_owner_native_fetches += fetched);
     hw_native_interval.pending = hw_native_interval.credit = 0;
 }
 
