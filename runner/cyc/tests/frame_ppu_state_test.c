@@ -18,8 +18,8 @@ int main(void)
         rom[16+32768+tile*16+row]=(uint8_t)(0x81u^(tile*17u+row*29u));
         rom[16+32768+tile*16+8+row]=(uint8_t)(0x55u^(tile*11u+row*19u));
     }
-    const unsigned targets[]={20,128,257,258};
-    for(unsigned align=0;align<4;++align)for(unsigned target=0;target<4;++target){
+    const unsigned targets[]={20,56,64,128,248,257,258};
+    for(unsigned align=0;align<4;++align)for(unsigned target=0;target<sizeof(targets)/sizeof(targets[0]);++target){
         check(cyc_load_ines(rom,sizeof(rom)),"load NROM");cyc_power_on((uint8_t)align);
         for(unsigned i=0;i<sizeof(ppu.ciram);++i)ppu.ciram[i]=(uint8_t)(i*7u+(i>>5));
         for(unsigned i=0;i<32;++i)ppu.palette[i]=(uint8_t)i;
@@ -38,6 +38,17 @@ int main(void)
         check(hardware==cyc_hw_state_hash(),"current-build hardware replay");
         check(memory==cyc_mem_state_hash(),"current-build memory replay");
         check(!memcmp(expected,hw_frame_index,sizeof(expected)),"current-build picture replay");
+        /* Packet execution and individual timestamp advances consume the
+         * same real inputs, including clear/object and line-end boundaries. */
+        cyc_snapshot_restore(snapshot);
+        frame_ppu_ticks(1,97);
+        hardware=cyc_hw_state_hash();memory=cyc_mem_state_hash();
+        memcpy(expected,hw_frame_index,sizeof(expected));
+        cyc_snapshot_restore(snapshot);
+        for(unsigned tick=1;tick<97;++tick)frame_ppu_ticks(tick,tick+1);
+        check(hardware==cyc_hw_state_hash(),"packet/timestamp hardware equivalence");
+        check(memory==cyc_mem_state_hash(),"packet/timestamp memory equivalence");
+        check(!memcmp(expected,hw_frame_index,sizeof(expected)),"packet/timestamp picture equivalence");
         cyc_snapshot_free(snapshot);
         printf("PASS align=%u dot=%u native picture snapshot replay\n",align,dot);
     }

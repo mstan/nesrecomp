@@ -358,19 +358,149 @@ static void fp_input_half(void)
 }
 
 
+#include "ppu_hle_kernel.h"
+
+/* A stable packet has no source mutation or pin/IRQ observation inside its
+ * admitted interval. Reuse the qualified raster row decoder and output job;
+ * retain the canonical planar history at the packet boundary. */
+static bool fp_tile_ready(void)
+{
+    return ppu.scanline<240 && ppu.dot>=8 && ppu.dot<=248 && !(ppu.dot&7) &&
+        rendering() && sm_rest && ppu.render_count==5 &&
+        ppu.frame_sprite_line==ppu.scanline &&
+        ppu.oam_buffer==ppu.oam_buffer_in &&
+        ppu.eval_bg==ppu.show_bg && ppu.eval_spr==ppu.show_spr &&
+        ppu.instant_bg==ppu.show_bg && ppu.instant_spr==ppu.show_spr &&
+        !(ppu.skipped_dot|ppu.w2001_delay|ppu.w2001_oam_delay|ppu.w2001_emph_delay|
+          ppu.w2005_delay|ppu.w2006_delay|ppu.oamc_disabled|ppu.oamc_disabled_now|
+          ppu.oamc_pending|ppu.palc_disabled|ppu.palc_v_left|ppu.read2002|
+          ppu.vset|ppu.vblank_pending|ppu.oam2_reset|ppu.commit) &&
+        ppu.vset_latch1 && !ppu.vset_latch2 && !hw_cart.m.pattern_pending
+#ifdef NESRECOMP_CYCLE_HDPACK
+        && !hdpack_recording()
+#endif
+        ;
+}
+static void fp_tile_oam(unsigned first)
+{
+    if(first<=64) {
+        for(unsigned i=0;i<4;++i) { ppu.oam2[ppu.oam2_addr]=0xff;oam2_increment(); }
+        ppu.oam_latch=ppu.oam_buffer=ppu.oam_buffer_in=0xff;
+        if(first==57) { ppu.oam2_reset=0;ppu.oam2_addr=ppu.oam2_full=0; }
+    } else {
+        if(first==65)fp_select_objects();
+        ppu.oam_latch=ppu.oam_buffer=ppu.oam_buffer_in;
+        if(first==249) { ppu.oam2_reset=0;ppu.oam2_addr=ppu.oam2_full=0; }
+    }
+    ppu.overflow_late=ppu.overflow;ppu.dot=(uint16_t)(first+7);
+}
+
+static void fp_input_tile(unsigned tick,uint64_t clock)
+{
+    unsigned first = (unsigned)ppu.dot + 1;
+    uint16_t old_lo=ppu.bg_lo,old_hi=ppu.bg_hi,old_at_lo=ppu.attr_lo,old_at_hi=ppu.attr_hi;
+    uint32_t bg=((uint32_t)ppu_hle_row((uint8_t)(old_lo>>8),(uint8_t)(old_hi>>8))<<16)|
+        ppu_hle_row((uint8_t)old_lo,(uint8_t)old_hi);
+    uint32_t attr=ppu_hle_row((uint8_t)old_at_lo,(uint8_t)old_at_hi);
+    unsigned latch = ppu.attr_latch;
+    uint32_t bg_pixels = bg << (2 * ppu.fine_x);
+    uint32_t attributes = ((attr << 16) | (latch * 0x5555u)) << (2 * ppu.fine_x);
+    uint8_t color[11], background[11];
+    color[0] = ppu.color[2]; color[1] = ppu.color[1]; color[2] = ppu.color[0];
+    if (cyc_background_enabled) {
+        background[0] = cyc_background_pipe[2];
+        background[1] = cyc_background_pipe[1];
+        background[2] = cyc_background_pipe[0];
+    }
+    unsigned collision = 8;
+    bool old_hit = ppu.s0hit || ppu.s0hit_pending1 || ppu.s0hit_pending2;
+    for (unsigned i = 0; i < 8; ++i) {
+        unsigned c = ppu.show_bg ? bg_pixels >> 30 : 0;
+        unsigned pal = c ? attributes >> 30 : 0;
+        bg_pixels <<= 2; attributes <<= 2;
+        hw_frame_bg[ppu.scanline * 256 + first + i - 1] = c != 0;
+        if (cyc_background_enabled) background[i + 3] = ppu.palette[pal * 4 + c] & 0x3f;
+        unsigned sample=ppu.show_spr?ppu.frame_sprites[first+i-1]:0,sc=sample&3;
+        if(sc) {
+            if((sample&32) && ppu.can_s0hit && c && first+i<256) {
+                collision=i;ppu.can_s0hit=0;
+            }
+            if(!c || !(sample&16)) { c=sc;pal=((sample>>2)&3)|4; }
+        }
+        color[i + 3] = ppu.palette[pal * 4 + c] & 0x3f;
+    }
+
+    /* Each nametable/attribute/pattern source is read once for the tile.
+     * Materialize connector/register state at the job boundary. */
+    uint16_t v = ppu.v;
+    uint16_t nt = (uint16_t)(0x2000 | (v & 0x0fff));
+    uint16_t at = (uint16_t)(0x23c0 | (v & 0x0c00) | ((v >> 4) & 0x38) | ((v >> 2) & 7));
+    uint8_t tile = ppu.ciram[(nt & 0x3ff) | hw_cart_ciram_a10(nt)];
+    uint8_t attribute = ppu.ciram[(at & 0x3ff) | hw_cart_ciram_a10(at)];
+    attribute >>= ((v & 2) ? 2 : 0) + ((v & 0x40) ? 4 : 0);
+    uint16_t pattern = (uint16_t)((ppu.bg_table ? 0x1000 : 0) | (tile << 4) | ((v >> 12) & 7));
+    if (hw_cart.watch_ppu_addr) {
+        if (hw_cart.mapper == 4) hw.cycles = clock + tick / 12;
+        hw_cart_ppu_addr_watched(nt);
+        if (hw_cart.mapper == 4) hw.cycles = clock + (tick + 16) / 12;
+        hw_cart_ppu_addr_watched(pattern);
+    }
+    uint8_t lo = hw_cart.chr[hw_cart_chr_index(pattern)];
+    uint8_t hi = hw_cart.chr[hw_cart_chr_index(pattern | 8)];
+    ppu.par_chr = pattern | 8;
+    ppu.octal_latch = (uint8_t)ppu.par_chr;
+    ppu.fetch_data = hi;
+    ppu.attribute = attribute & 3;
+    ppu.lo_plane = lo;
+    ppu.vbus = (uint16_t)((ppu.par_chr & 0xff00) | hi);
+    ppu.bg_lo=(uint16_t)((old_lo<<8)|lo);ppu.bg_hi=(uint16_t)((old_hi<<8)|hi);
+    ppu.attr_lo=(uint16_t)((old_at_lo<<8)|((latch&1)?255:0));
+    ppu.attr_hi=(uint16_t)((old_at_hi<<8)|((latch&2)?255:0));
+    ppu.hi_plane=hi;ppu.attr_latch=ppu.attribute;ppu.commit=0;increment_x();
+    fp_tile_oam(first);
+    unsigned halves=8;
+    unsigned hit_half = collision + 2;
+    ppu.s0hit = old_hit || hit_half <= halves;
+    ppu.s0hit_late = old_hit || hit_half < halves;
+    ppu.s0hit_pending1 = collision < 8 && hit_half == halves + 2;
+    ppu.s0hit_pending2 = collision < 8 && hit_half == halves + 1;
+    ppu.vset_latch2 = 0;
+    ppu.blnk_latch = ppu.pal_enable = ppu.copy_v = ppu.ale = ppu.wr = 0;
+    ppu.rd = 1;
+    unsigned out = (unsigned)ppu.scanline * 256 + first - 4;
+    unsigned emphasis = ppu.emphasis << 6;
+    unsigned mask = ppu.greyscale ? 0x30 : 0x3f;
+    for (unsigned i = 0; i < 8; ++i) {
+        uint16_t c = (uint16_t)((color[i] & mask) | emphasis);
+        hw_frame_index[out + i] = c;
+        if (cyc_background_enabled) {
+            cyc_background_pipe[3] = background[i];
+            cyc_render_background_output(out + i, ppu.emphasis, ppu.greyscale != 0);
+        }
+        if (hw_zapper.port) {
+            ++hw_zapper.dots;
+            hw_zapper_pixel((int)(first + i - 4), ppu.scanline, c);
+        }
+    }
+    for (unsigned i = 0; i < 4; ++i) {
+        ppu.color[i] = color[10 - i];
+        if (cyc_background_enabled) cyc_background_pipe[i] = background[10 - i];
+    }
+    io_bus_decay_span(8);
+    ++ppu_native_raster_tiles;
+}
+
 /* A packet owns at most eight background input dots. Its fetch, pixel and
  * half-phase deadlines remain ordered within the caller's admitted interval;
  * no CPU/device observation can be crossed by a packet. */
 static void fp_input_packet(unsigned first,unsigned events,uint64_t cycle)
 {
-    bool visible=ppu.scanline<240 && ppu.dot<249;
     for(unsigned i=0;i<events;++i) {
         unsigned tick=first+i*2;hw.cycles=cycle+tick/12;
         if(((hw.align+tick)&3)==0) {
             fp_input_sample();hw_cart_ppu_addr(ppu.vbus);
         } else fp_input_half();
     }
-    if(events==16 && visible)++ppu_native_raster_tiles;
 }
 void frame_ppu_ticks(unsigned first,unsigned end)
 {
@@ -384,7 +514,12 @@ void frame_ppu_ticks(unsigned first,unsigned end)
     uint64_t cycle=hw.cycles;
     unsigned tick=first+((hw.align+first)&1);
     while(tick<end) {
-        unsigned events=(end-tick+1)/2;if(events>16)events=16;
+        unsigned phase=(hw.align+tick)&3,remaining=(end-tick+1)/2;
+        if(phase==0 && remaining>=16 && fp_tile_ready()) {
+            fp_input_tile(tick,cycle);tick+=32;continue;
+        }
+        unsigned events=2*((8-(ppu.dot&7))&7)+(phase==2);
+        if(!events)events=16;if(events>remaining)events=remaining;
         fp_input_packet(tick,events,cycle);tick+=events*2;
     }
     hw.cycles=cycle;
