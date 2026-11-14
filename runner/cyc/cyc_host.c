@@ -1510,7 +1510,14 @@ session_restart:
     }
 #endif
     online_from_lobby=nes_netplay_pending()!=0;cyc_net_prepare(&netcfg);
-    if(netcfg.enabled&&(fds||acccoin||spam_page>=0||input_file||load_state||zapper_input||barcode||disk_event_count||zapper_port>0)) {
+    bool test_route=false;
+#ifdef NESRECOMP_NET_TEST_BOOT
+    /* Fixture builds may sample the existing SDL route as local input;
+     * published rows still pass through the normal network admission path. */
+    const char *test_fixture=getenv("NES_NET_TEST_BOOT");
+    test_route=!headless&&test_fixture&&*test_fixture;
+#endif
+    if(netcfg.enabled&&(fds||acccoin||spam_page>=0||(input_file&&!test_route)||load_state||zapper_input||barcode||disk_event_count||zapper_port>0)) {
         fprintf(stderr,"[cycle netplay] input scripts, load states, disk games and light guns are unavailable online\n");return 2;
     }
     /* The guest never reads or writes its personal save. Cartridge storage

@@ -53,6 +53,7 @@
 #include "cyc_disk_action.h"
 #include "cyc_fds_bios.h"
 #include "cyc_frame_pacing.h"
+#include "cyc_frame_wait.h"
 #include "cyc_host.h"
 #include "cyc_diagnostics.h"
 #include "cyc_host_extras.h"
@@ -1603,6 +1604,12 @@ int cyc_sdl_main(const char *title_in, int scale)
     char disk_hint[64];
     const double frame_seconds = cyc_host_frame_seconds();
     const Uint64 freq = SDL_GetPerformanceFrequency();
+    CycFrameWait frame_wait=cyc_frame_wait_create();
+    /* Optional bounded QA capture of actual frame completions; no per-frame
+     * work beyond the null check in ordinary play. */
+    const char *pacing_path=getenv("NESRECOMP_PACING_LOG");
+    FILE *pacing_log=pacing_path&&*pacing_path?fopen(pacing_path,"wb"):NULL;
+    if(pacing_log){setvbuf(pacing_log,NULL,_IOFBF,65536);fprintf(pacing_log,"frequency,%llu,seconds,%.12f\n",(unsigned long long)freq,frame_seconds);}
     const Uint64 frame_ticks = (Uint64)(frame_seconds * (double)freq);
     Uint64 next = SDL_GetPerformanceCounter();
     Uint64 fps_mark = next, shown = 0;
@@ -1888,6 +1895,7 @@ int cyc_sdl_main(const char *title_in, int scale)
         (void)fps_mark; (void)native_mark; (void)cycles_mark; (void)frames;
 #endif
         if (s_exit_after >= 0 && s_frames_done >= s_exit_after) s_running = false;
+        if(pacing_log)fprintf(pacing_log,"%ld,%llu,%llu\n",s_frames_done,(unsigned long long)SDL_GetPerformanceCounter(),(unsigned long long)shown);
 
         if (fast || s_uncapped) {
             next = tnow;
@@ -1895,17 +1903,34 @@ int cyc_sdl_main(const char *title_in, int scale)
         }
         next += frame_ticks;
         if (next > tnow) {
-            Uint32 ms = (Uint32)((next - tnow) * 1000 / freq);
-            if (ms > 1) SDL_Delay(ms - 1);
-            while (SDL_GetPerformanceCounter() < next) {}
+#ifdef NESRECOMP_PACING_REFERENCE
+            Uint32 ms=(Uint32)((next-tnow)*1000/freq);
+            if(ms>1)SDL_Delay(ms-1);
+            while(SDL_GetPerformanceCounter()<next){}
+#else
+            cyc_frame_wait_until(&frame_wait,next,freq);
+#endif
         } else if (tnow - next > freq / 4) {
             next = tnow; /* fell behind: don't try to catch up */
         }
     }
 
+    cyc_frame_wait_destroy(&frame_wait);
+    if(pacing_log)fclose(pacing_log);
     if (s_uncapped) {
         const double seconds = (double)(SDL_GetPerformanceCounter() - measurement_start) / (double)freq;
         const long completed = s_frames_done - measurement_first_frame;
+        SDL_RendererInfo measured_renderer = {0};
+        int window_w = 0, window_h = 0, drawable_w = 0, drawable_h = 0;
+        SDL_GetRendererInfo(s_ren, &measured_renderer);
+        SDL_GetWindowSize(s_win, &window_w, &window_h);
+        SDL_GetRendererOutputSize(s_ren, &drawable_w, &drawable_h);
+        const char *video_driver = SDL_GetCurrentVideoDriver();
+        const char *audio_driver = SDL_GetCurrentAudioDriver();
+        printf("window_backend: video_driver=%s renderer=%s flags=%u window_w=%d window_h=%d drawable_w=%d drawable_h=%d audio_driver=%s\n",
+               video_driver ? video_driver : "none", measured_renderer.name ? measured_renderer.name : "unknown",
+               measured_renderer.flags, window_w, window_h, drawable_w, drawable_h,
+               audio_driver ? audio_driver : "none");
         printf("window benchmark: ppu=%s frames=%ld seconds=%.6f fps=%.3f cycles=%llu native_cycles=%llu audio_device=%u audio_enabled=%u produced_samples=%llu queued_samples=%llu\n",
                cyc_ppu_implementation(), completed, seconds, seconds > 0 ? completed / seconds : 0,
                (unsigned long long)cyc_cycle_count(), (unsigned long long)cyc_run_native_cycles,

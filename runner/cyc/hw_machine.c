@@ -543,6 +543,8 @@ static uint8_t *alloc_padded(const uint8_t *src, size_t len, uint32_t *out_alloc
 
 bool hw_prg_modified;
 bool hw_prg_data_modified;
+static bool prg_hash_valid;
+static uint32_t prg_hash_cached;
 
 #if NESRECOMP_NATIVE_PRG_GUARDS
 uint64_t hw_prg_guard_epoch;
@@ -598,6 +600,7 @@ bool cyc_load_ines(const uint8_t *image, size_t size)
     hw_cart.info = info;
     hw_prg_modified = false;
     hw_prg_data_modified = false;
+    prg_hash_valid = false;
 #if NESRECOMP_NATIVE_PRG_GUARDS
     hw_prg_guard_load();
 #endif
@@ -638,6 +641,7 @@ bool cyc_load_fds(const uint8_t *bios, size_t bios_size, const uint8_t *image, s
     nes_fds_cart_info(&hw_cart.info);
     hw_prg_modified = false;
     hw_prg_data_modified = false;
+    prg_hash_valid = false;
     hw_cart.prg = prg;
     hw_cart.prg_len = NES_FDS_BIOS_BYTES;
     hw_cart.prg_slots = prg_alloc / 4096;
@@ -736,8 +740,12 @@ bool cyc_nvram_import(unsigned region, const void *buffer, size_t size) {
 
 uint32_t cyc_prg_hash(void)
 {
+    /* A mod can retain a writable PRG pointer; keep hashing that domain on
+     * every request. Ordinary cartridges and FDS BIOS are immutable. */
+    if(prg_hash_valid&&!hw_prg_modified&&!hw_prg_data_modified)return prg_hash_cached;
     uint32_t h = 2166136261u;
     for (uint32_t i = 0; i < hw_cart.prg_len; i++) h = (h ^ hw_cart.prg[i]) * 16777619u;
+    if(!hw_prg_modified&&!hw_prg_data_modified){prg_hash_cached=h;prg_hash_valid=true;}
     return h;
 }
 
