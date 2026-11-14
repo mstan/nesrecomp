@@ -95,6 +95,12 @@ void cyc_hdpack_sprite_fetch(unsigned slot,uint16_t address,uint8_t value,bool h
     fetch_tile(&pipeline.sprite[slot],address,value,high);
     if(!high)pipeline.sprite_x[slot]=0;
 }
+void cyc_hdpack_sprite_row(unsigned slot,uint16_t address,uint8_t lo,uint8_t hi,unsigned attr,unsigned x) {
+    if(!hdpack_recording())return;
+    HdFetchedTile *tile=&pipeline.sprite[slot];
+    fetch_tile(tile,address,lo,false);fetch_tile(tile,address+8,hi,true);
+    tile->attr=(uint8_t)attr;tile->x=(uint8_t)x;
+}
 void cyc_hdpack_sprite_shift(unsigned slot) {
     if(hdpack_recording() && pipeline.sprite_x[slot]<8)pipeline.sprite_x[slot]++;
 }
@@ -102,7 +108,7 @@ void cyc_hdpack_clock(void) {
     if(!hdpack_recording())return;
     pipeline.color[3]=pipeline.color[2];pipeline.color[2]=pipeline.color[1];pipeline.color[1]=pipeline.color[0];
 }
-void cyc_hdpack_pixel(unsigned bg_color,unsigned bg_palette,int sprite,unsigned sprite_color) {
+static void pixel(unsigned bg_color,unsigned bg_palette,int sprite,unsigned sprite_color,unsigned sx,unsigned attr) {
     if(!hdpack_recording())return;
     HdRecordedPixel *p=&pipeline.color[0];memset(p,0,sizeof(*p));
     p->bg_index=p->sp_index=-1;p->bg_pal[0]=ppu.palette[0];
@@ -112,16 +118,25 @@ void cyc_hdpack_pixel(unsigned bg_color,unsigned bg_palette,int sprite,unsigned 
         p->bg_x=bg->x;p->bg_y=bg->row;p->bg_color=(uint8_t)bg_color;
         for(unsigned j=1;j<4;j++)p->bg_pal[j]=ppu.palette[bg_palette*4+j];
     }
-    if(sprite>=0 && pipeline.sprite[sprite].valid && pipeline.sprite_x[sprite]<8) {
-        const HdFetchedTile *sp=&pipeline.sprite[sprite];unsigned attr=ppu.spr_attr[sprite];
+    if(sprite>=0 && pipeline.sprite[sprite].valid && sx<8) {
+        const HdFetchedTile *sp=&pipeline.sprite[sprite];
         p->flags|=(uint8_t)(2|((attr&0x40)?4:0)|((attr&0x80)?8:0));
         p->sp_index=sp->index;memcpy(p->sp_tile,sp->bytes,16);
         /* The shared sampler expects the fetched row (already vertically
          * flipped by the PPU); vm flips only pixels within its HD block. */
-        p->sp_x=pipeline.sprite_x[sprite];p->sp_y=sp->row;
+        p->sp_x=(uint8_t)sx;p->sp_y=sp->row;
         p->sp_color=(uint8_t)sprite_color;
         for(unsigned j=0;j<3;j++)p->sp_pal[j]=ppu.palette[16+(attr&3)*4+j+1];
     }
+}
+void cyc_hdpack_pixel(unsigned bg_color,unsigned bg_palette,int sprite,unsigned sprite_color) {
+    if(!hdpack_recording())return;
+    pixel(bg_color,bg_palette,sprite,sprite_color,sprite>=0?pipeline.sprite_x[sprite]:0,sprite>=0?ppu.spr_attr[sprite]:0);
+}
+void cyc_hdpack_row_pixel(unsigned bg_color,unsigned bg_palette,int sprite,unsigned sprite_color) {
+    if(!hdpack_recording())return;
+    const HdFetchedTile *sp=sprite>=0?&pipeline.sprite[sprite]:NULL;
+    pixel(bg_color,bg_palette,sprite,sprite_color,sp?ppu.dot-1-sp->x:0,sp?sp->attr:0);
 }
 void cyc_hdpack_blank(uint8_t backdrop) {
     if(!hdpack_recording())return;

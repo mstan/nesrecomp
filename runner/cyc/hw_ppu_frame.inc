@@ -60,8 +60,7 @@ static void fp_compose_sprites(void)
         unsigned lo=hw_cart_chr_read((uint16_t)address),hi=hw_cart_chr_read((uint16_t)(address+8));
 #ifdef NESRECOMP_CYCLE_HDPACK
         if(hdpack_recording()) {
-            cyc_hdpack_sprite_fetch((unsigned)slot,(uint16_t)address,(uint8_t)lo,false);
-            cyc_hdpack_sprite_fetch((unsigned)slot,(uint16_t)(address+8),(uint8_t)hi,true);
+            cyc_hdpack_sprite_row((unsigned)slot,(uint16_t)address,(uint8_t)lo,(uint8_t)hi,attr,ppu.oam[i*4+3]);
         }
 #endif
         for(unsigned j=0;j<8;++j) {
@@ -199,7 +198,7 @@ static void fp_input_pixel(void)
     if(cyc_background_enabled)cyc_background_pipe[0]=ppu.palette[
         rendering()&&ppu.scanline<240?background_addr:addr]&0x3f;
 #ifdef NESRECOMP_CYCLE_HDPACK
-    cyc_hdpack_pixel(hd_bg_color,hd_bg_palette,hd_sprite,hd_sprite_color);
+    cyc_hdpack_row_pixel(hd_bg_color,hd_bg_palette,hd_sprite,hd_sprite_color);
     if(!rendering())cyc_hdpack_blank(ppu.color[0]);
 #endif
 }

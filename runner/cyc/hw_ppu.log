@@ -22,6 +22,12 @@ writes, bus-state settling, recording consumers and raster boundaries. The
 job never reads beyond an interval which excludes source mutations and
 interrupt observations.
 
+HD recording consumes the native sprite row's owned tile, attributes and
+screen origin. Those inputs remain in the existing serialized HD tile record;
+the picture observer does not depend on reference sprite-shifter progress.
+The reference HD observer keeps its original interface and pixel positions.
+The synthetic HD input probe clocks real fetch phases before a bank change.
+
 Validation completed for this source: the FRAME/APU-operation SMB3 cold route
 matches HLE for all 2,400 recorded frame products, PCM, memory, screenshots
 and periodic presentation products. Current-build continuation is exact.
@@ -29,3 +35,7 @@ The FRAME/APU-operation state test passes 28 ordinary and four pending-input
 snapshot cases, plus 28 bulk-packet versus individual-timestamp comparisons,
 across every CPU/PPU alignment. Further game, performance, platform and
 netplay qualification remains separate from these checks.
+The synthetic HD pipeline gate passes CHR ROM/RAM, bank changes, scroll,
+sprite flips and 8/16-pixel rows, four alignments, and full-state replay.
+The fetched-input probe uses complete states, which include the HD observer;
+the unclocked guest-call snapshot deliberately excludes presentation state.

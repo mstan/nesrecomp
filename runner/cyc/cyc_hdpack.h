@@ -10,9 +10,11 @@ void cyc_hdpack_bg_fetch(uint16_t address,uint8_t value,bool high);
 void cyc_hdpack_bg_reload(void);
 void cyc_hdpack_bg_shift(void);
 void cyc_hdpack_sprite_fetch(unsigned slot,uint16_t address,uint8_t value,bool high);
+void cyc_hdpack_sprite_row(unsigned slot,uint16_t address,uint8_t lo,uint8_t hi,unsigned attr,unsigned x);
 void cyc_hdpack_sprite_shift(unsigned slot);
 void cyc_hdpack_clock(void);
 void cyc_hdpack_pixel(unsigned bg_color,unsigned bg_palette,int sprite,unsigned sprite_color);
+void cyc_hdpack_row_pixel(unsigned bg_color,unsigned bg_palette,int sprite,unsigned sprite_color);
 void cyc_hdpack_blank(uint8_t backdrop);
 void cyc_hdpack_output(int x,int y);
 /* Whole-picture provider: consume tile inputs directly, without clocking the
