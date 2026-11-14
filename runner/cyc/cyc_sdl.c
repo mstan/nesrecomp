@@ -77,6 +77,7 @@
 #endif
 #include "cyc_tcp.h"
 #include "cyc_video.h"
+#include "cyc_window_geometry.h"
 #include "../../common/nes_cart.h"
 #include "../../common/nes_fds.h"
 #ifdef CYC_WITH_RECOMP_UI
@@ -1431,7 +1432,7 @@ int cyc_sdl_main(const char *title_in, int scale)
      * saved stock/fixed-aspect and fullscreen choices keep the usual path. */
     if (!s_set.fullscreen && cyc_video_mode() == NES_VIDEO_FIT &&
         s_extras && s_extras->initial_fit_width > 0) {
-        int initial_w = nes_video_geometry_clamp_width(s_extras->initial_fit_width);
+        int initial_w = cyc_window_initial_fit_width(cyc_video_mode(), s_extras->initial_fit_width, w, h);
         SDL_SetWindowSize(s_win, initial_w * s_set.window_scale, logical_h() * s_set.window_scale);
     }
     SDL_RendererInfo renderer = {0}; SDL_GetRendererInfo(s_ren, &renderer);
