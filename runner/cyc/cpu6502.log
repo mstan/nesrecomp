@@ -1,0 +1,13 @@
+Immutable polling wait operation
+
+An immutable zero-page LDA followed by a same-page BPL/BEQ branch back to
+that load owns complete six-cycle quiet iterations. BPL admits a clear sign
+bit; BEQ admits a zero operand. Both use the same device deadline and ordinary
+instruction boundary executor, including the real branch opcode and final
+dummy read. No second interrupt, DMA or partial-instruction scheduler is added.
+The existing BPL entry remains available to previously generated callers.
+
+RAM observers, armed hooks at either instruction, modified program bytes,
+isolated calls, tracing, pending interrupts and the existing mapper guard all
+retain ordinary execution. Host counters count only actual fetch attempts;
+collapsed service iterations are separate from instruction observations.

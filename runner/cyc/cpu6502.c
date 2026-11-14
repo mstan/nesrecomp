@@ -138,16 +138,17 @@ void cpu_native_wait_jump(uint16_t pc, uint8_t high)
     }
 }
 
-/* One immutable LDA-zp/BPL-back operation. Complete quiet iterations use the
+/* One immutable LDA-zp/BPL-or-BEQ-back operation. Complete quiet iterations use the
  * shared device deadline; boundary instructions use the ordinary CPU bus API.
  * There is no second DMA, interrupt or partial-instruction sequencer. */
-bool cpu_native_wait_poll(uint16_t pc, uint8_t zp, uint8_t tail)
+static bool native_wait_poll(uint16_t pc, uint8_t zp, uint8_t tail, uint8_t branch)
 {
     ++wait_attempts[1];
     if ((pc & 0xffu) > 0xfbu || pc < 0x8000 || !hw_native_interval.enabled ||
         hw_isolated || cyc_trace_enabled || cyc_cpu_ram_read_policy ||
         hw_prg_modified || hw_prg_data_modified ||
-        (cpu.do_nmi | cpu.do_irq | cpu.do_reset) || (hw.ram[zp] & 0x80)) return false;
+        (cpu.do_nmi | cpu.do_irq | cpu.do_reset) ||
+        (branch==0x10 ? (hw.ram[zp]&0x80)!=0 : hw.ram[zp]!=0)) return false;
     if (hw_cart.mapper==1 && (hw_cart.m.ctrl&0x10) &&
         ((hw_cart.m.chr0^hw_cart.m.chr1)&0x1c)) return false;
     if (cyc_hooks_armed)
@@ -175,14 +176,23 @@ bool cpu_native_wait_poll(uint16_t pc, uint8_t zp, uint8_t tail)
         cpu.a=cpu_read(zp,CYC_POLL|CYC_DONE);cpu_nz(cpu.a);
         cpu.pc=(uint16_t)(pc+2);
         if (hw_frame_done || (cpu.do_nmi | cpu.do_irq | cpu.do_reset)) return true;
-        if (cpu_fetch_rom(cpu.pc,0x10)) {cpu_interrupt(false);return true;}
-        if (cpu.n) {
+        if (cpu_fetch_rom(cpu.pc,branch)) {cpu_interrupt(false);return true;}
+        if (branch==0x10 ? cpu.n : !cpu.z) {
             cpu_read_rom((uint16_t)(pc+3),0xfc,CYC_POLL|CYC_DONE);
             cpu.pc=(uint16_t)(pc+4);return true;
         }
         cpu_read_rom((uint16_t)(pc+3),0xfc,CYC_POLL);
         cpu_read_rom((uint16_t)(pc+4),tail,CYC_DONE);
     }
+}
+
+bool cpu_native_wait_poll(uint16_t pc, uint8_t zp, uint8_t tail)
+{
+    return native_wait_poll(pc,zp,tail,0x10);
+}
+bool cpu_native_wait_zero_poll(uint16_t pc, uint8_t zp, uint8_t tail)
+{
+    return native_wait_poll(pc,zp,tail,0xf0);
 }
 
 /* TAY/LDA-zp/BNE-exit/JMP-back has the same ownership contract. The first

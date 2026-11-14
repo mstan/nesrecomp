@@ -1522,10 +1522,11 @@ static void emit_instruction(Emit *e) {
     }
     if (e->p && !cart_ram_view(e) && !e->live && e->opcode == 0xa5 &&
         (e->P & 0xffu) <= 0xfbu && e->at.k + 4 < SLOT_SIZE &&
-        insn_byte(e, 2) == 0x10 && insn_byte(e, 3) == 0xfc) {
+        (insn_byte(e, 2) == 0x10 || insn_byte(e, 2) == 0xf0) && insn_byte(e, 3) == 0xfc) {
         out(e, "#if NESRECOMP_NATIVE_WAIT_LOOPS\n");
         if (path_counted(e)) out(e, "    HR_PATH_ADD(%u);\n", path_rank(e, e->P));
-        out(e, "    if (cpu_native_wait_poll(0x%04X, 0x%02X, 0x%02X)) return;\n",
+        out(e, "    if (%s(0x%04X, 0x%02X, 0x%02X)) return;\n",
+            insn_byte(e,2)==0xf0?"cpu_native_wait_zero_poll":"cpu_native_wait_poll",
             e->P, insn_byte(e, 1), insn_byte(e, 4));
         out(e, "#endif\n");
     }

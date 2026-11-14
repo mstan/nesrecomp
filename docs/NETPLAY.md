@@ -248,11 +248,10 @@ mapper0/1/4/66 producer is eligible only with binary32/binary64, direct double
 evaluation and round-to-nearest at power-on. Other boards, regions, floating
 point environments and builds retain the portable cycle executor.
 
-The bootstrap offers LLE or HLE's base PPU profile plus its eligible APU variant.
+The bootstrap offers the build's base PPU profile plus its eligible APU variant.
 Bits16 and32 identify `cycle-lle-apu1-c2` and `cycle-hle-apu1-c2`. Bit8 is the
-separate `cycle-frame-c1` picture profile, which always selects the portable
-APU executor in netplay, including builds that enable the offline producer.
-No FRAME/APU variant is offered. The host selects an LLE/HLE APU
+separate `cycle-frame-c1` picture profile; bit64 identifies its combined
+`cycle-frame-apu1-c1` variant. The host selects an eligible APU
 variant only when every occupied seat offers it, otherwise every peer uses
 the common portable profile. The selected NESBOOT2 profile is checked against
 every capability record before frame0. Exact executable and ROM checks remain
@@ -267,5 +266,8 @@ build's offline policy only after shutdown.
 A Windows SMB3 HLE/APU1 two-process test with a fresh in-level checkpoint,
 48kHz synthesis, simulated latency/jitter/loss and nine rollback episodes
 preserved the confirmed picture and full canonical state with zero desyncs.
-This bounded qualification does not promote the build option or qualify a
-FRAME/APU combination, another title, a physical LAN or another OS.
+A separate same-build Windows SMB3 FRAME/APU1 two-process test also preserved
+the confirmed picture and complete state through nine rollback episodes and
+state-changing corrections, with zero desyncs. These bounded qualifications
+do not promote the build option or qualify another title, a physical LAN,
+cross-build compatibility or another OS.
