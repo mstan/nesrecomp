@@ -54,6 +54,7 @@ extern Cpu6502 cpu;
  * keep the ordinary instruction templates and their bus/interrupt ordering. */
 void cpu_native_wait_jump(uint16_t pc, uint8_t high);
 bool cpu_native_wait_poll(uint16_t pc, uint8_t zp, uint8_t tail);
+bool cpu_native_wait_copy_poll(uint16_t pc, uint8_t zp);
 #endif
 /* Trusted host observation after a completed RTS, before its caller resumes.
  * No bus activity is replaced. NULL unless a game installs an observer. */

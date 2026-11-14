@@ -176,4 +176,57 @@ bool cpu_native_wait_poll(uint16_t pc, uint8_t zp, uint8_t tail)
         cpu_read_rom((uint16_t)(pc+4),tail,CYC_DONE);
     }
 }
+
+/* TAY/LDA-zp/BNE-exit/JMP-back has the same ownership contract. The first
+ * iteration retains the incoming accumulator in Y; later quiet iterations
+ * retain zero. Every interrupt/frame exit remains an instruction boundary. */
+bool cpu_native_wait_copy_poll(uint16_t pc, uint8_t zp)
+{
+    if ((pc&0xffu)>0xf7u || pc<0x8000 || !hw_native_interval.enabled ||
+        hw_isolated || cyc_trace_enabled || cyc_cpu_ram_read_policy ||
+        hw_prg_modified || hw_prg_data_modified ||
+        (cpu.do_nmi|cpu.do_irq|cpu.do_reset) || hw.ram[zp]) return false;
+    if (hw_cart.mapper==1 && (hw_cart.m.ctrl&0x10) &&
+        ((hw_cart.m.chr0^hw_cart.m.chr1)&0x1c)) return false;
+    if (cyc_hooks_armed)
+        for (uint32_t i=0;i<cyc_native_hook_site_count;++i) {
+            uint16_t at=cyc_native_hook_sites[i].addr;
+            if (at==pc || at==(uint16_t)(pc+1) ||
+                at==(uint16_t)(pc+3) || at==(uint16_t)(pc+5)) return false;
+        }
+    for (;;) {
+        hw_native_flush();cpu.pc=pc;
+        if (hw_frame_done || (cpu.do_nmi|cpu.do_irq|cpu.do_reset)) return true;
+        unsigned cycles=hw_native_interval_limit();cycles-=cycles%10;
+        if (cycles) {
+            if (!wait_spans) atexit(wait_report);
+            cpu.y=cycles>=20?0:cpu.a;cpu.a=0;cpu_nz(0);
+            hw_native_interval.pending=cycles;
+            hw_native_interval.addr=(uint16_t)(pc+7);
+            hw_native_interval.kind=HW_READ;
+            hw_native_interval.value=(uint8_t)(pc>>8);hw_native_interval.driven=1;
+            wait_cycles+=cycles;wait_iterations+=cycles/10;++wait_spans;
+            continue;
+        }
+        if (cpu_fetch_rom(pc,0xa8)) {cpu_interrupt(false);return true;}
+        cpu_read_rom((uint16_t)(pc+1),0xa5,CYC_POLL|CYC_DONE);
+        cpu.y=cpu.a;cpu_nz(cpu.y);cpu.pc=(uint16_t)(pc+1);
+        if (hw_frame_done || (cpu.do_nmi|cpu.do_irq|cpu.do_reset)) return true;
+        if (cpu_fetch_rom(cpu.pc,0xa5)) {cpu_interrupt(false);return true;}
+        cpu_read_rom((uint16_t)(pc+2),zp,0);
+        cpu.a=cpu_read(zp,CYC_POLL|CYC_DONE);cpu_nz(cpu.a);cpu.pc=(uint16_t)(pc+3);
+        if (hw_frame_done || (cpu.do_nmi|cpu.do_irq|cpu.do_reset)) return true;
+        if (cpu_fetch_rom(cpu.pc,0xd0)) {cpu_interrupt(false);return true;}
+        cpu_read_rom((uint16_t)(pc+4),3,cpu.z?(CYC_POLL|CYC_DONE):CYC_POLL);
+        if (!cpu.z) {
+            cpu_read_rom((uint16_t)(pc+5),0x4c,CYC_DONE);
+            cpu.pc=(uint16_t)(pc+8);return true;
+        }
+        cpu.pc=(uint16_t)(pc+5);
+        if (hw_frame_done || (cpu.do_nmi|cpu.do_irq|cpu.do_reset)) return true;
+        if (cpu_fetch_rom(cpu.pc,0x4c)) {cpu_interrupt(false);return true;}
+        cpu_read_rom((uint16_t)(pc+6),(uint8_t)pc,0);
+        cpu_read_rom((uint16_t)(pc+7),(uint8_t)(pc>>8),CYC_POLL|CYC_DONE);
+    }
+}
 #endif
