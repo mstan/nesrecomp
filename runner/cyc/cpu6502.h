@@ -178,7 +178,7 @@ static inline void cpu_trace_instruction(uint16_t pc) {
  * cpu_interrupt() with cpu.pc still at this instruction. The trace records
  * the instruction after any DMA cycles that delay the fetch. */
 static inline bool cpu_fetch_rom_path(uint16_t pc, uint8_t opcode) {
-    if (hw_native_reserve()) {
+    if (hw_native_reserve_fetch()) {
         hw_native_bus(pc, opcode, HW_FETCH);
         return false;
     }
@@ -189,8 +189,8 @@ static inline bool cpu_fetch_rom_path(uint16_t pc, uint8_t opcode) {
     return (cpu.do_nmi | cpu.do_irq | cpu.do_reset) != 0;
 }
 
-/* Non-generated callers retain standalone fetch accounting. Generated ROM
- * paths settle their known instruction prefix at control-flow exits. */
+/* Standalone callers keep optional PC observation. All actual fetch totals
+ * are accounted by the same physical bus owner as generated ROM paths. */
 static inline bool cpu_fetch_rom(uint16_t pc, uint8_t opcode) {
     hr_fetch(pc);
     return cpu_fetch_rom_path(pc, opcode);
@@ -207,7 +207,7 @@ static inline bool cpu_fetch(uint16_t pc, uint8_t *opcode) {
 
 static inline bool cpu_fetch_code_ram(uint16_t pc, uint8_t opcode) {
     hr_fetch(pc);
-    if (hw_native_reserve()) {
+    if (hw_native_reserve_fetch()) {
         hw_native_bus(pc, opcode, HW_FETCH);
         return false;
     }

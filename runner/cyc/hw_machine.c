@@ -193,6 +193,7 @@ static inline void run_tick_0(void)
 static void hr_interval_end(unsigned n, unsigned credit, unsigned site);
 static inline void hr_classify(uint16_t addr, unsigned site);
 static uint64_t hr_dma_cycles, hr_dma_oam_cycles;
+static uint64_t hr_owner_full_fetches, hr_owner_native_fetches;
 static unsigned hr_refusal;
 unsigned hr_ppu_reason(bool known_zero);
 unsigned hr_apu_block_reason(void);
@@ -302,7 +303,10 @@ void hw_native_begin_checked_rom(void)
 static void hw_native_flush_site(unsigned site)
 {
     (void)site;
-    unsigned n = hw_native_interval.pending;
+    unsigned n = hw_native_pending_cycles();
+#if NESRECOMP_HEADROOM_COUNTERS
+    unsigned fetched = hw_native_pending_fetches();
+#endif
     if (n) {
         HR_COUNT(if (!hw_isolated) hr_interval_end(n, hw_native_interval.credit, site));
         hw_native_interval_run(n);
@@ -323,6 +327,7 @@ static void hw_native_flush_site(unsigned site)
         }
 #endif
     }
+    HR_COUNT(hr_owner_native_fetches += fetched);
     hw_native_interval.pending = hw_native_interval.credit = 0;
 }
 
@@ -385,6 +390,7 @@ void hw_cycle_start(uint16_t addr, HwCycleKind kind)
     hw.cpu_addr = addr;
     hw.cpu_reading = kind == HW_READ || kind == HW_FETCH;
     cpu_opcode_fetch = kind == HW_FETCH;
+    HR_COUNT(if (site && cpu_opcode_fetch) ++hr_owner_full_fetches);
     hw_dma_stalls = 0;
     if (hw_isolated) {
         /* a mod's isolated routine call: memory only, no time (hw_internal.h) */
@@ -821,7 +827,7 @@ uint64_t cyc_cycle_count(void)
 #if NESRECOMP_ISOLATED_NATIVE
     if (hw_isolated) return hw.cycles; /* guest service time is not host/device time */
 #endif
-    return hw.cycles + hw_native_interval.pending;
+    return hw.cycles + hw_native_pending_cycles();
 #else
     return hw.cycles;
 #endif
@@ -1022,17 +1028,23 @@ static uint32_t hr_last_key;
 static uint64_t *hr_pc_cyc;
 static uint32_t *hr_pc_ins;
 int hr_pc_active;
-static uint64_t hr_ctx_time, hr_ctx_ins;
+static uint64_t hr_ctx_time, hr_ctx_ins, hr_owner_rebase;
 static uint64_t hr_ctx_interval, hr_ctx_dma, hr_dma_ctx[3];
 unsigned hr_apu_block_reason(void);
 void hr_ppu_print(void);
 void hr_apu_print(void);
 
 
+static uint64_t hr_owner_fetch_total(void)
+{
+    return hr_owner_rebase + hr_owner_full_fetches + hr_owner_native_fetches + hw_native_pending_fetches();
+}
+
 static void hr_context_sync(void)
 {
-    uint64_t now = hw.cycles + hw_native_interval.pending;
-    uint64_t interval = hw_native_interval_cycles + (hw_isolated ? 0 : hw_native_interval.pending);
+    hr_ins = hr_owner_fetch_total();
+    uint64_t now = hw.cycles + hw_native_pending_cycles();
+    uint64_t interval = hw_native_interval_cycles + (hw_isolated ? 0 : hw_native_pending_cycles());
     if (now >= hr_ctx_time) hr_cyc_ctx[hr_ctx] += now - hr_ctx_time;
     if (interval >= hr_ctx_interval) hr_iv_ctx[hr_ctx] += interval - hr_ctx_interval;
     hr_dma_ctx[hr_ctx] += hr_dma_cycles - hr_ctx_dma;
@@ -1139,7 +1151,7 @@ void hr_dump(void)
     }
     for (unsigned i = 0; i < 3; ++i)
         hr_full_ctx[i] = hr_cyc_ctx[i] - hr_iv_ctx[i] - hr_dma_ctx[i];
-    hr_iv_cycles = hw_native_interval_cycles + (hw_isolated ? 0 : hw_native_interval.pending);
+    hr_iv_cycles = hw_native_interval_cycles + (hw_isolated ? 0 : hw_native_pending_cycles());
     hr_print("HR_frames frames=%llu nmi=%llu irq=%llu\n", (unsigned long long)hr_frames, (unsigned long long)hr_nmi_count, (unsigned long long)hr_irq_count);
     hr_print("HR_guest instructions=%llu main=%llu nmi=%llu irq=%llu cycles_main=%llu cycles_nmi=%llu cycles_irq=%llu\n",
            (unsigned long long)hr_ins, (unsigned long long)hr_ins_ctx[0], (unsigned long long)hr_ins_ctx[1],
@@ -1190,7 +1202,7 @@ void hr_int_enter(uint16_t vector)
 
 void hr_fetch_pc(uint16_t pc)
 {
-    uint64_t now = hw.cycles + hw_native_interval.pending;
+    uint64_t now = hw.cycles + hw_native_pending_cycles();
     if (hr_last_valid && now >= hr_last_t && now - hr_last_t < 4096)
         hr_pc_cyc[hr_last_key] += now - hr_last_t;
     uint32_t key = pc < 0x8000 ? pc : 0x8000u + (((hw_cart.prg_off[(pc >> 12) & 7] >> 12) & 0x3f) << 12 | (pc & 0xfffu));
@@ -1205,8 +1217,11 @@ void hr_int_leave(void)
 void hr_clock_cut(void) { hr_context_sync(); }
 void hr_clock_resume(void)
 {
+    /* A load may discard an unpublished cursor, while observed host work
+     * remains cumulative. Rebase ownership exactly like physical clocks. */
+    hr_owner_rebase += hr_ins - hr_owner_fetch_total();
     /* Restored emulated timestamps are not newly executed host work. */
-    hr_ctx_time = hw.cycles + hw_native_interval.pending;
+    hr_ctx_time = hw.cycles + hw_native_pending_cycles();
     hr_ctx_ins = hr_ins;
     hr_ctx_interval = hw_native_interval_cycles;
     hr_ctx_dma = hr_dma_cycles;
@@ -1224,8 +1239,9 @@ void hr_start(void)
             hr_pc_active = hr_pc_cyc && hr_pc_ins;
         }
     }
+    hr_ins = hr_owner_fetch_total();
     hr_ctx = hr_sp = hr_last_valid = 0;
-    hr_ctx_time = hw.cycles + hw_native_interval.pending;
+    hr_ctx_time = hw.cycles + hw_native_pending_cycles();
     hr_ctx_ins = hr_ins;
     hr_ctx_interval = hw_native_interval_cycles;
     hr_ctx_dma = hr_dma_cycles;
