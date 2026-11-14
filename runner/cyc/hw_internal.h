@@ -462,9 +462,6 @@ void    apu_cycle(void);
 #ifndef NESRECOMP_APU_OPERATION
 #define NESRECOMP_APU_OPERATION 0
 #endif
-#if NESRECOMP_APU_OPERATION && defined(NESRECOMP_CYCLE_NET)
-#error The experimental APU operation has no qualified netplay profile
-#endif
 #if NESRECOMP_APU_OPERATION
 extern unsigned apu_operation_pending, apu_operation_deadline;
 extern bool apu_operation_active;

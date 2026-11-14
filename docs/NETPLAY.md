@@ -240,3 +240,30 @@ dirs, sram-sync/; executables pruned).
   a rejection / reseed on every load -- noise per episode; pre-existing.
 - Not done: two machines, internet, Windows/macOS builds, a human playing.
   Gameplay verdict belongs to Alex.
+
+## Cycle APU operation profile
+
+`NESRECOMP_APU_OPERATION` remains experimental and OFF by default. Its NTSC
+mapper0/1/4/66 producer is eligible only with binary32/binary64, direct double
+evaluation and round-to-nearest at power-on. Other boards, regions, floating
+point environments and builds retain the portable cycle executor.
+
+The bootstrap offers the base PPU profile plus its eligible APU variant.
+Bits16 and32 identify `cycle-lle-apu1-c2` and `cycle-hle-apu1-c2`; bit8 is
+reserved for the separate FRAME picture profile. The host selects an APU
+variant only when every occupied seat offers it, otherwise every peer uses
+the common portable profile. The selected NESBOOT2 profile is checked against
+every capability record before frame0. Exact executable and ROM checks remain
+mandatory; this does not establish cross-build or cross-OS compatibility.
+
+Deferred APU clocks materialize through the existing snapshot accessors;
+pending work, eligibility and executor ownership are host policy, not extra
+serialized machine state. Loading invalidates derived deadlines and mixer
+cache. Executor selection stays fixed through a match, returning to the
+build's offline policy only after shutdown.
+
+A Windows SMB3 HLE/APU1 two-process test with a fresh in-level checkpoint,
+48kHz synthesis, simulated latency/jitter/loss and nine rollback episodes
+preserved the confirmed picture and full canonical state with zero desyncs.
+This bounded qualification does not promote the build option or qualify a
+FRAME/APU combination, another title, a physical LAN or another OS.

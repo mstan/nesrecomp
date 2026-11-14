@@ -202,14 +202,25 @@ uint32_t nes_netplay_cycle_profile(const char *implementation) {
     return 0;
 }
 const char *nes_netplay_cycle_contract(const char *implementation) {
-    switch(nes_netplay_cycle_profile(implementation)) {
+    return nes_netplay_profile_contract(nes_netplay_cycle_profile(implementation));
+}
+uint32_t nes_netplay_apu_profile(uint32_t base) {
+    return base==NES_NET_PROFILE_CYCLE_LLE?NES_NET_PROFILE_CYCLE_LLE_APU1:
+           base==NES_NET_PROFILE_CYCLE_HLE?NES_NET_PROFILE_CYCLE_HLE_APU1:0;
+}
+const char *nes_netplay_profile_contract(uint32_t profile) {
+    switch(profile) {
         case NES_NET_PROFILE_CYCLE_LLE:return "cycle-lle-c2";
         case NES_NET_PROFILE_CYCLE_HLE:return "cycle-hle-c2";
+        case NES_NET_PROFILE_LEGACY_C:return "legacy-c1";
+        case NES_NET_PROFILE_CYCLE_LLE_APU1:return "cycle-lle-apu1-c2";
+        case NES_NET_PROFILE_CYCLE_HLE_APU1:return "cycle-hle-apu1-c2";
         default:return "cycle-unsupported";
     }
 }
 int nes_netplay_profile_compatible(uint32_t selected,uint32_t local,uint32_t remote) {
-    const uint32_t known=NES_NET_PROFILE_CYCLE_LLE|NES_NET_PROFILE_LEGACY_C|NES_NET_PROFILE_CYCLE_HLE;
+    const uint32_t known=NES_NET_PROFILE_CYCLE_LLE|NES_NET_PROFILE_LEGACY_C|NES_NET_PROFILE_CYCLE_HLE|
+        NES_NET_PROFILE_CYCLE_LLE_APU1|NES_NET_PROFILE_CYCLE_HLE_APU1;
     return selected && !(selected&(selected-1u)) && !(selected&~known) &&
            (local&selected) && (remote&selected);
 }

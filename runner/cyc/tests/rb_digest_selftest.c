@@ -53,6 +53,20 @@ static void capability_contract(void) {
     assert(!nes_netplay_profile_compatible(1,1,4));assert(!nes_netplay_profile_compatible(4,4,1));
     assert(!nes_netplay_profile_compatible(0,0,0));assert(!nes_netplay_profile_compatible(8,8,8));
     assert(!nes_netplay_profile_compatible(5,5,5));
+    /* The base PPU profile and its native-APU variant are distinct fixed
+     * simulation choices. Missing native support must leave a shared portable
+     * profile; neither an opposite PPU nor a combined selection is compatible. */
+    assert(nes_netplay_apu_profile(1)==16);assert(nes_netplay_apu_profile(4)==32);
+    assert(!nes_netplay_apu_profile(2));assert(!nes_netplay_apu_profile(8));
+    assert(!strcmp(nes_netplay_profile_contract(16),"cycle-lle-apu1-c2"));
+    assert(!strcmp(nes_netplay_profile_contract(32),"cycle-hle-apu1-c2"));
+    assert(nes_netplay_profile_compatible(16,17,17));
+    assert(nes_netplay_profile_compatible(32,36,36));
+    assert(!nes_netplay_profile_compatible(32,36,4));
+    assert(nes_netplay_profile_compatible(4,36,4));
+    assert(!nes_netplay_profile_compatible(16,17,36));
+    assert(!nes_netplay_profile_compatible(36,36,36));
+    assert(!nes_netplay_profile_compatible(64,64,64));
 }
 static void config_reference(void) {
     char guarded[80];memset(guarded,0x5a,sizeof guarded);

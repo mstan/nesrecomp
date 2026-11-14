@@ -23,6 +23,7 @@
 #include "hw.h"
 
 #include <float.h>
+#include <fenv.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -108,6 +109,7 @@ uint64_t apu_native_event_spans, apu_native_event_cycles;
 unsigned apu_operation_pending, apu_operation_deadline = 1;
 bool apu_operation_active;
 static bool operation_running;
+static bool operation_eligible;
 #define APU_SYNC() apu_operation_sync()
 #else
 #define APU_SYNC() ((void)0)
@@ -1446,8 +1448,13 @@ void apu_power_on(void)
     apu_operation_pending = 0;
     apu_operation_deadline = 1;
     operation_running = false;
-    apu_operation_active = !NESRECOMP_APU_LEVEL_REFERENCE && !hw_pal() && (hw_cart.mapper == 0 || hw_cart.mapper == 1 ||
+    operation_eligible = false;
+#if FLT_RADIX == 2 && FLT_MANT_DIG == 24 && DBL_MANT_DIG == 53 && FLT_EVAL_METHOD == 0
+    operation_eligible = !NESRECOMP_APU_LEVEL_REFERENCE && fegetround() == FE_TONEAREST &&
+        !hw_pal() && (hw_cart.mapper == 0 || hw_cart.mapper == 1 ||
         hw_cart.mapper == 4 || hw_cart.mapper == 66);
+#endif
+    apu_operation_active = operation_eligible;
 #endif
     apu_native_event_spans = apu_native_event_cycles = 0;
     audio.level_dirty = 1;
@@ -1464,6 +1471,29 @@ void apu_power_on(void)
     apu.noise_lfsr = 1;
     apu.noise_period = noise_period_table[0];
     apu.tri_out = 15;
+}
+
+/* Bootstrap policy, not serialized machine state. Both executors materialize
+ * the same APU image; clock debt must be drained before changing ownership.
+ * Eligibility is sampled at power-on and the session fixes this selection
+ * before admitting frame0, never in the middle of a match. */
+bool cyc_apu_operation_available(void)
+{
+#if NESRECOMP_APU_OPERATION
+    return operation_eligible;
+#else
+    return false;
+#endif
+}
+bool cyc_apu_operation_select(bool native)
+{
+    if (native && !cyc_apu_operation_available()) return false;
+    APU_SYNC();
+#if NESRECOMP_APU_OPERATION
+    apu_operation_active = native;
+    apu_operation_deadline = 1;
+#endif
+    return true;
 }
 
 #define APU_FIELD(f) {#f, offsetof(HwApu, f), sizeof(((HwApu *)0)->f)}

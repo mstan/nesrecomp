@@ -31,8 +31,12 @@ const uint8_t *nes_netplay_identity_build_sha256(void);
 void nes_netplay_session_reference(const char *text,char out[64]);
 
 /* Distinct fixed simulation contracts; these never select/switch a backend. */
-enum {NES_NET_PROFILE_CYCLE_LLE=1, NES_NET_PROFILE_LEGACY_C=2, NES_NET_PROFILE_CYCLE_HLE=4};
+enum {NES_NET_PROFILE_CYCLE_LLE=1, NES_NET_PROFILE_LEGACY_C=2, NES_NET_PROFILE_CYCLE_HLE=4,
+      /* Bit8 is reserved for the separate FRAME picture profile. */
+      NES_NET_PROFILE_CYCLE_LLE_APU1=16, NES_NET_PROFILE_CYCLE_HLE_APU1=32};
 uint32_t nes_netplay_cycle_profile(const char *implementation);
+uint32_t nes_netplay_apu_profile(uint32_t base);
+const char *nes_netplay_profile_contract(uint32_t profile);
 const char *nes_netplay_cycle_contract(const char *implementation);
 int nes_netplay_profile_compatible(uint32_t selected,uint32_t local,uint32_t remote);
 
