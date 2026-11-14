@@ -17,6 +17,20 @@
  * OAM and palette corruption, the OAM address stepping during evaluation)
  * follow measurements published with AccuracyCoin and TriCNES.
  */
+
+#include "ppu_implementation.h"
+#if NESRECOMP_PPU_FRAME
+#define ppu_dot reference_ppu_dot
+#define ppu_half_dot reference_ppu_half_dot
+#define ppu_clock_cpu_tail reference_ppu_clock_cpu_tail
+#define ppu_native_interval_limit reference_ppu_native_interval_limit
+#define ppu_native_interval_run reference_ppu_native_interval_run
+#define ppu_read reference_ppu_read
+#define ppu_write reference_ppu_write
+#define ppu_state_reloaded reference_ppu_state_reloaded
+#define ppu_power_on reference_ppu_power_on
+#define cyc_ppu_implementation reference_cyc_ppu_implementation
+#endif
 #include "hw_internal.h"
 
 #include "hw.h"
@@ -2130,6 +2144,10 @@ static const struct {
     PPU_FIELD(load_attr), PPU_FIELD(next_has_s0), PPU_FIELD(cur_has_s0), PPU_FIELD(oamc_disabled),
     PPU_FIELD(oamc_disabled_now), PPU_FIELD(oamc_pending), PPU_FIELD(oamc_index), PPU_FIELD(oamc_reenabled),
     PPU_FIELD(palc_disabled), PPU_FIELD(palc_v_left), PPU_FIELD(color),
+#if NESRECOMP_PPU_FRAME
+    PPU_FIELD(frame_line_v), PPU_FIELD(frame_fine_x_delay), PPU_FIELD(frame_fine_x_value),
+    PPU_FIELD(frame_bg_hold), PPU_FIELD(frame_at_hold), PPU_FIELD(frame_prefix_line), PPU_FIELD(frame_hold_status),
+#endif
 };
 
 uint64_t ppu_state_hash(uint64_t h)
@@ -2174,3 +2192,17 @@ void ppu_state_dump(void *file)
         fputc('\n', f);
     }
 }
+
+#if NESRECOMP_PPU_FRAME
+#undef ppu_dot
+#undef ppu_half_dot
+#undef ppu_clock_cpu_tail
+#undef ppu_native_interval_limit
+#undef ppu_native_interval_run
+#undef ppu_read
+#undef ppu_write
+#undef ppu_state_reloaded
+#undef ppu_power_on
+#undef cyc_ppu_implementation
+#include "hw_ppu_frame.inc"
+#endif

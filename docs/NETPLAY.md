@@ -19,7 +19,7 @@ boot. The trace previously prevented native clock intervals; desync checks
 still hash the complete frame-boundary machine image. The profile stays fixed
 for the match, and exact-build compatibility remains required.
 
-A Windows two-peer SMB3 gameplay check with latency, jitter, packet loss and
+A Windows two-peer SMB3 world-map check with latency, jitter, packet loss and
 forced mispredictions completed nine rollback episodes without a desync.
 Both peers produced identical confirmed-tick pictures and serialized states,
 and each executed over eight million native interval cycles. On that host,
@@ -248,9 +248,11 @@ mapper0/1/4/66 producer is eligible only with binary32/binary64, direct double
 evaluation and round-to-nearest at power-on. Other boards, regions, floating
 point environments and builds retain the portable cycle executor.
 
-The bootstrap offers the base PPU profile plus its eligible APU variant.
-Bits16 and32 identify `cycle-lle-apu1-c2` and `cycle-hle-apu1-c2`; bit8 is
-reserved for the separate FRAME picture profile. The host selects an APU
+The bootstrap offers LLE or HLE's base PPU profile plus its eligible APU variant.
+Bits16 and32 identify `cycle-lle-apu1-c2` and `cycle-hle-apu1-c2`. Bit8 is the
+separate `cycle-frame-c1` picture profile, which always selects the portable
+APU executor in netplay, including builds that enable the offline producer.
+No FRAME/APU variant is offered. The host selects an LLE/HLE APU
 variant only when every occupied seat offers it, otherwise every peer uses
 the common portable profile. The selected NESBOOT2 profile is checked against
 every capability record before frame0. Exact executable and ROM checks remain

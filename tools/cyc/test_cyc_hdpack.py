@@ -31,7 +31,7 @@ def png_read(path):
 PATTERNS=[bytes([255]*8+[0]*8),bytes([0xf0^(y*3) for y in range(8)]+[0xaa^(y*5) for y in range(8)])]
 
 
-def fixture(chr_ram, sprite16):
+def fixture(chr_ram, sprite16, native_picture=False):
     prg=bytearray([0xea]*32768);code=bytearray();labels={};fixups=[]
     def emit(*v):code.extend(v)
     def label(name):labels[name]=0x8000+len(code)
@@ -62,12 +62,14 @@ def fixture(chr_ram, sprite16):
     chr_data=bytearray(16384)
     for bank in range(2):
         for base in (bank*8192,bank*8192+4096):chr_data[base:base+32]=b''.join(PATTERNS)
-    mapper=0 if chr_ram else 3
-    return b'NES\x1a'+bytes([2,0 if chr_ram else 2,mapper<<4,0])+bytes(8)+prg+(b'' if chr_ram else chr_data)
+    mapper=0 if chr_ram else (66 if native_picture else 3)
+    return b'NES\x1a'+bytes([2,0 if chr_ram else 2,(mapper&15)<<4,mapper&0xf0])+bytes(8)+prg+(b'' if chr_ram else chr_data)
 
 
 def main():
-    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--host',type=Path,required=True);parser.add_argument('--out',type=Path,required=True);args=parser.parse_args()
+    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--host',type=Path,required=True);parser.add_argument('--out',type=Path,required=True)
+    parser.add_argument('--native-picture',action='store_true',help='exercise native GxROM bank changes instead of reference CNROM')
+    args=parser.parse_args()
     out=args.out.resolve();out.mkdir(parents=True,exist_ok=True)
     si=None
     if hasattr(subprocess,'STARTUPINFO'):si=subprocess.STARTUPINFO();si.dwFlags|=subprocess.STARTF_USESHOWWINDOW;si.wShowWindow=0
@@ -89,7 +91,9 @@ def main():
                 manifest+=f'<tile>{bank},{key},FF111213,16,0,1,N\n'
         (pack/'hires.txt').write_text(manifest)
         for sprite16 in (False,True):
-            rom=out/f'{"ram" if ram else "rom"}-{16 if sprite16 else 8}.nes';rom.write_bytes(fixture(ram,sprite16));tag=rom.stem
+            rom=out/f'{"ram" if ram else "rom"}-{16 if sprite16 else 8}.nes';rom.write_bytes(fixture(ram,sprite16,args.native_picture));tag=rom.stem
+            if args.native_picture and not ram and not sprite16:
+                run('retained-prefix',rom,pack,frames=1,extra=['--hdpack-prefix-check'])
             for align in range(4):
                 name=f'{tag}-a{align}';w,h,rows=run(name,rom,fallback,extra=['--align',align]);nw,nh,native=png_read(out/(name+'-native.png'));assert (w,h)==(512,480)
                 for y in range(nh):

@@ -208,7 +208,9 @@ static void sprite_output_cases(bool reference)
                (unsigned long long)cyc_mem_state_hash());
     }
     if (!reference) {
+#if !NESRECOMP_PPU_FRAME
         check(ppu_native_sprite_spans > 10, "prepared sprite output exercised");
+#endif
         check(apu_native_event_spans > 10, "APU event spans exercised");
     }
 }
@@ -329,7 +331,14 @@ int main(int argc, char **argv)
                 stimulus(i);
                 unsigned n = hw_native_interval_limit();
                 if (n) {
+#if NESRECOMP_PPU_FRAME
+                    /* A native row has no fetch/shifter phase boundary. Its
+                     * credit still stops before the next scanline. The exact
+                     * hardware/PCM comparison below verifies IRQ/NMI events. */
+                    check(n <= (340u - ppu.dot) / 3u, "bounded native row span");
+#else
                     check(n <= (ppu.scanline < 240 ? 80u : 109u), "bounded native span");
+#endif
                     uint8_t saved_tick = hw.tick;
                     hw.tick = 0;
                     check(!hw_native_interval_limit(), "partial cycle refusal");
@@ -352,11 +361,13 @@ int main(int argc, char **argv)
                         hw_cart.m.irq_out = 1;
                         check(!hw_native_interval_limit(), "unsampled mapper IRQ refusal");
                         hw_cart.m.irq_out = saved_out;
+#if !NESRECOMP_PPU_FRAME
                         uint8_t saved_table = ppu.bg_table, saved_a12 = hw_cart.m.a12;
                         ppu.bg_table = 1; hw_cart.m.a12 = 0;
                         if (ppu.scanline < 240)
                             check(!hw_native_interval_limit(), "possible first A12 rise refusal");
                         ppu.bg_table = saved_table; hw_cart.m.a12 = saved_a12;
+#endif
                     }
                     hw_extra_timing.extra_scanlines = 1;
                     check(!hw_native_interval_limit(), "extra timing refusal");

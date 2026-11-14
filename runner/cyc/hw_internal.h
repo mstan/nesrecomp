@@ -422,6 +422,13 @@ typedef struct {
     uint8_t  oam[256];
     uint8_t  palette[32];
     uint8_t  ciram[0x1000] /* upper 2 KiB belongs to four-screen cartridges */;
+#if NESRECOMP_PPU_FRAME
+    uint16_t frame_line_v;
+    uint8_t frame_fine_x_delay, frame_fine_x_value;
+    uint32_t frame_bg_hold, frame_at_hold;
+    uint16_t frame_prefix_line;
+    uint8_t frame_hold_status;
+#endif
 } HwPpu;
 
 extern HwPpu ppu;
@@ -444,6 +451,10 @@ bool    ppu_clock_cpu_tail(unsigned align);
  * independent device runs before calling the executor. */
 unsigned ppu_native_interval_limit(void);
 void    ppu_native_interval_run(unsigned cycles, unsigned align);
+#if NESRECOMP_PPU_FRAME
+void    frame_ppu_ticks(unsigned first, unsigned end);
+void    frame_ppu_mapper_changed(void);
+#endif
 unsigned hw_native_interval_limit(void);
 void    hw_native_interval_run(unsigned cycles);
 uint8_t ppu_read(uint16_t addr);

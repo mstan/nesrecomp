@@ -74,9 +74,13 @@ static inline void run_tick(unsigned k)
     if (k==0 && hw_cart.watch_cpu) hw_cart_cpu_clock();
     if (k == 4) sample_nmi();
     else if (k == 7) apu_sample_irq();
+#if NESRECOMP_PPU_FRAME
+    frame_ppu_ticks(k,k+1);
+#else
     unsigned q = (hw.align + k) & 3;
     if (q == 0) ppu_dot();
     else if (q == 2) ppu_half_dot();
+#endif
     if (k == 0) clock_cpu_devices();
     /* Boards clocked before the CPU's access, after the IRQ sample (FDS). */
     if (k == 11 && hw_cart.clock_late) hw_cart_cpu_clock_late();
@@ -171,8 +175,12 @@ static void run_ticks_1_to_11(void)
 static inline void run_tick_0(void)
 {
     if (hw_cart.watch_cpu) hw_cart_cpu_clock();
+#if NESRECOMP_PPU_FRAME
+    frame_ppu_ticks(0,1);
+#else
     if (hw.align == 0) ppu_dot();
     else if (hw.align == 2) ppu_half_dot();
+#endif
     clock_cpu_devices();
 }
 
@@ -499,7 +507,12 @@ void hw_bus_write(uint16_t addr, uint8_t value)
     if (addr < 0x2000) hw_code_store(&hw.ram[addr & 0x7FF], addr & 0x7FF, value);
     else if (addr < 0x4000) ppu_write(addr, value);
     else if (addr <= 0x4017) apu_write(addr, value);
-    else if (addr >= 0x4020) hw_cart_cpu_write(addr, value);
+    else if (addr >= 0x4020) {
+#if NESRECOMP_PPU_FRAME
+        frame_ppu_mapper_changed();
+#endif
+        hw_cart_cpu_write(addr, value);
+    }
     /* $4018-$401F: the 2A03's test registers, not connected on a console. */
     hw.data_bus = value;
     hw.internal_bus = value;

@@ -475,7 +475,7 @@ static void make_caps(uint8_t out[96]) {
         (SDL_HasSSE42()?8u:0u)|(SDL_HasAVX()?16u:0u)|(SDL_HasAVX2()?32u:0u)|(SDL_HasNEON()?64u:0u);
 #ifdef NESRECOMP_CYCLE_NET
     backend=1u|(cyc_native_prg_hash?2u:0u);
-    if(cyc_apu_operation_available())backend|=8u;
+    if(nes_netplay_apu_profile(portable_profile())&&cyc_apu_operation_available())backend|=8u;
 #else
     backend=4u;
 #endif
