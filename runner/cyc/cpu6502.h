@@ -25,6 +25,10 @@
 #include "cyc_trace.h"
 #include "hw.h"
 
+#ifndef NESRECOMP_NATIVE_WAIT_LOOPS
+#define NESRECOMP_NATIVE_WAIT_LOOPS 0
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -45,6 +49,11 @@ typedef struct {
 } Cpu6502;
 
 extern Cpu6502 cpu;
+#if NESRECOMP_NATIVE_WAIT_LOOPS
+/* Collapse complete, event-free JMP-self iterations. Boundaries
+ * keep the ordinary instruction templates and their bus/interrupt ordering. */
+void cpu_native_wait_jump(uint16_t pc, uint8_t high);
+#endif
 /* Trusted host observation after a completed RTS, before its caller resumes.
  * No bus activity is replaced. NULL unless a game installs an observer. */
 extern void (*cyc_cpu_rts_observer)(void);

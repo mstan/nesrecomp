@@ -87,3 +87,47 @@ void cpu_jam(void) {
 void cpu_jam_cycle(void) {
     cpu_read(0xFFFF, 0);
 }
+
+#if NESRECOMP_NATIVE_WAIT_LOOPS
+#include "hw_internal.h"
+#include "cyc_recomp.h"
+#include <stdio.h>
+#include <stdlib.h>
+static uint64_t wait_cycles, wait_iterations, wait_spans;
+static void wait_report(void) {
+    if (getenv("NESRECOMP_WAIT_REPORT"))
+        fprintf(stderr, "native_wait: cycles=%llu iterations=%llu spans=%llu\n",
+                (unsigned long long)wait_cycles,
+                (unsigned long long)wait_iterations,
+                (unsigned long long)wait_spans);
+}
+
+void cpu_native_wait_jump(uint16_t pc, uint8_t high)
+{
+    if ((pc & 0xffu) > 0xfdu || pc < 0x8000 || !hw_native_interval.enabled ||
+        hw_isolated || cyc_trace_enabled ||
+        hw_prg_modified || hw_prg_data_modified ||
+        (cpu.do_nmi | cpu.do_irq | cpu.do_reset)) return;
+    /* The compiler excludes immutable declared hook sites. No registers or
+     * flags change, and no RAM operand observer is involved in a JMP-self. */
+    hw_native_flush();
+    while (!hw_frame_done && !(cpu.do_nmi | cpu.do_irq | cpu.do_reset)) {
+        unsigned cycles = hw_native_interval_limit();
+        cycles -= cycles % 3;
+        if (!cycles) break;
+        if (!wait_spans) atexit(wait_report);
+        /* One iteration ends with the last ROM operand read.
+         * The shared device interval proves that no observer can distinguish
+         * its internal bus phases; publish the final phase exactly once. */
+        hw_native_interval.pending = cycles;
+        hw_native_interval.addr = (uint16_t)(pc + 2);
+        hw_native_interval.kind = HW_READ;
+        hw_native_interval.value = high;
+        hw_native_interval.driven = 1;
+        hw_native_flush();
+        wait_cycles += cycles;
+        wait_iterations += cycles / 3;
+        ++wait_spans;
+    }
+}
+#endif
