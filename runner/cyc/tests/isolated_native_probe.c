@@ -190,6 +190,16 @@ int main(int argc,char **argv)
             cyc_mod_set_return_hook(q&16?returned:NULL);cyc_mod_allow_isolated_hooks(true);
             hw_prg_data_modified=(q&32)!=0;
             hw_native_begin_checked_rom();
+            if(!reference && q==0 && mapper!=2) {
+                uint64_t saved_budget=hw_isolated_budget;
+                hw_isolated_budget=UINT64_C(65536);
+                check(hw_native_interval_limit()==65535,"isolated credit caps at65535");
+                hw_isolated_cycles=1;
+                check(hw_native_interval_limit()==65535,"isolated cap exact at65535 remaining");
+                hw_isolated_cycles=2;
+                check(hw_native_interval_limit()==65534,"isolated remaining below cap");
+                hw_isolated_cycles=0;hw_isolated_budget=saved_budget;
+            }
             if(reference)hw_native_interval.enabled=false;
             uint64_t cycles=0,reads=0;
 #define STEP(expression) do { expression; ++cycles; \

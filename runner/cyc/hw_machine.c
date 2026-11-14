@@ -20,6 +20,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <assert.h>
 #include <string.h>
 
 HwMachine  hw;
@@ -237,6 +238,8 @@ unsigned hw_native_interval_limit(void)
         ((hw_cart.m.chr0 ^ hw_cart.m.chr1) & 0x1c)) HR_REFUSE(HR_R_BOARD);
     unsigned ppu_limit = ppu_native_interval_limit();
     unsigned limit = apu_native_interval_limit(ppu_limit);
+    /* The owner admission bound also makes its packed host tally exact. */
+    assert(limit <= UINT16_MAX);
     if (!limit) HR_COUNT(hr_refusal = ppu_limit ? HR_R_APU_DMC : HR_R_PPU_BLANK + hr_ppu_reason(true));
     return limit;
 #undef HR_REFUSE

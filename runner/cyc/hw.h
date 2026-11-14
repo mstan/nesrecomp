@@ -81,10 +81,11 @@ extern int hw_dma_stalls;
 typedef struct {
     uint8_t *ram;
     unsigned credit;
-    /* Low 32 bits: physical cycles. With counters, high 32 bits: real
-     * opcode fetches, fused into the same reservation update. This derived
-     * cursor is not serialized; integer masks do not depend on host endian. */
-    uint64_t pending;
+    /* Every admitted span is <=UINT16_MAX cycles (including isolation),
+     * and fetches cannot outnumber cycles. Keep both quantities in the
+     * original word: low16 cycles, high16 real fetches when counters are on.
+     * Integer masks are endian-independent; this cursor is not serialized. */
+    uint32_t pending;
     uint16_t addr;
     uint8_t value, kind, driven;
     bool enabled;
@@ -118,12 +119,16 @@ bool hw_native_prepare(void);
 
 static inline unsigned hw_native_pending_cycles(void)
 {
-    return (uint32_t)hw_native_interval.pending;
+#if NESRECOMP_HEADROOM_COUNTERS
+    return (uint16_t)hw_native_interval.pending;
+#else
+    return hw_native_interval.pending;
+#endif
 }
 #if NESRECOMP_HEADROOM_COUNTERS
 static inline unsigned hw_native_pending_fetches(void)
 {
-    return (uint32_t)(hw_native_interval.pending >> 32);
+    return (uint16_t)(hw_native_interval.pending >> 16);
 }
 #endif
 
@@ -134,7 +139,7 @@ static inline bool hw_native_reserve_kind(bool opcode_fetch)
     if (!hw_native_interval.credit && !hw_native_prepare()) return false;
     --hw_native_interval.credit;
 #if NESRECOMP_HEADROOM_COUNTERS
-    hw_native_interval.pending += UINT64_C(1) + (opcode_fetch ? (UINT64_C(1) << 32) : 0);
+    hw_native_interval.pending += UINT32_C(1) + (opcode_fetch ? (UINT32_C(1) << 16) : 0);
 #else
     (void)opcode_fetch;
     ++hw_native_interval.pending;

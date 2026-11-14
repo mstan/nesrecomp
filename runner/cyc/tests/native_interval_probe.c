@@ -16,6 +16,23 @@ static void check(bool ok, const char *what)
     if (!ok) { fprintf(stderr, "FAIL: %s\n", what); exit(1); }
 }
 
+/* Exercise the maximum isolated credit without advancing physical devices.
+ * The final legal reservation fills both halves; the next needs a publish. */
+static void cursor_count_boundary(void)
+{
+#if NESRECOMP_HEADROOM_COUNTERS
+    HwNativeInterval saved=hw_native_interval;int stalls=hw_dma_stalls;
+    hw_native_interval.enabled=true;hw_native_interval.credit=UINT16_MAX;
+    hw_native_interval.pending=0;
+    for(unsigned i=0;i<UINT16_MAX;++i)
+        check(hw_native_reserve_fetch(),"maximum counted reservation");
+    check(!hw_native_interval.credit && hw_native_pending_cycles()==UINT16_MAX &&
+          hw_native_pending_fetches()==UINT16_MAX && hw_native_interval.pending==UINT32_MAX,
+          "both cursor halves retain65535 without overflow");
+    hw_native_interval=saved;hw_dma_stalls=stalls;
+#endif
+}
+
 static void access_bus(uint16_t addr, uint8_t value, bool write)
 {
     hw_cycle_start(addr, write ? HW_WRITE : HW_READ);
@@ -274,6 +291,7 @@ static void idle_output_cases(bool reference)
 
 int main(int argc, char **argv)
 {
+    cursor_count_boundary();
     bool reference = argc > 1 && strstr(argv[1], "reference") != NULL;
     bool cursor = argc > 1 && strstr(argv[1], "cpu") != NULL;
     cyc_set_audio_synthesis(argc > 1 && strstr(argv[1], "band") != NULL
