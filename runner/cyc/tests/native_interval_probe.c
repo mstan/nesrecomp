@@ -276,6 +276,8 @@ int main(int argc, char **argv)
 {
     bool reference = argc > 1 && strstr(argv[1], "reference") != NULL;
     bool cursor = argc > 1 && strstr(argv[1], "cpu") != NULL;
+    cyc_set_audio_synthesis(argc > 1 && strstr(argv[1], "band") != NULL
+        ? CYC_AUDIO_SYNTH_BAND_LIMITED : CYC_AUDIO_SYNTH_LEGACY);
     static uint8_t image[16 + 65536 + 16384];
     static const unsigned mappers[] = { 0, 1, 4, 66 };
     memcpy(image, "NES\032", 4);
