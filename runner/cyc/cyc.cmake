@@ -133,7 +133,7 @@ function(nesrecomp_cyc_enable_sdl target)
     endif()
     target_sources(${target} PRIVATE ${NESRECOMP_CYC_DIR}/cyc_sdl.c ${NESRECOMP_CYC_DIR}/cyc_input.c
         ${NESRECOMP_CYC_DIR}/cyc_settings.c ${NESRECOMP_CYC_DIR}/cyc_tcp.c
-        ${NESRECOMP_CYC_DIR}/cyc_chat.c)
+        ${NESRECOMP_CYC_DIR}/cyc_chat.c ${NESRECOMP_CYC_DIR}/cyc_affinity.c)
     if(WIN32)
         target_link_libraries(${target} PRIVATE ws2_32)
     endif()

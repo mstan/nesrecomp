@@ -48,6 +48,7 @@
 #endif
 #include <SDL.h>
 
+#include "cyc_affinity.h"
 #include "cyc_chat.h"
 #include "cyc_core.h"
 #include "cyc_disk_action.h"
@@ -1527,6 +1528,7 @@ static volatile int s_emu_quit;
 static int emu_main(void *unused)
 {
     (void)unused;
+    cyc_affinity_pin(CYC_PIN_EMU);              /* a core of its own (cyc_affinity.h) */
     for (;;) {
         SDL_SemWait(s_emu_go);
         if (s_emu_quit) return 0;
@@ -1541,6 +1543,7 @@ static bool emu_start(void)
         if (!s_emu_go) s_emu_go = SDL_CreateSemaphore(0);
         if (!s_emu_done) s_emu_done = SDL_CreateSemaphore(0);
         if (!s_emu_go || !s_emu_done) return false;
+        cyc_affinity_pin(CYC_PIN_MAIN);         /* before the thread: the plan is made here */
         s_emu_thread = SDL_CreateThread(emu_main, "nes-emulation", NULL);
         if (!s_emu_thread) return false;
     }
