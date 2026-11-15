@@ -1377,7 +1377,12 @@ static void eval_backgrounds_for_frame(void) {
     /* The recorded scroll already includes its nametable page. CycLine.ctrl
      * contains pattern-table/sprite-size bits, not the original $2000 page. */
     const int scrollx = cyc_render_line_scroll_x(239);
-    const int scrolly = cyc_render_line_scroll_y(0);
+    int scrolly = cyc_render_line_scroll_y(0);
+    if (s_native_hud_rows) {
+        /* A fixed HUD may replace the top scanline's scroll. Sample the room
+         * after its split, then remove the sampled scanline's own Y advance. */
+        scrolly = (cyc_render_line_scroll_y(239) + 480 - 239) % 480;
+    }
 #else
     const int scrollx = g_ppuscroll_x + ((g_ppuctrl & 0x01) ? 256 : 0);
     const int scrolly = g_ppuscroll_y + ((g_ppuctrl & 0x02) ? 240 : 0);
