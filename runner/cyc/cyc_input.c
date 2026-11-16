@@ -276,6 +276,11 @@ void cyc_input_eval(const CycBindings *b, const CycInputFrame *f, CycInputState 
     uint32_t pad_taken[CYC_INPUT_MAX_PADS] = { 0 };
     int axis_taken[CYC_INPUT_MAX_PADS] = { 0 };      /* the axis bindings a held shortcut uses */
     for (int s = 0; s < CYC_SC_COUNT; ++s) {
+        if (b->shortcut_off & (1u << s)) {
+          // this shortcut key can be freed up for a user to remap, since
+          // it's not relevant for this system, e.g. DISK shortcut on non-FDS
+          continue;
+        }
         const CycBinding *sb = &b->shortcut[s];
         if (key_down(f, sb->key)) {
             out->shortcut[s] = true;

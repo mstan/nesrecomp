@@ -90,6 +90,7 @@ typedef struct {
     CycBinding button[CYC_INPUT_PLAYERS][CYC_INPUT_BUTTONS];
     CycBinding shortcut[CYC_SC_COUNT];
     CycBinding game_button[CYC_INPUT_PLAYERS][CYC_GAME_BUTTONS];
+    unsigned shortcut_off;                     /* bitmask to deactivate CycShortcuts the system cannot use */
 } CycBindings;
 
 void cyc_bindings_default(CycBindings *b);
