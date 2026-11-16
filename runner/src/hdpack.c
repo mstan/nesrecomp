@@ -1380,9 +1380,11 @@ static void eval_backgrounds_for_frame(void) {
     const int scrollx = cyc_render_line_scroll_x(239);
     int scrolly = cyc_render_line_scroll_y(0);
     if (s_native_hud_rows) {
-        /* A fixed HUD may replace the top scanline's scroll. Sample the room
-         * after its split, then remove the sampled scanline's own Y advance. */
-        scrolly = (cyc_render_line_scroll_y(239) + 480 - 239) % 480;
+        /* Authored room-atlas offsets are relative to the first content
+         * scanline after the HUD split. Keep that scanline's PPU Y: removing
+         * its Y advance would subtract the HUD twice from scrolling crops. */
+        const unsigned row = s_native_hud_rows < 240 ? s_native_hud_rows : 239;
+        scrolly = cyc_render_line_scroll_y((int)row);
     }
 #else
     const int scrollx = g_ppuscroll_x + ((g_ppuctrl & 0x01) ? 256 : 0);
