@@ -1372,6 +1372,7 @@ static int cond_eval(HdCond *c, int x, int y, HdPixel *cur, int is_sprite) {
 
 static void eval_backgrounds_for_frame(void) {
     s_nact = 0;
+    s_band_behind = s_band_mid = s_band_fg = 0;
     if (!s_actbg) return;
 #ifdef NESRECOMP_CYCLE_HDPACK
     /* The recorded scroll already includes its nametable page. CycLine.ctrl
