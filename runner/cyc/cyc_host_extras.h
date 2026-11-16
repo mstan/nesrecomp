@@ -126,6 +126,25 @@ typedef struct CycHostExtras {
      * Does not select Fit, override a saved mod/aspect choice, change the
      * saved window scale/fullscreen mode, or affect headless presentation. */
     int initial_fit_width;
+    /* Pictures between machine frames (window only). With present_rate (Hz)
+     * above the machine's frame rate and present_phase set, the window
+     * presents again while it waits for the next machine frame, about
+     * present_rate times a second, first calling present_phase with how far
+     * through the frame period that picture falls (0 < phase < 1). present
+     * then composes the in-between picture (a camera moved on by that
+     * fraction of a frame). The machine frame's own picture is phase 0: the
+     * game resets its phase when the frame ends. Nothing runs between
+     * frames: input, audio and the machine are untouched. A game may change
+     * present_rate at any time (the window reads it each frame); 0 is off. */
+    unsigned present_rate;
+    void (*present_phase)(void *ctx, double phase);
+    /* The game promises that present, for an in-between picture (after a
+     * present_phase), reads nothing of the machine (no cyc_render_* or
+     * cyc_frame_* call): only what it copied when composing the machine
+     * frame's own picture. The window then runs the next machine frame on
+     * a second thread while it presents those pictures, so they stay evenly
+     * spaced even when a frame takes most of its time to emulate. */
+    bool present_from_snapshot;
 } CycHostExtras;
 
 const CycHostExtras *cyc_host_extras(void);

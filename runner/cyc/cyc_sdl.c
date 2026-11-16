@@ -48,6 +48,7 @@
 #endif
 #include <SDL.h>
 
+#include "cyc_affinity.h"
 #include "cyc_chat.h"
 #include "cyc_core.h"
 #include "cyc_disk_action.h"
@@ -494,6 +495,31 @@ static void apply_picture_scale(void)
         SDL_RenderSetIntegerScale(s_ren, integer);
 }
 
+/* The windowed size: the picture times the window scale, but no larger than
+ * the usable area of the window's display (a game presenting a large
+ * picture, such as one drawn at several times the NES resolution for smooth
+ * motion, would otherwise open a window wider than the monitor). Within that
+ * area the largest whole multiple that fits, else the picture's own size. */
+static void window_size(int display, int *w, int *h)
+{
+    int pw = s_tex_w, ph = logical_h(), scale = s_set.window_scale;
+    *w = pw * scale;
+    *h = ph * scale;
+    SDL_Rect area;
+    if (display < 0 || SDL_GetDisplayUsableBounds(display, &area) != 0 || area.w <= 0 || area.h <= 0) return;
+    area.h -= 48;                               /* the title bar */
+    while (scale > 1 && (pw * scale > area.w || ph * scale > area.h)) --scale;
+    *w = pw * scale;
+    *h = ph * scale;
+    if (*w > area.w || *h > area.h) {           /* even 1x is too large: fit, keeping the shape */
+        double f = (double)area.w / *w < (double)area.h / *h ? (double)area.w / *w : (double)area.h / *h;
+        *w = (int)(*w * f);
+        *h = (int)(*h * f);
+    }
+}
+
+static int s_window_w, s_window_h;              /* the windowed size last asked for */
+
 static void apply_settings(void)
 {
     CycAudioSynthesis synthesis = s_set.audio_synthesis == 1
@@ -507,9 +533,23 @@ static void apply_settings(void)
     }
     if (!s_win) return;
     Uint32 fs = s_set.fullscreen == 1 ? SDL_WINDOW_FULLSCREEN_DESKTOP : s_set.fullscreen == 2 ? SDL_WINDOW_FULLSCREEN : 0;
-    if ((SDL_GetWindowFlags(s_win) & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_FULLSCREEN_DESKTOP)) != fs)
+    bool fs_changed = (SDL_GetWindowFlags(s_win) & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_FULLSCREEN_DESKTOP)) != fs;
+    if (fs_changed)
         SDL_SetWindowFullscreen(s_win, fs);
-    if (!fs) SDL_SetWindowSize(s_win, s_tex_w * s_set.window_scale, logical_h() * s_set.window_scale);
+    if (!fs) {
+        /* Resize only when the wanted size changes (window scale, picture
+         * size) or the window leaves fullscreen. Every menu change applies
+         * the settings; resizing then would fight a window the player or
+         * the compositor maximized or tiled (on Wayland the game would
+         * then draw into a corner of the larger window). */
+        int ww, wh;
+        window_size(SDL_GetWindowDisplayIndex(s_win), &ww, &wh);
+        if (fs_changed || ww != s_window_w || wh != s_window_h) {
+            SDL_SetWindowSize(s_win, ww, wh);
+            s_window_w = ww;
+            s_window_h = wh;
+        }
+    }
     SDL_RenderSetLogicalSize(s_ren, s_tex_w, logical_h());
     apply_picture_scale();
     if (s_tex) SDL_SetTextureScaleMode(s_tex, s_set.linear_filter ? SDL_ScaleModeLinear : SDL_ScaleModeNearest);
@@ -1346,6 +1386,11 @@ static void present_shot(long frame)
     free(px);
 }
 
+/* In-between pictures can overlap a machine frame. The host's own crosshair
+ * must use a snapshot too, rather than inspecting the live input device. */
+static bool s_emu_frame_active;
+static CycZapperState s_present_zapper;
+
 static void show(bool loading, const char *toast_title, const char *toast_body)
 {
     int w, h;
@@ -1414,7 +1459,8 @@ static void show(bool loading, const char *toast_title, const char *toast_body)
 #endif
     SDL_RenderCopy(s_ren, gpu_texture?gpu_texture:s_tex, NULL, &dst);
     CycZapperState gun;
-    cyc_zapper_state(&gun);
+    if (s_emu_frame_active) gun = s_present_zapper;
+    else cyc_zapper_state(&gun);
     int aim_x = -1, aim_y = -1;
     if (gun.port && !s_zapper_override) aim_x = s_aim_x, aim_y = s_aim_y;
     else if (gun.port && gun.x >= 0) aim_x = gun.x + picture_native_origin(w), aim_y = gun.y;
@@ -1457,6 +1503,98 @@ static void show(bool loading, const char *toast_title, const char *toast_body)
         else cyc_tcp_err(s_ui_shot_id, SDL_GetError());
         s_ui_shot_id = -1;
     }
+}
+
+/* ---- in-between pictures (cyc_host_extras.h present_rate) ----
+ * Picture i after a machine frame's own picture (shown at s_ib.origin)
+ * appears at origin + i * step and shows phase i * step / frame_ticks. Those
+ * that begin before the next machine frame are presented after this one;
+ * with a game whose present reads only its own snapshot
+ * (present_from_snapshot), the rest are presented while the next machine
+ * frame runs on the emulation thread, so a frame that takes most of its
+ * 16.6 ms to emulate still gets evenly spaced pictures. */
+static struct {
+    bool   on;
+    Uint64 origin, step, frame_ticks, i, draw;
+} s_ib;
+static FILE *cyc_pacing_log_file;
+static Uint64 s_pace_frame_start, s_pace_emu_done, s_pace_extras_done;   /* CYC_PACING_LOG */
+
+static void ib_present(Uint64 deadline, const char *toast_title, const char *toast_body)
+{
+    const Uint64 freq = SDL_GetPerformanceFrequency();
+    FILE *pl = cyc_pacing_log_file;
+    while (s_ib.on && s_ib.step && s_ib.i * s_ib.step + s_ib.step / 2 < s_ib.frame_ticks) {
+        Uint64 target = s_ib.origin + s_ib.i * s_ib.step;
+        Uint64 at = target - (s_ib.draw < target ? s_ib.draw : 0);
+        Uint64 t = SDL_GetPerformanceCounter();
+        if (at >= deadline || t >= deadline) {
+            if (pl) fprintf(pl, " [%llu later]", (unsigned long long)s_ib.i);
+            return;                               /* during the next frame, if at all */
+        }
+        if (t < at) {
+            Uint32 wait_ms = (Uint32)((at - t) * 1000 / freq);
+            if (wait_ms > 1) SDL_Delay(wait_ms - 1);
+            while ((t = SDL_GetPerformanceCounter()) < at) {}
+        }
+        double phase = (double)(s_ib.i * s_ib.step) / (double)s_ib.frame_ticks;
+        s_extras->present_phase(s_extras->ctx, phase);
+        show(false, toast_title, toast_body);
+#ifdef NESRECOMP_CYCLE_HDPACK
+        if(s_gpu_picture)cyc_hd_gpu_present_end(s_hd_gpu);
+#endif
+        SDL_RenderPresent(s_ren);
+        Uint64 done = SDL_GetPerformanceCounter(), d = done - t;
+        if (pl) fprintf(pl, " [%llu at %+.2f shown %+.2f]", (unsigned long long)s_ib.i,
+                        (double)((long long)(t - s_ib.origin)) * 1000.0 / (double)freq,
+                        (double)((long long)(done - s_ib.origin)) * 1000.0 / (double)freq);
+        if (d > s_ib.step / 2) d = s_ib.step / 2;        /* a VSync wait is not drawing time */
+        s_ib.draw = s_ib.draw ? (s_ib.draw * 7 + d) / 8 : d;
+        s_ib.i++;
+    }
+    s_ib.on = false;
+}
+
+/* The emulation thread: runs one machine frame (cyc_run_frame) when told,
+ * while the main thread presents in-between pictures. Everything else the
+ * window does with the machine stays on the main thread, between frames. */
+static SDL_Thread *s_emu_thread;
+static SDL_sem *s_emu_go, *s_emu_done;
+static volatile int s_emu_quit;
+
+static int emu_main(void *unused)
+{
+    (void)unused;
+    cyc_affinity_pin(CYC_PIN_EMU);              /* a core of its own (cyc_affinity.h) */
+    for (;;) {
+        SDL_SemWait(s_emu_go);
+        if (s_emu_quit) return 0;
+        cyc_run_frame();
+        SDL_SemPost(s_emu_done);
+    }
+}
+
+static bool emu_start(void)
+{
+    if (!s_emu_thread) {
+        if (!s_emu_go) s_emu_go = SDL_CreateSemaphore(0);
+        if (!s_emu_done) s_emu_done = SDL_CreateSemaphore(0);
+        if (!s_emu_go || !s_emu_done) return false;
+        cyc_affinity_pin(CYC_PIN_MAIN);         /* before the thread: the plan is made here */
+        s_emu_thread = SDL_CreateThread(emu_main, "nes-emulation", NULL);
+        if (!s_emu_thread) return false;
+    }
+    SDL_SemPost(s_emu_go);
+    return true;
+}
+
+static void emu_stop(void)
+{
+    if (!s_emu_thread) return;
+    s_emu_quit = 1;
+    SDL_SemPost(s_emu_go);
+    SDL_WaitThread(s_emu_thread, NULL);
+    s_emu_thread = NULL;
 }
 
 /* ---- the loop ---- */
@@ -1562,8 +1700,11 @@ int cyc_sdl_main(const char *title_in, int scale)
     picture(&w, &h);
     s_tex_w = w;
     s_tex_h = h;
-    s_win = SDL_CreateWindow(title, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, w * s_set.window_scale,
-                             logical_h() * s_set.window_scale,
+    int win_w, win_h;
+    window_size(0, &win_w, &win_h);             /* centred windows open on the first display */
+    s_window_w = win_w;
+    s_window_h = win_h;
+    s_win = SDL_CreateWindow(title, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, win_w, win_h,
                              SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI | (s_hidden ? SDL_WINDOW_HIDDEN : 0));
     s_ren = NULL;
     if (!create_renderer() || !ensure_texture(w, h)) {
@@ -1846,9 +1987,27 @@ int cyc_sdl_main(const char *title_in, int scale)
                 cyc_replay_frame_begin(phys, logical, buttons);
             }
             }
+            s_pace_frame_start = SDL_GetPerformanceCounter();
             cyc_session_frame_begin();
-            cyc_run_frame();
+            /* The last picture's remaining in-between pictures while this
+             * frame runs on the emulation thread (see ib_present). */
+            const bool parallel_frame = s_ib.on && s_extras && s_extras->present &&
+                s_extras->present_phase && s_extras->present_rate && s_extras->present_from_snapshot &&
+                !open && !inactive && !st.shortcut[CYC_SC_FAST_FORWARD] && !s_uncapped &&
+                !online && !replay;
+            if (parallel_frame) cyc_zapper_state(&s_present_zapper);
+            if (parallel_frame && emu_start()) {
+                s_emu_frame_active = true;
+                ib_present(~(Uint64)0, toast_title, toast_body);
+                SDL_SemWait(s_emu_done);
+                s_emu_frame_active = false;
+            } else {
+                cyc_run_frame();
+            }
+            s_ib.on = false;
+            s_pace_emu_done = SDL_GetPerformanceCounter();
             cyc_session_frame_end();
+            s_pace_extras_done = SDL_GetPerformanceCounter();
             cyc_replay_frame_end();
             frames++;
             cyc_host_frame_done(++s_frames_done);
@@ -1901,8 +2060,49 @@ int cyc_sdl_main(const char *title_in, int scale)
 #ifdef NESRECOMP_CYCLE_HDPACK
             if(s_gpu_picture)cyc_hd_gpu_present_end(s_hd_gpu);
 #endif
+            /* Steady pictures: when the in-between pictures are drawn during
+             * the next frame (present_from_snapshot), hold this frame's own
+             * picture until one frame period after the last one, so the
+             * varying time a frame takes to emulate does not move it. The
+             * hold creeps 0.2 ms a frame earlier, so a slow frame's delay
+             * does not stay; it never waits more than half a frame. */
+            static Uint64 s_pic_due;
+            const bool steady = s_extras && s_extras->present_from_snapshot && s_extras->present_rate &&
+                                !s_vsync_active && !unpaced && !loading && !open && !inactive;
+            /* Never hold a picture past 80% of its frame: one slow frame (a
+             * goal) must not keep every later picture late. */
+            if (s_pic_due > next + frame_ticks * 4 / 5) s_pic_due = next + frame_ticks * 4 / 5;
+            if (steady && s_pic_due && s_pic_due < next + frame_ticks) {   /* never when running behind */
+                Uint64 t = SDL_GetPerformanceCounter();
+                if (t < s_pic_due && s_pic_due - t < frame_ticks / 2) {
+                    Uint32 wait_ms = (Uint32)((s_pic_due - t) * 1000 / freq);
+                    if (wait_ms > 1) SDL_Delay(wait_ms - 1);
+                    while (SDL_GetPerformanceCounter() < s_pic_due) {}
+                }
+            }
+            Uint64 pace_before = SDL_GetPerformanceCounter();
             SDL_RenderPresent(s_ren);
             shown = SDL_GetPerformanceCounter();
+            /* from when this picture was handed over, so the hold itself adds nothing */
+            s_pic_due = steady ? pace_before + frame_ticks - freq / 5000 : 0;   /* creeps 0.2 ms a frame earlier */
+            {
+                /* CYC_PACING_LOG=FILE: when each picture is drawn and shown
+                 * (ms from the frame's scheduled start), for pacing checks. */
+                static FILE *pl; static bool pl_tried;
+                if (!pl_tried) { const char *e = getenv("CYC_PACING_LOG"); pl_tried = true; if (e && *e) pl = fopen(e, "w"); }
+                if (pl) {
+                    double ms = 1000.0 / (double)freq;
+                    fprintf(pl, "\n%ld frame: work %.2f present %.2f vsync %d (late %.2f emu+ib %.2f extras %.2f draw+hold %.2f) |",
+                            (long)s_frames_done, (double)(pace_before - next) * ms, (double)(shown - pace_before) * ms,
+                            (int)s_vsync_active,
+                            (double)((long long)(s_pace_frame_start - next)) * ms,
+                            (double)(s_pace_emu_done - s_pace_frame_start) * ms,
+                            (double)(s_pace_extras_done - s_pace_emu_done) * ms,
+                            (double)(pace_before - s_pace_extras_done) * ms);
+                    fflush(pl);
+                }
+                cyc_pacing_log_file = pl;
+            }
             /* the one point a new width applies: after this present, before the next picture */
             cyc_video_apply_pending();
         }
@@ -1933,6 +2133,27 @@ int cyc_sdl_main(const char *title_in, int scale)
             continue;
         }
         next += frame_ticks;
+        /* In-between pictures (cyc_host_extras.h present_rate). They are
+         * presentation only and give way to the next machine frame: the
+         * ones that begin before it now, the rest during it (ib_present).
+         * Counted from the moment this frame's picture appeared (shown); with
+         * VSync on, a present waits for the monitor, so from the frame's
+         * scheduled start instead. */
+        s_ib.on = false;
+        if (s_extras && s_extras->present_phase && s_extras->present_rate && !open && !inactive && !loading &&
+            !s_uncapped && next > tnow) {
+            const Uint64 start = next - frame_ticks;
+            const Uint64 origin = s_vsync_active ? start : shown;
+            if (origin >= start) {
+                s_ib.on = true;
+                s_ib.origin = origin;
+                s_ib.step = freq / s_extras->present_rate;
+                s_ib.frame_ticks = frame_ticks;
+                s_ib.i = 1;
+                ib_present(next, toast_title, toast_body);
+            }
+            tnow = SDL_GetPerformanceCounter();
+        }
         if (next > tnow) {
 #ifdef NESRECOMP_PACING_REFERENCE
             Uint32 ms=(Uint32)((next-tnow)*1000/freq);
@@ -1971,6 +2192,7 @@ int cyc_sdl_main(const char *title_in, int scale)
                (unsigned long long)hw_native_interval_cycles,
                (unsigned long long)hw_native_interval_spans);
     }
+    emu_stop();
     cyc_diagnostics_note("game loop ended; releasing SDL resources");
     save_settings();
     cyc_tcp_stop();
