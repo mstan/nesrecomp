@@ -1386,6 +1386,11 @@ static void present_shot(long frame)
     free(px);
 }
 
+/* In-between pictures can overlap a machine frame. The host's own crosshair
+ * must use a snapshot too, rather than inspecting the live input device. */
+static bool s_emu_frame_active;
+static CycZapperState s_present_zapper;
+
 static void show(bool loading, const char *toast_title, const char *toast_body)
 {
     int w, h;
@@ -1454,7 +1459,8 @@ static void show(bool loading, const char *toast_title, const char *toast_body)
 #endif
     SDL_RenderCopy(s_ren, gpu_texture?gpu_texture:s_tex, NULL, &dst);
     CycZapperState gun;
-    cyc_zapper_state(&gun);
+    if (s_emu_frame_active) gun = s_present_zapper;
+    else cyc_zapper_state(&gun);
     int aim_x = -1, aim_y = -1;
     if (gun.port && !s_zapper_override) aim_x = s_aim_x, aim_y = s_aim_y;
     else if (gun.port && gun.x >= 0) aim_x = gun.x + picture_native_origin(w), aim_y = gun.y;
@@ -1985,10 +1991,16 @@ int cyc_sdl_main(const char *title_in, int scale)
             cyc_session_frame_begin();
             /* The last picture's remaining in-between pictures while this
              * frame runs on the emulation thread (see ib_present). */
-            if (s_ib.on && s_extras && s_extras->present_from_snapshot && !open && !inactive && !fast &&
-                !online && !replay && emu_start()) {
+            const bool parallel_frame = s_ib.on && s_extras && s_extras->present &&
+                s_extras->present_phase && s_extras->present_rate && s_extras->present_from_snapshot &&
+                !open && !inactive && !st.shortcut[CYC_SC_FAST_FORWARD] && !s_uncapped &&
+                !online && !replay;
+            if (parallel_frame) cyc_zapper_state(&s_present_zapper);
+            if (parallel_frame && emu_start()) {
+                s_emu_frame_active = true;
                 ib_present(~(Uint64)0, toast_title, toast_body);
                 SDL_SemWait(s_emu_done);
+                s_emu_frame_active = false;
             } else {
                 cyc_run_frame();
             }
