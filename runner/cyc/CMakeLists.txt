@@ -216,7 +216,7 @@ if(SDL2_FOUND)
                 --window $<TARGET_FILE:cyc_window> --dev-window $<TARGET_FILE:cyc_window_dev> ${window_ui}
                 --out ${CMAKE_CURRENT_BINARY_DIR}/window_run)
     set_tests_properties(cyc_window_run PROPERTIES TIMEOUT 900)
-    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang" AND NOT APPLE)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang" AND NOT APPLE AND NOT MSVC)
         set(interpolation_sources ${NESRECOMP_CYC_SOURCES})
         list(REMOVE_ITEM interpolation_sources "${CMAKE_CURRENT_SOURCE_DIR}/cyc_host_extras_none.c")
         add_executable(cyc_window_interpolation ${interpolation_sources}
