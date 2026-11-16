@@ -2,8 +2,21 @@
 #include "cyc_program.h"
 #include "../../common/nes_cart.h"
 #include <string.h>
+#if NESRECOMP_ENABLE_MODS
+#include "mod_runtime.h"
+#include <stdio.h>
+#endif
 
 #if CYC_NATIVE_PROGRAMS
+#if NESRECOMP_ENABLE_MODS
+static int compiled_mod_image(const uint8_t *image,uint32_t size) {
+    return cyc_program_match_image(image,size)!=NULL;
+}
+NES_MOD_CONSTRUCTOR(register_program_image_validator) {
+    if(!nes_mod_register_hd_image_validator(compiled_mod_image))
+        fprintf(stderr,"Cannot register native cartridge image validation\n");
+}
+#endif
 const CycProgram *cyc_program_active;
 static const CycProgram *catalog;
 static size_t catalog_count;

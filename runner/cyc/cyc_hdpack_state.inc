@@ -4,7 +4,7 @@
  * Presentation storage is exact: active/nonzero payloads keep every byte. */
 typedef struct {
     int32_t index;
-    uint8_t bytes[16], row, x, valid;
+    uint8_t bytes[16],key[16],row,x,valid;
 } HdFetchedTile;
 /* Owned keys survive bank changes and current-build save/load. Sixteen
  * native row chunks stay below the registry's per-record 1 MiB limit. */
@@ -42,7 +42,8 @@ static uint64_t presentation_epoch;
 /* Version 5 represents an exactly zero inactive payload. Version 6 pixel
  * chunks omit exactly zero sprite records, including all their padding.
  * Version 4 remains the lossless dense pixel fallback. Version 7 stores both
- * indexed pipeline delays. No invalidation keys persist. */
+ * indexed pipeline delays. Version 8 adds title-adapted display pattern keys;
+ * actual fetch bytes remain separate for native color/transparency. */
 static bool zero_payload(const void *data,size_t n) {
     const uint8_t *p=data;
     while(n>=sizeof(uint64_t)) {
@@ -84,7 +85,7 @@ static int save_part(unsigned part,uint8_t *buf,int cap) {
     }
     if(compact)size=0;
     if(cap<(int)(sizeof(HdStateHeader)+size))return -1;
-    HdStateHeader h={compact?5u:sparse?6u:part==HD_STATE_CHUNKS?7u:4u,hdpack_active()!=0,(uint32_t)hdpack_scale(),part,{0}};
+    HdStateHeader h={compact?5u:sparse?6u:part==HD_STATE_CHUNKS?8u:4u,hdpack_active()!=0,(uint32_t)hdpack_scale(),part,{0}};
     memcpy(h.fingerprint,fingerprint,sizeof fingerprint);memcpy(buf,&h,sizeof h);
     if(sparse)write_sparse_pixels(payload,buf+sizeof h);
     else if(size)memcpy(buf+sizeof h,payload,size);
@@ -122,7 +123,7 @@ static int validate_part(unsigned part,const uint8_t *buf,int len) {
     HdStateHeader h;memcpy(&h,buf,sizeof h);
     bool compact=h.version==5;
     bool sparse=h.version==6;
-    bool pipe=h.version==7;
+    bool pipe=h.version==8;
     if((h.version!=4 && !compact && !sparse && !pipe) || h.part!=part || h.active!=(unsigned)(hdpack_active()!=0) || h.scale!=(unsigned)hdpack_scale() || memcmp(h.fingerprint,fingerprint,sizeof fingerprint))return 0;
     if(compact)return !h.active && len==(int)sizeof h;
     if(sparse)return h.active && part<HD_STATE_CHUNKS && read_sparse_pixels(buf+sizeof h,(size_t)len-sizeof h,NULL);

@@ -113,6 +113,12 @@ struct HdPack {
     std::string patched_rom_crc32;
 };
 
+struct CartridgePatch {
+    std::string feature_id, path;
+    int64_t order = 0;
+    std::vector<std::string> hd_graphics;
+};
+
 struct Package {
     uint32_t format_version = 0;
     std::string id;
@@ -127,6 +133,7 @@ struct Package {
     std::vector<Option> options;
     std::vector<ExternalRom> external_roms;
     std::vector<HdPack> hd_packs;
+    std::vector<CartridgePatch> cartridge_patches;
 };
 
 struct FeatureSelection {
@@ -209,6 +216,11 @@ struct Runtime {
     NESModHdPack committed_hd{};
     std::string committed_hd_key;
     bool hd_locked = false;
+    bool cartridge_locked = false;
+    std::vector<uint8_t> committed_cartridge_image;
+    std::string committed_cartridge_key;
+    std::string committed_cartridge_save_namespace;
+    std::set<std::string> committed_cartridge_hd_graphics;
     std::set<std::pair<std::string, std::string>> locked_features;
     std::map<std::string, ResourceCache> resource_cache;
     std::string error;
@@ -469,6 +481,7 @@ bool read_manifest(const fs::path& path, Package& out, std::string* error) {
         Plugin,
         ExternalRom,
         HdPack,
+        CartridgePatch,
     };
     Section section = Section::Package;
     Target* target = nullptr;
@@ -477,6 +490,7 @@ bool read_manifest(const fs::path& path, Package& out, std::string* error) {
     Choice* choice = nullptr;
     ExternalRom* external_rom = nullptr;
     HdPack* hd_pack = nullptr;
+    CartridgePatch* cartridge_patch = nullptr;
     std::string plugin_feature;
     std::string plugin_id;
     std::string plugin_when_option;
@@ -529,6 +543,7 @@ bool read_manifest(const fs::path& path, Package& out, std::string* error) {
             choice = nullptr;
             external_rom = nullptr;
             hd_pack = nullptr;
+            cartridge_patch = nullptr;
             if (name == "target") {
                 section = Section::Target;
                 out.targets.emplace_back();
@@ -560,6 +575,10 @@ bool read_manifest(const fs::path& path, Package& out, std::string* error) {
                 section = Section::HdPack;
                 out.hd_packs.emplace_back();
                 hd_pack = &out.hd_packs.back();
+            } else if (name == "cartridge_patch") {
+                section = Section::CartridgePatch;
+                out.cartridge_patches.emplace_back();
+                cartridge_patch = &out.cartridge_patches.back();
             } else {
                 set_error(error, "unsupported manifest section [[" + name + "]]");
                 return false;
@@ -703,6 +722,14 @@ bool read_manifest(const fs::path& path, Package& out, std::string* error) {
                 else if (key == "patched_rom_crc32") parsed = string_field(hd_pack->patched_rom_crc32);
                 else known = false;
                 break;
+            case Section::CartridgePatch:
+                if (!cartridge_patch) parsed = false;
+                else if (key == "feature") parsed = string_field(cartridge_patch->feature_id);
+                else if (key == "path") parsed = string_field(cartridge_patch->path);
+                else if (key == "order") parsed = parse_int(value, cartridge_patch->order) && cartridge_patch->order >= 0 && cartridge_patch->order <= 65535;
+                else if (key == "hd_graphics") parsed = parse_string_array(value, cartridge_patch->hd_graphics);
+                else known = false;
+                break;
             case Section::ExternalRom:
                 external_rom = out.external_roms.empty()
                     ? nullptr : &out.external_roms.back();
@@ -809,6 +836,15 @@ bool read_manifest(const fs::path& path, Package& out, std::string* error) {
         }
     }
     std::set<std::pair<std::string, std::string>> option_ids;
+    std::set<std::string> cartridge_features;
+    for (const CartridgePatch& item : out.cartridge_patches) {
+        const Feature* owner = find_feature(out, item.feature_id);
+        if (!owner || owner->plugins.empty() || !package_relative_path(item.path) ||
+            !cartridge_features.insert(item.feature_id).second ||
+            !std::all_of(item.hd_graphics.begin(), item.hd_graphics.end(), valid_id)) {
+            set_error(error, "manifest has an invalid cartridge patch"); return false;
+        }
+    }
     std::set<std::string> hd_features;
     for (const HdPack& item : out.hd_packs) {
         Feature* owner = nullptr;
@@ -1520,12 +1556,78 @@ bool hd_apply_ips(const std::vector<uint8_t>& patch, std::vector<uint8_t>& image
     return fail();
 }
 
+struct ActiveCartridgePatch { const Package* package; const CartridgePatch* patch; };
+
+std::vector<ActiveCartridgePatch> cartridge_plan(Runtime& runtime, const Validation& plan) {
+    std::vector<ActiveCartridgePatch> patches;
+    std::set<std::pair<std::string,std::string>> seen;
+    for (const ResolvedPlugin& plugin : plan.plugins) {
+        if (!seen.emplace(plugin.package_id,plugin.feature_id).second) continue;
+        const Package* package = selected_package(runtime,plugin.package_id);
+        if (!package) continue;
+        for (const CartridgePatch& patch : package->cartridge_patches)
+            if (patch.feature_id == plugin.feature_id) patches.push_back({package,&patch});
+    }
+    std::sort(patches.begin(),patches.end(),[](const auto& a,const auto& b) {
+        if (a.patch->order != b.patch->order) return a.patch->order < b.patch->order;
+        if (a.package->id != b.package->id) return a.package->id < b.package->id;
+        return a.patch->feature_id < b.patch->feature_id;
+    });
+    return patches;
+}
+
+std::string cartridge_plan_key(Runtime& runtime,const Validation& plan) {
+    std::string key;
+    for (const auto& item : cartridge_plan(runtime,plan))
+        key += item.package->id+":"+item.package->version+":"+item.patch->feature_id+"\n";
+    return key;
+}
+
+bool snapshot_cartridge_patches(Runtime& runtime,const Validation& plan,
+                                 const fs::path& rom,std::string* error) {
+    const auto patches=cartridge_plan(runtime,plan);
+    if (patches.empty()) return true;
+    if (!hd_image_validator) {
+        set_error(error,"Cartridge mods require a compiled native-program catalog"); return false;
+    }
+    std::vector<uint8_t> image,content;
+    if (rom.empty() || !read_file(rom,image,error) || image.size()<16 ||
+        std::memcmp(image.data(),"NES\x1a",4)) {
+        set_error(error,"Cartridge mods require the verified original iNES ROM"); return false;
+    }
+    const size_t start=16+((image[6]&4)?512:0);
+    std::set<std::string> graphics;
+    int64_t previous=-1;
+    for (const auto& item : patches) {
+        if (item.patch->order==previous) {
+            set_error(error,"Selected cartridge patches have ambiguous order"); return false;
+        }
+        previous=item.patch->order;
+        fs::path path;
+        if (!hd_asset_path(*item.package,item.patch->path,path,error) ||
+            !read_file(path,content,error) || !hd_apply_ips(content,image,start,error)) return false;
+        graphics.insert(item.patch->hd_graphics.begin(),item.patch->hd_graphics.end());
+    }
+    if (!hd_image_validator(image.data(),(uint32_t)image.size())) {
+        set_error(error,"Selected cartridge-mod combination has no compiled native program"); return false;
+    }
+    runtime.committed_cartridge_image=std::move(image);
+    runtime.committed_cartridge_key=cartridge_plan_key(runtime,plan);
+    runtime.committed_cartridge_save_namespace=patches.front().package->id;
+    runtime.committed_cartridge_hd_graphics=std::move(graphics);
+    return true;
+}
+
 bool snapshot_hd_pack(Runtime& runtime, const Validation& plan,
                       const fs::path& rom, std::string* error) {
     for (const ResolvedPlugin& plugin : plan.plugins) {
         if (plugin.id != "nesrecomp.hd-pack") continue;
         const Package* package = selected_package(runtime, plugin.package_id);
         if (!package) return false;
+        const bool graphics_only=!runtime.committed_cartridge_image.empty();
+        if (graphics_only && !runtime.committed_cartridge_hd_graphics.count(package->id)) {
+            set_error(error,"This HD graphics pack is not qualified for the selected cartridge mods"); return false;
+        }
         const HdPack* descriptor = nullptr;
         for (const HdPack& item : package->hd_packs)
             if (item.feature_id == plugin.feature_id) descriptor = &item;
@@ -1564,7 +1666,12 @@ bool snapshot_hd_pack(Runtime& runtime, const Validation& plan,
         }
         std::vector<uint8_t> payload;
         std::vector<uint8_t> patched_image;
-        if (!descriptor->patch.empty()) {
+        if (graphics_only) {
+            /* A declared program/graphics combination keeps the selected native
+             * program and its music/save behavior. Never overlay an older HD
+             * program patch onto the newly selected cartridge. */
+            add("cartridge-graphics-only"); add(sha1_hex(runtime.committed_cartridge_image));
+        } else if (!descriptor->patch.empty()) {
             fs::path patch_path;
             std::vector<uint8_t> image;
             if (!hd_asset_path(*package, descriptor->patch, patch_path, error) ||
@@ -1600,6 +1707,7 @@ bool snapshot_hd_pack(Runtime& runtime, const Validation& plan,
         runtime.committed_hd.payload_size = (uint32_t)runtime.committed_hd_payload.size();
         runtime.committed_hd.patched_image = runtime.committed_hd_image.empty() ? nullptr : runtime.committed_hd_image.data();
         runtime.committed_hd.image_size = (uint32_t)runtime.committed_hd_image.size();
+        runtime.committed_hd.graphics_only = graphics_only;
         for (unsigned i = 0; i < 20; ++i)
             runtime.committed_hd.fingerprint[i] = (uint8_t)std::strtoul(hash.substr(i*2, 2).c_str(), nullptr, 16);
         return true;
@@ -2520,6 +2628,9 @@ int provider_commit(void*, const char* image_path) {
 
 int provider_commit_netplay(void*, const char* image_path) {
     Runtime& runtime = state();
+    if (runtime.cartridge_locked && !runtime.committed_cartridge_image.empty()) {
+        runtime.error = "Restart without cartridge mods before starting online play."; return 0;
+    }
     if (runtime.hd_locked && !runtime.committed_hd_key.empty()) {
         runtime.error = "Restart without the HD pack before starting online play.";
         return 0;
@@ -2543,6 +2654,10 @@ int provider_commit_netplay(void*, const char* image_path) {
     runtime.committed_hd_directory.clear();
     runtime.committed_hd_payload.clear();
     runtime.committed_hd_image.clear();
+    runtime.committed_cartridge_image.clear();
+    runtime.committed_cartridge_key.clear();
+    runtime.committed_cartridge_save_namespace.clear();
+    runtime.committed_cartridge_hd_graphics.clear();
     runtime.commit_succeeded = false;
     runtime.error.clear();
     return 1;
@@ -2976,6 +3091,10 @@ bool mod_runtime_initialize(const fs::path& root,
 bool mod_runtime_commit(const fs::path& rom_path, std::string* error) {
     Runtime& runtime = state();
     if (!runtime.initialized) return true;
+    if (runtime.cartridge_locked && cartridge_plan_key(runtime,validate(runtime)) != runtime.committed_cartridge_key) {
+        runtime.error="Change cartridge mods in the launcher, then restart the game.";
+        set_error(error,runtime.error); return false;
+    }
     if (runtime.hd_locked) {
         const Validation pending = validate(runtime);
         std::string key;
@@ -2991,6 +3110,12 @@ bool mod_runtime_commit(const fs::path& rom_path, std::string* error) {
     }
     runtime.committed = {};
     runtime.committed_external_rom_paths.clear();
+    if (!runtime.cartridge_locked) {
+        runtime.committed_cartridge_image.clear();
+        runtime.committed_cartridge_key.clear();
+        runtime.committed_cartridge_save_namespace.clear();
+        runtime.committed_cartridge_hd_graphics.clear();
+    }
     if (!runtime.hd_locked) {
         runtime.committed_hd = {};
         runtime.committed_hd_key.clear();
@@ -3033,7 +3158,8 @@ bool mod_runtime_commit(const fs::path& rom_path, std::string* error) {
         set_error(error, runtime.error);
         return false;
     }
-    if (!runtime.hd_locked && !snapshot_hd_pack(runtime, runtime.validation, rom_path, &runtime.error)) {
+    if ((!runtime.cartridge_locked && !snapshot_cartridge_patches(runtime,runtime.validation,rom_path,&runtime.error)) ||
+        (!runtime.hd_locked && !snapshot_hd_pack(runtime, runtime.validation, rom_path, &runtime.error))) {
         runtime.committed_external_rom_paths.clear();
         set_error(error, runtime.error);
         return false;
@@ -3082,6 +3208,19 @@ extern "C" const NESModHdPack* nes_mod_hd_pack(void) {
         ? &runtime.committed_hd : nullptr;
 }
 
+extern "C" const uint8_t* nes_mod_cartridge_image(uint32_t* size) {
+    const auto& runtime=NESRecomp::state();
+    if (size) *size=runtime.commit_succeeded?(uint32_t)runtime.committed_cartridge_image.size():0;
+    return runtime.commit_succeeded && !runtime.committed_cartridge_image.empty()
+        ? runtime.committed_cartridge_image.data() : nullptr;
+}
+extern "C" void nes_mod_lock_cartridge_image(void) { NESRecomp::state().cartridge_locked=true; }
+extern "C" const char* nes_mod_cartridge_save_namespace(void) {
+    const auto& runtime=NESRecomp::state();
+    return runtime.commit_succeeded && !runtime.committed_cartridge_save_namespace.empty()
+        ? runtime.committed_cartridge_save_namespace.c_str() : nullptr;
+}
+
 extern "C" void nes_mod_lock_hd_pack(void) { NESRecomp::state().hd_locked = true; }
 
 extern "C" void nes_mod_lock_feature(const char* package_id, const char* feature_id) {
@@ -3094,10 +3233,25 @@ extern "C" int nes_mod_feature_requires_restart(const char* package_id, const ch
     Runtime& runtime = state();
     if (!package_id || !feature_id) return 0;
     if (runtime.locked_features.count({package_id, feature_id})) return 1;
-    if (!runtime.hd_locked) return 0;
     const Package* package = selected_package(runtime, package_id);
     const Feature* feature = package ? find_feature(*package, feature_id) : nullptr;
     if (!feature) return 0;
+    auto shares_group=[&](const Feature& other) {
+        std::set<std::string> groups(other.exclusive_groups.begin(),other.exclusive_groups.end());
+        if(!other.exclusive_group.empty())groups.insert(other.exclusive_group);
+        if(groups.count(feature->exclusive_group))return true;
+        for(const auto& group:feature->exclusive_groups)if(groups.count(group))return true;
+        return false;
+    };
+    if (runtime.cartridge_locked) {
+        for (const auto& patch : package->cartridge_patches)
+            if (patch.feature_id==feature_id) return 1;
+        for(const auto& item:cartridge_plan(runtime,runtime.committed)) {
+            const Feature* active=find_feature(*item.package,item.patch->feature_id);
+            if(active && shares_group(*active))return 1;
+        }
+    }
+    if (!runtime.hd_locked) return 0;
     for (const HdPack& item : package->hd_packs)
         if (item.feature_id == feature_id) return 1;
     for (const ResolvedPlugin& plugin : runtime.committed.plugins) {
@@ -3105,10 +3259,7 @@ extern "C" int nes_mod_feature_requires_restart(const char* package_id, const ch
         const Package* active = selected_package(runtime, plugin.package_id);
         const Feature* hd = active ? find_feature(*active, plugin.feature_id) : nullptr;
         if (!hd) continue;
-        std::set<std::string> groups(hd->exclusive_groups.begin(), hd->exclusive_groups.end());
-        if (!hd->exclusive_group.empty()) groups.insert(hd->exclusive_group);
-        if (groups.count(feature->exclusive_group)) return 1;
-        for (const auto& group : feature->exclusive_groups) if (groups.count(group)) return 1;
+        if(shares_group(*hd))return 1;
     }
     return 0;
 }
@@ -3273,6 +3424,10 @@ extern "C" int nes_mod_runtime_commit_c(const char* rom_path) {
  * (nes_netplay_session_*), applied by the runner, not a mod plan. */
 extern "C" int nes_mod_runtime_commit_netplay_c(const char* rom_path) {
     NESRecomp::Runtime& runtime = NESRecomp::state();
+    if ((runtime.cartridge_locked && !runtime.committed_cartridge_image.empty()) ||
+        (runtime.hd_locked && !runtime.committed_hd_key.empty())) {
+        runtime.error="Restart without cartridge/HD mods before starting online play."; return 0;
+    }
     if (rom_path && rom_path[0]) {
         std::string digest;
         if (!NESRecomp::crc32_file(rom_path, digest, &runtime.error) ||
@@ -3285,6 +3440,11 @@ extern "C" int nes_mod_runtime_commit_netplay_c(const char* rom_path) {
     }
     runtime.committed = {};
     runtime.committed_external_rom_paths.clear();
+    runtime.committed_hd={};runtime.committed_hd_key.clear();runtime.committed_hd_directory.clear();
+    runtime.committed_hd_payload.clear();runtime.committed_hd_image.clear();
+    runtime.committed_cartridge_image.clear();runtime.committed_cartridge_key.clear();
+    runtime.committed_cartridge_save_namespace.clear();
+    runtime.committed_cartridge_hd_graphics.clear();
     runtime.commit_succeeded = false;
     runtime.error.clear();
     return 1;

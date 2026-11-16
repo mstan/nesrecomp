@@ -96,6 +96,64 @@ continuation, native in-game saves and the game's other display features.
 Undefined conditions or missing assets in a pack are not repaired by the
 importer.
 
+## Optional native cartridge programs
+
+A trusted feature can select a developer-compiled cartridge program without
+enabling HD packs. Compile every supported final image with
+`nesrecomp_add_cycle_program`, then call `nesrecomp_enable_native_programs`.
+Each program needs its own namespace and generation inputs. Changed instruction
+bytes must be compiled from that image; accepting its fingerprint as an alias
+for another program would authorize stale native code.
+
+```toml
+[[plugin]]
+feature = "alternate-game"
+id = "my-game.alternate"
+
+[[cartridge_patch]]
+feature = "alternate-game"
+path = "alternate.ips"
+order = 0
+# Optional, explicitly qualified graphics-only companion packages:
+hd_graphics = ["my-game.hd"]
+```
+
+The feature must activate a trusted plugin already linked into the host. Paths
+are package-relative. Selected patches apply in unique ascending `order`
+(0–65535) to a private copy of the verified source cartridge. The complete
+result must match a compiled native program, including cartridge geometry,
+before the host replaces its image or starts the machine. Unknown results
+fail without changing the source ROM. Companions can require the base feature
+and add their own ordered patches; every supported combination needs a catalog
+entry. Selection remains locked until restart and is unavailable online.
+
+Default battery saves use the first patch's package ID as a separate namespace:
+`saves/<ROM stem>.<package-id>.sav`. Companion selections share that base
+program's progress; stock keeps `saves/<ROM stem>.sav`. An explicit
+`--save-file` still selects the caller's path. Save states remain build- and
+selection-specific.
+
+An HD package listed in `hd_graphics` contributes only graphics while a cartridge
+program is selected. Its older program patch is not applied, and its replacement
+audio is not exposed or decoded. The selected cartridge retains its own code,
+native music and saves. Unmatched native tiles remain visible even when the
+pack normally hides original tiles, since a different program can change its
+graphics. Unlisted HD combinations fail validation. Titles must
+qualify the actual graphics and use visible feature exclusion groups for any
+renderer that cannot support the selected program.
+
+A cycle title can supply a `CycHdPackAdapter` through its host extras for an
+explicitly qualified graphics-only combination. The optional rules callback
+returns malloc-owned text against the original asset directory; it can reject
+an unknown pack before decoding. Pattern correspondence runs at native fetch
+cadence, retaining actual fetch bytes separately from display keys. Palette
+correspondence changes only lookup colors, preserving actual native fallback
+colors. A native HUD strip clips room layers and preserves transparent HUD
+cells; a visibility predicate can retain the modified program's own menus.
+The ordinary pack path has no adapter. Qualify actual replacement art, native
+unmatched art, sprite/room movement, guest/audio equality and current-build
+state continuation for each supported combination.
+
 ## Product and trust model
 
 - A **package** is the installation, update, provenance, and trust boundary.

@@ -159,8 +159,20 @@ typedef struct NESModHdPack {
      * The host selects this before loading cartridge storage and power-on. */
     const uint8_t *patched_image;
     uint32_t image_size;
+    /* A cartridge-program mod owns code/audio/save behavior. The declared
+     * compatible HD package supplies graphics without its older program patch. */
+    uint8_t graphics_only;
 } NESModHdPack;
 const NESModHdPack *nes_mod_hd_pack(void);
+/* Trusted, selected cartridge-patch features compose one exact catalog-checked
+ * image before boot. NULL means the original program. The image is immutable
+ * and owned by the mod runtime; callers copy it before loading the cartridge. */
+const uint8_t *nes_mod_cartridge_image(uint32_t *size);
+void nes_mod_lock_cartridge_image(void);
+/* Cartridge mods use a separate default battery-save namespace. Companion
+ * selections owned by the same base package share progress; stock is unchanged.
+ * An explicitly supplied save path remains the caller's choice. */
+const char *nes_mod_cartridge_save_namespace(void);
 /* A running cartridge keeps its pack/patch until the next launch. */
 void nes_mod_lock_hd_pack(void);
 /* Trusted content plugins lock boot-time selections after loading their data.

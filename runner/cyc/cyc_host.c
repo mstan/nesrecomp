@@ -183,6 +183,9 @@
 #include "cyc_render.h"
 #include "cyc_run.h"
 #include "cyc_session.h"
+#if NESRECOMP_ENABLE_MODS
+#include "mod_runtime.h"
+#endif
 #ifdef NESRECOMP_CYCLE_HDPACK_MODS
 #include "cyc_hdpack.h"
 #endif
@@ -1359,6 +1362,12 @@ session_restart:
     cyc_diagnostics_note("reading selected ROM");
 #endif
     uint8_t *image = read_file(rom_path, &size);
+#ifndef CYC_ORACLE
+    if(!cyc_session_mods_image(&image,&size)) {
+        cyc_diagnostics_error("Cartridge mods have no compatible compiled image\n");
+        free(image);return 2;
+    }
+#endif
 #ifdef NESRECOMP_CYCLE_HDPACK_MODS
     if (!cyc_hdpack_mod_image(&image, &size)) {
         cyc_diagnostics_error("HD pack has no compatible compiled cartridge image\n");
@@ -1513,7 +1522,18 @@ session_restart:
 #ifndef CYC_ORACLE
     char cartridge_save_path[1024];
     if (!fds && !headless && !no_save && !save_file && cyc_nvram_size(0)) {
-        if (!default_save_path(rom_path, "sav", cartridge_save_path, sizeof(cartridge_save_path))) {
+        const char *save_extension="sav";
+#if NESRECOMP_ENABLE_MODS
+        char mod_extension[128];
+        const char *save_namespace=nes_mod_cartridge_save_namespace();
+        if(save_namespace) {
+            if(snprintf(mod_extension,sizeof mod_extension,"%s.sav",save_namespace)>=(int)sizeof mod_extension) {
+                fprintf(stderr,"Cartridge save namespace is too long\n");return 2;
+            }
+            save_extension=mod_extension;
+        }
+#endif
+        if (!default_save_path(rom_path, save_extension, cartridge_save_path, sizeof(cartridge_save_path))) {
             fprintf(stderr, "cannot create cartridge save path\n");
             return 2;
         }

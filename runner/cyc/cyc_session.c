@@ -7,6 +7,9 @@
 #include "cyc_hooks.h"
 #include "cyc_mod.h"
 #include "cyc_render.h"
+#if CYC_NATIVE_PROGRAMS
+#include "cyc_program.h"
+#endif
 #include "cyc_replay.h"
 
 #include <stdlib.h>
@@ -119,6 +122,26 @@ bool cyc_session_mods_init(const char *root, char *err, size_t err_len)
 }
 
 bool cyc_session_mods_enabled(void) { return s_mods; }
+
+bool cyc_session_mods_image(uint8_t **image,size_t *size) {
+#if NESRECOMP_ENABLE_MODS
+    uint32_t bytes=0;
+    const uint8_t *program=nes_mod_cartridge_image(&bytes);
+    if(program) {
+#if CYC_NATIVE_PROGRAMS
+        if(!image || !size || !*image || !cyc_program_match_image(program,bytes))return false;
+        uint8_t *copy=malloc(bytes);if(!copy)return false;
+        memcpy(copy,program,bytes);free(*image);*image=copy;*size=bytes;
+#else
+        return false;
+#endif
+    }
+    nes_mod_lock_cartridge_image();
+#else
+    (void)image;(void)size;
+#endif
+    return true;
+}
 
 const void *cyc_session_mods_provider(void)
 {

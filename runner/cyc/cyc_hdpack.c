@@ -8,6 +8,7 @@
 #include "hw_internal.h"
 #include "hdpack.h"
 #include "cyc_hd_audio.h"
+#include "cyc_session.h"
 #include "mod_runtime.h"
 #include "mod_savestate.h"
 #if CYC_NATIVE_PROGRAMS
@@ -24,6 +25,9 @@ static uint64_t presented_generation;
 static const HdJobFrame *prepared_jobs;
 static uint64_t jobs_generation,jobs_epoch,thumbnail_serial;
 static uint32_t thumbnail[256*240];
+static const CycHdPackAdapter *adapter;
+static void *adapter_context;
+static bool visible(void) { return !adapter || !adapter->visible || adapter->visible(adapter_context); }
 static void release_jobs(void) {
     hdpack_jobs_release(prepared_jobs);prepared_jobs=NULL;
     thumbnail_serial=UINT64_MAX;
@@ -52,13 +56,12 @@ static int compiled_hd_image(const uint8_t *image,uint32_t size) {
 #endif
 NES_MOD_CONSTRUCTOR(register_hd_pack_plugin) {
     nes_mod_register_activation_plugin("nesrecomp.hd-pack",activate_hd_pack);
-#if CYC_NATIVE_PROGRAMS
-    nes_mod_register_hd_image_validator(compiled_hd_image);
-#endif
 }
 bool cyc_hdpack_mod_image(uint8_t **image,size_t *size) {
     const NESModHdPack *pack=nes_mod_hd_pack();
+    adapter=NULL;adapter_context=NULL;
     if(!pack || !pack->patched_image)return true;
+    if(nes_mod_cartridge_image(NULL))return false;
 #if CYC_NATIVE_PROGRAMS
     if(!*image || !compiled_hd_image(pack->patched_image,pack->image_size))return false;
     uint8_t *copy=malloc(pack->image_size);
@@ -72,6 +75,7 @@ bool cyc_hdpack_mod_image(uint8_t **image,size_t *size) {
 }
 bool cyc_hdpack_mod_prepare(void) {
     presentation_valid=false;++presentation_epoch;release_jobs();
+    adapter=NULL;adapter_context=NULL;
     const NESModHdPack *pack=nes_mod_hd_pack();
     memset(&pipeline,0,sizeof pipeline);memset(recorded,0,sizeof recorded);
     memset(fingerprint,0,sizeof fingerprint);hdpack_unload();cyc_hd_audio_unload();
@@ -81,10 +85,20 @@ bool cyc_hdpack_mod_prepare(void) {
                 fprintf(stderr,"[Mods] HD patch does not match this cartridge's geometry\n");return false;
             }
         }
-        if(hdpack_load(pack->directory,hw_cart.chr_ram!=0,256)) {
+        char *rules=NULL;
+        const CycHostExtras *extras=cyc_session_extras();
+        if(pack->graphics_only && extras && extras->hdpack_adapter) {
+            adapter=extras->hdpack_adapter(extras->ctx);adapter_context=extras->ctx;
+            if(adapter && adapter->rules && !adapter->rules(adapter_context,pack->directory,&rules)) {
+                free(rules);fprintf(stderr,"[Mods] HD pack is not compatible with this cartridge program\n");return false;
+            }
+        }
+        int failed=hdpack_load_rules(pack->directory,hw_cart.chr_ram!=0,256,rules);free(rules);
+        if(failed) {
             fprintf(stderr,"[Mods] Selected HD pack could not be loaded\n");return false;
         }
-        cyc_hd_audio_load(pack->directory,hw_pal());
+        if(pack->graphics_only)hdpack_preserve_unmatched_tiles(adapter?adapter->native_hud_rows:0,adapter?adapter->native_hud_columns:0);
+        else cyc_hd_audio_load(pack->directory,hw_pal());
         memcpy(fingerprint,pack->fingerprint,sizeof fingerprint);
     }
     nes_mod_lock_hd_pack();
@@ -106,6 +120,8 @@ static void fetch_tile(HdFetchedTile *tile,uint16_t address,uint8_t value,bool h
     /* Preserve the two bytes actually latched even if CHR changed between
      * pattern fetches. Other tile rows are a content key, not guest reads. */
     tile->bytes[row+(high?8:0)]=value;
+    if(adapter && adapter->pattern)adapter->pattern(adapter_context,tile->bytes,tile->key);
+    else memcpy(tile->key,tile->bytes,16);
 }
 void cyc_hdpack_bg_fetch(uint16_t address,uint8_t value,bool high) {
     if(hdpack_recording())fetch_tile(&pipeline.bg_fetch,address,value,high);
@@ -153,6 +169,8 @@ static void prepare_visual_sprites(void) {
             sp->tile.valid=1;sp->tile.row=(uint8_t)(source_row&7);
             sp->tile.index=hw_cart.chr_ram?-1:(int32_t)(hw_cart_chr_index(address)/16);
             for(unsigned b=0;b<16;b++)sp->tile.bytes[b]=cyc_render_chr((uint16_t)(address+b));
+            if(adapter && adapter->pattern)adapter->pattern(adapter_context,sp->tile.bytes,sp->tile.key);
+            else memcpy(sp->tile.key,sp->tile.bytes,16);
         }
         for(unsigned ox=0;ox<8 && (unsigned)sp->x+ox<256;ox++) {
             uint8_t *at=pipeline.visual_pixels[(unsigned)sp->x+ox];
@@ -191,7 +209,7 @@ void cyc_hdpack_pixel(unsigned bg_color,unsigned bg_palette,int sprite,unsigned 
     p->bg_index=-1;p->bg_pal[0]=ppu.palette[0];
     const HdFetchedTile *bg=&pipeline.bg[(pipeline.bg_head+15-ppu.fine_x)&15];
     if(ppu.show_bg && (ppu.dot>8 || ppu.show_bg8) && bg->valid) {
-        p->flags=1;p->bg_index=bg->index;memcpy(p->bg_tile,bg->bytes,16);
+        p->flags=1;p->bg_index=bg->index;memcpy(p->bg_tile,bg->key,16);
         p->bg_x=bg->x;p->bg_y=bg->row;p->bg_color=(uint8_t)bg_color;
         for(unsigned j=1;j<4;j++)p->bg_pal[j]=ppu.palette[bg_palette*4+j];
     }
@@ -204,7 +222,7 @@ void cyc_hdpack_pixel(unsigned bg_color,unsigned bg_palette,int sprite,unsigned 
                 const HdFetchedTile *tile=&visual->tile;unsigned attr=visual->attr;
                 if(!tile->valid)continue;
                 HdRecordedSprite *sp=&p->sp[k];
-                sp->index=tile->index;memcpy(sp->tile,tile->bytes,16);
+                sp->index=tile->index;memcpy(sp->tile,tile->key,16);
                 sp->x=(uint8_t)(ppu.dot-1-visual->x);sp->y=tile->row;
                 unsigned bit=(attr&0x40)?sp->x:7-sp->x;
                 sp->color=(uint8_t)(((tile->bytes[sp->y]>>bit)&1)|(((tile->bytes[sp->y+8]>>bit)&1)<<1));
@@ -219,7 +237,7 @@ void cyc_hdpack_pixel(unsigned bg_color,unsigned bg_palette,int sprite,unsigned 
             if(!tile->valid || pipeline.sprite_x[i]>=8 || (ppu.spr_x[i] && !ppu.skipped_dot))continue;
             HdRecordedSprite *sp=&p->sp[count++];unsigned attr=ppu.spr_attr[i];
             sp->flags=(uint8_t)(1|((attr&0x40)?2:0)|((attr&0x80)?4:0)|((attr&0x20)?8:0));
-            sp->index=tile->index;memcpy(sp->tile,tile->bytes,16);
+            sp->index=tile->index;memcpy(sp->tile,tile->key,16);
             sp->x=pipeline.sprite_x[i];sp->y=tile->row;
             sp->color=(uint8_t)(((ppu.spr_lo[i]>>7)&1)|((ppu.spr_hi[i]>>6)&2));
             for(unsigned j=0;j<3;j++)sp->pal[j]=ppu.palette[16+(attr&3)*4+j+1];
@@ -248,6 +266,10 @@ static void read_pixel(const void *context,size_t i,HdPixel *p) {
     p->bg_transparent=r->bg_color==0;
     p->bg_p0=r->bg_pal[0];p->bg_p1=r->bg_pal[1];p->bg_p2=r->bg_pal[2];p->bg_p3=r->bg_pal[3];
     p->bg_ox=r->bg_x;p->bg_oy=r->bg_y;
+    if(adapter && adapter->palette) {
+        uint8_t pal[4]={p->bg_p0,p->bg_p1,p->bg_p2,p->bg_p3};adapter->palette(adapter_context,pal);
+        p->bg_p0=pal[0];p->bg_p1=pal[1];p->bg_p2=pal[2];p->bg_p3=pal[3];
+    }
     p->backdrop=color(r->bg_pal[0],r->mask);
     p->bg_argb=color(r->bg_pal[r->bg_color],r->mask);
     unsigned count=0;
@@ -257,6 +279,10 @@ static void read_pixel(const void *context,size_t i,HdPixel *p) {
         memset(sp,0,sizeof(*sp));
         sp->index=rs->index;sp->t16=rs->tile;sp->has=rs->flags&1;
         sp->p0=0xff;sp->p1=rs->pal[0];sp->p2=rs->pal[1];sp->p3=rs->pal[2];
+        if(adapter && adapter->palette) {
+            uint8_t pal[4]={sp->p0,sp->p1,sp->p2,sp->p3};adapter->palette(adapter_context,pal);
+            sp->p0=pal[0];sp->p1=pal[1];sp->p2=pal[2];sp->p3=pal[3];
+        }
         sp->ox=rs->x;sp->oy=rs->y;sp->hm=(rs->flags>>1)&1;sp->vm=(rs->flags>>2)&1;sp->behind=(rs->flags>>3)&1;
         sp->transparent=rs->color==0;
         sp->argb=rs->color?color(rs->pal[rs->color-1],r->mask):native[i];
@@ -268,7 +294,7 @@ static void prepare_pixels(const uint32_t *native) {
     for(unsigned i=0;i<256*240;i++)read_pixel(native,i,&pixels[i]);
 }
 const HdJobFrame *cyc_hdpack_jobs(const uint32_t *native) {
-    if(!hdpack_active()){release_jobs();return NULL;}
+    if(!hdpack_active() || !visible()){release_jobs();return NULL;}
     uint64_t generation=cyc_render_generation();
     if(prepared_jobs && generation==jobs_generation && jobs_epoch==presentation_epoch)return prepared_jobs;
     hdpack_invalidate_conditions();
@@ -289,7 +315,7 @@ const uint32_t *cyc_hdpack_thumbnail(const uint32_t *native) {
     return thumbnail;
 }
 const uint32_t *cyc_hdpack_present(const uint32_t *native,int *width,int *height) {
-    *width=256;*height=240;if(!hdpack_active())return native;
+    *width=256;*height=240;if(!hdpack_active() || !visible())return native;
     uint64_t generation=cyc_render_generation();
     if(presentation_valid && generation==presented_generation) {
         *width=256*hdpack_scale();*height=240*hdpack_scale();return upscaled;

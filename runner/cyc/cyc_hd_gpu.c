@@ -335,7 +335,7 @@ SDL_Texture *cyc_hd_gpu_render(CycHdGpu *s,const HdJobFrame *f,unsigned requeste
         for(unsigned i=0;i<5;++i)g->Uniform1i(g->GetUniformLocation(s->program,names[i]),(GLint)i);
 #define HD_UNIFORM(name,value) g->Uniform1i(g->GetUniformLocation(s->program,name),(GLint)(value))
         HD_UNIFORM("output_scale",scale);HD_UNIFORM("source_scale",f->source_scale);HD_UNIFORM("image_count",f->image_count);
-        HD_UNIFORM("aux_width",s->bg_w);HD_UNIFORM("behind_end",f->behind_end);HD_UNIFORM("has_behind",f->has_behind);HD_UNIFORM("under_end",f->under_end);HD_UNIFORM("mid_end",f->mid_end);HD_UNIFORM("bg_count",f->background_count);HD_UNIFORM("hud_rows",f->hud_rows);
+        HD_UNIFORM("aux_width",s->bg_w);HD_UNIFORM("behind_end",f->behind_end);HD_UNIFORM("has_behind",f->has_behind);HD_UNIFORM("under_end",f->under_end);HD_UNIFORM("mid_end",f->mid_end);HD_UNIFORM("bg_count",f->background_count);HD_UNIFORM("hud_rows",f->hud_rows);HD_UNIFORM("native_hud_rows",f->native_hud_rows);HD_UNIFORM("native_hud_columns",f->native_hud_columns);
 #undef HD_UNIFORM
         g->Viewport(0,0,(GLsizei)width,(GLsizei)height);
         HdQuery *q=&s->query[s->query_cursor];

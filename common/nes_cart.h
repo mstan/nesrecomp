@@ -128,6 +128,9 @@ typedef struct {
 } NesKnownDump;
 static const NesKnownDump nes_known_dumps[] = {
 #include "nes_known_dumps.inc"
+    /* Zelda Remastered 1.0.6 changes PRG data but retains the USA PRG0
+     * SNROM board. Its unchanged iNES header omits the 8 KiB save chip. */
+    { 0xFD9C577Fu, 1, 1, 0, 1, 1, 0, 8192, 0, 131072, 0 },
 };
 
 static inline void nes_cart_known_dump(NesCartInfo *c, const uint8_t *data, size_t len)

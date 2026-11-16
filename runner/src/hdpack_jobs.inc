@@ -193,6 +193,8 @@ const HdJobFrame *hdpack_prepare_jobs(const uint32_t *native, int native_w)
     f->backgrounds = owned->backgrounds;f->sprites=owned->sprites;
     eval_backgrounds_for_frame();
     f->hud_rows = (uint32_t)s_hud_rows;
+    f->native_hud_rows=s_native_hud_rows;
+    f->native_hud_columns=s_native_hud_columns<(unsigned)native_w?s_native_hud_columns:(unsigned)native_w;
     for (int i = 0; i < s_nact; ++i) {
         HdBg *b = s_actbg[i];
         if (!b->img || b->img->job_image == HD_JOB_NO_IMAGE ||
@@ -223,10 +225,12 @@ const HdJobFrame *hdpack_prepare_jobs(const uint32_t *native, int native_w)
     int hide_bg = s_disable_orig || s_opt_hide_orig;
     for (int y = 0; y < 240; ++y) for (int x = 0; x < native_w; ++x) {
         size_t at = (size_t)y * (unsigned)native_w + (unsigned)x;
-        HdPixel scratch,*p=pixel_at(at,&scratch); HdJobPixel *j = &owned->pixels[at];
-        j->base = p->bg_has ? p->backdrop : native[at];
+        HdJobPixel *j = &owned->pixels[at];
         j->bg_image = j->sp_image = HD_JOB_NO_IMAGE;
         j->bg_uv = j->sp_uv = j->bg_color = j->sp_color = j->flags = 0;
+        if(native_hud_pixel((unsigned)x,(unsigned)y)){j->base=native[at];continue;}
+        HdPixel scratch,*p=pixel_at(at,&scratch);
+        j->base = p->bg_has ? p->backdrop : native[at];
         if(p->bg_has && (p->bg_ox>=8 || p->bg_oy>=8))goto fail;
         HdSprite *sprites=sprites_at(at,p);int limit=(int)sprite_limit(p),lowest_behind=limit;
         for(int k=0;k<limit;k++)if(sprites[k].has && sprites[k].behind && !sprites[k].transparent){lowest_behind=k;break;}
@@ -336,8 +340,12 @@ static int job_background_rows(const HdJobFrame *f, const HdJobBackground *b,
     if (left >= right || top >= bottom) return 0;
     if(scale==f->source_scale) {
         for(int64_t y=top;y<bottom;y++) {
-            unsigned sx=(unsigned)(left+ox),sy=(unsigned)(y+oy),remaining=(unsigned)(right-left);
-            uint32_t *dst=out+(size_t)y*pitch+(size_t)left;
+            int64_t row_left=left;
+            if(y<(int64_t)f->native_hud_rows*scale && row_left<(int64_t)f->native_hud_columns*scale)
+                row_left=(int64_t)f->native_hud_columns*scale;
+            if(row_left>=right)continue;
+            unsigned sx=(unsigned)(row_left+ox),sy=(unsigned)(y+oy),remaining=(unsigned)(right-row_left);
+            uint32_t *dst=out+(size_t)y*pitch+(size_t)row_left;
             while(remaining) {
                 unsigned n;const uint32_t *src=job_image_span(im,sx,sy,&n);
                 if(n>remaining)n=remaining;
@@ -349,8 +357,11 @@ static int job_background_rows(const HdJobFrame *f, const HdJobBackground *b,
     }
     for (int64_t y = top; y < bottom; ++y) {
         size_t sy = (size_t)((y + oy) * f->source_scale / scale);
-        uint32_t *dst = out + (size_t)y * pitch + (size_t)left;
-        for (int64_t x = left; x < right; ++x) {
+        int64_t row_left=left;
+        if(y<(int64_t)f->native_hud_rows*scale && row_left<(int64_t)f->native_hud_columns*scale)
+            row_left=(int64_t)f->native_hud_columns*scale;
+        uint32_t *dst = out + (size_t)y * pitch + (size_t)row_left;
+        for (int64_t x = row_left; x < right; ++x) {
             size_t sx = (size_t)((x + ox) * f->source_scale / scale);
             *dst = job_color_over(*dst, hd_image_pixel(im->pixels,im->pages,im->width,(unsigned)sx,(unsigned)sy),
                                   b->brightness, b->blend);
@@ -458,7 +469,8 @@ int hdpack_render_jobs(const HdJobFrame *f, unsigned scale, uint32_t *out, size_
         (f->image_count && !f->images) || (f->background_count && !f->backgrounds) ||
         (f->sprite_count && !f->sprites) || f->has_behind>1 ||
         f->behind_end > f->under_end || f->under_end > f->mid_end || f->mid_end > f->background_count ||
-        f->hud_rows > f->height) return -1;
+        f->hud_rows > f->height || f->native_hud_rows>f->height ||
+        f->native_hud_columns>f->width) return -1;
     if(!f->background_count)return job_cells(f,scale,out,pitch);
     for (uint32_t y = 0; y < f->height; ++y) for (uint32_t x = 0; x < f->width; ++x) {
         uint32_t *dst = out + (size_t)y * scale * pitch + (size_t)x * scale;
