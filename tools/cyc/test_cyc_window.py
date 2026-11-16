@@ -357,6 +357,8 @@ def main():
     ap.add_argument('--window', type=Path, required=True)
     ap.add_argument('--dev-window', type=Path, required=True)
     ap.add_argument('--recomp-ui', action='store_true', help='the production window has the runtime menu')
+    ap.add_argument('--interpolation-window', type=Path)
+    ap.add_argument('--interpolation-only', action='store_true')
     ap.add_argument('--out', type=Path, required=True)
     args = ap.parse_args()
     out = args.out.resolve()
@@ -366,10 +368,25 @@ def main():
                    capture_output=True, creationflags=NO_WINDOW)
     image, bios = fx / 'disk2_2.fds', fx / 'bios' / 'hle.rom'
     try:
-        cartridge_bindings(args.window.resolve(), bios, out)
-        cfg = production(args.window.resolve(), image, bios, out, args.recomp_ui)
-        rebinding(args.window.resolve(), image, bios, out, cfg)
-        dev(args.dev_window.resolve(), image, bios, out)
+        if args.interpolation_only:
+            check(args.interpolation_window is not None, 'interpolation host is required')
+            cartridge_bindings(args.interpolation_window.resolve(), bios, out)
+            w = Window(args.interpolation_window.resolve(), out / 'cartridge-input.nes',
+                       bios, out, 'interpolation-ownership')
+            try:
+                w.until(lambda s: s['frame'] >= 60, 900, 'snapshot interpolation running')
+                stats = w.ok('interpolation_test')
+                check(stats['phases'] > 0 and stats['worker_frames'] > 0,
+                      f'actual interpolation and emulation thread were not exercised: {stats}')
+                check(stats['unsafe_machine_reads'] == 0,
+                      f'presenter read machine state during the emulation thread: {stats}')
+            finally:
+                check(w.quit() == 0, 'interpolation host exit')
+        else:
+            cartridge_bindings(args.window.resolve(), bios, out)
+            cfg = production(args.window.resolve(), image, bios, out, args.recomp_ui)
+            rebinding(args.window.resolve(), image, bios, out, cfg)
+            dev(args.dev_window.resolve(), image, bios, out)
     finally:
         for p in OPEN:
             if p.poll() is None:

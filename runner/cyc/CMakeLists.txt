@@ -216,6 +216,23 @@ if(SDL2_FOUND)
                 --window $<TARGET_FILE:cyc_window> --dev-window $<TARGET_FILE:cyc_window_dev> ${window_ui}
                 --out ${CMAKE_CURRENT_BINARY_DIR}/window_run)
     set_tests_properties(cyc_window_run PROPERTIES TIMEOUT 900)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang" AND NOT APPLE)
+        set(interpolation_sources ${NESRECOMP_CYC_SOURCES})
+        list(REMOVE_ITEM interpolation_sources "${CMAKE_CURRENT_SOURCE_DIR}/cyc_host_extras_none.c")
+        add_executable(cyc_window_interpolation ${interpolation_sources}
+            cyc_native_none.c tests/interpolation_host.c)
+        target_include_directories(cyc_window_interpolation PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})
+        target_link_libraries(cyc_window_interpolation PRIVATE ${NESRECOMP_CYC_LIBRARIES})
+        target_link_options(cyc_window_interpolation PRIVATE
+            "-Wl,--wrap=cyc_run_frame" "-Wl,--wrap=cyc_zapper_state")
+        nesrecomp_cyc_enable_sdl(cyc_window_interpolation NO_DEV_UI)
+        add_test(NAME cyc_window_interpolation_run COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_cyc_window.py
+            --window $<TARGET_FILE:cyc_window> --dev-window $<TARGET_FILE:cyc_window_dev>
+            --interpolation-window $<TARGET_FILE:cyc_window_interpolation> --interpolation-only
+            --out ${CMAKE_CURRENT_BINARY_DIR}/window_interpolation)
+        set_tests_properties(cyc_window_interpolation_run PROPERTIES TIMEOUT 120)
+    endif()
     # The always-on diagnostic replay (cyc_replay.h): a hidden window records,
     # tools/cyc/replay_diagnostic.py replays headless with exact per-frame hash
     # equality, across a mid-session state load and segment rollovers; corrupted

@@ -24,7 +24,12 @@ void cyc_settings_default(CycSettings *s)
     s->audio_synthesis = 0;
     s->volume = 100;
     s->skip_launcher = 0;
-    s->rewind_enabled = 1;
+    /* A game may start with rewind off (its snapshot slows the next frame,
+     * which in-between pictures notice): -DNESRECOMP_REWIND_DEFAULT=0. */
+#ifndef NESRECOMP_REWIND_DEFAULT
+#define NESRECOMP_REWIND_DEFAULT 1
+#endif
+    s->rewind_enabled = NESRECOMP_REWIND_DEFAULT;
     s->rewind_depth = 100;
     s->rewind_interval = 4;
     s->view_mode = 0;
