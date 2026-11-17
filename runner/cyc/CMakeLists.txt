@@ -557,7 +557,8 @@ foreach(kind candidate reference)
         target_compile_definitions(cyc_ppu_span_${kind} PRIVATE _CRT_SECURE_NO_WARNINGS)
     endif()
 endforeach()
-target_compile_definitions(cyc_ppu_span_reference PRIVATE NESRECOMP_PPU_LLE_REFERENCE=1 NESRECOMP_APU_LEVEL_REFERENCE=1)
+target_compile_definitions(cyc_ppu_span_reference PRIVATE NESRECOMP_PPU_LLE_REFERENCE=1 NESRECOMP_APU_LEVEL_REFERENCE=1
+    NESRECOMP_PPU_HLE_FORCE_PORTABLE=1)
 target_compile_definitions(cyc_ppu_span_candidate PRIVATE NESRECOMP_APU_VERIFY_LEVELS=1)
 add_test(NAME cyc_ppu_spans COMMAND ${Python3_EXECUTABLE}
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_ppu_spans.py

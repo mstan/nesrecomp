@@ -44,6 +44,15 @@ int main(void) {
         unsigned bit=0;while(!(mask>>bit&1))++bit;
         assert(ppu_hle_first_sprite(mask)==bit);
     }
+    /* Every simultaneous lane mask, including all eight high bits: catches
+     * horizontal-pack/overflow mistakes that sparse random lanes can miss. */
+    for(unsigned mask=0;mask<256;++mask) {
+        uint8_t x[8],lo[8],hi[8]={0};
+        for(unsigned i=0;i<8;++i) {
+            x[i]=(mask>>i&1)?0:1;lo[i]=(mask>>i&1)?0x80:0;
+        }
+        check(x,lo,hi);
+    }
     for(unsigned byte=0;byte<256;++byte)for(unsigned lane=0;lane<8;++lane) {
         uint8_t x[8]={0},lo[8]={0},hi[8]={0};
         x[lane]=(uint8_t)byte;lo[lane]=0x81;hi[(lane+1)&7]=(uint8_t)~byte;check(x,lo,hi);
@@ -53,6 +62,7 @@ int main(void) {
         for(unsigned i=0;i<8;++i) {x[i]=(uint8_t)random32();lo[i]=(uint8_t)random32();hi[i]=(uint8_t)random32();}
         check(x,lo,hi);
     }
-    puts("PPU kernels: exact row decode, priority and shift; native/portable paths");
+    printf("PPU kernels: exact row decode, priority and shift; native/portable paths (NEON=%d SSE2=%d)\n",
+           NESRECOMP_PPU_HLE_NEON, NESRECOMP_PPU_HLE_SSE2);
     return 0;
 }
