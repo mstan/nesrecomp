@@ -561,7 +561,11 @@ void hw_bus_write(uint16_t addr, uint8_t value)
     if (hw_cart.mapper==5 && addr<0x4020) hw_cart_cpu_write(addr,value);
     if (addr < 0x2000) hw_code_store(&hw.ram[addr & 0x7FF], addr & 0x7FF, value);
     else if (addr < 0x4000) ppu_write(addr, value);
-    else if (addr <= 0x4017) apu_write(addr, value);
+    else if (addr <= 0x4017) {
+        if(hw_isolated&&cyc_mod_apu_write_hook&&addr!=0x4014&&addr!=0x4016)
+            cyc_mod_apu_write_hook(addr,value,hw_isolated_cycles);
+        apu_write(addr, value);
+    }
     else if (addr >= 0x4020) {
 #if NESRECOMP_PPU_FRAME
         frame_ppu_mapper_changed();

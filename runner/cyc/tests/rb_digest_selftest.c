@@ -25,7 +25,7 @@ static void reference(const uint8_t *img, size_t len, NesRbDigest *out) {
     while (end - at >= 8) {
         uint32_t n; memcpy(&n, img + at + 4, 4);
         if (n > end - at - 8) break;
-        if (!memcmp(img+at, "AOUT", 4)) { at += 8+n; continue; }
+        if (!memcmp(img+at, "AOUT", 4)||!memcmp(img+at,"MOUT",4)) { at += 8+n; continue; }
         out->master = reference_hash(img+at, 8+n, out->master);
         int part = !memcmp(img+at, "PPU ", 4) || !memcmp(img+at, "PIC", 3) || !memcmp(img+at, "CHRR", 4) ? 1 :
                    !memcmp(img+at, "CPU ", 4) || !memcmp(img+at, "HW  ", 4) || !memcmp(img+at, "CART", 4) ||
@@ -154,13 +154,27 @@ static void audio_presentation(void) {
         assert(before.part[0]==after.part[0] && before.part[1]==after.part[1]);image[i]^=1;
     }
     check(image,sizeof image);
+    /* Extra local voice state has the same continuation-only contract. */
+    memcpy(image+32,"MOUT",4);nes_rb_digest_image(image,sizeof image,&before);
+    for(size_t i=40;i<64;i++) {
+        image[i]^=0x7c;nes_rb_digest_image(image,sizeof image,&after);
+        assert(!memcmp(&before,&after,sizeof before));image[i]^=0x7c;
+    }
+    check(image,sizeof image);
+    /* The ordinary mod state beside it must remain in the simulation. */
+    memcpy(image+32,"MOD ",4);nes_rb_digest_image(image,sizeof image,&before);
+    for(size_t i=40;i<64;i++) {
+        image[i]^=0x7c;nes_rb_digest_image(image,sizeof image,&after);
+        assert(before.master!=after.master&&before.part[2]!=after.part[2]);image[i]^=0x7c;
+    }
+    check(image,sizeof image);
 }
 int main(void) {
     input_snapshot();config_reference();capability_contract();audio_presentation();
     uint8_t *image = malloc(1024 * 1024); assert(image);
     check(NULL, 0); check(NULL, 100);
     for (size_t n = 0; n < 80; ++n) { memset(image, 0xff, 80); check(image, n); }
-    const char tags[][5] = { "CPU ", "HW  ", "CART", "TIME", "REGN", "PPU ", "PICI", "PICL", "PICB", "CHRR", "APU ", "AOUT", "MOD ", "END ", "????" };
+    const char tags[][5] = { "CPU ", "HW  ", "CART", "TIME", "REGN", "PPU ", "PICI", "PICL", "PICB", "CHRR", "APU ", "AOUT", "MOD ", "MOUT", "END ", "????" };
     for (unsigned test = 0; test < 500; ++test) {
         size_t n = 32;
         for (size_t i = 0; i < 32; ++i) image[i] = (uint8_t)random32();

@@ -19,6 +19,7 @@
 #include "hw_internal.h"
 
 #include "cyc_core.h"
+#include "cyc_apu_voice.h"
 #include "cyc_trace.h"
 #include "hw.h"
 
@@ -146,7 +147,7 @@ static const uint16_t noise_period_table[16] = {
 #define AUDIO_BAND_PHASES 256
 #define AUDIO_BAND_TAPS (2 * AUDIO_BAND_HALF + 1)
 #define AUDIO_BAND_RING 256u /* power of two, comfortably longer than 2*HALF */
-static struct {
+typedef struct {
     bool     on;
     int      console;              /* CYC_CONSOLE_NES or CYC_CONSOLE_FAMICOM, while on */
     CycAudioSynthesis synthesis;
@@ -168,7 +169,9 @@ static struct {
      * it before any serializer/snapshot may replace the channel state. */
     double   base_level;
     uint8_t  level_dirty, level_dmc;
-} audio;
+} ApuAudio;
+static ApuAudio audio;
+static bool voice_busy;
 
 static double audio_band_kernel[(AUDIO_BAND_PHASES + 1) * AUDIO_BAND_TAPS];
 static bool audio_band_kernel_ready;
@@ -696,7 +699,7 @@ static void audio_cycle(void)
 #endif
 #endif
 
-    level += hw_cart_audio_level();
+    if(!voice_busy)level += hw_cart_audio_level();
     audio_output_cycle(level);
 }
 
@@ -1376,9 +1379,9 @@ static void oam_dma_put(void)
     }
 }
 
-static void dmc_dma_get(void)
+static void dmc_dma_get_value(uint8_t value)
 {
-    apu.dmc_buffer = hw_bus_read(apu.dmc_addr);
+    apu.dmc_buffer = value;
     apu.dmc_have_buffer = 1;
     if (++apu.dmc_addr == 0) apu.dmc_addr = 0x8000;
     if (apu.dmc_bytes > 0) apu.dmc_bytes--;
@@ -1394,6 +1397,7 @@ static void dmc_dma_get(void)
     apu.oam_dma_aligned = 0;
     apu.dmc_dma_cooldown = 2;
 }
+static void dmc_dma_get(void) {dmc_dma_get_value(hw_bus_read(apu.dmc_addr));}
 
 /* A DMA cycle. Put cycles write (the sprite DMA's $2004 store) or wait; get
  * cycles read. With both DMAs pending, the sprite DMA has the put cycles
@@ -1465,6 +1469,22 @@ void *apu_state_ptr(size_t *size)
     return &apu;
 }
 
+static void apu_reset_channels(void) {
+    audio.level_dirty = 1;
+    memset(&apu, 0, sizeof(apu));
+    apu.put = 1;
+    apu.reset_delay = 0xFF;
+    apu.dmc_rate = hw_pal() ? dmc_rate_table_pal[0] : 428;
+    apu.dmc_timer = 1022;
+    apu.dmc_sample_addr = apu.dmc_addr = 0xC000;
+    apu.dmc_sample_len = 1;
+    apu.dmc_bits = 8;
+    apu.dmc_silent = 1;
+    apu.dmc_out_silent = 1;
+    apu.noise_lfsr = 1;
+    apu.noise_period = noise_period_table[0];
+    apu.tri_out = 15;
+}
 void apu_power_on(void)
 {
 #if NESRECOMP_APU_OPERATION
@@ -1480,20 +1500,7 @@ void apu_power_on(void)
     apu_operation_active = operation_eligible;
 #endif
     apu_native_event_spans = apu_native_event_cycles = 0;
-    audio.level_dirty = 1;
-    memset(&apu, 0, sizeof(apu));
-    apu.put = 1;
-    apu.reset_delay = 0xFF;
-    apu.dmc_rate = hw_pal() ? dmc_rate_table_pal[0] : 428;
-    apu.dmc_timer = 1022;
-    apu.dmc_sample_addr = apu.dmc_addr = 0xC000;
-    apu.dmc_sample_len = 1;
-    apu.dmc_bits = 8;
-    apu.dmc_silent = 1;
-    apu.dmc_out_silent = 1;
-    apu.noise_lfsr = 1;
-    apu.noise_period = noise_period_table[0];
-    apu.tri_out = 15;
+    apu_reset_channels();
 }
 
 /* Bootstrap policy, not serialized machine state. Both executors materialize
@@ -1582,3 +1589,126 @@ void hr_apu_print(void)
            (unsigned long long)hr_audio_cycles, (unsigned)apu.irq_inhibit, (unsigned)apu.five_step, (unsigned)apu.dmc_playing);
 }
 #endif
+
+/* Audio-only contexts use the same 2A03 and sampler, never the master clock.
+ * The engine owns one emulation thread; calls cannot nest or run in an
+ * isolated CPU scope. Keep the large output buffer off the C stack. */
+struct CycApuVoice {
+    HwApu state;
+    ApuAudio output;
+    unsigned rate;
+    uint8_t mute;
+    CycApuSampleRead read;
+    void *read_ctx;
+};
+static struct {
+    HwApu state;
+    ApuAudio output;
+    uint8_t mute;
+#if NESRECOMP_APU_OPERATION
+    unsigned pending,deadline;
+    bool active,running;
+#endif
+} voice_backup;
+typedef struct {
+    uint32_t schema,rate,mute;
+    HwApu state;
+    ApuOutputState output;
+} ApuVoiceImage;
+
+static bool voice_enter(CycApuVoice *v) {
+    if(!v||voice_busy||hw_isolated)return false;
+    APU_SYNC();
+    voice_backup.state=apu;voice_backup.output=audio;voice_backup.mute=audio_mute_mask;
+#if NESRECOMP_APU_OPERATION
+    voice_backup.pending=apu_operation_pending;voice_backup.deadline=apu_operation_deadline;
+    voice_backup.active=apu_operation_active;voice_backup.running=operation_running;
+    apu_operation_active=false;apu_operation_pending=0;operation_running=false;
+#endif
+    apu=v->state;audio=v->output;audio_mute_mask=v->mute;voice_busy=true;
+    return true;
+}
+static void voice_leave(CycApuVoice *v) {
+    v->state=apu;v->output=audio;v->mute=audio_mute_mask;
+    apu=voice_backup.state;audio=voice_backup.output;audio_mute_mask=voice_backup.mute;
+#if NESRECOMP_APU_OPERATION
+    apu_operation_pending=voice_backup.pending;apu_operation_deadline=voice_backup.deadline;
+    apu_operation_active=voice_backup.active;operation_running=voice_backup.running;
+#endif
+    voice_busy=false;
+}
+CycApuVoice *cyc_apu_voice_new(unsigned rate,CycApuSampleRead read,void *ctx) {
+    if(!rate||rate>384000||voice_busy||hw_isolated)return NULL;
+    CycApuVoice *v=(CycApuVoice *)calloc(1,sizeof *v);if(!v)return NULL;
+    v->rate=rate;v->read=read;v->read_ctx=ctx;
+    if(!voice_enter(v)){free(v);return NULL;}
+    apu_reset_channels();apu_audio_enable(true,(int)rate);
+    voice_leave(v);return v;
+}
+void cyc_apu_voice_free(CycApuVoice *v) {if(!voice_busy)free(v);}
+bool cyc_apu_voice_run(CycApuVoice *v,const CycApuWrite *writes,size_t count,
+                       unsigned cycles,uint8_t channels) {
+    if(!v||(!writes&&count)||count>512||!cycles||cycles>65536)return false;
+    for(size_t i=0;i<count;i++) {
+        unsigned a=writes[i].addr;
+        if(writes[i].cycle>cycles||(i&&writes[i].cycle<writes[i-1].cycle)||
+           a<0x4000||a>0x4017||a==0x4014||a==0x4016)return false;
+    }
+    if(!voice_enter(v))return false;
+    apu_set_audio_mute((uint8_t)(~channels&31));
+    size_t event=0;
+    for(unsigned cycle=0;cycle<=cycles;cycle++) {
+        while(event<count&&writes[event].cycle==cycle) {
+            apu_write(writes[event].addr,writes[event].value);++event;
+        }
+        if(cycle==cycles)break;
+        apu_cycle_run();
+        /* An audio fetch services the same DMC output/buffer state. It never
+         * repeats a CPU read, steals guest time or touches the live bus. */
+        if(apu.dmc_dma&&(apu.dmc_playing||apu.implicit_abort)&&!apu.put) {
+            if(apu.dmc_dma_halt)apu.dmc_dma_halt=0;
+            else dmc_dma_get_value(v->read?v->read(v->read_ctx,apu.dmc_addr):0);
+        }
+        dma_end_of_cycle();
+    }
+    voice_leave(v);return true;
+}
+size_t cyc_apu_voice_read(CycApuVoice *v,int16_t *samples,size_t count) {
+    if(!samples||!voice_enter(v))return 0;
+    size_t n=apu_audio_read(samples,count);voice_leave(v);return n;
+}
+size_t cyc_apu_voice_state_size(void) {return sizeof(ApuVoiceImage);}
+bool cyc_apu_voice_state_get(CycApuVoice *v,void *out,size_t size) {
+    if(!out||size!=sizeof(ApuVoiceImage)||!voice_enter(v))return false;
+    ApuVoiceImage image;memset(&image,0,sizeof image);
+    image.schema=1;image.rate=v->rate;image.mute=audio_mute_mask;image.state=apu;
+    apu_output_save(&image.output,sizeof image.output);
+    voice_leave(v);memcpy(out,&image,sizeof image);return true;
+}
+static bool voice_image_valid(CycApuVoice *v,const ApuVoiceImage *s) {
+    if(!v||s->schema!=1||s->rate!=v->rate||s->mute>31)return false;
+    const HwApu *a=&s->state;
+    if(a->put>1||a->five_step>1||a->irq_inhibit>1||a->counter>41566||
+       !a->dmc_bits||a->dmc_bits>8||a->dmc_level>127||a->dmc_timer>1022||
+       !a->dmc_timer||(a->dmc_timer&1)||a->dmc_rate<2||a->dmc_rate>1022||(a->dmc_rate&1)||
+       a->dmc_bytes>4081||a->dmc_addr<0x8000||a->dmc_sample_addr<0xc000||a->dmc_sample_len>4081||
+       a->tri_step>31||a->tri_out>15||a->tri_period>2047||a->tri_timer>2047||
+       a->noise_lfsr>32767||a->noise_period>4068||a->noise_timer>4068||a->noise_env.decay>15||
+       a->oam_dma||a->strobe||a->shift_delay[0]||a->shift_delay[1])return false;
+    for(unsigned i=0;i<2;i++)if(a->pulse[i].step>7||a->pulse[i].period>2047||
+        a->pulse[i].timer>2047||a->pulse[i].env.decay>15||a->pulse[i].sweep_divider>7)return false;
+    if(s->output.enabled!=1||s->output.cycles_per_sample!=cyc_cpu_hz()/v->rate)return false;
+    if(!voice_enter(v))return false;
+    bool ok=apu_output_load(&s->output,sizeof s->output,false);voice_leave(v);return ok;
+}
+bool cyc_apu_voice_state_valid(CycApuVoice *v,const void *data,size_t size) {
+    if(!data||size!=sizeof(ApuVoiceImage))return false;
+    ApuVoiceImage image;memcpy(&image,data,sizeof image);return voice_image_valid(v,&image);
+}
+bool cyc_apu_voice_state_set(CycApuVoice *v,const void *data,size_t size) {
+    if(!data||size!=sizeof(ApuVoiceImage))return false;
+    ApuVoiceImage image;memcpy(&image,data,sizeof image);
+    if(!voice_image_valid(v,&image)||!voice_enter(v))return false;
+    apu=image.state;audio_mute_mask=(uint8_t)image.mute;
+    bool ok=apu_output_load(&image.output,sizeof image.output,true);voice_leave(v);return ok;
+}

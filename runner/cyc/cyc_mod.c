@@ -320,6 +320,11 @@ void cyc_mod_set_regs(const CycModRegs *in)
 }
 
 bool cyc_mod_isolated(void) { return s_open; }
+CycModApuWriteHook cyc_mod_apu_write_hook;
+bool cyc_mod_set_apu_write_hook(CycModApuWriteHook hook) {
+    if(!s_open&&hook)return false;
+    cyc_mod_apu_write_hook=hook;return true;
+}
 
 bool cyc_mod_isolated_job_ready(const CycModCodeRegion *regions, size_t count,
                                 uint64_t cycles)
@@ -380,6 +385,7 @@ bool cyc_mod_isolate_begin(void)
     }
     cyc_snapshot_take_isolated(s_snap);
     s_open = true;
+    cyc_mod_apu_write_hook=NULL;
     s_isolated_hooks = false;
     s_stats.scopes++;
     /* Nothing but the routine: no clock, no interrupt about to be taken, no
@@ -479,6 +485,7 @@ bool cyc_mod_call(uint16_t routine, CycModRegs *regs)
 void cyc_mod_isolate_end(void)
 {
     if (!s_open) return;
+    cyc_mod_apu_write_hook=NULL;
     hw_isolated = false;
     cyc_snapshot_restore(s_snap);
     cyc_ring_muted = 0;

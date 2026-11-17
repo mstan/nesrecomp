@@ -18,13 +18,14 @@ typedef struct {
     NESModSavestateGet  get;
     NESModSavestateSet  set;
     NESModSavestateValidate validate;
+    int presentation;
 } SavestateHook;
 
 static SavestateHook s_hooks[NES_MOD_MAX_SAVESTATE_HOOKS];
 static int           s_count = 0;
 
-int nes_mod_register_savestate_hook(const char *id, NESModSavestateGet get,
-                                    NESModSavestateSet set) {
+static int register_hook(const char *id, NESModSavestateGet get,
+                         NESModSavestateSet set,int presentation) {
     if (!id || !id[0] || !get || !set) return 0;
     if (strlen(id) >= NES_MOD_SAVESTATE_ID_CAP) return 0;
 
@@ -34,6 +35,7 @@ int nes_mod_register_savestate_hook(const char *id, NESModSavestateGet get,
          * reloaded mod does not need to track whether it already ran. */
         s_hooks[i].get = get;
         s_hooks[i].set = set;
+        s_hooks[i].presentation = presentation;
         return 1;
     }
     if (s_count >= NES_MOD_MAX_SAVESTATE_HOOKS) return 0;
@@ -42,8 +44,19 @@ int nes_mod_register_savestate_hook(const char *id, NESModSavestateGet get,
     s_hooks[s_count].id[NES_MOD_SAVESTATE_ID_CAP - 1] = '\0';
     s_hooks[s_count].get = get;
     s_hooks[s_count].set = set;
+    s_hooks[s_count].presentation = presentation;
     s_count++;
     return 1;
+}
+
+int nes_mod_register_savestate_hook(const char *id,NESModSavestateGet get,NESModSavestateSet set) {
+    return register_hook(id,get,set,0);
+}
+int nes_mod_register_presentation_savestate_hook(const char *id,NESModSavestateGet get,NESModSavestateSet set) {
+    return register_hook(id,get,set,1);
+}
+int nes_mod_savestate_hook_presentation_at(int index) {
+    return index>=0&&index<s_count?s_hooks[index].presentation:0;
 }
 
 int nes_mod_savestate_hook_count(void) { return s_count; }

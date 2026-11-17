@@ -189,7 +189,7 @@ bool cyc_state_save(uint8_t **out, size_t *len, char *err, size_t err_len)
             set_err(err, err_len, msg);
             return false;
         }
-        chunk(&b, TAG('M', 'O', 'D', ' '), blob, MOD_ID_BYTES + (size_t)n);
+        chunk(&b, nes_mod_savestate_hook_presentation_at(i)?TAG('M','O','U','T'):TAG('M','O','D',' '), blob, MOD_ID_BYTES + (size_t)n);
     }
     free(blob);
     chunk(&b, TAG('E', 'N', 'D', ' '), NULL, 0);
@@ -343,8 +343,9 @@ bool cyc_state_load(const uint8_t *data, size_t len, char *err, size_t err_len)
         if (!validate) continue;
         const char *id = nes_mod_savestate_hook_id_at(i);
         const Chunk *rec = NULL;
+        uint32_t tag=nes_mod_savestate_hook_presentation_at(i)?TAG('M','O','U','T'):TAG('M','O','D',' ');
         for (int k = 0; k < n; ++k)
-            if (c[k].tag == TAG('M', 'O', 'D', ' ') && c[k].len >= MOD_ID_BYTES &&
+            if (c[k].tag == tag && c[k].len >= MOD_ID_BYTES &&
                 !strncmp((const char *)c[k].data, id, MOD_ID_BYTES))
                 rec = &c[k];
         if (!validate(rec ? rec->data + MOD_ID_BYTES : NULL, rec ? (int)(rec->len - MOD_ID_BYTES) : 0)) {
@@ -406,8 +407,9 @@ bool cyc_state_load(const uint8_t *data, size_t len, char *err, size_t err_len)
         NESModSavestateSet set = nes_mod_savestate_hook_find_set(id);
         if (!set) continue;
         const Chunk *rec = NULL;
+        uint32_t tag=nes_mod_savestate_hook_presentation_at(i)?TAG('M','O','U','T'):TAG('M','O','D',' ');
         for (int k = 0; k < n; ++k)
-            if (c[k].tag == TAG('M', 'O', 'D', ' ') && c[k].len >= MOD_ID_BYTES &&
+            if (c[k].tag == tag && c[k].len >= MOD_ID_BYTES &&
                 !strncmp((const char *)c[k].data, id, MOD_ID_BYTES))
                 rec = &c[k];
         /* No record: the mod starts from its empty state (it was not in the

@@ -15,6 +15,10 @@
 #include "cyc_core.h"
 #include "cyc_run.h"
 #include "hw_internal.h"
+#include "cyc_apu_voice.h"
+#include "cyc_state.h"
+#include "cyc_mod.h"
+#include "../include/mod_savestate.h"
 #include "../../common/nes_fds.h"
 
 #include <math.h>
@@ -375,9 +379,126 @@ static void test_channel_mute(void)
     CHECK(!memcmp(hash[0], hash[1], sizeof(hash[0])));
 }
 
+static unsigned voice_fetches;
+static CycApuWrite observed_writes[4];
+static unsigned observed_count;
+static void observe_apu(uint16_t addr,uint8_t value,uint64_t cycle) {
+    CHECK(observed_count<4&&cycle<=UINT32_MAX);
+    observed_writes[observed_count++]=(CycApuWrite){(uint32_t)cycle,addr,value};
+}
+static void test_native_audio_observer(void) {
+    const uint8_t routine[]={0xa9,0x2f,0x8d,0x00,0x40,0xa9,0xff,0x8d,0x17,0x40,0x60};
+    uint64_t before=cyc_hw_state_hash(),memory=cyc_mem_state_hash(),clock=cyc_cycle_count();
+    CHECK(!cyc_mod_set_apu_write_hook(observe_apu));
+    CHECK(cyc_mod_isolate_begin());
+    for(unsigned i=0;i<sizeof routine;i++)CHECK(cyc_mod_poke((uint16_t)(0x600+i),routine[i]));
+    CHECK(cyc_mod_set_apu_write_hook(observe_apu));
+    CycModRegs regs={0,0,0,0xf0,0x24,0};
+    CHECK(cyc_mod_call(0x600,&regs));cyc_mod_isolate_end();
+    CHECK(observed_count==2&&!cyc_mod_apu_write_hook);
+    CHECK(observed_writes[0].addr==0x4000&&observed_writes[0].value==0x2f);
+    CHECK(observed_writes[1].addr==0x4017&&observed_writes[1].value==0xff);
+    CHECK(observed_writes[0].cycle>0&&observed_writes[1].cycle>observed_writes[0].cycle);
+    CHECK(cyc_hw_state_hash()==before&&cyc_mem_state_hash()==memory&&cyc_cycle_count()==clock);
+    puts("Native audio observer: ordered original register writes; no live-machine changes or leaked hook");
+}
+static uint32_t presentation_marker,simulation_marker;
+static int marker_get(uint8_t *out,int cap,uint32_t value) {
+    if(cap<4)return -1;memcpy(out,&value,4);return 4;
+}
+static int presentation_get(uint8_t *out,int cap){return marker_get(out,cap,presentation_marker);}
+static int simulation_get(uint8_t *out,int cap){return marker_get(out,cap,simulation_marker);}
+static int marker_valid(const uint8_t *data,int len) {
+    uint32_t value=0;if(!data||len!=4)return 0;memcpy(&value,data,4);return value<256;
+}
+static int presentation_set(const uint8_t *data,int len) {
+    if(!marker_valid(data,len))return 0;memcpy(&presentation_marker,data,4);return 1;
+}
+static int simulation_set(const uint8_t *data,int len) {
+    if(!marker_valid(data,len))return 0;memcpy(&simulation_marker,data,4);return 1;
+}
+static void test_presentation_snapshot(void) {
+    CHECK(nes_mod_register_presentation_savestate_hook("test.audio",presentation_get,presentation_set));
+    CHECK(nes_mod_register_savestate_hook("test.simulation",simulation_get,simulation_set));
+    CHECK(nes_mod_register_savestate_validator("test.audio",marker_valid));
+    CHECK(nes_mod_register_savestate_validator("test.simulation",marker_valid));
+    presentation_marker=42;simulation_marker=73;
+    uint8_t *image=NULL;size_t size=0;char why[256];
+    CHECK(cyc_state_save(&image,&size,why,sizeof why));
+    size_t audio_at=0,sim_at=0;
+    for(size_t at=32;at+8<=size;) {
+        uint32_t n;memcpy(&n,image+at+4,4);CHECK(n<=size-at-8);
+        if(!memcmp(image+at,"MOUT",4))audio_at=at;
+        if(!memcmp(image+at,"MOD ",4)&&n>=64&&!strcmp((char *)image+at+8,"test.simulation"))sim_at=at;
+        at+=8+n;
+    }
+    CHECK(audio_at&&sim_at);
+    presentation_marker=99;simulation_marker=88;hw.ram[0x400]=0x6a;
+    image[audio_at+8+64+1]=1; /* Marker >255: preflight must reject before any mutation. */
+    CHECK(!cyc_state_load(image,size,why,sizeof why));
+    CHECK(hw.ram[0x400]==0x6a&&presentation_marker==99&&simulation_marker==88);
+    image[audio_at+8+64+1]=0;
+    CHECK(cyc_state_load(image,size,why,sizeof why));
+    CHECK(presentation_marker==42&&simulation_marker==73&&hw.ram[0x400]!=0x6a);
+    memcpy(image+audio_at,"MOD ",4);hw.ram[0x400]=0x5b;
+    CHECK(!cyc_state_load(image,size,why,sizeof why)&&hw.ram[0x400]==0x5b);
+    free(image);puts("MOUT: local continuation round trip and atomic preflight rejection; ordinary MOD records retained");
+}
+static uint8_t voice_sample(void *ctx,uint16_t addr) {
+    (void)ctx;++voice_fetches;return (uint8_t)(addr^(addr>>3));
+}
+static void test_audio_voices(void) {
+    make_cart(0);CHECK(cyc_load_ines(cart,sizeof cart));
+    cyc_set_console(CYC_CONSOLE_NES);cyc_power_on(0);cyc_run_power_on();
+    /* The CPU reset adapter consumed a clock. Compare both independent
+     * audio contexts from the same fresh 2A03 half-cycle and filter phase. */
+    apu_power_on();CHECK(cyc_audio_enable(RATE));
+    CycApuVoice *v=cyc_apu_voice_new(RATE,voice_sample,NULL);CHECK(v);
+    CHECK(!cyc_apu_voice_new(0,NULL,NULL)&&!cyc_apu_voice_new(384001,NULL,NULL));
+    const CycApuWrite writes[]={
+        {0,0x4017,0xff},{2,0x4015,0x0f},{4,0x4000,0x9f},{6,0x4001,0x08},
+        {8,0x4002,0x80},{10,0x4003,0xf8},{12000,0x400e,0x03},{12002,0x400c,0x1b},{12004,0x400f,0x18}};
+    size_t next=0;
+    for(unsigned c=0;c<32768;c++) {
+        while(next<sizeof writes/sizeof *writes&&writes[next].cycle==c) {
+            apu_write(writes[next].addr,writes[next].value);++next;
+        }
+        apu_cycle();
+    }
+    int16_t expected[2048],got[2048];size_t count=apu_audio_read(expected,2048);
+    CHECK(count>800&&count<1000);
+    uint64_t hardware=cyc_hw_state_hash(),memory=cyc_mem_state_hash(),cycles=cyc_cycle_count();
+    size_t main_n=apu_output_save(NULL,0);uint8_t *main_before=malloc(main_n),*main_after=malloc(main_n);
+    CHECK(main_before&&main_after);apu_output_save(main_before,main_n);
+    CHECK(cyc_apu_voice_run(v,writes,sizeof writes/sizeof *writes,32768,31));
+    CHECK(cyc_apu_voice_read(v,got,2048)==count&&!memcmp(got,expected,count*sizeof *got));
+    double energy=0;for(size_t i=0;i<count;i++)energy+=(double)got[i]*got[i];CHECK(energy>1e6);
+    size_t size=cyc_apu_voice_state_size();uint8_t *start=malloc(size),*finish=malloc(size),*actual=malloc(size);
+    CHECK(start&&finish&&actual);CHECK(cyc_apu_voice_state_get(v,start,size));
+    CHECK(cyc_apu_voice_state_valid(v,start,size));
+    const CycApuWrite dmc[]={{0,0x4010,0x0f},{2,0x4012,0},{4,0x4013,0x10},{6,0x4015,0x1f}};
+    CHECK(cyc_apu_voice_run(v,dmc,4,32768,31));count=cyc_apu_voice_read(v,expected,2048);
+    CHECK(voice_fetches>0&&count>800);CHECK(cyc_apu_voice_state_get(v,finish,size));
+    CHECK(cyc_apu_voice_state_set(v,start,size));
+    CHECK(cyc_apu_voice_run(v,dmc,4,32768,31));CHECK(cyc_apu_voice_read(v,got,2048)==count);
+    CHECK(!memcmp(expected,got,count*sizeof *got));CHECK(cyc_apu_voice_state_get(v,actual,size));
+    CHECK(!memcmp(actual,finish,size));
+    start[0]^=1;CHECK(!cyc_apu_voice_state_set(v,start,size));start[0]^=1;
+    CHECK(!cyc_apu_voice_state_set(v,start,size-1));
+    CycApuWrite bad={0,0x4014,0};CHECK(!cyc_apu_voice_run(v,&bad,1,32768,31));
+    CHECK(cyc_apu_voice_state_get(v,actual,size)&&!memcmp(actual,finish,size));
+    CHECK(cyc_hw_state_hash()==hardware&&cyc_mem_state_hash()==memory&&cyc_cycle_count()==cycles);
+    apu_output_save(main_after,main_n);CHECK(!memcmp(main_before,main_after,main_n));
+    cyc_apu_voice_free(v);free(start);free(finish);free(actual);free(main_before);free(main_after);
+    puts("APU voice: exact native pulse/noise PCM, DMC, save continuation, invalid-state refusal and live-machine isolation");
+}
+
 int main(int argc, char **argv)
 {
     CHECK(cyc_audio_synthesis() == CYC_AUDIO_SYNTH_LEGACY);
+    test_audio_voices();
+    test_native_audio_observer();
+    test_presentation_snapshot();
     test_defaults(argc > 1 ? argv[1] : NULL);
     test_response();
     test_step();

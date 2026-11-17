@@ -58,6 +58,15 @@ NESModSavestateValidate nes_mod_savestate_hook_validate_at(int index);
 int nes_mod_register_savestate_hook(const char *id, NESModSavestateGet get,
                                     NESModSavestateSet set);
 
+/* Local audio/render continuations ONLY: never gameplay, input, RNG or other
+ * simulation state. The cycle runner retains and validates these records in
+ * current-build saves/rollback, but excludes their MOUT chunks from simulation
+ * digests, just like the main APU's AOUT output buffer. Register a normal
+ * validator too. Ordinary hooks remain MOD chunks and are always hashed. */
+int nes_mod_register_presentation_savestate_hook(const char *id, NESModSavestateGet get,
+                                                 NESModSavestateSet set);
+int nes_mod_savestate_hook_presentation_at(int index);
+
 /* Number of registered hooks, for savestate.c to iterate on save. */
 int nes_mod_savestate_hook_count(void);
 

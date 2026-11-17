@@ -56,7 +56,7 @@ void nes_rb_digest_image(const uint8_t *img,size_t len,NesRbDigest *out) {
          * its read cursor follows the host audio consumer, not emulated time.
          * Keep it in local rollback/save images, outside simulation digests.
          * The actual APU/DMC/controller state remains hashed below. */
-        if(!memcmp(img+at,"AOUT",4)){at+=8+n;continue;}
+        if(!memcmp(img+at,"AOUT",4)||!memcmp(img+at,"MOUT",4)){at+=8+n;continue;}
         int part=!memcmp(img+at,"PPU ",4)||!memcmp(img+at,"PIC",3)||!memcmp(img+at,"CHRR",4)?1:
                  !memcmp(img+at,"CPU ",4)||!memcmp(img+at,"HW  ",4)||!memcmp(img+at,"CART",4)||!memcmp(img+at,"TIME",4)||!memcmp(img+at,"REGN",4)?0:2;
         hash_pair(img+at,8+n,&out->master,&out->part[part]);at+=8+n;

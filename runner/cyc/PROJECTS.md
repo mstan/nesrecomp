@@ -232,6 +232,25 @@ whose analog output stage the audio goes through (see the APU section of
 FDS, Namco 163, VRC6 and VRC7, nes otherwise). The program's `--console`
 option overrides it. Any other value fails code generation.
 
+Titles that route music by local view can capture the original driver's APU
+writes with `cyc_mod_set_apu_write_hook` inside an isolated native call, then
+render those timestamped writes through `cyc_apu_voice.h`. Each audio-only
+voice reuses the existing 2A03 channels, DMC and sampler; it advances no CPU,
+PPU, mapper, controller or guest DMA time. Calls run on the emulation thread,
+outside isolation, with a pure ROM callback for DMC samples. Cartridge
+expansion audio is excluded from these voices. Normal machine audio retains
+its existing implementation.
+
+Register local driver/voice continuations with
+`nes_mod_register_presentation_savestate_hook` and a pure preflight validator.
+The cycle serializer stores these hooks in `MOUT` records and restores them
+for current-build save/load and rollback. Simulation digests exclude `MOUT`,
+as they already exclude `AOUT`; ordinary `MOD ` records remain hashed. Use
+this only for presentation: authoritative sound requests, inputs and gameplay
+must stay in shared machine or ordinary mod state. Voice images are build
+specific, and the title must include the driver's state as well as its voice
+image to resume the same sound.
+
 ## Native coverage and rebuilding
 
 Unseen code runs through the cycle interpreter. Profile a route with

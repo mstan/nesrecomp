@@ -175,6 +175,12 @@ void cyc_mod_set_call_budget(uint64_t cycles);
  * scope end resets the permission. The game's callbacks must keep their own
  * speculative presentation/simulation state separate from live state. */
 void cyc_mod_set_return_hook(void (*hook)(void));
+/* Pure observation of an isolated routine's 2A03 register writes. Cycle is
+ * relative to the current outer call. No gameplay clocks run; scope end
+ * clears the observer. Never mutate/reenter the machine from the callback. */
+typedef void (*CycModApuWriteHook)(uint16_t addr,uint8_t value,uint64_t cycle);
+extern CycModApuWriteHook cyc_mod_apu_write_hook;
+bool cyc_mod_set_apu_write_hook(CycModApuWriteHook hook);
 /* CPU adapter installed above: commits native device time before invoking
  * the trusted game callback. Other external RTS observers retain fallback. */
 void cyc_mod_return_observer(void);
