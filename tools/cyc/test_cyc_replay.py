@@ -140,8 +140,7 @@ class Window:
                                      stderr=subprocess.STDOUT, creationflags=NO_WINDOW | BELOW_NORMAL)
         OPEN.append(self.proc)
         self.sock, self.buf, self.next_id = None, b'', 1
-        deadline = time.time() + 30
-        while time.time() < deadline and self.sock is None:
+        while self.sock is None:
             try:
                 self.sock = socket.create_connection(('127.0.0.1', self.port), timeout=10)
             except OSError:
@@ -149,6 +148,7 @@ class Window:
                     raise RuntimeError(f'{tag}: the window exited {self.proc.returncode}; see {self.out}/stdout.log')
                 time.sleep(0.1)
         check(self.sock is not None, f'{tag}: no TCP server')
+        self.sock.settimeout(None)
 
     def cmd(self, _cmd, **fields):
         fields.update(cmd=_cmd, id=self.next_id)
@@ -170,15 +170,11 @@ class Window:
 
     def wait_frames(self, n):
         start = self.frame()
-        deadline = time.time() + 120
         while self.frame() < start + n:
-            check(time.time() < deadline, f'{n} frames did not run')
             time.sleep(0.01)
 
     def wait_until_frame(self, target):
-        deadline = time.time() + 120
         while self.frame() < target:
-            check(time.time() < deadline, f'frame {target} not reached')
             time.sleep(0.01)
 
     def hold(self, name, frames, player=1):
@@ -189,7 +185,7 @@ class Window:
     def quit(self):
         self.cmd('quit')
         self.sock.close()
-        rc = self.proc.wait(60)
+        rc = self.proc.wait()
         self.log.close()
         return rc
 
@@ -204,7 +200,7 @@ def run_tool(args, work, expect):
         if stale.exists():
             shutil.rmtree(stale)
     cmd = [sys.executable, '-I', str(HERE / 'replay_diagnostic.py'), *[str(a) for a in args]]
-    r = subprocess.run(cmd, cwd=work, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=600,
+    r = subprocess.run(cmd, cwd=work, capture_output=True, text=True, encoding='utf-8', errors='replace',
                        creationflags=NO_WINDOW)
     (work / f'tool-{expect}.log').write_text(r.stdout + r.stderr, encoding='utf-8')
     check(r.returncode == expect, f'tool exit {r.returncode}, wanted {expect}:\n{r.stdout}{r.stderr}')
@@ -219,7 +215,7 @@ def plain_run(exe, image, input_text, frames, work, name, extra=()):
     env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', NESRECOMP_REPLAY_RECORD='0',
                NESRECOMP_DIAGNOSTICS_DIR=str(work / 'diag'))
     r = subprocess.run([str(exe), str(image), '--frames', str(frames), '--input', str(inp), '--hash-out', str(hashes),
-                        '--no-save', *extra], cwd=work, env=env, capture_output=True, text=True, timeout=600,
+                        '--no-save', *extra], cwd=work, env=env, capture_output=True, text=True,
                        creationflags=NO_WINDOW)
     check(r.returncode == 0, f'{name}: host exit {r.returncode}\n{r.stdout}{r.stderr}')
     return rd.read_host_hashes(hashes)

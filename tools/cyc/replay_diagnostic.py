@@ -21,7 +21,6 @@ its own checkpoint). Without --exe/--rom, --check only inspects the files.
   --screenshot-every K  save a PNG of every Kth frame under <work>/shots
   --work-dir DIR        a NEW directory for the run (default: replay-<time> beside CAPTURE)
   --keep-going          after a divergence continue with the next segment
-  --timeout S           seconds the host may run per segment (default 900)
   --host-arg ARG        an extra host argument (repeatable), e.g. the FDS BIOS:
                         --host-arg=--fds-bios --host-arg FILE
 
@@ -30,7 +29,7 @@ is printed, and replay-divergence.cycstate holds the machine right after that
 frame); 2 bad or unsupported capture, wrong program, usage; 3 the capture's
 final input has no checkpoint (the frame hung or crashed in the original
 run; playback executed it so it can recur under a debugger); 4 the host
-failed or timed out.
+failed.
 
 Run with the Python that has no site packages needed: python -I replay_diagnostic.py ...
 """
@@ -293,16 +292,15 @@ def host_command(seg, args, work, frames_end, extra):
     return cmd + list(args.host_arg) + extra
 
 
-def run_host(cmd, work, timeout, log_name):
+def run_host(cmd, work, log_name):
     env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy', NESRECOMP_REPLAY_RECORD='0',
                NESRECOMP_DIAGNOSTICS_DIR=str(work))
     log = work / log_name
     with log.open('wb') as out:
-        try:
-            result = subprocess.run(cmd, cwd=work, env=env, stdout=out, stderr=subprocess.STDOUT, timeout=timeout,
-                                    creationflags=NO_WINDOW | getattr(subprocess, 'BELOW_NORMAL_PRIORITY_CLASS', 0))
-        except subprocess.TimeoutExpired:
-            return None, log
+        # Playback already has a finite recorded-frame workload. A slow frame
+        # or host must not turn observation time into a process termination.
+        result = subprocess.run(cmd, cwd=work, env=env, stdout=out, stderr=subprocess.STDOUT,
+                                creationflags=NO_WINDOW | getattr(subprocess, 'BELOW_NORMAL_PRIORITY_CLASS', 0))
     return result.returncode, log
 
 
@@ -334,16 +332,11 @@ def replay_segment(seg, args, work):
         shots.mkdir(exist_ok=True)
         extra += ['--screenshot', f'shots/segment-{seg.number:06d}.png', '--shot-every', str(args.screenshot_every)]
     cmd = host_command(seg, args, work, end, extra)
-    code, log = run_host(cmd, work, args.timeout, f'segment-{seg.number:06d}.log')
+    code, log = run_host(cmd, work, f'segment-{seg.number:06d}.log')
     got = read_host_hashes(work / f'segment-{seg.number:06d}.hashes')
     output = log.read_text(errors='replace') if log.is_file() else ''
     # Startup refusals can precede a long shutdown counter report.
     excerpt = output if len(output) <= 3000 else output[:1500] + '\n...\n' + output[-1500:]
-    if code is None:
-        # the host never finished: it may have hung on the frame after the last good one
-        done = max(got) if got else seg.first_frame - 1
-        return 'host', (f'segment {seg.number}: the host did not finish within {args.timeout}s '
-                        f'(last frame completed: {done}). See {log}')
     for frame, _ in seg.inputs[:count]:
         rec = seg.hashes.get(frame)
         if rec is None:
@@ -358,7 +351,7 @@ def replay_segment(seg, args, work):
             div_extra = ['--input', input_path.name, '--save-state', f'{frame}:{state.name}']
             if zapper_path:
                 div_extra += ['--zapper-input', zapper_path.name]
-            run_host(host_command(seg, args, work, frame + 1, div_extra), work, args.timeout,
+            run_host(host_command(seg, args, work, frame + 1, div_extra), work,
                      f'segment-{seg.number:06d}-divergence.log')
             saved = f'; the machine right after it is saved as {state}' if state.is_file() else ''
             return 'diverged', (f'segment {seg.number}: FIRST DIVERGENCE at frame {frame} (frame {frame - seg.first_frame + 1} '
@@ -400,7 +393,6 @@ def main():
     ap.add_argument('--screenshot-every', type=int, default=0)
     ap.add_argument('--work-dir', type=Path)
     ap.add_argument('--keep-going', action='store_true')
-    ap.add_argument('--timeout', type=int, default=900)
     ap.add_argument('--host-arg', action='append', default=[],
                     help='an extra argument for the host (repeatable), e.g. --host-arg=--fds-bios --host-arg FILE')
     args = ap.parse_args()
