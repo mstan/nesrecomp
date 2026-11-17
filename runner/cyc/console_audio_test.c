@@ -493,9 +493,43 @@ static void test_audio_voices(void) {
     puts("APU voice: exact native pulse/noise PCM, DMC, save continuation, invalid-state refusal and live-machine isolation");
 }
 
+static void cold_boot_tone(void) {
+    apu_write(0x4017,0xff);apu_write(0x4015,0x0f);
+    apu_write(0x4000,0x9f);apu_write(0x4001,0x08);
+    apu_write(0x4002,0x80);apu_write(0x4003,0xf8);
+    for(unsigned c=0;c<32768;c++)apu_cycle();
+}
+static void test_cold_boot_audio(void) {
+    make_cart(0);CHECK(cyc_load_ines(cart,sizeof cart));
+    for(int console=CYC_CONSOLE_NES;console<=CYC_CONSOLE_FAMICOM;console++)
+    for(int synth=CYC_AUDIO_SYNTH_LEGACY;synth<=CYC_AUDIO_SYNTH_BAND_LIMITED;synth++) {
+        cyc_set_console((CycConsole)console);cyc_set_audio_synthesis((CycAudioSynthesis)synth);
+        cyc_audio_enable(0);cyc_power_on(0);cyc_run_power_on();CHECK(cyc_audio_enable(RATE));
+        cold_boot_tone();
+        int16_t expected[4096],actual[4096];size_t count=cyc_audio_read(expected,4096);
+        CHECK(count>800&&count<1000);
+        size_t n=apu_output_save(NULL,0);uint8_t *before=malloc(n),*after=malloc(n);CHECK(before&&after);
+        CHECK(apu_output_save(before,n)==n);
+        size_t machine_n;void *machine=apu_state_ptr(&machine_n);uint8_t *channels=malloc(machine_n);CHECK(channels);
+        memcpy(channels,machine,machine_n);
+        /* Leave both pending samples and a nonzero filter history in the
+         * previous session, as when a match returns to Offline Play. */
+        cold_boot_tone();cold_boot_tone();
+        cyc_power_on(0);cyc_run_power_on();CHECK(cyc_audio_enable(RATE));cold_boot_tone();
+        CHECK(cyc_audio_read(actual,4096)==count);
+        CHECK(!memcmp(expected,actual,count*sizeof *actual));
+        CHECK(apu_output_save(after,n)==n&&!memcmp(before,after,n));
+        machine=apu_state_ptr(&n);CHECK(n==machine_n&&!memcmp(channels,machine,n));
+        free(before);free(after);free(channels);
+    }
+    cyc_set_audio_synthesis(CYC_AUDIO_SYNTH_LEGACY);
+    puts("Cold boot: fresh PCM, oscillator state, pending samples and filters after a prior audible session (NES/Famicom, both synthesizers)");
+}
+
 int main(int argc, char **argv)
 {
     CHECK(cyc_audio_synthesis() == CYC_AUDIO_SYNTH_LEGACY);
+    test_cold_boot_audio();
     test_audio_voices();
     test_native_audio_observer();
     test_presentation_snapshot();

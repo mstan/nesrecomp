@@ -137,7 +137,9 @@ typedef enum { CYC_RAM_PATTERN, CYC_RAM_ZEROS, CYC_RAM_ONES } CycRamInit;
 extern CycRamInit cyc_ram_init;
 
 /* Hardware power-on state. ppu_alignment selects the CPU/PPU master clock
- * phase (0-3). The host also powers on the CPU (cyc_run_power_on). */
+ * phase (0-3). The host also powers on the CPU (cyc_run_power_on), then
+ * enables its audio output rate. Pending PCM and output history are cleared;
+ * the requested console and synthesis choices are retained. */
 void cyc_power_on(uint8_t ppu_alignment);
 /* FNV-1a 32 of the loaded PRG ROM (matches cyc_native_prg_hash). */
 uint32_t cyc_prg_hash(void);

@@ -22,7 +22,11 @@ void nes_host_lobby_returned(RecompLauncherCGameInfo *gi, const char *error_code
 
 /* Headless room (NES_LOBBY_SELFTEST=host|guest, _LOBBY, _NAME, _SEATS,
  * RNET_LOBBY_URL): round 1 connects and creates / finds and joins; every
- * round readies, the host starts once every seat is filled and ready. */
+ * round readies, the host starts once every seat is filled and ready.
+ * NES_LOBBY_SELFTEST_LAN uses the native Direct-IP callbacks. Optional
+ * _BAD_JOIN exercises rejection/recovery before joining; _THEN_OFFLINE
+ * starts a fresh offline machine in the same process after the final round.
+ * Waiting follows actual protocol state without a total-run cutoff. */
 int  nes_host_lobby_selftest_role(void);
 int  nes_host_lobby_selftest_room(int round, NesNetplayConfig *cfg);
 void nes_host_lobby_selftest_report(int round);

@@ -1487,6 +1487,11 @@ static void apu_reset_channels(void) {
 }
 void apu_power_on(void)
 {
+    /* A new machine must not inherit the previous match's queued PCM,
+     * sampler or analog filter history. Hosts enable their selected output
+     * rate after power-on, just as they do in a fresh process. The user's
+     * console/synthesis requests remain separate bootstrap settings. */
+    memset(&audio, 0, sizeof(audio));
 #if NESRECOMP_APU_OPERATION
     apu_operation_pending = 0;
     apu_operation_deadline = 1;

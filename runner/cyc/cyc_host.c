@@ -1304,6 +1304,7 @@ static int host_main(int argc, char **argv) {
     bool online_from_lobby=false;
 #ifdef NES_HOST_HAS_RECOMP_UI
     int lobby_round=1;
+    bool lobby_offline=false;
 #endif
 session_restart:
     save_file=offline_save_file;datach_save=offline_datach_save;
@@ -1509,7 +1510,7 @@ session_restart:
 #ifdef NESRECOMP_NET
     NesNetplayConfig netcfg;
 #ifdef NES_HOST_HAS_RECOMP_UI
-    if(headless && nes_host_lobby_selftest_role()) {
+    if(headless && !lobby_offline && nes_host_lobby_selftest_role()) {
         if(!nes_host_lobby_init(cyc_native_display_name,rom_path)||nes_host_lobby_selftest_room(lobby_round,&netcfg)!=0)return 2;
         nes_netplay_set_pending_config(&netcfg);
     }
@@ -1682,7 +1683,19 @@ session_restart:
     WAV_RATE = cyc_session_audio_rate(WAV_RATE);
 #endif
 #ifdef NESRECOMP_NET
-    if(cyc_net_boot()!=0){cyc_net_shutdown();return 2;}
+    if(cyc_net_boot()!=0){
+#ifdef NES_HOST_HAS_RECOMP_UI
+        char why[96];snprintf(why,sizeof why,"%s",nes_netplay_last_error());
+#endif
+        cyc_net_shutdown();
+#ifdef NES_HOST_HAS_RECOMP_UI
+        if(headless&&!lobby_offline&&nes_host_lobby_selftest_role()) {
+            nes_host_lobby_returned(NULL,why);nes_host_lobby_selftest_report(lobby_round);
+            nes_host_lobby_shutdown();
+        }
+#endif
+        return 2;
+    }
 #endif
     FILE *wav_f = NULL;
     uint32_t wav_samples = 0;
@@ -1979,14 +1992,29 @@ session_restart:
 #endif
     if (!save_write(save_file,0) || !save_write(datach_save,1)) return 2;
 #ifdef NESRECOMP_NET
-    bool net_failed=nes_netplay_last_error()[0]!=0;cyc_net_shutdown();
-    if(net_failed)return 2;
+    char net_failure[96];snprintf(net_failure,sizeof net_failure,"%s",nes_netplay_last_error());
+    cyc_net_shutdown();
+    if(net_failure[0]) {
 #ifdef NES_HOST_HAS_RECOMP_UI
-    if(headless && nes_host_lobby_selftest_role()) {
+        if(headless&&!lobby_offline&&nes_host_lobby_selftest_role()) {
+            nes_host_lobby_returned(NULL,net_failure);nes_host_lobby_selftest_report(lobby_round);
+            nes_host_lobby_shutdown();
+        }
+#endif
+        return 2;
+    }
+#ifdef NES_HOST_HAS_RECOMP_UI
+    if(headless && !lobby_offline && nes_host_lobby_selftest_role()) {
         const char *rounds=getenv("NES_LOBBY_SELFTEST_ROUNDS");int count=rounds?atoi(rounds):1;
         nes_host_lobby_returned(NULL,NULL);nes_host_lobby_selftest_report(lobby_round);
         if(lobby_round++<count){free(image);goto session_restart;}
         nes_host_lobby_shutdown();
+        const char *offline=getenv("NES_LOBBY_SELFTEST_THEN_OFFLINE");
+        if(offline&&*offline&&*offline!='0') {
+            lobby_offline=true;
+            fprintf(stderr,"[lobby-selftest] starting fresh offline in the same process\n");
+            free(image);goto session_restart;
+        }
     }
 #endif
 #endif

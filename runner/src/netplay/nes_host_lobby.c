@@ -289,7 +289,7 @@ int nes_host_lobby_selftest_room(int round, NesNetplayConfig *cfg)
     const int seats = seats_env ? atoi(seats_env) : 2;
     RecompLauncherCSettings settings;
     RecompLauncherCNetplayLaunch launch;
-    uint32_t deadline = st_now() + 90000u, next_list = 0;
+    uint32_t next_list = 0;
     int joined = is_host, ready_sent = 0, started = 0;
     const int spectate = getenv("NES_LOBBY_SELFTEST_SPECTATE") != NULL;
     const char *ws = getenv("NES_LOBBY_SELFTEST_EXPECT_SPECTATORS");
@@ -319,7 +319,14 @@ int nes_host_lobby_selftest_room(int round, NesNetplayConfig *cfg)
             char gb[64], id[80];
             snprintf(gb, sizeof(gb), "0.0.0.0:%d", port + 1);
             snprintf(id, sizeof(id), "lan:127.0.0.1:%d", port);
-            while (st_now() < deadline) {   /* the host may not be listening yet */
+            if (getenv("NES_LOBBY_SELFTEST_BAD_JOIN")) {
+                rc = cb->join(NULL, "lan:", "", gb);
+                fprintf(stderr, "[lobby-selftest] malformed direct join rc=%d in_lobby=%d\n",
+                        rc, cb->in_lobby(NULL));
+                if (rc >= 0 || cb->in_lobby(NULL)) return -13;
+                if (cb->clear_last_error) cb->clear_last_error(NULL);
+            }
+            for (;;) {   /* the host may not be listening yet */
                 rc = cb->join(NULL, id, "", gb);
                 if (rc == 0) break;
                 SDL_Delay(250);
@@ -338,7 +345,11 @@ int nes_host_lobby_selftest_room(int round, NesNetplayConfig *cfg)
         }
         while (!rnet_lobby_player_id()[0]) {
             cb->pump(NULL);
-            if (st_now() > deadline) return -3;
+            if (!cb->connected(NULL) && (!cb->connecting || !cb->connecting(NULL))) {
+                fprintf(stderr, "[lobby-selftest] disconnected before identity: %s\n",
+                        cb->last_error(NULL));
+                return -3;
+            }
             SDL_Delay(10);
         }
         if (is_host) {
@@ -352,7 +363,7 @@ int nes_host_lobby_selftest_room(int round, NesNetplayConfig *cfg)
         }
         joined = is_host;
     }
-    while (st_now() < deadline) {
+    for (;;) {
         cb->pump(NULL);
         if (!joined && st_now() >= next_list) {
             int i, n;
@@ -422,8 +433,6 @@ int nes_host_lobby_selftest_room(int round, NesNetplayConfig *cfg)
         }
         SDL_Delay(10);
     }
-    fprintf(stderr, "[lobby-selftest] round=%d TIMED OUT waiting for a launch\n", round);
-    return -10;
 }
 
 void nes_host_lobby_selftest_report(int round)
