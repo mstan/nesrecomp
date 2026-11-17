@@ -11,6 +11,7 @@ int cyc_net_start(const NesNetplayConfig *cfg, const char *rom);
 int cyc_net_boot(void);
 int cyc_net_admit(uint8_t local);
 int cyc_net_admit_game(uint8_t local,uint32_t game);
+int cyc_net_admit_players(const uint8_t pads[4],const uint32_t game[4],bool muted);
 void cyc_net_input(uint8_t buttons[2]);
 void cyc_net_finish(void);
 bool cyc_net_replaying(void);

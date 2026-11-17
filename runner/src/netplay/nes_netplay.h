@@ -21,6 +21,9 @@
  * nes_input_seat(), and L/R reaches nes_input_game_buttons(): seats 0/1 are the two controller ports, seats 2/3 the
  * logical seats a multi-player mod reads (g_logical_input). While a session is
  * active the published rows are the ONLY source of any seat's input.
+ * Opt-in input v3 packs up to three 10-bit local humans in each peer's
+ * 32-bit digital row. Bootstrap seals peer counts before starting rollback;
+ * publication flattens those rows into the same four logical guest inputs.
  */
 #include <stdint.h>
 
@@ -60,6 +63,7 @@ typedef struct NesNetplayConfig {
     int      transport;           /* 0 auto, 1 ICE, 2 LAN / relay UDP */
     int      force_turn;
     int      force_input_relay;
+    int      local_players;       /* physical bindings, 1..3; 0 uses saved choice */
     /* The session configuration image the HOST settled (widescreen, the
      * co-op mode, ...), canonical text from nes_netplay_session_*. Applied on
      * every peer before boot and confirmed in-band by the driver's mod-set
@@ -127,6 +131,17 @@ void nes_netplay_require_player_count(int required);
 /* Local physical binding row, selected before the first admitted tick; -1 restores config default. */
 void nes_netplay_set_input_player(int player);
 void nes_netplay_register_input_contract(void);
+/* Opt-in game contract: one packed digital row per physical peer, up to
+ * three local humans and four logical humans total. Counts are declared
+ * once in the capability exchange and sealed before frame zero. */
+void nes_netplay_enable_local_seats(int enabled);
+int nes_netplay_bundled_inputs(void);
+void nes_netplay_set_local_players(int count);
+int nes_netplay_local_player_count(void);
+int nes_netplay_peer_player_count(int peer);
+int nes_netplay_logical_player_count(void);
+uint32_t nes_netplay_local_seat_mask(void);
+void nes_netplay_stage_local_players(const NesNetplayInput inputs[3]);
 
 /* ---- leaving ------------------------------------------------------------ */
 void nes_netplay_request_return_to_lobby(const char *why);

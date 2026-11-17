@@ -50,7 +50,9 @@ typedef struct {
     uint32_t occupied_mask;
     uint32_t session_id;
     int      relay, hub;
-    NesNetplayInput staged;
+    uint32_t staged;
+    int local_players;
+    uint8_t player_counts[4];
     int      admitted;          /* a tick was admitted and has not finished */
     int      sram_needed, sram_done, sram_sent;
     int      guest_sandbox;
@@ -69,27 +71,46 @@ typedef struct {
 
 /* Bounded QA source sampled at the driver's wire tick, before publication.
  * Format: tick HEX_NES_PAD HEX_GAME_BITS. No memory/scene commands. */
-static struct {uint32_t tick;NesNetplayInput input;} s_test_input[4096];
+static struct {uint32_t tick;NesNetplayInput input[3];} s_test_input[4096];
 static unsigned s_test_count;
 static int test_input_load(void) {
     s_test_count=0;const char *path=getenv("NES_NET_TEST_INPUT");if(!path||!*path)return 1;
     FILE *f=fopen(path,"r");if(!f)return 0;char line[128];int ok=1;
     while(fgets(line,sizeof line,f)) {
         if(line[0]=='#'||line[0]=='\n'||line[0]=='\r')continue;
-        unsigned tick,pad,game;char tail;
-        if(sscanf(line,"%u %x %x %c",&tick,&pad,&game,&tail)!=3||pad>255||game>3||s_test_count==4096||
+        unsigned tick,pad[3]={0},game[3]={0};char tail;
+        int fields=sscanf(line,"%u %x %x %x %x %x %x %c",&tick,&pad[0],&game[0],&pad[1],&game[1],&pad[2],&game[2],&tail);
+        if((fields!=3&&fields!=5&&fields!=7)||pad[0]>255||game[0]>3||pad[1]>255||game[1]>3||pad[2]>255||game[2]>3||s_test_count==4096||
            (s_test_count&&tick<=s_test_input[s_test_count-1].tick)){ok=0;break;}
-        s_test_input[s_test_count].tick=tick;s_test_input[s_test_count++].input=nes_netplay_input((uint8_t)pad,game);
+        s_test_input[s_test_count].tick=tick;
+        for(int i=0;i<3;i++)s_test_input[s_test_count].input[i]=nes_netplay_input((uint8_t)pad[i],game[i]);
+        ++s_test_count;
     }
     fclose(f);return ok;
 }
-static NesNetplayInput test_input_at(uint32_t tick,NesNetplayInput physical) {
+static uint32_t test_input_at(uint32_t tick,uint32_t physical,int bundled) {
     if(!s_test_count)return physical;
     unsigned lo=0,hi=s_test_count;while(lo<hi){unsigned mid=(lo+hi)/2;if(s_test_input[mid].tick<=tick)lo=mid+1;else hi=mid;}
-    return lo?s_test_input[lo-1].input:0;
+    if(!lo)return 0;
+    uint32_t value=s_test_input[lo-1].input[0];
+    if(bundled)for(unsigned i=1;i<3;i++)value|=(uint32_t)s_test_input[lo-1].input[i]<<(10*i);
+    return value;
 }
 static NetplayState g_np;
 static int s_require_caps,s_required_players,s_input_override=-1;
+static int s_bundled,s_local_players=1;
+void nes_netplay_enable_local_seats(int enabled){if(!g_np.active||!g_np.cur_tick||s_bundled==(enabled!=0))s_bundled=enabled!=0;}
+int nes_netplay_bundled_inputs(void){return s_bundled;}
+void nes_netplay_set_local_players(int count){if((!g_np.active||!g_np.cur_tick)&&count>=1&&count<=3)s_local_players=count;}
+int nes_netplay_local_player_count(void){return nes_netplay_active()?g_np.local_players:s_local_players;}
+int nes_netplay_peer_player_count(int peer){return peer>=0&&peer<g_np.slot_count?(s_bundled?g_np.player_counts[peer]:1):0;}
+int nes_netplay_logical_player_count(void){int n=0;for(int i=0;i<g_np.slot_count;i++)n+=nes_netplay_peer_player_count(i);return n;}
+uint32_t nes_netplay_local_seat_mask(void){
+    if(!nes_netplay_active()||g_np.spectator)return 0;
+    int first=0;for(int i=0;i<g_np.local_slot;i++)first+=nes_netplay_peer_player_count(i);
+    int count=nes_netplay_peer_player_count(g_np.local_slot);
+    return count>0&&first+count<=4?((1u<<count)-1u)<<first:0;
+}
 void nes_netplay_set_input_player(int player){if(player>=0&&g_np.cur_tick)return;s_input_override=player>=0&&player<4?player:-1;if(g_np.active&&s_input_override>=0)g_np.input_player=s_input_override;}
 void nes_netplay_require_capabilities(int required){s_require_caps=required!=0;}
 void nes_netplay_require_player_count(int required){s_required_players=required;}
@@ -100,9 +121,20 @@ static const char *core_contract(void) {
     return "legacy-c1";
 #endif
 }
-static int contract_get(char *out,int cap){return snprintf(out,cap,"2:03ff:%s",core_contract());}
+static unsigned input_version(void){return s_bundled?3:2;}
+static int contract_get(char *out,int cap){return snprintf(out,cap,"%u:03ff:%s",input_version(),core_contract());}
 static int contract_apply(const char *v){char mine[64];contract_get(mine,sizeof mine);return !strcmp(v,mine);}
-void nes_netplay_register_input_contract(void){nes_netplay_session_register("input",contract_get,contract_apply,NULL);}
+static int seats_get(char *out,int cap){
+    if(!s_bundled)return snprintf(out,cap,"single");
+    if(!g_np.player_counts[0])return snprintf(out,cap,"auto");
+    int n=0;for(int i=0;i<g_np.slot_count&&n<cap;i++)n+=snprintf(out+n,(size_t)(cap-n),"%s%u",i?",":"",g_np.player_counts[i]);
+    return n;
+}
+static int seats_apply(const char *v){char mine[32];seats_get(mine,sizeof mine);return !strcmp(v,mine);}
+void nes_netplay_register_input_contract(void){
+    nes_netplay_session_register("input",contract_get,contract_apply,NULL);
+    nes_netplay_session_register("seats",seats_get,seats_apply,NULL);
+}
 
 static NesNetplayConfig g_pending;
 static int g_pending_valid;
@@ -137,6 +169,7 @@ void nes_netplay_config_defaults(NesNetplayConfig *c)
     c->input_delay = 2;
     c->rollback = 1;
     c->session_id = 1;
+    c->local_players = 0; /* Resolve the saved local choice at start, after Mods. */
     snprintf(c->bind_hostport, sizeof(c->bind_hostport), "0.0.0.0:7777");
 }
 
@@ -157,6 +190,7 @@ void nes_netplay_config_apply_env(NesNetplayConfig *c)
     v = getenv("NES_NETPLAY");
     if (v && *v) c->enabled = atoi(v) != 0;
     c->local_slot = env_int("NES_NET_SLOT", c->local_slot);
+    c->local_players = env_int("NES_NET_LOCAL_PLAYERS",c->local_players);
     c->slot_count = env_int("NES_NET_SLOTS", c->slot_count);
     c->input_player = env_int("NES_NET_INPUT_PLAYER", c->input_player);
     c->input_delay = env_int("NES_NET_DELAY", c->input_delay);
@@ -188,9 +222,10 @@ static void host_sample_local(rnet_u32 tick, RNetInputSample *out, void *ctx)
     NetplayState *st = (NetplayState *)ctx;
     memset(out, 0, sizeof(*out));
     out->tick = tick;
-    out->size = NES_NETPLAY_PAD_BYTES;
-    NesNetplayInput input=st->spectator?0:test_input_at(tick,st->staged);
-    out->bytes[0]=(uint8_t)input;out->bytes[1]=(uint8_t)(input>>8);
+    out->size = s_bundled?4:NES_NETPLAY_PAD_BYTES;
+    uint32_t input=st->spectator?0:test_input_at(tick,st->staged,s_bundled);
+    if(s_bundled)input&=(1u<<(10*st->local_players))-1u;
+    for(unsigned i=0;i<out->size;i++)out->bytes[i]=(uint8_t)(input>>(8*i));
     out->valid = 1;
 }
 
@@ -277,6 +312,9 @@ int nes_netplay_start(const NesNetplayConfig *cfg)
         np_set_error("ice_not_built");
         return -4;
     }
+    g_np.local_players=cfg->local_players?cfg->local_players:s_local_players;
+    if(g_np.local_players<1||g_np.local_players>3){np_set_error("local_players_unsupported");return -1;}
+    g_np.slot_count=seats;
 
     /* The lobby carries a full SHA-256 reference. The reliable preboot blob
      * carries the full image, so source identities never get truncated. */
@@ -300,7 +338,8 @@ int nes_netplay_start(const NesNetplayConfig *cfg)
         }
     }
 
-    if(s_required_players && (seats!=s_required_players || (cfg->occupied_mask && cfg->occupied_mask!=((1u<<seats)-1u)))){np_set_error("profile_player_count");return -6;}
+    if(cfg->local_slot==0&&s_required_players && ((!s_bundled&&seats!=s_required_players)||(s_bundled&&seats>s_required_players)||
+       (cfg->occupied_mask&&cfg->occupied_mask!=((1u<<seats)-1u)))){np_set_error("profile_player_count");return -6;}
     rnet_config_init_defaults(&rcfg);
     rcfg.slot_count = (rnet_u8)seats;
     if (cfg->spectator) {
@@ -404,17 +443,8 @@ int nes_netplay_start(const NesNetplayConfig *cfg)
         nes_netplay_rb_bind(&b);
         nes_netplay_rb_set_identity(nes_netplay_identity_build_fp(),
                                     nes_netplay_identity_content_fp());
-        nes_netplay_rb_set_modset(g_np.session_text, np_modset_check, np_modset_adopt);
-        if (!nes_netplay_rb_start()) {
-            fprintf(stderr, "nes_netplay: rollback driver failed to start — "
-                            "refusing the session (there is no other admit path)\n");
-            nes_netplay_rb_bind(NULL);
-            rnet_session_destroy(g_np.session);
-            g_np.session = NULL;
-            g_np.active = 0;
-            np_set_error("driver_start");
-            return -7;
-        }
+        /* Start the driver only after bootstrap has settled the input codec
+         * and logical ownership, including guests adopting the host's game. */
     }
 
     {
@@ -441,7 +471,7 @@ static void np_pump(void)
 }
 
 /* Bootstrap records use explicit little-endian fields. The existing opaque
- * guest-upload operation carries NESCAP2, never memory-card or artwork bytes.
+ * guest-upload operation carries NESCAP3, never memory-card or artwork bytes.
  * The host's reliable SRAM operation carries NESBOOT2 and confirms all seats. */
 static void put32(uint8_t *p,uint32_t v){for(int i=0;i<4;i++)p[i]=(uint8_t)(v>>(i*8));}
 static uint32_t get32(const uint8_t *p){return p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24;}
@@ -461,7 +491,7 @@ static unsigned available_profiles(void) {
     return base;
 }
 static void make_caps(uint8_t out[96]) {
-    memset(out,0,96);memcpy(out,"NESCAP2",7);
+    memset(out,0,96);memcpy(out,"NESCAP3",7);
     uint32_t arch=0,features=0,backend=0;
 #if defined(_M_X64)||defined(__x86_64__)
     arch=2;
@@ -482,22 +512,46 @@ static void make_caps(uint8_t out[96]) {
     backend=4u;
 #endif
     put32(out+8,arch);put32(out+12,features);put32(out+16,backend);put32(out+20,available_profiles());
-    put32(out+24,1);put32(out+28,(uint32_t)SDL_GetCPUCount());
+    put32(out+24,1u|((uint32_t)g_np.local_players<<8));put32(out+28,(uint32_t)SDL_GetCPUCount());
     memcpy(out+32,nes_netplay_identity_build_sha256(),32);
     const char *hex=nes_netplay_identity_rom_sha256();
     for(int i=0;i<32 && strlen(hex)==64;i++){unsigned v=0;sscanf(hex+i*2,"%2x",&v);out[64+i]=(uint8_t)v;}
 }
 static int accept_caps(const uint8_t *p,size_t n) {
-    if(n!=96||memcmp(p,"NESCAP2",8)||get32(p+24)!=1||!nes_netplay_profile_compatible(portable_profile(),available_profiles(),get32(p+20))||
+    unsigned declared=n==96?get32(p+24):0;
+    if(n!=96||memcmp(p,"NESCAP3",8)||(declared&255u)!=1||(declared>>8)<1||(declared>>8)>3||!nes_netplay_profile_compatible(portable_profile(),available_profiles(),get32(p+20))||
        memcmp(p+32,g_np.local_caps+32,64))return 0;
     uint8_t any=0;for(int i=32;i<64;i++)any|=p[i];return any!=0;
 }
 static void log_caps(int seat,const uint8_t *p) {
-    fprintf(stderr,"NET_HOST_CAPS seat=%d compiled_arch=%u cpu_features=%08x backends=%x qualified_profiles=%x cores=%u\n",
-        seat,get32(p+8),get32(p+12),get32(p+16),get32(p+20),get32(p+28));
+    fprintf(stderr,"NET_HOST_CAPS seat=%d compiled_arch=%u cpu_features=%08x backends=%x qualified_profiles=%x cores=%u local_players=%u\n",
+        seat,get32(p+8),get32(p+12),get32(p+16),get32(p+20),get32(p+28),get32(p+24)>>8);
+}
+static int settle_seats(const uint8_t *caps,uint32_t mask) {
+    unsigned total=0;
+    if(g_np.slot_count<2||g_np.slot_count>4||(!g_np.spectator&&(g_np.local_slot<0||g_np.local_slot>=g_np.slot_count)))return 0;
+    memset(g_np.player_counts,0,sizeof g_np.player_counts);
+    for(int peer=0;peer<g_np.slot_count&&peer<4;peer++)if(mask&(1u<<peer)) {
+        unsigned count=get32(caps+96*peer+24)>>8;
+        if(count<1||count>3||total+count>NESRECOMP_INPUT_SEATS)return 0;
+        g_np.player_counts[peer]=(uint8_t)count;total+=count;
+    }
+    return g_np.spectator || g_np.player_counts[g_np.local_slot]==g_np.local_players;
+}
+static void requested_reference(const char *text,char ref[64]) {
+    /* The lobby offers automatic ownership. The capability exchange fills
+     * that one field; the final full map is then in the driver mod-set and
+     * simulation identity. All other requested configuration stays exact. */
+    char request[520];snprintf(request,sizeof request,"%s",text);
+    char *at=strstr(request,"\nseats=");
+    if(at&&strncmp(at+7,"single\n",7)) {
+        char *end=strchr(at+7,'\n');
+        if(end){size_t tail=strlen(end);memmove(at+7+4,end,tail+1);memcpy(at+7,"auto",4);}
+    }
+    nes_netplay_session_reference(request,ref);
 }
 static int bootstrap_apply(const uint8_t *p,size_t n) {
-    if(n<448||memcmp(p,"NESBOOT2",8)||get32(p+8)!=NES_NETPLAY_INPUT_VERSION||
+    if(n<448||memcmp(p,"NESBOOT2",8)||(get32(p+8)!=2&&get32(p+8)!=3)||
        get32(p+12)!=(uint32_t)g_np.slot_count)return 0;
     uint32_t selected=get32(p+20);
     if(!nes_netplay_profile_compatible(selected,available_profiles(),available_profiles()))return 0;
@@ -512,12 +566,18 @@ static int bootstrap_apply(const uint8_t *p,size_t n) {
            !nes_netplay_profile_compatible(selected,available_profiles(),get32(p+64+96*seat+20)))return 0;
         log_caps(seat,p+64+96*seat);
     }
-    char ref[64],why[160];nes_netplay_session_reference((const char *)p+448,ref);
+    if(!settle_seats(p+64,mask))return 0;
+    char ref[64],why[160];requested_reference((const char *)p+448,ref);
     if(g_np.expected_reference[0]&&strcmp(ref,g_np.expected_reference))return 0;
     if(!nes_netplay_session_apply((const char *)p+448,why,sizeof why)) {
         fprintf(stderr,"nes_netplay: host configuration unavailable: %s\n",why);return 0;
     }
-    if(s_required_players && (g_np.slot_count!=s_required_players || mask!=((1u<<g_np.slot_count)-1u))){np_set_error("profile_player_count");return 0;}
+    if(get32(p+8)!=input_version())return 0;
+    if(!s_bundled)for(int peer=0;peer<g_np.slot_count;peer++)if(g_np.player_counts[peer]>1)return 0;
+    if(!g_np.spectator&&(g_np.input_player<0||g_np.input_player+(s_bundled?g_np.local_players:1)>NESRECOMP_INPUT_SEATS)){
+        np_set_error("local_bindings_unsupported");return 0;
+    }
+    if(s_required_players && (nes_netplay_logical_player_count()!=s_required_players || mask!=((1u<<g_np.slot_count)-1u))){np_set_error("profile_player_count");return 0;}
     if(g_np.spectator&&s_require_caps){np_set_error("capabilities_spectator_unqualified");return 0;}
     int len=nes_netplay_session_describe(g_np.session_text,sizeof g_np.session_text);
     if(len<=0||len>=sizeof g_np.session_text||strcmp(g_np.session_text,(const char *)p+448))return 0;
@@ -531,7 +591,8 @@ static int bootstrap_apply(const uint8_t *p,size_t n) {
        !cyc_native_wait_select((selected&NES_NET_CAP_NATIVE_WAIT)!=0))return 0;
 #endif
     char identity[65];for(unsigned i=0;i<32;i++)snprintf(identity+2*i,3,"%02x",hash[i]);
-    fprintf(stderr,"NET_PROFILE_SEALED profile=%s revision=1 input=2 reference=%s exact_build=1 identity=%s\n",nes_netplay_profile_contract(selected),ref,identity);
+    char final_ref[64];nes_netplay_session_reference(g_np.session_text,final_ref);
+    fprintf(stderr,"NET_PROFILE_SEALED profile=%s revision=1 input=%u reference=%s exact_build=1 identity=%s\n",nes_netplay_profile_contract(selected),input_version(),final_ref,identity);
     return 1;
 }
 static int np_sram_barrier_step(void) {
@@ -561,6 +622,9 @@ static int np_sram_barrier_step(void) {
         } else {np_set_error("unexpected_bootstrap_blob");return -1;}
     }
     if(g_np.local_slot==0 && (g_np.caps_seen&mask)==mask && !g_np.boot_sent) {
+        if(!settle_seats(&g_np.caps[0][0],mask)){np_set_error("logical_seats_unsupported");return -1;}
+        int settled=nes_netplay_session_describe(g_np.session_text,sizeof g_np.session_text);
+        if(settled<=0||settled>=sizeof g_np.session_text){np_set_error("session_config_size");return -1;}
         unsigned common=available_profiles();
         for(int seat=0;seat<g_np.slot_count;seat++)if(mask&(1u<<seat))common&=get32(g_np.caps[seat]+20);
         unsigned selected=nes_netplay_profile_choose(portable_profile(),common);
@@ -569,7 +633,7 @@ static int np_sram_barrier_step(void) {
         size_t config_len=strlen(g_np.session_text)+1,total=448+config_len+storage_len;
         if((g_np.sram_needed&&!storage)||config_len>512){np_set_error("bootstrap_storage");return -1;}
         free(g_np.boot_blob);g_np.boot_blob=(uint8_t *)calloc(1,total);if(!g_np.boot_blob)return -1;
-        uint8_t *p=g_np.boot_blob;memcpy(p,"NESBOOT2",8);put32(p+8,NES_NETPLAY_INPUT_VERSION);put32(p+12,g_np.slot_count);
+        uint8_t *p=g_np.boot_blob;memcpy(p,"NESBOOT2",8);put32(p+8,input_version());put32(p+12,g_np.slot_count);
         put32(p+16,mask);put32(p+20,selected);put32(p+24,(uint32_t)config_len);put32(p+28,(uint32_t)storage_len);
         nes_netplay_profile_identity(g_np.session_text,selected,p+32);memcpy(p+64,g_np.caps,sizeof g_np.caps);
         memcpy(p+448,g_np.session_text,config_len);if(storage_len)memcpy(p+448+config_len,storage,storage_len);
@@ -613,6 +677,8 @@ int nes_netplay_boot_barrier(void)
         }
         SDL_Delay(1);
     }
+    nes_netplay_rb_set_modset(g_np.session_text,np_modset_check,np_modset_adopt);
+    if(!nes_netplay_rb_start()){np_set_error("driver_start");return -1;}
     fprintf(stderr, "nes_netplay: boot barrier passed after %u ms (sram=%s)\n",
             (unsigned)(SDL_GetTicks() - t0),
             g_np.sram_needed ? "host-authoritative" : "none");
@@ -631,6 +697,7 @@ void nes_netplay_shutdown(void)
 #ifndef NESRECOMP_CYCLE_NET
     if (g_np.guest_sandbox) save_ram_set_sandbox(NULL);
 #endif
+    g_np.active=0;
     nes_netplay_session_restore();
     free(g_np.boot_blob);g_np.boot_blob=NULL;
     {
@@ -662,6 +729,11 @@ const char *nes_netplay_transport_name(void)
 void nes_netplay_stage_local(NesNetplayInput pad)
 {
     g_np.staged = pad & NES_NETPLAY_INPUT_MASK;
+}
+void nes_netplay_stage_local_players(const NesNetplayInput inputs[3]) {
+    uint32_t word=0;
+    for(int i=0;i<g_np.local_players;i++)word|=(uint32_t)(inputs[i]&NES_NETPLAY_INPUT_MASK)<<(10*i);
+    g_np.staged=word;
 }
 
 int nes_netplay_poll_admit(void)

@@ -107,14 +107,29 @@ static uint8_t test_pad(uint8_t local) {
     uint8_t b=0x01;if((t+seed*17)%180>150)b=0x02;
     if((t+seed*11)%51<13)b|=0x80;if((t+seed*7)%80<65)b|=0x40;return b;
 }
-int cyc_net_admit_game(uint8_t local,uint32_t game) {
+static int admit_staged(void) {
     const char *ticks=getenv("NES_NET_MATCH_TICKS");
     if(ticks&&atoi(ticks)>0&&nes_netplay_sim_tick()>=(uint32_t)atoi(ticks))nes_netplay_request_quiesce();
     if(cyc_net_leaving())return NES_NETPLAY_ADMIT_STALL;
-    nes_netplay_stage_local(nes_netplay_input(test_pad(local),game));
     int a=nes_netplay_poll_admit();
     if(a){nes_rb_state_invalidate();s_tick_start=SDL_GetPerformanceCounter();}
     return a;
+}
+int cyc_net_admit_game(uint8_t local,uint32_t game) {
+    nes_netplay_stage_local(nes_netplay_input(test_pad(local),game));
+    return admit_staged();
+}
+int cyc_net_admit_players(const uint8_t pads[4],const uint32_t game[4],bool muted) {
+    int first=nes_netplay_input_player(),count=nes_netplay_local_player_count();
+    if(!nes_netplay_bundled_inputs())count=1;
+    NesNetplayInput inputs[3]={0};
+    for(int i=0;i<count&&i<3;i++) {
+        int p=first+i;
+        if(!muted&&p>=0&&p<4)inputs[i]=nes_netplay_input(i?pads[p]:test_pad(pads[p]),game[p]);
+    }
+    if(nes_netplay_bundled_inputs())nes_netplay_stage_local_players(inputs);
+    else nes_netplay_stage_local(inputs[0]);
+    return admit_staged();
 }
 int cyc_net_admit(uint8_t local) {return cyc_net_admit_game(local,0);}
 void cyc_net_input(uint8_t buttons[2]) {

@@ -1257,7 +1257,12 @@ static int host_main(int argc, char **argv) {
         }
         else if (!strcmp(argv[i], "--load-state") && i + 1 < argc) load_state = argv[++i], headless = true;
         else if (!strcmp(argv[i], "--replay-exact")) replay_exact = true, headless = true;
-        else if (!strcmp(argv[i], "--mods-root") && i + 1 < argc) mods_root = argv[++i];
+        else if (!strcmp(argv[i], "--mods-root") && i + 1 < argc) {
+            mods_root = argv[++i];
+#if defined(CYC_WITH_SDL)
+            cyc_sdl_option("--mods-root",mods_root);
+#endif
+        }
         else if ((!strcmp(argv[i], "--virtual-pad") || !strcmp(argv[i], "--exit-after") ||
                   !strcmp(argv[i], "--config") || !strcmp(argv[i], "--tcp")) && i + 1 < argc) {
 #if defined(CYC_WITH_SDL)

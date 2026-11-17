@@ -115,6 +115,7 @@ static bool s_zapper_override, s_zapper_release;
  * itself aims off the console's screen and sees no light. */
 static int  s_aim_x = -1, s_aim_y = -1;
 static char        s_set_path[1024];
+static const char *s_mods_root;
 static bool        s_fds;
 static const CycHostExtras *s_extras;
 static const char *s_present_out;
@@ -145,6 +146,7 @@ void cyc_sdl_option(const char *name, const char *value)
     if (!strcmp(name, "--virtual-pad")) s_vpad_path = value;
     else if (!strcmp(name, "--exit-after")) s_exit_after = atol(value);
     else if (!strcmp(name, "--config")) snprintf(s_set_path, sizeof(s_set_path), "%s", value);
+    else if (!strcmp(name, "--mods-root")) s_mods_root=value;
     else if (!strcmp(name, "--tcp")) s_tcp_port = atoi(value);
     else if (!strcmp(name, "--hidden")) s_hidden = true;
     else if (!strcmp(name, "--uncapped")) s_uncapped = true;
@@ -214,7 +216,8 @@ int cyc_sdl_prelaunch(const char **rom_path, const char *cli_bios, NesFdsHleAsk 
     s_fds = looks_fds(*rom_path);
     /* The mod catalog beside the executable, for a game built with mods. */
     char mods[1100], err[600];
-    exe_path(mods, sizeof(mods), "mods");
+    if(s_mods_root)snprintf(mods,sizeof mods,"%s",s_mods_root);
+    else exe_path(mods, sizeof(mods), "mods");
     if (!cyc_session_mods_init(mods, err, sizeof(err))) {
         fprintf(stderr, "%s\n", err);
         cyc_sdl_error_box("Mods", err);
@@ -1962,9 +1965,7 @@ int cyc_sdl_main(const char *title_in, int scale)
             const uint8_t phys[2] = {pad0, pad1};
 #ifdef NESRECOMP_NET
             if(online) {
-                int player=nes_netplay_input_player();if(player<0||player>=CYC_INPUT_PLAYERS)player=0;
-                int admit=cyc_net_admit_game(open||inactive||hold_input?0:st.buttons[player],
-                    open||inactive||hold_input?0:st.game_buttons[player]);
+                int admit=cyc_net_admit_players(st.buttons,st.game_buttons,open||inactive||hold_input);
                 if(!admit){SDL_Delay(1);continue;}
                 s_frames_done=(long)cyc_ring_frame;replay=cyc_net_replaying();cyc_net_input(buttons);
                 cyc_replay_suspend("online play");

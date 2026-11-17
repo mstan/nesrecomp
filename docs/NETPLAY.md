@@ -13,6 +13,38 @@
 
 ## 1. The pieces
 
+### Mixed local and online seats
+
+A trusted title can opt into input v3 with
+`nes_netplay_enable_local_seats(1)`. Each physical peer contributes one
+32-bit digital row containing up to three local humans (10 bits each: NES
+pad plus L/R). No analog filtering applies to this codec. Other titles keep
+the input v2 single-human row and its existing mapping.
+
+`NESCAP3` declares each peer's local count once. Before frame zero the host
+seals those counts in the `seats` session key, assigns consecutive logical
+seats in physical-peer order, and checks the title's required total. The final
+map participates in the full simulation identity and rollback mod-set check.
+Only after that settlement does the rollback driver start. At least two
+physical peers are required; total logical humans cannot exceed the build's
+seat capacity (at most four). Counts and bindings remain fixed for the match.
+
+The SDL host samples consecutive physical binding rows starting at the
+selected input player, then publishes only network-resolved logical inputs
+to the game. An unavailable row or an oversized party is refused before
+admission. `nes_netplay_local_seat_mask()` lets the title present its local
+humans' views without changing world state. A local count of zero in the
+launch configuration resolves the saved choice after Mods initialization.
+`NES_NET_LOCAL_PLAYERS` can override it for isolated tests. `--mods-root`
+also applies to windowed launches, allowing tests to keep their catalog and
+saved choices separate from the installed build.
+
+SMB2's Windows loopback checks exercise saved 2+2, 1+3 and 2+1+1 layouts,
+3+1 with host-party adoption, original one-human-per-peer parties, forced
+rollback, matching tick digests and coordinated drain. These checks do not
+establish physical controller ownership, internet play or cross-build
+compatibility.
+
 The cycle runtime seals `cycle-lle-c2` or `cycle-hle-c2` before admission.
 These profiles disable the per-bus diagnostic trace and clear its history at
 boot. The trace previously prevented native clock intervals; desync checks

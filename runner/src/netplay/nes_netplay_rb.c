@@ -22,6 +22,7 @@
 #include <string.h>
 
 #include "nes_rb_state.h"
+#include "nes_netplay.h"
 #ifdef NESRECOMP_CYCLE_NET
 #include "cyc_core.h"
 #include "cyc_ring.h"
@@ -173,16 +174,21 @@ static void rb_host_publish(void *ctx, uint32_t tick, const RNetRbFrame *rows,
     int i;
     (void)ctx;
     memset(g_rb.resolved, 0, sizeof(g_rb.resolved));
-    for (i = 0; i < slots && i < RB_MAX_SLOTS; ++i)
-        g_rb.resolved[i] = rows[i].buttons & RB_BUTTON_MASK;
+    int logical=0;
+    for (i = 0; i < slots && i < RB_MAX_SLOTS; ++i) {
+        uint32_t word=rows[i].buttons;
+        if(nes_netplay_bundled_inputs())word|=(uint32_t)(uint8_t)rows[i].stick_x<<16|(uint32_t)(uint8_t)rows[i].stick_y<<24;
+        int count=nes_netplay_peer_player_count(i);
+        for(int local=0;local<count&&logical<RB_MAX_SLOTS;local++,logical++)
+            g_rb.resolved[logical]=(uint16_t)((word>>(10*local))&RB_BUTTON_MASK);
+    }
     g_rb.last_admit_tick = tick;
     if (getenv("NES_RB_DEBUG_ROWS"))
         fprintf(stderr, "RB_ROWS tick=%u replay=%d rows=%02x %02x %02x %02x\n",
                 (unsigned)tick, replay, g_rb.resolved[0], g_rb.resolved[1],
                 g_rb.resolved[2], g_rb.resolved[3]);
     if (g_rb.b.publish)
-        g_rb.b.publish(tick, g_rb.resolved, slots > RB_MAX_SLOTS ? RB_MAX_SLOTS : slots,
-                       replay);
+        g_rb.b.publish(tick, g_rb.resolved, logical, replay);
 }
 
 /* Resim replays ticks the player has already seen and heard. The runner
@@ -227,17 +233,24 @@ static void rb_host_decode(void *ctx, int slot, const RNetInputSample *in,
 {
     (void)ctx;
     (void)slot;
-    out->buttons = in->size==2 ? (uint16_t)(in->bytes[0]|((in->bytes[1]&3u)<<8)) : 0u;
-    if(in->size!=2)out->is_valid=0;
-    out->stick_x = 0;
-    out->stick_y = 0;
+    unsigned size=nes_netplay_bundled_inputs()?4:2;
+    out->buttons=in->size==size?(uint16_t)(in->bytes[0]|(uint16_t)in->bytes[1]<<8):0;
+    if(in->size!=size)out->is_valid=0;
+    out->stick_x=in->size==4?(int8_t)in->bytes[2]:0;
+    out->stick_y=in->size==4?(int8_t)in->bytes[3]:0;
     out->analog = 0;
 }
 
 static void rb_host_sanitize(void *ctx, int slot, RNetRbFrame *f)
 {
     (void)ctx;
-    (void)slot;
+    if(nes_netplay_bundled_inputs()) {
+        int count=nes_netplay_peer_player_count(slot);
+        uint32_t word=f->buttons|(uint32_t)(uint8_t)f->stick_x<<16|(uint32_t)(uint8_t)f->stick_y<<24;
+        word&=count>0&&count<=3?(1u<<(10*count))-1u:0;
+        f->buttons=(uint16_t)word;f->stick_x=(int8_t)(word>>16);f->stick_y=(int8_t)(word>>24);f->analog=0;
+        return;
+    }
     if (f->buttons == RB_PSX_NEUTRAL)
         f->buttons = 0u;
     f->buttons &= RB_BUTTON_MASK;
@@ -251,6 +264,7 @@ static void rb_host_neutral(void *ctx, int slot, RNetRbFrame *out)
     (void)ctx;
     (void)slot;
     out->buttons = 0u;
+    out->stick_x=out->stick_y=out->analog=0;
 }
 
 /* ── session control ───────────────────────────────────────────────────── */
@@ -395,6 +409,7 @@ int nes_netplay_rb_start(void)
     cfg.force_turn = g_rb.b.force_turn;
     cfg.occupied_mask = g_rb.b.occupied_mask;
     cfg.replay_mode = RNET_RB_REPLAY_INCREMENTAL;
+    cfg.strict_inputs = (uint8_t)nes_netplay_bundled_inputs();
     cfg.part_names[0] = nes_rb_part_name(0);
     cfg.part_names[1] = nes_rb_part_name(1);
     cfg.part_names[2] = nes_rb_part_name(2);
