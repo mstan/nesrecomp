@@ -1952,10 +1952,12 @@ int cyc_sdl_main(const char *title_in, int scale)
             cyc_host_window_game_input(st.game_buttons, CYC_INPUT_PLAYERS);
             uint8_t pad0 = st.buttons[0], pad1 = st.buttons[1];
             if (hold_input) {
-                bool any_game = false;
-                for (int p = 0; p < CYC_INPUT_PLAYERS; p++) any_game |= st.game_buttons[p] != 0;
-                if (pad0 || pad1 || any_game) {
+                bool any_held = false;
+                for (int p = 0; p < CYC_INPUT_PLAYERS; p++)
+                    any_held |= st.buttons[p] != 0 || st.game_buttons[p] != 0;
+                if (any_held) {
                     pad0 = pad1 = 0;
+                    memset(st.buttons, 0, sizeof st.buttons);
                     memset(st.game_buttons, 0, sizeof st.game_buttons);
                 }
                 else hold_input = false;
