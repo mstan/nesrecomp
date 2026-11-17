@@ -468,6 +468,13 @@ void hw_write(uint16_t addr, uint8_t value)
         hw_isolated_io_writes++;
     hw_bus_write(addr, value);
 }
+void hw_write_ram_view(uint16_t addr, uint8_t value)
+{
+    assert(addr < 0x2000);
+    if (cyc_trace_enabled) cyc_trace_access(addr, value, true);
+    if (hw_cart.mapper == 5) hw_cart_cpu_write(addr, value);
+    hw.data_bus = hw.internal_bus = value;
+}
 
 void hw_cycle_finish(bool instruction_done)
 {

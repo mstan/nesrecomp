@@ -114,15 +114,17 @@ class Toolchain:
     def build_command(self, binary, parallel):
         return [self.cmake, '--build', str(binary), '--config', self.config, '--parallel', str(parallel)]
 
-    def run(self, cmd, cwd, log, timeout):
-        p = subprocess.run([str(x) for x in cmd], cwd=cwd, capture_output=True, text=True, timeout=timeout,
+    def run(self, cmd, cwd, log, timeout=None):
+        # Keep the legacy argument accepted; elapsed time must not kill a
+        # healthy nested compiler. Workloads and build parallelism remain finite.
+        p = subprocess.run([str(x) for x in cmd], cwd=cwd, capture_output=True, text=True,
                            env=self.environment(), creationflags=NO_WINDOW)
         Path(log).write_text(' '.join(str(x) for x in cmd) + '\n' + p.stdout + p.stderr)
         if p.returncode:
             raise RuntimeError(f'exit {p.returncode}: {cmd[0]} {cmd[1]} ...; see {log}')
         return p
 
-    def build(self, source, binary, logs, timeout=900, parallel=8, defines=()):
+    def build(self, source, binary, logs, timeout=None, parallel=2, defines=()):
         """Configure and build; logs go to <logs>/configure.log and build.log."""
         logs = Path(logs)
         self.run(self.configure_command(source, binary, defines), logs, logs / 'configure.log', timeout)

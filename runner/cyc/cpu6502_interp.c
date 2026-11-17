@@ -38,9 +38,10 @@ void cpu_interp_step(void) {
         uint8_t hi = cpu_read((uint8_t)(b1 + cpu.x + 1), 0);
         uint16_t ea = (uint16_t)(lo | hi << 8);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = cpu_asl(v);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu.a |= r; cpu_nz(cpu.a);
         cpu.pc = (uint16_t)(pc + 2);
         return;
@@ -67,9 +68,10 @@ void cpu_interp_step(void) {
         b1 = cpu_read((uint16_t)(pc + 1), 0);
         uint16_t ea = b1;
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = cpu_asl(v);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu.pc = (uint16_t)(pc + 2);
         return;
     }
@@ -77,9 +79,10 @@ void cpu_interp_step(void) {
         b1 = cpu_read((uint16_t)(pc + 1), 0);
         uint16_t ea = b1;
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = cpu_asl(v);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu.a |= r; cpu_nz(cpu.a);
         cpu.pc = (uint16_t)(pc + 2);
         return;
@@ -134,9 +137,10 @@ void cpu_interp_step(void) {
         b2 = cpu_read((uint16_t)(pc + 2), 0);
         uint16_t ea = (uint16_t)(b1 | b2 << 8);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = cpu_asl(v);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu.pc = (uint16_t)(pc + 3);
         return;
     }
@@ -145,9 +149,10 @@ void cpu_interp_step(void) {
         b2 = cpu_read((uint16_t)(pc + 2), 0);
         uint16_t ea = (uint16_t)(b1 | b2 << 8);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = cpu_asl(v);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu.a |= r; cpu_nz(cpu.a);
         cpu.pc = (uint16_t)(pc + 3);
         return;
@@ -188,9 +193,10 @@ void cpu_interp_step(void) {
         uint16_t base = (uint16_t)(lo | hi << 8), ea = (uint16_t)(base + cpu.y);
         cpu_read((uint16_t)((base & 0xFF00) | (ea & 0xFF)), 0);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = cpu_asl(v);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu.a |= r; cpu_nz(cpu.a);
         cpu.pc = (uint16_t)(pc + 2);
         return;
@@ -220,9 +226,10 @@ void cpu_interp_step(void) {
         cpu_read(b1, 0);
         uint16_t ea = (uint8_t)(b1 + cpu.x);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = cpu_asl(v);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu.pc = (uint16_t)(pc + 2);
         return;
     }
@@ -231,9 +238,10 @@ void cpu_interp_step(void) {
         cpu_read(b1, 0);
         uint16_t ea = (uint8_t)(b1 + cpu.x);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = cpu_asl(v);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu.a |= r; cpu_nz(cpu.a);
         cpu.pc = (uint16_t)(pc + 2);
         return;
@@ -266,9 +274,10 @@ void cpu_interp_step(void) {
         uint16_t base = (uint16_t)(b1 | b2 << 8), ea = (uint16_t)(base + cpu.y);
         cpu_read((uint16_t)((base & 0xFF00) | (ea & 0xFF)), 0);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = cpu_asl(v);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu.a |= r; cpu_nz(cpu.a);
         cpu.pc = (uint16_t)(pc + 3);
         return;
@@ -301,9 +310,10 @@ void cpu_interp_step(void) {
         uint16_t base = (uint16_t)(b1 | b2 << 8), ea = (uint16_t)(base + cpu.x);
         cpu_read((uint16_t)((base & 0xFF00) | (ea & 0xFF)), 0);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = cpu_asl(v);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu.pc = (uint16_t)(pc + 3);
         return;
     }
@@ -313,9 +323,10 @@ void cpu_interp_step(void) {
         uint16_t base = (uint16_t)(b1 | b2 << 8), ea = (uint16_t)(base + cpu.x);
         cpu_read((uint16_t)((base & 0xFF00) | (ea & 0xFF)), 0);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = cpu_asl(v);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu.a |= r; cpu_nz(cpu.a);
         cpu.pc = (uint16_t)(pc + 3);
         return;
@@ -353,9 +364,10 @@ void cpu_interp_step(void) {
         uint8_t hi = cpu_read((uint8_t)(b1 + cpu.x + 1), 0);
         uint16_t ea = (uint16_t)(lo | hi << 8);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = cpu_rol(v);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu.a &= r; cpu_nz(cpu.a);
         cpu.pc = (uint16_t)(pc + 2);
         return;
@@ -382,9 +394,10 @@ void cpu_interp_step(void) {
         b1 = cpu_read((uint16_t)(pc + 1), 0);
         uint16_t ea = b1;
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = cpu_rol(v);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu.pc = (uint16_t)(pc + 2);
         return;
     }
@@ -392,9 +405,10 @@ void cpu_interp_step(void) {
         b1 = cpu_read((uint16_t)(pc + 1), 0);
         uint16_t ea = b1;
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = cpu_rol(v);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu.a &= r; cpu_nz(cpu.a);
         cpu.pc = (uint16_t)(pc + 2);
         return;
@@ -450,9 +464,10 @@ void cpu_interp_step(void) {
         b2 = cpu_read((uint16_t)(pc + 2), 0);
         uint16_t ea = (uint16_t)(b1 | b2 << 8);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = cpu_rol(v);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu.pc = (uint16_t)(pc + 3);
         return;
     }
@@ -461,9 +476,10 @@ void cpu_interp_step(void) {
         b2 = cpu_read((uint16_t)(pc + 2), 0);
         uint16_t ea = (uint16_t)(b1 | b2 << 8);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = cpu_rol(v);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu.a &= r; cpu_nz(cpu.a);
         cpu.pc = (uint16_t)(pc + 3);
         return;
@@ -504,9 +520,10 @@ void cpu_interp_step(void) {
         uint16_t base = (uint16_t)(lo | hi << 8), ea = (uint16_t)(base + cpu.y);
         cpu_read((uint16_t)((base & 0xFF00) | (ea & 0xFF)), 0);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = cpu_rol(v);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu.a &= r; cpu_nz(cpu.a);
         cpu.pc = (uint16_t)(pc + 2);
         return;
@@ -536,9 +553,10 @@ void cpu_interp_step(void) {
         cpu_read(b1, 0);
         uint16_t ea = (uint8_t)(b1 + cpu.x);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = cpu_rol(v);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu.pc = (uint16_t)(pc + 2);
         return;
     }
@@ -547,9 +565,10 @@ void cpu_interp_step(void) {
         cpu_read(b1, 0);
         uint16_t ea = (uint8_t)(b1 + cpu.x);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = cpu_rol(v);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu.a &= r; cpu_nz(cpu.a);
         cpu.pc = (uint16_t)(pc + 2);
         return;
@@ -582,9 +601,10 @@ void cpu_interp_step(void) {
         uint16_t base = (uint16_t)(b1 | b2 << 8), ea = (uint16_t)(base + cpu.y);
         cpu_read((uint16_t)((base & 0xFF00) | (ea & 0xFF)), 0);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = cpu_rol(v);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu.a &= r; cpu_nz(cpu.a);
         cpu.pc = (uint16_t)(pc + 3);
         return;
@@ -617,9 +637,10 @@ void cpu_interp_step(void) {
         uint16_t base = (uint16_t)(b1 | b2 << 8), ea = (uint16_t)(base + cpu.x);
         cpu_read((uint16_t)((base & 0xFF00) | (ea & 0xFF)), 0);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = cpu_rol(v);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu.pc = (uint16_t)(pc + 3);
         return;
     }
@@ -629,9 +650,10 @@ void cpu_interp_step(void) {
         uint16_t base = (uint16_t)(b1 | b2 << 8), ea = (uint16_t)(base + cpu.x);
         cpu_read((uint16_t)((base & 0xFF00) | (ea & 0xFF)), 0);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = cpu_rol(v);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu.a &= r; cpu_nz(cpu.a);
         cpu.pc = (uint16_t)(pc + 3);
         return;
@@ -643,8 +665,8 @@ void cpu_interp_step(void) {
         uint8_t lo = cpu_read((uint16_t)(0x100 | (uint8_t)(cpu.s + 2)), 0);
         uint8_t hi = cpu_read((uint16_t)(0x100 | (uint8_t)(cpu.s + 3)), CYC_POLL | CYC_DONE);
         cpu.s = (uint8_t)(cpu.s + 3);
-        cpu.pc = (uint16_t)(lo | hi << 8);
         hr_int_leave();
+        cpu.pc = (uint16_t)(lo | hi << 8);
         return;
     }
     case 0x41: { /* EOR (zp,X) */
@@ -670,9 +692,10 @@ void cpu_interp_step(void) {
         uint8_t hi = cpu_read((uint8_t)(b1 + cpu.x + 1), 0);
         uint16_t ea = (uint16_t)(lo | hi << 8);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = cpu_lsr(v);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu.a ^= r; cpu_nz(cpu.a);
         cpu.pc = (uint16_t)(pc + 2);
         return;
@@ -699,9 +722,10 @@ void cpu_interp_step(void) {
         b1 = cpu_read((uint16_t)(pc + 1), 0);
         uint16_t ea = b1;
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = cpu_lsr(v);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu.pc = (uint16_t)(pc + 2);
         return;
     }
@@ -709,9 +733,10 @@ void cpu_interp_step(void) {
         b1 = cpu_read((uint16_t)(pc + 1), 0);
         uint16_t ea = b1;
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = cpu_lsr(v);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu.a ^= r; cpu_nz(cpu.a);
         cpu.pc = (uint16_t)(pc + 2);
         return;
@@ -762,9 +787,10 @@ void cpu_interp_step(void) {
         b2 = cpu_read((uint16_t)(pc + 2), 0);
         uint16_t ea = (uint16_t)(b1 | b2 << 8);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = cpu_lsr(v);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu.pc = (uint16_t)(pc + 3);
         return;
     }
@@ -773,9 +799,10 @@ void cpu_interp_step(void) {
         b2 = cpu_read((uint16_t)(pc + 2), 0);
         uint16_t ea = (uint16_t)(b1 | b2 << 8);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = cpu_lsr(v);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu.a ^= r; cpu_nz(cpu.a);
         cpu.pc = (uint16_t)(pc + 3);
         return;
@@ -816,9 +843,10 @@ void cpu_interp_step(void) {
         uint16_t base = (uint16_t)(lo | hi << 8), ea = (uint16_t)(base + cpu.y);
         cpu_read((uint16_t)((base & 0xFF00) | (ea & 0xFF)), 0);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = cpu_lsr(v);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu.a ^= r; cpu_nz(cpu.a);
         cpu.pc = (uint16_t)(pc + 2);
         return;
@@ -848,9 +876,10 @@ void cpu_interp_step(void) {
         cpu_read(b1, 0);
         uint16_t ea = (uint8_t)(b1 + cpu.x);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = cpu_lsr(v);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu.pc = (uint16_t)(pc + 2);
         return;
     }
@@ -859,9 +888,10 @@ void cpu_interp_step(void) {
         cpu_read(b1, 0);
         uint16_t ea = (uint8_t)(b1 + cpu.x);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = cpu_lsr(v);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu.a ^= r; cpu_nz(cpu.a);
         cpu.pc = (uint16_t)(pc + 2);
         return;
@@ -894,9 +924,10 @@ void cpu_interp_step(void) {
         uint16_t base = (uint16_t)(b1 | b2 << 8), ea = (uint16_t)(base + cpu.y);
         cpu_read((uint16_t)((base & 0xFF00) | (ea & 0xFF)), 0);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = cpu_lsr(v);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu.a ^= r; cpu_nz(cpu.a);
         cpu.pc = (uint16_t)(pc + 3);
         return;
@@ -929,9 +960,10 @@ void cpu_interp_step(void) {
         uint16_t base = (uint16_t)(b1 | b2 << 8), ea = (uint16_t)(base + cpu.x);
         cpu_read((uint16_t)((base & 0xFF00) | (ea & 0xFF)), 0);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = cpu_lsr(v);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu.pc = (uint16_t)(pc + 3);
         return;
     }
@@ -941,9 +973,10 @@ void cpu_interp_step(void) {
         uint16_t base = (uint16_t)(b1 | b2 << 8), ea = (uint16_t)(base + cpu.x);
         cpu_read((uint16_t)((base & 0xFF00) | (ea & 0xFF)), 0);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = cpu_lsr(v);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu.a ^= r; cpu_nz(cpu.a);
         cpu.pc = (uint16_t)(pc + 3);
         return;
@@ -983,9 +1016,10 @@ void cpu_interp_step(void) {
         uint8_t hi = cpu_read((uint8_t)(b1 + cpu.x + 1), 0);
         uint16_t ea = (uint16_t)(lo | hi << 8);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = cpu_ror(v);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu_adc(r);
         cpu.pc = (uint16_t)(pc + 2);
         return;
@@ -1012,9 +1046,10 @@ void cpu_interp_step(void) {
         b1 = cpu_read((uint16_t)(pc + 1), 0);
         uint16_t ea = b1;
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = cpu_ror(v);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu.pc = (uint16_t)(pc + 2);
         return;
     }
@@ -1022,9 +1057,10 @@ void cpu_interp_step(void) {
         b1 = cpu_read((uint16_t)(pc + 1), 0);
         uint16_t ea = b1;
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = cpu_ror(v);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu_adc(r);
         cpu.pc = (uint16_t)(pc + 2);
         return;
@@ -1080,9 +1116,10 @@ void cpu_interp_step(void) {
         b2 = cpu_read((uint16_t)(pc + 2), 0);
         uint16_t ea = (uint16_t)(b1 | b2 << 8);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = cpu_ror(v);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu.pc = (uint16_t)(pc + 3);
         return;
     }
@@ -1091,9 +1128,10 @@ void cpu_interp_step(void) {
         b2 = cpu_read((uint16_t)(pc + 2), 0);
         uint16_t ea = (uint16_t)(b1 | b2 << 8);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = cpu_ror(v);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu_adc(r);
         cpu.pc = (uint16_t)(pc + 3);
         return;
@@ -1134,9 +1172,10 @@ void cpu_interp_step(void) {
         uint16_t base = (uint16_t)(lo | hi << 8), ea = (uint16_t)(base + cpu.y);
         cpu_read((uint16_t)((base & 0xFF00) | (ea & 0xFF)), 0);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = cpu_ror(v);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu_adc(r);
         cpu.pc = (uint16_t)(pc + 2);
         return;
@@ -1166,9 +1205,10 @@ void cpu_interp_step(void) {
         cpu_read(b1, 0);
         uint16_t ea = (uint8_t)(b1 + cpu.x);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = cpu_ror(v);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu.pc = (uint16_t)(pc + 2);
         return;
     }
@@ -1177,9 +1217,10 @@ void cpu_interp_step(void) {
         cpu_read(b1, 0);
         uint16_t ea = (uint8_t)(b1 + cpu.x);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = cpu_ror(v);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu_adc(r);
         cpu.pc = (uint16_t)(pc + 2);
         return;
@@ -1212,9 +1253,10 @@ void cpu_interp_step(void) {
         uint16_t base = (uint16_t)(b1 | b2 << 8), ea = (uint16_t)(base + cpu.y);
         cpu_read((uint16_t)((base & 0xFF00) | (ea & 0xFF)), 0);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = cpu_ror(v);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu_adc(r);
         cpu.pc = (uint16_t)(pc + 3);
         return;
@@ -1247,9 +1289,10 @@ void cpu_interp_step(void) {
         uint16_t base = (uint16_t)(b1 | b2 << 8), ea = (uint16_t)(base + cpu.x);
         cpu_read((uint16_t)((base & 0xFF00) | (ea & 0xFF)), 0);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = cpu_ror(v);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu.pc = (uint16_t)(pc + 3);
         return;
     }
@@ -1259,9 +1302,10 @@ void cpu_interp_step(void) {
         uint16_t base = (uint16_t)(b1 | b2 << 8), ea = (uint16_t)(base + cpu.x);
         cpu_read((uint16_t)((base & 0xFF00) | (ea & 0xFF)), 0);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = cpu_ror(v);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu_adc(r);
         cpu.pc = (uint16_t)(pc + 3);
         return;
@@ -1278,7 +1322,7 @@ void cpu_interp_step(void) {
         uint8_t lo = cpu_read((uint8_t)(b1 + cpu.x), 0);
         uint8_t hi = cpu_read((uint8_t)(b1 + cpu.x + 1), 0);
         uint16_t ea = (uint16_t)(lo | hi << 8);
-        cpu_write(ea, cpu.a, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, cpu.a, CYC_POLL | CYC_DONE);
         cpu.pc = (uint16_t)(pc + 2);
         return;
     }
@@ -1294,35 +1338,35 @@ void cpu_interp_step(void) {
         uint8_t lo = cpu_read((uint8_t)(b1 + cpu.x), 0);
         uint8_t hi = cpu_read((uint8_t)(b1 + cpu.x + 1), 0);
         uint16_t ea = (uint16_t)(lo | hi << 8);
-        cpu_write(ea, (uint8_t)(cpu.a & cpu.x), CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, (uint8_t)(cpu.a & cpu.x), CYC_POLL | CYC_DONE);
         cpu.pc = (uint16_t)(pc + 2);
         return;
     }
     case 0x84: { /* STY zp */
         b1 = cpu_read((uint16_t)(pc + 1), 0);
         uint16_t ea = b1;
-        cpu_write(ea, cpu.y, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, cpu.y, CYC_POLL | CYC_DONE);
         cpu.pc = (uint16_t)(pc + 2);
         return;
     }
     case 0x85: { /* STA zp */
         b1 = cpu_read((uint16_t)(pc + 1), 0);
         uint16_t ea = b1;
-        cpu_write(ea, cpu.a, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, cpu.a, CYC_POLL | CYC_DONE);
         cpu.pc = (uint16_t)(pc + 2);
         return;
     }
     case 0x86: { /* STX zp */
         b1 = cpu_read((uint16_t)(pc + 1), 0);
         uint16_t ea = b1;
-        cpu_write(ea, cpu.x, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, cpu.x, CYC_POLL | CYC_DONE);
         cpu.pc = (uint16_t)(pc + 2);
         return;
     }
     case 0x87: { /* SAX zp */
         b1 = cpu_read((uint16_t)(pc + 1), 0);
         uint16_t ea = b1;
-        cpu_write(ea, (uint8_t)(cpu.a & cpu.x), CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, (uint8_t)(cpu.a & cpu.x), CYC_POLL | CYC_DONE);
         cpu.pc = (uint16_t)(pc + 2);
         return;
     }
@@ -1354,7 +1398,7 @@ void cpu_interp_step(void) {
         b1 = cpu_read((uint16_t)(pc + 1), 0);
         b2 = cpu_read((uint16_t)(pc + 2), 0);
         uint16_t ea = (uint16_t)(b1 | b2 << 8);
-        cpu_write(ea, cpu.y, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, cpu.y, CYC_POLL | CYC_DONE);
         cpu.pc = (uint16_t)(pc + 3);
         return;
     }
@@ -1362,7 +1406,7 @@ void cpu_interp_step(void) {
         b1 = cpu_read((uint16_t)(pc + 1), 0);
         b2 = cpu_read((uint16_t)(pc + 2), 0);
         uint16_t ea = (uint16_t)(b1 | b2 << 8);
-        cpu_write(ea, cpu.a, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, cpu.a, CYC_POLL | CYC_DONE);
         cpu.pc = (uint16_t)(pc + 3);
         return;
     }
@@ -1370,7 +1414,7 @@ void cpu_interp_step(void) {
         b1 = cpu_read((uint16_t)(pc + 1), 0);
         b2 = cpu_read((uint16_t)(pc + 2), 0);
         uint16_t ea = (uint16_t)(b1 | b2 << 8);
-        cpu_write(ea, cpu.x, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, cpu.x, CYC_POLL | CYC_DONE);
         cpu.pc = (uint16_t)(pc + 3);
         return;
     }
@@ -1378,7 +1422,7 @@ void cpu_interp_step(void) {
         b1 = cpu_read((uint16_t)(pc + 1), 0);
         b2 = cpu_read((uint16_t)(pc + 2), 0);
         uint16_t ea = (uint16_t)(b1 | b2 << 8);
-        cpu_write(ea, (uint8_t)(cpu.a & cpu.x), CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, (uint8_t)(cpu.a & cpu.x), CYC_POLL | CYC_DONE);
         cpu.pc = (uint16_t)(pc + 3);
         return;
     }
@@ -1401,7 +1445,7 @@ void cpu_interp_step(void) {
         uint8_t hi = cpu_read((uint8_t)(b1 + 1), 0);
         uint16_t base = (uint16_t)(lo | hi << 8), ea = (uint16_t)(base + cpu.y);
         cpu_read((uint16_t)((base & 0xFF00) | (ea & 0xFF)), 0);
-        cpu_write(ea, cpu.a, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, cpu.a, CYC_POLL | CYC_DONE);
         cpu.pc = (uint16_t)(pc + 2);
         return;
     }
@@ -1418,7 +1462,7 @@ void cpu_interp_step(void) {
         bool ignore_h = hw_dma_stalls != 0;
         uint8_t h = ignore_h ? 0xFF : (uint8_t)((base >> 8) + 1);
         if ((ea ^ base) & 0xFF00) ea = (uint16_t)((ea & 0xFF) | ((ea >> 8) & cpu.x) << 8);
-        cpu_write(ea, (uint8_t)(cpu.a & (cpu.x | 0xF5) & h), CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, (uint8_t)(cpu.a & (cpu.x | 0xF5) & h), CYC_POLL | CYC_DONE);
         cpu.pc = (uint16_t)(pc + 2);
         return;
     }
@@ -1426,7 +1470,7 @@ void cpu_interp_step(void) {
         b1 = cpu_read((uint16_t)(pc + 1), 0);
         cpu_read(b1, 0);
         uint16_t ea = (uint8_t)(b1 + cpu.x);
-        cpu_write(ea, cpu.y, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, cpu.y, CYC_POLL | CYC_DONE);
         cpu.pc = (uint16_t)(pc + 2);
         return;
     }
@@ -1434,7 +1478,7 @@ void cpu_interp_step(void) {
         b1 = cpu_read((uint16_t)(pc + 1), 0);
         cpu_read(b1, 0);
         uint16_t ea = (uint8_t)(b1 + cpu.x);
-        cpu_write(ea, cpu.a, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, cpu.a, CYC_POLL | CYC_DONE);
         cpu.pc = (uint16_t)(pc + 2);
         return;
     }
@@ -1442,7 +1486,7 @@ void cpu_interp_step(void) {
         b1 = cpu_read((uint16_t)(pc + 1), 0);
         cpu_read(b1, 0);
         uint16_t ea = (uint8_t)(b1 + cpu.y);
-        cpu_write(ea, cpu.x, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, cpu.x, CYC_POLL | CYC_DONE);
         cpu.pc = (uint16_t)(pc + 2);
         return;
     }
@@ -1450,7 +1494,7 @@ void cpu_interp_step(void) {
         b1 = cpu_read((uint16_t)(pc + 1), 0);
         cpu_read(b1, 0);
         uint16_t ea = (uint8_t)(b1 + cpu.y);
-        cpu_write(ea, (uint8_t)(cpu.a & cpu.x), CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, (uint8_t)(cpu.a & cpu.x), CYC_POLL | CYC_DONE);
         cpu.pc = (uint16_t)(pc + 2);
         return;
     }
@@ -1465,7 +1509,7 @@ void cpu_interp_step(void) {
         b2 = cpu_read((uint16_t)(pc + 2), 0);
         uint16_t base = (uint16_t)(b1 | b2 << 8), ea = (uint16_t)(base + cpu.y);
         cpu_read((uint16_t)((base & 0xFF00) | (ea & 0xFF)), 0);
-        cpu_write(ea, cpu.a, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, cpu.a, CYC_POLL | CYC_DONE);
         cpu.pc = (uint16_t)(pc + 3);
         return;
     }
@@ -1484,7 +1528,7 @@ void cpu_interp_step(void) {
         uint8_t h = ignore_h ? 0xFF : (uint8_t)((base >> 8) + 1);
         if ((ea ^ base) & 0xFF00) ea = (uint16_t)((ea & 0xFF) | ((ea >> 8) & cpu.x) << 8);
         cpu.s = (uint8_t)(cpu.a & cpu.x);
-        cpu_write(ea, (uint8_t)(cpu.a & (cpu.x | 0xF5) & h), CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, (uint8_t)(cpu.a & (cpu.x | 0xF5) & h), CYC_POLL | CYC_DONE);
         cpu.pc = (uint16_t)(pc + 3);
         return;
     }
@@ -1496,7 +1540,7 @@ void cpu_interp_step(void) {
         bool ignore_h = hw_dma_stalls != 0;
         uint8_t h = ignore_h ? 0xFF : (uint8_t)((base >> 8) + 1);
         if ((ea ^ base) & 0xFF00) ea = (uint16_t)((ea & 0xFF) | ((ea >> 8) & cpu.y) << 8);
-        cpu_write(ea, (uint8_t)(cpu.y & h), CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, (uint8_t)(cpu.y & h), CYC_POLL | CYC_DONE);
         cpu.pc = (uint16_t)(pc + 3);
         return;
     }
@@ -1505,7 +1549,7 @@ void cpu_interp_step(void) {
         b2 = cpu_read((uint16_t)(pc + 2), 0);
         uint16_t base = (uint16_t)(b1 | b2 << 8), ea = (uint16_t)(base + cpu.x);
         cpu_read((uint16_t)((base & 0xFF00) | (ea & 0xFF)), 0);
-        cpu_write(ea, cpu.a, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, cpu.a, CYC_POLL | CYC_DONE);
         cpu.pc = (uint16_t)(pc + 3);
         return;
     }
@@ -1517,7 +1561,7 @@ void cpu_interp_step(void) {
         bool ignore_h = hw_dma_stalls != 0;
         uint8_t h = ignore_h ? 0xFF : (uint8_t)((base >> 8) + 1);
         if ((ea ^ base) & 0xFF00) ea = (uint16_t)((ea & 0xFF) | ((ea >> 8) & cpu.x) << 8);
-        cpu_write(ea, (uint8_t)(cpu.x & h), CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, (uint8_t)(cpu.x & h), CYC_POLL | CYC_DONE);
         cpu.pc = (uint16_t)(pc + 3);
         return;
     }
@@ -1529,7 +1573,7 @@ void cpu_interp_step(void) {
         bool ignore_h = hw_dma_stalls != 0;
         uint8_t h = ignore_h ? 0xFF : (uint8_t)((base >> 8) + 1);
         if ((ea ^ base) & 0xFF00) ea = (uint16_t)((ea & 0xFF) | ((ea >> 8) & cpu.x) << 8);
-        cpu_write(ea, (uint8_t)(cpu.a & (cpu.x | 0xF5) & h), CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, (uint8_t)(cpu.a & (cpu.x | 0xF5) & h), CYC_POLL | CYC_DONE);
         cpu.pc = (uint16_t)(pc + 3);
         return;
     }
@@ -1859,9 +1903,10 @@ void cpu_interp_step(void) {
         uint8_t hi = cpu_read((uint8_t)(b1 + cpu.x + 1), 0);
         uint16_t ea = (uint16_t)(lo | hi << 8);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = (uint8_t)(v - 1);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu_cmp(cpu.a, r);
         cpu.pc = (uint16_t)(pc + 2);
         return;
@@ -1888,9 +1933,10 @@ void cpu_interp_step(void) {
         b1 = cpu_read((uint16_t)(pc + 1), 0);
         uint16_t ea = b1;
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = (uint8_t)(v - 1); cpu_nz(r);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu.pc = (uint16_t)(pc + 2);
         return;
     }
@@ -1898,9 +1944,10 @@ void cpu_interp_step(void) {
         b1 = cpu_read((uint16_t)(pc + 1), 0);
         uint16_t ea = b1;
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = (uint8_t)(v - 1);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu_cmp(cpu.a, r);
         cpu.pc = (uint16_t)(pc + 2);
         return;
@@ -1954,9 +2001,10 @@ void cpu_interp_step(void) {
         b2 = cpu_read((uint16_t)(pc + 2), 0);
         uint16_t ea = (uint16_t)(b1 | b2 << 8);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = (uint8_t)(v - 1); cpu_nz(r);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu.pc = (uint16_t)(pc + 3);
         return;
     }
@@ -1965,9 +2013,10 @@ void cpu_interp_step(void) {
         b2 = cpu_read((uint16_t)(pc + 2), 0);
         uint16_t ea = (uint16_t)(b1 | b2 << 8);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = (uint8_t)(v - 1);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu_cmp(cpu.a, r);
         cpu.pc = (uint16_t)(pc + 3);
         return;
@@ -2008,9 +2057,10 @@ void cpu_interp_step(void) {
         uint16_t base = (uint16_t)(lo | hi << 8), ea = (uint16_t)(base + cpu.y);
         cpu_read((uint16_t)((base & 0xFF00) | (ea & 0xFF)), 0);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = (uint8_t)(v - 1);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu_cmp(cpu.a, r);
         cpu.pc = (uint16_t)(pc + 2);
         return;
@@ -2040,9 +2090,10 @@ void cpu_interp_step(void) {
         cpu_read(b1, 0);
         uint16_t ea = (uint8_t)(b1 + cpu.x);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = (uint8_t)(v - 1); cpu_nz(r);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu.pc = (uint16_t)(pc + 2);
         return;
     }
@@ -2051,9 +2102,10 @@ void cpu_interp_step(void) {
         cpu_read(b1, 0);
         uint16_t ea = (uint8_t)(b1 + cpu.x);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = (uint8_t)(v - 1);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu_cmp(cpu.a, r);
         cpu.pc = (uint16_t)(pc + 2);
         return;
@@ -2086,9 +2138,10 @@ void cpu_interp_step(void) {
         uint16_t base = (uint16_t)(b1 | b2 << 8), ea = (uint16_t)(base + cpu.y);
         cpu_read((uint16_t)((base & 0xFF00) | (ea & 0xFF)), 0);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = (uint8_t)(v - 1);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu_cmp(cpu.a, r);
         cpu.pc = (uint16_t)(pc + 3);
         return;
@@ -2121,9 +2174,10 @@ void cpu_interp_step(void) {
         uint16_t base = (uint16_t)(b1 | b2 << 8), ea = (uint16_t)(base + cpu.x);
         cpu_read((uint16_t)((base & 0xFF00) | (ea & 0xFF)), 0);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = (uint8_t)(v - 1); cpu_nz(r);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu.pc = (uint16_t)(pc + 3);
         return;
     }
@@ -2133,9 +2187,10 @@ void cpu_interp_step(void) {
         uint16_t base = (uint16_t)(b1 | b2 << 8), ea = (uint16_t)(base + cpu.x);
         cpu_read((uint16_t)((base & 0xFF00) | (ea & 0xFF)), 0);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = (uint8_t)(v - 1);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu_cmp(cpu.a, r);
         cpu.pc = (uint16_t)(pc + 3);
         return;
@@ -2171,9 +2226,10 @@ void cpu_interp_step(void) {
         uint8_t hi = cpu_read((uint8_t)(b1 + cpu.x + 1), 0);
         uint16_t ea = (uint16_t)(lo | hi << 8);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = (uint8_t)(v + 1);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu_sbc(r);
         cpu.pc = (uint16_t)(pc + 2);
         return;
@@ -2200,9 +2256,10 @@ void cpu_interp_step(void) {
         b1 = cpu_read((uint16_t)(pc + 1), 0);
         uint16_t ea = b1;
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = (uint8_t)(v + 1); cpu_nz(r);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu.pc = (uint16_t)(pc + 2);
         return;
     }
@@ -2210,9 +2267,10 @@ void cpu_interp_step(void) {
         b1 = cpu_read((uint16_t)(pc + 1), 0);
         uint16_t ea = b1;
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = (uint8_t)(v + 1);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu_sbc(r);
         cpu.pc = (uint16_t)(pc + 2);
         return;
@@ -2265,9 +2323,10 @@ void cpu_interp_step(void) {
         b2 = cpu_read((uint16_t)(pc + 2), 0);
         uint16_t ea = (uint16_t)(b1 | b2 << 8);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = (uint8_t)(v + 1); cpu_nz(r);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu.pc = (uint16_t)(pc + 3);
         return;
     }
@@ -2276,9 +2335,10 @@ void cpu_interp_step(void) {
         b2 = cpu_read((uint16_t)(pc + 2), 0);
         uint16_t ea = (uint16_t)(b1 | b2 << 8);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = (uint8_t)(v + 1);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu_sbc(r);
         cpu.pc = (uint16_t)(pc + 3);
         return;
@@ -2319,9 +2379,10 @@ void cpu_interp_step(void) {
         uint16_t base = (uint16_t)(lo | hi << 8), ea = (uint16_t)(base + cpu.y);
         cpu_read((uint16_t)((base & 0xFF00) | (ea & 0xFF)), 0);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = (uint8_t)(v + 1);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu_sbc(r);
         cpu.pc = (uint16_t)(pc + 2);
         return;
@@ -2351,9 +2412,10 @@ void cpu_interp_step(void) {
         cpu_read(b1, 0);
         uint16_t ea = (uint8_t)(b1 + cpu.x);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = (uint8_t)(v + 1); cpu_nz(r);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu.pc = (uint16_t)(pc + 2);
         return;
     }
@@ -2362,9 +2424,10 @@ void cpu_interp_step(void) {
         cpu_read(b1, 0);
         uint16_t ea = (uint8_t)(b1 + cpu.x);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = (uint8_t)(v + 1);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu_sbc(r);
         cpu.pc = (uint16_t)(pc + 2);
         return;
@@ -2397,9 +2460,10 @@ void cpu_interp_step(void) {
         uint16_t base = (uint16_t)(b1 | b2 << 8), ea = (uint16_t)(base + cpu.y);
         cpu_read((uint16_t)((base & 0xFF00) | (ea & 0xFF)), 0);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = (uint8_t)(v + 1);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu_sbc(r);
         cpu.pc = (uint16_t)(pc + 3);
         return;
@@ -2432,9 +2496,10 @@ void cpu_interp_step(void) {
         uint16_t base = (uint16_t)(b1 | b2 << 8), ea = (uint16_t)(base + cpu.x);
         cpu_read((uint16_t)((base & 0xFF00) | (ea & 0xFF)), 0);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = (uint8_t)(v + 1); cpu_nz(r);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu.pc = (uint16_t)(pc + 3);
         return;
     }
@@ -2444,9 +2509,10 @@ void cpu_interp_step(void) {
         uint16_t base = (uint16_t)(b1 | b2 << 8), ea = (uint16_t)(base + cpu.x);
         cpu_read((uint16_t)((base & 0xFF00) | (ea & 0xFF)), 0);
         uint8_t v = cpu_read(ea, 0), r;
-        cpu_write(ea, v, 0);
+        v = cpu_ram_rmw_value(pc, ea, v);
+        cpu_ram_write(pc, ea, v, 0);
         r = (uint8_t)(v + 1);
-        cpu_write(ea, r, CYC_POLL | CYC_DONE);
+        cpu_ram_write(pc, ea, r, CYC_POLL | CYC_DONE);
         cpu_sbc(r);
         cpu.pc = (uint16_t)(pc + 3);
         return;

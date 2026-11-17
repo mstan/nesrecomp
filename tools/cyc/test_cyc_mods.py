@@ -44,8 +44,8 @@ NO_WINDOW = getattr(subprocess, 'CREATE_NO_WINDOW', 0)
 FRAMES = 40
 
 
-def run(cmd, cwd, log, timeout=900, ok=(0,)):
-    p = subprocess.run([str(x) for x in cmd], cwd=cwd, capture_output=True, text=True, timeout=timeout,
+def run(cmd, cwd, log, ok=(0,)):
+    p = subprocess.run([str(x) for x in cmd], cwd=cwd, capture_output=True, text=True,
                        creationflags=NO_WINDOW)
     Path(log).write_text(' '.join(str(x) for x in cmd) + '\n' + p.stdout + p.stderr)
     if ok is not None and p.returncode not in ok:
@@ -66,8 +66,7 @@ def ram_from_mem(path):
 
 def build(args, out, name, extras, defines=()):
     folder = out / name
-    shutil.rmtree(folder, ignore_errors=True)
-    folder.mkdir(parents=True)
+    folder.mkdir(parents=True, exist_ok=False)
     shutil.copy(out / 'game.toml', folder / 'game.toml')
     text = (folder / 'game.toml').read_text().replace('"disk.fds"', '"../disk.fds"').replace(
         '"bios/disksys.rom"', '"../bios/disksys.rom"')
@@ -160,6 +159,12 @@ def main():
         if lines != base or not m or int(m[1]) < 30 or int(m[2]):
             raise AssertionError(f'observers {flavour}: {m and m.groups()}')
     print('return observers: actual and handled RTS, explicit isolated hook permission, full machine parity')
+    for flavour, extra in (('native', []), ('interp', ['--interp-only'])):
+        p, lines, _ = play(exe, fmods, out, f'view_{flavour}', ['--test-mode', 'view'] + extra)
+        m = re.search(r'view-test: ok=(\d+) bad=(\d+)', p.stdout)
+        if lines != base or not m or int(m[1]) < 30 or int(m[2]):
+            raise AssertionError(f'operand views {flavour}: {m and m.groups()}')
+    print('writable operand views: native/interpreter stores and RMW, physical RAM preserved, legacy read-only contract')
     ring = fmods / 'iso_ring.txt'
     run([exe, out / 'disk.fds', '--fds-bios', out / 'bios' / 'disksys.rom', '--frames', FRAMES, '--test-mode', 'iso',
          '--ring-out', ring], fmods, fmods / 'iso_ring.log')

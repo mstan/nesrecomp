@@ -157,6 +157,19 @@ void cyc_mod_set_return_hook(void (*hook)(void)) {
 }
 void cyc_mod_set_ram_read_hook(uint8_t (*hook)(uint16_t pc, uint16_t addr, uint8_t value)) {
     cyc_cpu_ram_read_policy = hook;
+    cyc_cpu_ram_write_policy = NULL;
+}
+bool cyc_mod_set_ram_view(uint8_t (*read)(uint16_t,uint16_t,uint8_t),
+                          bool (*write)(uint16_t,uint16_t,uint8_t)) {
+    if (!!read != !!write) return false;
+    cyc_cpu_ram_read_policy = read;
+    cyc_cpu_ram_write_policy = write;
+    return true;
+}
+size_t cyc_mod_prg_offset(uint16_t address) {
+    if (address < 0x8000 || hw_cart.mapper == NES_FDS_MAPPER) return SIZE_MAX;
+    size_t offset = hw_cart.prg_off[(address >> 12) & 7] | (address & 0xfff);
+    return offset < hw_cart.prg_len ? offset : SIZE_MAX;
 }
 void cyc_mod_allow_isolated_hooks(bool allow) {
     if (!s_open) return;

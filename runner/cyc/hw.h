@@ -67,6 +67,8 @@ uint8_t hw_read_rom(uint16_t addr, uint8_t value);
  * no ROM substitution or cartridge ROM-read observer. */
 uint8_t hw_read_code_ram(uint16_t addr, uint8_t value);
 void    hw_write(uint16_t addr, uint8_t value);
+/* RAM operand view: publish the RAM write's bus effects without a RAM store. */
+void    hw_write_ram_view(uint16_t addr, uint8_t value);
 void    hw_cycle_finish(bool instruction_done);
 
 /* CPU cycles DMAs took inside the most recent bus-cycle start. */

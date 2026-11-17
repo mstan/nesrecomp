@@ -1222,7 +1222,7 @@ static void emit_read(Emit *e, const OpDef *d) {
 static void emit_write(Emit *e, const OpDef *d) {
     WriteReach reach = write_reach(e, d->am);
     addressing(e, d->am, true, false);
-    ln(e, "cpu_write(ea, %s, CYC_POLL | CYC_DONE);", d->body);
+    ln(e, "cpu_ram_write(%s, ea, %s, CYC_POLL | CYC_DONE);", INTERP(e) ? "pc" : str("0x%04X", e->P), d->body);
     if (!bank_exit(e, reach)) { ram_store_check(e, d->am); go_next(e); }
 }
 
@@ -1230,9 +1230,10 @@ static void emit_rmw(Emit *e, const OpDef *d) {
     WriteReach reach = write_reach(e, d->am);
     addressing(e, d->am, true, false);
     ln(e, "uint8_t v = cpu_read(ea, 0), r;");
-    ln(e, "cpu_write(ea, v, 0);");
+    ln(e, "v = cpu_ram_rmw_value(%s, ea, v);", INTERP(e) ? "pc" : str("0x%04X", e->P));
+    ln(e, "cpu_ram_write(%s, ea, v, 0);", INTERP(e) ? "pc" : str("0x%04X", e->P));
     ln(e, "%s", d->body);
-    ln(e, "cpu_write(ea, r, CYC_POLL | CYC_DONE);");
+    ln(e, "cpu_ram_write(%s, ea, r, CYC_POLL | CYC_DONE);", INTERP(e) ? "pc" : str("0x%04X", e->P));
     if (d->post) ln(e, "%s", d->post);
     if (!bank_exit(e, reach)) { ram_store_check(e, d->am); go_next(e); }
 }
@@ -1252,7 +1253,7 @@ static void emit_sh(Emit *e, const OpDef *d) {
     const char *value = fix == 'y' ? "(uint8_t)(cpu.y & h)"
                       : !strcmp(d->name, "SHX") ? "(uint8_t)(cpu.x & h)"
                       : "(uint8_t)(cpu.a & (cpu.x | 0xF5) & h)";
-    ln(e, "cpu_write(ea, %s, CYC_POLL | CYC_DONE);", value);
+    ln(e, "cpu_ram_write(%s, ea, %s, CYC_POLL | CYC_DONE);", INTERP(e) ? "pc" : str("0x%04X", e->P), value);
     /* The written high byte can be ANDed with the index: any address. */
     if (!bank_exit(e, reach)) { ram_store_check(e, AM_INDY); go_next(e); }
 }
@@ -1992,7 +1993,7 @@ static bool check_table(void) {
 
 bool cyc_codegen_emit_interpreter(const char *path) {
     if (!check_table()) return false;
-    FILE *f = fopen(path, "w");
+    FILE *f = fopen(path, "wb"); /* Stable LF output on every host. */
     if (!f) {
         fprintf(stderr, "[cyc] cannot write %s\n", path);
         return false;

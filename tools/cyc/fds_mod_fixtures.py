@@ -69,6 +69,7 @@ def main_file():
     a.op('LDA', 'abs', FRAME); a.op('CMP', 'imm', 30); a.op('BCS', 'rel', 'skip')
     a.op('JSR', 'abs', 0x7000)
     a.label('skip')
+    a.op('JSR', 'abs', 0x6500)                   # qualified writable-operand fixture
     a.op('LDX', 'imm', 3)                        # the tail site sees X = 3
     a.op('JSR', 'abs', 0x6400)
     a.op('INC', 'abs', FRAME)
@@ -90,6 +91,9 @@ def main_file():
     a.label('tail')
     a.op('LDA', 'imm', 0x88); a.op('STA', 'abs', 0x0451)
     a.op('RTS')
+    a.raw([0xEA] * (0x6500 - a.pc))
+    a.label('view')
+    a.raw([0xA9,0x35,0x8D,0x4A,0x04,0xEE,0x4A,0x04,0x0E,0x4A,0x04,0xAD,0x4A,0x04,0x60])
     return a
 
 

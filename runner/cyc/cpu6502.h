@@ -64,6 +64,7 @@ extern void (*cyc_cpu_rts_observer)(void);
  * open bus and all cycles. Only the instruction's RAM data value may change;
  * instruction fetches, dummy reads, RMW and I/O never use this callback. */
 extern uint8_t (*cyc_cpu_ram_read_policy)(uint16_t pc, uint16_t addr, uint8_t value);
+extern bool (*cyc_cpu_ram_write_policy)(uint16_t pc, uint16_t addr, uint8_t value);
 static inline uint8_t cpu_ram_read_value(uint16_t pc, uint16_t addr, uint8_t value) {
     if (addr < 0x2000 && cyc_cpu_ram_read_policy) {
         /* The physical access precedes the trusted operand observer. Publish
@@ -136,6 +137,29 @@ static inline void cpu_write(uint16_t addr, uint8_t value, unsigned f) {
     if (f & CYC_POLL) cpu_poll(f);
     hw_write(addr, value);
     hw_cycle_finish((f & CYC_DONE) != 0);
+}
+
+/* A paired writable operand view may retain its own storage. Even a handled
+ * store drives the original bus value and consumes its ordinary CPU cycle.
+ * Explicit instruction PCs cover native blocks and the interpreter equally. */
+static inline void cpu_ram_write(uint16_t pc, uint16_t addr, uint8_t value, unsigned f) {
+    if (addr < 0x2000 && cyc_cpu_ram_write_policy) {
+#if NESRECOMP_NATIVE_INTERVALS
+        hw_native_flush();
+#endif
+        if (cyc_cpu_ram_write_policy(pc, (uint16_t)(addr & 0x7ff), value)) {
+            hw_cycle_start(addr, HW_WITH_SITE(HW_WRITE, HR_S_RAM_W));
+            if (f & CYC_POLL) cpu_poll(f);
+            hw_write_ram_view(addr, value);
+            hw_cycle_finish((f & CYC_DONE) != 0);
+            return;
+        }
+    }
+    cpu_write(addr, value, f);
+}
+static inline uint8_t cpu_ram_rmw_value(uint16_t pc, uint16_t addr, uint8_t value) {
+    /* Preserve the legacy read-only observer's exclusion of RMW operations. */
+    return cyc_cpu_ram_write_policy ? cpu_ram_read_value(pc, addr, value) : value;
 }
 
 /* External ROM data in a byte-validated compiled chunk is not necessarily

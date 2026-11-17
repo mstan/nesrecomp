@@ -180,6 +180,18 @@ void cyc_mod_return_observer(void);
  * RAM, bus values and clocks are untouched. The callback must not mutate the
  * machine or reenter guest execution. NULL restores unmodified reads. */
 void cyc_mod_set_ram_read_hook(uint8_t (*hook)(uint16_t pc, uint16_t addr, uint8_t value));
+/* Paired trusted operand storage, including RMW reads and both writes. A true
+ * writer handles the store in mod-owned state; physical RAM is unchanged.
+ * Bus timing, open bus, instruction fetches and DMA remain physical. The mod
+ * owns validation and serialization of its storage and isolated-call effects.
+ * Install both callbacks or clear both. Refuses a partial pair without mutation.
+ * Callbacks must not reenter guest execution. Legacy read-only hooks clear the
+ * paired writer, retaining their original read-only/RMW-excluded contract. */
+bool cyc_mod_set_ram_view(uint8_t (*read)(uint16_t,uint16_t,uint8_t),
+                          bool (*write)(uint16_t,uint16_t,uint8_t));
+/* Physical cartridge PRG offset for an ordinary ROM address, SIZE_MAX otherwise.
+ * A pure mapping query; RAM/open mappings and FDS never impersonate ROM. */
+size_t cyc_mod_prg_offset(uint16_t address);
 void cyc_mod_allow_isolated_hooks(bool allow);
 bool cyc_mod_call_commit_hooked(uint16_t routine, CycModRegs *regs);
 bool cyc_mod_call_commit(uint16_t routine, CycModRegs *regs);

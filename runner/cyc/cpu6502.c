@@ -8,6 +8,7 @@
 Cpu6502 cpu;
 void (*cyc_cpu_rts_observer)(void);
 uint8_t (*cyc_cpu_ram_read_policy)(uint16_t pc, uint16_t addr, uint8_t value);
+bool (*cyc_cpu_ram_write_policy)(uint16_t pc, uint16_t addr, uint8_t value);
 
 void cpu_power_on(void) {
     hr_start();

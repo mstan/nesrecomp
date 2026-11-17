@@ -25,12 +25,41 @@
 #include <stdlib.h>
 #include <string.h>
 
-enum { MODE_NONE, MODE_HOOKS, MODE_ISO, MODE_COMMIT, MODE_OBSERVE };
+enum { MODE_NONE, MODE_HOOKS, MODE_ISO, MODE_COMMIT, MODE_OBSERVE, MODE_VIEW };
 static int s_mode;
 static struct {
     uint32_t ova_fires, ova_x_bad, tail_handled, iso_ok, iso_bad, commit_refused, commit_ok, frames;
 } c;
 static unsigned s_returns,s_observe_ok,s_observe_bad;
+static unsigned s_view_ok,s_view_bad,s_view_reads,s_view_writes;
+static uint8_t s_shadow;
+static uint8_t view_read(uint16_t pc,uint16_t addr,uint8_t value) {
+    if(pc>=0x6500&&pc<0x650f&&addr==0x44a) {s_view_reads++;return s_shadow;}
+    return value;
+}
+static bool view_write(uint16_t pc,uint16_t addr,uint8_t value) {
+    if(pc>=0x6500&&pc<0x650f&&addr==0x44a) {s_view_writes++;s_shadow=value;return true;}
+    return false;
+}
+static uint8_t legacy_read(uint16_t pc,uint16_t addr,uint8_t value) {
+    return pc>=0x6500&&pc<0x650f&&addr==0x44a?0x10:value;
+}
+static void view_frame(void) {
+    uint8_t before[0x800];memcpy(before,cyc_cpu_ram(),sizeof before);
+    if(!cyc_mod_isolate_begin()){s_view_bad++;return;}
+    cyc_mod_poke(0x44a,0xa6);s_shadow=0;s_view_reads=s_view_writes=0;
+    bool ok=!cyc_mod_set_ram_view(view_read,NULL)&&cyc_mod_set_ram_view(view_read,view_write);
+    CycModRegs r={0,0,0,0xfd,0x24,0};
+    ok=cyc_mod_call(0x6500,&r)&&r.a==0x6c&&s_shadow==0x6c&&cyc_mod_peek(0x44a)==0xa6&&
+        s_view_reads==3&&s_view_writes==5&&ok;
+    /* The old read-only contract excludes RMW; installing it clears a writer. */
+    cyc_mod_set_ram_read_hook(legacy_read);
+    ok=cyc_mod_call(0x6500,&r)&&r.a==0x10&&cyc_mod_peek(0x44a)==0x6c&&s_view_writes==5&&ok;
+    cyc_mod_set_ram_read_hook(NULL);
+    cyc_mod_isolate_end();
+    ok=!memcmp(before,cyc_cpu_ram(),sizeof before)&&ok;
+    if(ok)s_view_ok++;else s_view_bad++;
+}
 static void returned(void) {s_returns++;}
 
 static int ova_hook(uint16_t addr)
@@ -104,6 +133,7 @@ static void frame_end(void *ctx)
     if (s_mode == MODE_ISO && cyc_cpu_ram()[0x0460]) iso_frame();   /* once the program runs */
     if (s_mode == MODE_COMMIT && c.frames == 5) commit_frame();
     if (s_mode == MODE_OBSERVE && cyc_cpu_ram()[0x0460]) observe_frame();
+    if (s_mode == MODE_VIEW && cyc_cpu_ram()[0x0460]) view_frame();
 }
 
 static void report(void)
@@ -113,6 +143,7 @@ static void report(void)
            c.iso_bad, c.commit_refused, c.commit_ok);
     fflush(stdout);
     if(s_mode==MODE_OBSERVE)printf("return-test: ok=%u bad=%u returns=%u\n",s_observe_ok,s_observe_bad,s_returns);
+    if(s_mode==MODE_VIEW)printf("view-test: ok=%u bad=%u\n",s_view_ok,s_view_bad);
 }
 
 static void power_on(void *ctx)
@@ -133,7 +164,7 @@ static bool option(void *ctx, const char *name, const char *value)
     if (!strcmp(name, "--test-calc")) { s_calc = (uint16_t)strtoul(value, NULL, 16); s_dev = (uint16_t)(s_calc + 0x100); return true; }
     if (strcmp(name, "--test-mode")) return false;
     s_mode = !strcmp(value, "hooks") ? MODE_HOOKS : !strcmp(value, "iso") ? MODE_ISO
-           : !strcmp(value, "commit") ? MODE_COMMIT : !strcmp(value,"observe") ? MODE_OBSERVE : !strcmp(value, "none") ? MODE_NONE : -1;
+           : !strcmp(value, "commit") ? MODE_COMMIT : !strcmp(value,"observe") ? MODE_OBSERVE : !strcmp(value,"view") ? MODE_VIEW : !strcmp(value, "none") ? MODE_NONE : -1;
     if (s_mode < 0) return false;
     nes_mod_set_function_hook_enabled("test.ova", s_mode == MODE_HOOKS);
     nes_mod_set_function_hook_enabled("test.tail", s_mode == MODE_HOOKS);

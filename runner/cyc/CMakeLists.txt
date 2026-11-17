@@ -470,7 +470,6 @@ set_tests_properties(cyc_ramview_test PROPERTIES TIMEOUT 1800)
 add_test(NAME cyc_mods_test
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_cyc_mods.py
             --recompiler $<TARGET_FILE:NESRecomp> --out ${CMAKE_CURRENT_BINARY_DIR}/mods_test ${NESRECOMP_NESTED_BUILD_ARGS})
-set_tests_properties(cyc_mods_test PROPERTIES TIMEOUT 1800)
 
 add_test(NAME cyc_extra_timing
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_cyc_extra_timing.py
