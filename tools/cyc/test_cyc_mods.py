@@ -165,6 +165,12 @@ def main():
         if lines != base or not m or int(m[1]) < 30 or int(m[2]):
             raise AssertionError(f'operand views {flavour}: {m and m.groups()}')
     print('writable operand views: native/interpreter stores and RMW, physical RAM preserved, legacy read-only contract')
+    for flavour, extra in (('native', []), ('interp', ['--interp-only'])):
+        p, lines, _ = play(exe, fmods, out, f'nested_{flavour}', ['--test-mode','nested'] + extra)
+        m = re.search(r'nested-test: ok=(\d+) bad=(\d+)',p.stdout)
+        if lines!=base or not m or int(m[1])<30 or int(m[2]):
+            raise AssertionError(f'nested budgets {flavour}: {m and m.groups()}')
+    print('nested native calls: enclosing budget enforced, fresh larger call succeeds, complete isolation')
     ring = fmods / 'iso_ring.txt'
     run([exe, out / 'disk.fds', '--fds-bios', out / 'bios' / 'disksys.rom', '--frames', FRAMES, '--test-mode', 'iso',
          '--ring-out', ring], fmods, fmods / 'iso_ring.log')

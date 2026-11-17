@@ -25,7 +25,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-enum { MODE_NONE, MODE_HOOKS, MODE_ISO, MODE_COMMIT, MODE_OBSERVE, MODE_VIEW };
+enum { MODE_NONE, MODE_HOOKS, MODE_ISO, MODE_COMMIT, MODE_OBSERVE, MODE_VIEW, MODE_NESTED };
 static int s_mode;
 static struct {
     uint32_t ova_fires, ova_x_bad, tail_handled, iso_ok, iso_bad, commit_refused, commit_ok, frames;
@@ -33,6 +33,9 @@ static struct {
 static unsigned s_returns,s_observe_ok,s_observe_bad;
 static unsigned s_view_ok,s_view_bad,s_view_reads,s_view_writes;
 static uint8_t s_shadow;
+static unsigned s_nested_ok,s_nested_bad,s_inner_ok,s_inner_bad;
+static unsigned s_inner_budget;
+static uint16_t s_calc = 0x6200, s_dev = 0x6300;
 static uint8_t view_read(uint16_t pc,uint16_t addr,uint8_t value) {
     if(pc>=0x6500&&pc<0x650f&&addr==0x44a) {s_view_reads++;return s_shadow;}
     return value;
@@ -74,13 +77,18 @@ static int tail_hook(uint16_t addr)
     (void)addr;
     CycModRegs r;
     cyc_mod_regs(&r);
+    if(s_mode==MODE_NESTED&&cyc_mod_isolated()) {
+        CycModRegs inner=r;
+        if(s_inner_budget)cyc_mod_set_call_budget(s_inner_budget);
+        if(cyc_mod_call(s_calc,&inner))s_inner_ok++;else s_inner_bad++;
+        cyc_mod_set_regs(&r);
+        return 1;
+    }
     if (r.x != 3) c.ova_x_bad++;              /* the site sees the caller's registers */
     cyc_mod_poke(0x0450, 0x77);
     c.tail_handled++;
     return 1;
 }
-
-static uint16_t s_calc = 0x6200, s_dev = 0x6300;
 
 static void iso_frame(void)
 {
@@ -125,6 +133,34 @@ static void observe_frame(void) {
     ok=!memcmp(before,cyc_cpu_ram(),sizeof before) && ok;
     if(ok)s_observe_ok++;else s_observe_bad++;
 }
+static void nested_frame(void) {
+    uint8_t before[0x800];memcpy(before,cyc_cpu_ram(),sizeof before);
+    if(!cyc_mod_isolate_begin()){s_nested_bad++;return;}
+    for(unsigned i=0;i<8;++i)cyc_mod_poke((uint16_t)(0x441+i),(uint8_t)(i+1));
+    cyc_mod_allow_isolated_hooks(true);
+    nes_mod_set_function_hook_enabled("test.tail",1);
+    unsigned failed=s_inner_bad;
+    CycModRegs small={0,0,0,0xfd,0x24,0};
+    cyc_mod_set_call_budget(400);
+    bool ok=!cyc_mod_call(0x6600,&small)&&s_inner_bad>failed;
+    unsigned passed=s_inner_ok;
+    CycModRegs large={0,0,0,0xfd,0x24,0};
+    CycModStats before_large,after_large;cyc_mod_stats(&before_large);
+    cyc_mod_set_call_budget(4000);
+    ok=cyc_mod_call(0x6600,&large)&&s_inner_ok==passed+6&&cyc_mod_peek(0x440)==36&&ok;
+    cyc_mod_stats(&after_large);
+    /* Six 117-cycle calc calls plus 75 cycles in the outer routine. */
+    ok=after_large.cycles-before_large.cycles==777&&after_large.calls-before_large.calls==7&&ok;
+    failed=s_inner_bad;s_inner_budget=40;
+    CycModRegs local={0,0,0,0xfd,0x24,0};
+    ok=cyc_mod_call(0x6600,&local)&&s_inner_bad==failed+6&&ok;
+    s_inner_budget=0;
+    cyc_mod_set_call_budget(2000000);
+    nes_mod_set_function_hook_enabled("test.tail",0);
+    cyc_mod_isolate_end();
+    ok=!memcmp(before,cyc_cpu_ram(),sizeof before)&&ok;
+    if(ok)s_nested_ok++;else s_nested_bad++;
+}
 
 static void frame_end(void *ctx)
 {
@@ -134,6 +170,7 @@ static void frame_end(void *ctx)
     if (s_mode == MODE_COMMIT && c.frames == 5) commit_frame();
     if (s_mode == MODE_OBSERVE && cyc_cpu_ram()[0x0460]) observe_frame();
     if (s_mode == MODE_VIEW && cyc_cpu_ram()[0x0460]) view_frame();
+    if (s_mode == MODE_NESTED && cyc_cpu_ram()[0x0460]) nested_frame();
 }
 
 static void report(void)
@@ -144,6 +181,7 @@ static void report(void)
     fflush(stdout);
     if(s_mode==MODE_OBSERVE)printf("return-test: ok=%u bad=%u returns=%u\n",s_observe_ok,s_observe_bad,s_returns);
     if(s_mode==MODE_VIEW)printf("view-test: ok=%u bad=%u\n",s_view_ok,s_view_bad);
+    if(s_mode==MODE_NESTED)printf("nested-test: ok=%u bad=%u\n",s_nested_ok,s_nested_bad);
 }
 
 static void power_on(void *ctx)
@@ -154,7 +192,7 @@ static void power_on(void *ctx)
 }
 
 static const CycHostOption OPTIONS[] = {
-    { "--test-mode", true, "none | hooks | iso | commit" },
+    { "--test-mode", true, "none | hooks | iso | commit | observe | view | nested" },
     { "--test-calc", true, "calc routine address (hex)" },
 };
 
@@ -164,7 +202,7 @@ static bool option(void *ctx, const char *name, const char *value)
     if (!strcmp(name, "--test-calc")) { s_calc = (uint16_t)strtoul(value, NULL, 16); s_dev = (uint16_t)(s_calc + 0x100); return true; }
     if (strcmp(name, "--test-mode")) return false;
     s_mode = !strcmp(value, "hooks") ? MODE_HOOKS : !strcmp(value, "iso") ? MODE_ISO
-           : !strcmp(value, "commit") ? MODE_COMMIT : !strcmp(value,"observe") ? MODE_OBSERVE : !strcmp(value,"view") ? MODE_VIEW : !strcmp(value, "none") ? MODE_NONE : -1;
+           : !strcmp(value, "commit") ? MODE_COMMIT : !strcmp(value,"observe") ? MODE_OBSERVE : !strcmp(value,"view") ? MODE_VIEW : !strcmp(value,"nested") ? MODE_NESTED : !strcmp(value, "none") ? MODE_NONE : -1;
     if (s_mode < 0) return false;
     nes_mod_set_function_hook_enabled("test.ova", s_mode == MODE_HOOKS);
     nes_mod_set_function_hook_enabled("test.tail", s_mode == MODE_HOOKS);

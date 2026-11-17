@@ -164,7 +164,9 @@ void cyc_mod_isolated_job_resume(uint64_t cycles, uint16_t last_read,
  * address is pushed), run it until it returns, and give back the registers it
  * returned with. False when it did not return within the budget
  * (cyc_mod_set_call_budget, CPU cycles; default 2,000,000), jammed, or
- * returned past the caller's frame. */
+ * returned past the caller's frame. Re-entry from an explicitly allowed hook
+ * shares the enclosing call's remaining cycle budget; it cannot reset it.
+ * A fresh call after the enclosing call returns has its own complete budget. */
 bool cyc_mod_call(uint16_t routine, CycModRegs *regs);
 void cyc_mod_isolate_end(void);
 void cyc_mod_set_call_budget(uint64_t cycles);

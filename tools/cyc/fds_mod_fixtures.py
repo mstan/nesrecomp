@@ -94,6 +94,13 @@ def main_file():
     a.raw([0xEA] * (0x6500 - a.pc))
     a.label('view')
     a.raw([0xA9,0x35,0x8D,0x4A,0x04,0xEE,0x4A,0x04,0x0E,0x4A,0x04,0xAD,0x4A,0x04,0x60])
+    a.raw([0xEA] * (0x6600 - a.pc))
+    a.label('nested')
+    a.op('LDX', 'imm', 3); a.op('LDY', 'imm', 6)
+    a.label('nested_loop')
+    a.op('JSR', 'abs', 0x6400)
+    a.op('DEY'); a.op('BNE', 'rel', 'nested_loop')
+    a.op('RTS')
     return a
 
 

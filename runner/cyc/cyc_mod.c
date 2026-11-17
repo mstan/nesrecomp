@@ -179,6 +179,11 @@ void cyc_mod_allow_isolated_hooks(bool allow) {
 static bool         s_trace_was;
 static uint64_t     s_budget = 2000000;
 static CycModStats  s_stats;
+typedef struct ModCall {
+    struct ModCall *parent;
+    uint64_t children;
+} ModCall;
+static ModCall *s_call;
 
 /* per-frame MOD_CALL summaries, by routine */
 typedef struct { uint16_t routine; uint32_t calls, cycles; } FrameCall;
@@ -413,6 +418,22 @@ bool cyc_mod_call(uint16_t routine, CycModRegs *regs)
         fprintf(stderr, "[cyc mod] cyc_mod_call($%04X) outside cyc_mod_isolate_begin/end\n", routine);
         return false;
     }
+    ModCall current = {s_call, 0};
+    uint64_t parent_budget = hw_isolated_budget;
+    bool parent_done = hw_frame_done;
+    if (!current.parent) {
+        hw_isolated_cycles = 0;
+        hw_isolated_budget = s_budget;
+        hw_frame_done = false;
+    } else {
+        /* A callback can re-enter the guest, but cannot replenish its caller's
+         * budget. Keep one cumulative counter through the complete call tree. */
+        uint64_t end = s_budget > UINT64_MAX - hw_isolated_cycles ?
+                       UINT64_MAX : hw_isolated_cycles + s_budget;
+        hw_isolated_budget = end < parent_budget ? end : parent_budget;
+    }
+    uint64_t began = hw_isolated_cycles;
+    s_call = &current;
     cpu.a = regs->a;
     cpu.x = regs->x;
     cpu.y = regs->y;
@@ -424,15 +445,19 @@ bool cyc_mod_call(uint16_t routine, CycModRegs *regs)
     cpu.s = (uint8_t)(entry_s - 2);
     cpu.pc = routine;
     cpu.jammed = 0;
-    hw_isolated_cycles = 0;
-    hw_isolated_budget = s_budget;
-    hw_frame_done = false;
     int why = cyc_run_isolated((uint16_t)RETURN_PC, entry_s);
-    uint64_t took = hw_isolated_cycles;
-    hw_frame_done = false;
+    uint64_t took = hw_isolated_cycles - began;
+    s_call = current.parent;
+    if (current.parent) {
+        current.parent->children += took;
+        hw_isolated_budget = parent_budget;
+        /* A narrower inner limit may fail independently. Exhausting the
+         * enclosing limit must still stop the enclosing call. */
+        hw_frame_done = parent_done || hw_isolated_cycles > parent_budget;
+    } else hw_frame_done = false;
     cyc_mod_regs(regs);
     s_stats.calls++;
-    s_stats.cycles += took;
+    s_stats.cycles += took - current.children; /* Count executed cycles once. */
     cyc_ring_muted = 0;
     note_call(routine, took);
     if (why) {
