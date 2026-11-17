@@ -21,6 +21,9 @@ Testing/
 
 # ROM files — never commit game ROMs
 *.nes
+*.nro
+*.nacp
+*.elf
 *.bin
 *.sav
 

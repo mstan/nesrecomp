@@ -1259,13 +1259,20 @@ static int host_main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--replay-exact")) replay_exact = true, headless = true;
         else if (!strcmp(argv[i], "--mods-root") && i + 1 < argc) mods_root = argv[++i];
         else if ((!strcmp(argv[i], "--virtual-pad") || !strcmp(argv[i], "--exit-after") ||
+#ifdef CYC_SWITCH
+                  !strcmp(argv[i], "--benchmark-warmup") ||
+#endif
                   !strcmp(argv[i], "--config") || !strcmp(argv[i], "--tcp")) && i + 1 < argc) {
 #if defined(CYC_WITH_SDL)
             cyc_sdl_option(argv[i], argv[i + 1]);
 #endif
             ++i;
         }
-        else if (!strcmp(argv[i], "--hidden") || !strcmp(argv[i], "--uncapped") || !strcmp(argv[i], "--pause-unfocused")) {
+        else if (!strcmp(argv[i], "--hidden") || !strcmp(argv[i], "--uncapped") || !strcmp(argv[i], "--pause-unfocused")
+#ifdef CYC_SWITCH
+                 || !strcmp(argv[i], "--nxlink-log") || !strcmp(argv[i], "--benchmark")
+#endif
+        ) {
 #if defined(CYC_WITH_SDL)
             cyc_sdl_option(argv[i], "");
 #endif
@@ -1286,6 +1293,9 @@ static int host_main(int argc, char **argv) {
         }
     }
 #ifndef CYC_ORACLE
+#if defined(CYC_SWITCH) && !CYC_SWITCH_SAVES
+    no_save = true;
+#endif
     s_saves_enabled = !no_save;
     if (!rom_path) rom_path = cyc_native_fds_image_path;   /* game.toml [fds] image */
     if (headless && mods_root) {
@@ -1997,12 +2007,20 @@ session_restart:
 #ifndef CYC_ORACLE
 int main(int argc, char **argv)
 {
+#ifdef CYC_SWITCH
+    int cyc_switch_init(int argc, char **argv);
+    void cyc_switch_shutdown(void);
+    if (!cyc_switch_init(argc, argv)) return 2;
+#endif
 #ifdef CYC_STARTUP_DIAGNOSTICS
     /* Capture even failures in argument parsing, settings or launcher setup. */
     cyc_diagnostics_startup();
 #endif
     int result = host_main(argc, argv);
     cyc_diagnostics_exit(result);
+#ifdef CYC_SWITCH
+    cyc_switch_shutdown();
+#endif
     return result;
 }
 #endif
