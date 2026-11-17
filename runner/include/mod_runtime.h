@@ -51,6 +51,10 @@ int nes_mod_runtime_initialize_c(const char* root,
                                  const char* game_id,
                                  const char* rom_crc32);
 int nes_mod_runtime_commit_c(const char* rom_path);
+/* Multi-image builds: point the catalog's target identity at the image that is
+ * actually loaded, so its [[target]] lists decide which images a package
+ * serves. Call before commit; a no-op when the identity already matches. */
+int nes_mod_runtime_retarget_c(const char* rom_path);
 /* Netplay: commit NO mods without touching the persisted offline selection. */
 int nes_mod_runtime_commit_netplay_c(const char* rom_path);
 /* 1 when a feature is enabled in the player's offline SELECTION. */

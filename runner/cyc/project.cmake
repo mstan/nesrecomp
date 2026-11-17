@@ -245,7 +245,18 @@ function(nesrecomp_add_cycle_game target)
             if(CYC_BOXART)
                 set(boxart BOXART "${CYC_BOXART}")
             endif()
-            nesrecomp_cyc_enable_recomp_ui(${target} ${boxart} ROM_SHA256 "${CYC_PROJECT_LAUNCHER_SHA256}")
+            # Multi-image builds (cyc_game_image_accepted) also accept their
+            # extra images in the launcher, so the picker is not a stricter gate
+            # than the host. NESRECOMP_CYC_EXTRA_ROM_SHA256 holds their digests
+            # in the launcher's hashing convention; cyc_ui_launcher.c reads a
+            # comma separated list.
+            set(_nesrecomp_launcher_sha256 "${CYC_PROJECT_LAUNCHER_SHA256}")
+            foreach(_nesrecomp_extra IN LISTS NESRECOMP_CYC_EXTRA_ROM_SHA256)
+                if(_nesrecomp_extra)
+                    string(APPEND _nesrecomp_launcher_sha256 ",${_nesrecomp_extra}")
+                endif()
+            endforeach()
+            nesrecomp_cyc_enable_recomp_ui(${target} ${boxart} ROM_SHA256 "${_nesrecomp_launcher_sha256}")
         endif()
     elseif(CYC_HOST_EXTRAS)
         message(STATUS "${target}: headless; HOST_EXTRAS only matter to the window")
