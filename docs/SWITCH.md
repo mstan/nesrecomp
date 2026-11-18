@@ -64,7 +64,7 @@ cmake -S recompiler -B build/recompiler -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build/recompiler
 cmake -S runner/cyc/project -B build/game-switch -G Ninja \
   -DCMAKE_TOOLCHAIN_FILE="$DEVKITPRO/cmake/Switch.cmake" \
-  -DCMAKE_BUILD_TYPE=Release -DNESRECOMP_PPU_IMPL=HLE \
+  -DCMAKE_BUILD_TYPE=Release -DNESRECOMP_PPU_IMPL=FRAME \
   -DNESRECOMP_HOST_COMPILER="$PWD/build/recompiler/NESRecomp" \
   -DNESRECOMP_ROM=/path/to/your/game.nes \
   -DNESRECOMP_GAME_CONFIG=/path/to/game.toml \
@@ -77,6 +77,10 @@ cmake --build build/game-switch
 
 The build-time ROM path is never used at runtime; the NRO reads
 `<game dir>/rom.nes` and the core checks its identity as on desktop.
+
+`FRAME` is the fastest PPU on this CPU for the boards it supports (NTSC
+mappers 0, 1, 4 and 66 on `master`). A FRAME build runs other boards and
+regions on the LLE reference, so use `HLE` for those.
 
 ## ROM-free test
 
@@ -163,9 +167,14 @@ The NTSC target is 60.1 FPS; an audio supply below 1 means the emulator
 cannot keep up in real time. All three runs end in the same CPU memory state
 as the desktop host. On the desktop, HLE and FRAME produce byte-identical
 `--frame-log` output (RAM, CIRAM, palette, OAM and picture indices) for every
-frame of the same route. One title and one route are not a general guarantee;
-FRAME remains experimental and is NTSC-only, so PAL titles fall back to the
-slower paths.
+frame of the same route. One title and one route are not a general guarantee,
+and FRAME is still marked experimental.
+
+PAL: on `master`, FRAME and native intervals are NTSC-only. Adventure Island
+Classic (Europe, CNROM) measures 51.76 ms/frame (18.7 FPS) with HLE. With
+#112 (masked-IRQ intervals) and #113 (FRAME on PAL NROM/CNROM) it measures
+17.90 ms/frame (51.6 FPS) with FRAME, and 17.25 ms (53.4 FPS) with #114 as
+well, against a 20.0 ms PAL budget.
 
 ## Not yet qualified on hardware
 
