@@ -579,6 +579,15 @@ add_test(NAME cyc_native_intervals COMMAND ${Python3_EXECUTABLE}
     --probe $<TARGET_FILE:cyc_native_interval_probe>)
 set_tests_properties(cyc_native_intervals PROPERTIES TIMEOUT 180)
 
+add_executable(cyc_masked_irq_probe tests/masked_irq_probe.c hw_ppu.c hw_apu.c
+    $<TARGET_OBJECTS:cyc_ppu_span_runtime>)
+target_include_directories(cyc_masked_irq_probe PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})
+target_link_libraries(cyc_masked_irq_probe PRIVATE ${NESRECOMP_CYC_LIBRARIES})
+add_test(NAME cyc_masked_irq COMMAND ${Python3_EXECUTABLE}
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_masked_irq.py
+    --probe $<TARGET_FILE:cyc_masked_irq_probe>)
+set_tests_properties(cyc_masked_irq PROPERTIES TIMEOUT 180)
+
 if(NESRECOMP_PPU_IMPL STREQUAL "FRAME")
     add_executable(cyc_frame_ppu_state_test tests/frame_ppu_state_test.c hw_ppu.c hw_apu.c
         $<TARGET_OBJECTS:cyc_ppu_span_runtime>)

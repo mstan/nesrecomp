@@ -190,6 +190,20 @@ static inline void run_tick_0(void)
 /* hw.h                                                                      */
 /* ------------------------------------------------------------------------- */
 
+static bool native_masked_irq_enabled = true;
+void hw_native_set_masked_irq(bool enabled)
+{
+    hw_native_flush();
+    native_masked_irq_enabled = enabled;
+}
+/* Qualify a constant asserted APU frame IRQ only while the CPU masks IRQ.
+ * The cursor watches I on every access; mapper IRQs remain excluded. */
+static bool native_masked_irq_ready(void)
+{
+    return native_masked_irq_enabled && hw.irq_line && cpu.i &&
+           hw_cart.mapper != 4 && apu_native_masked_irq_ready();
+}
+
 #if NESRECOMP_HEADROOM_COUNTERS
 static void hr_interval_end(unsigned n, unsigned credit, unsigned site);
 static inline void hr_classify(uint16_t addr, unsigned site);
@@ -224,11 +238,12 @@ unsigned hw_native_interval_limit(void)
     if (hw_pal() || hw_isolated || cyc_trace_enabled ||
         hw_extra_timing.extra_scanlines || hw_cart.watch_cpu || hw_cart.clock_late ||
         (hw_cart.mapper != 0 && hw_cart.mapper != 1 && hw_cart.mapper != 4 && hw_cart.mapper != 66)) HR_REFUSE(HR_R_BOARD);
-    if (hw.irq_line) HR_REFUSE(HR_R_IRQ_LINE);
+    bool masked_irq = hw.irq_line && native_masked_irq_ready();
+    if (hw.irq_line && !masked_irq) HR_REFUSE(HR_R_IRQ_LINE);
     if (hw_cart.mapper == 4 && hw_cart.m.irq_out) HR_REFUSE(HR_R_MMC3_IRQ_OUT);
     if (cpu.nmi_edge) HR_REFUSE(HR_R_NMI_EDGE);
     if (cpu.nmi_input != ppu_nmi_output()) HR_REFUSE(HR_R_NMI_INPUT);
-    if (!apu_native_interval_ready()) {
+    if (!masked_irq && !apu_native_interval_ready()) {
         HR_COUNT(hr_refusal = HR_R_APU_OAMDMA + hr_apu_block_reason() - 1);
         return 0;
     }
@@ -332,6 +347,7 @@ static void hw_native_flush_site(unsigned site)
         HR_COUNT(hr_owner_native_fetches += fetched);
     }
     hw_native_interval.pending = hw_native_interval.credit = 0;
+    hw_native_interval.irq_mask = NULL;
 }
 
 void hw_native_flush(void) { hw_native_flush_site(HR_S_NONE); }
@@ -355,6 +371,7 @@ bool hw_native_prepare(void)
 #endif
         ) || cyc_mod_rom_read_overrides) return false;
     hw_native_interval.credit = hw_native_interval_limit();
+    hw_native_interval.irq_mask = hw_native_interval.credit && hw.irq_line ? &cpu.i : NULL;
     hw_native_interval.driven = hw.data_driven;
     return hw_native_interval.credit != 0;
 }

@@ -365,6 +365,7 @@ bool cyc_state_load(const uint8_t *data, size_t len, char *err, size_t err_len)
     hr_clock_cut();
     hw_native_interval.pending = hw_native_interval.credit = 0;
     hw_native_interval.enabled = false;
+    hw_native_interval.irq_mask = NULL;
     memcpy(&cpu, ccpu->data, sizeof(cpu));
     memcpy(&hw, chw->data, sizeof(hw));
     hw_extra_timing = timing;
@@ -584,6 +585,7 @@ void cyc_snapshot_restore(const CycSnapshot *s)
      * device work. Do not publish pixels/audio from the discarded future. */
     hw_native_interval.pending = hw_native_interval.credit = 0;
     hw_native_interval.enabled = false;
+    hw_native_interval.irq_mask = NULL;
     size_t n;
     cpu = s->cpu;
     hw = s->hw;
