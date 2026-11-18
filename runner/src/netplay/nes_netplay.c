@@ -7,6 +7,7 @@
 #include "nes_netplay.h"
 
 #include <stdio.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -34,6 +35,8 @@ static int np_sram_active(void) { return save_ram_active(); }
 #endif
 #include "logical_input.h"
 #include "recomp_net/recomp_net.h"
+#include "recomp_net/lobby_client.h"
+#include "recomp_net/host_ice.h"
 
 /* ── state ─────────────────────────────────────────────────────────────── */
 
@@ -49,7 +52,7 @@ typedef struct {
     int      rollback;
     uint32_t occupied_mask;
     uint32_t session_id;
-    int      relay, hub;
+    int      relay, hub, lobby_ice;
     uint32_t staged;
     int local_players;
     uint8_t player_counts[4];
@@ -284,6 +287,43 @@ static void np_set_error(const char *e)
     snprintf(g_np.last_error, sizeof(g_np.last_error), "%s", e ? e : "");
 }
 
+static int np_start_lobby_ice(const NesNetplayConfig *cfg)
+{
+#if defined(RNET_ENABLE_ICE)
+    if(rnet_lobby_is_host()) {
+        /* The simulation authority is session0. Lobby seats are mapped by
+         * the launch plan; a moved host must not adopt its own guest link. */
+        if(cfg->local_slot!=0){np_set_error("seats_unsupported");return -1;}
+        RNetLobbyIceSeat taken[NES_NETPLAY_MAX_SLOTS-1];
+        RNetIceAdoptSeat seats[NES_NETPLAY_MAX_SLOTS-1];
+        int n=rnet_lobby_ice_take_hub(taken,NES_NETPLAY_MAX_SLOTS-1);
+        if(n<1){np_set_error("ice_not_connected");return -1;}
+        uint32_t mask=0,want=(cfg->occupied_mask?cfg->occupied_mask:((1u<<cfg->slot_count)-1u))&~1u;
+        bool valid=true;
+        for(int i=0;i<n;++i) {
+            int slot=-1;
+            for(int p=1;p<cfg->slot_count;++p)
+                if(cfg->ice_lobby_slot[p]==taken[i].lobby_slot)slot=p;
+            if(slot<1||slot>=NES_NETPLAY_MAX_SLOTS||(mask&(1u<<slot)))valid=false;
+            else mask|=1u<<slot;
+            seats[i].slot=slot;seats[i].agent=taken[i].agent;
+        }
+        if(valid&&mask==want&&rnet_session_start_ice_hub_adopt(g_np.session,seats,n)==0) {
+            g_np.hub=1;return 0;
+        }
+        for(int i=0;i<n;++i)rnet_host_ice_destroy_agent(taken[i].agent);
+    } else {
+        RNetIceAgent *agent=rnet_lobby_ice_take_guest_agent();
+        if(agent&&rnet_session_adopt_ice_agent(g_np.session,agent)==0)return 0;
+        rnet_host_ice_destroy_agent(agent);
+    }
+    np_set_error("ice_not_connected");
+#else
+    (void)cfg;np_set_error("ice_not_built");
+#endif
+    return -1;
+}
+
 int nes_netplay_start(const NesNetplayConfig *cfg)
 {
     RNetConfig rcfg;
@@ -307,8 +347,8 @@ int nes_netplay_start(const NesNetplayConfig *cfg)
         return -1;
     }
     if (cfg->transport == 1) {
-        fprintf(stderr, "nes_netplay: ICE transport requested, but this build carries "
-                        "LAN / lobby-relay UDP only — refusing rather than falling back\n");
+        fprintf(stderr, "nes_netplay: direct ICE startup requires a connected native "
+                        "lobby handover — refusing this legacy startup route\n");
         np_set_error("ice_not_built");
         return -4;
     }
@@ -334,7 +374,11 @@ int nes_netplay_start(const NesNetplayConfig *cfg)
             int n=nes_netplay_session_describe(g_np.session_text,sizeof g_np.session_text);
             if(n<=0||n>=sizeof g_np.session_text){np_set_error("session_config_size");return -6;}
             nes_netplay_session_reference(g_np.session_text,ref);
-            if(g_np.expected_reference[0]&&strcmp(ref,g_np.expected_reference)){np_set_error("session_reference_changed");return -6;}
+            if(g_np.expected_reference[0]&&strcmp(ref,g_np.expected_reference)){
+                char wire[512];nes_netplay_session_to_wire(g_np.session_text,wire,sizeof wire);
+                fprintf(stderr,"nes_netplay: session offer changed expected=%s actual=%s config=\"%s\"\n",g_np.expected_reference,ref,wire);
+                np_set_error("session_reference_changed");return -6;
+            }
         }
     }
 
@@ -379,16 +423,21 @@ int nes_netplay_start(const NesNetplayConfig *cfg)
      * session (recomp-net's host-as-relay) unless the lobby server's UDP
      * relay carries the match, in which case every seat dials the relay. */
     g_np.relay = cfg->force_input_relay ? 1 : 0;
-    if (seats > 2 && !g_np.relay && rcfg.local_slot == 0) {
+    if(cfg->transport==3) {
+        rc=np_start_lobby_ice(cfg);
+        g_np.lobby_ice=rc==0;
+        if(g_np.lobby_ice)rnet_lobby_set_match_active(1);
+    } else if (seats > 2 && !g_np.relay && rcfg.local_slot == 0) {
         g_np.hub = 1;
         rc = rnet_session_start_lan_hub(g_np.session, cfg->bind_hostport);
     } else {
         rc = rnet_session_start_lan(g_np.session, cfg->bind_hostport, cfg->peer_hostport);
     }
     if (rc != 0) {
+        if(cfg->transport==3)rnet_lobby_ice_discard();
         rnet_session_destroy(g_np.session);
         g_np.session = NULL;
-        np_set_error("transport_start");
+        if(!g_np.last_error[0])np_set_error("transport_start");
         return -3;
     }
 
@@ -466,6 +515,7 @@ int nes_netplay_start(const NesNetplayConfig *cfg)
 
 static void np_pump(void)
 {
+    if(g_np.lobby_ice)rnet_lobby_pump();
     if (g_np.session)
         rnet_session_pump(g_np.session);
 }
@@ -694,6 +744,7 @@ void nes_netplay_shutdown(void)
         rnet_session_destroy(g_np.session);
         g_np.session = NULL;
     }
+    if(g_np.lobby_ice)rnet_lobby_set_match_active(0);
 #ifndef NESRECOMP_CYCLE_NET
     if (g_np.guest_sandbox) save_ram_set_sandbox(NULL);
 #endif
@@ -722,6 +773,7 @@ uint32_t nes_netplay_sim_tick(void) { return nes_netplay_active() ? nes_netplay_
 const char *nes_netplay_transport_name(void)
 {
     if (!g_np.active) return "none";
+    if (g_np.lobby_ice) return g_np.hub?"ice-hub":"ice";
     if (g_np.relay) return "relay";
     return g_np.hub ? "lan-hub" : "lan";
 }

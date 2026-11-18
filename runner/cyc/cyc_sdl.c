@@ -1687,7 +1687,11 @@ int cyc_sdl_main(const char *title_in, int scale)
             cyc_settings_profile(&s_set, s_extras->input_profile);
         }
     }
+    memset(s_key_hold, 0, sizeof s_key_hold);
+    memset(s_pad_hold, 0, sizeof s_pad_hold);
+    memset(s_act_hold, 0, sizeof s_act_hold);
     memset(s_game_hold, 0, sizeof s_game_hold);
+    memset(s_sc_hold, 0, sizeof s_sc_hold);
     if (scale > 0) s_set.window_scale = scale;
     s_fds = cyc_is_fds();
     s_set.bind.shortcut_off = s_fds ? 0u : (1u << CYC_SC_DISK);
@@ -2207,8 +2211,13 @@ int cyc_sdl_main(const char *title_in, int scale)
     s_audio_dev = 0;
     s_audio_rate = 0;
     s_audio_dev = 0;
-    for (int i = 0; i < s_pad_count; ++i) SDL_GameControllerClose(s_pads[i]);
+    for (int i = 0; i < s_pad_count; ++i) {
+        SDL_GameControllerClose(s_pads[i]);s_pads[i]=NULL;
+    }
+    s_pad_count=0;
     if (s_vpad_joy) SDL_JoystickClose(s_vpad_joy);
+    s_vpad_joy=NULL;
+    free(s_vpad);s_vpad=NULL;s_vpad_count=s_vpad_next=0;
 #ifdef NESRECOMP_CYCLE_HDPACK
     cyc_hd_gpu_destroy(s_hd_gpu,false);s_hd_gpu=NULL;
 #endif

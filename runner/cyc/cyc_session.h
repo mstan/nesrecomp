@@ -51,8 +51,11 @@ bool cyc_session_mods_start(const char *image_path, char *err, size_t err_len);
  * running game (the runtime menu's Mods rows). */
 void cyc_session_mods_reapply(void);
 
-/* After power-on, before the first frame: bind hook plugins, apply the game's
- * command-line options, the game's power_on. False: do not run. */
+/* Prepare game options before offering a lobby configuration. Repeated calls
+ * before the same boot are harmless; start also calls this for offline play. */
+bool cyc_session_prepare_options(void);
+/* After power-on, before the first frame: bind hook plugins and invoke the
+ * game's power_on. False: do not run. */
 bool cyc_session_start(void);
 /* Before every frame: the game's frame_begin. */
 void cyc_session_frame_begin(void);

@@ -17,9 +17,9 @@
  * private lobby client and a private WebSocket copy), which no longer
  * compiled against recomp-ui (cb_create lacked max_slots).
  *
- * Seats are SEAT-mapped (RECOMP_NETPLAY_SLOTS_SEAT): session slot == lobby
- * seat == controller port / character, so a player who moves seats changes
- * characters. The launch still carries occupied_mask.
+ * Legacy titles map lobby seats to controller ports. Bundled local parties
+ * use HOST_FIRST simulation slots and carry the lobby-seat map for ICE
+ * handover; native character selection remains independent of lobby seats.
  */
 #include "nes_host_lobby.h"
 
@@ -30,6 +30,7 @@
 #include <SDL.h>
 
 #ifdef NESRECOMP_CYCLE_NET
+#include "cyc_session.h"
 void cyc_sdl_net_name_store(const char *name);
 int cyc_sdl_net_name_load(char *out,size_t cap);
 #else
@@ -40,6 +41,7 @@ int cyc_sdl_net_name_load(char *out,size_t cap);
 #include "nes_netplay_identity.h"
 #include "nes_netplay_rb.h"
 #include "recomp_netplay_host.h"
+#include "recomp_net/host_ice.h"
 
 #ifndef NESRECOMP_GAME_PLAYERS
 #define NESRECOMP_GAME_PLAYERS 2
@@ -85,10 +87,13 @@ static void fill_caps(void *ctx, const RecompLauncherCSettings *settings,
 {
     char text[512], reference[64];
     (void)ctx;(void)settings;
+    caps->relay_host = 1;
     int n=nes_netplay_session_describe_offer(text,sizeof text);
     memset(caps->ext.bytes,0,sizeof caps->ext.bytes);
     if(n<=0 || n>=sizeof text){memset(caps->ext.bytes,'x',sizeof caps->ext.bytes);return;}
     nes_netplay_session_reference(text,reference);
+    char wire[512];nes_netplay_session_to_wire(text,wire,sizeof wire);
+    fprintf(stderr,"nes_lobby: session offer=\"%s\" reference=%s\n",wire,reference);
     snprintf((char *)caps->ext.bytes,sizeof caps->ext.bytes,"%s",reference);
 }
 
@@ -143,6 +148,9 @@ const RecompLauncherCNetplayCallbacks *nes_host_lobby_init(const char *game_name
                                                            const char *rom_path)
 {
     RecompNetplayHostHooks h;
+#ifdef NESRECOMP_CYCLE_NET
+    if (!cyc_session_prepare_options()) return NULL;
+#endif
     if (rom_path && rom_path[0])
         (void)nes_netplay_identity_set_rom_file(rom_path);
     nes_runner_register_session_keys();
@@ -151,6 +159,7 @@ const RecompLauncherCNetplayCallbacks *nes_host_lobby_init(const char *game_name
     snprintf(s_game_name, sizeof(s_game_name), "%s",
              game_name && game_name[0] ? game_name : "NES Game");
     rnet_lobby_set_caps_codec(&s_codec);
+    rnet_lobby_set_relay_via_ice(1);
     memset(&h, 0, sizeof(h));
     h.game_name = s_game_name;
     h.game_version = nes_netplay_identity_game_version();
@@ -163,7 +172,7 @@ const RecompLauncherCNetplayCallbacks *nes_host_lobby_init(const char *game_name
     h.max_players = NESRECOMP_GAME_PLAYERS < 2 ? 2
                   : (NESRECOMP_GAME_PLAYERS > NESRECOMP_INPUT_SEATS
                          ? NESRECOMP_INPUT_SEATS : NESRECOMP_GAME_PLAYERS);
-    h.slot_policy = RECOMP_NETPLAY_SLOTS_SEAT;
+    h.slot_policy = nes_netplay_bundled_inputs() ? RECOMP_NETPLAY_SLOTS_HOST_FIRST : RECOMP_NETPLAY_SLOTS_SEAT;
     h.input_player = 0;
     h.exe_dir_path = exe_dir_path;
     h.name_store = name_store;
@@ -208,6 +217,12 @@ int nes_host_lobby_config_from_launch(const RecompLauncherCNetplayLaunch *l,
     c->force_turn = l->force_turn;
     c->force_input_relay = l->force_input_relay;
     c->transport = 2;
+    const RNetLobbyJoinInfo *join=rnet_lobby_join_info();
+    if(!recomp_netplay_host_in_lan()&&join&&(join->transport_ice_hub||join->transport_ice_pair)) {
+        c->transport=3;
+        for(int i=0;i<NES_NETPLAY_MAX_SLOTS;++i)
+            c->ice_lobby_slot[i]=l->slot_port_valid?l->slot_port[i]:i;
+    }
     snprintf(c->bind_hostport, sizeof(c->bind_hostport), "%s", l->bind_hostport);
     snprintf(c->peer_hostport, sizeof(c->peer_hostport), "%s", l->peer_hostport);
     caps = rnet_lobby_match_caps();
@@ -285,6 +300,7 @@ int nes_host_lobby_selftest_room(int round, NesNetplayConfig *cfg)
     const char *lobby = getenv("NES_LOBBY_SELFTEST_LOBBY");
     const char *name = getenv("NES_LOBBY_SELFTEST_NAME");
     const char *seats_env = getenv("NES_LOBBY_SELFTEST_SEATS");
+    const char *password = getenv("NES_LOBBY_SELFTEST_PASSWORD");
     const char *url = getenv("RNET_LOBBY_URL");
     const int seats = seats_env ? atoi(seats_env) : 2;
     RecompLauncherCSettings settings;
@@ -302,6 +318,7 @@ int nes_host_lobby_selftest_room(int round, NesNetplayConfig *cfg)
     if (settle_ms > 10000) settle_ms = 10000;
 
     if (!cb || !role) return -1;
+    if (!password) password = "";
     if (!lobby || !lobby[0]) lobby = "nes-selftest";
     memset(&settings, 0, sizeof(settings));
     memset(&launch, 0, sizeof(launch));
@@ -314,7 +331,7 @@ int nes_host_lobby_selftest_room(int round, NesNetplayConfig *cfg)
         if (is_host) {
             char ep[64];
             snprintf(ep, sizeof(ep), "127.0.0.1:%d", port);
-            rc = cb->create(NULL, lobby, ep, "", &settings, 1, 2);
+            rc = cb->create(NULL, lobby, ep, password, &settings, 1, 2);
         } else {
             char gb[64], id[80];
             snprintf(gb, sizeof(gb), "0.0.0.0:%d", port + 1);
@@ -327,7 +344,7 @@ int nes_host_lobby_selftest_room(int round, NesNetplayConfig *cfg)
                 if (cb->clear_last_error) cb->clear_last_error(NULL);
             }
             for (;;) {   /* the host may not be listening yet */
-                rc = cb->join(NULL, id, "", gb);
+                rc = cb->join(NULL, id, password, gb);
                 if (rc == 0) break;
                 SDL_Delay(250);
             }
@@ -356,7 +373,7 @@ int nes_host_lobby_selftest_room(int round, NesNetplayConfig *cfg)
             char ep[64] = "0.0.0.0:7777";
             if (getenv("NES_LOBBY_SELFTEST_ALLOW_SPECTATORS"))
                 rnet_lobby_set_allow_spectators(1);
-            if (cb->create(NULL, lobby, ep, "", &settings, 0, seats) != 0) {
+            if (cb->create(NULL, lobby, ep, password, &settings, 0, seats) != 0) {
                 fprintf(stderr, "[lobby-selftest] create failed\n");
                 return -5;
             }
@@ -365,6 +382,7 @@ int nes_host_lobby_selftest_room(int round, NesNetplayConfig *cfg)
     }
     for (;;) {
         cb->pump(NULL);
+        if(cb->last_error&&!strcmp(cb->last_error(NULL),"ice_not_connected"))return -15;
         if (!joined && st_now() >= next_list) {
             int i, n;
             cb->request_list(NULL);
@@ -378,7 +396,7 @@ int nes_host_lobby_selftest_room(int round, NesNetplayConfig *cfg)
                      * probe sockets before any match socket is opened. */
                     const char *bind = getenv("NES_LOBBY_SELFTEST_GUEST_BIND");
                     if (bind) snprintf(gb, sizeof(gb), "%s", bind);
-                    if (cb->join(NULL, row.lobby_id, "", gb) == 0) {
+                    if (cb->join(NULL, row.lobby_id, password, gb) == 0) {
                         joined = 1;
                         fprintf(stderr, "[lobby-selftest] guest joined %s\n", row.lobby_id);
                     }
@@ -397,7 +415,17 @@ int nes_host_lobby_selftest_room(int round, NesNetplayConfig *cfg)
             (!is_host || players_seated() >= seats)) {
             ready_sent = cb->set_ready(NULL, 1) == 0;
         }
-        if (is_host && ready_sent && !started && players_seated() >= seats &&
+        int ice_ready=1;
+        if(!getenv("NES_LOBBY_SELFTEST_LAN")&&rnet_lobby_relay_via_ice()) {
+            RNetHostIceStatus ice;
+            if(!rnet_host_ice_available())return -14;
+            ice_ready=rnet_lobby_host_ice_status(&ice)&&ice.peer_count==seats-1&&ice.completed==ice.peer_count;
+        }
+        if(is_host&&started&&cb->last_error&&
+           !strcmp(cb->last_error(NULL),"relay_unavailable")) {
+            started=0;if(cb->clear_last_error)cb->clear_last_error(NULL);
+        }
+        if (is_host && ready_sent && !started && ice_ready && players_seated() >= seats &&
             spectators_seated() >= want_spectators && cb->all_ready(NULL)) {
             /* Optional harness delay lets waiting-room path probes settle
              * before testing the server's host-relay / SFU decision. */

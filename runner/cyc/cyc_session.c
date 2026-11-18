@@ -168,13 +168,10 @@ void cyc_session_mods_reapply(void)
 
 /* ---- the run ---- */
 
-bool cyc_session_start(void)
+static bool s_options_prepared;
+bool cyc_session_prepare_options(void)
 {
-    if (!cyc_hooks_validate()) {
-        fprintf(stderr, "[cyc hooks] a mod plugin is registered for a hook site this program does not declare; "
-                        "fix game.toml [[mod_function_hook]] or the plugin\n");
-        return false;
-    }
+    if (s_options_prepared) return true;
     const CycHostExtras *x = cyc_session_extras();
     for (size_t k = 0; k < s_taken_n; ++k) {
         if (!x->option || !x->option(x->ctx, s_taken[k].name, s_taken[k].value)) {
@@ -183,7 +180,21 @@ bool cyc_session_start(void)
             return false;
         }
     }
+    s_options_prepared = true;
+    return true;
+}
+
+bool cyc_session_start(void)
+{
+    if (!cyc_hooks_validate()) {
+        fprintf(stderr, "[cyc hooks] a mod plugin is registered for a hook site this program does not declare; "
+                        "fix game.toml [[mod_function_hook]] or the plugin\n");
+        return false;
+    }
+    if (!cyc_session_prepare_options()) return false;
+    const CycHostExtras *x = cyc_session_extras();
     if (x && x->power_on) x->power_on(x->ctx);
+    s_options_prepared = false; /* the next boot may prepare its own offer */
     cyc_render_frame_done();
     return true;
 }

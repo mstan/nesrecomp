@@ -36,7 +36,7 @@ if(NOT NESRECOMP_RBENGINE_ROOT)
 endif()
 
 option(NESRECOMP_ENABLE_NET "Build recomp-net rollback netplay for game targets" OFF)
-option(NESRECOMP_NET_ICE "Enable recomp-net ICE/libjuice WAN transport (not wired in the NES host yet)" OFF)
+option(NESRECOMP_NET_ICE "Enable recomp-net ICE/libjuice lobby transport" OFF)
 
 function(_nesrecomp_add_recomp_net)
     if(TARGET recomp_net)

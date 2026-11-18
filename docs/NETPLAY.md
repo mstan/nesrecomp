@@ -13,6 +13,22 @@
 
 ## 1. The pieces
 
+The SMB2 cycle integration now uses recomp-net's connected waiting-room ICE
+agents with the native launcher callbacks. It adopts either a host hub or the
+server's two-player ICE pair, retains the lobby connection during play, and
+rebuilds the waiting-room links after a match. Bundled local parties use
+HOST_FIRST session slots and retain the lobby-seat map for agent handover.
+Game options and viewport geometry must be prepared before publishing the
+configuration reference; the complete configuration and input ownership map
+are still sealed before frame zero.
+
+Windows and Linux checks cover four single-player peers, two parties of two,
+native selection and personal views, forced rollback, matching settled digests,
+and two headless native lobby matches followed by an exact fresh offline restart.
+These checks use a private current-server instance and loopback game links;
+they do not establish WAN or NAT coverage. The older SMB qualification records
+below describe their recorded builds, including their historical UDP relay.
+
 ### Mixed local and online seats
 
 A trusted title can opt into input v3 with

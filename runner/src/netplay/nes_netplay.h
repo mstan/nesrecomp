@@ -60,7 +60,8 @@ typedef struct NesNetplayConfig {
     uint32_t session_id;
     char     bind_hostport[64];
     char     peer_hostport[64];
-    int      transport;           /* 0 auto, 1 ICE, 2 LAN / relay UDP */
+    int      transport;           /* 0 auto, 1 legacy ICE, 2 UDP, 3 lobby ICE handover */
+    int      ice_lobby_slot[NES_NETPLAY_MAX_SLOTS]; /* session slot -> lobby seat */
     int      force_turn;
     int      force_input_relay;
     int      local_players;       /* physical bindings, 1..3; 0 uses saved choice */

@@ -1305,6 +1305,8 @@ static int host_main(int argc, char **argv) {
 #ifdef NES_HOST_HAS_RECOMP_UI
     int lobby_round=1;
     bool lobby_offline=false;
+    const char *lobby_window=getenv("NES_LOBBY_SELFTEST_WINDOW");
+    bool lobby_selftest=nes_host_lobby_selftest_role()&&(headless||(lobby_window&&!strcmp(lobby_window,"1")));
 #endif
 session_restart:
     save_file=offline_save_file;datach_save=offline_datach_save;
@@ -1510,7 +1512,7 @@ session_restart:
 #ifdef NESRECOMP_NET
     NesNetplayConfig netcfg;
 #ifdef NES_HOST_HAS_RECOMP_UI
-    if(headless && !lobby_offline && nes_host_lobby_selftest_role()) {
+    if(lobby_selftest && !lobby_offline) {
         if(!nes_host_lobby_init(cyc_native_display_name,rom_path)||nes_host_lobby_selftest_room(lobby_round,&netcfg)!=0)return 2;
         nes_netplay_set_pending_config(&netcfg);
     }
@@ -1594,6 +1596,10 @@ session_restart:
         char why[96];snprintf(why,sizeof why,"%s",nes_netplay_last_error());
         fprintf(stderr,"[cycle netplay] start refused: %s\n",why);cyc_net_shutdown();
 #ifdef NES_HOST_HAS_RECOMP_UI
+        if(lobby_selftest&&!lobby_offline) {
+            nes_host_lobby_returned(NULL,why);nes_host_lobby_selftest_report(lobby_round);
+            nes_host_lobby_shutdown();return 2;
+        }
         if(online_from_lobby&&!headless) {
             extern bool cyc_sdl_force_launcher;void cyc_ui_net_returned(const char *reason);
             cyc_ui_net_returned(why);cyc_sdl_force_launcher=true;free(image);goto session_restart;
@@ -1633,6 +1639,18 @@ session_restart:
         char net_error[96];snprintf(net_error,sizeof net_error,"%s",nes_netplay_last_error());
         cyc_net_shutdown();
 #ifdef NES_HOST_HAS_RECOMP_UI
+        if(saves_ok&&result==3&&online_from_lobby&&lobby_selftest&&!lobby_offline) {
+            nes_host_lobby_returned(NULL,net_error);nes_host_lobby_selftest_report(lobby_round);
+            if(net_error[0]){nes_host_lobby_shutdown();return 2;}
+            const char *rounds=getenv("NES_LOBBY_SELFTEST_ROUNDS");int count=rounds?atoi(rounds):1;
+            if(lobby_round++<count){free(image);goto session_restart;}
+            nes_host_lobby_shutdown();
+            const char *offline=getenv("NES_LOBBY_SELFTEST_THEN_OFFLINE");
+            if(offline&&*offline&&*offline!='0') {
+                lobby_offline=true;free(image);goto session_restart;
+            }
+            return 0;
+        }
         if(saves_ok&&result==3&&online_from_lobby) {
             extern bool cyc_sdl_force_launcher;void cyc_ui_net_returned(const char *why);
             cyc_ui_net_returned(net_error);cyc_sdl_force_launcher=true;free(image);goto session_restart;
@@ -1689,7 +1707,7 @@ session_restart:
 #endif
         cyc_net_shutdown();
 #ifdef NES_HOST_HAS_RECOMP_UI
-        if(headless&&!lobby_offline&&nes_host_lobby_selftest_role()) {
+        if(lobby_selftest&&!lobby_offline) {
             nes_host_lobby_returned(NULL,why);nes_host_lobby_selftest_report(lobby_round);
             nes_host_lobby_shutdown();
         }
@@ -1996,7 +2014,7 @@ session_restart:
     cyc_net_shutdown();
     if(net_failure[0]) {
 #ifdef NES_HOST_HAS_RECOMP_UI
-        if(headless&&!lobby_offline&&nes_host_lobby_selftest_role()) {
+        if(lobby_selftest&&!lobby_offline) {
             nes_host_lobby_returned(NULL,net_failure);nes_host_lobby_selftest_report(lobby_round);
             nes_host_lobby_shutdown();
         }
@@ -2004,7 +2022,7 @@ session_restart:
         return 2;
     }
 #ifdef NES_HOST_HAS_RECOMP_UI
-    if(headless && !lobby_offline && nes_host_lobby_selftest_role()) {
+    if(lobby_selftest && !lobby_offline) {
         const char *rounds=getenv("NES_LOBBY_SELFTEST_ROUNDS");int count=rounds?atoi(rounds):1;
         nes_host_lobby_returned(NULL,NULL);nes_host_lobby_selftest_report(lobby_round);
         if(lobby_round++<count){free(image);goto session_restart;}
