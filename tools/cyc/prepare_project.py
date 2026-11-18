@@ -77,7 +77,7 @@ def native_interval_board(path, fds):
     mapper = (head[6] >> 4) | (head[7] & 0xf0)
     if head[7] & 0x0c == 0x08:
         mapper |= (head[8] & 0x0f) << 8
-    return '1' if mapper in (0, 1, 4, 66) else '0'
+    return '1' if mapper in (0, 1, 3, 4, 66) else '0'
 
 
 def cmake_quote(value):

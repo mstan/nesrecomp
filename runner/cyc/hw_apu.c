@@ -1330,7 +1330,7 @@ void apu_native_interval_run(unsigned cycles)
 #if !NESRECOMP_APU_LEVEL_REFERENCE
     /* The machine proved no DMA/IRQ deadline and no expansion device on these
      * boards. Dense audible timers and short runs keep the simpler executor. */
-    if (cycles >= 8 && audio.on && !apu.strobe &&
+    if (!hw_pal() && cycles >= 8 && audio.on && !apu.strobe &&
         (hw_cart.mapper == 0 || hw_cart.mapper == 1 || hw_cart.mapper == 4 || hw_cart.mapper == 66) &&
         !(apu.len[CH_TRIANGLE].count && apu.tri_linear && apu.tri_period >= 2 && apu.tri_period < 8) &&
         !(apu.len[CH_NOISE].count && apu.noise_period < 8)) {
