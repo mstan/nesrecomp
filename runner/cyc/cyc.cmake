@@ -125,6 +125,11 @@ set(NESRECOMP_CYC_HELPER_TEST_SOURCES ${NESRECOMP_CYC_DIR}/cyc_helper_test.c)
 # host extras (cyc_host_extras.h) replace the default cyc_host_extras_none.c
 # provides (it is in NESRECOMP_CYC_SOURCES and gives way to a definition).
 function(nesrecomp_cyc_enable_sdl target)
+    if(NINTENDO_SWITCH)
+        include("${NESRECOMP_CYC_DIR}/../switch/switch.cmake")
+        nesrecomp_cyc_enable_switch(${target})
+        return()
+    endif()
     cmake_parse_arguments(SDLOPT "DEV_UI;NO_DEV_UI" "" "" ${ARGN})
     get_filename_component(_nes_sdl_vc "${NESRECOMP_CYC_DIR}/../external/SDL2/cmake" REALPATH)
     if(WIN32)
