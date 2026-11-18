@@ -482,6 +482,7 @@ HW_ALWAYS_INLINE void apu_clock(void)
 HW_ALWAYS_INLINE void apu_clock(void) { apu_cycle(); }
 #endif
 bool    apu_native_interval_ready(void);
+bool    apu_native_masked_irq_ready(void);
 unsigned apu_native_interval_limit(unsigned cycles);
 void    apu_native_interval_run(unsigned cycles);
 /* Tick 7: the IRQ input the CPU will poll, and the frame IRQ re-assertion. */

@@ -8,7 +8,10 @@ static struct {
 } fp;
 static bool fp_supported(void)
 {
-    return !hw_pal() && hw_cart.prg && (hw_cart.mapper==0 || hw_cart.mapper==1 || hw_cart.mapper==4 || hw_cart.mapper==66);
+    /* PAL qualifies the fixed-PRG boards whose CHR changes flush through CPU
+     * writes; mapper IRQ timestamps below are NTSC master-clock formulas. */
+    if(hw_pal()) return hw_cart.prg && (hw_cart.mapper==0 || hw_cart.mapper==3);
+    return hw_cart.prg && (hw_cart.mapper==0 || hw_cart.mapper==1 || hw_cart.mapper==4 || hw_cart.mapper==66);
 }
 
 /* OAM's object search is one scanline operation. The clear and fetch lanes
@@ -92,7 +95,7 @@ static unsigned fp_sprite_banks(void)
 }
 static unsigned fp_address_value(unsigned dot)
 {
-    if(!rendering() || (ppu.scanline>=240 && ppu.scanline!=261)) return ppu.v;
+    if(!rendering() || (ppu.scanline>=240 && ppu.scanline!=hw_prerender_line())) return ppu.v;
     if(!dot) return ppu.bg_table<<12;
     if(dot>=337 || ((dot-1)&7)<4) return 0x2000;
     if(dot>=257 && dot<=320) {
@@ -111,7 +114,7 @@ static unsigned fp_phase_after(unsigned dot)
 static unsigned fp_address_event(unsigned dot,unsigned a12)
 {
     if(!hw_cart.watch_ppu_addr || !rendering() ||
-       (ppu.scanline>=240 && ppu.scanline!=261)) return 341;
+       (ppu.scanline>=240 && ppu.scanline!=hw_prerender_line())) return 341;
     /* Identical address phases carry no mapper observation. A constant-low
      * background is one interval, not sixty-four repeated notifications. */
     for(unsigned next=fp_phase_after(dot);next<341;next=fp_phase_after(next))
@@ -468,14 +471,16 @@ static void fp_input_tile(unsigned tick,uint64_t clock)
     ppu.blnk_latch = ppu.pal_enable = ppu.copy_v = ppu.ale = ppu.wr = 0;
     ppu.rd = 1;
     unsigned out = (unsigned)ppu.scanline * 256 + first - 4;
-    unsigned emphasis = ppu.emphasis << 6;
+    unsigned emphasis = ppu.emphasis;
+    if (hw_pal()) emphasis = (emphasis & 4) | ((emphasis & 1) << 1) | ((emphasis & 2) >> 1);
+    emphasis <<= 6;
     unsigned mask = ppu.greyscale ? 0x30 : 0x3f;
     for (unsigned i = 0; i < 8; ++i) {
         uint16_t c = (uint16_t)((color[i] & mask) | emphasis);
         hw_frame_index[out + i] = c;
         if (cyc_background_enabled) {
             cyc_background_pipe[3] = background[i];
-            cyc_render_background_output(out + i, ppu.emphasis, ppu.greyscale != 0);
+            cyc_render_background_output(out + i, emphasis >> 6, ppu.greyscale != 0);
         }
         if (hw_zapper.port) {
             ++hw_zapper.dots;
@@ -544,13 +549,13 @@ bool ppu_clock_cpu_tail(unsigned align)
 static bool fp_interval_ready(void)
 {
     if(!sm_rest)return false;
-    if ((ppu.scanline == 241 || ppu.scanline == 261) && ppu.dot < 2) return false;
+    if ((ppu.scanline == 241 || ppu.scanline == hw_prerender_line()) && ppu.dot < 2) return false;
     if (ppu.dot >= 338) return false;
     if (hw_cart.mapper == 4) {
         if (ppu.w2006_delay && ppu.w2006_delay < 4) return false;
-        if ((!rendering() || (ppu.scanline >= 240 && ppu.scanline != 261)) &&
+        if ((!rendering() || (ppu.scanline >= 240 && ppu.scanline != hw_prerender_line())) &&
             ((ppu.v ^ (hw_cart.m.a12 << 12)) & 0x1000)) return false;
-        if (rendering() && (ppu.scanline < 240 || ppu.scanline == 261)) {
+        if (rendering() && (ppu.scanline < 240 || ppu.scanline == hw_prerender_line())) {
             unsigned edge = fp_irq_deadline();
             /* The original first-dot phase is 1..4 master clocks. Its
              * before-edge CPU duration is nonzero exactly four dots away. */
@@ -565,20 +570,26 @@ unsigned ppu_native_interval_limit(void)
 {
     if(!fp.enabled) return reference_ppu_native_interval_limit();
     if(!sm_rest)return 0;
-    if ((ppu.scanline == 241 || ppu.scanline == 261) && ppu.dot < 2) return 0;
+    if ((ppu.scanline == 241 || ppu.scanline == hw_prerender_line()) && ppu.dot < 2) return 0;
+    if(hw_pal()) {
+        /* From tick 1, N CPU cycles produce floor((phase+16N)/5) dots.
+         * Stay inside this scanline, as the NTSC bound below does. */
+        if(ppu.dot>=340) return 0;
+        return (5u*(340u-ppu.dot)+4u-hw_region_timing.phase)/16u;
+    }
     unsigned limit=(340u-ppu.dot)/3u;
     if(hw_cart.mapper==4) {
         if(ppu.w2006_delay) {
             unsigned before=(ppu.w2006_delay-1)/3u;
             if(limit>before) limit=before;
         }
-        if((!rendering() || (ppu.scanline>=240 && ppu.scanline!=261)) &&
+        if((!rendering() || (ppu.scanline>=240 && ppu.scanline!=hw_prerender_line())) &&
            ((ppu.v^(hw_cart.m.a12<<12))&0x1000)) return 0;
     }
     /* Only a filtered edge that can assert IRQ is a CPU deadline. Other
      * pin transitions run inside the native device interval at their original
      * timestamps; register/PPUDATA/OAM writes invalidate this derived proof. */
-    if(hw_cart.mapper==4 && rendering() && (ppu.scanline<240 || ppu.scanline==261)) {
+    if(hw_cart.mapper==4 && rendering() && (ppu.scanline<240 || ppu.scanline==hw_prerender_line())) {
         unsigned edge=fp_irq_deadline();
         if(edge<341) {
             if(edge<=ppu.dot) return 0;
@@ -590,9 +601,31 @@ unsigned ppu_native_interval_limit(void)
     return limit;
 }
 
+/* PAL interval: dots at phase 0 and half-dots at phase 2 of every five
+ * master ticks, from tick 1 of the entry cycle. The event order is the same
+ * sample/half alternation as NTSC, so tile jobs and packets are reused. */
+static void frame_ppu_pal_interval(unsigned cycles)
+{
+    unsigned phase=hw_region_timing.phase,ticks=cycles*16u;
+    unsigned dot_tick=5u-phase,half_tick=phase<2u?2u-phase:7u-phase;
+    uint64_t cycle=hw.cycles;
+    while(dot_tick<=ticks || half_tick<=ticks) {
+        if(half_tick<dot_tick) {
+            hw.cycles=cycle+half_tick/16u;fp_input_half();half_tick+=5u;continue;
+        }
+        if(half_tick==dot_tick+2u && half_tick+35u<=ticks && fp_tile_ready()) {
+            hw.cycles=cycle+dot_tick/16u;fp_input_tile(dot_tick,cycle);
+            dot_tick+=40u;half_tick+=40u;continue;
+        }
+        hw.cycles=cycle+dot_tick/16u;
+        fp_input_sample();hw_cart_ppu_addr(ppu.vbus);dot_tick+=5u;
+    }
+    hw.cycles=cycle;hw.tick=1;
+}
 void ppu_native_interval_run(unsigned cycles,unsigned align)
 {
     if(!fp.enabled){reference_ppu_native_interval_run(cycles,align);return;}
+    if(hw_pal()){frame_ppu_pal_interval(cycles);return;}
     frame_ppu_ticks(1,1+cycles*12);
 }
 void frame_ppu_mapper_changed(void) { fp.irq_valid=fp.sprite_banks_valid=false; }

@@ -1476,6 +1476,9 @@ static void render_clock_dot(void)
 
 unsigned ppu_native_interval_limit(void)
 {
+    /* PAL intervals are owned by the FRAME PPU; the reference PPU's span
+     * proofs assume the NTSC three-dot cycle. */
+    if (hw_pal()) return 0;
 #if NESRECOMP_PPU_HLE || !NESRECOMP_PPU_LLE_REFERENCE
     if (dot_kind == DOT_IDLE && ppu.dot < 334)
         return (337u - ppu.dot) / 3u;

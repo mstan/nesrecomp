@@ -89,6 +89,7 @@ typedef struct {
     uint16_t addr;
     uint8_t value, kind, driven;
     bool enabled;
+    const uint8_t *irq_mask; /* non-NULL only while a held IRQ is CPU-masked */
 #if NESRECOMP_NATIVE_PRG_GUARDS
     const uint8_t *prg[8];
     bool checked_prg;
@@ -116,6 +117,10 @@ const uint8_t *hw_prg_guard_image(size_t *size);
 void hw_native_end(void);
 void hw_native_flush(void);
 bool hw_native_prepare(void);
+/* Reference selection for masked-IRQ intervals; flushes pending work first. */
+void hw_native_set_masked_irq(bool enabled);
+/* Reference selection for PAL intervals (FRAME PPU); flushes pending work first. */
+void hw_native_set_pal_intervals(bool enabled);
 
 static inline unsigned hw_native_pending_cycles(void)
 {
@@ -136,6 +141,12 @@ static inline bool hw_native_reserve_kind(bool opcode_fetch)
 {
 #if NESRECOMP_NATIVE_INTERVALS
     if (!hw_native_interval.enabled) return false;
+    /* CLI/PLP/RTI can change I within a compiled dispatch. Stop before its
+     * next bus cycle and retain ordinary polling until the next dispatch. */
+    if (hw_native_interval.irq_mask && !*hw_native_interval.irq_mask) {
+        hw_native_end();
+        return false;
+    }
     if (!hw_native_interval.credit && !hw_native_prepare()) return false;
     --hw_native_interval.credit;
 #if NESRECOMP_HEADROOM_COUNTERS

@@ -440,7 +440,7 @@ int main(int argc, char **argv)
             check(cyc_set_region(CYC_REGION_PAL), "set PAL");
             cyc_power_on((uint8_t)align);
             check(hw_pal(), "PAL active");
-            check(!hw_native_interval_limit(), "PAL refusal");
+            check(!hw_native_interval_limit(), "PAL unsettled span refusal");
         }
     }
     return 0;

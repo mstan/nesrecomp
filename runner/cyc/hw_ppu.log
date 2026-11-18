@@ -10,6 +10,15 @@ composition remain scanline operations; the sprite presentation uses primary
 OAM and the selected native row. Unsupported boards/regions retain the
 build's reference provider.
 
+PAL (2C07) on fixed-PRG NROM/CNROM uses the same provider. Its pre-render
+line is hw_prerender_line() (311), not 261, and the red/green emphasis bits
+are swapped exactly as output_pixel does. A PAL native interval starts at
+tick 1 and stays within the current scanline: N CPU cycles produce
+floor((phase+16N)/5) dots, with half-dots two master ticks after each dot.
+That keeps the NTSC sample/half order, so eight-dot tile jobs and partial
+packets are reused unchanged. PAL MMC1/MMC3 and the reference providers keep
+refusing PAL intervals.
+
 Current-build states retain the actual bounded background pipeline and the
 native sprite row. FRAME schema 7 deliberately replaces the prior disposable
 prefix representation. Other PPU providers retain their layout and adapter.

@@ -1041,6 +1041,22 @@ void apu_cycle(void)
     apu_cycle_run();
 }
 
+/* A settled four-step frame IRQ stays asserted until a CPU register access.
+ * Such accesses flush the cursor. Pending clears/resets and every DMA source
+ * remain excluded; this does not predict a new interrupt or suppress one.
+ * DMC output bytes are excluded too, so no DMC deadline is needed here. */
+bool apu_native_masked_irq_ready(void)
+{
+#if NESRECOMP_APU_OPERATION
+    if (apu_operation_active) return false;
+#endif
+    return apu.frame_irq && apu.frame_irq_out && !apu.irq_inhibit && !apu.five_step &&
+           !apu.frame_irq_clear && (apu.reset_delay & 0x80) &&
+           !(apu.oam_dma | apu.dmc_dma | apu.dmc_bytes | apu.dmc_irq |
+             apu.dmc_enable_delay | apu.dmc_start_delay |
+             apu.implicit_abort | apu.implicit_abort_armed);
+}
+
 bool apu_native_interval_ready(void)
 {
 #if NESRECOMP_APU_OPERATION
@@ -1314,7 +1330,7 @@ void apu_native_interval_run(unsigned cycles)
 #if !NESRECOMP_APU_LEVEL_REFERENCE
     /* The machine proved no DMA/IRQ deadline and no expansion device on these
      * boards. Dense audible timers and short runs keep the simpler executor. */
-    if (cycles >= 8 && audio.on && !apu.strobe &&
+    if (!hw_pal() && cycles >= 8 && audio.on && !apu.strobe &&
         (hw_cart.mapper == 0 || hw_cart.mapper == 1 || hw_cart.mapper == 4 || hw_cart.mapper == 66) &&
         !(apu.len[CH_TRIANGLE].count && apu.tri_linear && apu.tri_period >= 2 && apu.tri_period < 8) &&
         !(apu.len[CH_NOISE].count && apu.noise_period < 8)) {

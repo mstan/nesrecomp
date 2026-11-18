@@ -190,6 +190,20 @@ static inline void run_tick_0(void)
 /* hw.h                                                                      */
 /* ------------------------------------------------------------------------- */
 
+static bool native_masked_irq_enabled = true;
+void hw_native_set_masked_irq(bool enabled)
+{
+    hw_native_flush();
+    native_masked_irq_enabled = enabled;
+}
+/* Qualify a constant asserted APU frame IRQ only while the CPU masks IRQ.
+ * The cursor watches I on every access; mapper IRQs remain excluded. */
+static bool native_masked_irq_ready(void)
+{
+    return native_masked_irq_enabled && hw.irq_line && cpu.i &&
+           hw_cart.mapper != 4 && apu_native_masked_irq_ready();
+}
+
 #if NESRECOMP_HEADROOM_COUNTERS
 static void hr_interval_end(unsigned n, unsigned credit, unsigned site);
 static inline void hr_classify(uint16_t addr, unsigned site);
@@ -203,6 +217,23 @@ enum { HR_R_DISABLED, HR_R_INT_PENDING, HR_R_OBSERVER, HR_R_TICK, HR_R_BOARD, HR
        HR_R_PPU_BLANK, HR_R_PPU_GENERAL, HR_R_PPU_UNKNOWN, HR_R_PPU_IDLE_END, HR_R_PPU_MMC3_A12,
        HR_R_PPU_LINE_249, HR_R_PPU_LIMIT_NONZERO, HR_R_N };
 #endif
+
+static bool native_pal_intervals_enabled = true;
+void hw_native_set_pal_intervals(bool enabled)
+{
+    hw_native_flush();
+    native_pal_intervals_enabled = enabled;
+}
+static bool native_interval_board_allowed(void)
+{
+    /* PAL intervals need the FRAME PPU's five-tick dot cadence. They qualify
+     * fixed-PRG NROM/CNROM only; CPU mapper writes flush pending work before
+     * a CNROM CHR-bank change. Other PPU builds keep refusing PAL. */
+    if (hw_pal() && !hw_isolated)
+        return NESRECOMP_PPU_FRAME && native_pal_intervals_enabled &&
+               (hw_cart.mapper == 0 || hw_cart.mapper == 3);
+    return hw_cart.mapper == 0 || hw_cart.mapper == 1 || hw_cart.mapper == 4 || hw_cart.mapper == 66;
+}
 
 unsigned hw_native_interval_limit(void)
 {
@@ -221,14 +252,15 @@ unsigned hw_native_interval_limit(void)
 #endif
 #define HR_REFUSE(reason) do { HR_COUNT(hr_refusal = reason); return 0; } while (0)
     if (hw.tick != 1) HR_REFUSE(HR_R_TICK);
-    if (hw_pal() || hw_isolated || cyc_trace_enabled ||
+    if (hw_isolated || cyc_trace_enabled ||
         hw_extra_timing.extra_scanlines || hw_cart.watch_cpu || hw_cart.clock_late ||
-        (hw_cart.mapper != 0 && hw_cart.mapper != 1 && hw_cart.mapper != 4 && hw_cart.mapper != 66)) HR_REFUSE(HR_R_BOARD);
-    if (hw.irq_line) HR_REFUSE(HR_R_IRQ_LINE);
+        !native_interval_board_allowed()) HR_REFUSE(HR_R_BOARD);
+    bool masked_irq = hw.irq_line && native_masked_irq_ready();
+    if (hw.irq_line && !masked_irq) HR_REFUSE(HR_R_IRQ_LINE);
     if (hw_cart.mapper == 4 && hw_cart.m.irq_out) HR_REFUSE(HR_R_MMC3_IRQ_OUT);
     if (cpu.nmi_edge) HR_REFUSE(HR_R_NMI_EDGE);
     if (cpu.nmi_input != ppu_nmi_output()) HR_REFUSE(HR_R_NMI_INPUT);
-    if (!apu_native_interval_ready()) {
+    if (!masked_irq && !apu_native_interval_ready()) {
         HR_COUNT(hr_refusal = HR_R_APU_OAMDMA + hr_apu_block_reason() - 1);
         return 0;
     }
@@ -253,18 +285,16 @@ void hw_native_begin(void)
     hw_native_interval.ram = hw.ram;
 #if NESRECOMP_ISOLATED_NATIVE
     hw_native_interval.enabled = NESRECOMP_NATIVE_INTERVALS && !cyc_trace_enabled &&
-        ((!hw_isolated && !hw_pal() && !hw_extra_timing.extra_scanlines)
+        ((!hw_isolated && (!hw_pal() || native_pal_intervals_enabled) && !hw_extra_timing.extra_scanlines)
          || hw_isolated
         ) &&
-        (hw_cart.mapper == 0 || hw_cart.mapper == 1 ||
-         hw_cart.mapper == 4 || hw_cart.mapper == 66) &&
+        native_interval_board_allowed() &&
         !hw_prg_data_modified && !cyc_mod_rom_read_overrides &&
         (!cyc_cpu_rts_observer || cyc_cpu_rts_observer == cyc_mod_return_observer);
 #else
     hw_native_interval.enabled = NESRECOMP_NATIVE_INTERVALS && !hw_isolated && !cyc_trace_enabled &&
-        !hw_pal() && !hw_extra_timing.extra_scanlines &&
-        (hw_cart.mapper == 0 || hw_cart.mapper == 1 ||
-         hw_cart.mapper == 4 || hw_cart.mapper == 66) &&
+        (!hw_pal() || native_pal_intervals_enabled) && !hw_extra_timing.extra_scanlines &&
+        native_interval_board_allowed() &&
         !hw_prg_data_modified && !cyc_mod_rom_read_overrides &&
         (!cyc_cpu_rts_observer || cyc_cpu_rts_observer == cyc_mod_return_observer);
 #endif
@@ -282,16 +312,16 @@ void hw_native_begin_checked_rom(void)
     hw_native_interval.checked_prg = true;
 #if NESRECOMP_ISOLATED_NATIVE
     hw_native_interval.enabled = NESRECOMP_NATIVE_INTERVALS && !cyc_trace_enabled &&
-        ((!hw_isolated && !hw_pal() && !hw_extra_timing.extra_scanlines)
+        ((!hw_isolated && (!hw_pal() || native_pal_intervals_enabled) && !hw_extra_timing.extra_scanlines)
          || hw_isolated
         ) &&
-        (hw_cart.mapper == 0 || hw_cart.mapper == 1 || hw_cart.mapper == 4 || hw_cart.mapper == 66) &&
+        native_interval_board_allowed() &&
         !cyc_mod_rom_read_overrides &&
         (!cyc_cpu_rts_observer || cyc_cpu_rts_observer == cyc_mod_return_observer);
 #else
     hw_native_interval.enabled = NESRECOMP_NATIVE_INTERVALS && !hw_isolated && !cyc_trace_enabled &&
-        !hw_pal() && !hw_extra_timing.extra_scanlines &&
-        (hw_cart.mapper == 0 || hw_cart.mapper == 1 || hw_cart.mapper == 4 || hw_cart.mapper == 66) &&
+        (!hw_pal() || native_pal_intervals_enabled) && !hw_extra_timing.extra_scanlines &&
+        native_interval_board_allowed() &&
         !cyc_mod_rom_read_overrides &&
         (!cyc_cpu_rts_observer || cyc_cpu_rts_observer == cyc_mod_return_observer);
 #endif
@@ -332,6 +362,7 @@ static void hw_native_flush_site(unsigned site)
         HR_COUNT(hr_owner_native_fetches += fetched);
     }
     hw_native_interval.pending = hw_native_interval.credit = 0;
+    hw_native_interval.irq_mask = NULL;
 }
 
 void hw_native_flush(void) { hw_native_flush_site(HR_S_NONE); }
@@ -355,6 +386,7 @@ bool hw_native_prepare(void)
 #endif
         ) || cyc_mod_rom_read_overrides) return false;
     hw_native_interval.credit = hw_native_interval_limit();
+    hw_native_interval.irq_mask = hw_native_interval.credit && hw.irq_line ? &cpu.i : NULL;
     hw_native_interval.driven = hw.data_driven;
     return hw_native_interval.credit != 0;
 }
@@ -369,6 +401,7 @@ void hw_native_interval_run(unsigned cycles)
     }
 #endif
     ppu_native_interval_run(cycles, hw.align);
+    if (hw_pal()) hw_region_timing.phase = (uint8_t)((hw_region_timing.phase + cycles) % 5u);
     apu_native_interval_run(cycles);
     /* Both sampled inputs are proven constant throughout this interval. */
     cpu_nmi_input(ppu_nmi_output());
