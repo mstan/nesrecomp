@@ -154,6 +154,15 @@ const CycHostExtras *cyc_host_extras(void);
  * Explicit command-line passwords may still be used without loading a save. */
 bool cyc_host_saves_enabled(void);
 
+/* Multi-image builds: a game may define this hook strongly to run one
+ * executable against several cartridge images whose executable regions agree.
+ * `prg_hash` is the loaded payload's FNV-1a; returning true skips both identity
+ * gates for that image. The compiled bytes are still verified per block
+ * (NESRECOMP_NATIVE_PRG_GUARDS), so a region that differs falls back to the
+ * interpreter instead of running stale native code. The default (weak)
+ * definition accepts only the image that was compiled. */
+bool cyc_game_image_accepted(uint32_t prg_hash);
+
 #ifdef __cplusplus
 }
 #endif
