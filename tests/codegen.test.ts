@@ -633,6 +633,35 @@ describe("code generation", () => {
     );
   });
 
+  it("keeps backward loops after inline trampoline operands local", () => {
+    const rom = new RomBuilder()
+      .org(0xc000)
+      .jsr(0xc100)
+      .emit([0x00, 0xff, 0xc1])
+      // Preserve an outer value around a loop. A fallback entered at C00B
+      // would escape at the PLA instead of executing the routine's RTS.
+      .emit([0xa9, 0x55, 0x48, 0xa2, 0x04, 0xca])
+      .bne(0xc00b)
+      .emit([0x68])
+      .rts()
+      .org(0xc100)
+      .jmp(0xc110)
+      .org(0xc110)
+      .rts()
+      .org(0xc200)
+      .rts()
+      .vectors(0xc000, 0xc000, 0xc000)
+      .writeTemp("emitted_secondary_backward_loop.nes");
+
+    const result = recompile(
+      rom,
+      `[game]\noutput_prefix = "emitted-secondary-loop"\npush_all_jsr = true\n\n[[trampoline]]\naddr = 0xC110\ninline_bytes = 3\nbs_fn_addr = 0xC200\naddr_adjust = 1\nbank_reg = "A"\n`
+    );
+
+    expect(result.fullC).toContain("goto label_C00B;");
+    expect(result.fullC).not.toContain("call_by_address(0xC00B)");
+  });
+
   it("uses direct CPU instruction boundaries for non-8KB-window mappers", () => {
     for (const mapper of [0, 1, 66]) {
       const builder = new RomBuilder({

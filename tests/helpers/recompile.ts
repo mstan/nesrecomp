@@ -44,7 +44,8 @@ export function recompile(
   const generatedDir = join(workDir, "generated");
 
   // Write toml if provided
-  const args = [romPath];
+  // These tests inspect function/frame codegen; upstream now defaults to cycles.
+  const args = [romPath, "--legacy"];
   if (tomlContent) {
     const tomlPath = join(workDir, "game.toml");
     writeFileSync(tomlPath, tomlContent);
