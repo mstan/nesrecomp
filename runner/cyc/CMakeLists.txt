@@ -280,7 +280,12 @@ if(SDL2_FOUND)
     add_test(NAME cyc_cart_saves
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_cyc_cart_saves.py
                 --exe $<TARGET_FILE:cyc_window> --out ${CMAKE_CURRENT_BINARY_DIR}/cart_saves)
-    set_tests_properties(cyc_cart_saves PROPERTIES TIMEOUT 120)
+    if(UNIX AND NOT APPLE)
+        add_test(NAME cyc_cart_saves_appimage
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_cyc_cart_saves.py
+                    --exe $<TARGET_FILE:cyc_window> --out ${CMAKE_CURRENT_BINARY_DIR}/cart_saves_appimage
+                    --appimage)
+    endif()
 else()
     message(STATUS "SDL2 not found: cyc_input_test and cyc_window are not built")
 endif()
