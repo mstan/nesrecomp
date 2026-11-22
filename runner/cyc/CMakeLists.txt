@@ -570,6 +570,29 @@ add_test(NAME cyc_ppu_spans COMMAND ${Python3_EXECUTABLE}
     --candidate $<TARGET_FILE:cyc_ppu_span_candidate>)
 set_tests_properties(cyc_ppu_spans PROPERTIES TIMEOUT 180)
 
+# Compare the phase-specialized PAL scheduler against its universal tick loop,
+# with the SAME PPU/APU implementation on both sides. The stimulus includes
+# all PAL divider phases, split register cycles, DMA, IRQ/NMI and state replay.
+add_library(cyc_pal_clock_runtime OBJECT cpu6502.c cpu6502_interp.c
+    ${CYC_TEST_BOARD_SOURCES} hw_palette.c cyc_trace.c cyc_ring.c
+    ${NESRECOMP_CYC_SCHEDULER_SOURCES} cyc_native_none.c)
+target_include_directories(cyc_pal_clock_runtime PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})
+foreach(kind candidate reference)
+    add_executable(cyc_pal_clock_${kind} tests/ppu_span_probe.c hw_machine.c hw_ppu.c hw_apu.c
+        $<TARGET_OBJECTS:cyc_pal_clock_runtime>)
+    target_include_directories(cyc_pal_clock_${kind} PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})
+    target_link_libraries(cyc_pal_clock_${kind} PRIVATE ${NESRECOMP_CYC_LIBRARIES})
+    if(MSVC)
+        target_compile_definitions(cyc_pal_clock_${kind} PRIVATE _CRT_SECURE_NO_WARNINGS)
+    endif()
+endforeach()
+target_compile_definitions(cyc_pal_clock_reference PRIVATE NESRECOMP_PAL_CLOCK_REFERENCE=1)
+add_test(NAME cyc_pal_clock COMMAND ${Python3_EXECUTABLE}
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_ppu_spans.py
+    --reference $<TARGET_FILE:cyc_pal_clock_reference>
+    --candidate $<TARGET_FILE:cyc_pal_clock_candidate>)
+set_tests_properties(cyc_pal_clock PROPERTIES TIMEOUT 180)
+
 endif()
 
 add_executable(cyc_native_interval_probe tests/native_interval_probe.c hw_ppu.c hw_apu.c

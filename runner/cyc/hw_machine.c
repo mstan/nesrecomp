@@ -97,19 +97,55 @@ static inline void pal_ppu_edge(unsigned half_phase)
     else if (half_phase == 5) ppu_half_dot();
 }
 
-static inline void run_pal_tick(unsigned k)
+HW_ALWAYS_INLINE void run_pal_tick_at(unsigned k, unsigned phase)
 {
     if (k == 0 && hw_cart.watch_cpu) hw_cart_cpu_clock();
     /* 2A07 M2 is low for 6.5 clocks (2A03: 4.5); the CPU's sample
      * positions move two master clocks later relative to M2's falling edge. */
     if (k == 6) sample_nmi();
     else if (k == 9) apu_sample_irq();
-    unsigned q = (2u * (hw_region_timing.phase + k)) % 10u;
+    unsigned q = (2u * (phase + k)) % 10u;
     pal_ppu_edge(q);
     if (k == 0) clock_cpu_devices();
     pal_ppu_edge(q + 1);
     if (k == 15 && hw_cart.clock_late) hw_cart_cpu_clock_late();
 }
+
+static inline void run_pal_tick(unsigned k)
+{
+    run_pal_tick_at(k, hw_region_timing.phase);
+}
+
+#ifndef NESRECOMP_PAL_CLOCK_REFERENCE
+#define NESRECOMP_PAL_CLOCK_REFERENCE 0
+#endif
+#if !NESRECOMP_PAL_CLOCK_REFERENCE
+/* The ordinary PAL tail always starts at tick 1. Select one divider phase,
+ * then let constant propagation remove master ticks without a device edge.
+ * Every observable PPU/NMI/IRQ/mapper event keeps its original order and the
+ * same hw.tick value. Register-split cycles still use the universal executor.
+ * This is host dispatch removal, not native guest-cycle batching. */
+static void run_pal_ticks_1_to_15(void)
+{
+#define PAL_STEP(k, phase) do { hw.tick = (k) + 1; run_pal_tick_at(k, phase); } while (0)
+#define PAL_TAIL(phase) do { \
+    PAL_STEP(1, phase); PAL_STEP(2, phase); PAL_STEP(3, phase); \
+    PAL_STEP(4, phase); PAL_STEP(5, phase); PAL_STEP(6, phase); \
+    PAL_STEP(7, phase); PAL_STEP(8, phase); PAL_STEP(9, phase); \
+    PAL_STEP(10, phase); PAL_STEP(11, phase); PAL_STEP(12, phase); \
+    PAL_STEP(13, phase); PAL_STEP(14, phase); PAL_STEP(15, phase); \
+} while (0)
+    switch (hw_region_timing.phase) {
+    case 0: PAL_TAIL(0); break;
+    case 1: PAL_TAIL(1); break;
+    case 2: PAL_TAIL(2); break;
+    case 3: PAL_TAIL(3); break;
+    default: PAL_TAIL(4); break;
+    }
+#undef PAL_TAIL
+#undef PAL_STEP
+}
+#endif
 
 void hw_clock_run_ticks(int n)
 {
@@ -419,6 +455,10 @@ void hw_cycle_start(uint16_t addr, HwCycleKind kind)
     }
     for (;;) {
         if (hw_pal()) {
+#if !NESRECOMP_PAL_CLOCK_REFERENCE
+            if (hw.tick == 1) run_pal_ticks_1_to_15();
+            else
+#endif
             while (hw.tick < 16) run_pal_tick(hw.tick++);
             hw_region_timing.phase = (uint8_t)((hw_region_timing.phase + 1) % 5);
         } else if (hw.tick == 1) run_ticks_1_to_11();
