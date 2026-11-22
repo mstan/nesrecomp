@@ -23,7 +23,7 @@ def main():
         command = [str(args.probe.resolve())]
         if mode == 'reference':
             command.append('--reference')
-        p = subprocess.run(command, capture_output=True, timeout=180, env=env,
+        p = subprocess.run(command, capture_output=True, env=env,
                            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
         (out / (name + '.stdout')).write_bytes(p.stdout)
         (out / (name + '.stderr')).write_bytes(p.stderr)
