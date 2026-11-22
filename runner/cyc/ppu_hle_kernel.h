@@ -3,9 +3,9 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-/* SSE2 is part of the supported x86-64 host ABI. Other targets, including
- * baseline 32-bit x86, keep the same interface with portable byte operations.
- * Never import or execute x86 intrinsics on those targets. */
+/* x86-64 uses SSE2 and AArch64 uses NEON. Other targets, including baseline
+ * 32-bit x86, keep the same interface with portable byte operations.
+ * Architecture headers are included only on their matching targets. */
 #if !defined(NESRECOMP_PPU_HLE_FORCE_PORTABLE) && \
     (defined(_M_X64) || defined(__x86_64__)) && !defined(_M_ARM64EC)
 #define NESRECOMP_PPU_HLE_SSE2 1
@@ -15,6 +15,19 @@
 #endif
 #if NESRECOMP_PPU_HLE_SSE2 && defined(_MSC_VER)
 #include <intrin.h>
+#endif
+#if !defined(NESRECOMP_PPU_HLE_FORCE_PORTABLE) && defined(__aarch64__) && defined(__ARM_NEON)
+#define NESRECOMP_PPU_HLE_NEON 1
+#include <arm_neon.h>
+/* AArch64 has no PMOVMSKB. Pack eight high bits with byte-lane weights;
+ * the horizontal sum cannot overflow because each weight occurs once. */
+static inline unsigned ppu_hle_movemask8(uint8x8_t value)
+{
+    const uint8x8_t weights = {1, 2, 4, 8, 16, 32, 64, 128};
+    return (unsigned)vaddv_u8(vmul_u8(vshr_n_u8(value, 7), weights));
+}
+#else
+#define NESRECOMP_PPU_HLE_NEON 0
 #endif
 
 static inline unsigned ppu_hle_first_sprite(unsigned mask)
@@ -98,6 +111,11 @@ static inline unsigned ppu_hle_sprite_mask(const uint8_t x[8],
     __m128i bits = _mm_or_si128(_mm_loadl_epi64((const __m128i *)lo),
                                _mm_loadl_epi64((const __m128i *)hi));
     return (unsigned)_mm_movemask_epi8(_mm_and_si128(bits, ready)) & 255u;
+#elif NESRECOMP_PPU_HLE_NEON
+    uint8x8_t vx = vld1_u8(x);
+    uint8x8_t ready = skipped ? vdup_n_u8(255) : vceq_u8(vx, vdup_n_u8(0));
+    uint8x8_t bits = vorr_u8(vld1_u8(lo), vld1_u8(hi));
+    return ppu_hle_movemask8(vand_u8(bits, ready));
 #else
     unsigned mask = 0;
     for (unsigned i = 0; i < 8; ++i)
@@ -121,6 +139,15 @@ static inline unsigned ppu_hle_sprite_shift(uint8_t x[8], uint8_t lo[8],
     _mm_storel_epi64((__m128i *)lo, vl);
     _mm_storel_epi64((__m128i *)hi, vh);
     return (unsigned)_mm_movemask_epi8(ready) & 255u;
+#elif NESRECOMP_PPU_HLE_NEON
+    uint8x8_t vx = vld1_u8(x);
+    uint8x8_t ready = skipped ? vdup_n_u8(255) : vceq_u8(vx, vdup_n_u8(0));
+    if (!skipped) vst1_u8(x, vqsub_u8(vx, vdup_n_u8(1)));
+    if (!render) return 0;
+    uint8x8_t vl = vld1_u8(lo), vh = vld1_u8(hi);
+    vst1_u8(lo, vbsl_u8(ready, vshl_n_u8(vl, 1), vl));
+    vst1_u8(hi, vbsl_u8(ready, vshl_n_u8(vh, 1), vh));
+    return ppu_hle_movemask8(ready);
 #else
     unsigned shifted = 0;
     for (unsigned i = 0; i < 8; ++i) {
