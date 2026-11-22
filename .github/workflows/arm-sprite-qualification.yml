@@ -1,0 +1,78 @@
+name: Native ARM sprite qualification
+
+on:
+  push:
+    branches: [burndown/nes110-native-arm-20261122]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-arm:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Record the actual native host and source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p qualification
+          {
+            git rev-parse HEAD
+            uname -a
+            test "$(uname -m)" = aarch64
+            cc --version
+            cmake --version
+            ninja --version
+            python3 --version
+          } | tee qualification/identity.log
+      - name: Build the existing ROM-free fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S runner/cyc -B build-arm -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release -DNESRECOMP_PPU_IMPL=HLE \
+            -DCMAKE_DISABLE_FIND_PACKAGE_SDL2=ON \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON 2>&1 | tee qualification/configure.log
+          cmake --build build-arm --parallel 2 --target \
+            cyc_ppu_kernel_test cyc_ppu_span_candidate cyc_ppu_span_reference \
+            cyc_native_interval_probe cyc_raster_interval_probe cyc_region_test \
+            2>&1 | tee qualification/build.log
+          cc -O2 -std=c11 -DNESRECOMP_PPU_HLE_FORCE_PORTABLE=1 \
+            -Irunner/cyc runner/cyc/tests/ppu_kernel_selftest.c \
+            runner/cyc/tests/ppu_kernel_portable.c -o build-arm/kernel-portable \
+            2>&1 | tee qualification/portable-build.log
+      - name: Execute native NEON and the universal portable control
+        shell: bash
+        run: |
+          set -euo pipefail
+          build-arm/cyc_ppu_kernel_test | tee qualification/kernel-neon.log
+          grep -F '(NEON=1 SSE2=0)' qualification/kernel-neon.log
+          build-arm/kernel-portable | tee qualification/kernel-portable.log
+          grep -F '(NEON=0 SSE2=0)' qualification/kernel-portable.log
+      - name: Execute the existing machine observations
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/cyc/test_ppu_spans.py \
+            --reference build-arm/cyc_ppu_span_reference \
+            --candidate build-arm/cyc_ppu_span_candidate \
+            2>&1 | tee qualification/spans.log
+          python3 tools/cyc/test_native_intervals.py --probe build-arm/cyc_native_interval_probe \
+            2>&1 | tee qualification/native-intervals.log
+          python3 tools/cyc/test_raster_intervals.py --probe build-arm/cyc_raster_interval_probe \
+            --out build-arm/raster-results 2>&1 | tee qualification/raster-intervals.log
+          build-arm/cyc_region_test 2>&1 | tee qualification/regions.log
+      - name: Retain the source, commands and results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-arm-sprite-qualification
+          path: |
+            qualification/
+            build-arm/CMakeCache.txt
+            build-arm/compile_commands.json
+          retention-days: 14
