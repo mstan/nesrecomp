@@ -591,7 +591,6 @@ add_test(NAME cyc_pal_clock COMMAND ${Python3_EXECUTABLE}
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_ppu_spans.py
     --reference $<TARGET_FILE:cyc_pal_clock_reference>
     --candidate $<TARGET_FILE:cyc_pal_clock_candidate>)
-set_tests_properties(cyc_pal_clock PROPERTIES TIMEOUT 180)
 
 endif()
 
@@ -614,7 +613,6 @@ target_link_libraries(cyc_masked_irq_probe PRIVATE ${NESRECOMP_CYC_LIBRARIES})
 add_test(NAME cyc_masked_irq COMMAND ${Python3_EXECUTABLE}
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_masked_irq.py
     --probe $<TARGET_FILE:cyc_masked_irq_probe>)
-set_tests_properties(cyc_masked_irq PROPERTIES TIMEOUT 180)
 
 if(NESRECOMP_PPU_IMPL STREQUAL "FRAME")
     add_executable(cyc_frame_ppu_state_test tests/frame_ppu_state_test.c hw_ppu.c hw_apu.c
