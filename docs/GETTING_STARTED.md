@@ -59,6 +59,26 @@ Start with a supported, simple board. The
 and its qualification limits. A registered mapper number alone does not
 prove that every cartridge using it works.
 
+
+## Describe the game project
+
+In the separate game's repository root, write its community metadata with the
+engine's small metadata command. Supply the game's actual name rather than
+guessing it from a filename:
+
+```powershell
+python nesrecomp/tools/write_recomp_json.py .recomp.json `
+  --game "My Game" --project MyGameNESRecomp --rom 'D:/ROMs/My Game.nes'
+```
+
+Commit `.recomp.json` with the game project. This uses the open
+[recomp.board specification](https://recomp.fyi/spec): it records the original
+system, toolchain, game name and input SHA-1, without copying ROM data or local
+paths. Add `--region` or `--serial` only when you know that release's values.
+New files start at `exploring`; update the status and other metadata as the
+project progresses. Running the command again only fills missing fields and
+keeps maintainer-written values, including supported revisions.
+
 ## 3. Build a baseline host
 
 The cycle backend is the default. Its standalone project can generate code
