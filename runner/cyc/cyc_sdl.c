@@ -273,6 +273,7 @@ static int           s_tex_w, s_tex_h;
 static bool          s_bar;          /* dev builds: the drive bar */
 static long          s_frames_done;
 static bool          s_running = true;
+static bool          s_debug_paused;
 static bool          s_have_menu;
 static SDL_AudioDeviceID s_audio_dev;
 #ifdef NESRECOMP_CYCLE_HDPACK
@@ -754,11 +755,12 @@ static void tcp_state(int id, const char *line)
     int w, hh;
     picture(&w, &hh);
     snprintf(f, sizeof(f),
-             "\"frame\":%ld,\"menu_open\":%s,\"fds\":%s,\"side\":%d,\"sides\":%u,\"motor\":%s,\"writing\":%s,"
+             "\"frame\":%ld,\"menu_open\":%s,\"paused\":%s,\"fds\":%s,\"side\":%d,\"sides\":%u,\"motor\":%s,\"writing\":%s,"
              "\"toast\":{\"visible\":%s,\"title\":%s,\"body\":%s},\"hle\":%s,\"disk_save\":%s,\"disk_binding\":%s,"
              "\"picture\":[%d,%d],\"dev_ui\":%s,\"recomp_ui\":%s,\"native\":%s,"
              "\"vsync_requested\":%s,\"vsync_active\":%s",
-             s_frames_done, menu_open() ? "true" : "false", s_fds ? "true" : "false", s_fds ? cyc_fds_side() : -1,
+             s_frames_done, menu_open() ? "true" : "false", s_debug_paused ? "true" : "false",
+             s_fds ? "true" : "false", s_fds ? cyc_fds_side() : -1,
              s_fds ? cyc_fds_side_count() : 0, s_fds && cyc_fds_motor_on() ? "true" : "false",
              s_fds && cyc_fds_writing() ? "true" : "false", s_toast_up ? "true" : "false", t, b, h, save, hq, w, hh,
 #ifdef CYC_DEV_UI
@@ -1134,6 +1136,22 @@ static void tcp_zapper(int id, const char *line)
     cyc_tcp_ok(id, fields);
 }
 
+static void tcp_pause(int id, const char *line)
+{
+    (void)line;
+    if (!states_available()) { cyc_tcp_err(id, "pause: unavailable during online play"); return; }
+    s_debug_paused = true;
+    if (s_audio_dev) SDL_ClearQueuedAudio(s_audio_dev);
+    cyc_tcp_ok(id, "\"paused\":true");
+}
+
+static void tcp_continue(int id, const char *line)
+{
+    (void)line;
+    s_debug_paused = false;
+    cyc_tcp_ok(id, "\"paused\":false");
+}
+
 static void tcp_setup(void)
 {
     int port = s_tcp_port;
@@ -1150,6 +1168,8 @@ static void tcp_setup(void)
     }
     if (port <= 0) return;
     cyc_tcp_register("ping", "liveness; the frame counter", tcp_ping);
+    cyc_tcp_register("pause", "pause local gameplay at a frame boundary", tcp_pause);
+    cyc_tcp_register("continue", "resume local gameplay", tcp_continue);
     cyc_tcp_register("zapper", "aim x/y, trigger, mouse true; optional window_x/window_y", tcp_zapper);
     cyc_tcp_register("state", "frame, menu, drive, toast, HLE, disk save, bindings, build", tcp_state);
     cyc_tcp_register("key", "hold an SDL key through the bindings: name, frames", tcp_key);
@@ -1173,8 +1193,11 @@ static void tcp_setup(void)
 #endif
     cyc_tcp_register("quit", "close the window (the disk save is written first)", tcp_quit);
     if (s_extras && s_extras->tcp_setup) s_extras->tcp_setup(s_extras->ctx);
-    if (cyc_tcp_start(port)) printf("[cyc tcp] listening on 127.0.0.1:%d\n", port);
-    else fprintf(stderr, "[cyc tcp] cannot listen on port %d\n", port);
+    if (cyc_tcp_start(port)) {
+        const char *start_paused = getenv("NESRECOMP_START_PAUSED");
+        s_debug_paused = states_available() && start_paused && !strcmp(start_paused, "1");
+        printf("[cyc tcp] listening on 127.0.0.1:%d\n", port);
+    } else fprintf(stderr, "[cyc tcp] cannot listen on port %d\n", port);
     fflush(stdout);
 }
 
@@ -1475,6 +1498,7 @@ int cyc_sdl_main(const char *title_in, int scale)
         return 2;
     }
     s_running=true;s_frames_done=(long)cyc_ring_frame;s_tex=NULL;s_pad_count=0;s_vpad_joy=NULL;
+    s_debug_paused = false;
     /* a path names the game by its file's stem */
     char title[256];
     const char *base = title_in, *s1 = strrchr(title_in, '/'), *s2 = strrchr(title_in, '\\');
@@ -1742,6 +1766,7 @@ int cyc_sdl_main(const char *title_in, int scale)
         online=nes_netplay_active();
         if(online&&cyc_net_leaving()){s_running=false;break;}
 #endif
+        inactive |= !online && s_debug_paused;
         if (online || (!open && !inactive)) {
             cyc_host_window_replay(s_frames_done, st.buttons, CYC_INPUT_PLAYERS);
             cyc_host_window_game_input(st.game_buttons, CYC_INPUT_PLAYERS);

@@ -32,6 +32,11 @@ bindings), `pad` (an SDL virtual game controller's buttons), `action`, `disk`
 window with `--hidden` and `SDL_VIDEODRIVER=dummy` to keep it off the desktop;
 see runner/cyc/README.md, The window.
 
+`pause` and `continue` control local gameplay independently of the runtime
+menu. The window still draws and serves TCP requests while paused. To wait
+at startup until a review client connects, enable TCP and set
+`NESRECOMP_START_PAUSED=1`. Check the `paused` field in `state`.
+
 ## Ports
 
 Each game project uses its own port. Selection lives in
