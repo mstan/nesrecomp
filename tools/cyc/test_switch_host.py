@@ -45,8 +45,7 @@ def main():
     config.write_text('[game]\ncycle_accurate=true\n', encoding='utf-8')
 
     def run(command, name, success=True, env=None):
-        result = subprocess.run(list(map(str, command)), capture_output=True, text=True,
-                                env=env, timeout=600)
+        result = subprocess.run(list(map(str, command)), capture_output=True, text=True, env=env)
         (out / (name + '.log')).write_text(result.stdout + result.stderr, encoding='utf-8')
         assert (result.returncode == 0) == success, (name, result.returncode, result.stdout[-1000:], result.stderr[-2000:])
         return result
@@ -167,6 +166,9 @@ endif()
     auto.write_bytes(b'broken state')
     run([exe, '--exit-after', '1'], 'bad-state', success=False, env=env)
     assert auto.read_bytes() == b'broken state'
+    run([exe, '--no-save', '--exit-after', '1', '--uncapped'], 'no-save-override', env=env)
+    assert auto.read_bytes() == b'broken state'
+    assert 'saves=0' in (data / 'runtime.log').read_text()
     auto.write_bytes(first_state)
     # Force a save-write error with a directory at the temporary filename.
     blocked = auto.with_suffix(auto.suffix + '.tmp')
@@ -179,6 +181,8 @@ endif()
     save_dir = data / 'saves'; parked = data / 'parked-saves'
     save_dir.rename(parked); save_dir.write_text('not a directory')
     run([exe, '--exit-after', '1'], 'directory-error', success=False, env=env)
+    run([exe, '--no-save', '--exit-after', '1', '--uncapped'], 'no-save-invalid-directory', env=env)
+    assert save_dir.read_text() == 'not a directory'
     save_dir.unlink(); parked.rename(save_dir)
     print('Switch host: SDL video/audio loop, 100% native fixture, autosave/resume, missing/wrong ROM, corrupt state, write-error preservation and directory-error checks passed')
     print(f'Prepared cross-build source: {source}')

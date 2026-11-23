@@ -14,6 +14,7 @@
 #endif
 #include "cyc_core.h"
 #include "cyc_host.h"
+#include "cyc_host_extras.h"
 #include "cyc_ring.h"
 #include "cyc_run.h"
 #include "cyc_session.h"
@@ -179,7 +180,7 @@ int cyc_switch_init(int argc, char **argv)
         if (!strcmp(argv[i], "--nxlink-log")) requested = true;
         if (!strcmp(argv[i], "--window-input") && i + 1 < argc) replay_path = argv[++i];
     }
-    if (!mkdirs(CYC_SWITCH_SAVES ? CYC_SWITCH_GAME_DIR "/saves" : CYC_SWITCH_GAME_DIR)) {
+    if (!mkdirs(CYC_SWITCH_GAME_DIR)) {
         cyc_sdl_error_box("Storage unavailable", "Cannot create the game's directory on the SD card.");
         return 0;
     }
@@ -218,6 +219,10 @@ int cyc_sdl_prelaunch(const char **rom_path, const char *bios, NesFdsHleAsk *hle
                       const char **saved_bios)
 {
     (void)bios;
+    if (cyc_host_saves_enabled() && !mkdirs(CYC_SWITCH_GAME_DIR "/saves")) {
+        cyc_sdl_error_box("Storage unavailable", "Cannot create the save directory on the SD card.");
+        return 2;
+    }
     *rom_path = ROM_PATH;
     *hle = NES_FDS_HLE_ASK_NONE;
     *saved_bios = NULL;
@@ -249,7 +254,7 @@ void cyc_sdl_image_path(const char *path) { (void)path; }
 
 static bool save_to(const char *path)
 {
-    if (!CYC_SWITCH_SAVES) return true;
+    if (!cyc_host_saves_enabled()) return true;
     if (!ready || storage_failed) return false;
     char err[256];
     if (!cyc_state_save_file(path, err, sizeof(err))) {
@@ -277,7 +282,7 @@ static void applet_event(AppletHookType type, void *unused)
 
 static bool load_from(const char *path, bool optional)
 {
-    if (!CYC_SWITCH_SAVES) return true;
+    if (!cyc_host_saves_enabled()) return true;
     struct stat st;
     if (stat(path, &st)) {
         if (optional && errno == ENOENT) return true;
@@ -369,16 +374,19 @@ int cyc_sdl_main(const char *title, int scale)
     SDL_PauseAudioDevice(audio, 0);
     pad = open_pad();
     SDL_GameControllerUpdate();
+    const bool saves_enabled = cyc_host_saves_enabled();
     /* Hold Nintendo X (SDL north/Y) at launch to deliberately start fresh. */
     bool fresh = pad && SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_Y);
-    if (CYC_SWITCH_SAVES && !fresh && !load_from(AUTO_PATH, true)) {
+    if (saves_enabled && !fresh && !load_from(AUTO_PATH, true)) {
         fatal = "Cannot read the automatic save. It has been preserved. See runtime.log."; goto cleanup;
     }
     ready = true;
 #if defined(__SWITCH__) && CYC_SWITCH_SAVES
-    appletHook(&hook, applet_event, NULL); hooked = true;
-    if (R_FAILED(appletSetFocusHandlingMode(AppletFocusHandlingMode_SuspendHomeSleepNotify))) {
-        fatal = "Cannot configure suspend notifications."; goto cleanup;
+    if (saves_enabled) {
+        appletHook(&hook, applet_event, NULL); hooked = true;
+        if (R_FAILED(appletSetFocusHandlingMode(AppletFocusHandlingMode_SuspendHomeSleepNotify))) {
+            fatal = "Cannot configure suspend notifications."; goto cleanup;
+        }
     }
 #endif
     bool running = true, old_save = false, old_load = false;
@@ -423,8 +431,8 @@ int cyc_sdl_main(const char *title, int scale)
         if (pad && !SDL_GameControllerGetAttached(pad)) { SDL_GameControllerClose(pad); pad = NULL; }
         if (!pad) pad = open_pad();
         if (suspended) { SDL_Delay(10); continue; }
-        bool save = CYC_SWITCH_SAVES && pad && SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_TRIGGERLEFT) > 16000;
-        bool load = CYC_SWITCH_SAVES && pad && SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > 16000;
+        bool save = saves_enabled && pad && SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_TRIGGERLEFT) > 16000;
+        bool load = saves_enabled && pad && SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > 16000;
         if (save && !old_save) save_to(SLOT_PATH);
         if (load && !old_load) {
             if (!load_from(SLOT_PATH, false)) {
