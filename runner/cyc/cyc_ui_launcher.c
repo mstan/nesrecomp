@@ -9,6 +9,9 @@
 #include "cyc_ui.h"
 #include "cyc_settings.h"
 #include "cyc_diagnostics.h"
+#ifdef CYC_WITH_GLSL
+#include "cyc_shader.h"
+#endif
 
 #include "cyc_input.h"
 #include "cyc_recomp.h"
@@ -60,6 +63,9 @@ static void to_launcher(const CycSettings *s, RecompLauncherCSettings *io, const
     io->fullscreen = s->fullscreen;
     io->integer_scale = s->integer_scale;
     io->linear_filter = s->linear_filter;
+#ifdef CYC_WITH_GLSL
+    snprintf(io->shader_path, sizeof io->shader_path, "%s", s->shader_path);
+#endif
     /* The host's 1/0 predates the setting: always transfer an opinion, so the
      * row shows ours rather than the model's ON seed. */
     io->vsync = s->vsync ? RECOMP_LAUNCHER_VSYNC_ON : RECOMP_LAUNCHER_VSYNC_OFF;
@@ -106,6 +112,9 @@ static void from_launcher(const RecompLauncherCSettings *io, CycSettings *s, con
     s->fullscreen = io->fullscreen < 0 ? 0 : io->fullscreen > 2 ? 2 : io->fullscreen;
     s->integer_scale = io->integer_scale != 0;
     s->linear_filter = io->linear_filter != 0;
+#ifdef CYC_WITH_GLSL
+    snprintf(s->shader_path, sizeof s->shader_path, "%s", io->shader_path);
+#endif
     /* SDL2 cannot do adaptive (no swap-interval API on the 2D renderer), so
      * Adaptive and On both mean synced presents. */
     s->vsync = io->vsync == RECOMP_LAUNCHER_VSYNC_ON || io->vsync == RECOMP_LAUNCHER_VSYNC_ADAPTIVE;
@@ -254,6 +263,9 @@ int cyc_ui_launcher(CycSettings *settings, const char *settings_path, const CycH
     gi.hdpack_supported = 0;
 #endif
     gi.has_integer_scale = 1;
+#ifdef CYC_WITH_GLSL
+    gi.has_shader = cyc_shader_available();
+#endif
     gi.has_rewind_depth = 1;
     /* Driver vsync at present time: the launcher draws its Graphics row for
      * it (psx is the only console that sets this today). The host builds its

@@ -1187,6 +1187,20 @@ keeps the bindings (`[Keyboard.PlayerN]`, `[Gamepad.PlayerN]`,
 `lefttrigger+`, `back+start` chords), the display and audio settings and the
 FDS HLE choices. Headless runs never read it.
 
+### Display shaders
+
+The launcher’s Shader setting applies an optional GLSL pass to the completed
+game picture on desktop OpenGL 3.3 or later. Off uses the default SDL output.
+The setting also accepts a `Shader` path in `config.ini` under `[Display]`.
+Supported files are a combined vertex/fragment `.glsl` or a one-pass
+viewport-sized `.glslp` preset. The game picture saved by the screenshot
+shortcut and the launcher overlays keep their original appearance.
+
+To bundle presets, configure with `-DNESRECOMP_SHADER_PRESET_DIR=/path/to/presets`.
+The SDL target stages the directory as `assets/shaders` beside the game.
+Include that directory in the release package so the launcher can list the
+presets. An unavailable preset or incompatible renderer uses SDL presentation.
+
 **Disk** (`cyc_disk_action.h`): the first press shows a toast with the drive's
 state (disk and side, motor, disk save) and the binding; each press while the
 toast is up turns the disk: eject, the drive empty for 30 frames, the next
