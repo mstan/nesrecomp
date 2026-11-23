@@ -254,6 +254,23 @@ enum { HR_R_DISABLED, HR_R_INT_PENDING, HR_R_OBSERVER, HR_R_TICK, HR_R_BOARD, HR
        HR_R_PPU_LINE_249, HR_R_PPU_LIMIT_NONZERO, HR_R_N };
 #endif
 
+static bool native_pal_intervals_enabled = true;
+void hw_native_set_pal_intervals(bool enabled)
+{
+    hw_native_flush();
+    native_pal_intervals_enabled = enabled;
+}
+static bool native_interval_board_allowed(void)
+{
+    /* PAL intervals need the FRAME PPU's five-tick dot cadence. They qualify
+     * fixed-PRG NROM/CNROM only; CPU mapper writes flush pending work before
+     * a CNROM CHR-bank change. Other PPU builds keep refusing PAL. */
+    if (hw_pal() && !hw_isolated)
+        return NESRECOMP_PPU_FRAME && native_pal_intervals_enabled &&
+               (hw_cart.mapper == 0 || hw_cart.mapper == 3);
+    return hw_cart.mapper == 0 || hw_cart.mapper == 1 || hw_cart.mapper == 4 || hw_cart.mapper == 66;
+}
+
 unsigned hw_native_interval_limit(void)
 {
 #if NESRECOMP_ISOLATED_NATIVE
@@ -271,9 +288,9 @@ unsigned hw_native_interval_limit(void)
 #endif
 #define HR_REFUSE(reason) do { HR_COUNT(hr_refusal = reason); return 0; } while (0)
     if (hw.tick != 1) HR_REFUSE(HR_R_TICK);
-    if (hw_pal() || hw_isolated || cyc_trace_enabled ||
+    if (hw_isolated || cyc_trace_enabled ||
         hw_extra_timing.extra_scanlines || hw_cart.watch_cpu || hw_cart.clock_late ||
-        (hw_cart.mapper != 0 && hw_cart.mapper != 1 && hw_cart.mapper != 4 && hw_cart.mapper != 66)) HR_REFUSE(HR_R_BOARD);
+        !native_interval_board_allowed()) HR_REFUSE(HR_R_BOARD);
     bool masked_irq = hw.irq_line && native_masked_irq_ready();
     if (hw.irq_line && !masked_irq) HR_REFUSE(HR_R_IRQ_LINE);
     if (hw_cart.mapper == 4 && hw_cart.m.irq_out) HR_REFUSE(HR_R_MMC3_IRQ_OUT);
@@ -304,18 +321,16 @@ void hw_native_begin(void)
     hw_native_interval.ram = hw.ram;
 #if NESRECOMP_ISOLATED_NATIVE
     hw_native_interval.enabled = NESRECOMP_NATIVE_INTERVALS && !cyc_trace_enabled &&
-        ((!hw_isolated && !hw_pal() && !hw_extra_timing.extra_scanlines)
+        ((!hw_isolated && (!hw_pal() || native_pal_intervals_enabled) && !hw_extra_timing.extra_scanlines)
          || hw_isolated
         ) &&
-        (hw_cart.mapper == 0 || hw_cart.mapper == 1 ||
-         hw_cart.mapper == 4 || hw_cart.mapper == 66) &&
+        native_interval_board_allowed() &&
         !hw_prg_data_modified && !cyc_mod_rom_read_overrides &&
         (!cyc_cpu_rts_observer || cyc_cpu_rts_observer == cyc_mod_return_observer);
 #else
     hw_native_interval.enabled = NESRECOMP_NATIVE_INTERVALS && !hw_isolated && !cyc_trace_enabled &&
-        !hw_pal() && !hw_extra_timing.extra_scanlines &&
-        (hw_cart.mapper == 0 || hw_cart.mapper == 1 ||
-         hw_cart.mapper == 4 || hw_cart.mapper == 66) &&
+        (!hw_pal() || native_pal_intervals_enabled) && !hw_extra_timing.extra_scanlines &&
+        native_interval_board_allowed() &&
         !hw_prg_data_modified && !cyc_mod_rom_read_overrides &&
         (!cyc_cpu_rts_observer || cyc_cpu_rts_observer == cyc_mod_return_observer);
 #endif
@@ -333,16 +348,16 @@ void hw_native_begin_checked_rom(void)
     hw_native_interval.checked_prg = true;
 #if NESRECOMP_ISOLATED_NATIVE
     hw_native_interval.enabled = NESRECOMP_NATIVE_INTERVALS && !cyc_trace_enabled &&
-        ((!hw_isolated && !hw_pal() && !hw_extra_timing.extra_scanlines)
+        ((!hw_isolated && (!hw_pal() || native_pal_intervals_enabled) && !hw_extra_timing.extra_scanlines)
          || hw_isolated
         ) &&
-        (hw_cart.mapper == 0 || hw_cart.mapper == 1 || hw_cart.mapper == 4 || hw_cart.mapper == 66) &&
+        native_interval_board_allowed() &&
         !cyc_mod_rom_read_overrides &&
         (!cyc_cpu_rts_observer || cyc_cpu_rts_observer == cyc_mod_return_observer);
 #else
     hw_native_interval.enabled = NESRECOMP_NATIVE_INTERVALS && !hw_isolated && !cyc_trace_enabled &&
-        !hw_pal() && !hw_extra_timing.extra_scanlines &&
-        (hw_cart.mapper == 0 || hw_cart.mapper == 1 || hw_cart.mapper == 4 || hw_cart.mapper == 66) &&
+        (!hw_pal() || native_pal_intervals_enabled) && !hw_extra_timing.extra_scanlines &&
+        native_interval_board_allowed() &&
         !cyc_mod_rom_read_overrides &&
         (!cyc_cpu_rts_observer || cyc_cpu_rts_observer == cyc_mod_return_observer);
 #endif
@@ -422,6 +437,7 @@ void hw_native_interval_run(unsigned cycles)
     }
 #endif
     ppu_native_interval_run(cycles, hw.align);
+    if (hw_pal()) hw_region_timing.phase = (uint8_t)((hw_region_timing.phase + cycles) % 5u);
     apu_native_interval_run(cycles);
     /* Both sampled inputs are proven constant throughout this interval. */
     cpu_nmi_input(ppu_nmi_output());

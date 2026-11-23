@@ -775,3 +775,15 @@ if(TARGET SDL2::SDL2)
     endif()
     add_test(NAME cyc_chat_online COMMAND cyc_chat_online_test)
 endif()
+
+# PAL native intervals are implemented by the FRAME PPU only.
+if(NESRECOMP_PPU_IMPL STREQUAL "FRAME")
+    add_executable(cyc_pal_interval_probe tests/pal_interval_probe.c hw_ppu.c hw_apu.c
+        $<TARGET_OBJECTS:cyc_ppu_span_runtime>)
+    target_include_directories(cyc_pal_interval_probe PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})
+    target_link_libraries(cyc_pal_interval_probe PRIVATE ${NESRECOMP_CYC_LIBRARIES})
+    add_test(NAME cyc_pal_intervals COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_pal_intervals.py
+        --probe $<TARGET_FILE:cyc_pal_interval_probe>)
+    set_tests_properties(cyc_pal_intervals PROPERTIES TIMEOUT 180)
+endif()
