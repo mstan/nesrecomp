@@ -96,6 +96,15 @@ try {
             $licenses[$font.Notice] = Join-Path $PSScriptRoot "release-licenses/$($font.Notice)"
         }
     }
+    if (Test-Path -LiteralPath (Join-Path $stage 'libstdc++-6.dll')) {
+        $compiler = Cache-Path 'CMAKE_CXX_COMPILER' ''
+        if (-not $compiler) { throw 'Missing compiler identity for GNU runtime notices.' }
+        $compilerPrefix = Split-Path -Parent (Split-Path -Parent $compiler)
+        foreach ($name in 'COPYING.LIB', 'COPYING.RUNTIME', 'COPYING3', 'README') {
+            $licenses["GCC-$name.txt"] = Join-Path $compilerPrefix "share/licenses/gcc-libs/$name"
+        }
+        $licenses['libwinpthread-COPYING.txt'] = Join-Path $compilerPrefix 'share/licenses/libwinpthread/COPYING'
+    }
     # Some local game projects do not yet carry a separate license file.
     # Bundle it when declared; the required framework/dependency notices stay.
     $gameLicense = Join-Path $ProjectRoot 'LICENSE'

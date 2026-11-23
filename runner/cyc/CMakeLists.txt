@@ -178,6 +178,9 @@ if(SDL2_FOUND)
     foreach(t cyc_window cyc_window_dev)
         target_include_directories(${t} PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})
         target_link_libraries(${t} PRIVATE ${NESRECOMP_CYC_LIBRARIES})
+        if(WIN32)
+            target_compile_definitions(${t} PRIVATE CYC_HOST_EXTRAS_STRONG=1)
+        endif()
         if(MSVC)
             target_compile_definitions(${t} PRIVATE _CRT_SECURE_NO_WARNINGS)
         endif()
@@ -213,6 +216,23 @@ if(SDL2_FOUND)
                 --window $<TARGET_FILE:cyc_window> --dev-window $<TARGET_FILE:cyc_window_dev> ${window_ui}
                 --out ${CMAKE_CURRENT_BINARY_DIR}/window_run)
     set_tests_properties(cyc_window_run PROPERTIES TIMEOUT 900)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang" AND NOT APPLE AND NOT MSVC)
+        set(interpolation_sources ${NESRECOMP_CYC_SOURCES})
+        list(REMOVE_ITEM interpolation_sources "${CMAKE_CURRENT_SOURCE_DIR}/cyc_host_extras_none.c")
+        add_executable(cyc_window_interpolation ${interpolation_sources}
+            cyc_native_none.c tests/interpolation_host.c)
+        target_include_directories(cyc_window_interpolation PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})
+        target_link_libraries(cyc_window_interpolation PRIVATE ${NESRECOMP_CYC_LIBRARIES})
+        target_link_options(cyc_window_interpolation PRIVATE
+            "-Wl,--wrap=cyc_run_frame" "-Wl,--wrap=cyc_zapper_state")
+        nesrecomp_cyc_enable_sdl(cyc_window_interpolation NO_DEV_UI)
+        add_test(NAME cyc_window_interpolation_run COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_cyc_window.py
+            --window $<TARGET_FILE:cyc_window> --dev-window $<TARGET_FILE:cyc_window_dev>
+            --interpolation-window $<TARGET_FILE:cyc_window_interpolation> --interpolation-only
+            --out ${CMAKE_CURRENT_BINARY_DIR}/window_interpolation)
+        set_tests_properties(cyc_window_interpolation_run PROPERTIES TIMEOUT 120)
+    endif()
     # The always-on diagnostic replay (cyc_replay.h): a hidden window records,
     # tools/cyc/replay_diagnostic.py replays headless with exact per-frame hash
     # equality, across a mid-session state load and segment rollovers; corrupted
@@ -238,6 +258,9 @@ if(SDL2_FOUND)
             ${CMAKE_CURRENT_SOURCE_DIR}/../include)
         target_link_libraries(cyc_window_mods PRIVATE ${NESRECOMP_CYC_LIBRARIES})
         target_compile_features(cyc_window_mods PRIVATE cxx_std_17)
+        if(WIN32)
+            target_compile_definitions(cyc_window_mods PRIVATE CYC_HOST_EXTRAS_STRONG=1)
+        endif()
         target_compile_definitions(cyc_window_mods PRIVATE NESRECOMP_ENABLE_MODS=1 "CYC_MOD_GAME_ID=\"cyc-replay-test\""
             "CYC_MOD_ROM_CRC32=\"${replay_mod_crc}\"")
         if(MSVC)
@@ -257,7 +280,12 @@ if(SDL2_FOUND)
     add_test(NAME cyc_cart_saves
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_cyc_cart_saves.py
                 --exe $<TARGET_FILE:cyc_window> --out ${CMAKE_CURRENT_BINARY_DIR}/cart_saves)
-    set_tests_properties(cyc_cart_saves PROPERTIES TIMEOUT 120)
+    if(UNIX AND NOT APPLE)
+        add_test(NAME cyc_cart_saves_appimage
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_cyc_cart_saves.py
+                    --exe $<TARGET_FILE:cyc_window> --out ${CMAKE_CURRENT_BINARY_DIR}/cart_saves_appimage
+                    --appimage)
+    endif()
 else()
     message(STATUS "SDL2 not found: cyc_input_test and cyc_window are not built")
 endif()
@@ -542,6 +570,28 @@ add_test(NAME cyc_ppu_spans COMMAND ${Python3_EXECUTABLE}
     --candidate $<TARGET_FILE:cyc_ppu_span_candidate>)
 set_tests_properties(cyc_ppu_spans PROPERTIES TIMEOUT 180)
 
+# Compare the phase-specialized PAL scheduler against its universal tick loop,
+# with the SAME PPU/APU implementation on both sides. The stimulus includes
+# all PAL divider phases, split register cycles, DMA, IRQ/NMI and state replay.
+add_library(cyc_pal_clock_runtime OBJECT cpu6502.c cpu6502_interp.c
+    ${CYC_TEST_BOARD_SOURCES} hw_palette.c cyc_trace.c cyc_ring.c
+    ${NESRECOMP_CYC_SCHEDULER_SOURCES} cyc_native_none.c)
+target_include_directories(cyc_pal_clock_runtime PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})
+foreach(kind candidate reference)
+    add_executable(cyc_pal_clock_${kind} tests/ppu_span_probe.c hw_machine.c hw_ppu.c hw_apu.c
+        $<TARGET_OBJECTS:cyc_pal_clock_runtime>)
+    target_include_directories(cyc_pal_clock_${kind} PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})
+    target_link_libraries(cyc_pal_clock_${kind} PRIVATE ${NESRECOMP_CYC_LIBRARIES})
+    if(MSVC)
+        target_compile_definitions(cyc_pal_clock_${kind} PRIVATE _CRT_SECURE_NO_WARNINGS)
+    endif()
+endforeach()
+target_compile_definitions(cyc_pal_clock_reference PRIVATE NESRECOMP_PAL_CLOCK_REFERENCE=1)
+add_test(NAME cyc_pal_clock COMMAND ${Python3_EXECUTABLE}
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_ppu_spans.py
+    --reference $<TARGET_FILE:cyc_pal_clock_reference>
+    --candidate $<TARGET_FILE:cyc_pal_clock_candidate>)
+
 endif()
 
 add_executable(cyc_native_interval_probe tests/native_interval_probe.c hw_ppu.c hw_apu.c
@@ -555,6 +605,14 @@ add_test(NAME cyc_native_intervals COMMAND ${Python3_EXECUTABLE}
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_native_intervals.py
     --probe $<TARGET_FILE:cyc_native_interval_probe>)
 set_tests_properties(cyc_native_intervals PROPERTIES TIMEOUT 180)
+
+add_executable(cyc_masked_irq_probe tests/masked_irq_probe.c hw_ppu.c hw_apu.c
+    $<TARGET_OBJECTS:cyc_ppu_span_runtime>)
+target_include_directories(cyc_masked_irq_probe PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})
+target_link_libraries(cyc_masked_irq_probe PRIVATE ${NESRECOMP_CYC_LIBRARIES})
+add_test(NAME cyc_masked_irq COMMAND ${Python3_EXECUTABLE}
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_masked_irq.py
+    --probe $<TARGET_FILE:cyc_masked_irq_probe>)
 
 if(NESRECOMP_PPU_IMPL STREQUAL "FRAME")
     add_executable(cyc_frame_ppu_state_test tests/frame_ppu_state_test.c hw_ppu.c hw_apu.c

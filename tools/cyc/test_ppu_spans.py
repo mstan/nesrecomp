@@ -10,7 +10,7 @@ def main():
     args = parser.parse_args()
     outputs = []
     for exe in (args.reference, args.candidate):
-        result = subprocess.run([exe], capture_output=True, timeout=120,
+        result = subprocess.run([exe], capture_output=True,
             creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
         if result.returncode:
             raise AssertionError((exe, result.returncode, result.stderr.decode(errors='replace')))

@@ -181,6 +181,55 @@ class Window:
         return rc
 
 
+def cartridge_bindings(exe, bios, out):
+    # This NROM program latches A from $4016 into RAM $10 continuously.
+    # Both inputs pass through the real window/bindings/controller path.
+    image = out / 'cartridge-input.nes'
+    rom = bytearray(b'NES\x1a' + bytes([1, 1]) + bytes(10))
+    code = bytes([0x78, 0xd8, 0xa2, 0xff, 0x9a,
+                  0xa9, 1, 0x8d, 0x16, 0x40,
+                  0xa9, 0, 0x8d, 0x16, 0x40,
+                  0xad, 0x16, 0x40, 0x29, 1, 0x85, 0x10,
+                  0x4c, 5, 0x80])
+    prg = bytearray(16384)
+    prg[:len(code)] = code
+    prg[-6:] = bytes([0, 0x80]) * 3
+    rom.extend(prg)
+    rom.extend(bytes(8192))
+    image.write_bytes(rom)
+    config = ('[Keyboard.Player1]\na = D\n'
+              '[Gamepad.Player1]\na = leftshoulder\n')
+    w = Window(exe, image, bios, out, 'cartridge-bindings', config)
+    try:
+        s = w.until(lambda s: s['frame'] >= 20, 300, 'cartridge boot')
+        check(not s['fds'], 'cartridge incorrectly reports FDS media')
+        check(w.ram(0x10) == 0, 'cartridge A starts released')
+        w.ok('key', name='D', frames=60)
+        w.until(lambda s: w.ram(0x10) == 1, 30, 'D reaches cartridge A')
+        check(not w.state()['toast']['visible'], 'cartridge D opens a disk toast')
+        w.until(lambda s: w.ram(0x10) == 0, 120, 'D release reaches cartridge')
+        # Discover our virtual pad rather than assuming it precedes a physical
+        # controller attached to the test host. Select it through normal config.
+        old_pads = {p['guid'] for p in w.state()['pads']}
+        w.ok('pad', buttons='leftshoulder', frames=1)
+        s = w.until(lambda s: any(p['guid'] not in old_pads for p in s['pads']),
+                    30, 'virtual controller attached')
+        virtual = [p['guid'] for p in s['pads'] if p['guid'] not in old_pads]
+        check(len(virtual) == 1, f'expected one test-owned controller: {virtual}')
+    finally:
+        check(w.quit() == 0, 'cartridge keyboard window exit')
+    config += f'[Input]\nPlayer1Source = 2\nPlayer1Device = {virtual[0]}\n'
+    w = Window(exe, image, bios, out, 'cartridge-controller', config)
+    try:
+        w.until(lambda s: s['frame'] >= 20, 300, 'controller cartridge boot')
+        w.ok('pad', buttons='leftshoulder', frames=60)
+        w.until(lambda s: w.ram(0x10) == 1, 30, 'left shoulder reaches cartridge A')
+        check(not w.state()['toast']['visible'], 'cartridge shoulder opens a disk toast')
+        w.until(lambda s: w.ram(0x10) == 0, 120, 'shoulder release reaches cartridge')
+    finally:
+        check(w.quit() == 0, 'cartridge input window exit')
+
+
 def production(exe, image, bios, out, recomp_ui):
     w = Window(exe, image, bios, out, 'production')
     s = w.until(lambda s: s['frame'] >= 60, 900, 'boot')
@@ -308,6 +357,8 @@ def main():
     ap.add_argument('--window', type=Path, required=True)
     ap.add_argument('--dev-window', type=Path, required=True)
     ap.add_argument('--recomp-ui', action='store_true', help='the production window has the runtime menu')
+    ap.add_argument('--interpolation-window', type=Path)
+    ap.add_argument('--interpolation-only', action='store_true')
     ap.add_argument('--out', type=Path, required=True)
     args = ap.parse_args()
     out = args.out.resolve()
@@ -317,9 +368,25 @@ def main():
                    capture_output=True, creationflags=NO_WINDOW)
     image, bios = fx / 'disk2_2.fds', fx / 'bios' / 'hle.rom'
     try:
-        cfg = production(args.window.resolve(), image, bios, out, args.recomp_ui)
-        rebinding(args.window.resolve(), image, bios, out, cfg)
-        dev(args.dev_window.resolve(), image, bios, out)
+        if args.interpolation_only:
+            check(args.interpolation_window is not None, 'interpolation host is required')
+            cartridge_bindings(args.interpolation_window.resolve(), bios, out)
+            w = Window(args.interpolation_window.resolve(), out / 'cartridge-input.nes',
+                       bios, out, 'interpolation-ownership')
+            try:
+                w.until(lambda s: s['frame'] >= 60, 900, 'snapshot interpolation running')
+                stats = w.ok('interpolation_test')
+                check(stats['phases'] > 0 and stats['worker_frames'] > 0,
+                      f'actual interpolation and emulation thread were not exercised: {stats}')
+                check(stats['unsafe_machine_reads'] == 0,
+                      f'presenter read machine state during the emulation thread: {stats}')
+            finally:
+                check(w.quit() == 0, 'interpolation host exit')
+        else:
+            cartridge_bindings(args.window.resolve(), bios, out)
+            cfg = production(args.window.resolve(), image, bios, out, args.recomp_ui)
+            rebinding(args.window.resolve(), image, bios, out, cfg)
+            dev(args.dev_window.resolve(), image, bios, out)
     finally:
         for p in OPEN:
             if p.poll() is None:

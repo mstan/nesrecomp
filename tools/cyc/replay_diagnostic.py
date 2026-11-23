@@ -336,7 +336,9 @@ def replay_segment(seg, args, work):
     cmd = host_command(seg, args, work, end, extra)
     code, log = run_host(cmd, work, args.timeout, f'segment-{seg.number:06d}.log')
     got = read_host_hashes(work / f'segment-{seg.number:06d}.hashes')
-    tail = log.read_text(errors='replace')[-1500:] if log.is_file() else ''
+    output = log.read_text(errors='replace') if log.is_file() else ''
+    # Startup refusals can precede a long shutdown counter report.
+    excerpt = output if len(output) <= 3000 else output[:1500] + '\n...\n' + output[-1500:]
     if code is None:
         # the host never finished: it may have hung on the frame after the last good one
         done = max(got) if got else seg.first_frame - 1
@@ -349,7 +351,7 @@ def replay_segment(seg, args, work):
         have = got.get(frame)
         if have is None:
             return 'host', (f'segment {seg.number}: the host stopped (exit {code}) before frame {frame}; '
-                            f'refusal or crash. Tail of {log}:\n{tail}')
+                            f'refusal or crash. Log excerpt from {log}:\n{excerpt}')
         bad = diff_fields(rec, have)
         if bad:
             state = work / f'replay-divergence-{seg.number:06d}.cycstate'
@@ -362,7 +364,7 @@ def replay_segment(seg, args, work):
             return 'diverged', (f'segment {seg.number}: FIRST DIVERGENCE at frame {frame} (frame {frame - seg.first_frame + 1} '
                                 f'of the segment): ' + '; '.join(bad) + saved)
     if code != 0 and len(got) < count:
-        return 'host', f'segment {seg.number}: the host exited {code}. Tail of {log}:\n{tail}'
+        return 'host', f'segment {seg.number}: the host exited {code}. Log excerpt from {log}:\n{excerpt}'
     if seg.unfinished is not None and (args.until is None or count == len(seg.inputs)):
         return 'incomplete', (f'segment {seg.number}: all {seg.completed} recorded frames matched, but frame '
                               f'{seg.unfinished} has an input and no checkpoint: it hung or crashed in the original run. '

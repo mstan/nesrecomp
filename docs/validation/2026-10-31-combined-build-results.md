@@ -34,7 +34,3 @@ and6prototype dispositions),8prepared/deferred areas and owner-parkedNES29.
 Selections overlap and are not16independent speedups. Deferred/inventory work
 is not completed candidate burndown. Continue remaining areas serially before
 the next final owner handoff; preserve accepted checks unless code changes.
-
-Requested engine reviewer/assignee `TechnicallyComputers` is not assignable
-(GitHub eligibility404). PR89 has no assignee; repository access is an unresolved
-ownership detail.
