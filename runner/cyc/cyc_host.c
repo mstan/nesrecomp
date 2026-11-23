@@ -187,6 +187,9 @@
 #endif
 #include "cyc_state.h"
 #include "cyc_video.h"
+#if defined(CYC_LAUNCHER_SHORTCUTS)
+#include "launcher_icons.h"   /* --desktop-shortcut / --steam-shortcut */
+#endif
 #ifdef NESRECOMP_NET
 #include "cyc_net.h"
 #include <SDL.h>
@@ -1065,6 +1068,21 @@ static bool s_saves_enabled = true;
 bool cyc_host_saves_enabled(void) { return s_saves_enabled; }
 #endif
 
+/* Multi-image builds. A game whose executable regions are shared between
+ * cartridge images can ship one executable for all of them by defining this
+ * hook strongly; the weak default accepts only the image that was compiled.
+ * `prg_hash` is the loaded payload's FNV-1a, the value compared below.
+ * Acceptance is not a claim that the bytes agree: NESRECOMP_NATIVE_PRG_GUARDS
+ * still checks every compiled byte, so a differing region falls back to the
+ * interpreter instead of running stale native code. */
+#if defined(__GNUC__)
+__attribute__((weak))
+#endif
+bool cyc_game_image_accepted(uint32_t prg_hash) {
+    (void)prg_hash;
+    return false;
+}
+
 #ifdef CYC_ORACLE
 int main(int argc, char **argv) {
 #else
@@ -1087,6 +1105,7 @@ static int host_main(int argc, char **argv) {
     unsigned spam_seed = 1;
     bool spam_dpad = true;
     bool acccoin = false, headless = false, frames_given = false;
+    int shortcut_action = 0;   /* 1 = desktop shortcut, 2 = Steam, then exit */
 #ifndef CYC_ORACLE
     const char *ring_out = NULL, *frame_log = NULL, *fds_bios = NULL;
     const char *fds_import_ips = NULL, *fds_export_ips = NULL, *fds_hle_arg = NULL;
@@ -1275,6 +1294,10 @@ static int host_main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--ram-view-list") && i + 1 < argc) view_list = argv[++i], headless = true;
 #endif
         else if (argv[i][0] != '-' && !rom_path) rom_path = argv[i];
+        /* The launcher's two utilities, reachable without the window so they
+         * can be scripted and checked. <rom> selects the image they describe. */
+        else if (!strcmp(argv[i], "--desktop-shortcut")) shortcut_action = 1;
+        else if (!strcmp(argv[i], "--steam-shortcut")) shortcut_action = 2;
 #ifndef CYC_ORACLE
         else if (cyc_session_take_option(argc, argv, &i, &bad_option)) {
             if (bad_option) { fprintf(stderr, "%s needs a value\n", argv[i]); return 2; }
@@ -1288,6 +1311,27 @@ static int host_main(int argc, char **argv) {
 #ifndef CYC_ORACLE
     s_saves_enabled = !no_save;
     if (!rom_path) rom_path = cyc_native_fds_image_path;   /* game.toml [fds] image */
+#if defined(CYC_LAUNCHER_SHORTCUTS)
+    if (shortcut_action) {
+        /* The launcher buttons, without the window: what <rom> describes. */
+        const char *label = cyc_native_display_name ? cyc_native_display_name : "Legend Of Zelda NES";
+        char args[1024], err[256];
+        snprintf(args, sizeof args, "\"%s\"", rom_path ? rom_path : "");
+        err[0] = 0;
+        const int ok = shortcut_action == 2
+            ? launcher_steam_shortcut(NULL, args, label, NULL, err, sizeof err)
+            : launcher_desktop_shortcut(NULL, args, label, err, sizeof err);
+        if (!ok) { fprintf(stderr, "%s\n", err[0] ? err : "failed"); return 2; }
+        printf("%s\n", shortcut_action == 2 ? "steam shortcut added (restart Steam to see it)"
+                                            : "desktop shortcut created");
+        return 0;
+    }
+#else
+    if (shortcut_action) {
+        fprintf(stderr, "This launcher build does not provide shortcut creation.\n");
+        return 2;
+    }
+#endif
     if (headless && mods_root) {
         char err[512];
         if (!cyc_session_mods_init(mods_root, err, sizeof(err))) {
@@ -1471,7 +1515,12 @@ session_restart:
     if (identity_region < 0) identity_region = CYC_GAME_REGION;
 #endif
     if (identity_region < 0) identity_region = cyc_cart_region();
-    if (cyc_native_program_name && !nes_cart_identity_compatible_region(&cart_info, cyc_native_cart_hash,
+    /* Keep the native cartridge metadata check for the compiled PRG.
+     * The title can declare other PRG identities for interpreter execution. */
+    const bool image_accepted = cyc_native_program_name &&
+        cyc_prg_hash() != cyc_native_prg_hash &&
+        cyc_game_image_accepted(cyc_prg_hash());
+    if (!image_accepted && cyc_native_program_name && !nes_cart_identity_compatible_region(&cart_info, cyc_native_cart_hash,
                                                                      identity_region == CYC_REGION_PAL)) {
         cyc_diagnostics_error("Cartridge metadata differs from the compiled program; regenerate native code\n");
 #if defined(CYC_WITH_SDL)
@@ -1479,13 +1528,26 @@ session_restart:
 #endif
         return 2;
     }
-    if (cyc_native_program_name && cyc_prg_hash() != cyc_native_prg_hash) {
+    if (!image_accepted && cyc_native_program_name && cyc_prg_hash() != cyc_native_prg_hash) {
         cyc_diagnostics_error("PRG ROM does not match the ROM '%s' was recompiled from (hash %08X, expected %08X)\n",
                 cyc_native_program_name, cyc_prg_hash(), cyc_native_prg_hash);
 #if defined(CYC_WITH_SDL)
         if (!headless) cyc_sdl_error_box("Cannot start game", "The selected ROM's program data differs from this build. Select the matching original ROM in the launcher.");
 #endif
         return 2;
+    }
+    /* An accepted image that is not the compiled one may not be reproduced by
+     * the compiled blocks: the compiler bakes the ROM bytes it can prove (see
+     * the "folds the ROM bytes at its address to constants" note in
+     * cyc_recomp.h), so folded data reads differ even when the instruction
+     * bytes agree - measured as a per-cycle trace divergence with identical
+     * memory and registers. The cycle-accurate interpreter is exact for any
+     * image, so such an image runs on it instead. */
+    if (image_accepted && cyc_prg_hash() != cyc_native_prg_hash && cyc_run_native) {
+        cyc_run_native = false;
+        cyc_diagnostics_note("image %08X accepted; not the compiled image, running the cycle interpreter", cyc_prg_hash());
+        fprintf(stderr, "accepted image %08X is not the image this build compiled; running on the cycle-accurate interpreter\n",
+                cyc_prg_hash());
     }
 #endif
     /* Windowed cartridges use the same save convention as disk games.
@@ -1535,13 +1597,15 @@ session_restart:
         fprintf(stderr,"barcode requires Datach, 8/12/13 digits with valid checksum, and a positive module duration\n"); return 2;
     }
 #ifndef CYC_ORACLE
-    /* Mods: the window committed its catalog's selection when the launcher
-     * started the game (cyc_sdl_prelaunch); a headless run only with
-     * --mods-root. */
-    if (headless) {
+    /* Activate mods after the selected cartridge passes the host identity
+     * checks. A headless run only initializes a catalog with --mods-root. */
+    {
         char err[512];
         if (!cyc_session_mods_start(rom_path, err, sizeof(err))) {
             cyc_diagnostics_error("%s\n", err);
+#if defined(CYC_WITH_SDL)
+            if (!headless) cyc_sdl_error_box("Mods", err);
+#endif
             return 2;
         }
     }

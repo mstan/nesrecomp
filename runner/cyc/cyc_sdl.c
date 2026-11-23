@@ -238,11 +238,6 @@ int cyc_sdl_prelaunch(const char **rom_path, const char *cli_bios, NesFdsHleAsk 
 #else
     (void)cli_bios;
 #endif
-    if (!cyc_session_mods_start(*rom_path, err, sizeof(err))) {
-        cyc_diagnostics_error("%s\n", err);
-        cyc_sdl_error_box("Mods", err);
-        return 2;
-    }
     SDL_version linked; SDL_GetVersion(&linked);
     cyc_diagnostics_note("settings scale=%d fullscreen=%d integer=%d linear=%d audio=%d volume=%d skip_launcher=%d view=%d SDL=%u.%u.%u platform=%s",
         s_set.window_scale, s_set.fullscreen, s_set.integer_scale, s_set.linear_filter,
