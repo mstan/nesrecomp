@@ -135,6 +135,12 @@ bool cyc_session_mods_start(const char *image_path, char *err, size_t err_len)
     cyc_diagnostics_note("starting selected mod plugins");
 #if NESRECOMP_ENABLE_MODS
     if (!s_mods) return true;
+#if defined(CYC_MULTI_IMAGE)
+    if (!nes_mod_runtime_retarget_c(image_path)) {
+        snprintf(err, err_len, "mods: %s", nes_mod_runtime_last_error_c());
+        return false;
+    }
+#endif
     int online=0;
 #ifdef NESRECOMP_NET
     NesNetplayConfig cfg;nes_netplay_config_defaults(&cfg);nes_netplay_config_apply_env(&cfg);
