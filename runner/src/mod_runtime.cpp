@@ -845,9 +845,10 @@ bool read_manifest(const fs::path& path, Package& out, std::string* error) {
         for (Feature& feature : out.features)
             if (feature.id == item.feature_id) owner = &feature;
         const bool external = item.source == "mesen";
+        /* HD resources share the ID namespace without an ExternalRom descriptor. */
         const bool descriptor_valid = external
             ? item.directory.empty() && item.patch.empty() && valid_id(item.resource_id) &&
-              !item.label.empty() && resource_ids.insert(item.resource_id).second &&
+              !item.label.empty() && resource_ids.emplace(item.resource_id, nullptr).second &&
               (item.patched_rom_crc32.empty() || valid_crc32(item.patched_rom_crc32))
             : item.source.empty() && item.resource_id.empty() && !item.require_patch && package_relative_path(item.directory) &&
               (item.patch.empty() || package_relative_path(item.patch)) &&
