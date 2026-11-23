@@ -14,6 +14,9 @@
 #include "cyc_recomp.h"
 #include "launcher_profile.h"
 #include "recomp_launcher.h"
+#if defined(CYC_MULTI_IMAGE) && NESRECOMP_ENABLE_MODS && defined(RECOMP_LAUNCHER_HAS_VERIFIED_ROM_CHANGED)
+#include "mod_runtime.h"
+#endif
 #ifdef NES_HOST_HAS_RECOMP_UI
 #include "nes_host_lobby.h"
 static int s_net_returned;
@@ -290,6 +293,9 @@ int cyc_ui_launcher(CycSettings *settings, const char *settings_path, const CycH
     gi.settings_bindings = 1;         /* every binding is the host's (config.ini) */
     /* The Mods screen (a game built with mods; recomp-ui's RECOMP_UI_ENABLE_MODS). */
     gi.mods = (const RecompLauncherCModProvider *)cyc_diagnostics_provider(mods);
+#if defined(CYC_MULTI_IMAGE) && NESRECOMP_ENABLE_MODS && defined(RECOMP_LAUNCHER_HAS_VERIFIED_ROM_CHANGED)
+    gi.verified_rom_changed_cb = nes_mod_runtime_retarget_c;
+#endif
     gi.default_settings = &defaults;
     gi.assist_binding_labels = shortcut_labels;
     gi.assist_binding_count = count + CYC_GAME_PLAYERS * CYC_GAME_BUTTONS;
@@ -331,6 +337,8 @@ int cyc_ui_launcher(CycSettings *settings, const char *settings_path, const CycH
         const char *hex = CYC_LAUNCHER_ROM_SHA256;
         int count = 0;
         while (hex && *hex && count < (int)(sizeof sha / sizeof sha[0])) {
+            const size_t len = strcspn(hex, ", ");
+            if (len != 64) break;
             bool ok = true;
             for (int i = 0; ok && i < 32; ++i) {
                 int hi = hex_nibble(hex[2 * i]), lo = hex_nibble(hex[2 * i + 1]);
@@ -339,6 +347,9 @@ int cyc_ui_launcher(CycSettings *settings, const char *settings_path, const CycH
             }
             if (!ok) break;
             ++count;
+#if NESRECOMP_ENABLE_MODS && !defined(RECOMP_LAUNCHER_HAS_VERIFIED_ROM_CHANGED)
+            if (mods) break;
+#endif
             hex += 64;
             while (*hex == ',' || *hex == ' ') ++hex;
         }

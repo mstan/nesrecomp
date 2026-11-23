@@ -187,7 +187,7 @@
 #endif
 #include "cyc_state.h"
 #include "cyc_video.h"
-#if defined(RECOMP_LAUNCHER)
+#if defined(CYC_LAUNCHER_SHORTCUTS)
 #include "launcher_icons.h"   /* --desktop-shortcut / --steam-shortcut */
 #endif
 #ifdef NESRECOMP_NET
@@ -1311,7 +1311,7 @@ static int host_main(int argc, char **argv) {
 #ifndef CYC_ORACLE
     s_saves_enabled = !no_save;
     if (!rom_path) rom_path = cyc_native_fds_image_path;   /* game.toml [fds] image */
-#if defined(RECOMP_LAUNCHER)
+#if defined(CYC_LAUNCHER_SHORTCUTS)
     if (shortcut_action) {
         /* The launcher buttons, without the window: what <rom> describes. */
         const char *label = cyc_native_display_name ? cyc_native_display_name : "Legend Of Zelda NES";
@@ -1325,6 +1325,11 @@ static int host_main(int argc, char **argv) {
         printf("%s\n", shortcut_action == 2 ? "steam shortcut added (restart Steam to see it)"
                                             : "desktop shortcut created");
         return 0;
+    }
+#else
+    if (shortcut_action) {
+        fprintf(stderr, "This launcher build does not provide shortcut creation.\n");
+        return 2;
     }
 #endif
     if (headless && mods_root) {
@@ -1510,9 +1515,10 @@ session_restart:
     if (identity_region < 0) identity_region = CYC_GAME_REGION;
 #endif
     if (identity_region < 0) identity_region = cyc_cart_region();
-    /* An image the game declares compatible (cyc_game_image_accepted) passes
-     * both identity gates; the PRG guards still verify each compiled byte. */
+    /* Keep the native cartridge metadata check for the compiled PRG.
+     * The title can declare other PRG identities for interpreter execution. */
     const bool image_accepted = cyc_native_program_name &&
+        cyc_prg_hash() != cyc_native_prg_hash &&
         cyc_game_image_accepted(cyc_prg_hash());
     if (!image_accepted && cyc_native_program_name && !nes_cart_identity_compatible_region(&cart_info, cyc_native_cart_hash,
                                                                      identity_region == CYC_REGION_PAL)) {
@@ -1591,13 +1597,15 @@ session_restart:
         fprintf(stderr,"barcode requires Datach, 8/12/13 digits with valid checksum, and a positive module duration\n"); return 2;
     }
 #ifndef CYC_ORACLE
-    /* Mods: the window committed its catalog's selection when the launcher
-     * started the game (cyc_sdl_prelaunch); a headless run only with
-     * --mods-root. */
-    if (headless) {
+    /* Activate mods after the selected cartridge passes the host identity
+     * checks. A headless run only initializes a catalog with --mods-root. */
+    {
         char err[512];
         if (!cyc_session_mods_start(rom_path, err, sizeof(err))) {
             cyc_diagnostics_error("%s\n", err);
+#if defined(CYC_WITH_SDL)
+            if (!headless) cyc_sdl_error_box("Mods", err);
+#endif
             return 2;
         }
     }
