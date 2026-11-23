@@ -22,6 +22,19 @@
 #include <stdarg.h>
 #include <assert.h>
 #include <string.h>
+#if NESRECOMP_PPU_FRAME_PAL
+
+#if NESRECOMP_PPU_FRAME
+/* The region clock already owns its event cadence. Keep PAL delegation out
+ * of the accepted NTSC packet/tail functions and their compiled hot paths. */
+#define frame_ppu_ticks ntsc_frame_ppu_ticks
+#define ppu_dot ntsc_ppu_dot
+#define ppu_half_dot ntsc_ppu_half_dot
+#define ppu_clock_cpu_tail ntsc_ppu_clock_cpu_tail
+#define ppu_native_interval_limit ntsc_ppu_native_interval_limit
+#define ppu_native_interval_run ntsc_ppu_native_interval_run
+#endif
+#endif
 
 HwMachine  hw;
 HwExtraTiming hw_extra_timing;
@@ -93,8 +106,18 @@ static inline void run_tick(unsigned k)
  * NTSC retains its existing unrolled /12 clock path. */
 static inline void pal_ppu_edge(unsigned half_phase)
 {
+#if NESRECOMP_PPU_FRAME_PAL
+#if NESRECOMP_PPU_FRAME
+    if (half_phase == 0) pal_ppu_dot();
+    else if (half_phase == 5) pal_ppu_half_dot();
+#else
     if (half_phase == 0) ppu_dot();
     else if (half_phase == 5) ppu_half_dot();
+#endif
+#else
+    if (half_phase == 0) ppu_dot();
+    else if (half_phase == 5) ppu_half_dot();
+#endif
 }
 
 HW_ALWAYS_INLINE void run_pal_tick_at(unsigned k, unsigned phase)
@@ -254,6 +277,40 @@ enum { HR_R_DISABLED, HR_R_INT_PENDING, HR_R_OBSERVER, HR_R_TICK, HR_R_BOARD, HR
        HR_R_PPU_LINE_249, HR_R_PPU_LIMIT_NONZERO, HR_R_N };
 #endif
 
+#if NESRECOMP_PPU_FRAME_PAL
+/* These eligibility facts belong to the loaded board/region, not to each
+ * guest block. Dynamic IRQ/DMA/watch/mapping guards remain at admission. */
+static bool native_pal_intervals_enabled = true;
+static bool native_ordinary_board_allowed, native_isolated_board_allowed;
+static uint16_t native_profile_mapper;
+static uint8_t native_profile_region;
+void hw_native_profile_reloaded(void)
+{
+    unsigned mapper = hw_cart.mapper;
+    native_profile_mapper = (uint16_t)mapper;
+    native_profile_region = hw_region_timing.region;
+    native_isolated_board_allowed = mapper == 0 || mapper == 1 || mapper == 4 || mapper == 66;
+    native_ordinary_board_allowed = hw_pal() ?
+        NESRECOMP_PPU_FRAME && native_pal_intervals_enabled && (mapper == 0 || mapper == 3) :
+        native_isolated_board_allowed;
+}
+void hw_native_set_pal_intervals(bool enabled)
+{
+    hw_native_flush();
+    native_pal_intervals_enabled = enabled;
+    hw_native_profile_reloaded();
+}
+static bool native_interval_board_allowed(void)
+{
+    /* A changed board/region must pass its normal setup/restore owner before
+     * it can use cached eligibility, including an unsupported board tag. */
+    if (hw_cart.mapper != native_profile_mapper || hw_region_timing.region != native_profile_region)
+        return false;
+    /* Isolation is live call ownership: PAL CNROM is ordinary-only. */
+    return hw_isolated ? native_isolated_board_allowed : native_ordinary_board_allowed;
+}
+
+#endif
 unsigned hw_native_interval_limit(void)
 {
 #if NESRECOMP_ISOLATED_NATIVE
@@ -271,9 +328,15 @@ unsigned hw_native_interval_limit(void)
 #endif
 #define HR_REFUSE(reason) do { HR_COUNT(hr_refusal = reason); return 0; } while (0)
     if (hw.tick != 1) HR_REFUSE(HR_R_TICK);
+#if NESRECOMP_PPU_FRAME_PAL
+    if (hw_isolated || cyc_trace_enabled ||
+        hw_extra_timing.extra_scanlines || hw_cart.watch_cpu || hw_cart.clock_late ||
+        !native_interval_board_allowed()) HR_REFUSE(HR_R_BOARD);
+#else
     if (hw_pal() || hw_isolated || cyc_trace_enabled ||
         hw_extra_timing.extra_scanlines || hw_cart.watch_cpu || hw_cart.clock_late ||
         (hw_cart.mapper != 0 && hw_cart.mapper != 1 && hw_cart.mapper != 4 && hw_cart.mapper != 66)) HR_REFUSE(HR_R_BOARD);
+#endif
     bool masked_irq = hw.irq_line && native_masked_irq_ready();
     if (hw.irq_line && !masked_irq) HR_REFUSE(HR_R_IRQ_LINE);
     if (hw_cart.mapper == 4 && hw_cart.m.irq_out) HR_REFUSE(HR_R_MMC3_IRQ_OUT);
@@ -287,7 +350,15 @@ unsigned hw_native_interval_limit(void)
      * boards need a bank-selection deadline before admitting CPU ROM reads. */
     if (hw_cart.mapper == 1 && (hw_cart.m.ctrl & 0x10) &&
         ((hw_cart.m.chr0 ^ hw_cart.m.chr1) & 0x1c)) HR_REFUSE(HR_R_BOARD);
+#if NESRECOMP_PPU_FRAME_PAL
+#if NESRECOMP_PPU_FRAME
+    unsigned ppu_limit = hw_pal() ? pal_ppu_native_interval_limit() : ppu_native_interval_limit();
+#else
     unsigned ppu_limit = ppu_native_interval_limit();
+#endif
+#else
+    unsigned ppu_limit = ppu_native_interval_limit();
+#endif
     unsigned limit = apu_native_interval_limit(ppu_limit);
     /* The owner admission bound also makes its packed host tally exact. */
     assert(limit <= UINT16_MAX);
@@ -304,18 +375,30 @@ void hw_native_begin(void)
     hw_native_interval.ram = hw.ram;
 #if NESRECOMP_ISOLATED_NATIVE
     hw_native_interval.enabled = NESRECOMP_NATIVE_INTERVALS && !cyc_trace_enabled &&
+#if NESRECOMP_PPU_FRAME_PAL
+        ((!hw_isolated && !hw_extra_timing.extra_scanlines)
+         || hw_isolated
+        ) &&
+        native_interval_board_allowed() &&
+#else
         ((!hw_isolated && !hw_pal() && !hw_extra_timing.extra_scanlines)
          || hw_isolated
         ) &&
         (hw_cart.mapper == 0 || hw_cart.mapper == 1 ||
          hw_cart.mapper == 4 || hw_cart.mapper == 66) &&
+#endif
         !hw_prg_data_modified && !cyc_mod_rom_read_overrides &&
         (!cyc_cpu_rts_observer || cyc_cpu_rts_observer == cyc_mod_return_observer);
 #else
     hw_native_interval.enabled = NESRECOMP_NATIVE_INTERVALS && !hw_isolated && !cyc_trace_enabled &&
+#if NESRECOMP_PPU_FRAME_PAL
+        !hw_extra_timing.extra_scanlines &&
+        native_interval_board_allowed() &&
+#else
         !hw_pal() && !hw_extra_timing.extra_scanlines &&
         (hw_cart.mapper == 0 || hw_cart.mapper == 1 ||
          hw_cart.mapper == 4 || hw_cart.mapper == 66) &&
+#endif
         !hw_prg_data_modified && !cyc_mod_rom_read_overrides &&
         (!cyc_cpu_rts_observer || cyc_cpu_rts_observer == cyc_mod_return_observer);
 #endif
@@ -333,16 +416,28 @@ void hw_native_begin_checked_rom(void)
     hw_native_interval.checked_prg = true;
 #if NESRECOMP_ISOLATED_NATIVE
     hw_native_interval.enabled = NESRECOMP_NATIVE_INTERVALS && !cyc_trace_enabled &&
+#if NESRECOMP_PPU_FRAME_PAL
+        ((!hw_isolated && !hw_extra_timing.extra_scanlines)
+         || hw_isolated
+        ) &&
+        native_interval_board_allowed() &&
+#else
         ((!hw_isolated && !hw_pal() && !hw_extra_timing.extra_scanlines)
          || hw_isolated
         ) &&
         (hw_cart.mapper == 0 || hw_cart.mapper == 1 || hw_cart.mapper == 4 || hw_cart.mapper == 66) &&
+#endif
         !cyc_mod_rom_read_overrides &&
         (!cyc_cpu_rts_observer || cyc_cpu_rts_observer == cyc_mod_return_observer);
 #else
     hw_native_interval.enabled = NESRECOMP_NATIVE_INTERVALS && !hw_isolated && !cyc_trace_enabled &&
+#if NESRECOMP_PPU_FRAME_PAL
+        !hw_extra_timing.extra_scanlines &&
+        native_interval_board_allowed() &&
+#else
         !hw_pal() && !hw_extra_timing.extra_scanlines &&
         (hw_cart.mapper == 0 || hw_cart.mapper == 1 || hw_cart.mapper == 4 || hw_cart.mapper == 66) &&
+#endif
         !cyc_mod_rom_read_overrides &&
         (!cyc_cpu_rts_observer || cyc_cpu_rts_observer == cyc_mod_return_observer);
 #endif
@@ -421,8 +516,25 @@ void hw_native_interval_run(unsigned cycles)
         return;
     }
 #endif
+#if NESRECOMP_PPU_FRAME_PAL
+    /* One region-owned device interval. NTSC retains its original APU
+     * kernel; PAL's per-cycle executor never tests NTSC span eligibility. */
+    if (hw_pal()) {
+#if NESRECOMP_PPU_FRAME
+        pal_ppu_native_interval_run(cycles, hw.align);
+#else
+        ppu_native_interval_run(cycles, hw.align);
+#endif
+        hw_region_timing.phase = (uint8_t)((hw_region_timing.phase + cycles) % 5u);
+        apu_pal_native_interval_run(cycles);
+    } else {
+        ppu_native_interval_run(cycles, hw.align);
+        apu_native_interval_run(cycles);
+    }
+#else
     ppu_native_interval_run(cycles, hw.align);
     apu_native_interval_run(cycles);
+#endif
     /* Both sampled inputs are proven constant throughout this interval. */
     cpu_nmi_input(ppu_nmi_output());
     apu_sample_irq();
@@ -811,6 +923,9 @@ void cyc_power_on(uint8_t ppu_alignment)
                   : bit1_clear != upper ? 0xF0 : 0x0F;
     }
     hw_cart_power_on();
+#if NESRECOMP_PPU_FRAME_PAL
+    hw_native_profile_reloaded();
+#endif
     ppu_power_on();
     apu_power_on();
     hw_frame_done = false;
@@ -824,7 +939,15 @@ void cyc_power_on(uint8_t ppu_alignment)
     if (hw_pal()) {
         unsigned q = 2u * hw_region_timing.phase;
         /* As on NTSC, no first-dot transition precedes the reset cycle. */
+#if NESRECOMP_PPU_FRAME_PAL
+#if NESRECOMP_PPU_FRAME
+        if (q + 1 == 5) pal_ppu_half_dot();
+#else
         if (q + 1 == 5) ppu_half_dot();
+#endif
+#else
+        if (q + 1 == 5) ppu_half_dot();
+#endif
     } else if (hw.align == 2) ppu_half_dot();
     apu_cycle();
     hw.tick = 1;

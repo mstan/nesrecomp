@@ -11,6 +11,10 @@ void cyc_hdpack_bg_reload(void);
 void cyc_hdpack_bg_shift(void);
 void cyc_hdpack_sprite_fetch(unsigned slot,uint16_t address,uint8_t value,bool high);
 void cyc_hdpack_sprite_row(unsigned slot,uint16_t address,uint8_t lo,uint8_t hi,unsigned attr,unsigned x);
+#if NESRECOMP_PPU_FRAME_PAL
+/* Position the row whose immutable tile bytes the real fetch already owns. */
+void cyc_hdpack_sprite_row_position(unsigned slot,unsigned attr,unsigned x);
+#endif
 void cyc_hdpack_sprite_shift(unsigned slot);
 void cyc_hdpack_clock(void);
 void cyc_hdpack_pixel(unsigned bg_color,unsigned bg_palette,int sprite,unsigned sprite_color);

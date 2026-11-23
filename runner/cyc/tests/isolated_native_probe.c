@@ -142,9 +142,46 @@ static void audio_states(void)
         printf("audio-state pal=%u console=%u rate=%u samples=%zu PASS\n",pal,console,hz,actual_len);
     }
 }
+#if NESRECOMP_PPU_FRAME_PAL
+/* Fixed profile facts must not latch the mode present at initialization. */
+static void profile_admission_controls(void)
+{
+    static uint8_t image[16 + 32768 + 8192];
+    memcpy(image, "NES\032", 4); image[4] = 2; image[5] = 1;
+    for (unsigned pal = 0; pal < 2; ++pal) for (unsigned cnrom = 0; cnrom < 2; ++cnrom) {
+        image[6] = cnrom ? 0x30 : 0;
+        check(cyc_load_ines(image, sizeof(image)), "profile board");
+        check(cyc_set_region(pal ? CYC_REGION_PAL : CYC_REGION_NTSC), "profile region");
+        cyc_power_on(0); cpu.nmi_edge = hw.irq_line = 0;
+        hw_native_set_pal_intervals(true);
+        bool ordinary = pal ? NESRECOMP_PPU_FRAME : !cnrom;
+        hw_isolated = false; hw_native_begin();
+        check(hw_native_interval.enabled == ordinary, "ordinary profile eligibility");
+        hw_native_end();
+        hw_isolated = true; hw_isolated_cycles = 0; hw_isolated_budget = 17;
+        hw_native_begin();
+        check(hw_native_interval.enabled == !cnrom, "isolation retains its own board set");
+        if (!cnrom) {
+            check(hw_native_interval_limit() == 17, "isolated budget unchanged");
+            uint64_t clock = hw.cycles;
+            hw_native_interval_run(5);
+            check(hw_isolated_cycles == 5 && hw.cycles == clock, "isolated service clocks no devices");
+        }
+        hw_native_end(); hw_isolated = false;
+        hw_native_begin(); check(hw_native_interval.enabled == ordinary, "mode return retains ordinary profile");
+        hw_native_end(); hw_native_set_pal_intervals(false);
+        hw_native_begin(); check(hw_native_interval.enabled == (!pal && !cnrom), "policy change refreshes ordinary eligibility");
+        hw_native_end(); hw_native_set_pal_intervals(true);
+    }
+    check(cyc_set_region(CYC_REGION_NTSC), "restore fixture region request");
+}
+#endif
 int main(int argc,char **argv)
 {
     if(argc>1 && !strcmp(argv[1],"--audio-state")){audio_states();return 0;}
+#if NESRECOMP_PPU_FRAME_PAL
+    profile_admission_controls();
+#endif
     bool reference=argc>1 && !strcmp(argv[1],"--reference");
     static uint8_t image[16+65536+16384];
     static const unsigned boards[]={0,1,4,66,2};

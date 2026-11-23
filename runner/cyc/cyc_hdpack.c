@@ -100,6 +100,13 @@ void cyc_hdpack_sprite_row(unsigned slot,uint16_t address,uint8_t lo,uint8_t hi,
     HdFetchedTile *tile=&pipeline.sprite[slot];
     fetch_tile(tile,address,lo,false);fetch_tile(tile,address+8,hi,true);
     tile->attr=(uint8_t)attr;tile->x=(uint8_t)x;
+#if NESRECOMP_PPU_FRAME_PAL
+}
+void cyc_hdpack_sprite_row_position(unsigned slot,unsigned attr,unsigned x) {
+    if(!hdpack_recording())return;
+    pipeline.sprite[slot].attr=(uint8_t)attr;
+    pipeline.sprite[slot].x=(uint8_t)x;
+#endif
 }
 void cyc_hdpack_sprite_shift(unsigned slot) {
     if(hdpack_recording() && pipeline.sprite_x[slot]<8)pipeline.sprite_x[slot]++;

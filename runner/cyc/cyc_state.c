@@ -110,6 +110,9 @@ static void set_err(char *err, size_t n, const char *msg)
 bool cyc_state_save(uint8_t **out, size_t *len, char *err, size_t err_len)
 {
     hw_native_flush();
+#if NESRECOMP_PPU_FRAME_PAL
+    ppu_sync_observers();
+#endif
     Buf b = { 0 };
     Header h;
     memset(&h, 0, sizeof(h));
@@ -391,6 +394,9 @@ bool cyc_state_load(const uint8_t *data, size_t len, char *err, size_t err_len)
         memcpy(hle, chle->data, hle_size);
         memcpy(hle, &cfg, sizeof(cfg));
     }
+#if NESRECOMP_PPU_FRAME_PAL
+    hw_native_profile_reloaded();
+#endif
     ppu_state_reloaded();
     hr_clock_resume();
     hw_cart_sound_reloaded();
@@ -531,6 +537,9 @@ static void snapshot_cart_copy(HwCart *out, const HwCart *in, size_t ram_len)
 static void snapshot_take(CycSnapshot *s, bool isolated)
 {
     hw_native_flush();
+#if NESRECOMP_PPU_FRAME_PAL
+    ppu_sync_observers();
+#endif
     size_t n;
     s->cpu = cpu;
     s->hw = hw;
@@ -607,6 +616,9 @@ void cyc_snapshot_restore(const CycSnapshot *s)
     hw_observe_hit = s->observe_hit;
     hw_frame_end_hit = s->frame_end_hit;
     hw_dma_stalls = s->dma_stalls;
+#if NESRECOMP_PPU_FRAME_PAL
+    hw_native_profile_reloaded();
+#endif
     ppu_state_reloaded();
     hr_clock_resume();
 }

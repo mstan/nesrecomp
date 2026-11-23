@@ -35,8 +35,13 @@ static void width_restore(void) {
     if(s_offline_mode==NES_VIDEO_STOCK)cyc_video_request_width(s_offline_width);else cyc_video_set_mode(s_offline_mode);
     cyc_video_apply_pending();s_offline_mode=-1;
 }
+#if NESRECOMP_PPU_FRAME_PAL
+static int timing_get(char *out,int cap){return snprintf(out,cap,"%d:%u:%s",(int)cyc_region(),cyc_extra_scanlines(),cyc_ppu_implementation());}
+static int timing_apply(const char *v){int region;unsigned lines;char provider[64],tail;if(sscanf(v,"%d:%u:%63s%c",&region,&lines,provider,&tail)!=3||region!=(int)cyc_region()||lines>262||strcmp(provider,cyc_ppu_implementation()))return 0;return cyc_set_extra_scanlines(lines);}
+#else
 static int timing_get(char *out,int cap){return snprintf(out,cap,"%d:%u",(int)cyc_region(),cyc_extra_scanlines());}
 static int timing_apply(const char *v){int region;unsigned lines;char tail;if(sscanf(v,"%d:%u%c",&region,&lines,&tail)!=2||region!=(int)cyc_region()||lines>262)return 0;return cyc_set_extra_scanlines(lines);}
+#endif
 #ifdef NESRECOMP_NET_TEST_BOOT
 /* Test target only: both peers independently verify one build-specific fixture.
  * The production target never reads this environment variable or registers it. */

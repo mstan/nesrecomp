@@ -20,7 +20,7 @@ def main():
             if args.storage_reference:
                 command = [str(args.storage_reference.resolve())]
             command.append('--reference')
-        result = subprocess.run(command, capture_output=True, timeout=180,
+        result = subprocess.run(command, capture_output=True,
                                 creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
         (args.out / (mode + '.stdout')).write_bytes(result.stdout)
         (args.out / (mode + '.stderr')).write_bytes(result.stderr)

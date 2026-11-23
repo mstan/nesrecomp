@@ -31,7 +31,7 @@ def png_read(path):
 PATTERNS=[bytes([255]*8+[0]*8),bytes([0xf0^(y*3) for y in range(8)]+[0xaa^(y*5) for y in range(8)])]
 
 
-def fixture(chr_ram, sprite16, native_picture=False):
+def fixture(chr_ram, sprite16, native_picture=False, pal=False):
     prg=bytearray([0xea]*32768);code=bytearray();labels={};fixups=[]
     def emit(*v):code.extend(v)
     def label(name):labels[name]=0x8000+len(code)
@@ -62,20 +62,21 @@ def fixture(chr_ram, sprite16, native_picture=False):
     chr_data=bytearray(16384)
     for bank in range(2):
         for base in (bank*8192,bank*8192+4096):chr_data[base:base+32]=b''.join(PATTERNS)
-    mapper=0 if chr_ram else (66 if native_picture else 3)
+    mapper=0 if chr_ram else (3 if pal else 66 if native_picture else 3)
     return b'NES\x1a'+bytes([2,0 if chr_ram else 2,(mapper&15)<<4,mapper&0xf0])+bytes(8)+prg+(b'' if chr_ram else chr_data)
 
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--host',type=Path,required=True);parser.add_argument('--out',type=Path,required=True)
     parser.add_argument('--native-picture',action='store_true',help='exercise native GxROM bank changes instead of reference CNROM')
+    parser.add_argument('--pal',action='store_true',help='exercise the explicitly selected PAL NROM/CNROM provider')
     args=parser.parse_args()
     out=args.out.resolve();out.mkdir(parents=True,exist_ok=True)
     si=None
     if hasattr(subprocess,'STARTUPINFO'):si=subprocess.STARTUPINFO();si.dwFlags|=subprocess.STARTF_USESHOWWINDOW;si.wShowWindow=0
     def run(name,rom,pack,frames=24,extra=()):
-        command=[str(args.host.resolve()),str(rom),'--frames',str(frames),'--no-save','--hdpack',str(pack),'--present-out',str(out/(name+'.png')),'--screenshot',str(out/(name+'-native.png')),'--hash-out',str(out/(name+'.hash')),*map(str,extra)]
-        result=subprocess.run(command,capture_output=True,text=True,timeout=90,startupinfo=si,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0));(out/(name+'.log')).write_text(result.stdout+result.stderr);assert result.returncode==0,result.stdout+result.stderr
+        command=[str(args.host.resolve()),str(rom),'--frames',str(frames),'--no-save','--hdpack',str(pack),'--present-out',str(out/(name+'.png')),'--screenshot',str(out/(name+'-native.png')),'--hash-out',str(out/(name+'.hash')),*(['--region','pal'] if args.pal else []),*map(str,extra)]
+        result=subprocess.run(command,capture_output=True,text=True,startupinfo=si,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0));(out/(name+'.log')).write_text(result.stdout+result.stderr);assert result.returncode==0,result.stdout+result.stderr
         return png_read(out/(name+'.png'))
     fallback=out/'fallback';fallback.mkdir(exist_ok=True);png_write(fallback/'none.png',16,16,lambda x,y:(0,0,0,0))
     (fallback/'hires.txt').write_text('<ver>106\n<scale>2\n<img>none.png\n<tile>0,0123456789ABCDEF0123456789ABCDEF,0F010203,0,0,1,N\n')
@@ -91,10 +92,10 @@ def main():
                 manifest+=f'<tile>{bank},{key},FF111213,16,0,1,N\n'
         (pack/'hires.txt').write_text(manifest)
         for sprite16 in (False,True):
-            rom=out/f'{"ram" if ram else "rom"}-{16 if sprite16 else 8}.nes';rom.write_bytes(fixture(ram,sprite16,args.native_picture));tag=rom.stem
+            rom=out/f'{"ram" if ram else "rom"}-{16 if sprite16 else 8}.nes';rom.write_bytes(fixture(ram,sprite16,args.native_picture,args.pal));tag=rom.stem
             if args.native_picture and not ram and not sprite16:
                 run('retained-prefix',rom,pack,frames=1,extra=['--hdpack-prefix-check'])
-            for align in range(4):
+            for align in range(5 if args.pal else 4):
                 name=f'{tag}-a{align}';w,h,rows=run(name,rom,fallback,extra=['--align',align]);nw,nh,native=png_read(out/(name+'-native.png'));assert (w,h)==(512,480)
                 for y in range(nh):
                     expected=b''.join(native[y][x*3:x*3+3]*2 for x in range(nw));assert rows[y*2]==expected and rows[y*2+1]==expected,(name,y,'fallback changed pixels')
@@ -124,7 +125,7 @@ def main():
                 run(name+'-replay',rom,pack,48,['--align',align,'--load-state',state])
                 assert (out/(name+'-save.png')).read_bytes()==(out/(name+'-replay.png')).read_bytes()
                 assert (out/(name+'-save.hash')).read_text().splitlines()[24:]==(out/(name+'-replay.hash')).read_text().splitlines()
-            print(tag,'four alignments: fallback, tile offsets, banks, sprite flips and replay passed',flush=True)
+            print(tag,'PAL five' if args.pal else 'NTSC four','alignments: fallback, tile offsets, banks, sprite flips and replay passed',flush=True)
 
 
 if __name__=='__main__':main()

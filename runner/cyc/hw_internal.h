@@ -450,8 +450,29 @@ void    ppu_native_interval_run(unsigned cycles, unsigned align);
 #if NESRECOMP_PPU_FRAME
 void    frame_ppu_ticks(unsigned first, unsigned end);
 void    frame_ppu_mapper_changed(void);
+#if NESRECOMP_PPU_FRAME_PAL
+/* Region ownership is chosen outside the native NTSC clock packets. Both
+ * providers operate the single HwPpu selected at setup/current-state load. */
+void    ntsc_frame_ppu_ticks(unsigned first, unsigned end);
+void    ntsc_ppu_dot(void);
+void    ntsc_ppu_half_dot(void);
+bool    ntsc_ppu_clock_cpu_tail(unsigned align);
+unsigned ntsc_ppu_native_interval_limit(void);
+void    ntsc_ppu_native_interval_run(unsigned cycles, unsigned align);
+void    pal_ppu_dot(void);
+void    pal_ppu_half_dot(void);
+unsigned pal_ppu_native_interval_limit(void);
+void    pal_ppu_native_interval_run(unsigned cycles, unsigned align);
+/* Materialize the canonical PPU view only at a real host/state observer. */
+void    ppu_sync_observers(void);
+extern uint64_t ppu_native_oam_prefixes,ppu_native_oam_dots;
+#endif
 #endif
 unsigned hw_native_interval_limit(void);
+#if NESRECOMP_PPU_FRAME_PAL
+/* Derived board/region eligibility follows power and current-state restore. */
+void hw_native_profile_reloaded(void);
+#endif
 void    hw_native_interval_run(unsigned cycles);
 uint8_t ppu_read(uint16_t addr);
 void    ppu_write(uint16_t addr, uint8_t value);
@@ -485,6 +506,9 @@ bool    apu_native_interval_ready(void);
 bool    apu_native_masked_irq_ready(void);
 unsigned apu_native_interval_limit(unsigned cycles);
 void    apu_native_interval_run(unsigned cycles);
+#if NESRECOMP_PPU_FRAME_PAL
+void    apu_pal_native_interval_run(unsigned cycles);
+#endif
 /* Tick 7: the IRQ input the CPU will poll, and the frame IRQ re-assertion. */
 void    apu_sample_irq(void);
 /* Register writes ($4000-$4017). */

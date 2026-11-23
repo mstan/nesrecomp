@@ -1476,6 +1476,11 @@ static void render_clock_dot(void)
 
 unsigned ppu_native_interval_limit(void)
 {
+#if NESRECOMP_PPU_FRAME_PAL
+    /* PAL intervals are owned by the FRAME PPU; the reference PPU's span
+     * proofs assume the NTSC three-dot cycle. */
+    if (hw_pal()) return 0;
+#endif
 #if NESRECOMP_PPU_HLE || !NESRECOMP_PPU_LLE_REFERENCE
     if (dot_kind == DOT_IDLE && ppu.dot < 334)
         return (337u - ppu.dot) / 3u;
@@ -1931,6 +1936,9 @@ bool ppu_clock_cpu_tail(unsigned align)
 
 static uint8_t read_oam(void)
 {
+#if NESRECOMP_PPU_FRAME_PAL
+    ppu_sync_observers();
+#endif
     return (rendering() && ppu.scanline < 240) || pal_oam_refresh() ? ppu.oam_latch : ppu.oam[ppu.oam_addr];
 }
 
@@ -1944,6 +1952,9 @@ static uint8_t read_register(uint16_t addr)
         value = ppu.vblank ? 0x80 : 0;
         ppu.read2002 = 1;
         hw_clock_run_ticks(7);
+#if NESRECOMP_PPU_FRAME_PAL
+        ppu_sync_observers();
+#endif
         value |= (uint8_t)((ppu.s0hit_late ? 0x40 : 0) | (ppu.overflow_late ? 0x20 : 0) | (ppu.io_bus & 0x1F));
         ppu.addr_latch = 0;
         ppu.io_bus = value;
@@ -1985,6 +1996,9 @@ static void write_register(uint16_t addr, uint8_t value)
          * register latches before the CPU drives the new byte. */
         ppu.t = (uint16_t)((ppu.t & 0x73FF) | ((hw.data_bus & 3) << 10));
         hw_clock_run_ticks(2);
+#if NESRECOMP_PPU_FRAME_PAL
+        ppu_sync_observers();
+#endif
         ppu.nmi_enable = (value & 0x80) != 0;
         ppu.inc32 = (value & 0x04) != 0;
         ppu.sprite16 = (value & 0x20) != 0;
@@ -2160,6 +2174,9 @@ static const struct {
 
 uint64_t ppu_state_hash(uint64_t h)
 {
+#if NESRECOMP_PPU_FRAME_PAL
+    ppu_sync_observers();
+#endif
 #if NESRECOMP_PPU_HLE
     /* Test-only observation: normalize private packed rows for the established
      * differential trace schema. No second implementation executes. */
@@ -2182,6 +2199,9 @@ uint64_t ppu_state_hash(uint64_t h)
 
 void ppu_state_dump(void *file)
 {
+#if NESRECOMP_PPU_FRAME_PAL
+    ppu_sync_observers();
+#endif
 #if NESRECOMP_PPU_HLE
     HwPpu observed = ppu;
     observed.bg_lo = ppu_hle_plane(ppu.bg_pixels, 0);
@@ -2212,7 +2232,19 @@ void ppu_state_dump(void *file)
 #undef ppu_state_reloaded
 #undef ppu_power_on
 #undef cyc_ppu_implementation
+#if NESRECOMP_PPU_FRAME_PAL
+/* Provider ownership is fixed by build/ROM/region at setup or state load.
+ * Both use the one canonical HwPpu; only the selected provider advances it. */
+static bool frame_pal_selected;
+#include "hw_ppu_frame_pal.inc"
 #include "hw_ppu_frame.inc"
+void ppu_sync_observers(void)
+{
+    if(frame_pal_selected)pal_ppu_sync_observers();
+}
+#else
+#include "hw_ppu_frame.inc"
+#endif
 #endif
 
 #if NESRECOMP_HEADROOM_COUNTERS

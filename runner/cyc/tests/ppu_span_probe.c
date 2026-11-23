@@ -5,9 +5,16 @@
 #include "hw_internal.h"
 #include "hw.h"
 #include "cyc_state.h"
+#if NESRECOMP_PPU_FRAME_PAL
+#include "cyc_trace.h"
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#if NESRECOMP_PPU_FRAME_PAL
+
+static uint64_t observed_reads;
+#endif
 
 static void check(bool ok, const char *what)
 {
@@ -17,7 +24,16 @@ static void check(bool ok, const char *what)
 static void access_bus(uint16_t addr, uint8_t value, bool write)
 {
     hw_cycle_start(addr, write ? HW_WRITE : HW_READ);
+#if NESRECOMP_PPU_FRAME_PAL
+    if (write) hw_write(addr, value);
+    else {
+        uint8_t actual = hw_read(addr);
+        if (addr >= 0x2000 && addr < 0x4000)
+            observed_reads = cyc_trace_mix(observed_reads, (uint64_t)addr << 8 | actual);
+    }
+#else
     if (write) hw_write(addr, value); else (void)hw_read(addr);
+#endif
     hw_cycle_finish(false);
 }
 
@@ -63,6 +79,9 @@ int main(void)
             check(cyc_load_ines(image, sizeof(image)), "load fixture");
             check(cyc_set_region(region ? CYC_REGION_PAL : CYC_REGION_NTSC), "region");
             cyc_power_on((uint8_t)align);
+#if NESRECOMP_PPU_FRAME_PAL
+            observed_reads = 0;
+#endif
             check(cyc_zapper_attach(2), "attach Zapper");
             cyc_set_zapper(120, 100, true);
             check(cyc_audio_enable(44100), "enable audio");
@@ -96,6 +115,22 @@ int main(void)
                 hash = (hash ^ (uint8_t)((uint16_t)pcm[i] >> 8)) * UINT64_C(1099511628211);
             }
             printf("pcm %zu %016llx\n", count, (unsigned long long)hash);
+#if NESRECOMP_PPU_FRAME_PAL
+            printf("guest_ppu_reads %016llx\n", (unsigned long long)observed_reads);
+#if NESRECOMP_PPU_FRAME
+            /* Keep the accepted NTSC FRAME observations unchanged. The newly
+             * admitted PAL provider must match independent coupled LLE reads.
+             * These are the same mixed ports/DMA stimulus and divider phases. */
+            static const uint64_t expected_reads[] = {
+                UINT64_C(0x7d0accf71a3077b6), UINT64_C(0x65c12f6892cfccc9),
+                UINT64_C(0x0b0f9bb5677119e1), UINT64_C(0xa03ac826786917c8),
+                UINT64_C(0x324c0a49c0c65567), UINT64_C(0x3a0dbe7a4ba02331),
+                UINT64_C(0xe9308c2b7e209ad7), UINT64_C(0xaa5229b8a6429563),
+                UINT64_C(0x65483509f0b46914)
+            };
+            check(observed_reads == expected_reads[(region ? 4 : 0) + align], region?"PAL coupled PPU port observations":"accepted NTSC FRAME port observations");
+#endif
+#endif
         }
     }
     return 0;

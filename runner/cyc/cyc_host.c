@@ -1565,10 +1565,15 @@ session_restart:
 #ifdef NESRECOMP_CYCLE_HDPACK_MODS
     if (!cyc_hdpack_mod_prepare()) return 2;
 #endif
+#if NESRECOMP_PPU_FRAME_PAL
+    cyc_power_on((uint8_t)align);
+#endif
 #ifndef CYC_ORACLE
     printf("ppu: implementation=%s (build-fixed)\n", cyc_ppu_implementation());
 #endif
+#if !NESRECOMP_PPU_FRAME_PAL
     cyc_power_on((uint8_t)align);
+#endif
 #ifdef CYC_GAME_ZAPPER_PORT
     cyc_zapper_attach(CYC_GAME_ZAPPER_PORT);
 #endif
@@ -1867,6 +1872,13 @@ session_restart:
            (unsigned long long)ppu_native_sprite_spans,
            (unsigned long long)ppu_native_sprite_dots);
     printf("raster_output_tiles: tiles=%llu\n", (unsigned long long)ppu_native_raster_tiles);
+#if NESRECOMP_PPU_FRAME_PAL
+#if NESRECOMP_PPU_FRAME
+    extern uint64_t ppu_native_oam_prefixes,ppu_native_oam_dots;
+    printf("oam_eval_prefixes: prefixes=%llu dots=%llu\n",
+           (unsigned long long)ppu_native_oam_prefixes,(unsigned long long)ppu_native_oam_dots);
+#endif
+#endif
     printf("apu_event_spans: spans=%llu cycles=%llu\n",
            (unsigned long long)apu_native_event_spans,
            (unsigned long long)apu_native_event_cycles);
