@@ -132,6 +132,19 @@ static const NesKnownDump nes_known_dumps[] = {
 
 static inline void nes_cart_known_dump(NesCartInfo *c, const uint8_t *data, size_t len)
 {
+    /* The distributed Zelda 1 Redux v3.3.3 patch sets one extra mapper bit
+     * in its NES 2.0 header. Its MMC1 animation uses four 8 KiB CHR-RAM
+     * banks. The upstream source header identifies mapper 1. Match the
+     * released payload and board geometry before correcting the mapper. */
+    if (c->nes2 && c->mapper == 257 && !c->submapper && !c->console &&
+        !c->trainer && !c->four_screen && !c->vertical && c->battery &&
+        c->prg_size == 131072 && !c->chr_size && !c->prg_ram &&
+        c->prg_nvram == 8192 && c->chr_ram == 32768 && !c->chr_nvram &&
+        !c->timing && len == 131072 && nes_crc32(0, data, len) == 0x67e03149u) {
+        c->mapper = 1;
+        return;
+    }
+
     bool ambiguous = !c->nes2 || ((c->mapper == 210 || c->mapper == 185) && !c->submapper);
     if (ambiguous) {
         uint32_t crc = nes_crc32(0, data, len);
