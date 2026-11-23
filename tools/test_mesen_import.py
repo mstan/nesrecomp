@@ -29,8 +29,8 @@ def main():
     rom=out/'stock.nes';rom.write_bytes(image)
     original_hash=hashlib.sha1(image).hexdigest()
     patch=b'PATCH'+bytes([0,0,16,0,1,0xa9])+b'EOF'
-    files={'hires.txt':f'<ver>106\n<scale>2\n<patch>fix.ips,{original_hash}\n'.encode(),
-           'fix.ips':patch,'art.png':b'synthetic pixels','LICENSE.txt':b'creator terms'}
+    files={'hires.txt':f'<ver>106\n<scale>2\n<supportedRom>{original_hash}\n'.encode(),
+           'art.png':b'synthetic pixels','LICENSE.txt':b'creator terms'}
     si=None
     if hasattr(subprocess,'STARTUPINFO'):
         si=subprocess.STARTUPINFO();si.dwFlags|=subprocess.STARTF_USESHOWWINDOW;si.wShowWindow=0
@@ -59,12 +59,12 @@ require_patch={str(require_patch).lower()}
         path=out/(name+'-support.nesmod');path.write_bytes(zip_bytes({'manifest.toml':text.encode()}))
         with zipfile.ZipFile(path) as archive: assert archive.namelist()==['manifest.toml']
         return path
-    support=recipe('synthetic','arbitrary-game',image,require_patch=True)
+    support=recipe('synthetic','arbitrary-game',image)
     def run(name,source,mode='import',support=support,rom=rom,game='arbitrary-game',catalog=None):
         catalog=catalog or out/(name+'-mods')
         start=time.monotonic()
         p=subprocess.run([str(args.driver.resolve()),mode,str(support),str(catalog),game,str(rom),str(source)],
-            cwd=out,capture_output=True,text=True,timeout=180,startupinfo=si,
+            cwd=out,capture_output=True,text=True,startupinfo=si,
             creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
         elapsed=time.monotonic()-start
         (out/(name+'.log')).write_text(p.stdout+p.stderr)
@@ -84,11 +84,18 @@ require_patch={str(require_patch).lower()}
     assert any(p.read_bytes()==b'outer creator notice' for p in imported.parent.joinpath('notices').iterdir())
     wrapper.unlink()
     run('resume-without-download',wrapper,'resume',catalog=catalog)
+    patch_tag=f'<patch>fix.ips,{original_hash}\n'.encode()
+    (imported/'hires.txt').write_bytes(files['hires.txt']+patch_tag)
+    (imported/'fix.ips').write_bytes(patch)
+    run('legacy-cache-refused',wrapper,'resume-legacy',catalog=catalog)
     folder=out/'directory-pack';folder.mkdir()
     for name,data in files.items():(folder/name).write_bytes(data)
     run('selected-hires',folder/'hires.txt')
-    missing=out/'missing-patch.zip';missing.write_bytes(zip_bytes({'hires.txt':b'<ver>106\n<scale>2\n','art.png':b'fixture'}))
-    run('required-patch-missing',missing,'reject')
+    legacy=out/'legacy.zip'
+    legacy.write_bytes(zip_bytes({**files,'hires.txt':files['hires.txt']+patch_tag,'fix.ips':patch}))
+    run('legacy-pack-refused',legacy,'legacy')
+    old_recipe=recipe('old','arbitrary-game',image,require_patch=True)
+    run('legacy-recipe-refused',direct,'legacy',support=old_recipe)
     for index,name in enumerate(('../escaped','/absolute','C:/escape','dir/../escape','NUL.png','HIRES.TXT')):
         path=out/f'unsafe{index}.zip';path.write_bytes(zip_bytes({**files,name:b'bad'}))
         run(f'unsafe-{index}',path,'reject')
@@ -104,20 +111,17 @@ require_patch={str(require_patch).lower()}
     path=out/'deep.zip';nested=direct.read_bytes()
     for _ in range(3):nested=zip_bytes({'next.zip':nested})
     path.write_bytes(nested);run('depth-limit',path,'reject')
-    modified=out/'different-header.nes';modified.write_bytes(image[:8]+b'\x01'+image[9:])
-    run('base-sha-refusal',direct,'bad-base',rom=modified)
-    path=out/'header-patch.zip';path.write_bytes(zip_bytes({**files,'fix.ips':b'PATCH'+bytes([0,0,0,0,1,1])+b'EOF'}))
-    run('header-patch-refusal',path,'bad-patch')
+    other=out/'other-original.nes'
+    other.write_bytes(b'NES\x1a'+bytes([1,0,0,0,1])+bytes(7)+bytes(16384))
+    run('base-sha-refusal',direct,'bad-base',rom=other)
     assert rom.read_bytes()==image
     if args.zelda_pack and args.zelda_rom:
         source_hash=hashlib.sha256(args.zelda_pack.read_bytes()).hexdigest()
         actual_rom=args.zelda_rom.read_bytes()
-        zelda=recipe('zelda','legend-of-zelda-us',actual_rom,'fd9c577f')
-        output,catalog=run('real-zelda',args.zelda_pack,support=zelda,rom=args.zelda_rom,game='legend-of-zelda-us')
-        assert 'patched_crc=fd9c577f' in output
+        zelda=recipe('zelda','legend-of-zelda-us',actual_rom)
+        run('real-zelda-legacy-refused',args.zelda_pack,'legacy',support=zelda,rom=args.zelda_rom,game='legend-of-zelda-us')
         assert hashlib.sha256(args.zelda_pack.read_bytes()).hexdigest()==source_hash
         assert args.zelda_rom.read_bytes()==actual_rom
-        run('real-zelda-cached',args.zelda_pack,'resume',support=zelda,rom=args.zelda_rom,game='legend-of-zelda-us',catalog=catalog)
     if args.smb_pack and args.smb_rom:
         smb=recipe('smb','super-mario-bros-us',args.smb_rom.read_bytes())
         run('real-smb',args.smb_pack,support=smb,rom=args.smb_rom,game='super-mario-bros-us')

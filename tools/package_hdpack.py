@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 """Wrap a local Mesen HD pack in a portable, default-off .nesmod archive.
 
-No ROM is included. A pack's optional <patch> IPS is verified against --rom;
-the shared Mods runtime applies it only to an in-memory cartridge copy.
+The original ROM supplies the package's target identity. Packs that declare
+an IPS require a title-native compatibility provider.
 Use --author and --license to preserve the pack creator's attribution/terms.
 """
 import argparse
 from contextlib import contextmanager
-import hashlib
 import os
 from pathlib import Path, PurePosixPath
 import re
@@ -135,34 +134,6 @@ def pack_folder(path):
             raise ValueError('Multiple HD packs found; select the intended inner ZIP or hires.txt folder')
         yield candidates[0]
 
-def apply_ips(image: bytes, patch: bytes) -> bytes:
-    if not patch.startswith(b'PATCH'):
-        raise ValueError('IPS is missing PATCH magic')
-    result = bytearray(image)
-    start = 16 + (512 if image[6] & 4 else 0)
-    p = 5
-    while p + 3 <= len(patch):
-        if patch[p:p+3] == b'EOF':
-            tail = patch[p+3:]
-            if tail and (len(tail) != 3 or int.from_bytes(tail, 'big') != len(image)):
-                raise ValueError('IPS cannot resize the cartridge')
-            return bytes(result)
-        offset = int.from_bytes(patch[p:p+3], 'big'); p += 3
-        if len(patch) - p < 2:
-            break
-        count = int.from_bytes(patch[p:p+2], 'big'); p += 2
-        if count:
-            data = patch[p:p+count]; p += count
-        else:
-            if len(patch) - p < 3:
-                break
-            count = int.from_bytes(patch[p:p+2], 'big'); p += 2
-            data = patch[p:p+1] * count; p += 1
-        if not count or len(data) != count or offset < start or offset + count > len(image):
-            raise ValueError('IPS record is truncated or changes cartridge geometry')
-        result[offset:offset+count] = data
-    raise ValueError('IPS is truncated or missing EOF')
-
 def relative(name: str) -> Path:
     path = PurePosixPath(name.replace('\\', '/'))
     devices = {'con', 'prn', 'aux', 'nul',
@@ -207,17 +178,8 @@ def package(args, folder, source_notices):
     if len(image) < 16 or image[:4] != b'NES\x1a':
         raise ValueError('Expected an iNES ROM')
     text = (folder / 'hires.txt').read_text(encoding='utf-8-sig')
-    patches = re.findall(r'^\s*<patch>([^\r\n]+)', text, re.MULTILINE)
-    if len(patches) > 1:
-        raise ValueError('Only one IPS patch per feature is supported')
-    patch_line = ''
-    if patches:
-        fields = [v.strip() for v in patches[0].split(',')]
-        if len(fields) != 2 or fields[1].lower() != hashlib.sha1(image).hexdigest():
-            raise ValueError('The pack patch requires a different stock ROM SHA-1')
-        patch_path = relative(fields[0])
-        patched = apply_ips(image, (folder / patch_path).read_bytes())
-        patch_line = f'patch = {quoted("pack/" + patch_path.as_posix())}\npatched_rom_crc32 = "{zlib.crc32(patched[16:]):08x}"\n'
+    if any(line.lstrip().startswith('<patch>') for line in text.splitlines()):
+        raise ValueError('This HD pack needs a native compatibility provider for its IPS changes')
     manifest = f'''format_version = 1
 id = {quoted(args.id)}
 version = {quoted(args.version)}
@@ -238,7 +200,7 @@ exclusive_group = "display-mode"
 [[hd_pack]]
 feature = "hd-pack"
 directory = "pack"
-{patch_line}'''
+'''
     tomllib.loads(manifest)
     files = sorted(pack_files(folder))
     if any(p.suffix.lower() in {'.nes', '.fds'} for p in files):
@@ -263,7 +225,7 @@ directory = "pack"
             archive.write(path, 'pack/' + path.relative_to(folder).as_posix())
         for name, path in notices.items():
             archive.write(path, 'notices/' + name)
-    print(f'Created {args.out}: {len(files)} assets, optional IPS={bool(patches)}, stock ROM excluded')
+    print(f'Created {args.out}: {len(files)} assets')
 
 if __name__ == '__main__':
     main()

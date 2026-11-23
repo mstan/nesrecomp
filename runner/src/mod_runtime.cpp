@@ -123,7 +123,14 @@ struct HdPack {
     std::string label;
     std::string description;
     bool require_patch = false;
+
+    bool needs_native_compatibility() const {
+        return require_patch || !patch.empty() || !patched_rom_crc32.empty();
+    }
 };
+
+constexpr char HD_PACK_NEEDS_NATIVE[] =
+    "This HD pack needs a native compatibility provider for its IPS changes";
 
 struct Package {
     uint32_t format_version = 0;
@@ -228,7 +235,6 @@ struct Runtime {
     std::map<std::string, std::string> committed_external_rom_paths;
     std::map<std::string, std::string> netplay_source_paths;
     std::string committed_hd_directory;
-    std::vector<uint8_t> committed_hd_payload;
     NESModHdPack committed_hd{};
     std::string committed_hd_key;
     bool hd_locked = false;
@@ -1548,39 +1554,6 @@ bool hd_asset_path(const Package& package, const std::string& relative,
     return true;
 }
 
-/* IPS offsets address the complete iNES file. Size, header and trainer must
- * remain unchanged: a mod cannot turn this compiled cartridge into a different
- * board. Apply into a copy and verify its declared payload CRC before exposure. */
-bool hd_apply_ips(const std::vector<uint8_t>& patch, std::vector<uint8_t>& image,
-                  size_t payload_start, std::string* error) {
-    auto fail = [&]() { set_error(error, "Invalid or incompatible HD pack IPS patch"); return false; };
-    if (patch.size() < 8 || std::memcmp(patch.data(), "PATCH", 5)) return fail();
-    size_t p = 5;
-    while (p + 3 <= patch.size()) {
-        if (!std::memcmp(patch.data() + p, "EOF", 3)) {
-            p += 3;
-            if (p == patch.size()) return true;
-            if (patch.size() - p != 3) return fail();
-            const size_t size = ((size_t)patch[p] << 16) | ((size_t)patch[p+1] << 8) | patch[p+2];
-            return size == image.size() ? true : fail();
-        }
-        const size_t at = ((size_t)patch[p] << 16) | ((size_t)patch[p+1] << 8) | patch[p+2];
-        p += 3;
-        if (patch.size() - p < 2) return fail();
-        size_t size = ((size_t)patch[p] << 8) | patch[p+1]; p += 2;
-        bool rle = !size;
-        if (rle) {
-            if (patch.size() - p < 3) return fail();
-            size = ((size_t)patch[p] << 8) | patch[p+1]; p += 2;
-        }
-        if (!size || at < payload_start || at > image.size() ||
-            size > image.size() - at || patch.size() - p < (rle ? 1 : size)) return fail();
-        if (rle) { std::memset(image.data() + at, patch[p++], size); }
-        else { std::memcpy(image.data() + at, patch.data() + p, size); p += size; }
-    }
-    return fail();
-}
-
 bool snapshot_hd_pack(Runtime& runtime, const Validation& plan,
                       const fs::path& rom, std::string* error) {
     for (const ResolvedPlugin& plugin : plan.plugins) {
@@ -1591,11 +1564,14 @@ bool snapshot_hd_pack(Runtime& runtime, const Validation& plan,
         for (const HdPack& item : package->hd_packs)
             if (item.feature_id == plugin.feature_id) descriptor = &item;
         if (!descriptor) { set_error(error, "HD pack feature has no asset descriptor"); return false; }
+        if (descriptor->needs_native_compatibility()) {
+            set_error(error, HD_PACK_NEEDS_NATIVE);
+            return false;
+        }
         fs::path directory;
         ImportedHdPack imported;
-        std::string patch_relative = descriptor->patch;
         if (descriptor->source == "mesen") {
-            const ResourceVerdict verdict = verify_hd_source(runtime, *package, *descriptor, false);
+            const ResourceVerdict verdict = verify_hd_source(runtime, *package, *descriptor, true);
             const std::string key = external_rom_key(package->id, descriptor->feature_id, descriptor->resource_id);
             const auto ready = runtime.imported_hd_packs.find(key);
             if (!verdict.verified || ready == runtime.imported_hd_packs.end()) {
@@ -1603,7 +1579,6 @@ bool snapshot_hd_pack(Runtime& runtime, const Validation& plan,
             }
             imported = ready->second;
             directory = imported.directory;
-            patch_relative = imported.patch;
         } else if (!hd_asset_path(*package, descriptor->directory, directory, error)) return false;
         std::error_code ec;
         if (!fs::is_directory(directory, ec) || !fs::is_regular_file(directory / "hires.txt", ec)) {
@@ -1637,32 +1612,7 @@ bool snapshot_hd_pack(Runtime& runtime, const Validation& plan,
             if (!read_file(file, content, error)) return false;
             add(file.lexically_relative(directory).generic_string()); add(sha1_hex(content));
         }
-        std::vector<uint8_t> payload;
-        if (!patch_relative.empty()) {
-            fs::path patch_path;
-            std::vector<uint8_t> image;
-            Package asset_owner = *package;
-            if (descriptor->source == "mesen") asset_owner.root = directory;
-            if (!hd_asset_path(asset_owner, patch_relative, patch_path, error) ||
-                !read_file(patch_path, content, error)) return false;
-            add(patch_relative); add(sha1_hex(content));
-            if (rom.empty() || !read_file(rom, image, error) || image.size() < 16 ||
-                std::memcmp(image.data(), "NES\x1a", 4)) {
-                set_error(error, "HD pack patch requires the verified stock iNES ROM"); return false;
-            }
-            if (!imported.patch_rom_sha1.empty() && sha1_hex(image) != imported.patch_rom_sha1) {
-                set_error(error, "The selected Mesen pack requires a different original ROM revision"); return false;
-            }
-            const size_t start = 16 + ((image[6] & 4) ? 512 : 0);
-            if (start > image.size() || !hd_apply_ips(content, image, start, error)) return false;
-            char crc[9]; std::snprintf(crc, sizeof(crc), "%08x", crc32_compute(image.data()+16, image.size()-16));
-            if (!descriptor->patched_rom_crc32.empty() && descriptor->patched_rom_crc32 != crc) {
-                set_error(error, "HD pack patched ROM does not match its declared CRC32"); return false;
-            }
-            payload.assign(image.begin() + start, image.end());
-        } else if (descriptor->require_patch || !descriptor->patched_rom_crc32.empty()) {
-            set_error(error, "The selected Mesen pack is missing the IPS required by this compatibility recipe"); return false;
-        } else if (!imported.supported_roms.empty()) {
+        if (!imported.supported_roms.empty()) {
             std::vector<uint8_t> image;
             if (rom.empty() || !read_file(rom, image, error) ||
                 std::find(imported.supported_roms.begin(), imported.supported_roms.end(), sha1_hex(image)) == imported.supported_roms.end()) {
@@ -1675,10 +1625,7 @@ bool snapshot_hd_pack(Runtime& runtime, const Validation& plan,
             set_error(error, "HD pack directory path is too long for the renderer"); return false;
         }
         runtime.committed_hd_key = package->id + ":" + package->version + ":" + plugin.feature_id;
-        runtime.committed_hd_payload = std::move(payload);
         runtime.committed_hd.directory = runtime.committed_hd_directory.c_str();
-        runtime.committed_hd.patched_payload = runtime.committed_hd_payload.empty() ? nullptr : runtime.committed_hd_payload.data();
-        runtime.committed_hd.payload_size = (uint32_t)runtime.committed_hd_payload.size();
         for (unsigned i = 0; i < 20; ++i)
             runtime.committed_hd.fingerprint[i] = (uint8_t)std::strtoul(hash.substr(i*2, 2).c_str(), nullptr, 16);
         return true;
@@ -1833,6 +1780,12 @@ bool feature_resources_valid(Runtime& runtime, const Package& package,
     bool valid = true;
     for (const HdPack& pack : package.hd_packs) {
         if (pack.feature_id != feature.id) continue;
+        if (pack.needs_native_compatibility()) {
+            valid = false;
+            if (diagnostics) diagnostics->push_back({package.id,feature.id,{},{},
+                "hd-pack:compatibility",HD_PACK_NEEDS_NATIVE});
+            continue;
+        }
         if (pack.source == "mesen") {
             const ResourceVerdict verdict = verify_hd_source(runtime, package, pack, force);
             if (!verdict.verified) {
@@ -1847,8 +1800,6 @@ bool feature_resources_valid(Runtime& runtime, const Package& package,
         bool assets = hd_asset_path(package, pack.directory + "/hires.txt", path, &error);
         std::error_code ec;
         assets = assets && fs::is_regular_file(path, ec);
-        if (assets && !pack.patch.empty())
-            assets = hd_asset_path(package, pack.patch, path, &error) && fs::is_regular_file(path, ec);
         if (!assets) {
             valid = false;
             if (diagnostics) diagnostics->push_back({package.id,feature.id,{},{},"hd-pack:assets",
@@ -2458,6 +2409,10 @@ bool import_mesen_pack(Runtime& runtime, const fs::path& selected,
     }
     ImportedHdPack metadata;
     if (!mesen_metadata(candidates[0], metadata, error)) return false;
+    if (!metadata.patch.empty()) {
+        set_error(error, HD_PACK_NEEDS_NATIVE);
+        return false;
+    }
     const fs::path ready = scratch / "ready";
     fs::create_directories(ready / "pack", ec);
     if (ec) { set_error(error, "Cannot prepare imported Mesen assets"); return false; }
@@ -2485,6 +2440,10 @@ bool import_mesen_pack(Runtime& runtime, const fs::path& selected,
 ResourceVerdict verify_hd_source(Runtime& runtime, const Package& package,
                                  const HdPack& descriptor, bool force) {
     ResourceVerdict verdict;
+    if (descriptor.needs_native_compatibility()) {
+        verdict.status = HD_PACK_NEEDS_NATIVE;
+        return verdict;
+    }
     auto& selection = package_selection(runtime, package);
     const std::string key = external_rom_key(package.id, descriptor.feature_id, descriptor.resource_id);
     const auto selected = selection.resources.find(descriptor.resource_id);
@@ -2502,8 +2461,8 @@ ResourceVerdict verify_hd_source(Runtime& runtime, const Package& package,
     } catch (const fs::filesystem_error& failure) {
         error = "Cannot import selected Mesen download: " + std::string(failure.what());
     }
-    if (!ready || ((descriptor.require_patch || !descriptor.patched_rom_crc32.empty()) && imported.patch.empty())) {
-        verdict.status = !ready ? error : "This compatibility mod requires a pack with its IPS patch";
+    if (!ready || !imported.patch.empty()) {
+        verdict.status = ready ? HD_PACK_NEEDS_NATIVE : error;
         runtime.imported_hd_packs.erase(key);
         ui_cache.path = selected->second; ui_cache.verdict = verdict; ui_cache.populated = true;
         return verdict;
@@ -2865,7 +2824,6 @@ int provider_commit_netplay(void*, const char* image_path) {
     runtime.committed_hd = {};
     runtime.committed_hd_key.clear();
     runtime.committed_hd_directory.clear();
-    runtime.committed_hd_payload.clear();
     runtime.commit_succeeded = false;
     runtime.error.clear();
     return 1;
@@ -3353,7 +3311,6 @@ bool mod_runtime_commit(const fs::path& rom_path, std::string* error) {
         runtime.committed_hd = {};
         runtime.committed_hd_key.clear();
         runtime.committed_hd_directory.clear();
-        runtime.committed_hd_payload.clear();
     }
     runtime.commit_succeeded = false;
     if (!rom_path.empty()) {

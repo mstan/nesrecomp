@@ -8,7 +8,6 @@ import tempfile
 import tomllib
 import unittest
 import zipfile
-import zlib
 import package_hdpack as importer
 
 
@@ -65,18 +64,15 @@ class ImportTests(unittest.TestCase):
                 if source==wrapper:
                     self.assertIn(b'outer credits',[d for n,d in content.items() if n.startswith('notices/')])
 
-    def test_ips_verified_applied_in_memory_and_wrong_rom_refused(self):
+    def test_ips_requires_native_compatibility(self):
         patch = b'PATCH'+bytes([0,0,16,0,1,0xA9])+b'EOF'
         files = dict(self.files, **{'fix.ips':patch})
         files['hires.txt'] += f'<patch>fix.ips,{hashlib.sha1(self.image).hexdigest()}\n'.encode()
         source=self.root/'AnyTitle.zip';source.write_bytes(zip_bytes(files))
-        manifest,_ = self.convert(source)
-        patched=self.image[:16]+b'\xA9'+self.image[17:]
-        self.assertEqual(manifest['hd_pack'][0]['patched_rom_crc32'],f'{zlib.crc32(patched[16:]):08x}')
-        self.rom.write_bytes(self.image[:-1]+b'\x01')
-        with self.assertRaisesRegex(ValueError,'different stock ROM'):
+        with self.assertRaisesRegex(ValueError,'native compatibility provider'):
             self.convert(source,'refused.nesmod')
         self.assertFalse((self.root/'refused.nesmod').exists())
+        self.assertEqual(self.rom.read_bytes(), self.image)
 
     def test_multiple_packs_are_ambiguous(self):
         source=self.root/'options.zip'

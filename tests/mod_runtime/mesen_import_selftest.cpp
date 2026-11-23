@@ -27,7 +27,7 @@ int main(int argc, char** argv) {
         std::string error;
         check(NESRecomp::mod_runtime_initialize(argv[3], argv[4], crc, &error), error.c_str());
         const auto* provider = NESRecomp::mod_runtime_launcher_provider();
-        if (mode != "resume") {
+        if (mode != "resume" && mode != "resume-legacy") {
             if (mode != "preloaded") {
                 const bool installed = provider->install_archive(provider->ctx, argv[2]);
                 check(installed, provider->last_error(provider->ctx));
@@ -41,11 +41,19 @@ int main(int argc, char** argv) {
             check(resource.required && !resource.verified && std::strstr(resource.file_patterns, "*.zip"), "resource contract");
             check(!provider->feature_enable(provider->ctx, package_id, "hd-pack", 1), "enabled without a download");
             const bool imported = provider->feature_resource_set_path(provider->ctx, package_id, "hd-pack", "source-pack", argv[6]);
-            if (mode == "reject") {
+            if (mode == "reject" || mode == "legacy") {
                 check(!imported, "unsafe or unsupported download accepted");
                 check(!nes_mod_hd_pack(), "invalid import exposed assets");
-                for (const auto& entry : fs::directory_iterator(fs::path(argv[3])/"imports"))
-                    check(entry.path().filename().string().rfind(".importing-", 0) != 0, "failed extraction leaked staging");
+                const auto imports = fs::path(argv[3])/"imports";
+                if (fs::is_directory(imports)) {
+                    for (const auto& entry : fs::directory_iterator(imports))
+                        check(entry.path().filename().string().rfind(".importing-", 0) != 0, "failed extraction leaked staging");
+                    if (mode == "legacy") check(fs::is_empty(imports), "legacy pack published into the cache");
+                }
+                if (mode == "legacy")
+                    check(std::strstr(provider->last_error(provider->ctx), "native compatibility provider"),
+                          "missing compatibility status");
+                check(read(argv[5]) == original, "refused import changed original ROM");
                 std::cout << "PASS: unsafe input rejected: " << provider->last_error(provider->ctx) << '\n';
                 return 0;
             }
@@ -55,11 +63,24 @@ int main(int argc, char** argv) {
             check(enabled, provider->last_error(provider->ctx));
         }
         const bool committed = provider->commit(provider->ctx, argv[5]);
+        if (mode == "resume-legacy") {
+            check(committed && !nes_mod_hd_pack(), "legacy cache activated or blocked stock play");
+            RecompLauncherCModResource resource{};
+            check(provider->feature_resource_get(provider->ctx, package_id, "hd-pack", 0, &resource) &&
+                  !resource.verified, "legacy cache reported as ready");
+            check(std::strstr(resource.status, "native compatibility provider"),
+                  "legacy cache lost compatibility status");
+            check(!provider->feature_enable(provider->ctx, package_id, "hd-pack", 1),
+                  "legacy cache could be enabled");
+            check(read(argv[5]) == original, "legacy cache changed original ROM");
+            std::cout << "PASS: stored legacy cache refused at Play\n";
+            return 0;
+        }
         check(committed, provider->last_error(provider->ctx));
         const auto* pack = nes_mod_hd_pack();
         check(pack && fs::is_regular_file(fs::path(pack->directory)/"hires.txt"), "imported assets unavailable");
         check(read(argv[5]) == original, "original ROM was changed");
-        check(mode != "bad-base" && mode != "bad-patch", "invalid cartridge transformation accepted");
+        check(mode != "bad-base", "unsupported original revision accepted");
         const auto cache = fs::path(pack->directory).parent_path();
         check(fs::is_directory(cache/"notices"), "creator notices not retained");
         nes_mod_lock_hd_pack();
@@ -67,16 +88,11 @@ int main(int argc, char** argv) {
         check(nes_mod_hd_pack() == pack, "refused live edit changed active pack");
         std::cout << "PASS: raw download imported through content-free recipe; ROM unchanged; stable committed pack\n";
         std::cout << "directory=" << pack->directory << '\n';
-        if (pack->payload_size) {
-            char patched[9]; std::snprintf(patched, sizeof(patched), "%08x", crc32_compute(pack->patched_payload, pack->payload_size));
-            std::cout << "patched_crc=" << patched << '\n';
-        }
         return 0;
     } catch (const std::exception& error) {
         const std::string mode = argv[1];
         const std::string message = error.what();
-        if ((mode == "bad-base" && message.find("requires a different original ROM revision") != std::string::npos) ||
-            (mode == "bad-patch" && message.find("Invalid or incompatible HD pack IPS patch") != std::string::npos)) {
+        if (mode == "bad-base" && message.find("does not support this original ROM revision") != std::string::npos) {
             std::cout << "PASS: incompatible original ROM refused: " << error.what() << '\n'; return 0;
         }
         std::cerr << "FAIL: " << error.what() << '\n'; return 1;

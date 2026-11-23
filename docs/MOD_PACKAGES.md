@@ -25,10 +25,6 @@ source = "mesen"
 resource_id = "source-pack"
 label = "Mesen HD pack download"
 description = "Select your original downloaded ZIP."
-# Optional: require the pack to supply its own <patch> IPS declaration.
-# require_patch = true
-# Optional expected final PRG+CHR identity for a specific compatibility profile:
-# patched_rom_crc32 = "01234567"
 ```
 
 The owning feature gets a normal Mods **Select file** control. The player
@@ -39,11 +35,11 @@ preserves creator notices, and imports only the chosen pack into a private
 textures, audio, IPS or ROM bytes. `tools/package_recipe.py` packages such a
 manifest without adding any files. No Python is needed by players.
 
-At Play the runtime reads the imported Mesen `<patch>` declaration, verifies
-the original ROM SHA-1, validates geometry-preserving IPS records, applies them
-to an in-memory copy and checks the recipe's expected CRC when supplied.
-Unpatched packs may declare `<supportedRom>`. The complete asset/patch identity
-is included in save-state checks; changes during gameplay are refused.
+At Play, the runtime checks any `<supportedRom>` declaration against the
+selected original ROM. Pack identity includes all imported assets. Cycle saves
+verify that identity and the running game keeps its selected pack until restart.
+Downloads that declare an IPS patch need a title-native compatibility provider.
+The original game image supplies the cartridge throughout execution.
 The local cache reference persists independently of the download path, so the
 original ZIP can be removed after import. Input expansion is bounded across
 three ZIP levels (256 MiB, 4096 entries) and staging is removed on failure.
@@ -68,23 +64,14 @@ exclusive_group = "display-mode"
 [[hd_pack]]
 feature = "hd-pack"
 directory = "pack"
-# Optional, geometry-preserving IPS against the target's stock iNES image:
-# patch = "pack/sound.ips"
-# patched_rom_crc32 = "01234567"
 ```
 
-`directory` and `patch` are relative to the installed package root. The
-directory contains `hires.txt` and the creator's assets. The runtime refuses
-parent/absolute paths, links, missing files, multiple selected HD packs and
-unsupported executables. A patch requires both fields above, preserves the
-header, trainer and cartridge size, and must produce the declared payload
-CRC32. It changes an in-memory copy; the original ROM remains untouched.
-Patched PRG uses the cycle interpreter so compiled stock opcodes cannot run
-against changed code. Native execution remains available with the Mod off.
+`directory` is relative to the installed package root and contains `hires.txt`
+and the creator's assets. The runtime refuses parent or absolute paths, links,
+missing files, multiple selected HD packs and unsupported executables.
 
-Pack identity includes package/version, target, all pack files and the patch.
-Cycle saves refuse a different pack or patch before changing the machine.
-Installed folders can move with the executable without changing identity.
+Pack identity includes package, version, target and all pack files. Installed
+folders can move with the executable while retaining the same identity.
 Select a pack in the launcher before starting; the running game's menu makes
 HD and conflicting display modes read-only until the next launch. HD packs
 currently require local play. Game display plugins that cannot combine with
@@ -96,11 +83,11 @@ Create a local archive from an existing pack:
 python tools/package_hdpack.py --pack "/path/to/pack" --rom "/path/to/stock.nes" --game-id "my-game" --id "my-game.hd" --name "HD textures" --author "Original creator" --license "Original pack terms" --notice "/path/to/original-readme.txt" --out "my-game-hd.nesmod"
 ```
 
-The importer verifies a Mesen `<patch>` declaration's original ROM SHA-1,
-checks its IPS and records the patched CRC. It bundles local assets and
-preserved notices, with no ROM. Install the archive through **Mods**, then
-enable its feature. This is the adoption path for cycle titles; the older
-folder/config adapter remains for explicit legacy integrations. Replacement
+The packaging tool validates the original ROM and bundles the local assets and
+creator notices. Packs declaring an IPS patch need native compatibility code
+in the title. Install the archive through **Mods**, then enable its feature.
+The older folder/config adapter remains for explicit legacy integrations.
+Replacement
 pack music/sounds and some Mesen conditions remain unsupported. An installed
 pack should be tested against its original and unmatched-pixel presentation,
 state continuation and the game's other display features.

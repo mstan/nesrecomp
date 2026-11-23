@@ -48,11 +48,6 @@ bool cyc_hdpack_mod_prepare(void) {
     memset(&pipeline,0,sizeof pipeline);memset(recorded,0,sizeof recorded);
     memset(fingerprint,0,sizeof fingerprint);hdpack_unload();
     if(pack) {
-        if(pack->patched_payload) {
-            if(!cyc_mod_apply_cart_payload(pack->patched_payload,pack->payload_size)) {
-                fprintf(stderr,"[Mods] HD patch does not match this cartridge's geometry\n");return false;
-            }
-        }
         if(hdpack_load(pack->directory,hw_cart.chr_ram!=0,256)) {
             fprintf(stderr,"[Mods] Selected HD pack could not be loaded\n");return false;
         }

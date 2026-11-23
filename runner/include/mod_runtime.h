@@ -149,8 +149,6 @@ const char* nes_mod_external_rom_path(const char* package_id,
  * The fingerprint identifies the package, assets and patch for save states. */
 typedef struct NESModHdPack {
     const char *directory;
-    const uint8_t *patched_payload;
-    uint32_t payload_size;
     uint8_t fingerprint[20];
 } NESModHdPack;
 const NESModHdPack *nes_mod_hd_pack(void);
