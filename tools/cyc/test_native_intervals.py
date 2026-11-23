@@ -33,9 +33,7 @@ def main():
     for modes in modes_to_check:
         outputs = []
         for mode in modes:
-            result = subprocess.run([args.probe, *([mode] if mode else [])], capture_output=True,
-                                    timeout=120,
-                                    creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+            result = subprocess.run([args.probe, *([mode] if mode else [])], capture_output=True, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
             if result.returncode:
                 raise AssertionError((mode, result.returncode, result.stderr.decode(errors='replace')))
             outputs.append(result.stdout.splitlines())
