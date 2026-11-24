@@ -14,6 +14,9 @@
 #include "cyc_recomp.h"
 #include "launcher_profile.h"
 #include "recomp_launcher.h"
+#if defined(CYC_MULTI_IMAGE) && NESRECOMP_ENABLE_MODS && defined(RECOMP_LAUNCHER_HAS_VERIFIED_ROM_CHANGED)
+#include "mod_runtime.h"
+#endif
 #ifdef NES_HOST_HAS_RECOMP_UI
 #include "nes_host_lobby.h"
 static int s_net_returned;
@@ -196,7 +199,7 @@ int cyc_ui_launcher(CycSettings *settings, const char *settings_path, const CycH
     static RecompLauncherCSettings io, defaults;
     static RecompLauncherCGameInfo gi;
     static char out_rom[1024], name[256];
-    static uint8_t sha[1][32];
+    static uint8_t sha[8][32];
     static const char *const FDS_PATTERNS[] = { "*.fds", "*.qd" };
     static const char *shortcut_labels[RECOMP_LAUNCHER_MAX_ASSIST_BINDINGS];
     static char game_labels[CYC_INPUT_PLAYERS][CYC_GAME_BUTTONS][96];
@@ -290,6 +293,9 @@ int cyc_ui_launcher(CycSettings *settings, const char *settings_path, const CycH
     gi.settings_bindings = 1;         /* every binding is the host's (config.ini) */
     /* The Mods screen (a game built with mods; recomp-ui's RECOMP_UI_ENABLE_MODS). */
     gi.mods = (const RecompLauncherCModProvider *)cyc_diagnostics_provider(mods);
+#if defined(CYC_MULTI_IMAGE) && NESRECOMP_ENABLE_MODS && defined(RECOMP_LAUNCHER_HAS_VERIFIED_ROM_CHANGED)
+    gi.verified_rom_changed_cb = nes_mod_runtime_retarget_c;
+#endif
     gi.default_settings = &defaults;
     gi.assist_binding_labels = shortcut_labels;
     gi.assist_binding_count = count + CYC_GAME_PLAYERS * CYC_GAME_BUTTONS;
@@ -323,17 +329,31 @@ int cyc_ui_launcher(CycSettings *settings, const char *settings_path, const CycH
         gi.host_persists_paths = 1;
     }
 #ifdef CYC_LAUNCHER_ROM_SHA256
-    /* The image this program was compiled from, hashed the way the launcher
-     * hashes (after an iNES header; FDS images whole). */
+    /* Images this program accepts, hashed the way the launcher hashes (after an
+     * iNES header; FDS images whole). A multi-image build passes a comma
+     * separated list: the image it was compiled from plus the images it
+     * declares compatible through cyc_game_image_accepted(). */
     {
         const char *hex = CYC_LAUNCHER_ROM_SHA256;
-        bool ok = strlen(hex) == 64;
-        for (int i = 0; ok && i < 32; ++i) {
-            int hi = hex_nibble(hex[2 * i]), lo = hex_nibble(hex[2 * i + 1]);
-            ok = hi >= 0 && lo >= 0;
-            sha[0][i] = (uint8_t)(hi * 16 + lo);
+        int count = 0;
+        while (hex && *hex && count < (int)(sizeof sha / sizeof sha[0])) {
+            const size_t len = strcspn(hex, ", ");
+            if (len != 64) break;
+            bool ok = true;
+            for (int i = 0; ok && i < 32; ++i) {
+                int hi = hex_nibble(hex[2 * i]), lo = hex_nibble(hex[2 * i + 1]);
+                ok = hi >= 0 && lo >= 0;
+                sha[count][i] = (uint8_t)(hi * 16 + lo);
+            }
+            if (!ok) break;
+            ++count;
+#if NESRECOMP_ENABLE_MODS && !defined(RECOMP_LAUNCHER_HAS_VERIFIED_ROM_CHANGED)
+            if (mods) break;
+#endif
+            hex += 64;
+            while (*hex == ',' || *hex == ' ') ++hex;
         }
-        if (ok) { gi.known_sha256 = (const uint8_t (*)[32])sha; gi.num_known_sha256 = 1; }
+        if (count > 0) { gi.known_sha256 = (const uint8_t (*)[32])sha; gi.num_known_sha256 = (size_t)count; }
     }
 #endif
     char title[300];

@@ -192,6 +192,9 @@ struct Runtime {
     fs::path root;
     std::string game_id;
     std::string rom_crc32;
+#if defined(CYC_MULTI_IMAGE)
+    std::string compiled_rom_crc32;
+#endif
     std::map<std::string, std::map<std::string, Package>> packages;
     std::map<std::string, PackageSelection> selections;
     Validation validation;
@@ -968,6 +971,9 @@ bool resolve_requirements(Runtime& runtime, std::vector<FeatureKey>& order,
         (void)versions;
         const Package* package = selected_package(runtime, id);
         if (!package) continue;
+#if defined(CYC_MULTI_IMAGE)
+        if (!target_matches(*package, runtime)) continue;
+#endif
         for (const Feature& feature : package->features) {
             if (!feature_enabled(runtime, *package, feature)) continue;
             active_requirements |= !feature.requirements.empty();
@@ -1027,6 +1033,9 @@ Validation validate(Runtime& runtime) {
         (void)versions;
         const Package* package = selected_package(runtime, id);
         if (!package) continue;
+#if defined(CYC_MULTI_IMAGE)
+        if (!target_matches(*package, runtime)) continue;
+#endif
         for (const Feature& feature : package->features) {
             if (!feature_enabled(runtime, *package, feature)) continue;
             if (!feature_resources_valid(runtime, *package, feature, false,
@@ -2278,7 +2287,11 @@ std::vector<const Package*> selected_packages(Runtime& runtime) {
     for (const auto& [id, versions] : runtime.packages) {
         (void)versions;
         const Package* package = selected_package(runtime, id);
-        if (package) result.push_back(package);
+        if (!package) continue;
+#if defined(CYC_MULTI_IMAGE)
+        if (!target_matches(*package, runtime)) continue;
+#endif
+        result.push_back(package);
     }
     return result;
 }
@@ -2934,6 +2947,9 @@ bool mod_runtime_initialize(const fs::path& root,
     runtime.root = root;
     runtime.game_id = game_id;
     runtime.rom_crc32 = rom_crc32;
+#if defined(CYC_MULTI_IMAGE)
+    runtime.compiled_rom_crc32 = rom_crc32;
+#endif
     if (game_id.empty() || !valid_crc32(rom_crc32)) {
         set_error(error, "invalid NES mod target identity");
         return false;
@@ -3047,6 +3063,33 @@ const RecompLauncherCModProvider* mod_runtime_launcher_provider() {
     return &provider;
 }
 #endif
+
+/* Multi-image builds: point the catalog's target identity at the image that is
+ * actually loaded. The packages' own [[target]] lists then decide which images
+ * they serve (see cyc_game_image_accepted / ZELDA_EXTRA_ROMS) instead of every
+ * launch being refused unless it matches the compile-time image. */
+bool mod_runtime_retarget_image(const fs::path& image, std::string* error) {
+#if defined(CYC_MULTI_IMAGE)
+    Runtime& runtime = state();
+    if (!runtime.initialized) return true;
+    std::string digest = runtime.compiled_rom_crc32;
+    if (!image.empty() && (!crc32_file(image, digest, error) || !valid_crc32(digest))) {
+        if (error && error->empty()) *error = "cannot hash the selected ROM";
+        runtime.error = error ? *error : "cannot hash the selected ROM";
+        return false;
+    }
+    if (digest != runtime.rom_crc32) {
+        runtime.rom_crc32 = std::move(digest);
+        runtime.resource_cache.clear();
+        runtime.validation = validate(runtime);
+    }
+    runtime.error.clear();
+#else
+    (void)image;
+    (void)error;
+#endif
+    return true;
+}
 
 }  // namespace NESRecomp
 
@@ -3236,6 +3279,17 @@ extern "C" int nes_mod_runtime_initialize_c(
 extern "C" int nes_mod_runtime_commit_c(const char* rom_path) {
     std::string error;
     return NESRecomp::mod_runtime_commit(
+        rom_path ? fs::path(rom_path) : fs::path(), &error) ? 1 : 0;
+}
+
+/* Multi-image builds: the catalog's target identity is the image that is
+ * actually loaded, not the one the program was compiled from. The packages'
+ * own [[target]] lists then decide which images they serve
+ * (cyc_game_image_accepted / ZELDA_EXTRA_ROMS), instead of every launch being
+ * refused unless it matches the compile-time image. */
+extern "C" int nes_mod_runtime_retarget_c(const char* rom_path) {
+    std::string error;
+    return NESRecomp::mod_runtime_retarget_image(
         rom_path ? fs::path(rom_path) : fs::path(), &error) ? 1 : 0;
 }
 
