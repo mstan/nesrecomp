@@ -10,6 +10,21 @@ composition remain scanline operations; the sprite presentation uses primary
 OAM and the selected native row. Unsupported boards/regions retain the
 build's reference provider.
 
+PAL (2C07) on fixed-PRG NROM/CNROM selects the canonical FRAME-PAL provider
+at power-on/current-state load. It shares the one HwPpu with the accepted
+NTSC provider; only the selected owner advances it. The machine clock routes
+PAL events directly, leaving NTSC packets and tails unchanged. Its pre-render
+line is hw_prerender_line() (311), not 261, and the red/green emphasis bits
+are swapped exactly as output_pixel does. A PAL native interval starts at
+tick 1 and stays within the current scanline: N CPU cycles produce
+floor((phase+16N)/5) dots, with half-dots two master ticks after each dot.
+That keeps the NTSC sample/half order, so eight-dot tile jobs and partial
+packets are reused unchanged. PAL MMC1/MMC3 and the reference providers keep
+refusing PAL intervals. The selected provider is included in the existing
+fixed session timing identity. CPU OAM/status reads and source mutations
+materialize the selected PAL evaluator before their actual observations;
+fetch, HD records, full current-state capture and reload use that same owner.
+
 Current-build states retain the actual bounded background pipeline and the
 native sprite row. FRAME schema 7 deliberately replaces the prior disposable
 prefix representation. Other PPU providers retain their layout and adapter.

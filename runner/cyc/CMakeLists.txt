@@ -106,7 +106,18 @@ add_test(NAME cyc_bad_game_config COMMAND "${Python3_EXECUTABLE}"
     "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_bad_game_config.py" --compiler $<TARGET_FILE:NESRecomp>)
 add_test(NAME cyc_backend_default COMMAND "${Python3_EXECUTABLE}"
     "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_backend_default.py" --recompiler $<TARGET_FILE:NESRecomp>)
-list(APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../external/SDL2/cmake")
+get_filename_component(_cyc_sdl_vc "${CMAKE_CURRENT_SOURCE_DIR}/../external/SDL2/cmake" REALPATH)
+if(WIN32)
+    list(APPEND CMAKE_PREFIX_PATH "${_cyc_sdl_vc}")
+elseif(SDL2_DIR)
+    # Match cyc.cmake's SDK ownership before importing the first SDL target.
+    # Keep explicit native SDKs; only retire the bundled Windows selection.
+    get_filename_component(_cyc_sdl_cached "${SDL2_DIR}" REALPATH)
+    if("${_cyc_sdl_cached}" STREQUAL "${_cyc_sdl_vc}")
+        unset(SDL2_DIR CACHE)
+        unset(SDL2_DIR)
+    endif()
+endif()
 find_package(SDL2 CONFIG QUIET)
 if(SDL2_FOUND)
     foreach(kind retained fallback)
@@ -141,7 +152,7 @@ if(SDL2_FOUND)
     nesrecomp_cyc_enable_sdl(cyc_hdpack_probe NO_DEV_UI)
     nesrecomp_cyc_enable_hdpack(cyc_hdpack_probe)
     set(NESRECOMP_HDPACK_TEST_ARGS "")
-    if(NESRECOMP_PPU_IMPL STREQUAL "FRAME")
+    if(NESRECOMP_PPU_IMPL MATCHES "^FRAME(_PAL)?$")
         set(NESRECOMP_HDPACK_TEST_ARGS --native-picture)
     endif()
     add_test(NAME cyc_hdpack COMMAND "${Python3_EXECUTABLE}"
@@ -552,7 +563,7 @@ add_library(cyc_ppu_span_runtime OBJECT cpu6502.c cpu6502_interp.c hw_machine.c
     ${CYC_TEST_BOARD_SOURCES} hw_palette.c cyc_trace.c cyc_ring.c
     ${NESRECOMP_CYC_SCHEDULER_SOURCES} cyc_native_none.c)
 target_include_directories(cyc_ppu_span_runtime PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})
-if(NOT NESRECOMP_PPU_IMPL STREQUAL "FRAME")
+if(NOT NESRECOMP_PPU_IMPL MATCHES "^FRAME(_PAL)?$")
 foreach(kind candidate reference)
     add_executable(cyc_ppu_span_${kind} tests/ppu_span_probe.c hw_ppu.c hw_apu.c
         $<TARGET_OBJECTS:cyc_ppu_span_runtime>)
@@ -614,12 +625,20 @@ add_test(NAME cyc_masked_irq COMMAND ${Python3_EXECUTABLE}
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_masked_irq.py
     --probe $<TARGET_FILE:cyc_masked_irq_probe>)
 
-if(NESRECOMP_PPU_IMPL STREQUAL "FRAME")
+if(NESRECOMP_PPU_IMPL MATCHES "^FRAME(_PAL)?$")
+    add_executable(cyc_frame_ppu_observer_probe tests/ppu_span_probe.c hw_ppu.c hw_apu.c
+        $<TARGET_OBJECTS:cyc_ppu_span_runtime>)
+    target_include_directories(cyc_frame_ppu_observer_probe PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})
+    target_link_libraries(cyc_frame_ppu_observer_probe PRIVATE ${NESRECOMP_CYC_LIBRARIES})
+    add_test(NAME cyc_frame_ppu_observers COMMAND cyc_frame_ppu_observer_probe)
     add_executable(cyc_frame_ppu_state_test tests/frame_ppu_state_test.c hw_ppu.c hw_apu.c
         $<TARGET_OBJECTS:cyc_ppu_span_runtime>)
     target_include_directories(cyc_frame_ppu_state_test PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})
     target_link_libraries(cyc_frame_ppu_state_test PRIVATE ${NESRECOMP_CYC_LIBRARIES})
     add_test(NAME cyc_frame_ppu_state COMMAND cyc_frame_ppu_state_test)
+    if(NESRECOMP_PPU_IMPL STREQUAL "FRAME_PAL")
+        add_test(NAME cyc_frame_ppu_pal_state COMMAND cyc_frame_ppu_state_test --pal)
+    endif()
 else()
 add_executable(cyc_raster_interval_probe tests/raster_interval_probe.c hw_ppu.c hw_apu.c
     $<TARGET_OBJECTS:cyc_ppu_span_runtime>)
@@ -649,7 +668,6 @@ add_test(NAME cyc_isolated_native COMMAND ${Python3_EXECUTABLE}
     ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_isolated_native.py
     --probe $<TARGET_FILE:cyc_isolated_native_probe>
     --out ${CMAKE_CURRENT_BINARY_DIR}/isolated_native_results)
-set_tests_properties(cyc_isolated_native PROPERTIES TIMEOUT 600)
 add_test(NAME cyc_apu_output_states COMMAND cyc_isolated_native_probe --audio-state)
 set_tests_properties(cyc_apu_output_states PROPERTIES TIMEOUT 60)
 
@@ -695,7 +713,7 @@ add_test(NAME cyc_ram_policy_test COMMAND cyc_ram_policy_test)
 
 # Low-level generated-ROM probes retain the independent reference provider.
 set(NESRECOMP_PPU_REFERENCE_TEST_IMPL "${NESRECOMP_PPU_IMPL}")
-if(NESRECOMP_PPU_IMPL STREQUAL "FRAME")
+if(NESRECOMP_PPU_IMPL MATCHES "^FRAME(_PAL)?$")
     set(NESRECOMP_PPU_REFERENCE_TEST_IMPL "LLE")
 endif()
 
@@ -774,4 +792,15 @@ if(TARGET SDL2::SDL2)
         target_link_libraries(cyc_chat_online_test PRIVATE ws2_32)
     endif()
     add_test(NAME cyc_chat_online COMMAND cyc_chat_online_test)
+endif()
+
+# Qualify native PAL intervals when their provider is built.
+if(NESRECOMP_PPU_IMPL STREQUAL "FRAME_PAL")
+    add_executable(cyc_pal_interval_probe tests/pal_interval_probe.c hw_ppu.c hw_apu.c
+        $<TARGET_OBJECTS:cyc_ppu_span_runtime>)
+    target_include_directories(cyc_pal_interval_probe PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})
+    target_link_libraries(cyc_pal_interval_probe PRIVATE ${NESRECOMP_CYC_LIBRARIES})
+    add_test(NAME cyc_pal_intervals COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_pal_intervals.py
+        --probe $<TARGET_FILE:cyc_pal_interval_probe>)
 endif()

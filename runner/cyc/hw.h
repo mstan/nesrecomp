@@ -119,6 +119,10 @@ void hw_native_flush(void);
 bool hw_native_prepare(void);
 /* Reference selection for masked-IRQ intervals; flushes pending work first. */
 void hw_native_set_masked_irq(bool enabled);
+#if NESRECOMP_PPU_FRAME_PAL
+/* Reference selection for PAL intervals (FRAME PPU); flushes pending work first. */
+void hw_native_set_pal_intervals(bool enabled);
+#endif
 
 static inline unsigned hw_native_pending_cycles(void)
 {

@@ -502,7 +502,11 @@ static void fp_input_packet(unsigned first,unsigned events,uint64_t cycle)
         } else fp_input_half();
     }
 }
+#if NESRECOMP_PPU_FRAME_PAL
+void ntsc_frame_ppu_ticks(unsigned first,unsigned end)
+#else
 void frame_ppu_ticks(unsigned first,unsigned end)
+#endif
 {
     if(!fp.enabled) {
         for(unsigned k=first;k<end;++k) {
@@ -529,6 +533,16 @@ void frame_ppu_ticks(unsigned first,unsigned end)
     }
     hw.cycles=cycle;
 }
+#if NESRECOMP_PPU_FRAME_PAL
+const char *cyc_ppu_implementation(void) { return frame_pal_selected?pal_cyc_ppu_implementation():fp.enabled?"FRAME":reference_cyc_ppu_implementation(); }
+void ntsc_ppu_dot(void) { if(!fp.enabled){reference_ppu_dot();return;}HR_COUNT(++hr_frame_calls;++hr_frame_dots);fp_input_sample();hw_cart_ppu_addr(ppu.vbus); }
+void ntsc_ppu_half_dot(void) { if(!fp.enabled){reference_ppu_half_dot();return;}fp_input_half(); }
+bool ntsc_ppu_clock_cpu_tail(unsigned align)
+{
+    if(!fp.enabled)return reference_ppu_clock_cpu_tail(align);
+    ntsc_frame_ppu_ticks(1,4);cpu_nmi_input(ppu_nmi_output());
+    ntsc_frame_ppu_ticks(4,7);apu_sample_irq();ntsc_frame_ppu_ticks(7,12);return true;
+#else
 const char *cyc_ppu_implementation(void) { return "FRAME"; }
 void ppu_dot(void) { if(!fp.enabled){reference_ppu_dot();return;}HR_COUNT(++hr_frame_calls;++hr_frame_dots);fp_input_sample();hw_cart_ppu_addr(ppu.vbus); }
 void ppu_half_dot(void) { if(!fp.enabled){reference_ppu_half_dot();return;}fp_input_half(); }
@@ -537,6 +551,7 @@ bool ppu_clock_cpu_tail(unsigned align)
     if(!fp.enabled)return reference_ppu_clock_cpu_tail(align);
     frame_ppu_ticks(1,4);cpu_nmi_input(ppu_nmi_output());
     frame_ppu_ticks(4,7);apu_sample_irq();frame_ppu_ticks(7,12);return true;
+#endif
 }
 /* Exact zero/nonzero admission proof without calculating a future duration.
  * MMC3 uses the same invalidated IRQ-deadline cache as the actual executor. */
@@ -561,7 +576,11 @@ static bool fp_interval_ready(void)
 }
 #endif
 
+#if NESRECOMP_PPU_FRAME_PAL
+unsigned ntsc_ppu_native_interval_limit(void)
+#else
 unsigned ppu_native_interval_limit(void)
+#endif
 {
     if(!fp.enabled) return reference_ppu_native_interval_limit();
     if(!sm_rest)return 0;
@@ -590,6 +609,17 @@ unsigned ppu_native_interval_limit(void)
     return limit;
 }
 
+#if NESRECOMP_PPU_FRAME_PAL
+void ntsc_ppu_native_interval_run(unsigned cycles,unsigned align)
+{
+    if(!fp.enabled){reference_ppu_native_interval_run(cycles,align);return;}
+    ntsc_frame_ppu_ticks(1,1+cycles*12);
+}
+void frame_ppu_mapper_changed(void) { if(frame_pal_selected){pal_frame_ppu_mapper_changed();return;}fp.irq_valid=fp.sprite_banks_valid=false; }
+uint8_t ppu_read(uint16_t address)
+{
+    if(frame_pal_selected)return pal_ppu_read(address);
+#else
 void ppu_native_interval_run(unsigned cycles,unsigned align)
 {
     if(!fp.enabled){reference_ppu_native_interval_run(cycles,align);return;}
@@ -598,17 +628,59 @@ void ppu_native_interval_run(unsigned cycles,unsigned align)
 void frame_ppu_mapper_changed(void) { fp.irq_valid=fp.sprite_banks_valid=false; }
 uint8_t ppu_read(uint16_t address)
 {
+#endif
     uint8_t value=reference_ppu_read(address);fp.irq_valid=fp.sprite_banks_valid=false;return value;
 }
 void ppu_write(uint16_t address,uint8_t value)
 {
+#if NESRECOMP_PPU_FRAME_PAL
+    if(frame_pal_selected){pal_ppu_write(address,value);return;}
+#endif
     reference_ppu_write(address,value);fp.irq_valid=fp.sprite_banks_valid=false;
 }
 void ppu_state_reloaded(void)
 {
+#if NESRECOMP_PPU_FRAME_PAL
+    frame_pal_selected=pal_fp_supported();
+    if(frame_pal_selected){fp.enabled=false;pal_ppu_state_reloaded();return;}
+    pal_fp.enabled=false;pal_fp.oam_first=0;
+#endif
     reference_ppu_state_reloaded();fp.enabled=fp_supported();fp.irq_valid=fp.sprite_banks_valid=false;
 }
 void ppu_power_on(void)
 {
+#if NESRECOMP_PPU_FRAME_PAL
+    frame_pal_selected=pal_fp_supported();
+    ppu_native_oam_prefixes=ppu_native_oam_dots=0;
+    if(frame_pal_selected){fp.enabled=false;pal_ppu_power_on();return;}
+    pal_fp.enabled=false;pal_fp.oam_first=0;
     reference_ppu_power_on();memset(&fp,0,sizeof(fp));fp.enabled=fp_supported();ppu.frame_sprite_line=0xffff;
 }
+
+/* Generic direct/debug PPU clients use the selected provider. The machine's
+ * NTSC clock calls the native entries above directly; PAL routing belongs
+ * to its already separate clock/interval owner, never to NTSC packets. */
+void frame_ppu_ticks(unsigned first,unsigned end) {
+    if(frame_pal_selected)pal_frame_ppu_ticks(first,end);
+    else ntsc_frame_ppu_ticks(first,end);
+}
+void ppu_dot(void) {
+    if(frame_pal_selected)pal_ppu_dot();else ntsc_ppu_dot();
+}
+void ppu_half_dot(void) {
+    if(frame_pal_selected)pal_ppu_half_dot();else ntsc_ppu_half_dot();
+}
+bool ppu_clock_cpu_tail(unsigned align) {
+    return frame_pal_selected?pal_ppu_clock_cpu_tail(align):ntsc_ppu_clock_cpu_tail(align);
+}
+unsigned ppu_native_interval_limit(void) {
+    return frame_pal_selected?pal_ppu_native_interval_limit():ntsc_ppu_native_interval_limit();
+}
+void ppu_native_interval_run(unsigned cycles,unsigned align) {
+    if(frame_pal_selected)pal_ppu_native_interval_run(cycles,align);
+    else ntsc_ppu_native_interval_run(cycles,align);
+}
+#else
+    reference_ppu_power_on();memset(&fp,0,sizeof(fp));fp.enabled=fp_supported();ppu.frame_sprite_line=0xffff;
+}
+#endif

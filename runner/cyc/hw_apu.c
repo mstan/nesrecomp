@@ -1346,6 +1346,29 @@ void apu_native_interval_run(unsigned cycles)
         hr_apu_calls += steps; if (audio.on) hr_audio_cycles += steps);
 }
 
+#if NESRECOMP_PPU_FRAME_PAL
+/* PAL retains its per-cycle APU owner, with the same IRQ/sample ordering. */
+void apu_pal_native_interval_run(unsigned cycles)
+{
+    HR_COUNT(hr_apu_iv_cycles += cycles);
+#if NESRECOMP_APU_OPERATION
+    if (apu_operation_active) {
+        apu_operation_pending += cycles;
+        if (apu_operation_pending >= apu_operation_deadline) apu_operation_sync();
+        return;
+    }
+#endif
+#if NESRECOMP_HEADROOM_COUNTERS
+    unsigned hr_cycles = cycles;
+    uint64_t hr_skipped = apu_native_event_cycles;
+#endif
+
+    while (cycles--) apu_cycle_run();
+    HR_COUNT(uint64_t steps = hr_cycles - (apu_native_event_cycles - hr_skipped);
+        hr_apu_calls += steps; if (audio.on) hr_audio_cycles += steps);
+}
+
+#endif
 void apu_sample_irq(void)
 {
 #if NESRECOMP_APU_OPERATION

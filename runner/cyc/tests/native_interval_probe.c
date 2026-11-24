@@ -440,7 +440,11 @@ int main(int argc, char **argv)
             check(cyc_set_region(CYC_REGION_PAL), "set PAL");
             cyc_power_on((uint8_t)align);
             check(hw_pal(), "PAL active");
+#if NESRECOMP_PPU_FRAME_PAL
+            check(!hw_native_interval_limit(), "PAL unsettled span refusal");
+#else
             check(!hw_native_interval_limit(), "PAL refusal");
+#endif
         }
     }
     return 0;

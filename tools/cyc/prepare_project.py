@@ -62,7 +62,7 @@ def mod_identity(path):
     return '%08x' % zlib.crc32(data[skip:])
 
 
-def native_interval_board(path, fds):
+def native_interval_board(path, fds, pal_frame=False):
     """Build-time eligibility only; runtime still proves each device deadline.
 
     Reading the complete NES2 mapper number prevents accidentally qualifying
@@ -77,7 +77,7 @@ def native_interval_board(path, fds):
     mapper = (head[6] >> 4) | (head[7] & 0xf0)
     if head[7] & 0x0c == 0x08:
         mapper |= (head[8] & 0x0f) << 8
-    return '1' if mapper in (0, 1, 4, 66) else '0'
+    return '1' if mapper in (0, 1, 4, 66) or (pal_frame and mapper == 3) else '0'
 
 
 def cmake_quote(value):
@@ -163,6 +163,7 @@ def main():
                          ('CYC_PROJECT_ROM', [rom]), ('CYC_PROJECT_ROM_SHA256', [digest(rom)]),
                          ('CYC_PROJECT_LAUNCHER_SHA256', [launcher_digest(rom)]),
                          ('CYC_PROJECT_NATIVE_INTERVALS', [native_interval_board(rom, fds)]),
+                         ('CYC_PROJECT_PAL_FRAME_INTERVALS', [native_interval_board(rom, fds, pal_frame=True)]),
                          ('CYC_PROJECT_MOD_CRC32', [mod_identity(rom)])]:
         manifest += 'set(' + name + '\n' + ''.join('  ' + cmake_quote(p.as_posix() if isinstance(p, Path) else p) + '\n' for p in values) + ')\n'
     (out / 'sources.cmake').write_text(manifest, encoding='utf-8', newline='\n')
