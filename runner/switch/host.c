@@ -10,6 +10,8 @@
 #include <unistd.h>
 #ifdef __SWITCH__
 #include <switch.h>
+#include <dirent.h>
+#include <strings.h>
 #include <netinet/in.h>
 #endif
 #include "cyc_core.h"
@@ -215,6 +217,204 @@ void cyc_switch_shutdown(void)
     network_log = false;
 }
 
+
+#ifdef __SWITCH__
+#define ROM_CONFIG CYC_SWITCH_GAME_DIR "/rom.cfg"
+#define SD_ROOT "sdmc:/"
+#define PICKER_ROWS 16
+
+typedef struct {
+    char *name;
+    bool directory;
+} RomEntry;
+
+static char selected_rom[768];
+static bool selected_in_picker, can_choose_rom;
+
+static int compare_entries(const void *left, const void *right)
+{
+    const RomEntry *a = left, *b = right;
+    if (a->directory != b->directory) return a->directory ? -1 : 1;
+    int cmp = strcasecmp(a->name, b->name);
+    return cmp ? cmp : strcmp(a->name, b->name);
+}
+
+static bool child_path(char *out, size_t size, const char *dir, const char *name)
+{
+    const char *separator = dir[strlen(dir) - 1] == '/' ? "" : "/";
+    int n = snprintf(out, size, "%s%s%s", dir, separator, name);
+    return n >= 0 && (size_t)n < size;
+}
+
+static bool list_entries(const char *dir, RomEntry **entries, size_t *count)
+{
+    DIR *opened = opendir(dir);
+    if (!opened) return false;
+    struct dirent *entry;
+    size_t capacity = 0;
+    bool ok = true;
+    while ((entry = readdir(opened))) {
+        const char *name = entry->d_name;
+        if (!strcmp(name, ".") || !strcmp(name, "..")) continue;
+        char path[sizeof selected_rom];
+        struct stat st;
+        if (!child_path(path, sizeof path, dir, name) || stat(path, &st)) continue;
+        const char *ext = strrchr(name, '.');
+        bool folder = S_ISDIR(st.st_mode);
+        if (!folder && (!S_ISREG(st.st_mode) || !ext || strcasecmp(ext, ".nes"))) continue;
+        if (*count == capacity) {
+            capacity = capacity ? capacity * 2 : 32;
+            RomEntry *grown = realloc(*entries, capacity * sizeof **entries);
+            if (!grown) { ok = false; break; }
+            *entries = grown;
+        }
+        char *copy = strdup(name);
+        if (!copy) { ok = false; break; }
+        (*entries)[(*count)++] = (RomEntry){copy, folder};
+    }
+    closedir(opened);
+    if (*count > 1) qsort(*entries, *count, sizeof **entries, compare_entries);
+    return ok;
+}
+
+static void picker_text(const char *text, size_t columns)
+{
+    for (; *text && columns; ++text, --columns) {
+        unsigned char c = (unsigned char)*text;
+        putchar(c < ' ' || c == 127 ? '?' : c);
+    }
+}
+
+static const char *choose_rom(const char *message)
+{
+    char dir[sizeof selected_rom] = CYC_SWITCH_GAME_DIR;
+    if (message && selected_in_picker) {
+        strcpy(dir, selected_rom);
+        char *slash = strrchr(dir, '/');
+        if (slash == dir + sizeof SD_ROOT - 2) slash[1] = 0;
+        else *slash = 0;
+    }
+    char *const mount_end = dir + sizeof SD_ROOT - 1;
+    bool chosen = false;
+    PadState pad;
+    padConfigureInput(1, HidNpadStyleSet_NpadStandard);
+    padInitializeDefault(&pad);
+    consoleInit(NULL);
+    while (appletMainLoop()) {
+        RomEntry *entries = NULL;
+        size_t count = 0, cursor = 0;
+        bool readable = list_entries(dir, &entries, &count);
+        bool redraw = true, change_dir = false;
+        while (appletMainLoop()) {
+            if (redraw) {
+                consoleClear();
+                puts("Select your original NES cartridge (.nes)\n");
+                picker_text(dir, 66);
+                puts("\n");
+                if (message) puts(message);
+                if (!readable) puts("Cannot list this folder.");
+                else if (!count) puts("This folder has no NES cartridges or subfolders.");
+                size_t start = cursor / PICKER_ROWS * PICKER_ROWS;
+                for (size_t i = start; readable && i < count && i < start + PICKER_ROWS; ++i) {
+                    printf("%s%s ", i == cursor ? "> " : "  ", entries[i].directory ? "[Folder]" : "        ");
+                    picker_text(entries[i].name, 57);
+                    putchar('\n');
+                }
+                puts("\nD-pad: Move   A: Open or select   B: Parent folder   +: Cancel");
+                redraw = false;
+            }
+            consoleUpdate(NULL);
+            padUpdate(&pad);
+            u64 buttons = padGetButtonsDown(&pad);
+            if (buttons & HidNpadButton_Plus) break;
+            if (buttons & HidNpadButton_B) {
+                if (!*mount_end) break;
+                char *slash = strrchr(dir, '/');
+                if (slash < mount_end) *mount_end = 0;
+                else *slash = 0;
+                change_dir = true;
+                break;
+            }
+            if (!readable || !count) continue;
+            if ((buttons & HidNpadButton_AnyUp) && cursor) { --cursor; redraw = true; }
+            if ((buttons & HidNpadButton_AnyDown) && cursor + 1 < count) { ++cursor; redraw = true; }
+            if (!(buttons & HidNpadButton_A)) continue;
+            if (!child_path(selected_rom, sizeof selected_rom, dir, entries[cursor].name)) continue;
+            if (entries[cursor].directory) {
+                strcpy(dir, selected_rom);
+                change_dir = true;
+            } else {
+                chosen = true;
+            }
+            break;
+        }
+        for (size_t i = 0; i < count; ++i) free(entries[i].name);
+        free(entries);
+        if (!change_dir) break;
+    }
+    consoleExit(NULL);
+    selected_in_picker = chosen;
+    return chosen ? selected_rom : NULL;
+}
+
+static const char *cached_rom(void)
+{
+    FILE *f = fopen(ROM_CONFIG, "rb");
+    if (!f) f = fopen(ROM_CONFIG ".bak", "rb");
+    if (!f) return NULL;
+    char line[sizeof selected_rom + 2];
+    bool complete = fgets(line, sizeof line, f) != NULL;
+    fclose(f);
+    if (!complete) return NULL;
+    char *end = strpbrk(line, "\r\n");
+    if (!end || (size_t)(end - line) >= sizeof selected_rom ||
+        strncmp(line, SD_ROOT, sizeof SD_ROOT - 1)) return NULL;
+    *end = 0;
+    strcpy(selected_rom, line);
+    return selected_rom;
+}
+
+static void remember_selected_rom(void)
+{
+    if (!selected_in_picker) return;
+    const char *temp = ROM_CONFIG ".tmp";
+    FILE *f = fopen(temp, "wb");
+    if (!f) return;
+    bool written = fprintf(f, "%s\n", selected_rom) > 0;
+    if (fclose(f) == 0 && written) {
+        if (rename(temp, ROM_CONFIG) == 0) return;
+        /* libnx can reject replacing a destination. Preserve the old choice
+         * until the replacement is in place. */
+        const char *backup = ROM_CONFIG ".bak";
+        if (errno == EEXIST) {
+            remove(backup);
+            if (rename(ROM_CONFIG, backup) == 0) {
+                if (rename(temp, ROM_CONFIG) == 0) {
+                    remove(backup);
+                    return;
+                }
+                rename(backup, ROM_CONFIG);
+            }
+        }
+    }
+    remove(temp);
+    runner_log("Could not remember the selected cartridge.\n");
+}
+#endif
+
+bool cyc_switch_retry_rom(const char **rom_path, const char *message)
+{
+#ifdef __SWITCH__
+    if (!can_choose_rom) return false;
+    *rom_path = choose_rom(message);
+    return true;
+#else
+    (void)rom_path;
+    (void)message;
+    return false;
+#endif
+}
+
 int cyc_sdl_prelaunch(const char **rom_path, const char *bios, NesFdsHleAsk *hle,
                       const char **saved_bios)
 {
@@ -223,7 +423,25 @@ int cyc_sdl_prelaunch(const char **rom_path, const char *bios, NesFdsHleAsk *hle
         cyc_sdl_error_box("Storage unavailable", "Cannot create the save directory on the SD card.");
         return 2;
     }
-    *rom_path = ROM_PATH;
+    if (!*rom_path) {
+        *rom_path = ROM_PATH;
+#ifdef __SWITCH__
+        can_choose_rom = !benchmark && exit_after < 0 && !replay_path;
+        if (can_choose_rom) {
+            PadState pad;
+            padConfigureInput(1, HidNpadStyleSet_NpadStandard);
+            padInitializeDefault(&pad);
+            padUpdate(&pad);
+            const char *cached = cached_rom();
+            if (cached) *rom_path = cached;
+            struct stat st;
+            if ((padGetButtons(&pad) & HidNpadButton_Y) ||
+                stat(*rom_path, &st) != 0 || !S_ISREG(st.st_mode))
+                *rom_path = choose_rom(NULL);
+            if (!*rom_path) return 1;
+        }
+#endif
+    }
     *hle = NES_FDS_HLE_ASK_NONE;
     *saved_bios = NULL;
 #ifdef __SWITCH__
@@ -333,6 +551,9 @@ static uint8_t buttons(SDL_GameController *pad)
 
 int cyc_sdl_main(const char *title, int scale)
 {
+#ifdef __SWITCH__
+    remember_selected_rom();
+#endif
     (void)scale;
     SDL_Window *window = NULL;
     SDL_Renderer *renderer = NULL;

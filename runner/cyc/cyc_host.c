@@ -1394,6 +1394,10 @@ session_restart:
 #endif
         return 2;
     }
+#if defined(CYC_SWITCH) && !defined(CYC_ORACLE)
+    bool cyc_switch_retry_rom(const char **rom_path, const char *message);
+switch_read_rom: ;
+#endif
     size_t size;
 #ifndef CYC_ORACLE
     cyc_diagnostics_note("reading selected ROM");
@@ -1405,6 +1409,18 @@ session_restart:
     bool qd = ext && (!strcmp(ext, ".qd") || !strcmp(ext, ".QD"));
     bool fds = image && !nes_cart_image(image, size, &cart_info) &&
                nes_fds_image(image, size, qd ? NES_FDS_QD : NES_FDS_NONE, &fds_image);
+#if defined(CYC_SWITCH) && !defined(CYC_ORACLE)
+    if (fds && !headless) {
+        const char *message = "Select an original NES cartridge image. Disk images are unsupported.";
+        free(image);
+        if (cyc_switch_retry_rom(&rom_path, message)) {
+            if (!rom_path) return 0;
+            goto switch_read_rom;
+        }
+        cyc_sdl_error_box("Cannot start game", message);
+        return 2;
+    }
+#endif
     if (fds) {
 #ifdef CYC_ORACLE
         fprintf(stderr, "%s is a Famicom Disk System image; the TriCNES oracle has no RAM Adapter "
@@ -1510,6 +1526,13 @@ session_restart:
 #endif
     } else if (!image || !nes_cart_image(image, size, &cart_info) || !cyc_load_ines(image, size)) {
 #ifndef CYC_ORACLE
+#ifdef CYC_SWITCH
+        if (!headless && cyc_switch_retry_rom(&rom_path, "Cannot read this cartridge. Choose a matching original.")) {
+            free(image);
+            if (!rom_path) return 0;
+            goto switch_read_rom;
+        }
+#endif
         cyc_diagnostics_error("cannot load selected ROM (invalid or unsupported cartridge)\n");
 #if defined(CYC_WITH_SDL)
         if (!headless) cyc_sdl_error_box("Cannot start game", "Cannot read the selected ROM, or its cartridge format is unsupported. Select the original ROM again in the launcher.");
@@ -1532,6 +1555,13 @@ session_restart:
         cyc_game_image_accepted(cyc_prg_hash());
     if (!image_accepted && cyc_native_program_name && !nes_cart_identity_compatible_region(&cart_info, cyc_native_cart_hash,
                                                                      identity_region == CYC_REGION_PAL)) {
+#ifdef CYC_SWITCH
+        if (!headless && cyc_switch_retry_rom(&rom_path, "This cartridge does not match the compiled game.")) {
+            free(image);
+            if (!rom_path) return 0;
+            goto switch_read_rom;
+        }
+#endif
         cyc_diagnostics_error("Cartridge metadata differs from the compiled program; regenerate native code\n");
 #if defined(CYC_WITH_SDL)
         if (!headless) cyc_sdl_error_box("Cannot start game", "The ROM cartridge metadata differs from this build. Select the matching original ROM in the launcher.");
@@ -1539,6 +1569,13 @@ session_restart:
         return 2;
     }
     if (!image_accepted && cyc_native_program_name && cyc_prg_hash() != cyc_native_prg_hash) {
+#ifdef CYC_SWITCH
+        if (!headless && cyc_switch_retry_rom(&rom_path, "This cartridge does not match the compiled game.")) {
+            free(image);
+            if (!rom_path) return 0;
+            goto switch_read_rom;
+        }
+#endif
         cyc_diagnostics_error("PRG ROM does not match the ROM '%s' was recompiled from (hash %08X, expected %08X)\n",
                 cyc_native_program_name, cyc_prg_hash(), cyc_native_prg_hash);
 #if defined(CYC_WITH_SDL)
@@ -1565,7 +1602,12 @@ session_restart:
 #ifndef CYC_ORACLE
     char cartridge_save_path[1024];
     if (!fds && !headless && !no_save && !save_file && cyc_nvram_size(0)) {
-        if (!default_save_path(rom_path, "sav", cartridge_save_path, sizeof(cartridge_save_path))) {
+#ifdef CYC_SWITCH
+        const char *save_base = CYC_SWITCH_GAME_DIR "/rom.nes";
+#else
+        const char *save_base = rom_path;
+#endif
+        if (!default_save_path(save_base, "sav", cartridge_save_path, sizeof(cartridge_save_path))) {
             fprintf(stderr, "cannot create cartridge save path\n");
             return 2;
         }

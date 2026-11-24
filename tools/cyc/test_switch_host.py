@@ -37,6 +37,8 @@ def main():
     prg[-6:] = bytes.fromhex('00 80 00 80 00 80')
     rom = data / 'rom.nes'
     header = bytearray(b'NES\x1a' + bytes([2, 1]) + bytes(10))
+    if not args.no_saves:
+        header[6] |= 2  # Battery-backed NES 1.0 cartridge for SD save-path coverage.
     if args.pal:
         header[7] = 8  # NES 2.0 carries an authoritative regional timing mode.
         header[12] = 1
@@ -86,10 +88,24 @@ else()
 endif()
 ''', encoding='utf-8')
     binary = out / 'native'
-    run(['cmake', '-S', source, '-B', binary, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release'], 'configure')
+    run(['cmake', '-S', source, '-B', binary, '-G', 'Ninja',
+         '-DCMAKE_BUILD_TYPE=Release', '-DNESRECOMP_PPU_IMPL=HLE'], 'configure')
     run(['cmake', '--build', binary, '--parallel', '4'], 'build')
     env = dict(os.environ, SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy')
     exe = binary / 'switch_fixture'
+    selected = out / 'other SD folder' / 'Matching cartridge.NES'
+    selected.parent.mkdir(exist_ok=True)
+    selected.write_bytes(rom.read_bytes())
+    run([exe, selected, '--no-save', '--exit-after', '90', '--uncapped'], 'selected-cartridge', env=env)
+    log = (data / 'runtime.log').read_text()
+    assert 'frames=90' in log and selected.read_bytes() == rom.read_bytes(), log
+    wrong = selected.with_name('Wrong cartridge.nes')
+    mismatched = bytearray(rom.read_bytes())
+    mismatched[16] ^= 1
+    wrong.write_bytes(mismatched)
+    run([exe, wrong, '--no-save', '--exit-after', '90', '--uncapped'], 'selected-wrong', success=False, env=env)
+    log = (data / 'runtime.log').read_text()
+    assert 'PRG ROM does not match' in log and wrong.read_bytes() == mismatched, log
     auto = data / 'saves/auto.cycstate'
     auto.unlink(missing_ok=True)
     if args.no_saves:
@@ -184,6 +200,15 @@ endif()
     run([exe, '--no-save', '--exit-after', '1', '--uncapped'], 'no-save-invalid-directory', env=env)
     assert save_dir.read_text() == 'not a directory'
     save_dir.unlink(); parked.rename(save_dir)
+    # Choosing a file on another part of the SD card still uses this game's
+    # existing battery save. The chooser does not write next to the image.
+    auto.unlink()
+    battery_save = data / 'rom.sav'
+    battery = bytes(range(256)) * 32
+    battery_save.write_bytes(battery)
+    run([exe, selected, '--exit-after', '1', '--uncapped'], 'selected-battery-save', env=env)
+    assert battery_save.read_bytes() == battery
+    assert not selected.with_suffix('.sav').exists()
     print('Switch host: SDL video/audio loop, 100% native fixture, autosave/resume, missing/wrong ROM, corrupt state, write-error preservation and directory-error checks passed')
     print(f'Prepared cross-build source: {source}')
 

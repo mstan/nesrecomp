@@ -64,7 +64,7 @@ cmake -S recompiler -B build/recompiler -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build/recompiler
 cmake -S runner/cyc/project -B build/game-switch -G Ninja \
   -DCMAKE_TOOLCHAIN_FILE="$DEVKITPRO/cmake/Switch.cmake" \
-  -DCMAKE_BUILD_TYPE=Release -DNESRECOMP_PPU_IMPL=FRAME \
+  -DCMAKE_BUILD_TYPE=Release -DNESRECOMP_PPU_IMPL=HLE \
   -DNESRECOMP_HOST_COMPILER="$PWD/build/recompiler/NESRecomp" \
   -DNESRECOMP_ROM=/path/to/your/game.nes \
   -DNESRECOMP_GAME_CONFIG=/path/to/game.toml \
@@ -75,7 +75,13 @@ cmake --build build/game-switch
 # build/game-switch/nes_game.nro
 ```
 
-The build-time ROM path is never used at runtime; the NRO reads
+The build-time ROM path is never used at runtime. The NRO opens an SD-card
+picker if it cannot find the cartridge, or when you hold **Y** during startup.
+Use the D-pad to move, **A** to open a folder or choose a .nes image, and **B**
+to go up one folder. The runner remembers a successfully validated selection
+in the per-game directory. Battery saves stay there when the image is stored
+elsewhere. Commands can pass an absolute SD-card cartridge path. The default
+for existing installations is still
 `<game dir>/rom.nes` and the core checks its identity as on desktop.
 
 `FRAME` is the fastest PPU on this CPU for the boards it supports (NTSC
@@ -93,8 +99,9 @@ python3 tools/cyc/test_switch_host.py --out build/switch-host-pal --recompiler b
 The test writes its own tiny NROM program (no game data), runs the Switch host
 on the desktop with SDL dummy drivers and checks:
 
+- both modes: explicit cartridge selection from another folder and rejection of a different PRG image;
 - saves on: 100% native coverage, autosave/resume, missing/wrong ROM rejection,
-  corrupt-state preservation, save-write and invalid-directory errors;
+  battery-save location, corrupt-state preservation, save-write and invalid-directory errors;
 - saves off: an existing state and an invalid save directory are ignored for
   1,900 paced frames, the audio supply ratio stays near 1, two neutral-input
   benchmarks reach identical state, and a scripted window route reaches the
@@ -115,7 +122,8 @@ cmake --build build/switch-fixture   # switch_fixture.nro
 ```text
 sdmc:/switch/nesrecomp/<game>/
   <name>.nro
-  rom.nes          # your own matching ROM
+  rom.nes          # optional default matching ROM on the SD card
+  rom.cfg          # saved path when you use the cartridge picker
   runtime.log      # rewritten each launch
   saves/           # only used when NESRECOMP_SWITCH_SAVES=ON
 ```
