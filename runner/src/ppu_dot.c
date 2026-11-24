@@ -61,6 +61,8 @@ static int s_v_coarse_y = 0, s_v_fine_y = 0, s_v_nt_row = 0;  /* canonical state
 static int s_abs_nt_y   = -1;   /* linear-path absolute nametable Y */
 static int s_last_sy_y  = -1;
 static int s_last_nt_yb = -1;
+static uint64_t s_v_write_epoch;
+static int s_raster_v_active;
 
 /* ---- palette resolve (mirror of ppu_renderer.c bg_color) ---- */
 static inline uint32_t dot_bg_color(int pal_base, int color_idx) {
@@ -151,7 +153,21 @@ static void dot_render_scanline(int sy, uint32_t *target, int snapshot) {
          * or any Y-scroll-source change (mid-frame split). scroll_y >= 240 selects
          * the canonical negative-Y state machine (e.g. Yoshi's title at $F8); else
          * the linear abs_nt_y model. */
-        if (!s_v_init || g_ppuscroll_y != s_last_sy_y || cur_nt_yb != s_last_nt_yb) {
+        uint64_t v_epoch = runtime_get_ppu_v_write_epoch();
+        if (!snapshot && s_v_init && v_epoch != s_v_write_epoch) {
+            /* A completed $2006 pair immediately replaces live v. Subsequent
+             * $2005 writes change t, not the visible vertical counter. This
+             * also handles sprite-0 splits outside an IRQ handler. */
+            uint16_t v = runtime_get_ppu_v_at_write();
+            s_raster_v_active = 1;
+            s_use_canon = 1;
+            s_v_coarse_y = (v >> 5) & 31;
+            s_v_fine_y = (v >> 12) & 7;
+            s_v_nt_row = (v >> 11) & 1;
+        }
+        s_v_write_epoch = v_epoch;
+        if (!s_v_init || (!s_raster_v_active &&
+            (g_ppuscroll_y != s_last_sy_y || cur_nt_yb != s_last_nt_yb))) {
             if (g_ppuscroll_y >= 240) {
                 s_use_canon  = 1;
                 s_v_coarse_y = (g_ppuscroll_y >> 3) & 0x1F;
@@ -332,10 +348,14 @@ void ppu_dot_render_snapshot(uint32_t *buf) {
     if (!buf || g_render_width > DOT_MAXW) return;
     int v0=s_v_init, v1=s_use_canon, v2=s_v_coarse_y, v3=s_v_fine_y, v4=s_v_nt_row,
         v5=s_abs_nt_y, v6=s_last_sy_y, v7=s_last_nt_yb;
+    uint64_t epoch = s_v_write_epoch;
+    int raster = s_raster_v_active;
+    s_raster_v_active = 0;
     s_v_init = 0; s_abs_nt_y = -1; s_last_sy_y = -1; s_last_nt_yb = -1;
     for (int sy = 0; sy < VISIBLE_LINES; sy++) dot_render_scanline(sy, buf, 1);
     s_v_init=v0; s_use_canon=v1; s_v_coarse_y=v2; s_v_fine_y=v3; s_v_nt_row=v4;
     s_abs_nt_y=v5; s_last_sy_y=v6; s_last_nt_yb=v7;
+    s_v_write_epoch = epoch; s_raster_v_active = raster;
 }
 
 /* ---- public API ---- */
@@ -410,6 +430,7 @@ void ppu_dot_frame_boundary(void) {
     s_sprite_suppression_ready = 0;
     s_prerender_done = 0;
     s_v_init         = 0;
+    s_raster_v_active = 0;
     s_abs_nt_y       = -1;
     s_last_sy_y      = -1;
     s_last_nt_yb     = -1;
