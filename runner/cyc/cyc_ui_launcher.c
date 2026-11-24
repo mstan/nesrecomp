@@ -275,14 +275,13 @@ int cyc_ui_launcher(CycSettings *settings, const char *settings_path, const CycH
     gi.widescreen_supported = 0;
     (void)extras;
     gi.config_path = settings_path;
+    char *base = SDL_GetBasePath();
 #ifdef CYC_GAME_PASSWORD_SAVE
     /* --config must not redirect an existing mantra away from the executable. */
     if (cyc_host_saves_enabled()) {
         static char password_path[1100];
-        char *base = SDL_GetBasePath();
         if (base) {
             int n = snprintf(password_path, sizeof(password_path), "%s%s", base, CYC_GAME_PASSWORD_SAVE);
-            SDL_free(base);
             if (n > 0 && (size_t)n < sizeof(password_path)) {
                 gi.password_save_path = password_path;
 #ifdef CYC_GAME_PASSWORD_SAVE_LABEL
@@ -375,7 +374,9 @@ int cyc_ui_launcher(CycSettings *settings, const char *settings_path, const CycH
 #endif
     out_rom[0] = 0;
     cyc_diagnostics_note("entering launcher");
-    int act = recomp_launcher_run_window(title, &io, &gi, ".", *rom_path ? *rom_path : "", out_rom, sizeof(out_rom));
+    int act = recomp_launcher_run_window(title, &io, &gi, base ? base : ".",
+                                         *rom_path ? *rom_path : "", out_rom, sizeof(out_rom));
+    SDL_free(base);
     cyc_diagnostics_note("launcher returned action=%d", act);
     /* The edits come back whichever way the launcher closed. */
     from_launcher(&io, settings, shortcuts, count);
