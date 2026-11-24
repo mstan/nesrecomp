@@ -73,7 +73,9 @@ static uint8_t *fds_read_whole(const char *path, size_t *size, bool *missing)
 static bool default_save_path(const char *image_path, const char *extension, char *out, size_t cap)
 {
     char dir[900] = ".";
-#ifdef _WIN32
+#ifdef CYC_SWITCH
+    snprintf(dir, sizeof(dir), "%s/", CYC_SWITCH_GAME_DIR);
+#elif defined(_WIN32)
     DWORD n = GetModuleFileNameA(NULL, dir, sizeof(dir));
     if (n == 0 || n >= sizeof(dir)) strcpy(dir, ".");
 #else

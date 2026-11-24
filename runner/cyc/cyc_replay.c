@@ -51,7 +51,7 @@ void cyc_replay_mods_applied(void)
 #endif
 }
 
-#ifndef CYC_WITH_SDL
+#if !defined(CYC_WITH_SDL) || defined(CYC_SWITCH)
 
 void cyc_replay_set_config_path(const char *path) { (void)path; }
 bool cyc_replay_init(const char *title) { (void)title; return false; }
