@@ -122,6 +122,7 @@ struct HdPack {
     std::string resource_id;
     std::string label;
     std::string description;
+    std::string artwork_provider;
     bool require_patch = false;
 
     bool needs_native_compatibility() const {
@@ -206,10 +207,16 @@ struct ImportedHdPack {
     std::string patch_rom_sha1;
     std::vector<std::string> supported_roms;
     std::string source_digest;
+    const NESModHdArtworkProvider* artwork_provider = nullptr;
 };
 
 std::map<std::string, RegisteredPlugin>& registered_plugins() {
     static std::map<std::string, RegisteredPlugin> value;
+    return value;
+}
+
+std::map<std::string, const NESModHdArtworkProvider*>& registered_hd_artwork_providers() {
+    static std::map<std::string, const NESModHdArtworkProvider*> value;
     return value;
 }
 
@@ -277,7 +284,7 @@ bool snapshot_hd_pack(Runtime& runtime, const Validation& plan,
                       const fs::path& rom, std::string* error);
 ResourceVerdict verify_hd_source(Runtime& runtime, const Package& package,
                                  const HdPack& descriptor, bool force);
-bool import_mesen_pack(Runtime& runtime, const fs::path& source,
+bool import_mesen_pack(Runtime& runtime, const HdPack& descriptor, const fs::path& source,
                        ImportedHdPack& out, std::string* error);
 
 bool package_relative_path(const std::string& name) {
@@ -739,6 +746,7 @@ bool read_manifest(const fs::path& path, Package& out, std::string* error) {
                 else if (key == "resource_id") parsed = string_field(hd_pack->resource_id);
                 else if (key == "label") parsed = string_field(hd_pack->label);
                 else if (key == "description") parsed = string_field(hd_pack->description);
+                else if (key == "artwork_provider") parsed = string_field(hd_pack->artwork_provider);
                 else if (key == "require_patch") parsed = parse_bool(value, hd_pack->require_patch);
                 else known = false;
                 break;
@@ -864,6 +872,8 @@ bool read_manifest(const fs::path& path, Package& out, std::string* error) {
               (item.patch.empty() == item.patched_rom_crc32.empty()) &&
               (item.patch.empty() || valid_crc32(item.patched_rom_crc32));
         if (!owner || !descriptor_valid ||
+            (!item.artwork_provider.empty() && (!external || item.needs_native_compatibility() ||
+                                               !valid_id(item.artwork_provider))) ||
             !hd_features.insert(item.feature_id).second) {
             set_error(error, "manifest has an invalid HD pack descriptor");
             return false;
@@ -1607,6 +1617,7 @@ bool snapshot_hd_pack(Runtime& runtime, const Validation& plan,
         add(package->id); add(package->version); add(plugin.feature_id);
         add(runtime.game_id); add(runtime.rom_crc32);
         add(descriptor->directory); add(descriptor->patched_rom_crc32);
+        if (imported.artwork_provider) add(imported.artwork_provider->id);
         std::vector<uint8_t> content;
         for (const auto& file : files) {
             if (!read_file(file, content, error)) return false;
@@ -1626,6 +1637,7 @@ bool snapshot_hd_pack(Runtime& runtime, const Validation& plan,
         }
         runtime.committed_hd_key = package->id + ":" + package->version + ":" + plugin.feature_id;
         runtime.committed_hd.directory = runtime.committed_hd_directory.c_str();
+        runtime.committed_hd.artwork_provider = imported.artwork_provider;
         for (unsigned i = 0; i < 20; ++i)
             runtime.committed_hd.fingerprint[i] = (uint8_t)std::strtoul(hash.substr(i*2, 2).c_str(), nullptr, 16);
         return true;
@@ -2363,7 +2375,34 @@ bool cached_mesen(Runtime& runtime, const std::string& digest, ImportedHdPack& o
     return true;
 }
 
-bool import_mesen_pack(Runtime& runtime, const fs::path& selected,
+bool verify_mesen_artwork(const Runtime& runtime, const HdPack& descriptor,
+                          ImportedHdPack& pack, std::string* error) {
+    if (descriptor.artwork_provider.empty()) {
+        if (pack.patch.empty()) return true;
+        set_error(error, HD_PACK_NEEDS_NATIVE);
+        return false;
+    }
+    const auto& providers = registered_hd_artwork_providers();
+    const auto found = providers.find(descriptor.artwork_provider);
+    if (found == providers.end() || runtime.game_id != found->second->game_id ||
+        runtime.rom_crc32 != found->second->rom_crc32) {
+        set_error(error, "No native artwork provider is available for this ROM revision");
+        return false;
+    }
+    std::vector<uint8_t> rules;
+    Package assets;
+    assets.root = pack.directory;
+    fs::path path;
+    if (!hd_asset_path(assets, "hires.txt", path, error) || !read_file(path, rules, error)) return false;
+    if (sha1_hex(rules) != found->second->rules_sha1) {
+        set_error(error, "The artwork rules do not match the supported pack revision");
+        return false;
+    }
+    pack.artwork_provider = found->second;
+    return true;
+}
+
+bool import_mesen_pack(Runtime& runtime, const HdPack& descriptor, const fs::path& selected,
                        ImportedHdPack& out, std::string* error) {
     std::error_code ec;
     fs::path source = selected;
@@ -2408,11 +2447,8 @@ bool import_mesen_pack(Runtime& runtime, const fs::path& selected,
             "Download contains multiple HD packs; select the desired inner pack ZIP"); return false;
     }
     ImportedHdPack metadata;
-    if (!mesen_metadata(candidates[0], metadata, error)) return false;
-    if (!metadata.patch.empty()) {
-        set_error(error, HD_PACK_NEEDS_NATIVE);
-        return false;
-    }
+    if (!mesen_metadata(candidates[0], metadata, error) ||
+        !verify_mesen_artwork(runtime, descriptor, metadata, error)) return false;
     const fs::path ready = scratch / "ready";
     fs::create_directories(ready / "pack", ec);
     if (ec) { set_error(error, "Cannot prepare imported Mesen assets"); return false; }
@@ -2457,19 +2493,22 @@ ResourceVerdict verify_hd_source(Runtime& runtime, const Package& package,
     bool ready = false;
     try {
         ready = cached != selection.imported_resources.end() && cached_mesen(runtime, cached->second, imported, &error);
-        if (!ready) ready = import_mesen_pack(runtime, fs::u8path(selected->second), imported, &error);
+        if (!ready) ready = import_mesen_pack(runtime, descriptor, fs::u8path(selected->second), imported, &error);
+        if (ready) ready = verify_mesen_artwork(runtime, descriptor, imported, &error);
     } catch (const fs::filesystem_error& failure) {
         error = "Cannot import selected Mesen download: " + std::string(failure.what());
     }
-    if (!ready || !imported.patch.empty()) {
-        verdict.status = ready ? HD_PACK_NEEDS_NATIVE : error;
+    if (!ready) {
+        verdict.status = error;
         runtime.imported_hd_packs.erase(key);
         ui_cache.path = selected->second; ui_cache.verdict = verdict; ui_cache.populated = true;
         return verdict;
     }
     selection.imported_resources[descriptor.resource_id] = imported.source_digest;
     runtime.imported_hd_packs[key] = std::move(imported);
-    verdict.verified = true; verdict.status = "Imported and ready";
+    verdict.verified = true;
+    verdict.status = runtime.imported_hd_packs.at(key).artwork_provider ?
+        "Imported artwork for the original game" : "Imported and ready";
     ui_cache.path = selected->second; ui_cache.verdict = verdict; ui_cache.populated = true;
     return verdict;
 }
@@ -3468,6 +3507,15 @@ extern "C" int nes_mod_register_activation_plugin(
         return 0;
     plugins[id].activation = callback;
     return 1;
+}
+
+extern "C" int nes_mod_register_hd_artwork_provider(const NESModHdArtworkProvider* provider) {
+    if (!provider || !provider->id || !provider->game_id || !provider->rom_crc32 ||
+        !provider->rules_sha1 || !NESRecomp::valid_id(provider->id) ||
+        !NESRecomp::valid_id(provider->game_id) || !NESRecomp::valid_crc32(provider->rom_crc32) ||
+        !NESRecomp::valid_sha1(provider->rules_sha1)) return 0;
+    const auto result = NESRecomp::registered_hd_artwork_providers().emplace(provider->id, provider);
+    return result.second || result.first->second == provider;
 }
 
 extern "C" int nes_mod_register_reset_callback(

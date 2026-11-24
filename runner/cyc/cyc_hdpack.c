@@ -225,7 +225,15 @@ const HdJobFrame *cyc_hdpack_jobs(const uint32_t *native) {
     uint64_t generation=cyc_render_generation();
     if(prepared_jobs && generation==jobs_generation && jobs_epoch==presentation_epoch)return prepared_jobs;
     prepare_pixels(native);
-    const HdJobFrame *next=hdpack_prepare_jobs(native,256);
+    HdNativeArea area={0};
+#ifdef NESRECOMP_CYCLE_HDPACK_MODS
+    const NESModHdPack *pack=nes_mod_hd_pack();
+    const NESModHdArtworkProvider *provider=pack?pack->artwork_provider:NULL;
+    NESModHdNativeArea rect;
+    if(provider && provider->native_area && provider->native_area(&rect))
+        area=(HdNativeArea){rect.x0,rect.y0,rect.x1,rect.y1};
+#endif
+    const HdJobFrame *next=hdpack_prepare_jobs_with_native_area(native,256,area);
     release_jobs();prepared_jobs=next;jobs_generation=generation;jobs_epoch=presentation_epoch;
     return prepared_jobs;
 }

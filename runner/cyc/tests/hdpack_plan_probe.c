@@ -299,6 +299,30 @@ int main(void) {
             const HdJobFrame *gpu_jobs=hdpack_prepare_jobs(native,17);assert(gpu_jobs);
             hdpack_gpu_probe_check(gpu_jobs,(unsigned)s_scale,out,(size_t)17*s_scale);
             hdpack_jobs_release(gpu_jobs);
+            if (ram == 0 && ver == 1 && si == 2 && q == 2) {
+                const HdNativeArea area = {3, 5, 9, 11};
+                const unsigned scale = (unsigned)s_scale;
+                const size_t pitch = 17 * scale;
+                const HdJobFrame *protected_jobs = hdpack_prepare_jobs_with_native_area(native, 17, area);
+                assert(protected_jobs);
+                uint32_t *expected = malloc(n * sizeof(*expected));
+                uint32_t *cpu = malloc(n * sizeof(*cpu));
+                assert(expected && cpu);
+                memcpy(expected, out, n * sizeof(*expected));
+                for (unsigned y = area.y0 * scale; y < area.y1 * scale; ++y) {
+                    for (unsigned x = area.x0 * scale; x < area.x1 * scale; ++x) {
+                        expected[y * pitch + x] = native[(y / scale) * 17 + x / scale];
+                    }
+                }
+                assert(memcmp(expected, out, n * sizeof(*expected)) != 0);
+                assert(!hdpack_render_jobs(protected_jobs, scale, cpu, pitch));
+                assert(!memcmp(expected, cpu, n * sizeof(*cpu)));
+                hdpack_gpu_probe_check(protected_jobs, scale, expected, pitch);
+                fprintf(stderr, "Native artwork area matches stock pixels on CPU and GPU\n");
+                hdpack_jobs_release(protected_jobs);
+                free(cpu);
+                free(expected);
+            }
 #endif
             uint64_t hash=UINT64_C(1469598103934665603);
             for(size_t i=0;i<n;i++)for(int j=0;j<4;j++)hash=(hash^(uint8_t)(out[i]>>(j*8)))*UINT64_C(1099511628211);

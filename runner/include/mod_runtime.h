@@ -142,14 +142,28 @@ const char* nes_mod_external_rom_path(const char* package_id,
                                       const char* feature_id,
                                       const char* resource_id);
 
+typedef struct NESModHdNativeArea {
+    unsigned x0, y0, x1, y1;  /* Half-open bounds at native resolution. */
+} NESModHdNativeArea;
+
+/* A title may present a specific revision of authored artwork over its
+ * original cartridge. The descriptor and strings have static lifetime. */
+typedef struct NESModHdArtworkProvider {
+    const char *id;
+    const char *game_id;
+    const char *rom_crc32;
+    const char *rules_sha1;
+    int (*native_area)(NESModHdNativeArea *area);
+} NESModHdArtworkProvider;
+int nes_mod_register_hd_artwork_provider(const NESModHdArtworkProvider *provider);
+
 /* One framework HD pack selected by the successfully committed Mods plan.
- * Assets live inside the installed package. An optional IPS produces a
- * geometry-preserving cartridge payload, without changing the owner's file.
  * Storage remains valid until initialize/commit. NULL means stock graphics.
- * The fingerprint identifies the package, assets and patch for save states. */
+ * The fingerprint identifies the package, assets and presentation provider. */
 typedef struct NESModHdPack {
     const char *directory;
     uint8_t fingerprint[20];
+    const NESModHdArtworkProvider *artwork_provider;
 } NESModHdPack;
 const NESModHdPack *nes_mod_hd_pack(void);
 /* A running cartridge keeps its pack/patch until the next launch. */
