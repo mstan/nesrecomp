@@ -9,6 +9,8 @@
 #include "cyc_ring.h"
 #include "hw_fds.h"
 #include "hw_internal.h"
+#include <stdio.h>
+#include <stdlib.h>
 
 bool      cyc_run_native = true;
 uint64_t  cyc_run_native_cycles;
@@ -49,13 +51,13 @@ void cyc_run_power_on(void) {
 
 void (*cyc_run_observer)(void);
 
-static void run_until_stop(void);
+static bool run_until_stop(void);
 
 void cyc_run_frame(void) {
     hw_frame_done = hw_frame_end_hit = false;
     if (cpu.power_on) cpu_power_on_sequence();
     for (;;) {
-        run_until_stop();
+        if (!run_until_stop()) exit(EXIT_FAILURE);
         if (!hw_observe_hit) break;
         /* An observation point: look, then go on unless the frame also
          * ended (an OAM DMA can carry the CPU from scanline 240 into VBlank). */
@@ -77,7 +79,7 @@ void cyc_run_frame(void) {
 
 /* One dispatch at an instruction boundary: recompiled ROM code, a compiled
  * RAM view, or the interpreter. */
-static void dispatch(void) {
+static bool dispatch(void) {
     int view;
     {
         if (cpu.jammed) {
@@ -113,6 +115,14 @@ static void dispatch(void) {
             cyc_ramview_stats.native_cycles += took;
         } else {
             uint16_t pc = cpu.pc;
+            if (cyc_run_native && (hw_prg_modified || hw_prg_data_modified) && hw_prg_is_rom(pc)) {
+                /* Applying an image overlay is valid. Executing bytes that
+                 * have no checked native view is a separate coverage gap. */
+                fprintf(stderr, "[native coverage] cartridge overlay has no validated native view: "
+                        "pc=$%04X prg_bank=%u interpreter_rom_cycles=%llu\n",
+                        pc, hw_prg_bank4(pc), (unsigned long long)cyc_run_interp_rom_cycles);
+                return false;
+            }
             uint64_t before = cyc_cycle_count();
             bool ram = pc < 0x2000 || is_prg_ram(pc);
             if (cyc_run_miss && hw_prg_is_rom(pc)) cyc_run_miss[cyc_run_miss_index(pc)]++;
@@ -131,9 +141,10 @@ static void dispatch(void) {
             else cyc_run_interp_other_cycles += took;
         }
     }
+    return true;
 }
 
-static void run_until_stop(void) {
+static bool run_until_stop(void) {
     while (!hw_frame_done) {
         /* Mod hook sites (cyc_hooks.h): the callbacks run at the boundary
          * before the site's instruction, whichever path would run it; the
@@ -147,9 +158,10 @@ static void run_until_stop(void) {
                 continue;
             }
         }
-        dispatch();
+        if (!dispatch()) return false;
         cyc_hook_passed = -1;
     }
+    return true;
 }
 
 /* A mod's isolated call (cyc_mod.c): run until the routine returns to stop_pc
@@ -169,7 +181,7 @@ int cyc_run_isolated(uint16_t stop_pc, uint8_t entry_s) {
                 continue;
             }
         }
-        dispatch();
+        if (!dispatch()) return CYC_MOD_FAIL_NATIVE;
         cyc_hook_passed = -1;
     }
     return 0;

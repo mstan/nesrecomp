@@ -87,15 +87,16 @@ require_patch={str(require_patch).lower()}
     patch_tag=f'<patch>fix.ips,{original_hash}\n'.encode()
     (imported/'hires.txt').write_bytes(files['hires.txt']+patch_tag)
     (imported/'fix.ips').write_bytes(patch)
-    run('legacy-cache-refused',wrapper,'resume-legacy',catalog=catalog)
+    run('cached-memory-overlay',wrapper,'resume-patch',catalog=catalog)
     folder=out/'directory-pack';folder.mkdir()
     for name,data in files.items():(folder/name).write_bytes(data)
     run('selected-hires',folder/'hires.txt')
     legacy=out/'legacy.zip'
     legacy.write_bytes(zip_bytes({**files,'hires.txt':files['hires.txt']+patch_tag,'fix.ips':patch}))
-    run('legacy-pack-refused',legacy,'legacy')
+    run('direct-memory-overlay',legacy,'patch')
     old_recipe=recipe('old','arbitrary-game',image,require_patch=True)
-    run('legacy-recipe-refused',direct,'legacy',support=old_recipe)
+    run('required-patch-missing',direct,'missing-patch',support=old_recipe)
+    run('required-patch-present',legacy,'patch',support=old_recipe)
     for index,name in enumerate(('../escaped','/absolute','C:/escape','dir/../escape','NUL.png','HIRES.TXT')):
         path=out/f'unsafe{index}.zip';path.write_bytes(zip_bytes({**files,name:b'bad'}))
         run(f'unsafe-{index}',path,'reject')
@@ -119,7 +120,7 @@ require_patch={str(require_patch).lower()}
         source_hash=hashlib.sha256(args.zelda_pack.read_bytes()).hexdigest()
         actual_rom=args.zelda_rom.read_bytes()
         zelda=recipe('zelda','legend-of-zelda-us',actual_rom)
-        run('real-zelda-legacy-refused',args.zelda_pack,'legacy',support=zelda,rom=args.zelda_rom,game='legend-of-zelda-us')
+        run('real-zelda-memory-overlay',args.zelda_pack,support=zelda,rom=args.zelda_rom,game='legend-of-zelda-us')
         assert hashlib.sha256(args.zelda_pack.read_bytes()).hexdigest()==source_hash
         assert args.zelda_rom.read_bytes()==actual_rom
     if args.smb_pack and args.smb_rom:

@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Wrap a local Mesen HD pack in a portable, default-off .nesmod archive.
 
-The original ROM supplies the package's target identity. Packs that declare
-an IPS require a title-native compatibility provider.
+The original ROM supplies the package's target identity. An IPS is validated
+in memory and shipped as an overlay; no modified ROM is written or compiled.
 Use --author and --license to preserve the pack creator's attribution/terms.
 """
 import argparse
+import hashlib
 from contextlib import contextmanager
 import os
 from pathlib import Path, PurePosixPath
@@ -171,6 +172,38 @@ def main() -> None:
         parser.error(str(error))
 
 
+def overlay_image(image, patch):
+    """Stage geometry-preserving IPS operations without modifying the input."""
+    if len(patch) < 8 or patch[:5] != b'PATCH':
+        raise ValueError('Invalid IPS patch')
+    result = bytearray(image)
+    start = 16 + (512 if image[6] & 4 else 0)
+    if start > len(image):
+        raise ValueError('Truncated original image trainer')
+    pos = 5
+    while pos + 3 <= len(patch):
+        if patch[pos:pos+3] == b'EOF':
+            tail = patch[pos+3:]
+            if not tail or len(tail) == 3 and int.from_bytes(tail, 'big') == len(image):
+                return bytes(result)
+            raise ValueError('IPS cannot resize this cartridge')
+        offset = int.from_bytes(patch[pos:pos+3], 'big'); pos += 3
+        if pos + 2 > len(patch):
+            raise ValueError('Truncated IPS record')
+        size = int.from_bytes(patch[pos:pos+2], 'big'); pos += 2
+        rle = size == 0
+        if rle:
+            if pos + 3 > len(patch):
+                raise ValueError('Truncated IPS RLE record')
+            size = int.from_bytes(patch[pos:pos+2], 'big'); pos += 2
+        count = 1 if rle else size
+        if not size or offset < start or offset + size > len(image) or pos + count > len(patch):
+            raise ValueError('IPS record changes cartridge geometry or is truncated')
+        result[offset:offset+size] = bytes([patch[pos]]) * size if rle else patch[pos:pos+size]
+        pos += count
+    raise ValueError('IPS has no complete EOF marker')
+
+
 def package(args, folder, source_notices):
     if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]*', args.id):
         raise ValueError('Invalid package id')
@@ -178,8 +211,21 @@ def package(args, folder, source_notices):
     if len(image) < 16 or image[:4] != b'NES\x1a':
         raise ValueError('Expected an iNES ROM')
     text = (folder / 'hires.txt').read_text(encoding='utf-8-sig')
-    if any(line.lstrip().startswith('<patch>') for line in text.splitlines()):
-        raise ValueError('This HD pack needs a native compatibility provider for its IPS changes')
+    patches = [line.strip()[7:] for line in text.splitlines() if line.lstrip().startswith('<patch>')]
+    patch_fields = ''
+    if patches:
+        if len(patches) != 1:
+            raise ValueError('The pack must declare one IPS patch')
+        name, separator, original_sha1 = patches[0].partition(',')
+        name, original_sha1 = name.strip(), original_sha1.strip().lower()
+        if not separator or not re.fullmatch(r'[0-9a-f]{40}', original_sha1):
+            raise ValueError('The IPS declaration needs the original image SHA-1')
+        patch_path = relative(name)
+        if hashlib.sha1(image).hexdigest() != original_sha1:
+            raise ValueError('The pack requires a different original ROM revision')
+        patched = overlay_image(image, (folder / patch_path).read_bytes())
+        patch_fields = (f'patch = {quoted("pack/" + patch_path.as_posix())}\n'
+                        f'patched_rom_crc32 = "{zlib.crc32(patched[16:]):08x}"\n')
     manifest = f'''format_version = 1
 id = {quoted(args.id)}
 version = {quoted(args.version)}
@@ -200,7 +246,7 @@ exclusive_group = "display-mode"
 [[hd_pack]]
 feature = "hd-pack"
 directory = "pack"
-'''
+''' + patch_fields
     tomllib.loads(manifest)
     files = sorted(pack_files(folder))
     if any(p.suffix.lower() in {'.nes', '.fds'} for p in files):

@@ -164,6 +164,11 @@ typedef struct NESModHdPack {
     const char *directory;
     uint8_t fingerprint[20];
     const NESModHdArtworkProvider *artwork_provider;
+    /* Validated, owned PRG + CHR bytes for the loaded cartridge only.
+     * The original image is never rewritten or replaced as a build input. */
+    const uint8_t *patched_payload;
+    const uint8_t *original_payload;
+    uint32_t payload_size;
 } NESModHdPack;
 const NESModHdPack *nes_mod_hd_pack(void);
 /* A running cartridge keeps its pack/patch until the next launch. */

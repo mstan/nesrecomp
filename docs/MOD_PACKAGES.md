@@ -38,8 +38,16 @@ manifest without adding any files. No Python is needed by players.
 At Play, the runtime checks any `<supportedRom>` declaration against the
 selected original ROM. Pack identity includes all imported assets. Cycle saves
 verify that identity and the running game keeps its selected pack until restart.
-Downloads that declare an IPS patch need a title-native compatibility provider.
-The original game image supplies the cartridge throughout execution.
+Downloads may declare a geometry-preserving IPS overlay. Its original-image
+identity, records and expected result are validated in owned memory before any
+loaded cartridge bytes change. A conflicting earlier cartridge write rejects
+the transaction without overwriting that write. The original image stays
+read-only and remains the recompilation input. Patched instructions still need
+native execution coverage; an accepted overlay is not proof of that coverage.
+Native guards retain unchanged compiled chunks. If execution reaches modified
+ROM without a validated native view, the runtime reports its PC and PRG bank
+and stops before interpreting it. A native hook or provider can supply that
+missing behavior without rejecting the underlying cartridge or RAM write.
 The local cache reference persists independently of the download path, so the
 original ZIP can be removed after import. Input expansion is bounded across
 three ZIP levels (256 MiB, 4096 entries) and staging is removed on failure.
@@ -84,8 +92,9 @@ python tools/package_hdpack.py --pack "/path/to/pack" --rom "/path/to/stock.nes"
 ```
 
 The packaging tool validates the original ROM and bundles the local assets and
-creator notices. Packs declaring an IPS patch need native compatibility code
-in the title. Install the archive through **Mods**, then enable its feature.
+creator notices. It validates IPS overlays in memory and includes their records
+and expected result identity, without writing a modified ROM. Install the
+archive through **Mods**, then enable its feature.
 The older folder/config adapter remains for explicit legacy integrations.
 Replacement
 pack music/sounds and some Mesen conditions remain unsupported. An installed
@@ -106,7 +115,7 @@ The loader accepts stored and DEFLATE entries, verifies ZIP CRCs, rejects
 encrypted or unsafe paths, caps archives at 4096 files and 256 MiB expanded,
 stages extraction, validates the manifest, and publishes a version atomically.
 
-The selected game image remains a stock ROM. Targets use the lowercase CRC32
+The original on-disk game image stays read-only. Targets use the lowercase CRC32
 of all bytes after the 16-byte iNES header, matching NESRecomp's existing ROM
 verification and allowing equivalent header variants. A Famicom Disk System
 image is identified by its side data: the bytes after a 16-byte fwNES

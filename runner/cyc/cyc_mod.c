@@ -209,6 +209,19 @@ bool cyc_mod_apply_cart_payload(const uint8_t *payload, size_t size) {
     }
     return true;
 }
+bool cyc_mod_apply_cart_payload_guarded(const uint8_t *expected,
+                                      const uint8_t *payload, size_t size) {
+    size_t chr_rom = hw_cart.info.chr_size;
+    if (s_open || hw_cart.mapper == NES_FDS_MAPPER || !expected || !payload ||
+        !hw_cart.prg || size != (size_t)hw_cart.prg_len + chr_rom ||
+        (chr_rom && !hw_cart.chr) ||
+        memcmp(hw_cart.prg, expected, hw_cart.prg_len) ||
+        (chr_rom && memcmp(hw_cart.chr, expected + hw_cart.prg_len, chr_rom)))
+        return false;
+    /* Prefer the native data path without limiting valid code overlays. */
+    return cyc_mod_apply_cart_data_payload(payload, size) ||
+           cyc_mod_apply_cart_payload(payload, size);
+}
 bool cyc_mod_apply_cart_data_payload(const uint8_t *payload, size_t size) {
     size_t chr_rom = hw_cart.info.chr_size;
     if (s_open || hw_cart.mapper == NES_FDS_MAPPER || !payload || !hw_cart.prg ||
@@ -430,7 +443,8 @@ bool cyc_mod_call(uint16_t routine, CycModRegs *regs)
         if (!told) {
             if (s_failed_n < sizeof(s_failed) / sizeof(s_failed[0])) s_failed[s_failed_n++] = routine;
             fprintf(stderr, "[cyc mod] isolated call to $%04X did not return (%s after %llu cycles, pc $%04X)\n",
-                    routine, why == CYC_MOD_FAIL_BUDGET ? "budget" : why == CYC_MOD_FAIL_JAM ? "jam" : "stack",
+                    routine, why == CYC_MOD_FAIL_BUDGET ? "budget" : why == CYC_MOD_FAIL_JAM ? "jam" :
+                             why == CYC_MOD_FAIL_NATIVE ? "native coverage" : "stack",
                     (unsigned long long)took, cpu.pc);
         }
     }

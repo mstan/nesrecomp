@@ -8,6 +8,7 @@ import tempfile
 import tomllib
 import unittest
 import zipfile
+import zlib
 import package_hdpack as importer
 
 
@@ -64,14 +65,43 @@ class ImportTests(unittest.TestCase):
                 if source==wrapper:
                     self.assertIn(b'outer credits',[d for n,d in content.items() if n.startswith('notices/')])
 
-    def test_ips_requires_native_compatibility(self):
+    def test_ips_overlay_keeps_original_input(self):
         patch = b'PATCH'+bytes([0,0,16,0,1,0xA9])+b'EOF'
         files = dict(self.files, **{'fix.ips':patch})
         files['hires.txt'] += f'<patch>fix.ips,{hashlib.sha1(self.image).hexdigest()}\n'.encode()
         source=self.root/'AnyTitle.zip';source.write_bytes(zip_bytes(files))
-        with self.assertRaisesRegex(ValueError,'native compatibility provider'):
-            self.convert(source,'refused.nesmod')
-        self.assertFalse((self.root/'refused.nesmod').exists())
+        manifest, content = self.convert(source,'overlay.nesmod')
+        self.assertEqual(manifest['hd_pack'][0]['patch'], 'pack/fix.ips')
+        staged = self.image[:16] + bytes([0xA9]) + self.image[17:]
+        self.assertEqual(manifest['hd_pack'][0]['patched_rom_crc32'], f'{zlib.crc32(staged[16:]):08x}')
+        self.assertEqual(content['pack/fix.ips'], patch)
+        self.assertEqual(self.rom.read_bytes(), self.image)
+
+    def test_ips_invalid_records_leave_no_archive(self):
+        for index, patch in enumerate((b'PATCH'+bytes([0,0,0,0,1,0xA9])+b'EOF',
+                                       b'PATCH'+bytes([0,0,16,0,0,0,3])+b'EOF',
+                                       b'PATCHEOF'+bytes([0,0,1]))):
+            files = dict(self.files, **{'fix.ips':patch})
+            files['hires.txt'] += f'<patch>fix.ips,{hashlib.sha1(self.image).hexdigest()}\n'.encode()
+            source=self.root/f'invalid-{index}.zip';source.write_bytes(zip_bytes(files))
+            name=f'invalid-{index}.nesmod'
+            with self.assertRaises(ValueError):self.convert(source,name)
+            self.assertFalse((self.root/name).exists())
+        self.assertEqual(self.rom.read_bytes(), self.image)
+
+    def test_ips_rle_and_original_identity(self):
+        patch = b'PATCH' + bytes([0, 0, 16, 0, 0, 0, 3, 0xA9]) + b'EOF'
+        staged = importer.overlay_image(self.image, patch)
+        self.assertEqual(staged[16:19], bytes([0xA9]) * 3)
+        self.assertEqual(staged[19:], self.image[19:])
+        self.assertEqual(importer.overlay_image(self.image, patch + len(self.image).to_bytes(3, 'big')), staged)
+        files = dict(self.files, **{'fix.ips': patch})
+        files['hires.txt'] += b'<patch>fix.ips,' + b'0' * 40 + b'\n'
+        source = self.root / 'wrong-original.zip'
+        source.write_bytes(zip_bytes(files))
+        with self.assertRaisesRegex(ValueError, 'different original ROM revision'):
+            self.convert(source, 'wrong-original.nesmod')
+        self.assertFalse((self.root / 'wrong-original.nesmod').exists())
         self.assertEqual(self.rom.read_bytes(), self.image)
 
     def test_multiple_packs_are_ambiguous(self):

@@ -16,8 +16,10 @@ def main():
     packs=manifest.get('hd_pack',[])
     if not packs or any(p.get('source')!='mesen' or p.get('directory') or p.get('patch') for p in packs):
         parser.error('Expected content-free Mesen source recipes, without packaged asset/patch paths')
-    if any(p.get('require_patch') or p.get('patched_rom_crc32') for p in packs):
-        parser.error('This HD pack needs a native compatibility provider for its IPS changes')
+    if any(p.get('patched_rom_crc32') and
+           (not isinstance(p['patched_rom_crc32'], str) or len(p['patched_rom_crc32']) != 8 or
+            any(c not in '0123456789abcdef' for c in p['patched_rom_crc32'])) for p in packs):
+        parser.error('Expected a lowercase CRC32 for the staged cartridge overlay')
     if args.out.exists():parser.error('Output already exists')
     args.out.parent.mkdir(parents=True,exist_ok=True)
     with zipfile.ZipFile(args.out,'x',compression=zipfile.ZIP_STORED) as archive:

@@ -51,6 +51,13 @@ bool cyc_hdpack_mod_prepare(void) {
         if(hdpack_load(pack->directory,hw_cart.chr_ram!=0,256)) {
             fprintf(stderr,"[Mods] Selected HD pack could not be loaded\n");return false;
         }
+        if(pack->patched_payload &&
+           !cyc_mod_apply_cart_payload_guarded(pack->original_payload,
+                                             pack->patched_payload,pack->payload_size)) {
+            hdpack_unload();
+            fprintf(stderr,"[Mods] HD overlay conflicts with the loaded cartridge\n");
+            return false;
+        }
         memcpy(fingerprint,pack->fingerprint,sizeof fingerprint);
     }
     nes_mod_lock_hd_pack();

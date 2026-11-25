@@ -708,14 +708,13 @@ add_test(NAME cyc_cart_ramviews_test
             --ppu ${NESRECOMP_PPU_REFERENCE_TEST_IMPL} ${NESRECOMP_NESTED_BUILD_ARGS})
 set_tests_properties(cyc_cart_ramviews_test PROPERTIES TIMEOUT 900)
 
-# Optional atomic-PRG admission: fresh metadata, changed instructions, folded
+# Atomic-PRG admission: fresh metadata, changed instructions, folded
 # external data, pointer escapes and cache generations, traced and untraced.
 add_test(NAME cyc_prg_guards_test
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../tools/cyc/test_cyc_prg_guards.py
             --recompiler $<TARGET_FILE:NESRecomp>
             --out ${CMAKE_CURRENT_BINARY_DIR}/prg_guards_test
             --ppu ${NESRECOMP_PPU_REFERENCE_TEST_IMPL} ${NESRECOMP_NESTED_BUILD_ARGS})
-set_tests_properties(cyc_prg_guards_test PROPERTIES TIMEOUT 900)
 
 if(TARGET SDL2::SDL2)
     # Existing HD corpus, also consumed by the real resident renderer. Hosts

@@ -141,8 +141,19 @@ int main(void) {
         image[16+131072]=0xa7;
         CHECK(!cyc_mod_apply_cart_payload(image+16,image_size-17));
         CHECK(!hw_prg_modified && hw_cart.chr[0]==0);
-        CHECK(cyc_mod_apply_cart_payload(image+16,image_size-16));
+        uint8_t *expected=(uint8_t *)malloc(image_size-16);
+        CHECK(expected!=NULL);
+        if(!expected) { free(image); return 1; }
+        CHECK(cyc_mod_copy_cart_payload(expected,image_size-16)==image_size-16);
+        expected[0]=1;
+        CHECK(!cyc_mod_apply_cart_payload_guarded(expected,image+16,image_size-16));
+        CHECK(hw_cart.prg[0]==0 && hw_cart.chr[0]==0);
+        expected[0]=0;
+        CHECK(cyc_mod_apply_cart_payload_guarded(expected,image+16,image_size-16));
         CHECK(!hw_prg_modified && hw_cart.chr[0]==0xa7 && hw_cart.chr[hw_cart.chr_ram_base]==0x5a);
+        CHECK(!cyc_mod_apply_cart_payload_guarded(expected,image+16,image_size-16));
+        CHECK(hw_cart.chr[0]==0xa7); /* conflict preserves the committed image */
+        free(expected);
         image[16]=0xea;
         CHECK(cyc_mod_isolate_begin());
         CHECK(!cyc_mod_apply_cart_payload(image+16,image_size-16));cyc_mod_isolate_end();

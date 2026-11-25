@@ -190,10 +190,16 @@ rather than an address:
   mapping is discontiguous at that moment (`$BFFF` into `$C000` with another
   16KB bank under it). Nothing jumps into such an instruction except through
   that dispatch, and a mapper write ends the block, so the check cannot go
-  stale. With patched PRG (`NESRECOMP_NATIVE_PRG_GUARDS`) the dispatch also
+  stale. Native PRG guards are enabled by default. With patched PRG the dispatch also
   compares the folded operand bytes with the image. Only an instruction that
   wraps past `$FFFF` (the program counter becomes `$0000`) is always left to
   the interpreter. `tools/cyc/test_cyc_crossslot.py` covers both directions.
+
+Cartridge overlays do not disable every compiled chunk. Unchanged guarded
+chunks and native hooks remain usable, and data overlays read the current
+mapped image. If a modified image reaches a ROM PC with no validated native
+view, execution reports the PC and PRG bank before interpreter fallback.
+An isolated call returns a native-coverage failure so its caller can roll back.
 
 Static discovery therefore reaches only what the fixed slots lead to — for
 SMB3, 534 instructions from the vectors. Everything behind a bank switch comes

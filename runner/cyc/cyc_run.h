@@ -5,6 +5,8 @@
  * compiled, the native code runs; everything else (RAM code, open bus,
  * addresses discovery missed) runs on the interpreter generated from the same
  * templates (cpu6502_interp.c).
+ * A modified cartridge is different: its ROM instructions require a checked
+ * native view. Missing coverage is reported before any interpreter fallback.
  *
  * A frame ends at the first instruction boundary at or after the PPU reports
  * the frame's VBlank. Recompiled code can only yield at instruction
