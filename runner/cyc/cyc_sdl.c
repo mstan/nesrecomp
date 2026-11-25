@@ -122,11 +122,17 @@ static const char *s_present_out;
 static long        s_present_every;
 static long        s_exit_after = -1;
 static const char *s_vpad_path;
+static const char *s_mods_root;
 static int         s_tcp_port;
 static int         s_key_hold[SDL_NUM_SCANCODES];   /* host loops a TCP-held key stays down */
 static bool        s_hidden;
 static bool        s_uncapped; /* measurement pacing only; render and audio still run */
 static bool        s_pause_unfocused;
+/* Native review controls freeze simulation without opening any menu. Host
+ * delivery and pending step replies are not part of a guest snapshot. */
+static bool        s_review_paused;
+static long        s_review_steps;
+static int         s_review_step_id = -1;
 static bool        s_fullscreen_chord; /* consume Enter until released, even if Alt comes up first */
 static char        s_image[1024];                   /* the image running (the save state slot's name) */
 bool cyc_sdl_force_launcher;
@@ -144,12 +150,14 @@ void cyc_sdl_image_path(const char *path) { snprintf(s_image, sizeof(s_image), "
 void cyc_sdl_option(const char *name, const char *value)
 {
     if (!strcmp(name, "--virtual-pad")) s_vpad_path = value;
+    else if (!strcmp(name, "--mods-root")) s_mods_root = value;
     else if (!strcmp(name, "--exit-after")) s_exit_after = atol(value);
     else if (!strcmp(name, "--config")) snprintf(s_set_path, sizeof(s_set_path), "%s", value);
     else if (!strcmp(name, "--tcp")) s_tcp_port = atoi(value);
     else if (!strcmp(name, "--hidden")) s_hidden = true;
     else if (!strcmp(name, "--uncapped")) s_uncapped = true;
     else if (!strcmp(name, "--pause-unfocused")) s_pause_unfocused = true;
+    else if (!strcmp(name, "--paused")) s_review_paused = true;
 }
 
 void cyc_sdl_present_out(const char *path, long every)
@@ -213,9 +221,14 @@ int cyc_sdl_prelaunch(const char **rom_path, const char *cli_bios, NesFdsHleAsk 
     }
     if (!had_config) save_settings();
     s_fds = looks_fds(*rom_path);
-    /* The mod catalog beside the executable, for a game built with mods. */
+    /* Explicit catalogs use the same path in the launcher and direct SDL QA.
+     * Otherwise retain the catalog beside the executable. */
     char mods[1100], err[600];
-    exe_path(mods, sizeof(mods), "mods");
+    if(s_mods_root) {
+        if(snprintf(mods,sizeof mods,"%s",s_mods_root)>=(int)sizeof mods) {
+            fprintf(stderr,"Mods catalog path is too long\n");return 2;
+        }
+    } else exe_path(mods, sizeof(mods), "mods");
     if (!cyc_session_mods_init(mods, err, sizeof(err))) {
         fprintf(stderr, "%s\n", err);
         cyc_sdl_error_box("Mods", err);
@@ -1145,6 +1158,47 @@ static void tcp_ping(int id, const char *line)
     cyc_tcp_ok(id, f);
 }
 
+static bool review_control_allowed(int id) {
+#ifdef NESRECOMP_NET
+    if(nes_netplay_active()) {
+        cyc_tcp_err(id,"pause/step controls require offline play");return false;
+    }
+#endif
+    return true;
+}
+static void review_status(int id) {
+    char fields[96];
+    snprintf(fields,sizeof fields,"\"frame\":%ld,\"paused\":%s",
+             s_frames_done,s_review_paused?"true":"false");
+    cyc_tcp_ok(id,fields);
+}
+static void review_cancel_step(void) {
+    if(s_review_step_id>=0) cyc_tcp_err(s_review_step_id,"step cancelled by runtime control");
+    s_review_step_id=-1;s_review_steps=0;
+}
+static void tcp_pause(int id,const char *line) {
+    (void)line;if(!review_control_allowed(id))return;
+    review_cancel_step();s_review_paused=true;
+    if(s_audio_dev){SDL_PauseAudioDevice(s_audio_dev,1);SDL_ClearQueuedAudio(s_audio_dev);}
+    review_status(id);
+}
+static void tcp_resume(int id,const char *line) {
+    (void)line;if(!review_control_allowed(id))return;
+    review_cancel_step();s_review_paused=false;
+    if(s_audio_dev)SDL_PauseAudioDevice(s_audio_dev,0);
+    review_status(id);
+}
+static void tcp_step(int id,const char *line) {
+    if(!review_control_allowed(id))return;
+    long frames=1;cyc_tcp_long(line,"frames",&frames);
+    if(frames<1 || frames>100000 || !s_review_paused || s_review_step_id>=0) {
+        cyc_tcp_err(id,"step: pause first; frames1..100000; one request at a time");return;
+    }
+    s_review_steps=frames;s_review_step_id=id;
+    /* Reply after the final frame and audio producer complete. No wall-clock
+     * deadline changes or terminates this finite requested workload. */
+}
+
 /* Where native column 0 sits in the last picture() of width w: the game
  * compositor's declared origin (cyc_render.h), centered otherwise. */
 static int picture_native_origin(int w)
@@ -1232,6 +1286,9 @@ static void tcp_setup(void)
     }
     if (port <= 0) return;
     cyc_tcp_register("ping", "liveness; the frame counter", tcp_ping);
+    cyc_tcp_register("pause", "pause simulation/audio without opening a menu (offline)", tcp_pause);
+    cyc_tcp_register("resume", "resume simulation/audio (offline)", tcp_resume);
+    cyc_tcp_register("step", "advance a paused runtime by frames (offline)", tcp_step);
     cyc_tcp_register("zapper", "aim x/y, trigger, mouse true; optional window_x/window_y", tcp_zapper);
     cyc_tcp_register("state", "frame, menu, drive, toast, HLE, disk save, bindings, build", tcp_state);
     cyc_tcp_register("headroom", "cumulative device and guest cost counters", tcp_headroom);
@@ -1772,12 +1829,15 @@ int cyc_sdl_main(const char *title_in, int scale)
     SDL_AudioDeviceID dev = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
     s_audio_dev = dev;
     s_audio_rate = dev ? have.freq : 0;
-    if (dev && cyc_audio_enable(have.freq)) SDL_PauseAudioDevice(dev, 0);
+    if (dev && cyc_audio_enable(have.freq)) SDL_PauseAudioDevice(dev, s_review_paused?1:0);
     else if (!dev) cyc_diagnostics_error("SDL audio: %s (continuing without sound)\n", SDL_GetError());
     cyc_diagnostics_note("audio device=%u driver=%s rate=%d game_controllers=%d", dev,
         SDL_GetCurrentAudioDriver() ? SDL_GetCurrentAudioDriver() : "none", dev ? have.freq : 0, SDL_NumJoysticks());
 #ifdef NESRECOMP_NET
     if(cyc_net_boot()!=0)s_running=false;
+    if(s_review_paused && nes_netplay_active()) {
+        cyc_diagnostics_error("--paused requires offline play\n");s_running=false;
+    }
 #endif
 
     if (s_vpad_path && vpad_load(s_vpad_path)) vpad_attach();
@@ -1831,7 +1891,7 @@ int cyc_sdl_main(const char *title_in, int scale)
             cyc_ui_process_event(&ev);
 #endif
             if (ev.type == SDL_CONTROLLERDEVICEREMOVED ||
-                (!open && (!s_pause_unfocused || s_hidden || (SDL_GetWindowFlags(s_win) & SDL_WINDOW_INPUT_FOCUS)))) {
+                (!open && !s_review_paused && (!s_pause_unfocused || s_hidden || (SDL_GetWindowFlags(s_win) & SDL_WINDOW_INPUT_FOCUS)))) {
                 int player = -1;
                 if (ev.type == SDL_CONTROLLERAXISMOTION) {
                     CycInputFrame ef; CycInputState es;
@@ -1959,7 +2019,7 @@ int cyc_sdl_main(const char *title_in, int scale)
         online=nes_netplay_active();
         if(online&&cyc_net_leaving()){s_running=false;break;}
 #endif
-        if (online || (!open && !inactive)) {
+        if (online || (!open && !inactive && (!s_review_paused || s_review_steps>0))) {
             cyc_host_window_replay(s_frames_done, st.buttons, CYC_INPUT_PLAYERS);
             cyc_host_window_game_input(st.game_buttons, CYC_INPUT_PLAYERS);
             uint8_t pad0 = st.buttons[0], pad1 = st.buttons[1];
@@ -2026,6 +2086,7 @@ int cyc_sdl_main(const char *title_in, int scale)
             cyc_replay_frame_end();
             frames++;
             cyc_host_frame_done(++s_frames_done);
+            if(s_review_paused && s_review_steps>0)--s_review_steps;
 #ifdef CYC_WITH_RECOMP_UI
             if (s_have_menu) {
                 if (cyc_state_ui_capture_due(s_frames_done)) {
@@ -2041,15 +2102,18 @@ int cyc_sdl_main(const char *title_in, int scale)
         int16_t pcm[4096];
         size_t n;
         while ((n = cyc_audio_read(pcm, 4096)) > 0) {
-            cyc_session_audio_mix(pcm,n);
+            cyc_session_audio_mix(pcm,n,(unsigned)s_audio_rate);
             audio_samples_produced += n;
             /* Keep latency bounded: skip a frame's audio if ~100 ms are queued. */
-            if (replay || !dev || fast || open || inactive || !s_set.audio_enabled || SDL_GetQueuedAudioSize(dev) >= (Uint32)(have.freq / 10) * 2)
+            if (replay || !dev || fast || open || inactive || s_review_paused || !s_set.audio_enabled || SDL_GetQueuedAudioSize(dev) >= (Uint32)(have.freq / 10) * 2)
                 continue;
             if (s_set.volume < 100)
                 for (size_t i = 0; i < n; ++i) pcm[i] = (int16_t)(pcm[i] * s_set.volume / 100);
             SDL_QueueAudio(dev, pcm, (Uint32)(n * sizeof(int16_t)));
             audio_samples_queued += n;
+        }
+        if(s_review_step_id>=0 && !s_review_steps) {
+            review_status(s_review_step_id);s_review_step_id=-1;
         }
 #ifdef NESRECOMP_NET
         /* Keep audio extras inside the completed simulation tick, matching

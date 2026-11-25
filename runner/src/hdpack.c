@@ -6,6 +6,7 @@
  * HdNesPack.cpp). PNG decode uses stb_image (implemented in chr_codec.c).
  */
 #include "hdpack.h"
+#include "hdpack_audio.h"
 #include "config.h"
 
 #include <stdio.h>
@@ -102,6 +103,7 @@ static int        s_skipped_cond = 0;  /* conditional tiles not yet supported (P
 static int        s_overscan[4] = {0,0,0,0}; /* top,right,bottom,left (parsed; clip TODO) */
 static int        s_has_overscan = 0;
 static int        s_disable_orig = 0;  /* <options>disableOriginalTiles */
+static int        s_audio_invalid;
 
 /* ── <condition> engine (mirrors Mesen HdPackConditions.h) ─────────────────── */
 
@@ -693,6 +695,17 @@ static void parse_line(char *line) {
     else if (!strncmp(L, "<condition>", 11)) process_condition(L + 11);
     else if (!strncmp(L, "<tile>", 6))       process_tile(cond_str, L + 6);
     else if (!strncmp(L, "<background>", 12)) process_background(cond_str, L + 12);
+    else if (!strncmp(L, "<bgm>", 5) || !strncmp(L, "<sfx>", 5)) {
+        char *tok[4];
+        int n = split_commas(L + 5, tok, 4);
+        char *end_a, *end_t;
+        unsigned long a = n == 3 ? strtoul(tok[0], &end_a, 10) : 256;
+        unsigned long t = n == 3 ? strtoul(tok[1], &end_t, 10) : 256;
+        if (n != 3 || !*tok[0] || !*tok[1] || *end_a || *end_t ||
+            a > 255 || t > 255 ||
+            !hdpack_audio_define(L[1] == 'b', (unsigned)a, (unsigned)t, s_dir, tok[2]))
+            s_audio_invalid = 1;
+    }
     else if (!strncmp(L, "<options>", 9))    { if (strstr(L + 9, "disableOriginalTiles")) s_disable_orig = 1; }
     else if (!strncmp(L, "<overscan>", 10)) {
         char buf[64]; char *tok[4];
@@ -702,7 +715,8 @@ static void parse_line(char *line) {
             s_has_overscan = 1;
         }
     }
-    /* <bgm>/<sfx>/<patch>/<options>/<addition>/<fallback>/#comments: ignored for now */
+    /* IPS is verified by the mod importer; audio commands belong to native
+     * game hooks. Other unsupported tags retain their existing handling. */
 }
 
 /* ── Public API ───────────────────────────────────────────────────────────── */
@@ -738,6 +752,7 @@ int hdpack_resize(int native_w) {
 }
 
 void hdpack_unload(void) {
+    hdpack_audio_reset(); s_audio_invalid = 0;
     int jobs_own_pixels = hd_jobs_owns_assets();
 #if defined(NESRECOMP_HDPACK_LAYER_PLANS) && NESRECOMP_HDPACK_LAYER_PLANS
     hd_layer_unload();
@@ -802,6 +817,10 @@ int hdpack_load(const char *dir, int is_chr_ram_game, int native_w) {
     char line[2048];
     while (fgets(line, sizeof(line), f)) parse_line(line);
     fclose(f);
+    if (s_audio_invalid || !hdpack_audio_validate_sources()) {
+        fprintf(stderr, "[HDPack] Invalid or conflicting audio declaration\n");
+        hdpack_unload(); return -1;
+    }
     finalize_backgrounds();
 #if defined(NESRECOMP_HDPACK_LAYER_PLANS) && NESRECOMP_HDPACK_LAYER_PLANS
     hd_layer_prepare();

@@ -7,6 +7,7 @@
 #include "cyc_mod.h"
 #include "hw_internal.h"
 #include "hdpack.h"
+#include "hdpack_audio.h"
 #include "mod_runtime.h"
 #include "mod_savestate.h"
 #include <stdlib.h>
@@ -276,6 +277,16 @@ static int get##n(uint8_t *b,int c){return save_part(n,b,c);} \
 static int set##n(const uint8_t *b,int l){return load_part(n,b,l);} \
 static int check##n(const uint8_t *b,int l){return validate_part(n,b,l);}
 HD_STATE_PART(0) HD_STATE_PART(1) HD_STATE_PART(2) HD_STATE_PART(3) HD_STATE_PART(4)
+static int get_audio(uint8_t *b,int cap) {
+    size_t n=hdpack_audio_state_size();
+    return cap>=(int)n && hdpack_audio_state_save(b,n)?(int)n:-1;
+}
+static int check_audio(const uint8_t *b,int len) {
+    return len>=0 && hdpack_audio_state_validate(b,(size_t)len);
+}
+static int set_audio(const uint8_t *b,int len) {
+    return len>=0 && hdpack_audio_state_load(b,(size_t)len);
+}
 NES_MOD_CONSTRUCTOR(register_cycle_hd_state) {
     NESModSavestateGet gets[]={get0,get1,get2,get3,get4};
     NESModSavestateSet sets[]={set0,set1,set2,set3,set4};
@@ -285,4 +296,7 @@ NES_MOD_CONSTRUCTOR(register_cycle_hd_state) {
         if(!nes_mod_register_savestate_hook(id,gets[i],sets[i]) || !nes_mod_register_savestate_validator(id,checks[i]))
             fprintf(stderr,"[HD pack] Cannot register cycle save record %u\n",i);
     }
+    if(!nes_mod_register_savestate_hook("cyc.hdpack.audio",get_audio,set_audio) ||
+       !nes_mod_register_savestate_validator("cyc.hdpack.audio",check_audio))
+        abort();
 }
