@@ -70,6 +70,7 @@
 #include "cyc_run.h"
 #include "cyc_session.h"
 #include "cyc_settings.h"
+#include "cyc_shader.h"
 #ifdef NESRECOMP_CYCLE_HDPACK
 #include "cyc_hdpack.h"
 #include "cyc_hd_gpu.h"
@@ -275,6 +276,8 @@ static bool          s_running = true;
 static bool          s_have_menu;
 static SDL_AudioDeviceID s_audio_dev;
 static int s_audio_rate;
+static CycShader *s_shader;
+static bool s_shader_tried;
 #ifdef NESRECOMP_CYCLE_HDPACK
 static CycHdGpu *s_hd_gpu;
 static bool s_hd_gpu_tried,s_gpu_picture;
@@ -301,14 +304,16 @@ static bool create_renderer(void)
 {
     s_vsync_supported = s_vsync_active = false;
     int preferred=-1;
+    bool prefer_gl = cyc_shader_available() && s_set.shader_path[0];
 #ifdef NESRECOMP_CYCLE_HDPACK
     /* A configured pack can publish source jobs directly to this backend.
      * Explicit driver selection and unsupported hosts retain their renderer. */
-    if(hdpack_active() && !getenv("SDL_RENDER_DRIVER")) {
+    prefer_gl = prefer_gl || hdpack_active();
+#endif
+    if(prefer_gl && !getenv("SDL_RENDER_DRIVER")) {
         for(int i=0;i<SDL_GetNumRenderDrivers();++i){SDL_RendererInfo info={0};
             if(!SDL_GetRenderDriverInfo(i,&info) && !strcmp(info.name,"opengl")){preferred=i;break;}}
     }
-#endif
     s_ren = s_win ? SDL_CreateRenderer(s_win, preferred, SDL_RENDERER_ACCELERATED) : NULL;
     if(s_win && !s_ren && preferred>=0)s_ren=SDL_CreateRenderer(s_win,-1,SDL_RENDERER_ACCELERATED);
     /* offscreen / headless video drivers have no accelerated renderer */
@@ -1452,7 +1457,20 @@ static void show(bool loading, const char *toast_title, const char *toast_body)
         cyc_hd_gpu_present_begin(s_hd_gpu);
     }
 #endif
-    SDL_RenderCopy(s_ren, gpu_texture?gpu_texture:s_tex, NULL, &dst);
+    SDL_Texture *display_texture = gpu_texture ? gpu_texture : s_tex;
+    if (s_set.shader_path[0] && !s_shader_tried) {
+        s_shader_tried = true;
+        s_shader = cyc_shader_create(s_ren, s_set.shader_path);
+        if (!s_shader) fprintf(stderr, "[Video shader] unavailable; using standard SDL output\n");
+    }
+    bool allow_shader = s_shader != NULL;
+#ifndef CYC_WITH_RECOMP_UI
+    /* This fallback composites the drive toast into the picture texture. */
+    allow_shader = allow_shader && !toast_title;
+#endif
+    bool shader_drawn = allow_shader &&
+        cyc_shader_draw(s_shader, s_win, s_ren, display_texture, &dst, s_set.linear_filter != 0);
+    if (!shader_drawn) SDL_RenderCopy(s_ren, display_texture, NULL, &dst);
     CycZapperState gun;
     if (s_emu_frame_active) gun = s_present_zapper;
     else cyc_zapper_state(&gun);
@@ -1828,12 +1846,14 @@ int cyc_sdl_main(const char *title_in, int scale)
                 cyc_session_event(&ev, player);
             }
             if (ev.type == SDL_QUIT) s_running = false;
-#ifdef NESRECOMP_CYCLE_HDPACK
             else if(ev.type==SDL_RENDER_TARGETS_RESET || ev.type==SDL_RENDER_DEVICE_RESET){
+                cyc_shader_destroy(s_shader,ev.type==SDL_RENDER_DEVICE_RESET);
+                s_shader=NULL;s_shader_tried=false;
+#ifdef NESRECOMP_CYCLE_HDPACK
                 cyc_hd_gpu_destroy(s_hd_gpu,ev.type==SDL_RENDER_DEVICE_RESET);
                 s_hd_gpu=NULL;s_hd_gpu_tried=s_gpu_picture=false;
-            }
 #endif
+            }
             else if (ev.type == SDL_WINDOWEVENT && ev.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
                 int ow = 0, oh = 0;
                 SDL_GetRendererOutputSize(s_ren, &ow, &oh);
@@ -2204,6 +2224,7 @@ int cyc_sdl_main(const char *title_in, int scale)
 #ifdef NESRECOMP_CYCLE_HDPACK
     cyc_hd_gpu_destroy(s_hd_gpu,false);s_hd_gpu=NULL;
 #endif
+    cyc_shader_destroy(s_shader,false);s_shader=NULL;s_shader_tried=false;
     SDL_DestroyTexture(s_tex);
     SDL_DestroyRenderer(s_ren);
     SDL_DestroyWindow(s_win);

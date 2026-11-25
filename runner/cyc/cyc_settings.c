@@ -168,6 +168,11 @@ bool cyc_settings_load(CycSettings *s, const char *path, FILE *log, const CycSet
             else if (eq_ci(key, "Fullscreen")) bad = !parse_int(val, &v) || (s->fullscreen = clampi(v, 0, 2), 0);
             else if (eq_ci(key, "IntegerScale")) bad = !parse_int(val, &v) || (s->integer_scale = v != 0, 0);
             else if (eq_ci(key, "LinearFilter")) bad = !parse_int(val, &v) || (s->linear_filter = v != 0, 0);
+            else if (eq_ci(key, "Shader")) {
+                size_t length = strlen(val);
+                if (length >= sizeof s->shader_path) bad = true;
+                else memcpy(s->shader_path, val, length + 1);
+            }
             else if (eq_ci(key, "VSync")) bad = !parse_int(val, &v) || (s->vsync = v != 0, 0);
             else if (eq_ci(key, "HdPackEnabled")) bad = !parse_int(val, &v) || (s->hdpack_enabled = v != 0, 0);
             else if (eq_ci(key, "HdPackDir")) snprintf(s->hdpack_dir,sizeof s->hdpack_dir,"%s",val);
@@ -269,6 +274,7 @@ bool cyc_settings_save(const CycSettings *s, const char *path, const CycSettings
                "# window write this file. Keys are SDL key and controller names.\n");
     fprintf(f, "[Display]\nWindowScale = %d\nFullscreen = %d\nIntegerScale = %d\nLinearFilter = %d\nVSync = %d\n",
             s->window_scale, s->fullscreen, s->integer_scale, s->linear_filter, s->vsync);
+    if (s->shader_path[0]) fprintf(f, "Shader = %s\n", s->shader_path);
     fprintf(f,"HdPackEnabled = %d\nHdPackDir = %s\n",s->hdpack_enabled,s->hdpack_dir);
 #ifdef NESRECOMP_CYCLE_HDPACK
     fprintf(f, "HDResolution = %d\n", s->hd_resolution);
