@@ -36,6 +36,7 @@ typedef struct CycSettings {
     int  fullscreen;        /* 0 off, 1 borderless, 2 exclusive */
     int  integer_scale;     /* bool */
     int  linear_filter;     /* bool */
+    char shader_path[512];  /* [Display] Shader; empty uses SDL sampling */
     int  vsync;             /* bool: sync presents to the display refresh */
     int  audio_enabled;     /* bool */
     int  volume;            /* 0..100 */

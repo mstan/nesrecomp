@@ -53,6 +53,7 @@ static int script_result;
 static RecompLauncherCGameInfo seen_game;
 static RecompLauncherCSettings seen_io;
 static char seen_initial[256];
+static char seen_assets[4096];
 static void (*script_edit)(RecompLauncherCSettings *io);
 static const char *script_rom;
 static const char *script_bios;        /* pick_bios(): the player's Select BIOS... */
@@ -60,7 +61,8 @@ static const char *script_bios;        /* pick_bios(): the player's Select BIOS.
 int recomp_launcher_run_window(const char *title, RecompLauncherCSettings *io, const RecompLauncherCGameInfo *game,
                                const char *assets, const char *initial_rom, char *out, size_t out_len)
 {
-    (void)title; (void)assets;
+    (void)title;
+    snprintf(seen_assets, sizeof(seen_assets), "%s", assets ? assets : "");
     seen_game = *game;
     seen_io = *io;
     snprintf(seen_initial, sizeof(seen_initial), "%s", initial_rom ? initial_rom : "");
@@ -275,6 +277,7 @@ int main(int argc, char **argv)
     /* what the host hands over */
     CycSettings s;
     cyc_settings_default(&s);
+    s.vsync = 0;
     const char *rom = image;
     script_result = RECOMP_LAUNCHER_RESULT_QUIT;
     CHECK(cyc_ui_launcher(&s, cfg, NULL, &rom, true, NULL, NULL) == 1);
@@ -296,6 +299,7 @@ int main(int argc, char **argv)
     char *base = SDL_GetBasePath();
     char password_path[1100];
     CHECK(base);
+    CHECK(!strcmp(seen_assets, base));
     snprintf(password_path, sizeof(password_path), "%stest-password.srm", base);
     SDL_free(base);
     CHECK(seen_game.password_save_path && !strcmp(seen_game.password_save_path, password_path));

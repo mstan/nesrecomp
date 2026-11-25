@@ -87,6 +87,7 @@ set(NESRECOMP_CYC_SCHEDULER_SOURCES
     ${NESRECOMP_CYC_DIR}/../src/mod_savestate.c
 )
 option(NESRECOMP_DEV_UI "Window developer surface: FDS drive bar, dev keys (F1-F4, F6+), coverage title" OFF)
+set(NESRECOMP_SHADER_PRESET_DIR "" CACHE PATH "Shared GLSL presets to stage under assets/shaders")
 set(NESRECOMP_CYC_LIBRARIES "")
 if(UNIX)
     # The C runtime's NTSC palette uses sin/cos. C++ oracle linking can hide
@@ -145,7 +146,9 @@ function(nesrecomp_cyc_enable_sdl target)
     endif()
     target_sources(${target} PRIVATE ${NESRECOMP_CYC_DIR}/cyc_sdl.c ${NESRECOMP_CYC_DIR}/cyc_input.c
         ${NESRECOMP_CYC_DIR}/cyc_settings.c ${NESRECOMP_CYC_DIR}/cyc_tcp.c
-        ${NESRECOMP_CYC_DIR}/cyc_chat.c ${NESRECOMP_CYC_DIR}/cyc_affinity.c)
+        ${NESRECOMP_CYC_DIR}/cyc_chat.c ${NESRECOMP_CYC_DIR}/cyc_affinity.c
+        ${NESRECOMP_CYC_DIR}/cyc_shader.c)
+    target_compile_definitions(${target} PRIVATE CYC_WITH_GLSL)
     if(WIN32)
         target_link_libraries(${target} PRIVATE ws2_32)
     endif()
@@ -155,6 +158,15 @@ function(nesrecomp_cyc_enable_sdl target)
     endif()
     set_property(TARGET ${target} PROPERTY NESRECOMP_CYC_SDL TRUE)
     target_link_libraries(${target} PRIVATE SDL2::SDL2)
+    if(NESRECOMP_SHADER_PRESET_DIR AND NOT (ANDROID OR EMSCRIPTEN))
+        if(NOT IS_DIRECTORY "${NESRECOMP_SHADER_PRESET_DIR}")
+            message(FATAL_ERROR "NESRECOMP_SHADER_PRESET_DIR does not name a preset directory")
+        endif()
+        add_custom_command(TARGET ${target} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory "${NESRECOMP_SHADER_PRESET_DIR}"
+                "$<TARGET_FILE_DIR:${target}>/assets/shaders"
+            VERBATIM)
+    endif()
     if(WIN32)
         add_custom_command(TARGET ${target} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:SDL2::SDL2> $<TARGET_FILE_DIR:${target}>)
