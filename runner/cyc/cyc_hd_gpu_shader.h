@@ -42,9 +42,10 @@ static const char hd_gpu_fragment[] =
     "ivec2 sub=(p%output_scale)*source_scale/output_scale;"
     "uvec4 a=texelFetch(jobs,ivec2(n.x*2,n.y),0);"
     "uvec4 b=texelFetch(jobs,ivec2(n.x*2+1,n.y),0);"
-    "uint u=a.x;if(n.y>=hud_rows)u=band(u,0,under_end,n,sub);"
+    "uint u=a.x;if((b.w&64u)==0u){"
+    "if(n.y>=hud_rows)u=band(u,0,under_end,n,sub);"
     "u=tile(u,b.w&3u,a.y,a.z,a.w,0u,sub);"
     "u=band(u,under_end,mid_end,n,sub);"
     "u=tile(u,(b.w>>2u)&3u,b.x,b.y,b.z,b.w,sub);"
-    "u=band(u,mid_end,bg_count,n,sub);"
+    "u=band(u,mid_end,bg_count,n,sub);}"
     "result=vec4(vec3(rgb(u))/255.0,float(u>>24u)/255.0);}\n";

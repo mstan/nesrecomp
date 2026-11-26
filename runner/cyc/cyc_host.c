@@ -1276,7 +1276,12 @@ static int host_main(int argc, char **argv) {
         }
         else if (!strcmp(argv[i], "--load-state") && i + 1 < argc) load_state = argv[++i], headless = true;
         else if (!strcmp(argv[i], "--replay-exact")) replay_exact = true, headless = true;
-        else if (!strcmp(argv[i], "--mods-root") && i + 1 < argc) mods_root = argv[++i];
+        else if (!strcmp(argv[i], "--mods-root") && i + 1 < argc) {
+            mods_root = argv[++i];
+#if defined(CYC_WITH_SDL)
+            cyc_sdl_option("--mods-root",mods_root);
+#endif
+        }
         else if ((!strcmp(argv[i], "--virtual-pad") || !strcmp(argv[i], "--exit-after") ||
                   !strcmp(argv[i], "--config") || !strcmp(argv[i], "--tcp")) && i + 1 < argc) {
 #if defined(CYC_WITH_SDL)
@@ -1284,7 +1289,7 @@ static int host_main(int argc, char **argv) {
 #endif
             ++i;
         }
-        else if (!strcmp(argv[i], "--hidden") || !strcmp(argv[i], "--uncapped") || !strcmp(argv[i], "--pause-unfocused")) {
+        else if (!strcmp(argv[i], "--hidden") || !strcmp(argv[i], "--uncapped") || !strcmp(argv[i], "--pause-unfocused") || !strcmp(argv[i], "--paused")) {
 #if defined(CYC_WITH_SDL)
             cyc_sdl_option(argv[i], "");
 #endif
@@ -1855,7 +1860,7 @@ session_restart:
             size_t n;
             while ((n = cyc_audio_read(pcm, 4096)) > 0) {
 #ifndef CYC_ORACLE
-                cyc_session_audio_mix(pcm,n);
+                cyc_session_audio_mix(pcm,n,WAV_RATE);
 #endif
                 if(wav_f&&!replay){fwrite(pcm, sizeof(int16_t), n, wav_f);wav_samples += (uint32_t)n;}
             }

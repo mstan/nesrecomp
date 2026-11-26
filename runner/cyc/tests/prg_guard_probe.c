@@ -27,7 +27,7 @@ static void serial(uint16_t addr, unsigned value)
 
 int main(int argc, char **argv)
 {
-    check(argc == 6, "path native alignment trace data-only");
+    check(argc == 6 || argc == 7, "path native alignment trace data-only [coverage case]");
     bool native = atoi(argv[2]) != 0, trace = atoi(argv[4]) != 0;
     bool data_only = atoi(argv[5]) != 0;
     unsigned align = (unsigned)atoi(argv[3]);
@@ -41,11 +41,41 @@ int main(int argc, char **argv)
     check(cyc_mod_copy_cart_payload(payload, sizeof(payload)) == sizeof(payload), "copy payload");
     check(cyc_native_has(0x8F00) && cyc_native_has(0xC000) && cyc_native_has(0xC400), "explicit seeds compiled");
     check(cyc_native_has(0xAFFF), "instruction running into the next slot compiled");
+    if (argc == 7) {
+        check(native, "coverage observer uses native execution");
+        if (!strcmp(argv[6], "code") || !strcmp(argv[6], "isolated")) {
+            payload[0x0E01] = 0xC4; payload[0x4401] = 3;
+            check(cyc_native_prg_code_byte(0x4401), "changed operand is compiled code");
+            check(cyc_mod_apply_cart_payload_guarded(image + 16, payload, sizeof(payload)),
+                  "guarded code overlay accepted");
+            check(cyc_native_has(0x8F00), "unmodified chunk still admitted");
+            check(!cyc_native_has(0xC400), "changed code needs native coverage");
+            if (!strcmp(argv[6], "isolated")) {
+                uint8_t before = cyc_cpu_ram()[0x10];
+                check(cyc_mod_isolate_begin(), "isolated coverage scope");
+                check(cyc_mod_poke(0x10, (uint8_t)(before ^ 0xff)), "isolated RAM write");
+                CycModRegs regs = {0};
+                check(!cyc_mod_call(0xC400, &regs), "uncovered isolated call reports failure");
+                cyc_mod_isolate_end();
+                check(cyc_cpu_ram()[0x10] == before, "failed native call restores isolated RAM");
+                check(cyc_mod_peek(0xC401) == 3, "host cartridge overlay is retained");
+                puts("PASS: isolated native coverage failure preserves rollback");
+                return 0;
+            }
+        } else {
+            check(!strcmp(argv[6], "escape"), "known coverage case");
+            size_t size; uint8_t *rw = cyc_mod_prg_data_rw(&size);
+            check(rw && size == sizeof(payload), "writable cartridge remains available");
+            rw[0x4401] = 4;
+        }
+        for (unsigned i = 0; i < 10; ++i) cyc_run_frame();
+        check(false, "uncovered modified ROM executed without a diagnostic");
+    }
     uint64_t pcm = UINT64_C(1469598103934665603), samples = 0;
     uint64_t modified_native = 0, modified_intervals = 0;
     int16_t audio[2048];
     uint64_t epoch_before_reload = 0;
-    for (unsigned frame = 0; frame < 33; ++frame) {
+    for (unsigned frame = 0; frame < 45; ++frame) {
         if (frame == 5) {
             payload[0x0E01] = 0xC4;
             check(data_only ? cyc_mod_apply_cart_data_payload(payload, sizeof(payload)) :
@@ -67,8 +97,8 @@ int main(int argc, char **argv)
             /* The predecessor's conservative operand tail may also reject
              * C000; the independent bank containing 8F00 must stay native. */
             check(cyc_native_has(0x8F00), "independent unchanged chunk retained");
-            check(cyc_native_has(0xC400) == (frame == 13), "changed chunk fallback then readmission");
-            check(cyc_native_has(0xAFFF) == (frame == 13), "patched operand in the next slot: fallback then readmission");
+            check(cyc_native_has(0xC400) == (frame == 13), "changed chunk coverage then readmission");
+            check(cyc_native_has(0xAFFF) == (frame == 13), "patched cross-slot operand coverage then readmission");
         }
         if (frame == 17) {
             size_t size; uint8_t *rw = cyc_mod_prg_data_rw(&size);
@@ -91,9 +121,19 @@ int main(int argc, char **argv)
             payload[0x0E01] = 0xC4; payload[0x4401] = 5;
             check(cyc_mod_apply_cart_payload(payload, sizeof(payload)), "new image code edit");
             check(cyc_native_has(0x8F00) && !cyc_native_has(0xC400), "old valid cache not reused");
+            /* Coverage refusal is tested separately, without interpreting
+             * modified code. Resume this data/PCM route on original code. */
+            check(cyc_load_ines(image, sizeof(image)), "restore covered code");
+            cyc_power_on((uint8_t)align); cyc_run_power_on();
+            check(cyc_audio_enable(48000), "restored audio enable");
+            check(cyc_mod_copy_cart_payload(payload, sizeof(payload)) == sizeof(payload), "restored payload");
+            payload[0x0E01] = 0xC4;
+            check(cyc_mod_apply_cart_data_payload(payload, sizeof(payload)), "restore data overlay");
         }
         uint64_t before = cyc_run_native_cycles, interval_before = hw_native_interval_cycles;
-        cyc_run_frame();
+        /* Observe code admission/restore while unsupported bytes remain
+         * unexecuted. The separate coverage cases stop at their first PC. */
+        if (!((frame >= 9 && frame < 13) || (frame >= 17 && frame < 25))) cyc_run_frame();
         uint64_t used = cyc_run_native_cycles - before;
         if (frame >= 6 && frame < 17) {
             modified_native += used;
@@ -116,7 +156,7 @@ int main(int argc, char **argv)
                cyc_mem_state_hash(), trace ? cyc_trace_hash : 0, pcm, samples);
     }
     check(samples > 20000, "full PCM captured");
-    check(cyc_cpu_ram()[5] != 0, "new image executes changed operand");
+    check(cyc_cpu_ram()[2] != 0, "mapped data selects the covered routine");
     if (native) {
         check(modified_native > 0, "modified tracked image actually uses native ROM");
         if (!trace) check(modified_intervals > 0, "modified native ROM uses deadline cursor");
@@ -167,7 +207,7 @@ int main(int argc, char **argv)
     }
     unsigned mapper = hw_cart.mapper;
     hw_cart.mapper = 2;
-    check(!cyc_native_prg_guard_available(), "unsupported board stays interpreted");
+    check(!cyc_native_prg_guard_available(), "unsupported board has no guarded native view");
     hw_cart.mapper = 5;
     hw_cart.prg_off[0] |= MMC5_PRG_RAM;
     const uint8_t *previous = hw_native_interval.prg[0];

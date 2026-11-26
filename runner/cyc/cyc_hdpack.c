@@ -7,6 +7,7 @@
 #include "cyc_mod.h"
 #include "hw_internal.h"
 #include "hdpack.h"
+#include "hdpack_audio.h"
 #include "mod_runtime.h"
 #include "mod_savestate.h"
 #include <stdlib.h>
@@ -48,13 +49,15 @@ bool cyc_hdpack_mod_prepare(void) {
     memset(&pipeline,0,sizeof pipeline);memset(recorded,0,sizeof recorded);
     memset(fingerprint,0,sizeof fingerprint);hdpack_unload();
     if(pack) {
-        if(pack->patched_payload) {
-            if(!cyc_mod_apply_cart_payload(pack->patched_payload,pack->payload_size)) {
-                fprintf(stderr,"[Mods] HD patch does not match this cartridge's geometry\n");return false;
-            }
-        }
         if(hdpack_load(pack->directory,hw_cart.chr_ram!=0,256)) {
             fprintf(stderr,"[Mods] Selected HD pack could not be loaded\n");return false;
+        }
+        if(pack->patched_payload &&
+           !cyc_mod_apply_cart_payload_guarded(pack->original_payload,
+                                             pack->patched_payload,pack->payload_size)) {
+            hdpack_unload();
+            fprintf(stderr,"[Mods] HD overlay conflicts with the loaded cartridge\n");
+            return false;
         }
         memcpy(fingerprint,pack->fingerprint,sizeof fingerprint);
     }
@@ -230,7 +233,15 @@ const HdJobFrame *cyc_hdpack_jobs(const uint32_t *native) {
     uint64_t generation=cyc_render_generation();
     if(prepared_jobs && generation==jobs_generation && jobs_epoch==presentation_epoch)return prepared_jobs;
     prepare_pixels(native);
-    const HdJobFrame *next=hdpack_prepare_jobs(native,256);
+    HdNativeArea area={0};
+#ifdef NESRECOMP_CYCLE_HDPACK_MODS
+    const NESModHdPack *pack=nes_mod_hd_pack();
+    const NESModHdArtworkProvider *provider=pack?pack->artwork_provider:NULL;
+    NESModHdNativeArea rect;
+    if(provider && provider->native_area && provider->native_area(&rect))
+        area=(HdNativeArea){rect.x0,rect.y0,rect.x1,rect.y1};
+#endif
+    const HdJobFrame *next=hdpack_prepare_jobs_with_native_area(native,256,area);
     release_jobs();prepared_jobs=next;jobs_generation=generation;jobs_epoch=presentation_epoch;
     return prepared_jobs;
 }
@@ -266,6 +277,16 @@ static int get##n(uint8_t *b,int c){return save_part(n,b,c);} \
 static int set##n(const uint8_t *b,int l){return load_part(n,b,l);} \
 static int check##n(const uint8_t *b,int l){return validate_part(n,b,l);}
 HD_STATE_PART(0) HD_STATE_PART(1) HD_STATE_PART(2) HD_STATE_PART(3) HD_STATE_PART(4)
+static int get_audio(uint8_t *b,int cap) {
+    size_t n=hdpack_audio_state_size();
+    return cap>=(int)n && hdpack_audio_state_save(b,n)?(int)n:-1;
+}
+static int check_audio(const uint8_t *b,int len) {
+    return len>=0 && hdpack_audio_state_validate(b,(size_t)len);
+}
+static int set_audio(const uint8_t *b,int len) {
+    return len>=0 && hdpack_audio_state_load(b,(size_t)len);
+}
 NES_MOD_CONSTRUCTOR(register_cycle_hd_state) {
     NESModSavestateGet gets[]={get0,get1,get2,get3,get4};
     NESModSavestateSet sets[]={set0,set1,set2,set3,set4};
@@ -275,4 +296,7 @@ NES_MOD_CONSTRUCTOR(register_cycle_hd_state) {
         if(!nes_mod_register_savestate_hook(id,gets[i],sets[i]) || !nes_mod_register_savestate_validator(id,checks[i]))
             fprintf(stderr,"[HD pack] Cannot register cycle save record %u\n",i);
     }
+    if(!nes_mod_register_savestate_hook("cyc.hdpack.audio",get_audio,set_audio) ||
+       !nes_mod_register_savestate_validator("cyc.hdpack.audio",check_audio))
+        abort();
 }

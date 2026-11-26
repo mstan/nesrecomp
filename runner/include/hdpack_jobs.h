@@ -9,7 +9,8 @@ extern "C" {
 enum {
     HD_JOB_SKIP = 0, HD_JOB_SOLID = 1, HD_JOB_IMAGE = 2,
     HD_JOB_BG_SHIFT = 0, HD_JOB_SP_SHIFT = 2,
-    HD_JOB_MODE_MASK = 3, HD_JOB_HMIRROR = 16, HD_JOB_VMIRROR = 32
+    HD_JOB_MODE_MASK = 3, HD_JOB_HMIRROR = 16, HD_JOB_VMIRROR = 32,
+    HD_JOB_NATIVE = 64
 };
 #define HD_JOB_NO_IMAGE UINT32_MAX
 
@@ -37,10 +38,15 @@ typedef struct {
     uint32_t brightness, blend; /* premultiplied over=0, saturating add=1/sub=2 */
 } HdJobBackground;
 
+typedef struct {
+    unsigned x0, y0, x1, y1;
+} HdNativeArea;
+
 typedef struct HdJobFrame {
     uint64_t serial, pack_generation;
     uint32_t width, height, source_scale;
     uint32_t image_count, background_count, under_end, mid_end, hud_rows;
+    HdNativeArea native_area;
     const HdJobImage *images;
     const HdJobPixel *pixels;
     const HdJobBackground *backgrounds;
@@ -53,6 +59,8 @@ typedef struct HdJobFrame {
  * Retain/release run on the producer thread; other threads may read a const
  * frame while its owner keeps a reference. Allocation failure returns NULL. */
 const HdJobFrame *hdpack_prepare_jobs(const uint32_t *native, int native_w);
+const HdJobFrame *hdpack_prepare_jobs_with_native_area(const uint32_t *native, int native_w,
+                                                       HdNativeArea area);
 void hdpack_jobs_retain(const HdJobFrame *frame);
 void hdpack_jobs_release(const HdJobFrame *frame);
 

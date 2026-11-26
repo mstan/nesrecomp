@@ -8,6 +8,7 @@ function(nesrecomp_cyc_enable_hdpack target)
         "${cyc_dir}/cyc_hd_gpu.c"
         "${cyc_dir}/cyc_hd_gpu_cache.c"
         "${cyc_dir}/../src/hdpack.c"
+        "${cyc_dir}/../src/hdpack_audio.c"
         "${cyc_dir}/../src/chr_codec.c")
     target_include_directories(${target} PRIVATE "${cyc_dir}/../include" "${cyc_dir}/../src")
     target_compile_definitions(${target} PRIVATE NESRECOMP_CYCLE_HDPACK)

@@ -163,11 +163,18 @@ static HdTile *job_match(int sprite, HdPixel *p, int x, int y)
                      p->bg_p1, p->bg_p2, p->bg_p3, x, y, p);
 }
 
-const HdJobFrame *hdpack_prepare_jobs(const uint32_t *native, int native_w)
+static int native_area_valid(HdNativeArea area, unsigned w, unsigned h)
+{
+    return area.x0 <= area.x1 && area.x1 <= w && area.y0 <= area.y1 && area.y1 <= h;
+}
+
+const HdJobFrame *hdpack_prepare_jobs_with_native_area(const uint32_t *native, int native_w,
+                                                       HdNativeArea area)
 {
     if (!s_active || !native || !s_pixels || native_w <= 0 ||
         native_w != s_native_w || s_scale <= 0 || s_scale > 64 ||
-        (size_t)native_w > SIZE_MAX / 240 / sizeof(HdJobPixel)) return NULL;
+        (size_t)native_w > SIZE_MAX / 240 / sizeof(HdJobPixel) ||
+        !native_area_valid(area, (unsigned)native_w, 240)) return NULL;
     if (s_opt_debug < 0) s_opt_debug = getenv("NESRECOMP_HDPACK_DEBUG") ? 1 : 0;
     if (s_opt_hide_orig < 0)
         s_opt_hide_orig = getenv("NESRECOMP_HDPACK_HIDE_ORIGINALS") ? 1 : 0;
@@ -180,6 +187,7 @@ const HdJobFrame *hdpack_prepare_jobs(const uint32_t *native, int native_w)
     owned->pack = pack; ++pack->refs;
     HdJobFrame *f = &owned->frame;
     f->width = (uint32_t)native_w; f->height = 240; f->source_scale = (uint32_t)s_scale;
+    f->native_area = area;
     f->pack_generation = pack->generation; f->images = pack->images;
     f->image_count = pack->count; f->pixels = owned->pixels;
     f->backgrounds = owned->backgrounds;
@@ -247,11 +255,22 @@ const HdJobFrame *hdpack_prepare_jobs(const uint32_t *native, int native_w)
             }
         }
     }
+    for (unsigned y = area.y0; y < area.y1; ++y) for (unsigned x = area.x0; x < area.x1; ++x) {
+        const size_t at = (size_t)y * (unsigned)native_w + x;
+        HdJobPixel *j = &owned->pixels[at];
+        j->base = native[at];
+        j->flags = HD_JOB_NATIVE;
+    }
     if (!++s_job_serial) ++s_job_serial;
     f->serial = s_job_serial;
     return f;
 fail:
     hdpack_jobs_release(f); return NULL;
+}
+
+const HdJobFrame *hdpack_prepare_jobs(const uint32_t *native, int native_w)
+{
+    return hdpack_prepare_jobs_with_native_area(native, native_w, (HdNativeArea){0});
 }
 
 static uint32_t job_color_over(uint32_t under, uint32_t source, uint32_t brightness,
@@ -328,6 +347,17 @@ static int job_tile_block(const HdJobFrame *f, unsigned scale, uint32_t *dst,
     return 0;
 }
 
+static void job_fill_base(const HdJobFrame *f, unsigned scale, uint32_t *out, size_t pitch,
+                          HdNativeArea area)
+{
+    for (unsigned y = area.y0; y < area.y1; ++y) for (unsigned x = area.x0; x < area.x1; ++x) {
+        uint32_t *dst = out + (size_t)y * scale * pitch + (size_t)x * scale;
+        const uint32_t color = f->pixels[(size_t)y * f->width + x].base;
+        for (unsigned dy = 0; dy < scale; ++dy)
+            for (unsigned dx = 0; dx < scale; ++dx) dst[(size_t)dy * pitch + dx] = color;
+    }
+}
+
 int hdpack_render_jobs(const HdJobFrame *f, unsigned scale, uint32_t *out, size_t pitch)
 {
     if (!f || !out || !f->pixels || !f->width || !f->height || !f->source_scale ||
@@ -336,13 +366,9 @@ int hdpack_render_jobs(const HdJobFrame *f, unsigned scale, uint32_t *out, size_
         (size_t)f->height > SIZE_MAX / sizeof(*out) / scale / pitch ||
         (f->image_count && !f->images) || (f->background_count && !f->backgrounds) ||
         f->under_end > f->mid_end || f->mid_end > f->background_count ||
-        f->hud_rows > f->height) return -1;
-    for (uint32_t y = 0; y < f->height; ++y) for (uint32_t x = 0; x < f->width; ++x) {
-        uint32_t *dst = out + (size_t)y * scale * pitch + (size_t)x * scale;
-        uint32_t color = f->pixels[(size_t)y * f->width + x].base;
-        for (unsigned dy = 0; dy < scale; ++dy)
-            for (unsigned dx = 0; dx < scale; ++dx) dst[(size_t)dy * pitch + dx] = color;
-    }
+        f->hud_rows > f->height ||
+        !native_area_valid(f->native_area, f->width, f->height)) return -1;
+    job_fill_base(f, scale, out, pitch, (HdNativeArea){0, 0, f->width, f->height});
     for (uint32_t i = 0; i < f->under_end; ++i)
         if (job_background_rows(f, &f->backgrounds[i], f->hud_rows, scale, out, pitch)) return -1;
     for (uint32_t y = 0; y < f->height; ++y) for (uint32_t x = 0; x < f->width; ++x) {
@@ -361,5 +387,6 @@ int hdpack_render_jobs(const HdJobFrame *f, unsigned scale, uint32_t *out, size_
     }
     for (uint32_t i = f->mid_end; i < f->background_count; ++i)
         if (job_background_rows(f, &f->backgrounds[i], 0, scale, out, pitch)) return -1;
+    job_fill_base(f, scale, out, pitch, f->native_area);
     return 0;
 }

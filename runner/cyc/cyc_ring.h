@@ -148,6 +148,7 @@ enum {
     CYC_MOD_FAIL_BUDGET = 1,    /* ran past its instruction budget */
     CYC_MOD_FAIL_STACK  = 2,    /* returned past the frame it was called with */
     CYC_MOD_FAIL_JAM    = 3,    /* executed a jam opcode */
+    CYC_MOD_FAIL_NATIVE = 4,    /* modified ROM has no validated native view */
 };
 
 enum {

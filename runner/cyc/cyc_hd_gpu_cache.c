@@ -135,6 +135,7 @@ static bool mark_frame(HdGpuPageCache *cache, const HdJobFrame *frame)
     size_t pixels = (size_t)frame->width * frame->height;
     for (size_t i = 0; i < pixels; ++i) {
         const HdJobPixel *p = &frame->pixels[i];
+        if (p->flags == HD_JOB_NATIVE) continue;
         if (p->flags & ~(uint32_t)63) return false;
         if (!need_tile(cache, frame, p->flags, p->bg_image, p->bg_uv, false) ||
             !need_tile(cache, frame, p->flags, p->sp_image, p->sp_uv, true)) return false;

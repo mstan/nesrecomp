@@ -8,6 +8,9 @@
 #include "cyc_mod.h"
 #include "cyc_render.h"
 #include "cyc_replay.h"
+#ifdef NESRECOMP_CYCLE_HDPACK
+#include "hdpack_audio.h"
+#endif
 
 #include <stdlib.h>
 #include <string.h>
@@ -250,7 +253,12 @@ unsigned cyc_session_audio_rate(unsigned fallback) {
     const CycHostExtras *x=cyc_session_extras();
     return x&&x->audio_rate?x->audio_rate:fallback;
 }
-void cyc_session_audio_mix(int16_t *samples,size_t count) {
+void cyc_session_audio_mix(int16_t *samples,size_t count,unsigned rate) {
     const CycHostExtras *x=cyc_session_extras();
     if(x&&x->audio_mix)x->audio_mix(x->ctx,samples,count);
+#ifdef NESRECOMP_CYCLE_HDPACK
+    hdpack_audio_mix(samples,count,rate);
+#else
+    (void)rate;
+#endif
 }

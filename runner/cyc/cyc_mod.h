@@ -97,18 +97,21 @@ bool cyc_mod_set_prg_read_override(uint32_t offset, uint8_t compare, uint8_t val
 bool cyc_mod_remove_prg_read_override(uint32_t offset);
 void cyc_mod_clear_rom_read_overrides(void);
 
-/* Optional trusted content tools. Obtaining writable PRG disables generated
- * ROM dispatch until another image is loaded: generated opcodes/operands and
- * folded NROM data may otherwise disagree with the edited image. Qualified
+/* Optional trusted content tools. An escaped writable PRG pointer prevents
+ * guarded native ROM admission until another image is loaded. A missing
+ * native view is reported before interpreting modified ROM. Qualified
  * SNROM SRAM views remain eligible because they validate physical RAM bytes
  * and never fold external ROM data. Image files on disk are never changed. */
 uint8_t *cyc_mod_prg_data_rw(size_t *size);
 /* Replace a geometry-preserving PRG+CHR-ROM payload atomically after its
- * package verification. CHR RAM is retained; changed PRG disables ordinary
- * native dispatch. Qualified NESRECOMP_NATIVE_PRG_GUARDS builds can admit
+ * package verification. CHR RAM is retained. Native PRG guards admit
  * exact-byte validated chunks; escaped writable pointers remain excluded.
  * Refused for FDS, incomplete payloads and isolated calls. */
 bool cyc_mod_apply_cart_payload(const uint8_t *payload, size_t size);
+/* Validate the complete current image before replacing any byte. A different
+ * earlier overlay is a conflict, not permission to overwrite its changes. */
+bool cyc_mod_apply_cart_payload_guarded(const uint8_t *expected,
+                                      const uint8_t *payload, size_t size);
 /* Data-only variant: transactionally refuses any changed PRG opcode or operand
  * used by ANY generated view. Accepted changes retain native dispatch; folded
  * ROM reads then fetch the mapped image. Does not undo prior writable-PRG use. */
@@ -164,7 +167,8 @@ void cyc_mod_isolated_job_resume(uint64_t cycles, uint16_t last_read,
  * address is pushed), run it until it returns, and give back the registers it
  * returned with. False when it did not return within the budget
  * (cyc_mod_set_call_budget, CPU cycles; default 2,000,000), jammed, or
- * returned past the caller's frame. */
+ * returned past the caller's frame, or reached modified ROM without native
+ * coverage. Ending the scope restores the scratch machine after failure. */
 bool cyc_mod_call(uint16_t routine, CycModRegs *regs);
 void cyc_mod_isolate_end(void);
 void cyc_mod_set_call_budget(uint64_t cycles);

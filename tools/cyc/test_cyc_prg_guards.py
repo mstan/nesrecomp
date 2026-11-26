@@ -40,6 +40,7 @@ def main():
     ap.add_argument('--source', type=Path, default=Path(__file__).resolve().parents[2] / 'runner/cyc')
     ap.add_argument('--ppu', choices=('HLE', 'LLE'), default='HLE')
     ap.add_argument('--parallel', type=int, default=1)
+    ap.add_argument('--probe', type=Path, help='Reuse the already-built probe for unchanged fixture inputs')
     nested_build.add_arguments(ap)
     args = ap.parse_args(); tc = nested_build.Toolchain.from_args(args)
     out = args.out.resolve(); out.mkdir(parents=True, exist_ok=True)
@@ -49,12 +50,20 @@ def main():
     (out / 'game.toml').write_text('[game]\noutput_prefix="guard"\ncycle_accurate=true\ncycle_seed_file="seeds.txt"\n')
     def run(argv, name):
         result = subprocess.run([str(x) for x in argv], cwd=out, capture_output=True,
-                                text=True, timeout=300, creationflags=nested_build.NO_WINDOW,
+                                text=True, creationflags=nested_build.NO_WINDOW,
                                 env=tc.environment())
         (out / (name + '.log')).write_text(result.stdout + result.stderr)
         if result.returncode: raise RuntimeError(f'{name} exit {result.returncode}; see {out / (name + ".log")}')
-        return result.stdout
-    run([args.recompiler.resolve(), 'test.nes', '--game', 'game.toml'], 'codegen')
+        observations = [line for line in result.stdout.splitlines() if line and line[0].isdigit()]
+        assert len(observations) == 45, (name, 'complete frame observations')
+        return '\n'.join(observations)
+    if not args.probe:
+        # Code generation has no frame observations; retain its complete log.
+        generated = subprocess.run([str(args.recompiler.resolve()), 'test.nes', '--game', 'game.toml'],
+                                   cwd=out, capture_output=True, text=True,
+                                   creationflags=nested_build.NO_WINDOW, env=tc.environment())
+        (out / 'codegen.log').write_text(generated.stdout + generated.stderr)
+        if generated.returncode: raise RuntimeError(f'codegen exit {generated.returncode}')
     cmake = ['cmake_minimum_required(VERSION 3.20)', 'project(prg_guards C)',
              'set(CMAKE_C_STANDARD 11)',
              'add_compile_definitions(NESRECOMP_NATIVE_PRG_GUARDS=1 NESRECOMP_NATIVE_INTERVALS=1 CYC_HOST_EXTRAS_STRONG)',
@@ -66,8 +75,20 @@ def main():
              'target_include_directories(probe PRIVATE ${NESRECOMP_CYC_INCLUDE_DIRS})',
              'target_link_libraries(probe PRIVATE ${NESRECOMP_CYC_LIBRARIES})']
     (out / 'CMakeLists.txt').write_text('\n'.join(cmake) + '\n')
-    tc.build(out, out / 'build', out, parallel=args.parallel, defines=(f'-DNESRECOMP_PPU_IMPL={args.ppu}',))
-    exe = tc.executable(out / 'build', 'probe')
+    if not args.probe:
+        tc.build(out, out / 'build', out, parallel=args.parallel, defines=(
+            f'-DNESRECOMP_PPU_IMPL={args.ppu}', '-DNESRECOMP_APU_OPERATION=ON', '-DNESRECOMP_NATIVE_WAIT_LOOPS=ON'))
+    exe = args.probe.resolve() if args.probe else tc.executable(out / 'build', 'probe')
+    for case in ('code', 'escape', 'isolated'):
+        result = subprocess.run([str(x) for x in (exe, out/'test.nes', 1, 0, 0, 0, case)],
+                                cwd=out, capture_output=True, text=True,
+                                creationflags=nested_build.NO_WINDOW, env=tc.environment())
+        (out / ('coverage-' + case + '.log')).write_text(result.stdout + result.stderr)
+        assert (result.returncode == 0 if case == 'isolated' else result.returncode != 0), (case, result)
+        assert '[native coverage]' in result.stderr, (case, result)
+        assert 'interpreter_rom_cycles=0' in result.stderr, (case, result.stderr)
+        assert ('pc=$8000' if case == 'escape' else 'pc=$C400') in result.stderr, (case, result.stderr)
+        if case == 'isolated': assert 'preserves rollback' in result.stdout
     report = []
     for trace in (0, 1):
         for style in (0, 1):

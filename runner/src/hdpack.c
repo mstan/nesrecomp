@@ -6,6 +6,7 @@
  * HdNesPack.cpp). PNG decode uses stb_image (implemented in chr_codec.c).
  */
 #include "hdpack.h"
+#include "hdpack_audio.h"
 #include "config.h"
 
 #include <stdio.h>
@@ -27,8 +28,6 @@
 #define g_ram hw.ram
 #define g_ppuctrl (cyc_frame_lines()[239].ctrl)
 #define g_frame_count cyc_ring_frame
-#define g_ppuscroll_x (cyc_render_line_scroll_x(239)&255)
-#define g_ppuscroll_y (cyc_render_line_scroll_y(0)%240)
 #else
 extern uint8_t  g_ram[0x0800];
 extern uint64_t g_frame_count;
@@ -102,6 +101,7 @@ static int        s_skipped_cond = 0;  /* conditional tiles not yet supported (P
 static int        s_overscan[4] = {0,0,0,0}; /* top,right,bottom,left (parsed; clip TODO) */
 static int        s_has_overscan = 0;
 static int        s_disable_orig = 0;  /* <options>disableOriginalTiles */
+static int        s_audio_invalid;
 
 /* ── <condition> engine (mirrors Mesen HdPackConditions.h) ─────────────────── */
 
@@ -663,7 +663,10 @@ static void process_background(const char *cond_str, char *rest) {
 }
 
 static int bg_priority_cmp(const void *a, const void *b) {
-    return (*(HdBg * const *)a)->priority - (*(HdBg * const *)b)->priority;
+    const HdBg *aa=*(HdBg * const *)a, *bb=*(HdBg * const *)b;
+    if (aa->priority != bb->priority) return aa->priority - bb->priority;
+    /* Alternatives with equal priority retain their authored order. */
+    return (aa > bb) - (aa < bb);
 }
 static void finalize_backgrounds(void) {
     if (s_bg_count == 0) return;
@@ -693,6 +696,17 @@ static void parse_line(char *line) {
     else if (!strncmp(L, "<condition>", 11)) process_condition(L + 11);
     else if (!strncmp(L, "<tile>", 6))       process_tile(cond_str, L + 6);
     else if (!strncmp(L, "<background>", 12)) process_background(cond_str, L + 12);
+    else if (!strncmp(L, "<bgm>", 5) || !strncmp(L, "<sfx>", 5)) {
+        char *tok[4];
+        int n = split_commas(L + 5, tok, 4);
+        char *end_a, *end_t;
+        unsigned long a = n == 3 ? strtoul(tok[0], &end_a, 10) : 256;
+        unsigned long t = n == 3 ? strtoul(tok[1], &end_t, 10) : 256;
+        if (n != 3 || !*tok[0] || !*tok[1] || *end_a || *end_t ||
+            a > 255 || t > 255 ||
+            !hdpack_audio_define(L[1] == 'b', (unsigned)a, (unsigned)t, s_dir, tok[2]))
+            s_audio_invalid = 1;
+    }
     else if (!strncmp(L, "<options>", 9))    { if (strstr(L + 9, "disableOriginalTiles")) s_disable_orig = 1; }
     else if (!strncmp(L, "<overscan>", 10)) {
         char buf[64]; char *tok[4];
@@ -702,7 +716,8 @@ static void parse_line(char *line) {
             s_has_overscan = 1;
         }
     }
-    /* <bgm>/<sfx>/<patch>/<options>/<addition>/<fallback>/#comments: ignored for now */
+    /* IPS is verified by the mod importer; audio commands belong to native
+     * game hooks. Other unsupported tags retain their existing handling. */
 }
 
 /* ── Public API ───────────────────────────────────────────────────────────── */
@@ -738,6 +753,7 @@ int hdpack_resize(int native_w) {
 }
 
 void hdpack_unload(void) {
+    hdpack_audio_reset(); s_audio_invalid = 0;
     int jobs_own_pixels = hd_jobs_owns_assets();
 #if defined(NESRECOMP_HDPACK_LAYER_PLANS) && NESRECOMP_HDPACK_LAYER_PLANS
     hd_layer_unload();
@@ -802,6 +818,10 @@ int hdpack_load(const char *dir, int is_chr_ram_game, int native_w) {
     char line[2048];
     while (fgets(line, sizeof(line), f)) parse_line(line);
     fclose(f);
+    if (s_audio_invalid || !hdpack_audio_validate_sources()) {
+        fprintf(stderr, "[HDPack] Invalid or conflicting audio declaration\n");
+        hdpack_unload(); return -1;
+    }
     finalize_backgrounds();
 #if defined(NESRECOMP_HDPACK_LAYER_PLANS) && NESRECOMP_HDPACK_LAYER_PLANS
     hd_layer_prepare();
@@ -1066,11 +1086,22 @@ static int cond_eval(HdCond *c, int x, int y, HdPixel *cur, int is_sprite) {
 
 static void eval_backgrounds_for_frame(void) {
     s_nact = 0;
+    s_band_mid = s_band_fg = s_hud_rows = 0;
     if (!s_actbg) return;
+#ifdef NESRECOMP_CYCLE_HDPACK
+    /* Recorded coordinates already include their nametable page. Line ctrl
+     * records pattern/sprite selection, not the original $2000 page. */
+    const int scrollx = cyc_render_line_scroll_x(239);
+    const int scrolly = cyc_render_line_scroll_y(0);
+#else
     const int scrollx = g_ppuscroll_x + ((g_ppuctrl & 0x01) ? 256 : 0);
     const int scrolly = g_ppuscroll_y + ((g_ppuctrl & 0x02) ? 240 : 0);
+#endif
+    int selected_priority = -1;
     for (int i = 0; i < s_bg_count; i++) {
         HdBg *b = s_bg_sorted[i];
+        /* Each priority is an ordered list of alternatives, not a stack. */
+        if (b->priority == selected_priority) continue;
         int act = 1;
         for (int k = 0; k < b->ncond; k++) {
             int v = cond_eval(b->conds[k], 0, 0, NULL, 0);
@@ -1081,6 +1112,7 @@ static void eval_backgrounds_for_frame(void) {
             b->offx = (int)(scrollx * b->hscroll);
             b->offy = (int)(scrolly * b->vscroll);
             s_actbg[s_nact++] = b;   /* preserves priority order */
+            selected_priority = b->priority;
         }
     }
     s_band_mid = s_band_fg = s_nact;
@@ -1095,6 +1127,9 @@ static void eval_backgrounds_for_frame(void) {
      * contiguous span of rows the overlay fully spans, so the compositor can skip
      * the room backgrounds there and let those holes fall back to the backdrop. */
     s_hud_rows = 0;
+#ifdef NESRECOMP_CYCLE_HDPACK
+    int content_row = 0;
+#endif
     for (int i = s_band_fg; i < s_nact; i++) {
         HdBg *b = s_actbg[i];
         int offy = b->offy;
@@ -1112,7 +1147,19 @@ static void eval_backgrounds_for_frame(void) {
             rows = sy + 1;
         }
         if (rows > s_hud_rows && rows < 120) s_hud_rows = rows;  /* top strip only, not a full-screen overlay */
+#ifdef NESRECOMP_CYCLE_HDPACK
+        if (b->vscroll == 0 && rows > content_row && rows < 120) content_row = rows;
+#endif
     }
+#ifdef NESRECOMP_CYCLE_HDPACK
+    if (content_row) {
+        /* A fixed top HUD replaces line zero's scroll. Authored room crops
+         * start at the first content line, retaining that line's actual Y. */
+        const int room_y = cyc_render_line_scroll_y(content_row);
+        for (int i = 0; i < s_nact; i++)
+            s_actbg[i]->offy = (int)(room_y * s_actbg[i]->vscroll);
+    }
+#endif
 }
 
 static uint32_t sat_add(uint32_t u, uint32_t s) {

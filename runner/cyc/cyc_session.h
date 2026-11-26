@@ -62,7 +62,8 @@ void cyc_session_input(uint8_t buttons[2]);
 void cyc_session_logical_input(const uint8_t *buttons, unsigned seats);
 void cyc_session_game_input(const uint32_t *buttons, unsigned seats);
 unsigned cyc_session_audio_rate(unsigned fallback);
-void cyc_session_audio_mix(int16_t *samples, size_t count);
+/* rate is the actual producer/device rate, including negotiated SDL changes. */
+void cyc_session_audio_mix(int16_t *samples, size_t count, unsigned rate);
 void cyc_session_event(const void *event, int player);
 /* After every frame: a new picture to present, then the game's frame_end. */
 void cyc_session_frame_end(void);
