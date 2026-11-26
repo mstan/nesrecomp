@@ -8,6 +8,10 @@
 #include <string.h>
 #ifdef _WIN32
 #include <windows.h>
+#elif defined(__APPLE__)
+#include <limits.h>
+#include <mach-o/dyld.h>
+#include <unistd.h>
 #else
 #include <unistd.h>
 #endif
@@ -61,6 +65,13 @@ const char *cyc_settings_default_path(void)
 #ifdef _WIN32
     DWORD n = GetModuleFileNameA(NULL, dir, sizeof(dir));
     if (n == 0 || n >= sizeof(dir)) strcpy(dir, ".");
+#elif defined(__APPLE__)
+    /* macOS has no /proc: ask dyld for the executable, then resolve symlinks
+     * as /proc/self/exe does. */
+    char exe[PATH_MAX], real[PATH_MAX];
+    uint32_t size = sizeof(exe);
+    if (_NSGetExecutablePath(exe, &size) == 0 && realpath(exe, real) && strlen(real) < sizeof(dir))
+        strcpy(dir, real);
 #else
     /* The executable lives inside a read-only mount when launched through
      * AppImage. Keep settings and related user files beside the outer image. */

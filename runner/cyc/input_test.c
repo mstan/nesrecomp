@@ -538,7 +538,7 @@ static void fullscreen_chord(void)
 
 static void settings_location(void)
 {
-#ifndef _WIN32
+#if !defined(_WIN32) && !defined(__APPLE__)
     const char *image = getenv("APPIMAGE");
     char *saved = image ? strdup(image) : NULL;
     char ordinary[1024];
