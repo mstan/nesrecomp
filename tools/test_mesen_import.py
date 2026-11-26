@@ -106,6 +106,12 @@ require_patch={str(require_patch).lower()}
         info=zipfile.ZipInfo('link');info.external_attr=(stat.S_IFLNK|0o777)<<16
         archive.writestr(info,'../target')
     run('symlink',path,'reject')
+    path=out/'reparse.zip'
+    with zipfile.ZipFile(path,'w') as archive:
+        archive.writestr('hires.txt',files['hires.txt'])
+        info=zipfile.ZipInfo('link');info.external_attr=0x400
+        archive.writestr(info,'target')
+    run('reparse',path,'reject')
     path=out/'ambiguous.zip';path.write_bytes(zip_bytes({'one.zip':direct.read_bytes(),'two.zip':direct.read_bytes()}))
     run('ambiguous',path,'reject')
     path=out/'corrupt.zip';path.write_bytes(direct.read_bytes()[:30]);run('truncated',path,'reject')
