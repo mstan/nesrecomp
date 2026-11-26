@@ -1,5 +1,6 @@
 /* cyc_state.c - save states and the isolated-call snapshot; see cyc_state.h. */
 #include "cyc_state.h"
+#include "recomp_persistence/atomic_file.h"
 
 #include "cpu6502.h"
 #include "cyc_core.h"
@@ -427,23 +428,9 @@ bool cyc_state_save_file(const char *path, char *err, size_t err_len)
     uint8_t *data;
     size_t len;
     if (!cyc_state_save(&data, &len, err, err_len)) return false;
-    char tmp[1100];
-    snprintf(tmp, sizeof(tmp), "%s.tmp", path);
-    FILE *f = fopen(tmp, "wb");
-    bool ok = f && fwrite(data, 1, len, f) == len;
-    if (f) ok = fflush(f) == 0 && ok, fclose(f);
+    bool ok = recomp_atomic_file_store(path, data, len) != 0;
     free(data);
-    if (ok) {
-#ifdef _WIN32
-        ok = MoveFileExA(tmp, path, MOVEFILE_REPLACE_EXISTING) != 0;
-#else
-        ok = rename(tmp, path) == 0;
-#endif
-    }
-    if (!ok) {
-        remove(tmp);
-        set_err(err, err_len, "cannot write the save state file");
-    }
+    if (!ok) set_err(err, err_len, "cannot write the save state file");
     return ok;
 }
 

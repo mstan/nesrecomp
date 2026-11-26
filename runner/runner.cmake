@@ -7,6 +7,8 @@
 #   target_include_directories(MyGame PRIVATE ${NESRECOMP_RUNNER_INCLUDE_DIRS} ${CMAKE_SOURCE_DIR})
 #   target_link_libraries(MyGame SDL2::SDL2)
 
+include("${CMAKE_CURRENT_LIST_DIR}/../cmake/NesSharedRuntime.cmake")
+
 set(NESRECOMP_RUNNER_ROOT ${CMAKE_CURRENT_LIST_DIR})
 
 # launcher.c uses DbgHelp for native Windows crash backtraces.  Game projects

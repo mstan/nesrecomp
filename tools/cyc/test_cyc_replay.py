@@ -417,7 +417,7 @@ def scenario_zapper(exe, out):
 def scenario_overflow(exe, out):
     """A disk that stops answering: the bounded queue fills, recording stops loudly, the game never waits."""
     rom = out / 'test.nes'
-    w = Window(exe, rom, out, 'overflow', env_extra={'NESRECOMP_REPLAY_TEST_STALL_MS': '120000',
+    w = Window(exe, rom, out, 'overflow', env_extra={'RECOMP_DIAGNOSTICS_TEST_WRITER_START_DELAY_US': '120000000',
                                                      'NESRECOMP_REPLAY_SEGMENT_FRAMES': '2'})
     started = time.time()
     w.wait_until_frame(400)                    # ~330 KiB of checkpoint every 2 frames overruns a 16 MiB queue by frame ~100

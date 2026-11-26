@@ -1,3 +1,4 @@
+#include "recomp_persistence/atomic_file.h"
 #include "cyc_state_ui.h"
 #include "cyc_ui.h"
 #include "retcomm_rbengine/snap_ring.h"
@@ -81,19 +82,8 @@ bool atomic_write(const fs::path &path, const uint8_t *data, size_t n) {
     std::error_code ec;
     fs::create_directories(path.parent_path(), ec);
     if (ec) return false;
-    auto tmp = path; tmp += ".tmp";
-    std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
-    if (!out.write(reinterpret_cast<const char *>(data), static_cast<std::streamsize>(n))) return false;
-    out.close();
-    if (!out) return false;
-#ifdef _WIN32
-    bool ok = MoveFileExW(tmp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
-#else
-    fs::rename(tmp, path, ec);
-    bool ok = !ec;
-#endif
-    if (!ok) fs::remove(tmp, ec);
-    return ok;
+    const auto utf8 = path.u8string();
+    return recomp_atomic_file_store(reinterpret_cast<const char *>(utf8.data()), data, n) != 0;
 }
 void scan_slot(int index) {
     Slot &s = slots[index];

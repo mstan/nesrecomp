@@ -4,3 +4,15 @@
 [submodule "lib/retcomm-rbengine"]
 	path = lib/retcomm-rbengine
 	url = https://github.com/RetroPortingToolKit/rbengine.git
+[submodule "external/shared-cores/recomp-mod-core"]
+	path = external/shared-cores/recomp-mod-core
+	url = https://github.com/mstan/recomp-mod-core.git
+[submodule "external/shared-cores/recomp-persistence-core"]
+	path = external/shared-cores/recomp-persistence-core
+	url = https://github.com/mstan/recomp-persistence-core-candidate-20261124.git
+[submodule "external/shared-cores/recomp-input-core"]
+	path = external/shared-cores/recomp-input-core
+	url = https://github.com/mstan/recomp-input-core-candidate-20261124.git
+[submodule "external/shared-cores/recomp-diagnostics-core"]
+	path = external/shared-cores/recomp-diagnostics-core
+	url = https://github.com/mstan/recomp-diagnostics-core-candidate-20261124.git

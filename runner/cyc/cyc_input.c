@@ -3,6 +3,7 @@
  * (cyc_input.h). Needs SDL only for key and controller names and constants.
  */
 #include "cyc_input.h"
+#include "recomp_input.h"
 
 #include <SDL.h>
 #include <ctype.h>
@@ -212,22 +213,12 @@ static bool axis_on(const CycInputFrame *f, int pad, int code, bool positive, in
 }
 
 /* Whether controller `pad` satisfies binding v; *mask gets the buttons it holds. */
-static bool pad_down(const CycInputFrame *f, int pad, int v, int threshold, uint32_t *mask)
+static bool pad_down(const ri_device *device, int v, int threshold, uint32_t *mask)
 {
-    uint32_t held = f->pad_buttons[pad];
-    if (CYC_PAD_IS_BUTTON(v)) {
-        uint32_t m = 1u << (v - 1);
-        if (mask) *mask = m;
-        return (held & m) != 0;
-    }
-    if (CYC_PAD_IS_COMBO(v)) {
-        uint32_t m = (uint32_t)(v - 1000);
-        if (mask) *mask = m;
-        return m && (held & m) == m;
-    }
-    if (mask) *mask = 0;
-    if (CYC_PAD_IS_AXIS(v)) return axis_on(f, pad, (v - 100) / 2, ((v - 100) & 1) != 0, threshold);
-    return false;
+    if (v < 0) { if (mask) *mask = 0; return false; }
+    if (mask) *mask = CYC_PAD_IS_BUTTON(v) && v <= 32 ? 1u << (v - 1) :
+                       CYC_PAD_IS_COMBO(v) ? (uint32_t)(v - 1000) : 0;
+    return ri_binding_held(device, (uint32_t)v, threshold - 1) != 0;
 }
 
 void cyc_input_assign(const CycBindings *b, const CycInputFrame *f, int player_pad[CYC_INPUT_PLAYERS])
@@ -262,6 +253,11 @@ void cyc_input_eval(const CycBindings *b, const CycInputFrame *f, CycInputState 
     memset(out, 0, sizeof(*out));
     int pads = f->pad_count < CYC_INPUT_MAX_PADS ? f->pad_count : CYC_INPUT_MAX_PADS;
     const int SHORTCUT_THRESHOLD = 16384;
+    ri_device devices[CYC_INPUT_MAX_PADS];
+    for (int i = 0; i < pads; ++i) {
+        devices[i].buttons = f->pad_buttons[i];
+        memcpy(devices[i].axes, f->pad_axes[i], sizeof(devices[i].axes));
+    }
 
     /* Shortcuts first: what they hold is theirs. */
     bool key_taken[SDL_NUM_SCANCODES] = { false };
@@ -288,7 +284,7 @@ void cyc_input_eval(const CycBindings *b, const CycInputFrame *f, CycInputState 
         }
         for (int i = 0; i < pads; ++i) {
             uint32_t m;
-            if (sb->pad && pad_down(f, i, sb->pad, SHORTCUT_THRESHOLD, &m)) {
+            if (sb->pad && pad_down(&devices[i], sb->pad, SHORTCUT_THRESHOLD, &m)) {
                 out->shortcut[s] = true;
                 pad_taken[i] |= m;
                 if (CYC_PAD_IS_AXIS(sb->pad)) axis_taken[i] = sb->pad;
@@ -310,7 +306,7 @@ void cyc_input_eval(const CycBindings *b, const CycInputFrame *f, CycInputState 
             /* a keyboard player's pad (cyc_input_assign) adds to its keys */
             if (!on && b->source[p] != 0 && pad >= 0 && pb->pad) {
                 uint32_t m;
-                on = pad_down(f, pad, pb->pad, threshold, &m) && !(m & pad_taken[pad]) &&
+                on = pad_down(&devices[pad], pb->pad, threshold, &m) && !(m & pad_taken[pad]) &&
                      !(CYC_PAD_IS_AXIS(pb->pad) && axis_taken[pad] == pb->pad);
             }
             if (on) bits |= (uint8_t)(0x80 >> i);
@@ -331,7 +327,7 @@ void cyc_input_eval(const CycBindings *b, const CycInputFrame *f, CycInputState 
             bool on = b->source[p] == 1 && key_down(f, pb->key) && !key_taken[pb->key];
             if (!on && b->source[p] != 0 && pad >= 0 && pb->pad) {
                 uint32_t m;
-                on = pad_down(f, pad, pb->pad, threshold, &m) && !(m & pad_taken[pad]) &&
+                on = pad_down(&devices[pad], pb->pad, threshold, &m) && !(m & pad_taken[pad]) &&
                     !(CYC_PAD_IS_AXIS(pb->pad) && axis_taken[pad] == pb->pad);
             }
             if (on) out->game_buttons[p] |= 1u << i;

@@ -1,3 +1,4 @@
+#include "recomp_persistence/atomic_file.h"
 /* Host save files are explicit (--save-file), keeping unattended comparisons
  * reproducible. Write a complete temporary file and atomically replace only
  * after flushing it. Failed loads never reach this write path. */
@@ -71,33 +72,7 @@ static bool save_load(const char *path, unsigned region)
  * replaces the old one, or the old one stays. */
 static bool save_atomic(const char *path, const uint8_t *buffer, size_t n)
 {
-    char *temporary=(char *)malloc(strlen(path)+64);
-    if (!temporary) return false;
-    bool ok=true;
-    int fd=-1;
-    for (unsigned attempt=0;attempt<100;++attempt) {
-        snprintf(temporary,strlen(path)+64,"%s.tmp-%lu-%u",path,(unsigned long)save_pid(),attempt);
-        fd=save_open(temporary);
-        if (fd>=0 || errno!=EEXIST) break;
-    }
-    if (fd<0) ok=false;
-    if (ok) {
-        FILE *f=save_fdopen(fd,"wb");
-        if (!f) { save_close(fd); ok=false; }
-        else {
-            ok=fwrite(buffer,1,n,f)==n && fflush(f)==0 && save_flush(fd)==0;
-            if (fclose(f)) ok=false;
-        }
-    }
-    if (ok) {
-#ifdef _WIN32
-        ok=MoveFileExA(temporary,path,MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH)!=0;
-#else
-        ok=rename(temporary,path)==0;
-#endif
-    }
-    if (fd>=0 && !ok) remove(temporary);
-    free(temporary); return ok;
+    return recomp_atomic_file_store(path, buffer, n) != 0;
 }
 static bool save_write(const char *path, unsigned region)
 {

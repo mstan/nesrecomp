@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 project(NESRecompExternalRomGateSelftest C CXX)
+include("${CMAKE_CURRENT_LIST_DIR}/../../cmake/NesSharedRuntime.cmake")
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
