@@ -131,183 +131,14 @@ static int u_mkdir(const char *path)
 /* The bounded writer                                                        */
 /* ------------------------------------------------------------------------- */
 
-enum { Q = CYC_REPLAY_QUEUE_BYTES, FILE_BUFFER = 65536 };
-enum { OP_BEGIN, OP_STATE, OP_LINE, OP_REMOVE, OP_END };
-enum { ERR_NONE, ERR_FULL, ERR_INVALID, ERR_IO };
+#include "recomp_diagnostics/replay_c.h"
 
-typedef struct { uint32_t op, size; } Command;
 typedef struct {
     char path[1280], config[1280], mods[1280];
     char header[6144];
 } BeginPayload;
 
-typedef struct Writer {
-    SDL_Thread *thread;
-    SDL_atomic_t stop, error, read_pos, write_pos;
-    unsigned head;                       /* producer only */
-    unsigned peak;                       /* producer only: most bytes ever queued */
-    unsigned char bytes[Q];
-} Writer;
-
-static void w_fail(Writer *w, int e) { SDL_AtomicCAS(&w->error, ERR_NONE, e); }
-
-static void w_put(Writer *w, unsigned at, const void *data, size_t n)
-{
-    size_t first = Q - at;
-    if (first > n) first = n;
-    if (first) memcpy(w->bytes + at, data, first);
-    if (n > first) memcpy(w->bytes, (const char *)data + first, n - first);
-}
-
-static void w_get(Writer *w, unsigned at, void *data, size_t n)
-{
-    size_t first = Q - at;
-    if (first > n) first = n;
-    if (first) memcpy(data, w->bytes + at, first);
-    if (n > first) memcpy((char *)data + first, w->bytes, n - first);
-}
-
-static bool w_enqueue(Writer *w, unsigned op, const void *data, size_t n)
-{
-    if (!w || SDL_AtomicGet(&w->stop) || SDL_AtomicGet(&w->error)) return false;
-    if (sizeof(Command) + n >= (size_t)Q / 2) { w_fail(w, ERR_INVALID); return false; }
-    unsigned tail = (unsigned)SDL_AtomicGet(&w->read_pos);
-    if (sizeof(Command) + n > (size_t)((tail + Q - w->head - 1) % Q)) { w_fail(w, ERR_FULL); return false; }
-    Command c = { op, (uint32_t)n };
-    unsigned at = w->head;
-    w_put(w, at, &c, sizeof(c));
-    at = (unsigned)((at + sizeof(c)) % Q);
-    if (n) w_put(w, at, data, n);
-    at = (unsigned)((at + n) % Q);
-    w->head = at;
-    unsigned used = (at + Q - tail) % Q;
-    if (used > w->peak) w->peak = used;
-    /* SDL atomics order the payload writes before the consumer sees the head. */
-    SDL_AtomicSet(&w->write_pos, (int)at);
-    return true;
-}
-
-static bool w_write_ring(Writer *w, FILE *f, unsigned at, size_t n)
-{
-    size_t first = Q - at;
-    if (first > n) first = n;
-    return f && fwrite(w->bytes + at, 1, first, f) == first && (n == first || fwrite(w->bytes, 1, n - first, f) == n - first);
-}
-
-static bool copy_optional(const char *source, const char *dest)
-{
-    if (!*source) return true;
-    FILE *in = u_fopen(source, "rb");
-    if (!in) return errno == ENOENT;
-    FILE *out = u_fopen(dest, "wb");
-    bool ok = out != NULL;
-    char bytes[8192];
-    size_t n;
-    while (ok && (n = fread(bytes, 1, sizeof(bytes), in))) ok = fwrite(bytes, 1, n, out) == n;
-    if (ferror(in)) ok = false;
-    fclose(in);
-    if (out && fclose(out)) ok = false;
-    return ok;
-}
-
-static int SDLCALL w_worker(void *opaque)
-{
-    Writer *w = (Writer *)opaque;
-    FILE *text = NULL;
-    static char text_buffer[FILE_BUFFER];
-    unsigned tail = 0;
-    uint32_t last_flush = SDL_GetTicks();
-    bool dirty = false;
-    {
-        /* Test aid: a disk that has stopped answering (the overflow acceptance test). */
-        const char *stall = getenv("NESRECOMP_REPLAY_TEST_STALL_MS");
-        long ms = stall ? atol(stall) : 0;
-        for (; ms > 0 && !SDL_AtomicGet(&w->stop); ms -= 10) SDL_Delay(10);
-    }
-    for (;;) {
-        if ((unsigned)SDL_AtomicGet(&w->write_pos) != tail) {
-            Command c;
-            w_get(w, tail, &c, sizeof(c));
-            unsigned at = (unsigned)((tail + sizeof(c)) % Q);
-            bool ok = true;
-            switch (c.op) {
-            case OP_BEGIN: {
-                BeginPayload *b = (BeginPayload *)malloc(sizeof(*b));
-                char path[1400];
-                if (!b || c.size != sizeof(*b)) { free(b); ok = false; break; }
-                w_get(w, at, b, sizeof(*b));
-                if (text) { ok = fclose(text) == 0; text = NULL; }
-                text = ok ? u_fopen(b->path, "wb") : NULL;
-                ok = ok && text && !setvbuf(text, text_buffer, _IOFBF, sizeof(text_buffer)) && fputs(b->header, text) != EOF;
-                snprintf(path, sizeof(path), "%s.config.ini", b->path);
-                ok = copy_optional(b->config, path) && ok;
-                snprintf(path, sizeof(path), "%s.mods.toml", b->path);
-                ok = copy_optional(b->mods, path) && ok;
-                free(b);
-                break;
-            }
-            case OP_STATE: {
-                /* the checkpoint of the segment whose text was just opened; the
-                 * path is that text file's name + ".state" (carried first) */
-                char path[1400];
-                char name[1280];
-                w_get(w, at, name, sizeof(name));
-                snprintf(path, sizeof(path), "%s.state", name);
-                FILE *f = u_fopen(path, "wb");
-                size_t bytes = c.size - sizeof(name);
-                unsigned data_at = (unsigned)((at + sizeof(name)) % Q);
-                ok = f && w_write_ring(w, f, data_at, bytes);
-                if (f && fclose(f)) ok = false;
-                break;
-            }
-            case OP_LINE: ok = w_write_ring(w, text, at, c.size); break;
-            case OP_REMOVE: {
-                char path[1400];
-                if (c.size >= sizeof(path)) { ok = false; break; }
-                w_get(w, at, path, c.size);
-                path[c.size] = 0;
-                ok = !u_remove(path) || errno == ENOENT;
-                break;
-            }
-            case OP_END:
-                if (text) ok = fclose(text) == 0;
-                text = NULL;
-                break;
-            default: ok = false; break;
-            }
-            if (!ok) { w_fail(w, ERR_IO); break; }
-            /* the payload stays owned until the disk work is done */
-            tail = (unsigned)((tail + sizeof(c) + c.size) % Q);
-            SDL_AtomicSet(&w->read_pos, (int)tail);
-            dirty = text != NULL;
-        } else {
-            if (SDL_AtomicGet(&w->stop) || SDL_AtomicGet(&w->error)) {
-                if ((unsigned)SDL_AtomicGet(&w->write_pos) == tail) break;
-                continue;
-            }
-            SDL_Delay(2);
-        }
-        uint32_t now = SDL_GetTicks();
-        if (dirty && now - last_flush >= 100) {
-            /* A hung simulation still leaves its last queued input on disk. */
-            if (text && fflush(text)) { w_fail(w, ERR_IO); break; }
-            last_flush = now;
-            dirty = false;
-        }
-    }
-    if (text && fclose(text)) w_fail(w, ERR_IO);
-    return SDL_AtomicGet(&w->error) != ERR_NONE;
-}
-
-static const char *w_error(Writer *w)
-{
-    switch (w ? SDL_AtomicGet(&w->error) : ERR_NONE) {
-    case ERR_FULL: return "the replay disk writer fell behind (bounded queue full)";
-    case ERR_INVALID: return "an invalid or oversized replay write";
-    case ERR_IO: return "a replay file write failed";
-    default: return NULL;
-    }
-}
+static const char *w_error(RecompReplayWriter *w) { return recomp_replay_error(w); }
 
 /* ------------------------------------------------------------------------- */
 /* The recorder                                                              */
@@ -323,7 +154,7 @@ static const char *const WHY_NAME[] = { "", "start", "segment length", "frames s
 
 static struct {
     bool enabled, failed, started, suspended, mod_paused;   /* enabled: armed (not forced off by the environment) */
-    Writer *writer;
+    RecompReplayWriter *writer;
     char stem[1300], dir[1100], title[64], path[1400];
     unsigned segment, oldest, rows;
     unsigned segment_frames;
@@ -376,7 +207,8 @@ static bool check_writer(void)
 
 static bool line(const char *text, size_t n)
 {
-    return w_enqueue(S.writer, OP_LINE, text, n);
+    (void)n; /* Callers terminate each formatted row batch, including S.ev. */
+    return recomp_replay_line(S.writer, text);
 }
 
 /* ---- notes from the machine's callers ---- */
@@ -393,6 +225,7 @@ static void ev_append(const char *fmt, ...)
     if (S.ev_len + (size_t)n > EV_CAP) { S.ev_overflow = true; return; }
     memcpy(S.ev + S.ev_len, buf, (size_t)n);
     S.ev_len += (size_t)n;
+    S.ev[S.ev_len] = 0;
 }
 
 static void on_cheat(uint16_t addr, uint8_t value)
@@ -540,11 +373,13 @@ static bool start_recorder(void)
     char stamp[32];
     if (!tm || !strftime(stamp, sizeof(stamp), "%Y%m%d-%H%M%S", tm)) strcpy(stamp, "session");
     snprintf(S.stem, sizeof(S.stem), "%s/%s-replay-%s-%ld", S.dir, S.title, stamp, replay_pid());
-    S.ev = (char *)malloc(EV_CAP);
-    Writer *w = (Writer *)calloc(1, sizeof(Writer));
-    if (!S.ev || !w) { free(S.ev); free(w); S.ev = NULL; S.enabled = false; return false; }
-    w->thread = SDL_CreateThread(w_worker, "cyc-replay-writer", w);
-    if (!w->thread) { free(S.ev); free(w); S.ev = NULL; S.enabled = false; return false; }
+    S.ev = (char *)malloc(EV_CAP + 1);
+    RecompReplayWriter *w = recomp_replay_create_profile(RECOMP_REPLAY_HASHED64, CYC_REPLAY_QUEUE_BYTES);
+    if (!S.ev || !w) {
+        free(S.ev); recomp_replay_destroy(w); S.ev = NULL; S.enabled = false;
+        cyc_diagnostics_error("[replay] could not create the bounded replay writer");
+        return false;
+    }
     S.writer = w;
     S.oldest = 1;
     S.seen_loads = cyc_state_load_count;
@@ -571,7 +406,7 @@ static void remove_segment_files(unsigned n)
     for (unsigned i = 0; i < 4; ++i) {
         char p[1500];
         snprintf(p, sizeof(p), "%s-%06u.cycreplay%s", S.stem, n, SUFFIX[i]);
-        w_enqueue(S.writer, OP_REMOVE, p, strlen(p));
+        recomp_replay_remove(S.writer, p);
     }
 }
 
@@ -589,7 +424,7 @@ static bool evict_oldest(void)
 
 static void end_segment(void)
 {
-    if (S.recording) w_enqueue(S.writer, OP_END, NULL, 0);
+    if (S.recording) recomp_replay_end(S.writer);
     S.recording = false;
 }
 
@@ -631,7 +466,7 @@ static bool open_segment_impl(unsigned why, uint32_t frame)
         stop_recording(msg);
         return false;
     }
-    if (len + sizeof(Command) + 1280 + 64 >= (size_t)Q / 2) {
+    if (len + 8 + 1280 + 64 >= (size_t)CYC_REPLAY_QUEUE_BYTES / 2) {
         free(state);
         stop_recording("the machine checkpoint is larger than the bounded writer queue allows");
         return false;
@@ -676,19 +511,15 @@ static bool open_segment_impl(unsigned why, uint32_t frame)
     H("%s", opts);
     H("BEGIN\n");
 #undef H
-    bool ok = w_enqueue(S.writer, OP_BEGIN, b, sizeof(*b));
+    char config_dest[1500], mods_dest[1500];
+    snprintf(config_dest, sizeof(config_dest), "%s.config.ini", S.path);
+    snprintf(mods_dest, sizeof(mods_dest), "%s.mods.toml", S.path);
+    const RecompReplaySidecar copies[] = {
+        { b->config, config_dest }, { b->mods, mods_dest }
+    };
+    bool ok = recomp_replay_begin_with_sidecars(S.writer, S.path, b->header, copies, 2, NULL, 0);
     free(b);
-    if (ok) {
-        /* the checkpoint, tagged with the text file it belongs to */
-        size_t total = 1280 + len;
-        uint8_t *payload = (uint8_t *)malloc(total);
-        if (!payload) { free(state); stop_recording("out of memory"); return false; }
-        memset(payload, 0, 1280);
-        snprintf((char *)payload, 1280, "%s", S.path);
-        memcpy(payload + 1280, state, len);
-        ok = w_enqueue(S.writer, OP_STATE, payload, total);
-        free(payload);
-    }
+    if (ok) ok = recomp_replay_snapshot_raw(S.writer, state, len);
     free(state);
     if (!ok || !check_writer()) { if (!S.failed) stop_recording(w_error(S.writer) ? w_error(S.writer) : "queue refused a write"); return false; }
     S.recording = true;
@@ -824,32 +655,29 @@ void cyc_replay_shutdown(void)
     cyc_cheat_change_hook = NULL;
     cyc_fds_change_hook = NULL;
     end_segment();
-    Writer *w = S.writer;
+    RecompReplayWriter *w = S.writer;
     S.writer = NULL;
     if (w) {
-        SDL_AtomicSet(&w->stop, 1);
-        SDL_WaitThread(w->thread, NULL);
+        const char *e = recomp_replay_destroy(w);
         double us = 1e6 / (double)SDL_GetPerformanceFrequency();
         char stats[512];
         snprintf(stats, sizeof(stats),
                  "[replay] %llu frames in %llu segments; recording cost per frame: %.1f us total (begin %.1f, hashes %.1f; "
-                 "checkpoints are %.1f of begin); %llu checkpoints, mean %.2f ms, worst %.2f ms; writer queue peak %u KiB",
+                 "checkpoints are %.1f of begin); %llu checkpoints, mean %.2f ms, worst %.2f ms",
                  (unsigned long long)S.frames, (unsigned long long)S.opens,
                  S.frames ? (double)(S.t_begin + S.t_end) * us / (double)S.frames : 0.0,
                  S.frames ? (double)S.t_begin * us / (double)S.frames : 0.0,
                  S.frames ? (double)S.t_end * us / (double)S.frames : 0.0,
                  S.frames ? (double)S.t_open * us / (double)S.frames : 0.0,
                  (unsigned long long)S.opens, S.opens ? (double)S.t_open * us / 1000.0 / (double)S.opens : 0.0,
-                 (double)S.t_open_worst * us / 1000.0, w->peak >> 10);
+                 (double)S.t_open_worst * us / 1000.0);
         printf("%s\n", stats);
         fflush(stdout);
         cyc_diagnostics_note("%s", stats);
-        const char *e = w_error(w);
         if (e && !S.failed) {
             fprintf(stderr, "[replay] %s; the last frames may be missing\n", e);
             cyc_diagnostics_error("[replay] %s; the last frames may be missing\n", e);
         }
-        free(w);
     }
     free(S.ev);
     S.ev = NULL;

@@ -1,3 +1,6 @@
+#ifndef _WIN32
+#define _POSIX_C_SOURCE 200809L
+#endif
 /*
  * cyc_tcp.c - the cycle host's TCP debug server (cyc_tcp.h).
  */
@@ -8,26 +11,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "diagnostics_server.h"
 #ifdef _WIN32
-#include <winsock2.h>
-#include <ws2tcpip.h>
-typedef SOCKET sock_t;
-#define BAD_SOCK INVALID_SOCKET
-#define close_sock closesocket
-static bool would_block(void) { return WSAGetLastError() == WSAEWOULDBLOCK; }
-static void nonblock(sock_t s) { u_long on = 1; ioctlsocket(s, FIONBIO, &on); }
+#include <windows.h>
 #else
-#include <arpa/inet.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <unistd.h>
-typedef int sock_t;
-#define BAD_SOCK (-1)
-#define close_sock close
-static bool would_block(void) { return errno == EAGAIN || errno == EWOULDBLOCK; }
-static void nonblock(sock_t s) { fcntl(s, F_SETFL, fcntl(s, F_GETFL, 0) | O_NONBLOCK); }
+#include <time.h>
 #endif
 
 #define LINE_MAX_BYTES 8192
@@ -38,28 +26,14 @@ typedef struct {
     CycTcpHandler handler;
 } Command;
 
-static sock_t s_listen = BAD_SOCK, s_client = BAD_SOCK;
-static int s_port;
-static char s_buf[LINE_MAX_BYTES];
-static size_t s_len;
+static DiagServer *s_server;
+static bool s_stopping;
 static Command s_cmds[MAX_COMMANDS];
 static int s_ncmds;
 
-static void send_all(const char *data, size_t n)
-{
-    while (s_client != BAD_SOCK && n) {
-        int w = (int)send(s_client, data, (int)n, 0);
-        if (w > 0) { data += w; n -= (size_t)w; continue; }
-        if (w < 0 && would_block()) continue;      /* small replies: spin until the kernel takes them */
-        close_sock(s_client);
-        s_client = BAD_SOCK;
-    }
-}
-
 static void send_line(const char *text)
 {
-    send_all(text, strlen(text));
-    send_all("\n", 1);
+    if (s_server) (void)diag_server_reply(s_server, text);
 }
 
 void cyc_tcp_ok(int id, const char *fields)
@@ -178,35 +152,37 @@ void cyc_tcp_register(const char *name, const char *summary, CycTcpHandler handl
     else fprintf(stderr, "[cyc tcp] command table full: %s is not served\n", name);
 }
 
+static void dispatch(char *line);
+static void receive_line(void *user, DiagServer *server, const char *arguments)
+{
+    (void)user; (void)server;
+    if (s_stopping) return;
+    char line[LINE_MAX_BYTES];
+    size_t n = strlen(arguments);
+    if (n >= sizeof(line)) { cyc_tcp_err(0, "command line is too long"); return; }
+    memcpy(line, arguments, n + 1);
+    dispatch(line);
+}
+static void framing_error(void *user, DiagServer *server, const char *reason)
+{
+    (void)user; (void)server;
+    if (!s_stopping) cyc_tcp_err(0, reason);
+}
 bool cyc_tcp_start(int port)
 {
-#ifdef _WIN32
-    WSADATA wsa;
-    if (WSAStartup(MAKEWORD(2, 2), &wsa)) return false;
-#endif
-    s_listen = socket(AF_INET, SOCK_STREAM, 0);
-    if (s_listen == BAD_SOCK) return false;
-    int yes = 1;
-    setsockopt(s_listen, SOL_SOCKET, SO_REUSEADDR, (const char *)&yes, sizeof(yes));
-    struct sockaddr_in a;
-    memset(&a, 0, sizeof(a));
-    a.sin_family = AF_INET;
-    a.sin_port = htons((unsigned short)port);
-    a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    if (bind(s_listen, (struct sockaddr *)&a, sizeof(a)) || listen(s_listen, 1)) {
-        close_sock(s_listen);
-        s_listen = BAD_SOCK;
-        return false;
+    s_stopping = false;
+    s_server = diag_server_create((uint16_t)port);
+    if (!s_server) return false;
+    if (!diag_server_protocol(s_server, LINE_MAX_BYTES - 1, 64u * 1024u * 1024u, framing_error, NULL) ||
+        !diag_server_raw_handler(s_server, receive_line, NULL)) {
+        diag_server_destroy(s_server); s_server = NULL; return false;
     }
-    nonblock(s_listen);
-    s_port = port;
     bool have_help = false;
     for (int i = 0; i < s_ncmds; ++i) have_help |= !strcmp(s_cmds[i].name, "help");
     if (!have_help) cyc_tcp_register("help", "list the commands", help);
     return true;
 }
-
-int cyc_tcp_port(void) { return s_listen != BAD_SOCK ? s_port : 0; }
+int cyc_tcp_port(void) { return s_server ? diag_server_port(s_server) : 0; }
 
 static void dispatch(char *line)
 {
@@ -224,43 +200,22 @@ static void dispatch(char *line)
 
 void cyc_tcp_poll(void)
 {
-    if (s_listen == BAD_SOCK) return;
-    if (s_client == BAD_SOCK) {
-        sock_t c = accept(s_listen, NULL, NULL);
-        if (c == BAD_SOCK) return;
-        nonblock(c);
-        s_client = c;
-        s_len = 0;
-    }
-    for (;;) {
-        char tmp[2048];
-        int r = (int)recv(s_client, tmp, sizeof(tmp), 0);
-        if (r == 0 || (r < 0 && !would_block())) {
-            close_sock(s_client);
-            s_client = BAD_SOCK;
-            return;
-        }
-        if (r < 0) return;
-        for (int i = 0; i < r; ++i) {
-            if (tmp[i] == '\n') {
-                s_buf[s_len] = 0;
-                s_len = 0;
-                dispatch(s_buf);
-                if (s_client == BAD_SOCK) return;
-            } else if (s_len + 1 < sizeof(s_buf)) {
-                s_buf[s_len++] = tmp[i];
-            }
-        }
-    }
+    if (s_server) (void)diag_server_poll(s_server);
 }
 
 void cyc_tcp_stop(void)
 {
-    if (s_client != BAD_SOCK) close_sock(s_client);
-    if (s_listen != BAD_SOCK) close_sock(s_listen);
-    s_client = s_listen = BAD_SOCK;
-    s_port = 0;
+    if (!s_server) return;
+    s_stopping = true;
+    while (diag_server_pending_output(s_server)) {
+        (void)diag_server_poll(s_server);
 #ifdef _WIN32
-    WSACleanup();
+        Sleep(1);
+#else
+        struct timespec delay = { 0, 1000000 };
+        nanosleep(&delay, NULL);
 #endif
+    }
+    diag_server_destroy(s_server);
+    s_server = NULL;
 }

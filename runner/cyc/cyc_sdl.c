@@ -829,7 +829,7 @@ static void tcp_headroom(int id, const char *line)
 static void tcp_state(int id, const char *line)
 {
     (void)line;
-    char f[2048], t[160], b[400], h[96], save[96];
+    char f[4096], t[160], b[400], h[96], save[96];
     cyc_tcp_quote(s_toast_up ? s_toast_title : "", t, sizeof(t));
     cyc_tcp_quote(s_toast_up ? s_toast_body : "", b, sizeof(b));
     cyc_tcp_quote(s_fds ? cyc_host_hle_text() : "", h, sizeof(h));
@@ -843,7 +843,9 @@ static void tcp_state(int id, const char *line)
              "\"frame\":%ld,\"menu_open\":%s,\"fds\":%s,\"side\":%d,\"sides\":%u,\"motor\":%s,\"writing\":%s,"
              "\"toast\":{\"visible\":%s,\"title\":%s,\"body\":%s},\"hle\":%s,\"disk_save\":%s,\"disk_binding\":%s,"
              "\"picture\":[%d,%d],\"dev_ui\":%s,\"recomp_ui\":%s,\"native\":%s,"
-               "\"vsync_requested\":%s,\"vsync_active\":%s,\"audio_synthesis\":\"%s\"",
+               "\"vsync_requested\":%s,\"vsync_active\":%s,\"audio_synthesis\":\"%s\","
+               "\"native_cycles\":%llu,\"interpreted_rom_cycles\":%llu,\"interpreted_ram_cycles\":%llu,"
+               "\"interpreted_prg_ram_cycles\":%llu,\"interpreted_other_cycles\":%llu",
              s_frames_done, menu_open() ? "true" : "false", s_fds ? "true" : "false", s_fds ? cyc_fds_side() : -1,
              s_fds ? cyc_fds_side_count() : 0, s_fds && cyc_fds_motor_on() ? "true" : "false",
              s_fds && cyc_fds_writing() ? "true" : "false", s_toast_up ? "true" : "false", t, b, h, save, hq, w, hh,
@@ -859,7 +861,10 @@ static void tcp_state(int id, const char *line)
 #endif
              cyc_run_native ? "true" : "false", s_set.vsync ? "true" : "false",
                renderer_synced() ? "true" : "false",
-               cyc_audio_synthesis() == CYC_AUDIO_SYNTH_BAND_LIMITED ? "band-limited" : "legacy");
+               cyc_audio_synthesis() == CYC_AUDIO_SYNTH_BAND_LIMITED ? "band-limited" : "legacy",
+               (unsigned long long)cyc_run_native_cycles, (unsigned long long)cyc_run_interp_rom_cycles,
+               (unsigned long long)cyc_run_interp_ram_cycles, (unsigned long long)cyc_run_interp_prg_ram_cycles,
+               (unsigned long long)cyc_run_interp_other_cycles);
     /* the controllers the window reads, and the buttons it sees held */
     size_t at = strlen(f);
     at += (size_t)snprintf(f + at, sizeof(f) - at, ",\"pads\":[");
