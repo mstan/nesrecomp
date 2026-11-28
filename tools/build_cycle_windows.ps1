@@ -5,7 +5,9 @@ param(
     [string]$BuildDir = 'build_release',
     [string]$EngineRoot,
     [string]$RecompUi,
-    [string[]]$CMakeArgs = @()
+    [string[]]$CMakeArgs = @(),
+    [int]$Jobs = 4,
+    [string]$Generator
 )
 $ErrorActionPreference = 'Stop'
 $ProjectRoot = (Resolve-Path -LiteralPath $ProjectRoot).Path
@@ -39,8 +41,17 @@ function Invoke-CycleBuild([string[]]$ToolArgs) {
         if ($process.ExitCode) { throw "CMake failed ($($process.ExitCode))" }
     } finally { $process.Dispose() }
 }
-$configure = @('-S',$ProjectRoot,'-B',$build,'-G','Visual Studio 17 2022','-A','x64',
-    "-DNESRECOMP_ROOT=$EngineRoot",'-DNESRECOMP_BACKEND=cycle',"-DNESRECOMP_ROM=$Rom",'-DNESRECOMP_ENABLE_TRACE:BOOL=OFF')
+$cacheFile=Join-Path $build 'CMakeCache.txt'
+if (-not $Generator -and (Test-Path -LiteralPath $cacheFile)) {
+    $match=[regex]::Match((Get-Content -LiteralPath $cacheFile -Raw),'(?m)^CMAKE_GENERATOR:INTERNAL=(.*)\r?$')
+    if ($match.Success) { $Generator=$match.Groups[1].Value.TrimEnd("`r") }
+}
+if (-not $Generator) { $Generator='Visual Studio 17 2022' }
+if ($Jobs -lt 1) { throw 'Jobs must be positive.' }
+$configure = @('-S',$ProjectRoot,'-B',$build,'-G',$Generator,
+    "-DNESRECOMP_ROOT=$EngineRoot",'-DNESRECOMP_BACKEND=cycle','-DNESRECOMP_PPU_IMPL=HLE',"-DNESRECOMP_ROM=$Rom",'-DNESRECOMP_ENABLE_TRACE:BOOL=OFF')
 if ($RecompUi) { $configure += "-DNESRECOMP_RECOMP_UI=$RecompUi" }
+if ($Generator -like 'Visual Studio*') { $configure += @('-A','x64') }
+else { $configure += '-DCMAKE_BUILD_TYPE=Release' }
 Invoke-CycleBuild ($configure + $CMakeArgs)
-Invoke-CycleBuild @('--build',$build,'--config','Release','--parallel','4')
+Invoke-CycleBuild @('--build',$build,'--config','Release','--parallel',"$Jobs")
