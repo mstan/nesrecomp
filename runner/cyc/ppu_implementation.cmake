@@ -1,4 +1,4 @@
-set(NESRECOMP_PPU_IMPL "LLE" CACHE STRING "Cycle PPU implementation (LLE, HLE or experimental FRAME)")
+set(NESRECOMP_PPU_IMPL "HLE" CACHE STRING "Cycle PPU implementation (HLE, LLE or experimental FRAME)")
 set_property(CACHE NESRECOMP_PPU_IMPL PROPERTY STRINGS LLE HLE FRAME)
 if(NESRECOMP_PPU_IMPL STREQUAL "LLE")
     add_compile_definitions(NESRECOMP_PPU_HLE=0)

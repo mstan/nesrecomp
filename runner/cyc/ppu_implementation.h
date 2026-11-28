@@ -3,7 +3,7 @@
 
 /* Fixed by the build, never by an environment variable or player setting. */
 #ifndef NESRECOMP_PPU_HLE
-#define NESRECOMP_PPU_HLE 0
+#define NESRECOMP_PPU_HLE 1
 #endif
 #if NESRECOMP_PPU_HLE != 0 && NESRECOMP_PPU_HLE != 1
 #error "NESRECOMP_PPU_HLE must be 0 (LLE) or 1 (HLE)"

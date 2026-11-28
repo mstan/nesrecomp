@@ -338,3 +338,26 @@ it refuses CHR ROM, out-of-range addresses and isolated calls. The shared
 checks cover native/interpreter/reference parity, complete machine restoration
 after mantra capture, accepted password restore, persistence/history, no-save,
 text replacement, tile round trips, visible tile overrides and PNG compilation.
+
+## Shared project tools
+
+Game repositories keep title identity, image profiles, assets and specialized
+release validation. Their build wrappers use `tools/build_cycle.py` or
+`tools/build_cycle_windows.ps1`; Linux/macOS wrappers source
+`tools/build_cycle_linux.sh` / `tools/build_cycle_macos.sh` with title configuration
+and optional staging/validation functions. These entry points select host-native
+HLE and retain bounded build parallelism.
+
+`tools/package_cycle_windows.ps1` owns clean runtime staging, dependency notices,
+licensed redistributable discovery and verified archive replacement. Title
+recipes can pass `AdditionalFiles`, `ReadmeText`, `StageHook` and `ValidateStage`
+to retain stronger asset/catalog/source checks and specialized content. Player
+saves, settings and original images are rejected. `release_support.py` and
+`platform_common.sh` provide the same archive/data guards and build/tool-download
+primitives for recipes with a distinct package format.
+
+The shared `dbg.py` preserves the JSON-lines debug CLI and accepts `--host`,
+`--port` and `--json`. `verify_usa_rom.py` validates a title-supplied payload CRC
+and mapper before generation. `migrate_hints.py` migrates explicitly supplied
+revision symbols and optional original-image spans; unresolved and ambiguous
+entries remain reported, and migration is never run automatically during builds.
